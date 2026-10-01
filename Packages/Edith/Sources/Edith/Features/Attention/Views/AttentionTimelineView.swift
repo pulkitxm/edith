@@ -61,57 +61,63 @@ struct AttentionFilterBar: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let dark = scheme == .dark
-        HStack(spacing: UIScale.pt(6)) {
-            ForEach(AttentionPalette.levels, id: \.self) { level in
-                Button {
-                    model.toggle(level: level)
-                } label: {
-                    AttentionChip(
-                        title: level.title, color: AttentionPalette.level(level, dark: dark),
-                        active: model.levelFilter == level)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                filterMenu; search; reset
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    filterMenu; Spacer(); reset
                 }
-                .buttonStyle(.edith(.borderless))
-            }
-            ForEach([AttentionSphere.work, .personal], id: \.self) { sphere in
-                Button {
-                    model.toggle(sphere: sphere)
-                } label: {
-                    AttentionChip(
-                        title: sphere.title, color: DashSkin.inkFaint(dark),
-                        active: model.sphereFilter == sphere)
-                }
-                .buttonStyle(.edith(.borderless))
-            }
-            Menu {
-                Button("All categories") { model.filter(category: nil, navigate: false) }
-                ForEach(model.settings.categories) { category in
-                    Button(category.name) { model.filter(category: category.id, navigate: false) }
-                }
-            } label: {
-                AttentionChip(
-                    title: model.categoryFilter.map { model.category($0).name } ?? "Category",
-                    color: model.categoryFilter.map {
-                        AttentionPalette.category(model.category($0), dark: dark)
-                    } ?? DashSkin.inkFaint(dark),
-                    active: model.categoryFilter != nil)
-            }
-            .menuStyle(.button)
-            .buttonStyle(.edith(.borderless))
-            .menuIndicator(.hidden)
-            .fixedSize()
-            Spacer(minLength: UIScale.pt(8))
-            if showsSearch {
-                TextField("Search names and titles", text: $model.searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: UIScale.pt(240))
-            }
-            if model.hasFilters {
-                Button("Clear") { model.clearFilters() }
-                    .buttonStyle(.edith(.borderless))
+                search
             }
         }
     }
+
+    private var filterMenu: some View {
+        Menu {
+            Button("All activity") { model.clearFilters() }
+            Section("Productivity") {
+                ForEach(AttentionPalette.levels, id: \.self) { level in
+                    Button(level.title) { model.toggle(level: level) }
+                }
+            }
+            Section("Context") {
+                ForEach(AttentionSphere.allCases, id: \.self) { sphere in
+                    Button(sphere.title) { model.toggle(sphere: sphere) }
+                }
+            }
+            Menu("Category") {
+                ForEach(model.settings.categories) { category in
+                    Button(category.name) { model.filter(category: category.id, navigate: false) }
+                }
+            }
+        } label: {
+            Label(
+                model.categoryFilter.map { model.category($0).name }
+                    ?? model.levelFilter?.title ?? model.sphereFilter?.title ?? "All activity",
+                systemImage: "line.3.horizontal.decrease")
+        }
+        .menuStyle(.button).buttonStyle(.edith(.secondary)).fixedSize()
+    }
+
+    @ViewBuilder private var search: some View {
+        if showsSearch {
+            TextField("Search names and titles", text: $model.searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: UIScale.pt(360))
+        } else {
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder private var reset: some View {
+        if model.hasFilters {
+            Button("Clear filters") { model.clearFilters() }
+                .buttonStyle(.edith(.borderless)).fixedSize()
+        }
+    }
+
 }
 
 struct AttentionTimelineView: View {

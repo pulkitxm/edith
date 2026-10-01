@@ -58,6 +58,7 @@ final class AttentionPageModel {
     var extensionInstalled = false
     var message: String?
     var errorMessage: String?
+    var selectedEntityID: String?
     var breakdownDimension = AttentionDimension.entity
     private(set) var levelFilter: AttentionProductivity?
     private(set) var sphereFilter: AttentionSphere?

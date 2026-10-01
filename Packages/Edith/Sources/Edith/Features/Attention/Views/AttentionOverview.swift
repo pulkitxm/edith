@@ -10,13 +10,14 @@ struct AttentionOverview: View {
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
             AttentionHeadline(model: model)
+            AttentionAllocationPanel(model: model)
+            AttentionEntitiesPanel(model: model, limit: 12)
             AttentionDayPanel(model: model)
             columns {
                 AttentionCategoryPanel(model: model)
             } trailing: {
                 AttentionHoursPanel(model: model)
             }
-            AttentionEntitiesPanel(model: model, limit: 12)
             if !model.triage.isEmpty {
                 AttentionTriagePanel(model: model)
             }
@@ -68,11 +69,8 @@ struct AttentionHeadline: View {
         let hours = max(active / 3_600, 1 / 60)
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
-        let pulse = summary.pulse.map { Int($0.rounded()) }
-        let previousPulse = previous?.pulse.map { Int($0.rounded()) }
         LazyVGrid(
-            columns: Array(
-                repeating: GridItem(.flexible(), spacing: UIScale.pt(12)), count: compact ? 2 : 6),
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(12))],
             spacing: UIScale.pt(12)
         ) {
             AttentionTile(
@@ -86,11 +84,11 @@ struct AttentionHeadline: View {
                     "\(AttentionFormat.percent(productive, of: active)) · \(AttentionFormat.delta(productive, previous?.productive) ?? "of active time")",
                 tint: accent, symbol: "scope")
             AttentionTile(
-                label: "Pulse", value: pulse.map { "\($0)" } ?? "n/a",
-                detail: pulse.flatMap { current in
-                    previousPulse.map { "\(current - $0 >= 0 ? "+" : "")\(current - $0) vs before" }
-                } ?? "\(AttentionFormat.duration(distracting)) distracting",
-                tint: accent, symbol: "waveform.path.ecg")
+                label: "Distracting", value: AttentionFormat.duration(distracting),
+                detail:
+                    "\(AttentionFormat.percent(distracting, of: active)) · \(AttentionFormat.delta(distracting, previous?.distracting) ?? "of active time")",
+                tint: AttentionPalette.level(.veryDistracting, dark: dark),
+                symbol: "arrow.down.right")
             AttentionTile(
                 label: "Deep work", value: AttentionFormat.duration(summary.deepWorkDuration),
                 detail: summary.focusBlocks.isEmpty
@@ -192,147 +190,6 @@ struct AttentionHoursPanel: View {
                 AttentionWeekHeatmap(cells: summary.hours)
             }
         }
-    }
-}
-
-struct AttentionEntitiesPanel: View {
-    @Bindable var model: AttentionPageModel
-    let limit: Int
-    @State private var expanded: Set<String> = []
-    @State private var showAll = false
-
-    var body: some View {
-        let entities = model.summary.entities
-        let shown = showAll ? Array(entities.prefix(80)) : Array(entities.prefix(limit))
-        let top = entities.first?.duration ?? 1
-        AttentionPanel(
-            "Where time went",
-            subtitle: "Apps and sites by active time. Recategorizing updates all history.",
-            trailing: {
-                if entities.count > limit {
-                    Button(showAll ? "Show fewer" : "Show all \(min(entities.count, 80))") {
-                        showAll.toggle()
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .font(.system(size: UIScale.pt(11.5)))
-                }
-            }
-        ) {
-            if entities.isEmpty {
-                AttentionEmpty(text: "No active apps or sites in this period")
-            } else {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, entity in
-                        if index > 0 { Divider().opacity(0.6) }
-                        AttentionEntityRow(
-                            model: model, entity: entity, scale: top,
-                            total: model.summary.activeDuration,
-                            expanded: expanded.contains(entity.id)
-                        ) {
-                            if expanded.contains(entity.id) {
-                                expanded.remove(entity.id)
-                            } else {
-                                expanded.insert(entity.id)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-struct AttentionEntityRow: View {
-    let model: AttentionPageModel
-    let entity: AttentionEntity
-    let scale: TimeInterval
-    let total: TimeInterval
-    let expanded: Bool
-    let toggle: () -> Void
-    @Environment(\.colorScheme) private var scheme
-
-    var body: some View {
-        let dark = scheme == .dark
-        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-            HStack(spacing: UIScale.pt(10)) {
-                Button(action: toggle) {
-                    HStack(spacing: UIScale.pt(10)) {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: UIScale.pt(9), weight: .semibold))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .rotationEffect(.degrees(expanded ? 90 : 0))
-                            .opacity(entity.details.isEmpty ? 0 : 1)
-                        AttentionEntityIcon(entity: entity)
-                        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                            HStack(spacing: UIScale.pt(6)) {
-                                Text(entity.name)
-                                    .font(.system(size: UIScale.pt(13), weight: .medium))
-                                    .foregroundStyle(DashSkin.ink(dark))
-                                    .lineLimit(1)
-                                AttentionCategoryBadge(
-                                    category: entity.category, productivity: entity.productivity,
-                                    sphere: entity.sphere, source: entity.categorySource,
-                                    confidence: entity.confidence)
-                            }
-                            AttentionMixBar(
-                                levels: entity.levels, total: entity.duration, scale: scale)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.edith(.borderless))
-                .accessibilityLabel(
-                    "\(entity.name), \(entity.category.name), \(AttentionFormat.duration(entity.duration))"
-                )
-                VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
-                    Text(AttentionFormat.duration(entity.duration))
-                        .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                        .monospacedDigit()
-                        .foregroundStyle(DashSkin.ink(dark))
-                    Text(
-                        "\(AttentionFormat.percent(entity.duration, of: total)) · \(entity.visits) visits"
-                    )
-                    .font(.system(size: UIScale.pt(10)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                }
-                .frame(minWidth: UIScale.pt(88), alignment: .trailing)
-                AttentionCategoryMenu(model: model, entity: entity)
-            }
-            if expanded {
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    ForEach(entity.details) { detail in
-                        HStack(spacing: UIScale.pt(8)) {
-                            Circle()
-                                .fill(AttentionPalette.level(detail.productivity, dark: dark))
-                                .frame(width: UIScale.pt(6), height: UIScale.pt(6))
-                            Text(detail.name)
-                                .font(.system(size: UIScale.pt(11.5)))
-                                .foregroundStyle(DashSkin.inkSoft(dark))
-                                .lineLimit(1)
-                                .help(detail.url ?? detail.name)
-                            Spacer(minLength: UIScale.pt(8))
-                            Text(model.category(detail.categoryID).name)
-                                .font(.system(size: UIScale.pt(10.5)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                            Text(AttentionFormat.duration(detail.duration))
-                                .font(.system(size: UIScale.pt(11)))
-                                .monospacedDigit()
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                        }
-                    }
-                    if entity.signals.interactions > 0 {
-                        Text(
-                            "\(AttentionFormat.count(entity.signals.keys)) keys · \(AttentionFormat.count(entity.signals.clicks)) clicks · \(AttentionFormat.count(entity.signals.scrolls)) scrolls"
-                        )
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
-                }
-                .padding(.leading, UIScale.pt(58))
-                .padding(.bottom, UIScale.pt(4))
-            }
-        }
-        .padding(.vertical, UIScale.pt(7))
     }
 }
 

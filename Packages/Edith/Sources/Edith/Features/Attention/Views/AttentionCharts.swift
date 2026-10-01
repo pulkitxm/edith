@@ -139,7 +139,10 @@ struct AttentionLevelLegend: View {
 
     var body: some View {
         let dark = scheme == .dark
-        HStack(spacing: UIScale.pt(14)) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(220)), alignment: .leading)],
+            alignment: .leading, spacing: UIScale.pt(8)
+        ) {
             ForEach(AttentionPalette.levels, id: \.self) { level in
                 let value = levels[level.key] ?? 0
                 if value > 0 {
@@ -158,7 +161,6 @@ struct AttentionLevelLegend: View {
                     .font(.system(size: UIScale.pt(11)))
                 }
             }
-            Spacer(minLength: 0)
         }
     }
 }
