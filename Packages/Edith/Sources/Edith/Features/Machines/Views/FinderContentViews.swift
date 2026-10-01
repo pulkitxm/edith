@@ -368,7 +368,9 @@ struct QuickLookOverlay: View {
                         height: min(UIScale.pt(500), max(0, geometry.size.height - 48))
                     )
                     .scaleEffect(shown || reduceMotion ? 1 : 0.96)
-                    .opacity(shown ? 1 : 0)
+                    .opacity(shown || reduceMotion ? 1 : 0)
+                    .contentShape(Rectangle())
+                    .onTapGesture {}
             }
         }
         .onExitCommand { close() }
@@ -398,6 +400,7 @@ struct QuickLookOverlay: View {
             body(for: entry)
         }
         .edithSurface(cornerRadius: 16)
+        .contentShape(Rectangle())
         .shadow(color: .black.opacity(0.2), radius: UIScale.pt(24), y: 12)
     }
 

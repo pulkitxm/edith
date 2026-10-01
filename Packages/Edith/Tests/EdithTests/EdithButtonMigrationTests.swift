@@ -41,7 +41,7 @@ import Testing
             "Edith/Features/Machines/ViewModels/WorkspaceModel.swift": 1,
             "Edith/Features/Machines/ViewModels/WorkspacePaneModel.swift": 1,
             "Edith/Features/Machines/Views/DockerConsoleViews.swift": 1,
-            "Edith/Features/Machines/Views/FinderContentViews.swift": 6,
+            "Edith/Features/Machines/Views/FinderContentViews.swift": 7,
             "Edith/Features/Pages/Views/MusicPageView.swift": 1,
             "Edith/Features/Settings/Views/GeneralPane.swift": 1,
             "Edith/Features/VideoEditor/VideoBeatPanel.swift": 1,

@@ -602,6 +602,7 @@ struct MachineTerminalTab: View {
     let session: MachineSession
     var active = true
     var wantsFocus = true
+    var allowsShellLaunch = true
     var onFocus: (() -> Void)?
     @State private var ownHolder = TerminalSessionHolder()
     @State private var selectedWindowsShell = WindowsTerminalShell.automatic
@@ -616,11 +617,13 @@ struct MachineTerminalTab: View {
         context: MachineTerminalContext? = nil,
         showsStatusBar: Bool = true,
         onFocus: (() -> Void)? = nil,
-        holder: TerminalSessionHolder? = nil
+        holder: TerminalSessionHolder? = nil,
+        allowsShellLaunch: Bool = true
     ) {
         self.session = session
         self.active = active
         self.wantsFocus = wantsFocus
+        self.allowsShellLaunch = allowsShellLaunch
         injectedHolder = holder
         self.context = context
         self.showsStatusBar = showsStatusBar
@@ -633,12 +636,13 @@ struct MachineTerminalTab: View {
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     private var dark: Bool { scheme == .dark }
+    private var shellLaunchEnabled: Bool { allowsShellLaunch && launchEnabled }
 
     var body: some View {
         let presentation = MachineTerminalPresentation.make(
             state: session.state, target: session.machine.sshTarget, isLocal: session.isLocal,
             started: holder.started, exitMessage: holder.exitMessage,
-            launchEnabled: launchEnabled)
+            launchEnabled: shellLaunchEnabled)
         VStack(spacing: 0) {
             if showsStatusBar { statusBar(presentation) }
             if presentation.showsTerminal {
@@ -760,7 +764,7 @@ struct MachineTerminalTab: View {
     private func startIfPossible() {
         guard
             TerminalLaunchPolicy.shouldStart(
-                active: active, launchEnabled: launchEnabled, started: holder.started,
+                active: active, launchEnabled: shellLaunchEnabled, started: holder.started,
                 isLocal: session.isLocal, connected: session.state.isConnected)
         else { return }
         guard let context else {
