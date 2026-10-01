@@ -13,7 +13,7 @@ public enum AgentService {
     public static let label = AppBuildIdentity.agent
     public static let executableName = "edithd"
     public static let stateKey = "agentRegistrationState"
-    public static let protocolVersion = 1
+    public static let protocolVersion = 2
 
     public static var bundledPlistURL: URL {
         Bundle.main.bundleURL

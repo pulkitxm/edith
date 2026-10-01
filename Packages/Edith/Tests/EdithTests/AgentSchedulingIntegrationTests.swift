@@ -9,7 +9,8 @@ import Testing
     @Test func overlappingRefreshesShareOneExecutionAndOnePublication() async {
         let gate = CollectorGate()
         let output = SchedulerOutput()
-        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        let scheduler = JobScheduler(publish: { topic, payload, _ in output.append(topic, payload) }
+        )
         await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
         let first = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
@@ -29,7 +30,8 @@ import Testing
     func explicitEnqueuesDuringCollectionProduceOneFollowUp(requests: Int) async {
         let gate = CollectorGate()
         let output = SchedulerOutput()
-        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        let scheduler = JobScheduler(publish: { topic, payload, _ in output.append(topic, payload) }
+        )
         await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
         let first = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
@@ -102,7 +104,8 @@ import Testing
     @Test func stoppingDiscardsAnUncooperativeCollectorsLateResult() async {
         let gate = CollectorGate()
         let output = SchedulerOutput()
-        let scheduler = JobScheduler(publish: { output.append($0, $1) })
+        let scheduler = JobScheduler(publish: { topic, payload, _ in output.append(topic, payload) }
+        )
         await scheduler.register(AgentJob(descriptor: descriptor()) { await gate.run() })
         let task = Task { await scheduler.runNow("fixture.refresh") }
         await gate.waitForStart()
@@ -376,6 +379,103 @@ import Testing
         #expect(await runtime.runtimeSnapshot().subscriberCount == 0)
     }
 
+    @Test func repeatedRevisionDoesNotDeliverThePayloadAgain() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let listener = DiagnosticSubscriber()
+        let payload = Data("log".utf8)
+        await runtime.publish(topic: .downloads, payload: payload, revision: 7)
+        await runtime.subscribe(peer: UUID(), topic: .downloads, subscriber: listener)
+        #expect(await waitUntil { listener.count(topic: AgentTopic.downloads.rawValue) == 1 })
+        await runtime.publish(
+            topic: .downloads, payload: Data(repeating: 9, count: 64_000), revision: 7)
+        #expect(listener.count(topic: AgentTopic.downloads.rawValue) == 1)
+        #expect(try await runtime.snapshot(topic: .downloads) == payload)
+    }
+
+    @Test func subscribedEventBurstsEncodeTheLogOnce() async {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        for index in 0..<20 {
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "quiet", message: "\(index)"))
+        }
+        #expect(await runtime.eventLogEncodeCount == 0)
+        let gate = EventPublishGate()
+        await runtime.setEventPublishHold { await gate.wait() }
+        await runtime.subscribe(peer: UUID(), topic: .events, subscriber: DiagnosticSubscriber())
+        for index in 0..<AgentDiagnostics.capacity {
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "step", message: "\(index)"))
+        }
+        #expect(await runtime.eventLogEncodeCount == 0)
+        gate.release()
+        #expect(await waitUntil { await runtime.eventLogEncodeCount == 1 })
+        #expect(await runtime.eventLogEncodeCount == 1)
+    }
+
+    @Test func eventDeltaPayloadDoesNotGrowWithTheLog() async throws {
+        let gate = EventPublishGate()
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        await runtime.setEventPublishHold { await gate.wait() }
+        let listener = EventPayloadSubscriber()
+        await runtime.subscribe(peer: UUID(), topic: .events, subscriber: listener)
+        #expect(await waitUntil { listener.deliveryCount >= 1 })
+        let message = String(repeating: "m", count: 180)
+        for index in 0..<AgentDiagnostics.capacity {
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "fill", message: "\(index) \(message)"))
+        }
+        gate.release()
+        #expect(await waitUntil { listener.deliveryCount >= 2 })
+        let filled = listener.byteCount(at: 1)
+        let second = EventPublishGate()
+        await runtime.setEventPublishHold { await second.wait() }
+        await runtime.record(
+            AgentEvent(category: "fixture", name: "fill", message: "tail \(message)"))
+        second.release()
+        #expect(await waitUntil { listener.deliveryCount >= 3 })
+        let single = listener.byteCount(at: 2)
+        let delta = try AgentPayload.decode(AgentEventDelta.self, from: listener.payload(at: 2))
+        #expect(delta.appended.count == 1)
+        #expect(delta.reset == false)
+        #expect(single < 4_000)
+        #expect(filled > single * 40)
+        var log: [AgentEvent] = []
+        var through: UInt64 = 0
+        let replaced = AgentEventFeed.reduce(
+            log: log, through: &through, payload: listener.payload(at: 0))
+        log = try #require(replaced)
+        let grown = AgentEventFeed.reduce(
+            log: log, through: &through, payload: listener.payload(at: 1))
+        log = try #require(grown)
+        #expect(log.count == AgentDiagnostics.capacity)
+        let stale = listener.payload(at: 1)
+        #expect(AgentEventFeed.reduce(log: log, through: &through, payload: stale) == nil)
+        let updated = AgentEventFeed.reduce(
+            log: log, through: &through, payload: listener.payload(at: 2))
+        #expect(try #require(updated).count == AgentDiagnostics.capacity)
+        #expect(try #require(updated).last?.message.hasPrefix("tail") == true)
+    }
+
+    @Test func eventJournalPrunesInBatches() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try AgentStore(
+            url: root.appendingPathComponent("edith.sqlite"), build: "fixture")
+        let runtime = AgentRuntime(build: "fixture", store: store)
+        for index in 0..<549 {
+            await runtime.record(
+                AgentEvent(category: "fixture", name: "keep", message: "\(index)"))
+        }
+        store.flush()
+        #expect(
+            try store.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM agent_event") } == 549)
+        await runtime.record(AgentEvent(category: "fixture", name: "keep", message: "549"))
+        store.flush()
+        #expect(
+            try store.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM agent_event") } == 500)
+        try store.close()
+    }
+
     @Test func eventHistoryIsBoundedAndSurvivesARuntimeRestart() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -557,9 +657,52 @@ private final class SchedulerPolicy: @unchecked Sendable {
     func advance(_ seconds: TimeInterval) { lock.withLock { current += seconds } }
 }
 
+private final class EventPublishGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var released = false
+
+    func wait() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumeNow = lock.withLock { () -> Bool in
+                if released { return true }
+                continuations.append(continuation)
+                return false
+            }
+            if resumeNow { continuation.resume() }
+        }
+    }
+
+    func release() {
+        let pending = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            released = true
+            let pending = continuations
+            continuations.removeAll()
+            return pending
+        }
+        for continuation in pending { continuation.resume() }
+    }
+}
+
 private final class DiagnosticSubscriber: NSObject, EdithAgentSubscriberXPC, @unchecked Sendable {
     private let lock = NSLock()
     private var topics: [String] = []
     func topicChanged(topic: String, payload: Data) { lock.withLock { topics.append(topic) } }
     func count(topic: String) -> Int { lock.withLock { topics.filter { $0 == topic }.count } }
+}
+
+private final class EventPayloadSubscriber: NSObject, EdithAgentSubscriberXPC, @unchecked Sendable {
+    private let lock = NSLock()
+    private var payloads: [Data] = []
+
+    func topicChanged(topic: String, payload: Data) {
+        guard topic == AgentTopic.events.rawValue else { return }
+        lock.withLock { payloads.append(payload) }
+    }
+
+    var deliveryCount: Int { lock.withLock { payloads.count } }
+
+    func payload(at index: Int) -> Data { lock.withLock { payloads[index] } }
+
+    func byteCount(at index: Int) -> Int { payload(at: index).count }
 }

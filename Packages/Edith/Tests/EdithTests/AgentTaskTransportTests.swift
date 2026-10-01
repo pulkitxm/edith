@@ -9,9 +9,9 @@ import Testing
         let runtime = AgentRuntime(build: "fixture", store: nil)
         let service = try AgentTaskService(
             directory: nil,
-            publish: { snapshots in
+            publish: { snapshots, revision in
                 if let data = try? AgentPayload.encode(snapshots) {
-                    await runtime.publish(topic: .tasks, payload: data)
+                    await runtime.publish(topic: .tasks, payload: data, revision: revision)
                 }
             })
         await service.register(operation: "fixture") { _, _ in

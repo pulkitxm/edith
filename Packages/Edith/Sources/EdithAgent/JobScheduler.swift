@@ -41,7 +41,7 @@ public struct StaticPowerSource: AgentPowerSource {
 }
 
 public actor JobScheduler {
-    public typealias Publish = @Sendable (AgentTopic, Data) -> Void
+    public typealias Publish = @Sendable (AgentTopic, Data, UInt64?) -> Void
     public typealias Observe = @Sendable (AgentEvent) async -> Void
 
     private struct Flight {
@@ -78,11 +78,12 @@ public actor JobScheduler {
     private var shuttingDown = false
     private var shutdownFlights: [Task<Data?, Never>] = []
     private var timer: Task<Void, Never>?
+    private var jobsRevision: UInt64 = 0
 
     var concurrencyLimit: Int { maxConcurrent }
 
     public init(
-        publish: @escaping Publish = { _, _ in },
+        publish: @escaping Publish = { _, _, _ in },
         power: AgentPowerSource = StaticPowerSource(),
         pauseAmbientOnBattery: Bool = false,
         maxConcurrent: Int? = nil,
@@ -298,7 +299,7 @@ public actor JobScheduler {
             states[id]?.lastError = failure
             if failure == nil { states[id]?.runCount += 1 }
             payload = value
-            if let value, let topic { publish(topic, value) }
+            if let value, let topic { publish(topic, value, nil) }
             await observe(
                 AgentEvent(
                     level: failure == nil ? .info : .error,
@@ -424,7 +425,8 @@ public actor JobScheduler {
     }
 
     private func publishJobs() {
+        jobsRevision &+= 1
         guard let payload = try? AgentPayload.encode(snapshots) else { return }
-        publish(.jobs, payload)
+        publish(.jobs, payload, jobsRevision)
     }
 }

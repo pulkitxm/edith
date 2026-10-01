@@ -16,10 +16,18 @@ public actor AgentRuntime {
     private var scheduler: JobScheduler!
     private var subscribers: [UUID: Subscriber] = [:]
     private var latest: [AgentTopic: Data] = [:]
+    private var topicRevisions: [AgentTopic: UInt64] = [:]
+    private var eventsNeedPublish = false
+    private var eventPublishTask: Task<Void, Never>?
+    private var eventPublishHold: (@Sendable () async -> Void)?
+    private var eventLogEncodes = 0
     private var operations: [String: OperationHandler] = [:]
     private var busSubscribers: [UUID: Set<String>] = [:]
     private var busDemandObserver: (@Sendable (String, Int) async -> Void)?
     private var events: [AgentEvent] = []
+    private var firstEventSequence: UInt64 = 1
+    private var eventCursor = 0
+    private var eventDrops = 0
     public private(set) var isShuttingDown = false
     private var shutdownHandlers: [String: @Sendable () async -> Void] = [:]
     private var shutdownTasks: [String: Task<Void, Never>] = [:]
@@ -82,8 +90,15 @@ public actor AgentRuntime {
     }
 
     public func flushJournal() {
+        AgentEventJournal.prune(store: store)
         store?.flush()
     }
+
+    func setEventPublishHold(_ hold: @escaping @Sendable () async -> Void) {
+        eventPublishHold = hold
+    }
+
+    var eventLogEncodeCount: Int { eventLogEncodes }
 
     public var registeredOperations: Set<String> { Set(operations.keys) }
 
@@ -92,8 +107,13 @@ public actor AgentRuntime {
             protocolVersion: AgentService.protocolVersion, build: build, startedAt: startedAt)
     }
 
-    public func publish(topic: AgentTopic, payload: Data) {
-        guard latest[topic] != payload else { return }
+    public func publish(topic: AgentTopic, payload: Data, revision: UInt64? = nil) {
+        if let revision {
+            guard topicRevisions[topic] != revision else { return }
+            topicRevisions[topic] = revision
+        } else if latest[topic] == payload {
+            return
+        }
         latest[topic] = payload
         for subscriber in subscribers.values where subscriber.topics.contains(topic) {
             subscriber.proxy?.topicChanged(topic: topic.rawValue, payload: payload)
@@ -103,17 +123,64 @@ public actor AgentRuntime {
     public func record(_ event: AgentEvent) {
         events.append(event)
         if events.count > AgentDiagnostics.capacity {
-            events.removeFirst(events.count - AgentDiagnostics.capacity)
+            let trimmed = events.count - AgentDiagnostics.capacity
+            events.removeFirst(trimmed)
+            firstEventSequence += UInt64(trimmed)
+            eventCursor = max(0, eventCursor - trimmed)
+            eventDrops += trimmed
         }
         AgentEventJournal.append(event, store: store)
-        if subscribers.values.contains(where: { $0.topics.contains(.events) }),
-            let payload = try? AgentPayload.encode(events)
-        {
-            publish(topic: .events, payload: payload)
-        }
         AgentLog.logger.info(
             "\(event.category, privacy: .public).\(event.name, privacy: .public): \(event.message, privacy: .private)"
         )
+        scheduleEventPublish()
+    }
+
+    private func scheduleEventPublish() {
+        guard subscribers.values.contains(where: { $0.topics.contains(.events) }) else { return }
+        eventsNeedPublish = true
+        guard eventPublishTask == nil else { return }
+        eventPublishTask = Task {
+            if let eventPublishHold {
+                await eventPublishHold()
+            } else {
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+            await self.finishEventPublish()
+        }
+    }
+
+    private func finishEventPublish() async {
+        repeat {
+            eventsNeedPublish = false
+            guard subscribers.values.contains(where: { $0.topics.contains(.events) }) else { break }
+            guard let delta = takeEventDelta() else { continue }
+            let payload = await Task.detached(priority: .utility) {
+                try? AgentPayload.encode(delta)
+            }.value
+            if let payload {
+                eventLogEncodes += 1
+                publish(topic: .events, payload: payload)
+            }
+        } while eventsNeedPublish
+        eventPublishTask = nil
+        if eventsNeedPublish { scheduleEventPublish() }
+    }
+
+    private var eventThrough: UInt64 {
+        guard !events.isEmpty else { return 0 }
+        return firstEventSequence + UInt64(events.count) - 1
+    }
+
+    private func takeEventDelta() -> AgentEventDelta? {
+        let start = min(eventCursor, events.count)
+        let appended = Array(events[start...])
+        let dropped = eventDrops
+        let through = eventThrough
+        eventCursor = events.count
+        eventDrops = 0
+        guard dropped > 0 || !appended.isEmpty else { return nil }
+        return AgentEventDelta(dropped: dropped, appended: appended, through: through, reset: false)
     }
 
     public func setBusDemandObserver(
@@ -165,7 +232,12 @@ public actor AgentRuntime {
     }
 
     public func snapshot(topic: AgentTopic) async throws -> Data {
-        if topic == .events { return try AgentPayload.encode(events) }
+        if topic == .events {
+            let snapshot = events
+            return try await Task.detached(priority: .utility) {
+                try AgentPayload.encode(snapshot)
+            }.value
+        }
         if topic == .jobs { return try AgentPayload.encode(await jobSnapshots()) }
         if let cached = latest[topic] { return cached }
         guard let scheduler else { throw AgentError(.unavailable, "The agent is still starting.") }
@@ -193,6 +265,19 @@ public actor AgentRuntime {
     }
 
     private func deliverSnapshot(peer: UUID, topic: AgentTopic) async {
+        if topic == .events {
+            let through = eventThrough
+            let snapshot = events
+            let payload = await Task.detached(priority: .utility) {
+                try? AgentPayload.encode(
+                    AgentEventDelta(dropped: 0, appended: snapshot, through: through, reset: true))
+            }.value
+            guard let payload, let subscriber = subscribers[peer],
+                subscriber.topics.contains(topic)
+            else { return }
+            subscriber.proxy?.topicChanged(topic: topic.rawValue, payload: payload)
+            return
+        }
         guard let payload = try? await snapshot(topic: topic),
             let subscriber = subscribers[peer], subscriber.topics.contains(topic)
         else { return }
