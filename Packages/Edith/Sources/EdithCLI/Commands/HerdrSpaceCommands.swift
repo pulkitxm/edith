@@ -24,9 +24,10 @@ enum HerdrSpaceCLI {
     ) {
         try AppBridge.requireMainApp("a Herdr space window")
         let requestID = UUID().uuidString
-        var payload: [String: Any] = ["requestID": requestID, "action": action]
-        if let window, !window.isEmpty { payload["window"] = window }
-        if let side { payload["side"] = side }
+        var fields: [String: Any] = ["requestID": requestID, "action": action]
+        if let window, !window.isEmpty { fields["window"] = window }
+        if let side { fields["side"] = side }
+        let payload = fields
         guard
             let reply = await AppBridge.awaitReply(
                 IPC.Name.herdrSpaceActionResult, timeout: 8,
