@@ -42,6 +42,26 @@ private struct AttentionDaemonFixture {
 }
 
 @Suite struct AttentionDaemonIntegrationTests {
+    @Test func allTimeUsesTheFirstStoredEventAndSkipsTheComparison() async throws {
+        let fixture = try AttentionDaemonFixture()
+        defer { Task { await fixture.close() } }
+        let now = Date()
+        let first = now.addingTimeInterval(-200 * 86_400)
+        try await fixture.service.record(
+            AttentionBatch(events: [
+                fixture.event(at: first, duration: 60),
+                fixture.event(at: now.addingTimeInterval(-120), duration: 30),
+            ]))
+        let snapshot = try await fixture.service.summary(
+            AttentionSummaryRequest(
+                from: Calendar.current.startOfDay(for: now), to: now,
+                comparePeriod: 86_400, parts: [.overview], allTime: true))
+        #expect(snapshot.summary.from == Calendar.current.startOfDay(for: first))
+        #expect(snapshot.summary.activeDuration == 90)
+        #expect(snapshot.summary.previous == nil)
+        #expect(try fixture.events.firstEventDate()?.timeIntervalSince(first).magnitude ?? 1 < 0.01)
+    }
+
     @Test func browserRetriesCannotDuplicateTimeOrBridgeUnobservedGaps() async throws {
         let fixture = try AttentionDaemonFixture()
         defer { Task { await fixture.close() } }

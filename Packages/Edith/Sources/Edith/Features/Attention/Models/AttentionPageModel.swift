@@ -96,6 +96,7 @@ final class AttentionPageModel {
 
     var refreshInterval: Duration {
         guard period.isCurrent() else { return .seconds(900) }
+        if period.preset == .allTime { return .seconds(120) }
         return period.isSingleDay ? .seconds(30) : .seconds(120)
     }
 
@@ -112,6 +113,7 @@ final class AttentionPageModel {
     }
 
     func step(_ steps: Int) {
+        guard period.preset != .allTime else { return }
         let next = period.shifted(by: steps)
         guard next.start <= Date() else { return }
         setPeriod(next)
@@ -121,7 +123,8 @@ final class AttentionPageModel {
         setPeriod(AttentionPeriod(.today))
     }
 
-    var canStepForward: Bool { !period.isCurrent() }
+    var canStepBackward: Bool { period.preset != .allTime }
+    var canStepForward: Bool { period.preset != .allTime && !period.isCurrent() }
 
     func setPeriod(_ next: AttentionPeriod) {
         guard next != period else { return }
@@ -206,6 +209,7 @@ final class AttentionPageModel {
         if !preserveSettings, settings != state.settings { settings = state.settings }
         if let derived = state.derived {
             summary = derived.summary
+            if period.preset == .allTime { period.start = summary.from }
             dayRibbon = derived.dayRibbon
             timeline = derived.timeline
             triage = derived.triage
@@ -237,7 +241,8 @@ final class AttentionPageModel {
         let interval = period.interval()
         let request = AttentionSummaryRequest(
             from: interval.start, to: interval.end, settings: settings,
-            comparePeriod: period.comparePeriod, window: window, parts: parts)
+            comparePeriod: period.comparePeriod, window: window, parts: parts,
+            allTime: period.preset == .allTime)
         let snapshot: AttentionPageSnapshot
         if repository.resolvedEventSink is AgentAttentionSink {
             snapshot = try await AttentionBackgroundClient.summary(request)

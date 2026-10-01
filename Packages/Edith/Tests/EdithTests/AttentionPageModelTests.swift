@@ -6,6 +6,47 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func allTimeCoversEveryRecordedDayWithoutComparisonsOrStepping() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let now = Date()
+        let first = now.addingTimeInterval(-500 * 86_400)
+        for date in [first, now.addingTimeInterval(-120)] {
+            try fixture.repository.append(
+                AttentionEvent(
+                    startedAt: date, duration: 60, source: .application,
+                    appName: "Writing", bundleID: "app.writing"))
+        }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.allTime)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 120)
+        #expect(model.summary.from == Calendar.current.startOfDay(for: first))
+        #expect(model.summary.previous == nil)
+        #expect(model.period.title() == "All time")
+        #expect(model.period.comparePeriod == nil)
+        #expect(!model.canStepBackward)
+        #expect(!model.canStepForward)
+        #expect(model.refreshInterval == .seconds(120))
+        let period = model.period
+        model.step(-1)
+        #expect(model.period == period)
+        model.select(.last90)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 60)
+    }
+
+    @Test func emptyAllTimeIsBoundedToToday() async {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.allTime)
+        await model.waitForReload()
+        #expect(model.summary.from == Calendar.current.startOfDay(for: Date()))
+        #expect(model.summary.activeDuration == 0)
+        #expect(model.errorMessage == nil)
+    }
+
     @Test func dayRibbonRangeStaysValidForBlocksFromAnotherDay() {
         let day = DateInterval(start: Date(timeIntervalSince1970: 1_790_000_000), duration: 86_400)
         let later = [day.end.addingTimeInterval(7_200), day.end.addingTimeInterval(9_000)]
