@@ -239,19 +239,27 @@ final class DocsCodeHighlight: @unchecked Sendable {
     }
 
     func highlight(text: String, language: String, dark: Bool) async -> AttributedString? {
+        if let hit = stored(text: text, language: language, dark: dark) { return hit }
+        guard let rendered = await render(text, language, dark) else { return nil }
+        return remember(text: text, language: language, dark: dark, value: rendered)
+    }
+
+    private func stored(text: String, language: String, dark: Bool) -> AttributedString? {
         let key = Key(language: language, dark: dark, hash: text.hashValue)
         lock.lock()
-        if let hit = cache[key], hit.text == text {
-            lock.unlock()
-            return hit.value
-        }
-        lock.unlock()
-        guard let rendered = await render(text, language, dark) else { return nil }
+        defer { lock.unlock() }
+        guard let hit = cache[key], hit.text == text else { return nil }
+        return hit.value
+    }
+
+    private func remember(text: String, language: String, dark: Bool, value: AttributedString)
+        -> AttributedString
+    {
+        let key = Key(language: language, dark: dark, hash: text.hashValue)
         lock.lock()
-        if cache[key]?.text != text { cache[key] = Entry(text: text, value: rendered) }
-        let stored = cache[key]?.value ?? rendered
-        lock.unlock()
-        return stored
+        defer { lock.unlock() }
+        if cache[key]?.text != text { cache[key] = Entry(text: text, value: value) }
+        return cache[key]?.value ?? value
     }
 
     private static func syntax(text: String, language: String, dark: Bool) async
