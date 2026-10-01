@@ -223,8 +223,15 @@ test("release builds and publishes the macOS assets", () => {
   );
   expect(buildScript).not.toContain("swift build");
   expect(makefile).toContain("Release SWIFT_OPTIMIZATION_LEVEL must be -Osize");
+  expect(dmgJob).toContain("./scripts/package-database-pack.sh dist/edith-database .");
+  expect(dmgJob).toContain("xcrun notarytool submit edith-database.zip --wait");
+  expect(dmgJob.indexOf("name: Package the database pack")).toBeLessThan(
+    dmgJob.indexOf("name: Notarize and staple"),
+  );
   expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
   expect(releaseWorkflow).toContain("release-assets/appcast.xml");
+  expect(releaseWorkflow).toContain("release-assets/edith-database.zip");
+  expect(releaseWorkflow).toContain("release-assets/edith-database.zip.sha256");
   expect(releaseWorkflow).toContain("gh release create");
   expect(releaseWorkflow).toContain("gh release upload");
 });
@@ -259,7 +266,7 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(10);
+  ).toBe(11);
   expect(publish.if).toContain("needs.dmg.outputs.superseded != 'true'");
 });
 
