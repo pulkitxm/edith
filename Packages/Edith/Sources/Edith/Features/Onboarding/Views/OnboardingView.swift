@@ -13,6 +13,19 @@ struct OnboardingView: View {
         case ready
         case provisioning
         case connect
+
+        var name: String {
+            switch self {
+            case .welcome: "welcome"
+            case .restore: "restore"
+            case .picks: "picks"
+            case .agent: "agent"
+            case .permissions: "permissions"
+            case .ready: "ready"
+            case .provisioning: "provisioning"
+            case .connect: "connect"
+            }
+        }
     }
 
     let onFinish: () -> Void
@@ -23,6 +36,7 @@ struct OnboardingView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var step = Step.welcome
+    @State private var router = WindowRouter()
     @State private var transitionDirection = 1.0
     @State private var selectedIDs = OnboardingFlow.initialSelectedIDs
     @State private var icloudBackup = OnboardingFlow.initialICloudBackup
@@ -43,6 +57,13 @@ struct OnboardingView: View {
     }
 
     var body: some View {
+        NavigationRouteHost(router: router) {
+            onboardingContent.navigationRoute(
+                "step", selection: stepBinding, isValid: { step(named: $0) != nil })
+        }
+    }
+
+    private var onboardingContent: some View {
         VStack(spacing: UIScale.pt(0)) {
             ZStack {
                 currentStep
@@ -537,7 +558,8 @@ struct OnboardingView: View {
     private var footer: some View {
         HStack(spacing: UIScale.pt(10)) {
             if [Step.restore, .picks, .agent, .permissions, .connect].contains(step) {
-                Button("Back") { goBack() }
+                Button("Back") { router.goBack() }
+                    .disabled(!router.canGoBack)
                     .buttonStyle(.edith(.borderless))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
@@ -670,15 +692,17 @@ struct OnboardingView: View {
         }
     }
 
-    private func goBack() {
-        switch step {
-        case .restore: move(to: .welcome, direction: -1)
-        case .picks: move(to: .restore, direction: -1)
-        case .agent: move(to: .picks, direction: -1)
-        case .permissions: move(to: .agent, direction: -1)
-        case .connect: move(to: .ready, direction: -1)
-        default: break
-        }
+    private var stepBinding: Binding<String> {
+        Binding(
+            get: { step.name },
+            set: { token in
+                guard let next = step(named: token), next != step else { return }
+                move(to: next, direction: next.rawValue < step.rawValue ? -1 : 1)
+            })
+    }
+
+    private func step(named token: String) -> Step? {
+        Step.allCases.first { $0.name == token }
     }
 
     private func move(to nextStep: Step, direction: Double) {

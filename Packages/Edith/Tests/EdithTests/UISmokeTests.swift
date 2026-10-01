@@ -150,9 +150,11 @@ private func settledBitmap(
             await browser.ask(browser.question, decider: nil)
             #expect(browser.answer?.engine == .search)
             #expect(browser.answer?.picks.first?.command.path == "ed machines docker prune")
+            let earlier = browser.location
             browser.openSelection()
             #expect(browser.location == DocsLocation(path: "machines-docker/prune.md"))
-            #expect(browser.goBack() && browser.location.path == "herdr/ls.md")
+            browser.open(earlier, reveal: false)
+            #expect(browser.location.path == "herdr/ls.md")
             await browser.ask(browser.question, decider: nil)
             let asked = try #require(
                 await settledBitmap(DocsScreen(browser: browser), scheme: scheme))

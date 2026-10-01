@@ -15,18 +15,28 @@ final class SectionWindowController {
 
 struct DetachedSectionView: View {
     let controller: SectionWindowController
+    @State private var router = WindowRouter()
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        GeometryReader { geo in
-            detail
-                .tint(themeColor(themeName))
-                .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(DashSkin.paper(scheme == .dark))
+        NavigationRouteHost(router: router) {
+            GeometryReader { geo in
+                detail
+                    .tint(themeColor(themeName))
+                    .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(DashSkin.paper(scheme == .dark))
+            }
+            .navigationRoute(
+                "section", selection: sectionBinding,
+                isValid: { $0.isEmpty || $0 == controller.destination.rawValue })
         }
+    }
+
+    private var sectionBinding: Binding<String> {
+        Binding(get: { controller.destination.rawValue }, set: { _ in })
     }
 
     private var detail: some View {

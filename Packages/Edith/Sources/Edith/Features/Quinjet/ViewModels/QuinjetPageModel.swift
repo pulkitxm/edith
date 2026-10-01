@@ -75,6 +75,13 @@ final class QuinjetPageModel {
         tabs.first { $0.id == selected }
     }
 
+    @discardableResult
+    func selectSession(_ id: UUID) -> Bool {
+        guard tabs.contains(where: { $0.id == id }) else { return false }
+        selected = id
+        return true
+    }
+
     var filteredProjects: [QuinjetProject] {
         filtered(recentProjects(projects, machineID: "local"))
     }

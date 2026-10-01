@@ -679,6 +679,9 @@ public enum Guide {
         ed app relaunch --yes           apply the restart after a permission grant
         ed app clear-updates            preview clearing the update history
         ed app reveal companion --tab chat  show a section, and a tab inside it
+        ed app route                    print where the window is, without focusing it
+        ed app navigate companion/chat  move there without ordering the window forward
+        ed app back                     previous route, still in the background
         ed app snapshot                 the open windows as PNGs, no screen recording
         ```
 

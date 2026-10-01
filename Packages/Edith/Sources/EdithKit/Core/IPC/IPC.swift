@@ -130,6 +130,8 @@ public enum IPC {
         public static let calendarEvents = IPC.scopedName("com.pulkit.edith.calendarEvents")
         public static let requestReveal = IPC.scopedName("com.pulkit.edith.requestReveal")
         public static let revealResult = IPC.scopedName("com.pulkit.edith.revealResult")
+        public static let requestNavigation = IPC.scopedName("com.pulkit.edith.requestNavigation")
+        public static let navigationResult = IPC.scopedName("com.pulkit.edith.navigationResult")
         public static let requestVideoEditorOpen = IPC.scopedName(
             "com.pulkit.edith.requestVideoEditorOpen")
         public static let videoEditorOpenResult = IPC.scopedName(

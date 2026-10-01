@@ -32,7 +32,13 @@ ed app reveal docs
 ed app reveal companion --tab settings
 ed app reveal settings --tab permissions
 ed app reveal machines --json
+ed app reveal companion/chat
 ```
+
+A value that contains `/` is a full route. The first segment is still the
+section, and `companion` or `settings` also take their tab from the second
+segment. [`ed app navigate`](./navigate.md) moves to the same route without
+bringing the window forward.
 
 The app answers when the section is on screen, so a `0` exit means the window
 is open and showing what you asked for, not merely that a request was sent.

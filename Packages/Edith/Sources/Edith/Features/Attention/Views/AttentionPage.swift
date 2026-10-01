@@ -74,6 +74,7 @@ struct AttentionPage: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute("section", selection: $model.section)
         .task(id: windowVisible) {
             guard windowVisible else { return }
             model.reload()

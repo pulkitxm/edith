@@ -325,33 +325,6 @@ extension NSEvent.ModifierFlags {
     }
 }
 
-private struct NavStack {
-    private(set) var entries: [String] = []
-    private(set) var index = -1
-
-    var canGoBack: Bool { index > 0 }
-    var canGoForward: Bool { index >= 0 && index < entries.count - 1 }
-
-    mutating func record(_ location: String) {
-        if index >= 0, entries[index] == location { return }
-        if index < entries.count - 1 { entries.removeSubrange((index + 1)...) }
-        entries.append(location)
-        index = entries.count - 1
-    }
-
-    mutating func goBack() -> String? {
-        guard canGoBack else { return nil }
-        index -= 1
-        return entries[index]
-    }
-
-    mutating func goForward() -> String? {
-        guard canGoForward else { return nil }
-        index += 1
-        return entries[index]
-    }
-}
-
 struct MainWindowView: View {
     let updater: UpdaterModel
 
@@ -483,9 +456,7 @@ struct MainWindowView: View {
     @State private var optionHintMonitor: Any?
     @State private var optionHintWork: DispatchWorkItem?
     @State private var showShortcutHints = false
-    @State private var nav = NavStack()
-    @State private var musicFolderPath = ""
-    @State private var restoringHistory = false
+    @State private var router = WindowRouter()
     @State private var permissionsNeedAttention = PermissionsStatus.current
     @State private var permissionsObserverID = UUID()
     @State private var presenterQuickActionsPresented = false
@@ -525,43 +496,27 @@ struct MainWindowView: View {
             mainWindowSection: mainWindowSection, settingsTab: settingsTab)
     }
 
-    private var currentLocation: String {
-        if destination == .settings {
-            return "settings/\(navigationSelection.settingsTab)"
-        }
-        if destination == .music, !musicFolderPath.isEmpty {
-            return "music/\(musicFolderPath)"
-        }
-        return navigationSelection.mainWindowSection
+    private var sectionBinding: Binding<String> {
+        Binding(
+            get: { destination.rawValue },
+            set: { mainWindowSection = MainDestination.resolve($0).rawValue })
     }
 
-    private func navigate(to location: String) {
-        restoringHistory = true
-        let music = MainDestination.music.rawValue
-        if location.hasPrefix("settings/") {
-            settingsTab = String(location.dropFirst("settings/".count))
-            mainWindowSection = MainDestination.settings.rawValue
-        } else if location == music || location.hasPrefix(music + "/") {
-            MusicRemote.shared.navigate(
-                to: location.hasPrefix(music + "/")
-                    ? String(location.dropFirst(music.count + 1)) : "")
-            mainWindowSection = music
-        } else {
-            mainWindowSection = location
-        }
-    }
-
-    private func goBack() {
-        if destination == .docs, DocsBrowser.shared.goBack() { return }
-        if let location = nav.goBack() { navigate(to: location) }
-    }
-
-    private func goForward() {
-        if destination == .docs, DocsBrowser.shared.goForward() { return }
-        if let location = nav.goForward() { navigate(to: location) }
+    private func sectionIsValid(_ raw: String) -> Bool {
+        guard !raw.isEmpty else { return true }
+        let resolved = MainDestination.resolve(raw)
+        guard resolved.rawValue == raw else { return false }
+        return resolved.page.isVisible(in: SharedDefaults.store)
     }
 
     var body: some View {
+        NavigationRouteHost(router: router, role: .main) {
+            windowContent.navigationRoute(
+                "section", selection: sectionBinding, isValid: sectionIsValid)
+        }
+    }
+
+    private var windowContent: some View {
         GeometryReader { geo in
             let bandHeight = UIScale.pt(Self.chromeHeight + 10)
             VStack(spacing: 0) {
@@ -586,20 +541,9 @@ struct MainWindowView: View {
                 Motion.animation(Motion.glide, reduceMotion: reduceMotion),
                 value: musicBarCollapsed)
         }
-        .background(historyShortcuts)
         .onExitCommand { InputFocus.resignEditing() }
-        .onChange(of: MusicRemote.shared.folderPath, initial: true) { _, newValue in
-            musicFolderPath = newValue
-        }
         .onChange(of: destination) { _, opened in
             PageTrace.begin(opened)
-        }
-        .onChange(of: currentLocation) { _, location in
-            if restoringHistory {
-                restoringHistory = false
-            } else {
-                nav.record(location)
-            }
         }
         .onAppear {
             guard automaticActionsEnabled else { return }
@@ -610,7 +554,7 @@ struct MainWindowView: View {
             PresenterState.shared.syncEnabled(presenterEnabled)
             CalendarPermission.observe(permissionsObserverID)
             refreshPermissionsPill()
-            if nav.entries.isEmpty { nav.record(currentLocation) }
+            NavigationHistoryInput.install()
         }
         .onChange(of: musicEnabled) { _, _ in
             if automaticActionsEnabled { syncMusicResources() }
@@ -684,17 +628,6 @@ struct MainWindowView: View {
         let resolved = navigationSelection
         mainWindowSection = resolved.mainWindowSection
         settingsTab = resolved.settingsTab
-    }
-
-    private var historyShortcuts: some View {
-        ZStack {
-            Button("", action: goBack)
-                .keyboardShortcut("[", modifiers: .command)
-            Button("", action: goForward)
-                .keyboardShortcut("]", modifiers: .command)
-        }
-        .opacity(0)
-        .allowsHitTesting(false)
     }
 
     private func installMusicKeys() {

@@ -201,6 +201,10 @@ public enum CommandTree {
         "ed app clear-updates": Spec(
             options: ["--json", "--help", "--yes"], destructivePolicy: .previewThenYes),
         "ed app reveal": Spec(options: ["--json", "--help", "--tab", "--list"]),
+        "ed app route": Spec(options: ["--json", "--help"]),
+        "ed app navigate": Spec(options: ["--json", "--help"], arguments: [.free]),
+        "ed app back": Spec(options: ["--json", "--help"]),
+        "ed app forward": Spec(options: ["--json", "--help"]),
         "ed app snapshot": Spec(options: ["--json", "--help", "--dir"]),
         "ed extensions ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed extensions enable": Spec(options: ["--json"], arguments: [.extensionID]),

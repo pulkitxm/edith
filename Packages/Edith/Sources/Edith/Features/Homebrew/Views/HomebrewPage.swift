@@ -53,6 +53,7 @@ struct HomebrewMaintenanceView: View {
             }
         }
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute("view", selection: $model.mode)
         .task {
             guard automaticActionsEnabled else { return }
             model.activate(kind: kind)

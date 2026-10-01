@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 enum CLIWindowBridge {
     private static var revealObserver: NSObjectProtocol?
+    private static var navigationObserver: NSObjectProtocol?
     private static var snapshotObserver: NSObjectProtocol?
 
     static func install() {
@@ -12,6 +13,11 @@ enum CLIWindowBridge {
         revealObserver = IPC.observe(IPC.Name.requestReveal) { info in
             MainActor.assumeIsolated {
                 AppRuntimeCenter().perform(.reveal) { reveal(info) }
+            }
+        }
+        navigationObserver = IPC.observe(IPC.Name.requestNavigation) { info in
+            MainActor.assumeIsolated {
+                navigate(info)
             }
         }
         StudioRecordInstaller.install()
@@ -36,6 +42,13 @@ enum CLIWindowBridge {
         IPC.post(IPC.Name.revealResult, userInfo: ["ok": false, "error": message])
     }
 
+    private static func navigate(_ info: [AnyHashable: Any]) {
+        let action = info["action"] as? String ?? "route"
+        let route = info["route"] as? String
+        let reply = NavigationCommands.perform(action: action, route: route)
+        IPC.post(IPC.Name.navigationResult, userInfo: reply)
+    }
+
     private static func reveal(_ info: [AnyHashable: Any]) {
         if info["list"] as? Bool == true {
             let sections = MainDestination.allCases.map {
@@ -47,6 +60,10 @@ enum CLIWindowBridge {
             return
         }
         let sectionRaw = info["section"] as? String ?? ""
+        if sectionRaw.contains("/") {
+            revealRoute(sectionRaw)
+            return
+        }
         guard !sectionRaw.isEmpty else {
             MainWindow.open()
             let current =
@@ -92,6 +109,54 @@ enum CLIWindowBridge {
             section.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
         MainWindow.open()
         var payload: [String: Any] = ["ok": true, "section": section.rawValue]
+        if !resolvedTab.isEmpty { payload["tab"] = resolvedTab }
+        IPC.post(IPC.Name.revealResult, userInfo: payload)
+    }
+
+    private static func revealRoute(_ raw: String) {
+        guard let route = NavigationRoute(raw) else {
+            fail("route is empty or malformed")
+            return
+        }
+        let sectionRaw = route.segments[0]
+        guard let section = MainDestination(rawValue: sectionRaw) else {
+            fail(
+                "no section named \(sectionRaw); sections: "
+                    + MainDestination.allCases.map(\.rawValue).joined(separator: ", "))
+            return
+        }
+        var resolvedTab = ""
+        if route.segments.count > 1 {
+            let tabRaw = route.segments[1]
+            switch section {
+            case .companion:
+                guard let tab = CompanionTab(rawValue: tabRaw) else {
+                    fail(
+                        "companion has no tab named \(tabRaw); tabs: "
+                            + CompanionTab.allCases.map(\.rawValue).joined(separator: ", "))
+                    return
+                }
+                SharedDefaults.store.set(tab.rawValue, forKey: AppStorageKeys.Companion.tab)
+                resolvedTab = tab.rawValue
+            case .settings:
+                guard let tab = SettingsPane.Tab(rawValue: tabRaw) else {
+                    fail(
+                        "settings has no tab named \(tabRaw); tabs: "
+                            + SettingsPane.Tab.allCases.map(\.rawValue).joined(separator: ", "))
+                    return
+                }
+                SharedDefaults.store.set(tab.rawValue, forKey: AppStorageKeys.General.settingsTab)
+                resolvedTab = tab.rawValue
+            default:
+                break
+            }
+        }
+        SharedDefaults.store.set(section.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
+        MainWindow.open()
+        WindowRouter.commandTarget?.navigate(to: route.description)
+        var payload: [String: Any] = [
+            "ok": true, "section": section.rawValue, "route": route.description,
+        ]
         if !resolvedTab.isEmpty { payload["tab"] = resolvedTab }
         IPC.post(IPC.Name.revealResult, userInfo: payload)
     }
