@@ -49,7 +49,8 @@ enum TerminalClipboard {
         return (0..<count).compactMap { TerminalClipboardEntry(content[$0]) }
     }
 
-    static func write(_ entries: [TerminalClipboardEntry], to pasteboard: NSPasteboard) {
+    @discardableResult
+    static func write(_ entries: [TerminalClipboardEntry], to pasteboard: NSPasteboard) -> Bool {
         var unique: [NSPasteboard.PasteboardType: TerminalClipboardEntry] = [:]
         var orderedTypes: [NSPasteboard.PasteboardType] = []
         for entry in entries {
@@ -57,16 +58,20 @@ enum TerminalClipboard {
             if unique[type] == nil { orderedTypes.append(type) }
             unique[type] = entry
         }
-        guard !orderedTypes.isEmpty else { return }
+        guard !orderedTypes.isEmpty else { return false }
         pasteboard.declareTypes(orderedTypes, owner: nil)
+        var success = true
         for type in orderedTypes {
             guard let entry = unique[type] else { continue }
+            let stored: Bool
             if type == .string, let value = String(data: entry.data, encoding: .utf8) {
-                pasteboard.setString(value, forType: type)
+                stored = pasteboard.setString(value, forType: type)
             } else {
-                pasteboard.setData(entry.data, forType: type)
+                stored = pasteboard.setData(entry.data, forType: type)
             }
+            success = success && stored
         }
+        return success
     }
 
     static func read(

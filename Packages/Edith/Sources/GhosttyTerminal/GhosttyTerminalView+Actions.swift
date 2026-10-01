@@ -235,6 +235,18 @@ final class TerminalProgressStrip: NSProgressIndicator {
 }
 
 extension GhosttyTerminalView {
+    func showCopyConfirmation() {
+        guard surface != nil else { return }
+        copyConfirmationTask?.cancel()
+        copyConfirmation.isHidden = false
+        copyConfirmationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1_500))
+            guard !Task.isCancelled, let self else { return }
+            copyConfirmation.isHidden = true
+            copyConfirmationTask = nil
+        }
+    }
+
     static func decoded(_ bytes: UnsafePointer<CChar>?, count: Int? = nil) -> String? {
         guard let bytes else { return nil }
         if let count {
