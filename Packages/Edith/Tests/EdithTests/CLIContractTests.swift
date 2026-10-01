@@ -181,6 +181,10 @@ enum JSONContract {
         JSONCase(
             "ed completions install", ["completions", "install", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed app route", ["app", "route", "--json"]),
+        JSONCase("ed app navigate", ["app", "navigate", "docs", "--json"]),
+        JSONCase("ed app back", ["app", "back", "--json"]),
+        JSONCase("ed app forward", ["app", "forward", "--json"]),
         JSONCase("ed app actions", ["app", "actions", "--json"]),
         JSONCase("ed app info", ["app", "info", "--json"]),
         JSONCase("ed app diagnostics", ["app", "diagnostics", "--json"]),
