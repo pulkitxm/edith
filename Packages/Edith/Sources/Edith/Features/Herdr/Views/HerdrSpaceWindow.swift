@@ -547,6 +547,7 @@ private struct HerdrSpacePaneView: View {
                     HerdrSpaceTerminalView(
                         target: target, holder: holder, machines: machines,
                         active: active, wantsFocus: focused,
+                        launchEnabled: launchEnabled,
                         onFocus: { tab.focus(pane.id) })
                 }
             } else {
@@ -576,9 +577,9 @@ private struct HerdrSpaceTerminalView: View {
     let machines: MachinesModel
     let active: Bool
     let wantsFocus: Bool
+    let launchEnabled: Bool
     var onFocus: (() -> Void)?
 
-    @Environment(\.terminalLaunchEnabled) private var launchEnabled
     @Environment(\.colorScheme) private var scheme
 
     private var session: MachineSession { machines.session(for: target.machineID) }
@@ -593,7 +594,8 @@ private struct HerdrSpaceTerminalView: View {
                     context: MachineTerminalContext(startingDirectory: target.argument),
                     showsStatusBar: false,
                     onFocus: onFocus,
-                    holder: holder
+                    holder: holder,
+                    allowsShellLaunch: launchEnabled
                 )
                 .task(id: active) { connectIfNeeded() }
             } else {
