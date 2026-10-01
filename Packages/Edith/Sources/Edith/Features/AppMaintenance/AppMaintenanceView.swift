@@ -575,6 +575,7 @@ struct AppMaintenanceView: View {
         }
         .frame(minWidth: UIScale.pt(700), minHeight: UIScale.pt(520))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationRoute("section", selection: sectionBinding)
         .task { model.refresh(interval: updateRefreshInterval) }
         .task(id: updateAutoRefresh) {
             guard updateAutoRefresh else { return }

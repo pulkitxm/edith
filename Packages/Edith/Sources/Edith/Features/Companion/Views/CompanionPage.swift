@@ -85,6 +85,9 @@ struct CompanionPage: View {
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
+    private var tabBinding: Binding<CompanionTab> {
+        Binding(get: { tab }, set: { tabRaw = $0.rawValue })
+    }
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
@@ -95,6 +98,7 @@ struct CompanionPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(pageBackground)
+        .navigationRoute("tab", selection: tabBinding)
         .sheet(item: $setupModel) { model in
             CompanionSetupSheet(model: model, home: home)
         }

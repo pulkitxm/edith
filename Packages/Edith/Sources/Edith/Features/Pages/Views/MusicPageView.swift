@@ -861,6 +861,23 @@ struct MusicPage: View {
     @State private var selection = MusicListSelection()
 
     private var dark: Bool { scheme == .dark }
+    private var musicPlaceBinding: Binding<String> {
+        Binding(
+            get: { remote.showingFavourites ? "favourites" : remote.folderPath },
+            set: { value in
+                if value == "favourites" {
+                    remote.openFavourites()
+                } else {
+                    remote.navigate(to: value)
+                }
+            })
+    }
+
+    private func musicPlaceIsValid(_ value: String) -> Bool {
+        if value.isEmpty || value == "favourites" { return true }
+        return !value.hasPrefix("/") && !value.contains("..")
+    }
+
     private var theme: Color { themeColor(themeName) }
     private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
 
@@ -905,6 +922,7 @@ struct MusicPage: View {
             trackList
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
+        .navigationRoute("place", selection: musicPlaceBinding, isValid: musicPlaceIsValid)
         .navigationTitle("Music")
         .sheet(isPresented: $showDownloader) {
             DownloadSheet()

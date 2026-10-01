@@ -260,19 +260,26 @@ struct HerdrSpaceView: View {
     let store: HerdrStore
     var machines = MachinesModel.shared
     let launchEnabled: Bool
+    @State private var router = WindowRouter()
 
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
-            content
+        NavigationRouteHost(router: router) {
+            VStack(spacing: 0) {
+                toolbar
+                Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
+                content
+            }
+            .background(DashSkin.paper(dark))
+            .environment(\.terminalLaunchEnabled, launchEnabled)
+            .navigationRoute(
+                "tab",
+                selection: Binding(get: { model.selected }, set: { model.selected = $0 }),
+                isValid: { id in model.tabs.contains { $0.id == id } })
         }
-        .background(DashSkin.paper(dark))
-        .environment(\.terminalLaunchEnabled, launchEnabled)
     }
 
     private var toolbar: some View {

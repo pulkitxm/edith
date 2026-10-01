@@ -30,8 +30,34 @@ struct HerdrPage: View {
     private var dark: Bool { scheme == .dark }
     private var hideAgents: Bool { presenterState.active && presenterBlurAgents }
     private var onBoard: Bool { store.selectedTab == HerdrStore.boardID }
+    private var tabBinding: Binding<String> {
+        Binding(
+            get: { onBoard ? "" : store.selectedTab },
+            set: { store.selectedTab = $0.isEmpty ? HerdrStore.boardID : $0 })
+    }
+    private var viewBinding: Binding<String> {
+        Binding(
+            get: {
+                guard !onBoard, let agent = store.focusedSession?.agent.id else { return "" }
+                return store.view(for: agent).rawValue
+            },
+            set: { raw in
+                guard !onBoard, let agent = store.focusedSession?.agent.id,
+                    let view = HerdrAgentView(rawValue: raw)
+                else { return }
+                store.setView(view, for: agent)
+            })
+    }
     private var listedAgents: [HerdrAgent] { store.listedAgents }
     private var machineTerminals: [HerdrAgent] { store.machineTerminals }
+
+    private func herdrTabIsValid(_ id: String) -> Bool {
+        id.isEmpty || id == HerdrStore.boardID || store.tab(id) != nil
+    }
+
+    private func herdrViewIsValid(_ raw: String) -> Bool {
+        raw.isEmpty || HerdrAgentView(rawValue: raw) != nil
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,6 +104,8 @@ struct HerdrPage: View {
         .coordinateSpace(name: HerdrDragCoordinator.space)
         .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
+        .navigationRoute("view", selection: viewBinding, isValid: herdrViewIsValid)
+        .navigationRoute("tab", selection: tabBinding, isValid: herdrTabIsValid)
         .onDisappear { drag.cancel() }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)

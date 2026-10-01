@@ -12,6 +12,21 @@ struct VirtualCameraPage: View {
     }
 
     private var dark: Bool { scheme == .dark }
+    private var sceneBinding: Binding<String> {
+        Binding(
+            get: { model.state.activeSceneID?.uuidString ?? "" },
+            set: { raw in
+                guard let id = UUID(uuidString: raw),
+                    let scene = model.state.scenes.first(where: { $0.id == id })
+                else { return }
+                model.apply(scene)
+            })
+    }
+
+    private func sceneIsValid(_ raw: String) -> Bool {
+        guard let id = UUID(uuidString: raw) else { return false }
+        return model.state.scenes.contains { $0.id == id }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +48,8 @@ struct VirtualCameraPage: View {
             }
         }
         .background(DashSkin.paper(dark))
+        .navigationRoute("inspector", selection: $model.tab)
+        .navigationRoute("scene", selection: sceneBinding, isValid: sceneIsValid)
         .onAppear { model.appear() }
         .onDisappear { model.disappear() }
         .alert(

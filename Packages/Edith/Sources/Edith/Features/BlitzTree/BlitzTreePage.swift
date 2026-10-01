@@ -9,6 +9,7 @@ struct BlitzTreePage: View {
     @State private var pendingRemoval: BlitzTreeReport.Entry?
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.windowRouter) private var router
 
     var body: some View {
         ScrollView {
@@ -48,6 +49,8 @@ struct BlitzTreePage: View {
             .padding(.bottom, UIScale.pt(PageMetrics.bottom))
         }
         .background(DashSkin.paper(scheme == .dark))
+        .navigationRoute("list", selection: $list)
+        .navigationRoute("folder", selection: folderBinding, isValid: folderIsValid)
         .onDisappear { model.cancel() }
         .confirmationDialog(
             "Move this item to Trash?",
@@ -69,10 +72,31 @@ struct BlitzTreePage: View {
         }
     }
 
+    private var folderBinding: Binding<String> {
+        Binding(
+            get: { model.root ?? "" },
+            set: { path in
+                guard !path.isEmpty else { return }
+                model.scan(path, remember: false)
+            })
+    }
+
+    private func folderIsValid(_ path: String) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
     private var navigation: some View {
         HStack {
-            Button("Back", systemImage: "chevron.left", action: model.back)
-                .disabled(model.history.isEmpty || model.removing)
+            Button("Back", systemImage: "chevron.left") {
+                if router?.canGoBack == true {
+                    router?.goBack()
+                } else {
+                    model.back()
+                }
+            }
+            .disabled((router?.canGoBack != true && model.history.isEmpty) || model.removing)
             Text(model.root ?? "Choose a folder to explore its disk usage")
                 .font(.system(size: UIScale.pt(12), design: .monospaced))
                 .lineLimit(1)

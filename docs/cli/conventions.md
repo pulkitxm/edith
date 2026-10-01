@@ -420,7 +420,7 @@ is a local question that needs no permission and no round trip.
 | --- | --- | --- |
 | `ed app diagnostics` | menu bar | uptime and idle wakeups belong to the live helper process |
 | `ed app clean-keys`, `ed app test-notification`, `ed app open` | menu bar | the helper owns the panel, the keyboard lock and notifications |
-| `ed app quit --yes`, `ed app check-updates`, `ed app reveal`, `ed app snapshot` | main window | these act on the window, and the updater lives in it; the quit preview needs no process |
+| `ed app quit --yes`, `ed app check-updates`, `ed app reveal`, `ed app route`, `ed app navigate`, `ed app back`, `ed app forward`, `ed app snapshot` | main window | these act on the window, and the updater lives in it; the quit preview needs no process. `route`, `navigate`, `back`, and `forward` change or read the selection without activating Edith or ordering a window forward |
 | `ed calendar ls` | menu bar | the calendar grant belongs to the Edith bundle, not to `ed` |
 | `ed permissions request`, `ed permissions refresh` | menu bar | only the bundle can raise a TCC prompt or re-read its own state |
 | `ed permissions settings` | no | opens the matching System Settings pane locally and never relaunches Edith |
@@ -476,6 +476,10 @@ ed calendar ls                 4 seconds
 ed usage limits --refresh      20 seconds
 ed app check-updates           60 seconds, or 0.1 with --no-wait
 ed app reveal                  10 seconds
+ed app route                   10 seconds
+ed app navigate                10 seconds
+ed app back                    10 seconds
+ed app forward                 10 seconds
 ed app snapshot                15 seconds
 ed machines files undo         20 seconds
 ed music status                2 seconds, for Edith's own player

@@ -20,7 +20,13 @@ struct MachineDetailView: View {
             detail
                 .padding(.top, UIScale.pt(6))
         }
+        .navigationRoute("tab", selection: $tab, isValid: tabIsAvailable)
         .machineActivity(session)
+    }
+
+    private func tabIsAvailable(_ tab: MachineTab) -> Bool {
+        MachineTab.tabs(isLocal: session.isLocal, hasDocker: session.docker.isInstalled).contains(
+            tab)
     }
 
     private var tabBar: some View {
@@ -150,6 +156,7 @@ struct ConnectionPill: View {
 
 struct MachineWindowView: View {
     let machineID: UUID
+    @State private var router = WindowRouter()
     @State private var model = MachinesModel.shared
     @State private var tab = MachineTab.overview
     @Environment(\.colorScheme) private var scheme
@@ -158,20 +165,24 @@ struct MachineWindowView: View {
 
     var body: some View {
         let session = model.session(for: machineID)
-        VStack(spacing: UIScale.pt(0)) {
-            PageHeader(
-                session.machine.name,
-                trailing: {
-                    Text(model.isLocal(machineID) ? "Local" : session.machine.subtitle)
-                        .font(DashSkin.mono(11))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                })
-            MachineDetailView(session: session, model: model, tab: $tab)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
-        .onAppear {
-            if case .disconnected = session.state { session.start() }
+        NavigationRouteHost(router: router) {
+            VStack(spacing: UIScale.pt(0)) {
+                PageHeader(
+                    session.machine.name,
+                    trailing: {
+                        Text(model.isLocal(machineID) ? "Local" : session.machine.subtitle)
+                            .font(DashSkin.mono(11))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    })
+                MachineDetailView(session: session, model: model, tab: $tab)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DashSkin.paper(dark))
+            .navigationRoute("machine", selection: .constant(machineID.uuidString))
+            .navigationRoute("section", selection: .constant(MainDestination.machines.rawValue))
+            .onAppear {
+                if case .disconnected = session.state { session.start() }
+            }
         }
     }
 }
