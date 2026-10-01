@@ -1,4 +1,5 @@
 import AppKit
+import EdithCore
 import EventKit
 import Observation
 
@@ -6,21 +7,40 @@ import Observation
 @Observable
 public final class CalendarStore: FeatureModule {
     public private(set) var events: [CalendarEventPayload] = []
+    public private(set) var groupedDays: [(day: Date, events: [CalendarEventPayload])] = []
     public private(set) var authStatus: EKAuthorizationStatus
 
     public private(set) var pagination = CalendarEventPagination()
 
-    private let store = EKEventStore()
+    private static let eventStore = EKEventStore()
+    private let snapshotStore: CalendarAgendaSnapshotStore
+    private let fetchOverride: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?
     private var changeObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
     private var refreshDebounce: Task<Void, Never>?
     private var fetchTask: Task<Void, Never>?
+    private var snapshotTask: Task<Void, Never>?
 
-    public init() {
+    public convenience init() {
+        self.init(snapshotStore: .standard, fetch: nil)
+    }
+
+    public init(
+        snapshotStore: CalendarAgendaSnapshotStore,
+        fetch: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?
+    ) {
+        self.snapshotStore = snapshotStore
+        fetchOverride = fetch
         authStatus = EKEventStore.authorizationStatus(for: .event)
-        if authStatus == .fullAccess { refresh() }
+        if fetchOverride == nil {
+            if authStatus == .fullAccess {
+                refresh()
+            } else {
+                fetchTask = Task { [weak self] in await self?.restoreCachedAgenda() }
+            }
+        }
         changeObserver = NotificationCenter.default.addObserver(
-            forName: .EKEventStoreChanged, object: store, queue: .main
+            forName: .EKEventStoreChanged, object: Self.eventStore, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleRefresh() }
         }
@@ -58,13 +78,23 @@ public final class CalendarStore: FeatureModule {
         if status == .fullAccess { refresh() }
     }
 
+    public func restoreCachedAgenda() async {
+        guard events.isEmpty, let cached = await snapshotStore.load(), !cached.isEmpty else {
+            return
+        }
+        publish(cached, persist: false)
+    }
+
     public func refresh() {
         fetchTask?.cancel()
-        guard authStatus == .fullAccess else { return }
         fetchTask = Task { [weak self] in
-            guard let self, let fetched = await self.fetchEvents(pagination.query()) else { return }
+            await self?.restoreCachedAgenda()
+            guard let self, self.authStatus == .fullAccess || self.fetchOverride != nil else {
+                return
+            }
+            guard let fetched = await self.fetchEvents(self.pagination.query()) else { return }
             guard !Task.isCancelled else { return }
-            self.events = fetched
+            self.publish(fetched, persist: true)
         }
     }
 
@@ -72,8 +102,10 @@ public final class CalendarStore: FeatureModule {
     public func refreshAndWait() async -> [CalendarEventPayload] {
         fetchTask?.cancel()
         fetchTask = nil
+        await restoreCachedAgenda()
+        guard authStatus == .fullAccess || fetchOverride != nil else { return events }
         guard let fetched = await fetchEvents(pagination.query()) else { return events }
-        events = fetched
+        publish(fetched, persist: true)
         return fetched
     }
 
@@ -82,21 +114,71 @@ public final class CalendarStore: FeatureModule {
     }
 
     private func fetchEvents(_ query: CalendarEventQuery) async -> [CalendarEventPayload]? {
+        if let fetchOverride { return await fetchOverride(query) }
         guard authStatus == .fullAccess else { return nil }
+        let eventStore = Self.eventStore
         return await CalendarEventOperationExecution.events(query) { query in
             await Task.detached(priority: .userInitiated) {
-                let store = EKEventStore()
-                let predicate = store.predicateForEvents(
+                let predicate = eventStore.predicateForEvents(
                     withStart: query.start, end: query.end,
-                    calendars: store.calendars(for: .event))
-                return store.events(matching: predicate).map(CalendarEventPayload.init(event:))
+                    calendars: eventStore.calendars(for: .event))
+                return eventStore.events(matching: predicate).map(CalendarEventPayload.init(event:))
             }.value
         }
     }
 
     public func loadMore() {
         guard pagination.loadMore() else { return }
-        refresh()
+        appendPage()
+    }
+
+    public func loadMoreAndWait() async {
+        guard pagination.loadMore() else { return }
+        await appendPageAndWait()
+    }
+
+    private func appendPage() {
+        fetchTask?.cancel()
+        let baseline = events
+        let query = pagination.query()
+        fetchTask = Task { [weak self] in
+            guard let self, let fetched = await self.fetchEvents(query) else { return }
+            guard !Task.isCancelled else { return }
+            self.publish(self.appended(baseline, fetched), persist: true)
+        }
+    }
+
+    private func appendPageAndWait() async {
+        fetchTask?.cancel()
+        fetchTask = nil
+        let baseline = events
+        guard let fetched = await fetchEvents(pagination.query()) else { return }
+        publish(appended(baseline, fetched), persist: true)
+    }
+
+    private func appended(
+        _ baseline: [CalendarEventPayload], _ fetched: [CalendarEventPayload]
+    ) -> [CalendarEventPayload] {
+        var known = Set<String>()
+        for event in baseline {
+            known.insert(event.id)
+        }
+        var next = baseline
+        for event in fetched where !known.contains(event.id) {
+            next.append(event)
+        }
+        return next
+    }
+
+    private func publish(_ next: [CalendarEventPayload], persist: Bool) {
+        events = next
+        groupedDays = CalendarDayEvents.groupedByDay(next)
+        guard persist else { return }
+        snapshotTask?.cancel()
+        let store = snapshotStore
+        snapshotTask = Task {
+            await store.save(next)
+        }
     }
 
 }

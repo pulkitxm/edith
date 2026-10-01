@@ -1,19 +1,15 @@
 import SwiftUI
 
 public struct CalendarAgendaView: View {
-    private let events: [CalendarEventPayload]
+    private let groupedDays: [(day: Date, events: [CalendarEventPayload])]
     private let style: CalendarAgendaStyle
     private let accentColor: Color
     private let blurEvents: Bool
     private let onLoadMore: () -> Void
     private let onOpenMeeting: (URL) -> Void
 
-    private var groupedDays: [(day: Date, events: [CalendarEventPayload])] {
-        CalendarDayEvents.groupedByDay(events)
-    }
-
     public init(
-        events: [CalendarEventPayload],
+        days: [(day: Date, events: [CalendarEventPayload])],
         style: CalendarAgendaStyle,
         accentColor: Color,
         blurEvents: Bool,
@@ -22,7 +18,7 @@ public struct CalendarAgendaView: View {
             Task { @MainActor in CalendarEventActions.join(url) }
         }
     ) {
-        self.events = events
+        groupedDays = days
         self.style = style
         self.accentColor = accentColor
         self.blurEvents = blurEvents
@@ -144,6 +140,12 @@ private struct CalendarDaySection: View {
     }
 
     private var rows: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            dayRows
+        }
+    }
+
+    private var dayRows: some View {
         ForEach(Array(events.enumerated()), id: \.offset) { index, event in
             CalendarEventRow(
                 event: event,
