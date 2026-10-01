@@ -62,10 +62,11 @@ struct HomePage: View {
                             }
                         }
                         if usageEnabled {
-                            if model.loaded {
+                            if model.homeUsage.hasDays {
                                 SkinCard(title: "Activity", note: "daily cost", dark: dark) {
                                     ActivityHeatmap(
-                                        days: model.calendarDays, cuts: model.chartData.heatCuts,
+                                        days: model.homeUsage.calendarDays,
+                                        cuts: model.homeUsage.heatCuts,
                                         model: model, dark: dark, blur: blurMoney)
                                 }
                             } else if !model.loadAttempted {
@@ -102,7 +103,9 @@ struct HomePage: View {
         }
         .navigationTitle("Home")
         .task(id: usageEnabled) {
-            if automaticActionsEnabled, usageEnabled { await model.load() }
+            guard automaticActionsEnabled, usageEnabled else { return }
+            await model.restoreCachedHomeUsage()
+            await model.load()
         }
         .onAppear {
             guard automaticActionsEnabled else { return }
@@ -855,7 +858,7 @@ private struct UsageSummaryCard: View {
     private func day(_ offset: Int) -> HeatDay? {
         let cal = Calendar.current
         let date = cal.date(byAdding: .day, value: -offset, to: cal.startOfDay(for: Date()))!
-        return model.heatDetail[Self.ymd.string(from: date)]
+        return model.homeUsage.heatDetail[Self.ymd.string(from: date)]
     }
 
     private var lastDays: [(date: Date, cost: Double, tokens: Double)] {
@@ -863,7 +866,7 @@ private struct UsageSummaryCard: View {
         let today = cal.startOfDay(for: Date())
         return (0..<14).reversed().map { offset in
             let date = cal.date(byAdding: .day, value: -offset, to: today)!
-            let detail = model.heatDetail[Self.ymd.string(from: date)]
+            let detail = model.homeUsage.heatDetail[Self.ymd.string(from: date)]
             return (date, detail?.cost ?? 0, detail?.tokens ?? 0)
         }
     }
@@ -874,7 +877,7 @@ private struct UsageSummaryCard: View {
 
     var body: some View {
         SkinCard(title: "Agent usage", note: "last 14 days", dark: dark) {
-            if model.loaded {
+            if model.homeUsage.hasDays {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     HStack(spacing: UIScale.pt(24)) {
                         stat(

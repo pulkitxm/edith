@@ -98,7 +98,13 @@ import Testing
             dashboard.chartData.stackedCost.filter { $0.tokens > 0 }.map(\.label))
 
         #expect(dashboard.chartData.stackedCost.count < 61)
+        #expect(dashboard.chartData.daily.count == dashboard.chartData.stackedCost.count)
+        #expect(dashboard.chartData.daily.count <= DashboardComputation.chartMarkBudget)
+        #expect(
+            Set(dashboard.chartData.daily.map(\.label))
+                == Set(dashboard.chartData.stackedCost.map(\.label)))
         #expect(barBuckets == activeCostBuckets)
+        #expect(dashboard.chartData.daily.reduce(0) { $0 + $1.tokens } == 610)
         #expect(dashboard.chartData.stackedCost.reduce(0) { $0 + $1.tokens } == 610)
         #expect(dashboard.chartData.stackedCost.reduce(0) { $0 + $1.cost } == 61)
     }
