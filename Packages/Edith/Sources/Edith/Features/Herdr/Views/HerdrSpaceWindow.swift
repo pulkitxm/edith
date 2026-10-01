@@ -207,7 +207,7 @@ struct HerdrSpaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             content
         }
         .background(DashSkin.paper(dark))

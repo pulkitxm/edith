@@ -51,7 +51,7 @@ struct DocsScreen: View {
             PageHeader(
                 "Docs", trailing: { history },
                 accessory: { askField(question: $browser.question) })
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             ZStack(alignment: .top) {
                 content
                 if browser.resultsVisible, let answer = browser.answer {
@@ -83,7 +83,7 @@ struct DocsScreen: View {
                             filterFocused: $filterFocused, dark: dark
                         )
                         .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
-                        Rectangle().fill(DashSkin.line(dark)).frame(width: 1)
+                        Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
                         document(library, width: geometry.size.width)
                     }
                 }

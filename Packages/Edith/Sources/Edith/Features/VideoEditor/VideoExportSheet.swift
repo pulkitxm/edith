@@ -1,4 +1,5 @@
 import SwiftUI
+import EdithKit
 
 enum VideoExportQuality: String, CaseIterable, Identifiable {
     case source
@@ -59,7 +60,7 @@ struct VideoExportSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 480)
+        .frame(width: UIScale.pt(480))
     }
 
     private var options: some View {
@@ -170,7 +171,7 @@ struct VideoExportSheet: View {
                             set: { delivery.bitRate = min(1000, max(1, $0)) * 1_000_000 }
                         ), format: .number
                     )
-                    .frame(width: 80)
+                    .frame(width: UIScale.pt(80))
                 }
                 Stepper(
                     "Keyframe interval: \(delivery.keyFrameInterval) frames",

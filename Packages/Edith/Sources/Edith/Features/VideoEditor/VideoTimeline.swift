@@ -1,4 +1,5 @@
 import SwiftUI
+import EdithKit
 
 struct VideoTimeline: View {
     let model: VideoEditorModel
@@ -25,7 +26,7 @@ struct VideoTimeline: View {
                 Spacer()
                 Text("Drag to move · edges to trim").font(.caption).foregroundStyle(.secondary)
                 Button("Fit") { scale = max(8, min(180, 900 / max(1, model.duration))) }
-                Slider(value: $scale, in: 8...240).frame(width: 110).accessibilityLabel(
+                Slider(value: $scale, in: 8...240).frame(width: UIScale.pt(110)).accessibilityLabel(
                     "Timeline scale")
             }
             .buttonStyle(.borderless).padding(12)
@@ -61,17 +62,17 @@ struct VideoTimeline: View {
                     }
                     VideoTimelinePlayhead(model: model, scale: scale)
                 }
-                .frame(width: width + 90).padding(.vertical, 8)
+                .frame(width: width + UIScale.pt(90)).padding(.vertical, 8)
             }
             .coordinateSpace(name: "editTimeline")
         }
-        .frame(minHeight: 180, idealHeight: 240, maxHeight: 280)
+        .frame(minHeight: UIScale.pt(180), idealHeight: UIScale.pt(240), maxHeight: UIScale.pt(280))
     }
 
     private func ruler(width: Double) -> some View {
         let step = max(1, Int(ceil(60 / scale)))
         return HStack(spacing: 0) {
-            Text("TIME").font(.caption2).foregroundStyle(.secondary).frame(width: 90)
+            Text("TIME").font(.caption2).foregroundStyle(.secondary).frame(width: UIScale.pt(90))
             Canvas { context, size in
                 for second in stride(from: 0, through: Int(ceil(model.duration)), by: step) {
                     context.draw(
@@ -79,7 +80,7 @@ struct VideoTimeline: View {
                         at: CGPoint(x: Double(second) * scale + 2, y: 10), anchor: .leading)
                 }
             }
-            .frame(width: width, height: 26).contentShape(Rectangle())
+            .frame(width: width, height: UIScale.pt(26)).contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0).onChanged { model.seek(to: $0.location.x / scale) }
             )
@@ -91,8 +92,10 @@ struct VideoTimeline: View {
         _ title: String, color: Color, items: [Item], width: Double, snaps: [Double]
     ) -> some View {
         HStack(spacing: 0) {
-            Text(title).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                .frame(width: 90)
+            Text(title).font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+                .secondary
+            )
+            .frame(width: UIScale.pt(90))
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 5).fill(color.opacity(0.06))
                 ForEach(items) { item in
@@ -110,19 +113,22 @@ struct VideoTimeline: View {
                         }
                     }
                     .overlay(alignment: .bottom) {
-                        waveform(item).frame(height: 10).padding(.horizontal, 12).padding(
-                            .bottom, 2)
+                        waveform(item).frame(height: UIScale.pt(10)).padding(.horizontal, 12)
+                            .padding(
+                                .bottom, 2)
                     }
                     .offset(x: item.start * scale)
                 }
-            }.frame(width: width, height: 38)
+            }.frame(width: width, height: UIScale.pt(38))
         }
     }
 
     private func zoomLane(width: Double) -> some View {
         HStack(spacing: 0) {
-            Text("ZOOM").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                .frame(width: 90)
+            Text("ZOOM").font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+                .secondary
+            )
+            .frame(width: UIScale.pt(90))
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 5).fill(Color.blue.opacity(0.06))
                 ForEach(model.project?.zooms ?? []) { zoom in
@@ -146,7 +152,7 @@ struct VideoTimeline: View {
                     )
                     .offset(x: start * scale)
                 }
-            }.frame(width: width, height: 38).coordinateSpace(name: "zoomTimeline")
+            }.frame(width: width, height: UIScale.pt(38)).coordinateSpace(name: "zoomTimeline")
         }
     }
 
@@ -263,8 +269,8 @@ private struct VideoTimelinePlayhead: View {
     let scale: Double
 
     var body: some View {
-        Rectangle().fill(.red).frame(width: 1.5)
-            .offset(x: 90 + model.playhead * scale).allowsHitTesting(false)
+        Rectangle().fill(.red).frame(width: UIScale.pt(1.5))
+            .offset(x: UIScale.pt(90) + model.playhead * scale).allowsHitTesting(false)
     }
 }
 
@@ -294,7 +300,9 @@ struct VideoTimelineRegion: View {
             }.buttonStyle(.borderless).highPriorityGesture(drag("move"))
             handle("end")
         }
-        .frame(width: max(28, (range.end - range.start) * scale), height: 32)
+        .frame(
+            width: max(UIScale.pt(28), (range.end - range.start) * scale), height: UIScale.pt(32)
+        )
         .background(color.opacity(selected ? 0.65 : 0.3), in: RoundedRectangle(cornerRadius: 5))
         .overlay {
             RoundedRectangle(cornerRadius: 5).strokeBorder(selected ? .white : .clear, lineWidth: 1)
@@ -304,8 +312,10 @@ struct VideoTimelineRegion: View {
     }
 
     private func handle(_ edge: String) -> some View {
-        Capsule().fill(.white.opacity(0.7)).frame(width: 3, height: 16)
-            .frame(width: 10, height: 32).contentShape(Rectangle()).gesture(drag(edge))
+        Capsule().fill(.white.opacity(0.7)).frame(width: UIScale.pt(3), height: UIScale.pt(16))
+            .frame(width: UIScale.pt(10), height: UIScale.pt(32)).contentShape(Rectangle()).gesture(
+                drag(edge)
+            )
             .accessibilityLabel("Trim \(title) \(edge)")
     }
 

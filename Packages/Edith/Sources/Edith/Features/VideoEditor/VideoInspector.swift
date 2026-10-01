@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import SwiftUI
+import EdithKit
 
 struct VideoInspector: View {
     enum Tab: String, CaseIterable {
@@ -47,7 +48,7 @@ struct VideoInspector: View {
         }
         .font(.callout)
         .padding(14)
-        .frame(width: 250)
+        .frame(width: UIScale.pt(250))
         .onChange(of: model.selection) { _, selection in
             switch selection {
             case .clip, .speed: tab = .clip

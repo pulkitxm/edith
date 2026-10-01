@@ -139,7 +139,7 @@ struct HerdrAgentDetails: View {
         VStack(spacing: 0) {
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
             Button {
                 confirmingAgentClose = true
             } label: {

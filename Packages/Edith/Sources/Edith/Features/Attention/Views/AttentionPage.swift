@@ -125,7 +125,7 @@ private struct AttentionPeriodControl: View {
             .fixedSize()
             .popover(isPresented: $customOpen, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    Text("Custom range").font(.system(size: 13, weight: .semibold))
+                    Text("Custom range").font(.system(size: UIScale.pt(13), weight: .semibold))
                     DatePicker(
                         "From", selection: $customFrom, in: ...Date(), displayedComponents: .date)
                     DatePicker(
@@ -140,7 +140,7 @@ private struct AttentionPeriodControl: View {
                     }
                 }
                 .padding(16)
-                .frame(width: 280)
+                .frame(width: UIScale.pt(280))
             }
             AttentionWindowMenu(model: model)
             Divider().frame(height: UIScale.pt(18)).padding(.horizontal, UIScale.pt(4))
@@ -515,7 +515,7 @@ private struct AttentionSetupView: View {
                 }
                 .pickerStyle(.segmented)
                 Text(privacyDescription)
-                    .font(.system(size: 12))
+                    .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
                 if model.settings.privacyLevel == .detailed {
                     Toggle(
@@ -533,9 +533,9 @@ private struct AttentionSetupView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("The event store starts empty")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: UIScale.pt(12), weight: .semibold))
                     Text("You will see a collecting state until genuine activity arrives.")
-                        .font(.system(size: 11))
+                        .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -574,9 +574,10 @@ private struct AttentionCollectingView: View {
         AttentionCard {
             VStack(spacing: 18) {
                 ZStack {
-                    Circle().fill(Color.accentColor.opacity(0.12)).frame(width: 76, height: 76)
+                    Circle().fill(Color.accentColor.opacity(0.12)).frame(
+                        width: UIScale.pt(76), height: UIScale.pt(76))
                     Image(systemName: "waveform.path.ecg")
-                        .font(.system(size: 30, weight: .medium))
+                        .font(.system(size: UIScale.pt(30), weight: .medium))
                         .foregroundStyle(Color.accentColor)
                 }
                 Text(
@@ -591,7 +592,7 @@ private struct AttentionCollectingView: View {
                 )
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 520)
+                .frame(maxWidth: UIScale.pt(520))
                 HStack(spacing: 12) {
                     AttentionStatusPill(
                         title: "Applications",
@@ -639,13 +640,13 @@ struct SetupStep: View {
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
             Text(number)
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .frame(width: 26, height: 26)
+                .font(.system(size: UIScale.pt(12), weight: .bold, design: .rounded))
+                .frame(width: UIScale.pt(26), height: UIScale.pt(26))
                 .background(Color.accentColor.opacity(0.14), in: Circle())
                 .foregroundStyle(Color.accentColor)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.system(size: 15, weight: .semibold))
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
+                Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
             }
         }
     }
@@ -658,10 +659,10 @@ struct SourceLabel: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: 24)
+            Image(systemName: icon).foregroundStyle(Color.accentColor).frame(width: UIScale.pt(24))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .semibold))
-                Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(title).font(.system(size: UIScale.pt(13), weight: .semibold))
+                Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
             }
         }
     }
@@ -680,9 +681,11 @@ struct GuideRow<Trailing: View>: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(String(number)).font(.system(size: 10, weight: .bold)).frame(width: 21, height: 21)
-                .background(.secondary.opacity(0.12), in: Circle())
-            Text(text).font(.system(size: 12))
+            Text(String(number)).font(.system(size: UIScale.pt(10), weight: .bold)).frame(
+                width: UIScale.pt(21), height: UIScale.pt(21)
+            )
+            .background(.secondary.opacity(0.12), in: Circle())
+            Text(text).font(.system(size: UIScale.pt(12)))
             Spacer()
             trailing
         }
@@ -706,8 +709,8 @@ struct SettingsTitle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 15, weight: .semibold))
-            Text(subtitle).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(title).font(.system(size: UIScale.pt(15), weight: .semibold))
+            Text(subtitle).font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
         }
     }
 }
@@ -750,14 +753,15 @@ struct BrowserInstallCard: View {
             if showToken {
                 Divider()
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("Local port").font(.system(size: 11, weight: .semibold))
+                    Text("Local port").font(.system(size: UIScale.pt(11), weight: .semibold))
                     Text(String(model.settings.serverPort))
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
                         .textSelection(.enabled)
-                    Text("Private local token").font(.system(size: 11, weight: .semibold))
+                    Text("Private local token").font(
+                        .system(size: UIScale.pt(11), weight: .semibold))
                     HStack {
                         Text(String(repeating: "•", count: 24))
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(size: UIScale.pt(11), design: .monospaced))
                             .lineLimit(1)
                         Spacer()
                         Button("Copy") { model.copyToken() }
@@ -765,13 +769,13 @@ struct BrowserInstallCard: View {
                     Text(
                         "Paste this token into the extension settings for every profile. Each profile gets its own label and can import its own 30-day site inventory."
                     )
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
                 }
             }
             Text(
                 "Version \(AttentionExtensionInstaller.version) reads the focused tab, page titles, searches, repositories, videos, playing media and typing, clicking and scrolling counts on every site. Updates install themselves when Edith ships a newer version."
             )
-            .font(.system(size: 11)).foregroundStyle(.secondary)
+            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
         }
     }
 }

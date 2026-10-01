@@ -230,9 +230,9 @@ struct BackgroundAgentPane: View {
                     Label("Event timeline", systemImage: "waveform.path.ecg")
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 16, height: 20)
+                        .frame(width: UIScale.pt(16), height: UIScale.pt(20))
                 }
                 .padding(.vertical, 6)
                 .padding(.trailing, 8)

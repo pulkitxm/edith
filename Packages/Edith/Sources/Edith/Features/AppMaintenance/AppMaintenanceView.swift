@@ -702,10 +702,11 @@ struct AppMaintenanceView: View {
             HSplitView {
                 sectionInventory
                     .frame(
-                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        minWidth: UIScale.pt(280), idealWidth: UIScale.pt(320),
+                        maxWidth: UIScale.pt(380),
                         maxHeight: .infinity)
                 detail
-                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: UIScale.pt(460), maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -1152,10 +1153,11 @@ struct AppMaintenanceSectionSkeleton: View {
             HSplitView {
                 inventory
                     .frame(
-                        minWidth: 280, idealWidth: 320, maxWidth: 380,
+                        minWidth: UIScale.pt(280), idealWidth: UIScale.pt(320),
+                        maxWidth: UIScale.pt(380),
                         maxHeight: .infinity)
                 detail
-                    .frame(minWidth: 460, maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: UIScale.pt(460), maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

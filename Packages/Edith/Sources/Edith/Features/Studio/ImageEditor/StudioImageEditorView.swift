@@ -226,7 +226,7 @@ struct StudioImageCanvas: View {
             Circle()
                 .fill(Color.white)
                 .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: 2))
-                .frame(width: 12, height: 12)
+                .frame(width: UIScale.pt(12), height: UIScale.pt(12))
                 .offset(x: frame.maxX - 6, y: frame.maxY - 6)
                 .gesture(resizeGesture(in: rect, layer: selected))
         }
@@ -399,7 +399,7 @@ struct StudioImageCropOverlay: View {
                 let y = corner < 2 ? crop.minY : crop.maxY
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white)
-                    .frame(width: 14, height: 14)
+                    .frame(width: UIScale.pt(14), height: UIScale.pt(14))
                     .offset(x: x - 7, y: y - 7)
                     .gesture(
                         DragGesture()

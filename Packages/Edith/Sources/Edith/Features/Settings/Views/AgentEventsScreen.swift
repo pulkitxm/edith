@@ -110,9 +110,9 @@ struct AgentEventsScreen: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: UIScale.pt(11), weight: .semibold))
                         .foregroundStyle(DashSkin.ink(scheme == .dark))
-                        .frame(width: 28, height: 28)
+                        .frame(width: UIScale.pt(28), height: UIScale.pt(28))
                         .contentShape(Circle())
                 }
                 .buttonStyle(.edith(.borderless))
@@ -173,7 +173,10 @@ struct AgentEventsScreen: View {
             .font(.caption).foregroundStyle(.secondary)
             .padding(.horizontal, 24).padding(.vertical, 12)
         }
-        .frame(minWidth: 680, idealWidth: 840, minHeight: 460, idealHeight: 620)
+        .frame(
+            minWidth: UIScale.pt(680), idealWidth: UIScale.pt(840), minHeight: UIScale.pt(460),
+            idealHeight: UIScale.pt(620)
+        )
         .background(.regularMaterial)
         .disclosureGroupStyle(EdithDisclosureGroupStyle())
         .task(id: "\(model.paused)-\(retryID)") {

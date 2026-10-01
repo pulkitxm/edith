@@ -38,7 +38,7 @@ struct BifrostSnippetEditor: View {
                 TextField("Name", text: item.name)
                     .textFieldStyle(.roundedBorder)
                 TextEditor(text: item.content)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(.system(size: UIScale.pt(12), design: .monospaced))
                     .frame(height: UIScale.pt(60))
                     .border(Color.secondary.opacity(0.3))
                 TextField("Keyword", text: item.keyword)

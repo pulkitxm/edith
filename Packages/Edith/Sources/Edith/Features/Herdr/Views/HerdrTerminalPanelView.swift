@@ -30,7 +30,7 @@ struct HerdrTerminalPanelView: View {
                         .presenterCover(hideAgents, dark: dark)
                     Rectangle()
                         .fill(DashSkin.lineStrong(dark))
-                        .frame(width: 1)
+                        .frame(width: UIScale.pt(1))
                     HerdrTerminalList(store: store, owner: owner, hideAgents: hideAgents)
                         .frame(width: UIScale.pt(HerdrTerminalPanelSizing.listWidth))
                 }
@@ -115,7 +115,7 @@ private struct HerdrTerminalList: View {
             header
             Rectangle()
                 .fill(DashSkin.lineStrong(dark))
-                .frame(height: 1)
+                .frame(height: UIScale.pt(1))
             ScrollView {
                 VStack(spacing: UIScale.pt(2)) {
                     ForEach(panels.terminals(of: owner)) { terminal in

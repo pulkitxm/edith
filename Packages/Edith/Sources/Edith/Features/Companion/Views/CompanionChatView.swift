@@ -477,12 +477,12 @@ struct CompanionChatScreen: View {
 
     private func dayDividerView(_ label: String) -> some View {
         HStack(spacing: UIScale.pt(10)) {
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
             Text(label)
                 .font(.system(size: UIScale.pt(10.5)))
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .fixedSize()
-            Rectangle().fill(DashSkin.line(dark)).frame(height: 1)
+            Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
         }
         .padding(.vertical, UIScale.pt(16))
     }

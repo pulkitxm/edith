@@ -1,0 +1,10 @@
+GhosttyTerminalView	terminal font zoom owns command plus, minus, and zero
+LogTextView	log pane has its own font size control
+PDFPreview	document scale stays with the file
+QuickLookPreview	document preview stays with the file
+NativeVideoPlayer	video frames stay at their media size
+StudioPDFCanvas	document zoom stays with the page
+StudioReadOnlyPDFView	document scale stays with the file
+VirtualCameraPreview	camera framing zoom stays independent
+PdfPreview	document scale stays with the file
+EditorPlayerView	video frames stay at their media size

@@ -163,7 +163,7 @@ struct StudioSignaturePad: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 10).fill(Color.white)
                 RoundedRectangle(cornerRadius: 10).strokeBorder(Color.black.opacity(0.15))
-                Rectangle().fill(Color.black.opacity(0.15)).frame(height: 1).padding(
+                Rectangle().fill(Color.black.opacity(0.15)).frame(height: UIScale.pt(1)).padding(
                     .horizontal, 30
                 ).offset(y: 40)
                 content
@@ -175,11 +175,13 @@ struct StudioSignaturePad: View {
                     Button {
                         color = swatch
                     } label: {
-                        Circle().fill(Color(cgColor: swatch.cgColor)).frame(width: 18, height: 18)
-                            .overlay(
-                                Circle().strokeBorder(
-                                    Color.primary.opacity(color == swatch ? 0.9 : 0.15),
-                                    lineWidth: 2))
+                        Circle().fill(Color(cgColor: swatch.cgColor)).frame(
+                            width: UIScale.pt(18), height: UIScale.pt(18)
+                        )
+                        .overlay(
+                            Circle().strokeBorder(
+                                Color.primary.opacity(color == swatch ? 0.9 : 0.15),
+                                lineWidth: 2))
                     }
                     .buttonStyle(.edith(.iconOnly))
                 }
@@ -245,7 +247,7 @@ struct StudioSignaturePad: View {
                         Text($0).font(.custom($0, size: 14)).tag($0)
                     }
                 }
-                .frame(width: 220)
+                .frame(width: UIScale.pt(220))
             }
         case .image:
             VStack(spacing: 10) {

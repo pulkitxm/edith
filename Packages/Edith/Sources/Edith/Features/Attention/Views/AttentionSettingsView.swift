@@ -74,17 +74,17 @@ struct AttentionSettingsView: View {
                     "Categorize automatically every half hour",
                     isOn: $model.settings.jevCategorizationEnabled)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("About you").font(.system(size: 11, weight: .semibold))
+                    Text("About you").font(.system(size: UIScale.pt(11), weight: .semibold))
                     TextEditor(text: $model.settings.profileNote)
-                        .font(.system(size: 12))
-                        .frame(minHeight: 70, maxHeight: 120)
+                        .font(.system(size: UIScale.pt(12)))
+                        .frame(minHeight: UIScale.pt(70), maxHeight: UIScale.pt(120))
                         .scrollContentBackground(.hidden)
                         .padding(6)
                         .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
                     Text(
                         "Jev reads this with every question, together with examples from your own rules. Say what you do and what counts as useful for you, for example: I build developer tools, so following AI news on X and watching engineering talks helps my work, but X is still personal time."
                     )
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack {
@@ -99,7 +99,7 @@ struct AttentionSettingsView: View {
                     Text(
                         "\(model.classifications.entities.values.filter(\.isDecisive).count) apps and sites, \(model.classifications.titles.values.filter(\.isDecisive).count) titles categorized by Jev"
                     )
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
                 }
             }
 
@@ -113,7 +113,7 @@ struct AttentionSettingsView: View {
                 )
                 ForEach(model.settings.ignoredBundleIDs, id: \.self) { bundleID in
                     HStack {
-                        Text(bundleID).font(.system(size: 12, design: .monospaced))
+                        Text(bundleID).font(.system(size: UIScale.pt(12), design: .monospaced))
                         Spacer()
                         Button(role: .destructive) {
                             model.settings.ignoredBundleIDs.removeAll { $0 == bundleID }
@@ -156,7 +156,7 @@ struct AttentionSettingsView: View {
                     Spacer()
                     if let date = model.cloudBackup.lastBackupAt {
                         Text("Last backup \(date.formatted(date: .abbreviated, time: .shortened))")
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                            .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -167,7 +167,7 @@ struct AttentionSettingsView: View {
 
             HStack {
                 Text("Changes apply to all history and to the collectors after saving.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(.system(size: UIScale.pt(11))).foregroundStyle(.secondary)
                 Spacer()
                 Button("Save settings") { model.saveSettings() }
                     .buttonStyle(.edith(.primary))
@@ -201,14 +201,14 @@ private struct AttentionCategoriesEditor: View {
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 150)
+                    .frame(width: UIScale.pt(150))
                     Picker("Sphere", selection: $category.sphere) {
                         ForEach(AttentionSphere.allCases, id: \.self) { sphere in
                             Text(sphere.title).tag(sphere)
                         }
                     }
                     .labelsHidden()
-                    .frame(width: 160)
+                    .frame(width: UIScale.pt(160))
                     Button(role: .destructive) {
                         model.removeCategory(category.id)
                     } label: {
@@ -274,7 +274,7 @@ private struct AttentionRuleEditor: View {
                     ForEach(categories) { category in Text(category.name).tag(category.id) }
                 }
                 .labelsHidden()
-                .frame(width: 180)
+                .frame(width: UIScale.pt(180))
                 Button(role: .destructive, action: remove) { Image(systemName: "trash") }
                     .buttonStyle(.edith(.iconOnly))
             }
@@ -285,17 +285,17 @@ private struct AttentionRuleEditor: View {
                         Text(level.title).tag(AttentionProductivity?.some(level))
                     }
                 }
-                .frame(width: 260)
+                .frame(width: UIScale.pt(260))
                 Picker("Part of", selection: $rule.sphere) {
                     Text("Category default").tag(AttentionSphere?.none)
                     ForEach(AttentionSphere.allCases, id: \.self) { sphere in
                         Text(sphere.title).tag(AttentionSphere?.some(sphere))
                     }
                 }
-                .frame(width: 260)
+                .frame(width: UIScale.pt(260))
                 Spacer()
             }
-            .font(.system(size: 11))
+            .font(.system(size: UIScale.pt(11)))
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                 GridRow {
                     field("Apps", \.bundleIDs, "com.apple.dt.Xcode, com.jetbrains.*")
@@ -310,7 +310,7 @@ private struct AttentionRuleEditor: View {
                         .gridCellColumns(2)
                 }
             }
-            .font(.system(size: 11))
+            .font(.system(size: UIScale.pt(11)))
         }
         .padding(.vertical, 4)
     }
@@ -320,7 +320,8 @@ private struct AttentionRuleEditor: View {
         _ placeholder: String
     ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
+            Text(label).font(.system(size: UIScale.pt(10), weight: .semibold)).foregroundStyle(
+                .secondary)
             TextField(
                 placeholder,
                 text: Binding(

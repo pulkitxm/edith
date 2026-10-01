@@ -3,6 +3,7 @@ import AppKit
 import Observation
 import ScreenCaptureKit
 import SwiftUI
+import EdithKit
 
 @available(macOS 15.0, *)
 @MainActor @Observable
@@ -273,7 +274,7 @@ struct VideoRecorderSheet: View {
                 Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
             }
         }
-        .padding(24).frame(width: 480)
+        .padding(24).frame(width: UIScale.pt(480))
         .interactiveDismissDisabled(recorder.recording || recorder.busy)
         .task { await recorder.loadSources() }
     }

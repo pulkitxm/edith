@@ -393,9 +393,9 @@ struct StudioSpanSlider: View {
             let startX = CGFloat(span.start / duration) * width
             let endX = CGFloat((span.end ?? duration) / duration) * width
             ZStack(alignment: .leading) {
-                Capsule().fill(DashSkin.grid(scheme == .dark)).frame(height: 6)
+                Capsule().fill(DashSkin.grid(scheme == .dark)).frame(height: UIScale.pt(6))
                 Capsule().fill(DashSkin.accent(scheme == .dark))
-                    .frame(width: max(2, endX - startX), height: 6)
+                    .frame(width: max(2, endX - startX), height: UIScale.pt(6))
                     .offset(x: startX)
                 handle.offset(x: startX - 7)
                     .gesture(
@@ -423,7 +423,7 @@ struct StudioSpanSlider: View {
         Circle()
             .fill(Color.white)
             .overlay(Circle().strokeBorder(DashSkin.accent(scheme == .dark), lineWidth: 2))
-            .frame(width: 14, height: 14)
+            .frame(width: UIScale.pt(14), height: UIScale.pt(14))
             .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
     }
 }
@@ -529,7 +529,7 @@ struct StudioRectOverlay: View {
                         .onEnded { _ in origin = nil })
             Circle()
                 .fill(Color.white)
-                .frame(width: 12, height: 12)
+                .frame(width: UIScale.pt(12), height: UIScale.pt(12))
                 .offset(x: frame.maxX - 6, y: frame.maxY - 6)
                 .gesture(
                     DragGesture()
