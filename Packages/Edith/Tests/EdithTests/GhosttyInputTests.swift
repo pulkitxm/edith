@@ -5,8 +5,10 @@ import GhosttyKit
 import Testing
 
 @Suite struct GhosttyInputTests {
-    @Test(arguments: [false, true]) @MainActor
-    func plainDragSelectsAndCopiesInsideAMouseReportingChild(focusClick: Bool) async throws {
+    @Test(arguments: [false, true], [1000, 1002, 1003]) @MainActor
+    func plainDragSelectsAndCopiesInsideAMouseReportingChild(focusClick: Bool, mode: Int)
+        async throws
+    {
         _ = TestWindowHost.application
         let board = NSPasteboard.general
         let previous = (board.types ?? []).compactMap { type in
@@ -20,7 +22,7 @@ import Testing
             .appendingPathComponent("edith-ghostty-select-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: output) }
         let command =
-            "stty raw -echo; printf '\\033[2J\\033[3J\\033[Halpha beta gamma\\033[?1003h\\033[?1006h'; cat > '\(output.path)'"
+            "stty raw -echo; printf '\\033[2J\\033[3J\\033[Halpha beta gamma\\033[?\(mode)h\\033[?1006h'; cat > '\(output.path)'"
         let view = GhosttyTerminalView(
             launch: GhosttyLaunch(
                 executable: "/bin/sh", arguments: ["-c", command], environment: []),
@@ -71,15 +73,26 @@ import Testing
         try await Task.sleep(for: .milliseconds(150))
         #expect((try? Data(contentsOf: output))?.isEmpty == true)
 
+        view.mouseDown(with: try event(.leftMouseDown, at: start, number: 4))
+        view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 5))
+        #expect(view.selectionMouseReportingSuspended)
+        view.setRenderingActive(false)
+        #expect(!view.selectionMouseReportingSuspended)
+        #expect(!view.selectionMouseActive)
+        #expect(view.pendingSelectionMouseDown == nil)
+        view.setRenderingActive(true)
+
         let hover = NSPoint(x: 200, y: 300)
-        view.mouseMoved(with: try event(.mouseMoved, at: hover, number: 4))
+        view.mouseDown(with: try event(.leftMouseDown, at: hover, number: 6))
+        view.mouseUp(with: try event(.leftMouseUp, at: hover, number: 7))
         for _ in 0..<100 {
             if let data = try? Data(contentsOf: output), !data.isEmpty { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         let reports = String(decoding: try Data(contentsOf: output), as: UTF8.self)
-        #expect(reports.contains("\u{1B}[<35;"))
-        #expect(!reports.contains("\u{1B}[<0;"))
+        #expect(reports.contains("\u{1B}[<0;"))
+        #expect(reports.contains("m"))
+        #expect(board.string(forType: .string) == "alpha")
     }
 
     @Test func onlyConfiguredInterruptsRequestTerminalReset() {
@@ -176,7 +189,10 @@ import Testing
         #expect(bytes == Data([0x1B]))
     }
 
-    @Test @MainActor func optionClicksAndRightClicksReachAMouseReportingChild() async throws {
+    @Test(arguments: [NSEvent.ModifierFlags(), .option, .control]) @MainActor
+    func leftClicksAndRightClicksReachAMouseReportingChild(flags: NSEvent.ModifierFlags)
+        async throws
+    {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("edith-ghostty-buttons-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: output) }
@@ -205,13 +221,19 @@ import Testing
             try #require(
                 NSEvent.mouseEvent(
                     with: type, location: NSPoint(x: 80, y: 500),
-                    modifierFlags: type == .leftMouseDown || type == .leftMouseUp ? .option : [],
+                    modifierFlags: type == .leftMouseDown || type == .leftMouseUp ? flags : [],
                     timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
                     eventNumber: number, clickCount: 1, pressure: 0))
         }
 
         view.mouseMoved(with: try event(.mouseMoved, number: 1))
         view.mouseDown(with: try event(.leftMouseDown, number: 2))
+        let jitter = try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDragged, location: NSPoint(x: 81, y: 500), modifierFlags: flags,
+                timestamp: 2.1, windowNumber: window.windowNumber, context: nil, eventNumber: 6,
+                clickCount: 1, pressure: 0))
+        view.mouseDragged(with: jitter)
         view.mouseUp(with: try event(.leftMouseUp, number: 3))
         view.rightMouseDown(with: try event(.rightMouseDown, number: 4))
         view.rightMouseUp(with: try event(.rightMouseUp, number: 5))
@@ -227,8 +249,10 @@ import Testing
         }
 
         #expect(reports.contains { $0.hasPrefix("[<35;") && $0.hasSuffix("M") })
-        #expect(reports.contains { $0.hasPrefix("[<8;") && $0.hasSuffix("M") })
-        #expect(reports.contains { $0.hasPrefix("[<8;") && $0.hasSuffix("m") })
+        let leftCode = flags.contains(.option) ? 8 : flags.contains(.control) ? 16 : 0
+        #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("M") })
+        #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("m") })
+        #expect(!view.selectionMouseReportingSuspended)
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("M") })
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("m") })
     }

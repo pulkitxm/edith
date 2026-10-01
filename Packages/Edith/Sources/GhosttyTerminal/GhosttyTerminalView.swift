@@ -41,6 +41,7 @@ public final class GhosttyTerminalView: NSView {
     var localEventMonitor: Any?
     var suppressNextLeftMouseUp = false
     var focusMouseDown: NSEvent?
+    var pendingSelectionMouseDown: NSEvent?
     var selectionMouseActive = false
     var selectionCopyPending = false
     var selectionMouseReportingSuspended = false
@@ -155,6 +156,7 @@ public final class GhosttyTerminalView: NSView {
         accessibilitySelectionTask?.cancel()
         accessibilitySelectionTask = nil
         focusMouseDown = nil
+        pendingSelectionMouseDown = nil
         selectionMouseActive = false
         selectionCopyPending = false
         secureInputRequested = false
@@ -186,6 +188,8 @@ public final class GhosttyTerminalView: NSView {
             if focusRequested {
                 DispatchQueue.main.async { [weak self] in self?.claimRequestedFocus() }
             }
+        } else {
+            cancelSelectionGesture()
         }
         syncFocus()
         applyPresentationState()
@@ -329,7 +333,10 @@ public final class GhosttyTerminalView: NSView {
         guard renderingActive != active else { return }
         renderingActive = active
         isHidden = !active
-        if !active { mouseOverSurface = false }
+        if !active {
+            mouseOverSurface = false
+            cancelSelectionGesture()
+        }
         syncFocus()
         applyPresentationState()
     }
@@ -432,6 +439,7 @@ public final class GhosttyTerminalView: NSView {
     public override func resignFirstResponder() -> Bool {
         guard super.resignFirstResponder() else { return false }
         suppressNextLeftMouseUp = false
+        cancelSelectionGesture()
         if let surface { ghostty_surface_set_focus(surface, false) }
         syncSecureInput(focused: false)
         return true
