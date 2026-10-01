@@ -3,11 +3,12 @@
 Quits the Edith main window and leaves the menu bar running.
 
 ```
-ed app quit [--yes] [--json]
+ed app quit [--completely] [--yes] [--json]
 ```
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
+| `--completely` | flag | off | Also quit the menu bar app. This is Quit Edith in the status item. |
 | `--yes` | flag | off | Send the quit request. Without it, print the plan only. |
 | `--json` | flag | off | Emit JSON on stdout. |
 
@@ -18,6 +19,7 @@ Without `--yes`, `--json` describes the safe preview:
   "action": "quit",
   "applied": false,
   "changed": false,
+  "completely": false,
   "requested": false,
   "targets": ["com.pulkit.edith"]
 }
@@ -30,6 +32,7 @@ Examples:
 ```
 ed app quit
 ed app quit --yes
+ed app quit --completely --yes
 ed app quit --yes --json
 ```
 

@@ -240,11 +240,17 @@ import Testing
         view.rightMouseUp(with: try event(.rightMouseUp, number: 5))
 
         var reports: [String] = []
-        for _ in 0..<100 {
+        for _ in 0..<200 {
             if let data = try? Data(contentsOf: output) {
                 reports = String(decoding: data, as: UTF8.self)
                     .split(separator: "\u{1B}").map(String.init)
-                if reports.count >= 5 { break }
+                let rightDown = reports.contains {
+                    $0.hasPrefix("[<2;") && $0.hasSuffix("M")
+                }
+                let rightUp = reports.contains {
+                    $0.hasPrefix("[<2;") && $0.hasSuffix("m")
+                }
+                if rightDown && rightUp { break }
             }
             try await Task.sleep(for: .milliseconds(10))
         }

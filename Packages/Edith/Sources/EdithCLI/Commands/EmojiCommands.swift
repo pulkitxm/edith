@@ -15,7 +15,7 @@ struct EmojiCommand: AsyncParsableCommand {
             """,
         subcommands: [
             EmojiPickCommand.self, EmojiListCommand.self, EmojiInsertCommand.self,
-            EmojiToneCommand.self, EmojiClearCommand.self,
+            EmojiToneCommand.self, EmojiForgetCommand.self, EmojiClearCommand.self,
         ],
         defaultSubcommand: EmojiListCommand.self)
 }
@@ -253,6 +253,41 @@ struct EmojiToneCommand: AsyncParsableCommand {
                 return
             }
             CLIOut.out("skin tone set to \(resolved.token) \(resolved.sample)")
+        }
+    }
+}
+
+struct EmojiForgetCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "forget",
+        abstract: "Forget one frequently used emoji.",
+        discussion: """
+            Writes the frequently used ledger without that character. The rest stay.
+            Example: `ed emoji forget 1F600`.
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Argument(help: "Emoji character, name, or code point.")
+    var emoji: String
+
+    func run() async throws {
+        try await execute {
+            let character = try EmojiBridge.resolve(emoji)
+            var ledger = EmojiUsageLedger.load(
+                from: CLIEnvironment.sharedDefaults, key: AppStorageKeys.Emoji.usage)
+            let before = ledger.entries.count
+            ledger.forget(character)
+            let removed = before - ledger.entries.count
+            ledger.save(to: CLIEnvironment.sharedDefaults, key: AppStorageKeys.Emoji.usage)
+            AppBridge.post(IPC.Name.settingsChanged)
+            guard !json else {
+                CLIOut.json(
+                    .object(["character": .string(character), "removed": .bool(removed > 0)]))
+                return
+            }
+            CLIOut.out(removed > 0 ? "forgot \(character)" : "\(character) was not in the ledger")
         }
     }
 }

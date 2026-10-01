@@ -176,7 +176,7 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
             node.children.map(\.name)
                 == [
                     "inventory", "scan", "remove", "install", "updates", "update", "history",
-                    "backup-updates",
+                    "backup-updates", "ignore", "snooze", "exclude", "reset",
                 ])
         #expect(
             try EdRoot.parseAsRoot(["maintenance", "inventory", "--no-updates"])
@@ -196,6 +196,17 @@ private final class AppMaintenanceRequestCapture: @unchecked Sendable {
         #expect(
             try EdRoot.parseAsRoot(["maintenance", "backup-updates", "/tmp/updates.json"])
                 is MaintenanceUpdateBackupCommand)
+        #expect(
+            try EdRoot.parseAsRoot(
+                ["maintenance", "ignore", "firefox", "--available", "120.0"])
+                is MaintenanceIgnoreCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["maintenance", "snooze", "firefox", "--for", "7d"])
+                is MaintenanceSnoozeCommand)
+        #expect(
+            try EdRoot.parseAsRoot(["maintenance", "exclude", "com.example.App"])
+                is MaintenanceExcludeCommand)
+        #expect(try EdRoot.parseAsRoot(["maintenance", "reset"]) is MaintenanceResetCommand)
     }
 
     private func temporaryDirectory() throws -> URL {

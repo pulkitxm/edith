@@ -21,6 +21,8 @@ struct MaintenanceCommand: AsyncParsableCommand {
             MaintenanceUpdatesCommand.self, MaintenanceUpdateCommand.self,
             MaintenanceUpdateHistoryCommand.self,
             MaintenanceUpdateBackupCommand.self,
+            MaintenanceIgnoreCommand.self, MaintenanceSnoozeCommand.self,
+            MaintenanceExcludeCommand.self, MaintenanceResetCommand.self,
         ],
         defaultSubcommand: MaintenanceInventoryCommand.self)
 }

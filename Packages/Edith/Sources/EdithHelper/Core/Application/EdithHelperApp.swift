@@ -272,6 +272,9 @@ struct EdithApp {
                         RunningAppIPC.changedKey: outcome.changed,
                     ])
             })
+        _ = IPC.observe(IPC.Name.quitEdithCompletely) {
+            MainActor.assumeIsolated { AppRuntimeCenter().quitCompletely() }
+        }
         _ = IPC.observe(IPC.Name.openPanel) {
             AppRuntimeCenter().perform(.open) { showPanel() }
         }

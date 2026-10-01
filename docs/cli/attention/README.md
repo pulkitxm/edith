@@ -22,6 +22,8 @@ the collecting process; application duration does not.
 - [`ed attention categories`](./categories/README.md)
 - [`ed attention focus`](./focus/README.md)
 - [`ed attention doctor`](./doctor.md)
+- [`ed attention backup`](./backup.md)
+- [`ed attention restore`](./restore.md)
 
 A bare `ed attention` runs `status`. Events live in the background agent's
 `~/Library/Application Support/Edith/edith.sqlite` database. Settings, focus sessions,
