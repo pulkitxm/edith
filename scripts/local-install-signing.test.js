@@ -41,6 +41,10 @@ function fixture() {
   executable(join(bin, "python3"), "exit 0");
   executable(join(bin, "codesign"), "exit 0");
   executable(join(bin, "find"), "exit 0");
+  executable(
+    join(bin, "mktemp"),
+    '/usr/bin/mktemp "$EDITH_FIXTURE_TMP/temporary.XXXXXX"',
+  );
   executable(join(bin, "base64"), "cat >/dev/null; printf fixture");
   executable(
     join(bin, "security"),
@@ -77,6 +81,7 @@ esac`,
           MACOS_CERT_P12_BASE64: "Zml4dHVyZQ==",
           MACOS_CERT_PASSWORD: "fixture",
           EDITH_FIXTURE_PRIMARY: primary,
+          EDITH_FIXTURE_TMP: root,
           EDITH_FIXTURE_LOG: log,
           EDITH_FIXTURE_AVAILABLE_IDENTITY: available,
         },
