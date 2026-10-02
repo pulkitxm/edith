@@ -957,70 +957,61 @@ public enum ConfigCatalog {
             summary: "Comma-separated app names that never get a sweater."),
     ]
 
-    private static let presenter: [SettingDefinition] = [
-        SettingDefinition(
-            AppStorageKeys.Presenter.autoActive, .bool, group: "presenter",
-            summary: "A share is being detected right now.", fallback: .bool(false),
-            readOnly: true),
-        SettingDefinition(
-            AppStorageKeys.Presenter.autoPaused, .bool, group: "presenter",
-            summary: "Auto presenter mode is paused until the current share ends.",
-            fallback: .bool(false), readOnly: true),
-        SettingDefinition(
-            AppStorageKeys.Presenter.autoReason, .string, group: "presenter",
-            summary: "Why auto presenter mode turned on.", readOnly: true),
-        SettingDefinition(
-            AppStorageKeys.Presenter.enabled, .bool, group: "presenter",
-            summary: "Presenter extension: blur sensitive numbers while sharing.",
-            fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.Presenter.mode, .bool, group: "presenter",
-            summary: "Presenter mode on right now.", fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.Presenter.autoEnabled, .bool, group: "presenter",
-            summary: "Turn presenter mode on automatically when a share is detected."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.detectRecording, .bool, group: "presenter",
-            summary: "Treat screen recording as a share."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.detectScreenSharing, .bool, group: "presenter",
-            summary: "Treat screen sharing as a share."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.detectMirroring, .bool, group: "presenter",
-            summary: "Treat display mirroring as a share."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.askJev, .bool, group: "presenter",
-            summary:
-                "Ask Jev whether on-screen windows look like a shared screen. Sends window titles to TypeSafe.",
-            fallback: .bool(false)),
-        SettingDefinition(
-            AppStorageKeys.Presenter.hideMenuBarNumbers, .bool, group: "presenter",
-            summary: "Hide menu bar percentages while presenting."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.blurMoney, .bool, group: "presenter",
-            summary: "Blur spend figures."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.blurUsage, .bool, group: "presenter",
-            summary: "Blur usage percentages."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.blurMusic, .bool, group: "presenter",
-            summary: "Blur track names."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.blurCalendar, .bool, group: "presenter",
-            summary: "Blur calendar entries."),
-        SettingDefinition(
-            AppStorageKeys.Presenter.blurAgents, .bool, group: "presenter",
-            summary: "Hide live Herdr titles and blur attached terminals."),
-        SettingDefinition(
-            "presenterHotKeyCode", .int, group: "presenter",
-            summary: "Virtual key code of the presenter shortcut."),
-        SettingDefinition(
-            "presenterHotKeyMods", .int, group: "presenter",
-            summary: "Carbon modifier mask of the presenter shortcut."),
-        SettingDefinition(
-            "presenterHotKeyLabel", .string, group: "presenter",
-            summary: "Printable label for the presenter shortcut."),
-    ]
+    private static let presenter: [SettingDefinition] =
+        [
+            SettingDefinition(
+                AppStorageKeys.Presenter.autoActive, .bool, group: "presenter",
+                summary: "A share is being detected right now.", fallback: .bool(false),
+                readOnly: true),
+            SettingDefinition(
+                AppStorageKeys.Presenter.autoPaused, .bool, group: "presenter",
+                summary: "Auto presenter mode is paused until the current share ends.",
+                fallback: .bool(false), readOnly: true),
+            SettingDefinition(
+                AppStorageKeys.Presenter.autoReason, .string, group: "presenter",
+                summary: "Why auto presenter mode turned on.", readOnly: true),
+            SettingDefinition(
+                AppStorageKeys.Presenter.enabled, .bool, group: "presenter",
+                summary: "Presenter extension: blur sensitive numbers while sharing.",
+                fallback: .bool(false)),
+            SettingDefinition(
+                AppStorageKeys.Presenter.mode, .bool, group: "presenter",
+                summary: "Presenter mode on right now.", fallback: .bool(false)),
+            SettingDefinition(
+                AppStorageKeys.Presenter.autoEnabled, .bool, group: "presenter",
+                summary: "Turn presenter mode on automatically when a share is detected."),
+            SettingDefinition(
+                AppStorageKeys.Presenter.detectRecording, .bool, group: "presenter",
+                summary: "Treat screen recording as a share."),
+            SettingDefinition(
+                AppStorageKeys.Presenter.detectScreenSharing, .bool, group: "presenter",
+                summary: "Treat screen sharing as a share."),
+            SettingDefinition(
+                AppStorageKeys.Presenter.detectMirroring, .bool, group: "presenter",
+                summary: "Treat display mirroring as a share."),
+            SettingDefinition(
+                AppStorageKeys.Presenter.askJev, .bool, group: "presenter",
+                summary:
+                    "Ask Jev whether on-screen windows look like a shared screen. Sends window titles to TypeSafe.",
+                fallback: .bool(false)),
+            SettingDefinition(
+                AppStorageKeys.Presenter.hideMenuBarNumbers, .bool, group: "presenter",
+                summary: "Hide menu bar percentages while presenting."),
+        ]
+        + PresenterPrivacy.allCases.map { category in
+            SettingDefinition(
+                category.storageKey, .bool, group: "presenter", summary: category.summary)
+        } + [
+            SettingDefinition(
+                "presenterHotKeyCode", .int, group: "presenter",
+                summary: "Virtual key code of the presenter shortcut."),
+            SettingDefinition(
+                "presenterHotKeyMods", .int, group: "presenter",
+                summary: "Carbon modifier mask of the presenter shortcut."),
+            SettingDefinition(
+                "presenterHotKeyLabel", .string, group: "presenter",
+                summary: "Printable label for the presenter shortcut."),
+        ]
 
     private static let keystrokeHighlight: [SettingDefinition] = [
         SettingDefinition(

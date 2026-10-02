@@ -214,6 +214,21 @@ private struct EdithButtonBody<Label: View>: View {
     }
 }
 
+private struct PresenterPrivacyMask: ViewModifier {
+    let category: PresenterPrivacy
+    let cover: Bool
+    private var presenter = PresenterState.shared
+
+    @ViewBuilder func body(content: Content) -> some View {
+        let on = presenter.hides(category)
+        if cover {
+            content.presenterCover(on)
+        } else {
+            content.presenterBlur(on).privacySensitive(on)
+        }
+    }
+}
+
 extension View {
     public func edithButtonTarget(_ role: EdithButtonRole) -> some View {
         modifier(EdithButtonTarget(role))
@@ -231,6 +246,14 @@ extension View {
     public func presenterTextBlur(_ on: Bool, fontSize: CGFloat) -> some View {
         presenterBlur(on, radius: max(4, fontSize * 0.4))
             .privacySensitive(on)
+    }
+
+    public func presenterBlur(_ category: PresenterPrivacy) -> some View {
+        modifier(PresenterPrivacyMask(category: category, cover: false))
+    }
+
+    public func presenterCover(_ category: PresenterPrivacy) -> some View {
+        modifier(PresenterPrivacyMask(category: category, cover: true))
     }
 
     @ViewBuilder
