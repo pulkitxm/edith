@@ -466,9 +466,10 @@ private actor HerdrWatchHarness {
         #expect(store.hosts.map(\.id) == [HerdrHostSnapshot.localID])
     }
 
-    @Test func localAgentAttachmentUsesTheRawTerminalBridge() async throws {
+    @Test(arguments: ["Cursor Agent", "cursor-agent-cli", "Codex", "OpenCode"])
+    func localAgentAttachmentUsesTheRawTerminalBridge(kind: String) async throws {
         let store = HerdrStore()
-        let selected = agent("Codex", pane: "pane-1")
+        let selected = agent(kind, pane: "pane-1")
         store.open(selected)
         let tab = try #require(store.sessions.first)
         let executable = URL(fileURLWithPath: "/tmp/herdr")
@@ -481,7 +482,8 @@ private actor HerdrWatchHarness {
         let controller = HerdrOperationExecution.localControlRequest(
             for: selected, environment: environment, executable: executable)
         let expected = try HerdrTerminalBridge.launchRequest(
-            bridgeExecutable: bridge, controller: controller)
+            bridgeExecutable: bridge, controller: controller,
+            mouse: HerdrKind.displayName(for: kind) == "Cursor Agent" ? .scroll : .buttons)
 
         #expect(request == expected)
     }

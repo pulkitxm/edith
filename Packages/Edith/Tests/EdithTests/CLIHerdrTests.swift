@@ -120,6 +120,88 @@ private final class HerdrPipeReadBox: @unchecked Sendable {
         #expect(Data(base64Encoded: try #require(trailing["bytes"] as? String)) == Data("b".utf8))
     }
 
+    @Test(arguments: [
+        "\u{1B}[<0;122;31M", "\u{1B}[<0;122;31m", "\u{1B}[<32;122;31M",
+        "\u{1B}[<66;95;22M", "\u{1B}[<67;95;22M", "\u{1B}[I", "\u{1B}[O",
+    ])
+    func scrollOnlyBridgeDropsReportsAtEveryReadBoundary(report: String) throws {
+        let bytes = Data(report.utf8)
+        for split in 1..<bytes.count {
+            var router = HerdrTerminalInputRouter(mouse: .scroll)
+            let first = try router.commands(for: Data("before".utf8) + bytes.prefix(split))
+            let second = try router.commands(for: bytes.dropFirst(split) + Data("after".utf8))
+            let commands = first + second + (try router.finish())
+            let input = try commands.reduce(into: Data()) { result, command in
+                let encoded = try #require(try object(command)["bytes"] as? String)
+                result.append(try #require(Data(base64Encoded: encoded)))
+            }
+            #expect(input == Data("beforeafter".utf8))
+        }
+    }
+
+    @Test func bridgeReassemblesWheelReportsOneByteAtATime() throws {
+        var router = HerdrTerminalInputRouter(mouse: .scroll)
+        var commands: [Data] = []
+        for byte in "\u{1B}[<65;123;32M".utf8 {
+            commands += try router.commands(for: Data([byte]))
+        }
+        #expect(commands.count == 1)
+        let scroll = try object(try #require(commands.first))
+        #expect(scroll["type"] as? String == "terminal.scroll")
+        #expect(scroll["direction"] as? String == "down")
+        #expect(scroll["column"] as? Int == 122)
+        #expect(scroll["row"] as? Int == 31)
+    }
+
+    @Test func standaloneEscapeIsDeliveredAfterThePrefixTimeout() throws {
+        var router = HerdrTerminalInputRouter(mouse: .scroll)
+        #expect(try router.commands(for: Data([0x1B])).isEmpty)
+        #expect(router.hasPendingEscapePrefix)
+        let commands = try router.flushEscapePrefix()
+        #expect(commands.count == 1)
+        let command = try #require(commands.first)
+        let encoded = try #require(try object(command)["bytes"] as? String)
+        #expect(Data(base64Encoded: encoded) == Data([0x1B]))
+        #expect(!router.hasPendingEscapePrefix)
+    }
+
+    @Test func aMouseReportIsNotFlushedIntoInputAtTimeoutOrEOF() throws {
+        var router = HerdrTerminalInputRouter(mouse: .scroll)
+        #expect(try router.commands(for: Data("\u{1B}[<0;122;".utf8)).isEmpty)
+        #expect(!router.hasPendingEscapePrefix)
+        #expect(try router.flushEscapePrefix().isEmpty)
+        #expect(try router.finish().isEmpty)
+    }
+
+    @Test(arguments: ["\u{1B}[A", "\u{1B}[D", "\u{1B}[1;5C", "\u{1B}x"])
+    func bridgePreservesSplitKeyboardSequences(sequence: String) throws {
+        var router = HerdrTerminalInputRouter(mouse: .scroll)
+        var input = Data()
+        for byte in sequence.utf8 {
+            for command in try router.commands(for: Data([byte])) {
+                let encoded = try #require(try object(command)["bytes"] as? String)
+                input.append(try #require(Data(base64Encoded: encoded)))
+            }
+        }
+        #expect(input == Data(sequence.utf8))
+    }
+
+    @Test func inputTimeoutLeavesThePipeOpenAndReadable() throws {
+        let pipe = Pipe()
+        defer {
+            try? pipe.fileHandleForWriting.close()
+            try? pipe.fileHandleForReading.close()
+        }
+        #expect(
+            try HerdrTerminalStream.read(from: pipe.fileHandleForReading, timeoutMilliseconds: 1)
+                == nil)
+        let input = Data("draft".utf8)
+        try pipe.fileHandleForWriting.write(contentsOf: input)
+        #expect(
+            try HerdrTerminalStream.read(from: pipe.fileHandleForReading, timeoutMilliseconds: 100)
+                == input)
+    }
+
     private func object(_ command: Data) throws -> [String: Any] {
         try #require(JSONSerialization.jsonObject(with: command) as? [String: Any])
     }

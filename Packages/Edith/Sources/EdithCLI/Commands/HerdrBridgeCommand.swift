@@ -75,6 +75,16 @@ enum HerdrTerminalStream {
     static func read(from handle: FileHandle) -> Data {
         handle.availableData
     }
+
+    static func read(from handle: FileHandle, timeoutMilliseconds: Int32) throws -> Data? {
+        var descriptor = pollfd(fd: handle.fileDescriptor, events: Int16(POLLIN), revents: 0)
+        while true {
+            let ready = poll(&descriptor, 1, timeoutMilliseconds)
+            if ready > 0 { return read(from: handle) }
+            if ready == 0 { return nil }
+            if errno != EINTR { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        }
+    }
 }
 
 struct HerdrTerminalInputRouter {
@@ -94,6 +104,8 @@ struct HerdrTerminalInputRouter {
         self.mouse = mouse
     }
 
+    var hasPendingEscapePrefix: Bool { !pending.isEmpty && pending.count < 3 }
+
     mutating func commands(for data: Data) throws -> [Data] {
         pending.append(data)
         let bytes = [UInt8](pending)
@@ -102,6 +114,17 @@ struct HerdrTerminalInputRouter {
         var offset = 0
 
         while offset < bytes.count {
+            if bytes[offset] == 0x1B,
+                bytes.count - offset == 1
+                    || (bytes.count - offset == 2 && bytes[offset + 1] == 0x5B)
+            {
+                if inputStart < offset {
+                    commands.append(
+                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                }
+                pending = Data(bytes[offset...])
+                return commands
+            }
             if isFocusReport(bytes, at: offset) {
                 if inputStart < offset {
                     commands.append(
@@ -159,9 +182,15 @@ struct HerdrTerminalInputRouter {
 
     mutating func finish() throws -> [Data] {
         guard !pending.isEmpty else { return [] }
-        let command = try HerdrTerminalBridge.inputCommand(pending)
+        let bytes = pending
         pending.removeAll(keepingCapacity: true)
-        return [command]
+        guard !bytes.starts(with: [0x1B, 0x5B, 0x3C]) else { return [] }
+        return [try HerdrTerminalBridge.inputCommand(bytes)]
+    }
+
+    mutating func flushEscapePrefix() throws -> [Data] {
+        guard hasPendingEscapePrefix else { return [] }
+        return try finish()
     }
 
     private func isFocusReport(_ bytes: [UInt8], at offset: Int) -> Bool {
@@ -299,14 +328,24 @@ private final class HerdrTerminalBridgeRuntime {
         DispatchQueue.global(qos: .userInteractive).async { [input, specification] in
             var router = HerdrTerminalInputRouter(mouse: specification.mouse)
             while true {
-                let bytes = HerdrTerminalStream.read(from: input)
-                guard !bytes.isEmpty else {
-                    guard let commands = try? router.finish() else { return }
+                do {
+                    guard
+                        let bytes = try HerdrTerminalStream.read(
+                            from: input,
+                            timeoutMilliseconds: router.hasPendingEscapePrefix ? 40 : -1)
+                    else {
+                        try router.flushEscapePrefix().forEach(writer.send)
+                        continue
+                    }
+                    guard !bytes.isEmpty else {
+                        try router.finish().forEach(writer.send)
+                        return
+                    }
+                    let commands = try router.commands(for: bytes)
                     commands.forEach(writer.send)
+                } catch {
                     return
                 }
-                guard let commands = try? router.commands(for: bytes) else { return }
-                commands.forEach(writer.send)
             }
         }
     }

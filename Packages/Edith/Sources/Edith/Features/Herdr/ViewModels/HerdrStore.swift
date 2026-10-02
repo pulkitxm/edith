@@ -1905,7 +1905,8 @@ final class HerdrStore {
         return try await controlRequest(
             for: tab.agent, machine: tab.machine, environment: environment,
             localExecutable: localExecutable, bridgeExecutable: bridgeExecutable,
-            mouse: .buttons)
+            mouse: HerdrKind.displayName(for: tab.agent.kind) == "Cursor Agent" ? .scroll : .buttons
+        )
     }
 
     func attachRequest(
