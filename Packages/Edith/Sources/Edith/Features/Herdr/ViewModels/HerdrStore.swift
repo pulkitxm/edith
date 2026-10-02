@@ -776,14 +776,19 @@ final class HerdrStore {
 
     func shownView(for id: String) -> HerdrAgentView {
         let view = view(for: id)
-        guard view == .split, tab(containing: id)?.isSplit == true else { return view }
+        guard view == .split, hidesSplitView(id) else { return view }
         return .agent
     }
 
     func views(for id: String) -> [HerdrAgentView] {
         if session(id)?.agent.isTerminal == true { return [] }
-        if tab(containing: id)?.isSplit == true { return [.agent, .diff] }
+        if hidesSplitView(id) { return [.agent, .diff] }
         return [.agent, .split, .diff]
+    }
+
+    private func hidesSplitView(_ id: String) -> Bool {
+        guard let tab = tab(containing: id) else { return false }
+        return tab.isSplit && tab.zoomed != id
     }
 
     func setView(_ view: HerdrAgentView, for id: String) {
