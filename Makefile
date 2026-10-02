@@ -1,3 +1,21 @@
+ifeq ($(EDITH_MAKE_GATE),)
+
+export EDITH_MAKE_GATE := 1
+
+.PHONY: .edith-make-gate
+.edith-make-gate:
+	@python3 -B scripts/make-resource-gate.py exec --goals $(if $(MAKECMDGOALS),$(MAKECMDGOALS),ci) -- $(MAKE) $(MAKECMDGOALS)
+
+ifeq ($(MAKECMDGOALS),)
+.DEFAULT_GOAL := .edith-make-gate
+else
+.PHONY: $(MAKECMDGOALS)
+$(MAKECMDGOALS): .edith-make-gate
+	@:
+endif
+
+else
+
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 PKG := Packages/Edith
 STUDIO_PKG := Packages/EdithStudio
@@ -350,3 +368,5 @@ ci-companion-migrate:
 ci-tools:
 	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true
 	cargo install cargo-audit --locked || true
+
+endif
