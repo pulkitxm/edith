@@ -15,6 +15,8 @@ struct ColorPickerRows: View {
         var historySize = 100
     @State private var history: [ColorSwatch] = ColorHistoryStore.load()
 
+    @State private var historyObserver: NSObjectProtocol?
+
     var body: some View {
         Group {
             Section {
@@ -62,15 +64,32 @@ struct ColorPickerRows: View {
             .disabled(!colorPickerEnabled)
             .opacity(colorPickerEnabled ? 1 : 0.5)
 
-            if colorPickerEnabled, !history.isEmpty {
+            if colorPickerEnabled {
                 Section {
-                    ColorSwatchGrid(history: history, defaultFormat: copyFormat)
+                    if history.isEmpty {
+                        Label(
+                            "No colors picked yet. Choose Pick now to start.",
+                            systemImage: "eyedropper"
+                        )
+                        .settingsCaption()
+                    } else {
+                        ColorSwatchGrid(history: history, defaultFormat: copyFormat)
+                    }
                 } header: {
                     Text("Recent Colors")
                 }
             }
         }
-        .onAppear { history = ColorHistoryStore.load() }
+        .onAppear {
+            history = ColorHistoryStore.load()
+            historyObserver = IPC.observe(IPC.Name.settingsChanged) {
+                history = ColorHistoryStore.load()
+            }
+        }
+        .onDisappear {
+            if let historyObserver { IPC.stopObserving(historyObserver) }
+            historyObserver = nil
+        }
     }
 }
 private struct ColorSwatchGrid: View {

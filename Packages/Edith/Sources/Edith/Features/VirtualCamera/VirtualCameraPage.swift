@@ -144,6 +144,17 @@ struct VirtualCameraStage: View {
                         .font(.system(size: UIScale.pt(12)))
                 }
                 .foregroundStyle(.white.opacity(0.7))
+            } else if model.hasNoCameraSource {
+                VStack(spacing: UIScale.pt(12)) {
+                    Image(systemName: "video.slash")
+                        .font(.system(size: UIScale.pt(32)))
+                    Text("No camera connected")
+                        .font(.system(size: UIScale.pt(18), weight: .semibold))
+                    Text("Connect a camera, then refresh the camera list.")
+                        .font(.system(size: UIScale.pt(12)))
+                    Button("Refresh cameras") { model.refreshSources() }
+                }
+                .foregroundStyle(.white.opacity(0.7))
             } else if model.cameraAccess == .authorized || model.display.current != nil {
                 VirtualCameraPreview(
                     display: model.display, mirrored: model.state.mirrorPreview,

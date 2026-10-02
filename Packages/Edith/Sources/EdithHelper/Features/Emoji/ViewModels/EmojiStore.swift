@@ -134,6 +134,7 @@ final class EmojiStore: FeatureModule {
 
     private func persistLedger() {
         ledger.save(to: SharedDefaults.store, key: AppStorageKeys.Emoji.usage)
+        IPC.post(IPC.Name.emojiUsageChanged)
     }
 
     private func refreshFrequent() {

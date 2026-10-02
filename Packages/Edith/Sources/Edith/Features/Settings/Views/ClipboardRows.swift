@@ -41,11 +41,10 @@ struct ClipboardRows: View {
         var saveText = true
 
     @State private var tab = "general"
-    @State private var recentEntries: [ClipboardEntry] = []
+    @State private var recent = ClipboardRecentModel()
     @State private var showHistory = false
     @State private var refreshObserver: NSObjectProtocol?
     @State private var refreshTask: Task<Void, Never>?
-    @State private var refreshError: String?
 
     private var maxItemMB: Binding<Int> {
         Binding(
@@ -83,16 +82,20 @@ struct ClipboardRows: View {
             .opacity(enabled ? 1 : 0.5)
 
             Section {
-                if let refreshError {
-                    Text(refreshError).settingsCaption().foregroundStyle(.orange)
+                if let error = recent.error {
+                    Text(error).settingsCaption().foregroundStyle(.orange)
+                    Button("Retry") { reload() }
+                } else if recent.loading, recent.entries.isEmpty {
+                    ProgressView("Loading clipboard history…")
+                } else if recent.entries.isEmpty {
+                    Label(
+                        "No clipboard history yet. Copy something to get started.",
+                        systemImage: "doc.on.clipboard"
+                    )
+                    .settingsCaption()
                 }
-                if recentEntries.isEmpty {
-                    Text("No clipboard history yet.")
-                        .settingsCaption()
-                } else {
-                    ForEach(recentEntries) { entry in
-                        recentRow(entry)
-                    }
+                ForEach(recent.entries) { entry in
+                    recentRow(entry)
                 }
                 Button("Open history ▸") { showHistory = true }
             } header: {
@@ -298,18 +301,7 @@ struct ClipboardRows: View {
 
     private func reload() {
         refreshTask?.cancel()
-        refreshTask = Task { @MainActor in
-            do {
-                let snapshot = try await AgentClipboardClient().snapshot(
-                    .init(limit: 5, recentlyCreated: true))
-                guard !Task.isCancelled else { return }
-                recentEntries = snapshot.entries
-                refreshError = nil
-            } catch {
-                guard !Task.isCancelled else { return }
-                refreshError = error.localizedDescription
-            }
-        }
+        refreshTask = Task { await recent.refresh() }
     }
 
     private func recentRow(_ entry: ClipboardEntry) -> some View {
@@ -321,5 +313,40 @@ struct ClipboardRows: View {
             Text(entry.createdAt.formatted(.relative(presentation: .named)))
         }
         .settingsCaption()
+    }
+}
+
+@MainActor
+@Observable
+final class ClipboardRecentModel {
+    private(set) var entries: [ClipboardEntry] = []
+    private(set) var error: String?
+    private(set) var loading = false
+    private var revision = 0
+    private let load: @Sendable () async throws -> [ClipboardEntry]
+
+    init(
+        load: @escaping @Sendable () async throws -> [ClipboardEntry] = {
+            try await AgentClipboardClient().snapshot(.init(limit: 5, recentlyCreated: true))
+                .entries
+        }
+    ) {
+        self.load = load
+    }
+
+    func refresh() async {
+        revision += 1
+        let current = revision
+        loading = true
+        defer { if revision == current { loading = false } }
+        do {
+            let loaded = try await load()
+            guard !Task.isCancelled, revision == current else { return }
+            entries = loaded
+            error = nil
+        } catch {
+            guard !Task.isCancelled, revision == current else { return }
+            self.error = error.localizedDescription
+        }
     }
 }
