@@ -272,11 +272,33 @@ struct HerdrSpaceView: View {
             }
             .background(DashSkin.paper(dark))
             .environment(\.terminalLaunchEnabled, launchEnabled)
-            .navigationRoute(
-                "tab",
-                selection: Binding(get: { model.selected }, set: { model.selected = $0 }),
-                isValid: { id in model.tabs.contains { $0.id == id } })
+            .navigationRoute("tab", selection: spaceBinding, isValid: spaceIsValid)
         }
+    }
+
+    private var spaceBinding: Binding<String> {
+        Binding(
+            get: {
+                guard let tab = model.selectedTab else { return "" }
+                return WorkspaceFocusRoute.spaceValue(tabID: tab.id, layout: tab.layout)
+            },
+            set: { raw in
+                guard let decoded = WorkspaceFocusRoute.decodeSpace(raw),
+                    let tab = model.tabs.first(where: { $0.id == decoded.tabID })
+                else { return }
+                var layout = tab.layout
+                guard WorkspaceFocusRoute.apply(decoded.focus, to: &layout) else { return }
+                tab.layout = layout
+                model.selected = decoded.tabID
+            })
+    }
+
+    private func spaceIsValid(_ raw: String) -> Bool {
+        if raw.isEmpty { return true }
+        guard let decoded = WorkspaceFocusRoute.decodeSpace(raw),
+            let tab = model.tabs.first(where: { $0.id == decoded.tabID })
+        else { return false }
+        return WorkspaceFocusRoute.accepts(decoded.focus, layout: tab.layout)
     }
 
     private var toolbar: some View {

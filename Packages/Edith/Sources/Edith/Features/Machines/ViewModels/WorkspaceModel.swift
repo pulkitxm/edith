@@ -213,6 +213,7 @@ struct WorkspaceView: View {
             }
         }
         .background(DashSkin.paper(dark))
+        .navigationRoute("focus", selection: focusBinding, isValid: focusIsValid)
         .alert("Rename Workspace", isPresented: renameBinding) {
             TextField("Workspace name", text: $renameText)
             Button("Cancel", role: .cancel) { renameTarget = nil }
@@ -255,6 +256,20 @@ struct WorkspaceView: View {
         Binding(
             get: { model.operationError != nil },
             set: { if !$0 { model.operationError = nil } })
+    }
+
+    private var focusBinding: Binding<String> {
+        Binding(
+            get: { WorkspaceFocusRoute.value(model.layout) },
+            set: { raw in
+                var next = model.layout
+                guard WorkspaceFocusRoute.apply(raw, to: &next) else { return }
+                model.apply { $0 = next }
+            })
+    }
+
+    private func focusIsValid(_ raw: String) -> Bool {
+        WorkspaceFocusRoute.accepts(raw, layout: model.layout)
     }
 
     private var toolbar: some View {
