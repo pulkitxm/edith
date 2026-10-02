@@ -41,3 +41,24 @@ run at once next to the installed Edith without touching it or each other.
 
 See `docs/background-agent.md` for how the identities, agent loading and
 LaunchServices cleanup work.
+
+## Make resource gate
+
+Heavy `make` targets share one machine-wide budget: app builds, Ghostty,
+Swift and Cargo test builds, security scans, and the JS tool targets. A
+light target such as `make ci-comments` does not take a slot. Before a heavy
+target starts, `scripts/make-resource-gate.py` records its pid and name in
+`~/.cache/edith/make-slots` and admits it only when free CPU and memory cover
+what that target tends to use. Load average accounts for other work. Each
+running make also counts the cpu it is using right now, which load average
+has not caught up to yet, plus a reservation for what it has not allocated:
+the full estimate for the first 20s, then at least half, or more when live
+usage is higher. Available memory already includes allocations, so that part
+is not reserved again. A quiet 14-core machine fits about three app builds.
+A busy one fits fewer. Set `EDITH_MAKE_GATE=skip` to run immediately.
+
+When the budget is short, the gate waits and prints `make-resource-gate:`
+lines on stderr: the reason, the host budget, each running pid and target,
+and that it checks every 5 seconds and gives up after 5 minutes. A later line
+says `still waiting` with how long is left. If the wait expires, the target
+does not start.
