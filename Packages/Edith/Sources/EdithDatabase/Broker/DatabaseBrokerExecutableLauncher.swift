@@ -228,11 +228,19 @@ struct DatabaseBrokerExecutableCandidateValidator: Sendable {
             code: currentCode,
             requirement: requirement,
             options: options)
+        guard
+            let identifier = DatabasePackIdentity.counterpartIdentifier(
+                for: try system.signingIdentifier(for: currentStaticCode))
+        else { throw DatabaseBrokerExecutableLauncherError.candidateCodeRequirementMismatch }
+        let packRequirement = try system.requirement(
+            DatabasePackIdentity.requirement(
+                identifier: identifier,
+                teamIdentifier: try system.teamIdentifier(for: currentStaticCode)))
         validateImplementation = { path in
             let candidate = try system.candidateStaticCode(at: path)
             try system.validateCandidate(
                 code: candidate,
-                requirement: requirement,
+                requirement: packRequirement,
                 options: options)
         }
     }

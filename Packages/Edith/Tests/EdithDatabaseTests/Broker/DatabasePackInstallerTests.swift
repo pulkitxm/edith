@@ -89,6 +89,36 @@ import Testing
         #expect(fixture.inspect(expected: "2.0.0").state == .missing)
     }
 
+    @Test func repairRedownloadsEvenWhenTheVersionIsCurrent() async throws {
+        let fixture = try PackFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try DatabasePackStore.install(
+            executable: fixture.executable(Data("broken".utf8)), version: "2.0.0",
+            directories: fixture.directories)
+        let payload = Data("repaired".utf8)
+        let installer = fixture.installer(
+            checksum: DatabasePackChecksum.sha256Hex(payload), payload: payload,
+            extract: { data, destination in try data.write(to: destination) },
+            acceptSignature: true)
+        let installed = try await installer.install(reinstall: true)
+        #expect(installed.state == .current)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: installed.path)) == payload)
+    }
+
+    @Test func aCurrentPackIsVerifiedBeforeReuse() async throws {
+        let fixture = try PackFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try DatabasePackStore.install(
+            executable: fixture.executable(Data("invalid".utf8)), version: "2.0.0",
+            directories: fixture.directories)
+        var installer = fixture.installer(
+            checksum: "", payload: Data(), extract: { _, _ in }, acceptSignature: false)
+        installer.allowsDownload = false
+        await #expect(throws: DatabasePackInstallError.signatureRejected) {
+            try await installer.install()
+        }
+    }
+
     @Test func checksumFileAcceptsTheLeadingDigest() {
         let digest = String(repeating: "cd", count: 32)
         #expect(DatabasePackChecksum.digest(in: "\(digest)  edith-database.zip\n") == digest)
