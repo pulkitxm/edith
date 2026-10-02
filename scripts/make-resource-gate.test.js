@@ -346,3 +346,30 @@ test("a stale slot is dropped and a full budget gives up", async () => {
   expect(await new Response(waiter.stdout).text()).not.toContain("should-not-run");
   expect(await holder.exited).toBe(0);
 }, 20000);
+
+test("make runs light targets through the gate without waiting", async () => {
+  const env = { ...process.env };
+  delete env.EDITH_MAKE_GATE;
+  const printed = Bun.spawnSync(["make", "-n", "ci-community"], {
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(printed.exitCode, printed.stderr.toString()).toBe(0);
+  expect(printed.stdout.toString()).toContain("scripts/make-resource-gate.py");
+
+  const root = tempDir();
+  const ran = Bun.spawn(
+    ["make", "ci-community"],
+    {
+      env: gateEnv(root, { EDITH_MAKE_GATE_TIMEOUT: "5" }),
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  children.push(ran);
+  expect(await ran.exited).toBe(0);
+  const stderr = await new Response(ran.stderr).text();
+  expect(stderr).not.toContain("waiting to start");
+  expect(readdirSync(root).filter((name) => name.endsWith(".json"))).toEqual([]);
+}, 20000);
