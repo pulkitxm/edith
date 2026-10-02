@@ -63,7 +63,6 @@ struct NavigationHistory: Equatable {
     }
 
     mutating func replaceCurrent(_ location: String) {
-        guard !location.isEmpty else { return }
         guard entries.indices.contains(index) else {
             record(location)
             return
@@ -156,8 +155,8 @@ final class WindowRouter {
 
     var location: String {
         let landed = slotLocation
-        guard !lastRestoreRejected, let current = history.current else { return landed }
-        if current == landed || current.hasPrefix(landed + "/") { return current }
+        guard restoring, let current = history.current else { return landed }
+        if current.hasPrefix(landed + "/") { return current }
         return landed
     }
 
@@ -255,7 +254,9 @@ final class WindowRouter {
     }
 
     func unregister(depth: Int, name: String) {
+        guard slots.contains(where: { $0.depth == depth && $0.name == name }) else { return }
         slots.removeAll { $0.depth == depth && $0.name == name }
+        finishRestore()
     }
 
     func goBack() {
@@ -359,25 +360,11 @@ final class WindowRouter {
         slots[index].apply(value)
     }
 
-    private func clearDeeper(than depth: Int) {
-        let deeper = slots.filter { $0.depth > depth }
-        for slot in deeper where !slot.value.isEmpty {
-            write(slot, "")
-        }
-        slots.removeAll { $0.depth > depth }
-    }
-
     private func finishRestore() {
         restoring = false
         pending = []
         settleGeneration += 1
-        let landed = slotLocation
-        guard lastRestoreRejected else { return }
-        if landed.isEmpty {
-            history.replaceCurrent(history.current ?? "")
-        } else if landed != history.current {
-            history.replaceCurrent(landed)
-        }
+        history.replaceCurrent(slotLocation)
     }
 
     private func scheduleSettle() {
