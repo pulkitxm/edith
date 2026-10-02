@@ -217,7 +217,7 @@ private struct EdithButtonBody<Label: View>: View {
 private struct PresenterPrivacyMask: ViewModifier {
     let category: PresenterPrivacy
     let cover: Bool
-    private var presenter = PresenterState.shared
+    fileprivate var presenter = PresenterState.shared
 
     @ViewBuilder func body(content: Content) -> some View {
         let on = presenter.hides(category)
