@@ -16,6 +16,8 @@ struct HerdrSpaceCommand: AsyncParsableCommand {
             HerdrSpaceListCommand.self, HerdrSpaceTerminalCommand.self, HerdrSpaceSplitCommand.self,
         ],
         defaultSubcommand: HerdrSpaceListCommand.self)
+
+    @OptionGroup var output: JSONOutputOptions
 }
 
 enum HerdrSpaceCLI {
@@ -104,13 +106,12 @@ struct HerdrSpaceListCommand: AsyncParsableCommand {
             ed herdr space ls --json
             """, aliases: ["list"])
 
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
+    @OptionGroup var output: JSONOutputOptions
 
     func run() async throws {
         try await execute {
             let reply = try await HerdrSpaceCLI.request(action: "list", window: nil, side: nil)
-            HerdrSpaceCLI.emit(reply.windows, message: reply.message, json: json)
+            HerdrSpaceCLI.emit(reply.windows, message: reply.message, json: output.json)
         }
     }
 }
@@ -127,8 +128,7 @@ struct HerdrSpaceTerminalCommand: AsyncParsableCommand {
             ed herdr space terminal --window desk --json
             """)
 
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
+    @OptionGroup var output: JSONOutputOptions
 
     @Option(
         name: .long, help: "Space id or title. The only open window is used when this is omitted.")
@@ -138,7 +138,7 @@ struct HerdrSpaceTerminalCommand: AsyncParsableCommand {
         try await execute {
             let reply = try await HerdrSpaceCLI.request(
                 action: "terminal", window: window, side: nil)
-            HerdrSpaceCLI.emit(reply.windows, message: reply.message, json: json)
+            HerdrSpaceCLI.emit(reply.windows, message: reply.message, json: output.json)
         }
     }
 }
@@ -155,8 +155,7 @@ struct HerdrSpaceSplitCommand: AsyncParsableCommand {
             ed herdr space split --window desk --side down --json
             """)
 
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
+    @OptionGroup var output: JSONOutputOptions
 
     @Option(
         name: .long, help: "Space id or title. The only open window is used when this is omitted.")
@@ -169,7 +168,7 @@ struct HerdrSpaceSplitCommand: AsyncParsableCommand {
         try await execute {
             let reply = try await HerdrSpaceCLI.request(
                 action: "split", window: window, side: try HerdrSpaceCLI.side(side))
-            HerdrSpaceCLI.emit(reply.windows, message: reply.message, json: json)
+            HerdrSpaceCLI.emit(reply.windows, message: reply.message, json: output.json)
         }
     }
 }

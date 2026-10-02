@@ -22,6 +22,26 @@ import Testing
                 is AttentionExtensionTokenCommand)
     }
 
+    @Test func extensionGroupPassesJSONToItsCommands() throws {
+        for arguments in [
+            ["attention", "extension", "--json"],
+            ["attention", "extension", "--json", "install"],
+            ["attention", "extension", "install", "--json"],
+        ] {
+            let command = try #require(
+                try EdRoot.parseAsRoot(arguments) as? AttentionExtensionInstallCommand)
+            #expect(command.output.json)
+        }
+        let open = try #require(
+            try EdRoot.parseAsRoot(["attention", "extension", "--json", "open"])
+                as? AttentionExtensionOpenCommand)
+        #expect(open.output.json)
+        let token = try #require(
+            try EdRoot.parseAsRoot(["attention", "extension", "--json", "token"])
+                as? AttentionExtensionTokenCommand)
+        #expect(token.output.json)
+    }
+
     @Test func cancelJSONReportsTheWindowAndTheCommand() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(
             "edith-flights-\(UUID().uuidString)", isDirectory: true)

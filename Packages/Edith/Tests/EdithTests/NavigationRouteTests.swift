@@ -154,6 +154,43 @@ import Testing
         router.register(depth: 1, name: "tab", value: "chat", accept: { _ in true }) { _ in }
         router.unregister(depth: 1, name: "tab")
         #expect(router.location == "companion")
+        #expect(router.history.current == "companion")
+        #expect(!router.canGoBack)
+    }
+
+    @Test func anUnmountedChildFinishesTheRestore() {
+        let router = WindowRouter()
+        router.register(depth: 0, name: "section", value: "companion", accept: { _ in true }) {
+            _ in
+        }
+        router.register(depth: 1, name: "tab", value: "", accept: { _ in true }) { _ in }
+        router.navigate(to: "companion/chat/detail")
+        #expect(router.restoring)
+        #expect(router.location == "companion/chat/detail")
+        router.unregister(depth: 1, name: "tab")
+        #expect(!router.restoring)
+        #expect(router.location == "companion")
+        #expect(router.history.entries == ["companion"])
+    }
+
+    @Test func aRestoreWithoutItsChildSettlesOnTheMountedRoute() async {
+        let router = WindowRouter()
+        router.register(depth: 0, name: "section", value: "home", accept: { _ in true }) { _ in }
+        router.navigate(to: "companion/chat")
+        #expect(router.restoring)
+        #expect(router.location == "companion/chat")
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                DispatchQueue.main.async { continuation.resume() }
+            }
+        }
+        #expect(!router.restoring)
+        #expect(router.location == "companion")
+        #expect(router.history.entries == ["home", "companion"])
+        router.goBack()
+        #expect(router.location == "home")
+        router.goForward()
+        #expect(router.location == "companion")
     }
 
     @Test func modifierRegistersWhileTheViewIsMounted() {
@@ -170,6 +207,7 @@ import Testing
         tab.unmount()
         section.unmount()
         #expect(router.location.isEmpty)
+        #expect(router.history.current == "")
     }
 
     @Test func commandsMoveHistoryWithoutAKeyWindow() {
