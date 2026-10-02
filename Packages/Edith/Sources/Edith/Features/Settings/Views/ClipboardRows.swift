@@ -86,7 +86,13 @@ struct ClipboardRows: View {
                     Text(error).settingsCaption().foregroundStyle(.orange)
                     Button("Retry") { reload() }
                 } else if recent.loading, recent.entries.isEmpty {
-                    ProgressView("Loading clipboard history…")
+                    HStack {
+                        SkeletonGroup {
+                            SkeletonBlock(width: 220, height: 9, corner: 4)
+                        }
+                    }
+                    .settingsCaption()
+                    .accessibilityLabel("Loading clipboard history")
                 } else if recent.entries.isEmpty {
                     Label(
                         "No clipboard history yet. Copy something to get started.",
