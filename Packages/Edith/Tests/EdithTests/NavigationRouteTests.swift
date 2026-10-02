@@ -190,6 +190,61 @@ import Testing
         #expect(gone["ok"] as? Bool == false)
         router.detach()
     }
+
+    @Test func hiddenHostPublishesAndMovesTheRoute() {
+        let host = NSHostingView(
+            rootView: HiddenRouteProbe().environment(\.automaticViewActionsEnabled, false))
+        host.frame = NSRect(x: 0, y: 0, width: 320, height: 180)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        defer {
+            WindowRouter.commandTarget?.detach()
+            window.orderOut(nil)
+        }
+        window.contentView = host
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+        host.layoutSubtreeIfNeeded()
+        let current = NavigationCommands.perform(action: "route", route: nil)
+        #expect(current["route"] as? String == "home")
+        #expect(current["canGoBack"] as? Bool == false)
+        let moved = NavigationCommands.perform(action: "navigate", route: "companion/chat")
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+        let settled = NavigationCommands.perform(action: "route", route: nil)
+        #expect(moved["ok"] as? Bool == true)
+        #expect(settled["route"] as? String == "companion/chat")
+        #expect(settled["canGoBack"] as? Bool == true)
+        let back = NavigationCommands.perform(action: "back", route: nil)
+        #expect(back["ok"] as? Bool == true)
+        #expect(back["route"] as? String == "home")
+        let forward = NavigationCommands.perform(action: "forward", route: nil)
+        #expect(forward["ok"] as? Bool == true)
+        #expect(forward["route"] as? String == "companion/chat")
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+}
+
+@MainActor
+private struct HiddenRouteProbe: View {
+    @State private var router = WindowRouter()
+    @State private var section = "home"
+    @State private var tab = "chat"
+
+    var body: some View {
+        NavigationRouteHost(router: router, role: .main) {
+            VStack {
+                Text(section)
+                if section == "companion" {
+                    Text(tab).navigationRoute("tab", selection: $tab)
+                }
+            }
+            .navigationRoute(
+                "section", selection: $section,
+                isValid: { $0.isEmpty || $0 == "home" || $0 == "companion" }
+            )
+            .frame(width: 320, height: 180)
+        }
+    }
 }
 
 @MainActor

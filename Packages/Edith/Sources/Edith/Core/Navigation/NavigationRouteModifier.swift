@@ -133,43 +133,43 @@ extension View {
     func navigationRoute<S: LosslessStringConvertible & Equatable>(
         _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil
     ) -> some View {
-        modifier(
-            NavigationRouteModifier(
-                name: name,
-                text: Binding(
-                    get: { selection.wrappedValue.description },
-                    set: { proposed in
-                        guard let value = S(proposed) else { return }
-                        selection.wrappedValue = value
-                    }),
-                accept: { raw in
-                    if raw.isEmpty { return true }
-                    guard let value = S(raw) else { return false }
-                    return isValid?(value) ?? true
-                }))
+        NavigationRouteSlot(
+            name: name,
+            text: Binding(
+                get: { selection.wrappedValue.description },
+                set: { proposed in
+                    guard let value = S(proposed) else { return }
+                    selection.wrappedValue = value
+                }),
+            accept: { raw in
+                if raw.isEmpty { return true }
+                guard let value = S(raw) else { return false }
+                return isValid?(value) ?? true
+            },
+            content: self)
     }
 
     func navigationRoute<S: RawRepresentable & Equatable>(
         _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil
     ) -> some View where S.RawValue: LosslessStringConvertible {
-        modifier(
-            NavigationRouteModifier(
-                name: name,
-                text: Binding(
-                    get: { selection.wrappedValue.rawValue.description },
-                    set: { proposed in
-                        guard let raw = S.RawValue(proposed), let value = S(rawValue: raw) else {
-                            return
-                        }
-                        selection.wrappedValue = value
-                    }),
-                accept: { raw in
-                    if raw.isEmpty { return true }
-                    guard let rawValue = S.RawValue(raw), let value = S(rawValue: rawValue) else {
-                        return false
+        NavigationRouteSlot(
+            name: name,
+            text: Binding(
+                get: { selection.wrappedValue.rawValue.description },
+                set: { proposed in
+                    guard let raw = S.RawValue(proposed), let value = S(rawValue: raw) else {
+                        return
                     }
-                    return isValid?(value) ?? true
-                }))
+                    selection.wrappedValue = value
+                }),
+            accept: { raw in
+                if raw.isEmpty { return true }
+                guard let rawValue = S.RawValue(raw), let value = S(rawValue: rawValue) else {
+                    return false
+                }
+                return isValid?(value) ?? true
+            },
+            content: self)
     }
 
     func navigationRoute(
@@ -208,26 +208,34 @@ extension View {
     }
 }
 
-private struct NavigationRouteModifier: ViewModifier {
+private struct NavigationRouteSlot<Content: View>: View {
     let name: String
     @Binding var text: String
     let accept: (String) -> Bool
+    let content: Content
     @Environment(\.windowRouter) private var router
     @Environment(\.navigationRouteDepth) private var depth
 
-    func body(content: Content) -> some View {
+    var body: some View {
         content
-            .environment(\.navigationRouteDepth, depth + 1)
             .background {
                 RouteSlotAnchor(
                     depth: depth, name: name, value: text, accept: accept,
-                    apply: { proposed in
-                        if text != proposed { text = proposed }
-                    })
+                    apply: applyProposed, installedRouter: router)
+            }
+            .environment(\.navigationRouteDepth, depth + 1)
+            .onAppear {
+                NavigationRouteMount.sync(
+                    router: router, depth: depth, name: name, value: text, accept: accept,
+                    apply: applyProposed)
             }
             .onDisappear {
                 NavigationRouteMount.unregister(router: router, depth: depth, name: name)
             }
+    }
+
+    private func applyProposed(_ proposed: String) {
+        if text != proposed { text = proposed }
     }
 }
 
@@ -285,28 +293,94 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
+    func makeNSView(context: Context) -> SlotView {
+        let view = SlotView(frame: .zero)
         view.isHidden = true
+        view.onMove = { [weak view] in
+            guard let view else { return }
+            context.coordinator.publish(in: view)
+        }
         return view
     }
 
-    func updateNSView(_ view: NSView, context: Context) {
+    func updateNSView(_ view: SlotView, context: Context) {
         context.coordinator.router = router
         context.coordinator.depth = depth
         context.coordinator.name = name
-        router?.sync(depth: depth, name: name, value: value, accept: accept, apply: apply)
+        context.coordinator.value = value
+        context.coordinator.accept = accept
+        context.coordinator.apply = apply
+        context.coordinator.ready = true
+        context.coordinator.publish(in: view)
     }
 
-    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+    static func dismantleNSView(_ view: SlotView, coordinator: Coordinator) {
+        view.onMove = nil
+        coordinator.cancel()
         NavigationRouteMount.unregister(
-            router: coordinator.router, depth: coordinator.depth, name: coordinator.name)
+            router: coordinator.resolved ?? coordinator.router, depth: coordinator.depth,
+            name: coordinator.name)
     }
 
     final class Coordinator {
         var router: WindowRouter?
         var depth = 0
         var name = ""
+        var value = ""
+        var accept: (String) -> Bool = { _ in true }
+        var apply: (String) -> Void = { _ in }
+        var resolved: WindowRouter?
+        var ready = false
+        private var retry: DispatchWorkItem?
+        private var attempts = 0
+
+        func cancel() {
+            retry?.cancel()
+            retry = nil
+        }
+
+        func publish(in view: NSView) {
+            guard ready else { return }
+            let preferred = router
+            let found = MainActor.assumeIsolated { () -> WindowRouter? in
+                if let preferred { return preferred }
+                guard let window = view.window else { return nil }
+                return WindowRouter.router(for: window)
+            }
+            guard let found else {
+                guard attempts < 2, retry == nil else { return }
+                attempts += 1
+                let work = DispatchWorkItem { [weak self, weak view] in
+                    guard let self, let view else { return }
+                    self.retry = nil
+                    self.publish(in: view)
+                }
+                retry = work
+                DispatchQueue.main.async(execute: work)
+                return
+            }
+            cancel()
+            resolved = found
+            let slotDepth = depth
+            let slotName = name
+            let slotValue = value
+            let slotAccept = accept
+            let slotApply = apply
+            MainActor.assumeIsolated {
+                found.sync(
+                    depth: slotDepth, name: slotName, value: slotValue, accept: slotAccept,
+                    apply: slotApply)
+            }
+        }
+    }
+
+    final class SlotView: NSView {
+        var onMove: (() -> Void)?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            onMove?()
+        }
     }
 }
 

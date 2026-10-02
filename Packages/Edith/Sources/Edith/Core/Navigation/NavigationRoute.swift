@@ -157,9 +157,13 @@ final class WindowRouter {
         forKeyWindow() ?? mainRouter
     }
 
+    static func router(for window: NSWindow) -> WindowRouter? {
+        registry[ObjectIdentifier(window)]
+    }
+
     static func forKeyWindow() -> WindowRouter? {
         guard let window = NSApp.keyWindow else { return nil }
-        return registry[ObjectIdentifier(window)]
+        return router(for: window)
     }
 
     func attach(_ window: NSWindow, role: Role) {
