@@ -60,6 +60,32 @@ import Testing
         #expect(store.shownView(for: claude.id) == .split)
     }
 
+    @Test func zoomedAgentGetsTheSoloViewControls() {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let claude = agent("Claude Code", pane: "a")
+        let codex = agent("Codex", pane: "b")
+        store.open(claude, showing: .split)
+        store.open(codex, beside: .right)
+        #expect(store.views(for: claude.id) == [.agent, .diff])
+        #expect(store.shownView(for: claude.id) == .agent)
+
+        store.toggleZoom(claude.id)
+        #expect(store.currentTab?.zoomed == claude.id)
+        #expect(store.views(for: claude.id) == [.agent, .split, .diff])
+        #expect(store.shownView(for: claude.id) == .split)
+        #expect(store.views(for: codex.id) == [.agent, .diff])
+        store.setView(.diff, for: claude.id)
+        #expect(store.shownView(for: claude.id) == .diff)
+        store.setView(.split, for: claude.id)
+        #expect(store.view(for: claude.id) == .split)
+
+        store.toggleZoom(claude.id)
+        #expect(store.currentTab?.zoomed == nil)
+        #expect(store.views(for: claude.id) == [.agent, .diff])
+        #expect(store.shownView(for: claude.id) == .agent)
+        #expect(store.view(for: claude.id) == .split)
+    }
+
     @Test func diffStaysAvailableInsideASharedTab() {
         let store = HerdrStore(defaults: Self.scratchDefaults())
         let claude = agent("Claude Code", pane: "a")
