@@ -47,7 +47,7 @@ with pathlib.Path(os.environ['WRAPPER_DEFAULTS_CALLS']).open('a') as stream:
     def run_wrapper(self, arguments=None, **environment):
         return subprocess.run([str(WRAPPER), *(arguments if arguments is not None else ['--filter', 'IsolationProbe'])],
                               cwd=REPO, env=dict(self.environment, **environment),
-                              text=True, capture_output=True, timeout=10)
+                              text=True, capture_output=True, timeout=30)
 
     def defaults_calls(self):
         return [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []

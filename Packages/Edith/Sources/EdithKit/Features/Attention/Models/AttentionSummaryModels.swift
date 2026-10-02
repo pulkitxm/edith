@@ -264,6 +264,7 @@ public struct AttentionDimension: Codable, Equatable, Identifiable, Sendable {
         case Self.url: "URL"
         case Self.entity: "App and site"
         case Self.category: "Category"
+        case "profile": "Browser profile"
         default: AttentionTag.title(key)
         }
     }

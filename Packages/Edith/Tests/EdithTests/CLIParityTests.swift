@@ -44,6 +44,8 @@ enum UIParity {
 
     static let notReachableFromTheUI: [String: String] = [
         "ed config import": "the app restores from iCloud rather than from a JSON file",
+        "ed attention rules import":
+            "the app edits individual rules rather than importing a JSON file",
         "ed color clear": "the colour picker no longer offers a clear-history action",
         "ed companion machines add":
             "the companion setup no longer adds deployment machines from the app",
@@ -69,6 +71,9 @@ enum UIParity {
         UICapability(
             "Extensions pane", "turn an extension off", ["extensions", "disable", "clipboard"]),
         UICapability("Extensions pane", "browse registered extensions", ["extensions", "ls"]),
+        UICapability(
+            "Database pack sheet", "download and verify database drivers",
+            ["database", "pack", "install"]),
         UICapability(
             "Extension settings", "inspect metadata and requirements",
             ["extensions", "info", "clipboard"]),

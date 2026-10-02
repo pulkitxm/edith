@@ -463,6 +463,8 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
     public var urls: [String]
     public var keywords: [String]
     public var contexts: [String]
+    public var browserProfiles: [String]
+    public var reportSeparately: Bool
     public var productivity: AttentionProductivity?
     public var sphere: AttentionSphere?
 
@@ -470,6 +472,7 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
         id: String = UUID().uuidString, name: String, categoryID: String,
         bundleIDs: [String] = [], domains: [String] = [], urls: [String] = [],
         keywords: [String] = [], contexts: [String] = [],
+        browserProfiles: [String] = [], reportSeparately: Bool = false,
         productivity: AttentionProductivity? = nil, sphere: AttentionSphere? = nil
     ) {
         self.id = id
@@ -480,12 +483,15 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
         self.urls = urls
         self.keywords = keywords
         self.contexts = contexts
+        self.browserProfiles = browserProfiles
+        self.reportSeparately = reportSeparately
         self.productivity = productivity
         self.sphere = sphere
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, categoryID, bundleIDs, domains, urls, keywords, contexts, productivity,
+        case id, name, categoryID, bundleIDs, domains, urls, keywords, contexts, browserProfiles,
+            reportSeparately, productivity,
             sphere
     }
 
@@ -499,6 +505,10 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
         urls = try container.decodeIfPresent([String].self, forKey: .urls) ?? []
         keywords = try container.decodeIfPresent([String].self, forKey: .keywords) ?? []
         contexts = try container.decodeIfPresent([String].self, forKey: .contexts) ?? []
+        browserProfiles =
+            try container.decodeIfPresent([String].self, forKey: .browserProfiles) ?? []
+        reportSeparately =
+            try container.decodeIfPresent(Bool.self, forKey: .reportSeparately) ?? false
         productivity = try container.decodeIfPresent(
             AttentionProductivity.self, forKey: .productivity)
         sphere = try container.decodeIfPresent(AttentionSphere.self, forKey: .sphere)
@@ -506,16 +516,17 @@ public struct AttentionIdentityRule: Codable, Equatable, Identifiable, Sendable 
 
     public var isIdentity: Bool {
         (!bundleIDs.isEmpty || !domains.isEmpty) && urls.isEmpty && keywords.isEmpty
-            && contexts.isEmpty
+            && contexts.isEmpty && browserProfiles.isEmpty
     }
 
     public var isEmpty: Bool {
         bundleIDs.isEmpty && domains.isEmpty && urls.isEmpty && keywords.isEmpty
-            && contexts.isEmpty
+            && contexts.isEmpty && browserProfiles.isEmpty
     }
 
     public var specificity: Int {
-        (urls.isEmpty ? 0 : 8) + (keywords.isEmpty ? 0 : 8) + (contexts.isEmpty ? 0 : 8)
+        (urls.isEmpty ? 0 : 32) + (keywords.isEmpty ? 0 : 8) + (contexts.isEmpty ? 0 : 8)
+            + (browserProfiles.isEmpty ? 0 : 4)
             + (bundleIDs.isEmpty && domains.isEmpty ? 0 : 1)
     }
 }

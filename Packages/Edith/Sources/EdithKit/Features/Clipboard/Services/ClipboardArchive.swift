@@ -72,53 +72,54 @@ public final class ClipboardArchive: @unchecked Sendable {
             createdAt: capture.capturedAt, lastCopiedAt: capture.capturedAt,
             size: capture.data.count, preview: capture.preview, pinned: false)
         let destination = try blobURL(staged)
-        var existing = stat()
-        let hadBlob = lstat(destination.path, &existing) == 0
-        if !hadBlob {
-            try writeBlob(capture.data, destination)
+        let temporary = blobs.appendingPathComponent(".capture-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        if !FileManager.default.fileExists(atPath: destination.path) {
+            try writeBlob(capture.data, temporary)
         }
-        do {
-            return try withLock {
-                var entries = try load()
-                let existing = entries.first { $0.sha256 == sha && $0.ext == capture.ext }
-                if let existing,
-                    existing.lastCopiedAt.timeIntervalSince1970
-                        >= floor(capture.capturedAt.timeIntervalSince1970)
-                {
-                    return ClipboardMutationResult(changed: 0, total: entries.count)
-                }
-                let previous = entries
-                let entry = ClipboardEntry(
-                    id: existing?.id ?? capture.id, sha256: sha, types: capture.types,
-                    ext: capture.ext, sourceApp: capture.sourceApp,
-                    sourceBundleID: capture.sourceBundleID,
-                    createdAt: existing?.createdAt ?? capture.capturedAt,
-                    lastCopiedAt: capture.capturedAt, size: capture.data.count,
-                    preview: capture.preview, pinned: existing?.pinned ?? false)
-                entries.removeAll { $0.sha256 == sha && $0.ext == capture.ext }
-                entries.append(entry)
-                entries = ClipboardIndex.applyRetention(
-                    entries, maxItems: max(0, maxItems), maxAge: maxAge)
-                try ensureDirectory(blobs)
-                let destination = try blobURL(entry)
-                let stored = try read(destination, maximum: Self.maximumBlobBytes)
-                if let stored, stored != capture.data {
-                    throw AgentError(.failed, "The stored clipboard payload failed verification.")
-                }
-                if stored == nil { try writeBlob(capture.data, destination) }
-                do {
-                    try Task.checkCancellation()
-                    try save(entries)
-                } catch {
-                    if stored == nil { try? FileManager.default.removeItem(at: destination) }
-                    throw error
-                }
-                pruneRemoved(previous + [entry], keeping: entries)
-                return ClipboardMutationResult(changed: 1, total: entries.count)
+        return try withLock {
+            var entries = try load()
+            let existing = entries.first { $0.sha256 == sha && $0.ext == capture.ext }
+            if let existing,
+                existing.lastCopiedAt.timeIntervalSince1970
+                    >= floor(capture.capturedAt.timeIntervalSince1970)
+            {
+                return ClipboardMutationResult(changed: 0, total: entries.count)
             }
-        } catch {
-            if !hadBlob { try? FileManager.default.removeItem(at: destination) }
-            throw error
+            let previous = entries
+            let entry = ClipboardEntry(
+                id: existing?.id ?? capture.id, sha256: sha, types: capture.types,
+                ext: capture.ext, sourceApp: capture.sourceApp,
+                sourceBundleID: capture.sourceBundleID,
+                createdAt: existing?.createdAt ?? capture.capturedAt,
+                lastCopiedAt: capture.capturedAt, size: capture.data.count,
+                preview: capture.preview, pinned: existing?.pinned ?? false)
+            entries.removeAll { $0.sha256 == sha && $0.ext == capture.ext }
+            entries.append(entry)
+            entries = ClipboardIndex.applyRetention(
+                entries, maxItems: max(0, maxItems), maxAge: maxAge)
+            try ensureDirectory(blobs)
+            let destination = try blobURL(entry)
+            let stored = try read(destination, maximum: Self.maximumBlobBytes)
+            if let stored, stored != capture.data {
+                throw AgentError(.failed, "The stored clipboard payload failed verification.")
+            }
+            if stored == nil {
+                if FileManager.default.fileExists(atPath: temporary.path) {
+                    try FileManager.default.moveItem(at: temporary, to: destination)
+                } else {
+                    try writeBlob(capture.data, destination)
+                }
+            }
+            do {
+                try Task.checkCancellation()
+                try save(entries)
+            } catch {
+                if stored == nil { try? FileManager.default.removeItem(at: destination) }
+                throw error
+            }
+            pruneRemoved(previous + [entry], keeping: entries)
+            return ClipboardMutationResult(changed: 1, total: entries.count)
         }
     }
 

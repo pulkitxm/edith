@@ -244,7 +244,7 @@ let targets: [Target] = [
             "Highlighter",
         ],
         exclude: ["Resources"],
-        swiftSettings: shippedSwiftSettings
+        swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .executableTarget(
         name: "edith-database",
@@ -254,7 +254,7 @@ let targets: [Target] = [
     .executableTarget(
         name: "EdithMain",
         dependencies: ["Edith", "EdithCLI", "EdithDatabase"],
-        swiftSettings: shippedSwiftSettings,
+        swiftSettings: [.swiftLanguageMode(.v5)],
         linkerSettings: [
             .unsafeFlags([
                 "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
@@ -265,7 +265,7 @@ let targets: [Target] = [
         name: "EdithHelper",
         dependencies: ["EdithCameraSupport", "EdithCore", "EdithKit", "EdithLidAwakeSupport"],
         resources: [.copy("MenuBar.png")],
-        swiftSettings: shippedSwiftSettings
+        swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
         name: "EdithTests",

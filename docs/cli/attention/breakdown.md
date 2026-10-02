@@ -9,11 +9,12 @@ ed attention breakdown [--by <dimension>] [--range <window>] [--from <date>] [--
 ```
 
 `--by` accepts `app`, `title`, `url`, `page`, `machine`, `agent`, `project`,
-`repo`, `section`, `channel`, `group`, `search` and `doc`. It defaults to `app`.
+`repo`, `section`, `channel`, `group`, `search`, `doc` and `profile`. It defaults to `app`.
 
 - `page`, `machine`, `agent` and `project` come from the Edith app itself. They say
   which Edith page was open and, on Sessions, which agent on which machine had
   focus.
+- `profile` groups time by the profile label configured in the browser extension.
 - `repo`, `section`, `channel`, `group`, `search` and `doc` come from the browser
   extension. Each is a GitHub repository, a site section such as a pull request or
   a YouTube watch page, a creator or subreddit, a tab group, a search query or a

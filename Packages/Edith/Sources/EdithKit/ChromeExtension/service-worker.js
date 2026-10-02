@@ -49,11 +49,12 @@ async function activeTab() {
   return tabs[0] || null
 }
 
-async function pageFor(tabId) {
-  if (tabId == null) return {}
-  const key = `page:${tabId}`
+async function pageFor(tab) {
+  if (tab.id == null) return {}
+  const key = `page:${tab.id}`
   const stored = await chrome.storage.session.get(key)
-  return stored[key] || {}
+  const page = stored[key]
+  return page?.url === tab.url && page?.title === tab.title ? page : {}
 }
 
 function param(url, names) {
@@ -140,7 +141,7 @@ async function observe(settings, now) {
   const tab = await activeTab()
   if (!tab?.url || !/^https?:/.test(tab.url) || tab.incognito) return null
   const idle = await chrome.idle.queryState(Number(settings.idleThreshold))
-  const page = await pageFor(tab.id)
+  const page = await pageFor(tab)
   const media = Array.isArray(page.media) ? page.media : []
   const tags = { ...urlTags(tab.url), ...(page.tags || {}) }
   const group = await groupTitle(tab)
@@ -371,6 +372,8 @@ async function recordPage(tabId, message) {
   const signalsKey = `signals:${tabId}`
   const stored = await chrome.storage.session.get([key, signalsKey])
   const page = { ...(stored[key] || {}) }
+  page.url = message.url
+  page.title = message.title
   if (Array.isArray(message.media)) page.media = message.media
   if (message.tags && typeof message.tags === "object") page.tags = message.tags
   const updates = { [key]: page }

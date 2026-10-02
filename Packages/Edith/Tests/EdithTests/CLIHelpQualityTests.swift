@@ -8,6 +8,7 @@ enum CLIHelpQuality {
     static let jsonExemptions: [String: String] = [
         "ed schema": "stdout is already one JSON Schema document",
         "ed config export": "stdout is already the settings JSON document",
+        "ed attention rules export": "stdout is already the attention rules JSON document",
         "ed completions zsh": "prints a zsh completion script",
         "ed completions bash": "prints a bash completion script",
         "ed completions fish": "prints a fish completion script",

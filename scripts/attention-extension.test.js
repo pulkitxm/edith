@@ -116,7 +116,7 @@ function fixture() {
     reload,
     reloads: () => reloads,
     message: (message, tabId = 1) =>
-      listeners.message(message, { tab: { id: tabId } }),
+      listeners.message({ url, title, ...message }, { tab: { id: tabId } }),
     title(value) {
       title = value;
     },
@@ -424,4 +424,32 @@ test("a payload Edith rejects as malformed is dropped instead of blocking the qu
   await f.tick();
   expect(f.sent.at(-1).domain).toBe("first.example");
   expect(f.local.attentionQueue).toHaveLength(0);
+});
+
+test("page metadata never follows a tab to another URL or title", async () => {
+  const f = fixture();
+  f.tab("https://video.example/watch?v=first");
+  f.title("First video");
+  await f.message({ type: "edith-page", tags: { channel: "Teacher" } });
+  await f.tick();
+  f.advance(10);
+  f.tab("https://video.example/watch?v=second");
+  f.title("Second video");
+  await f.tick();
+  f.advance(10);
+  await f.tick();
+  expect(f.sent[0].tags.channel).toBe("Teacher");
+  expect(f.sent[1].tags.channel).toBeUndefined();
+  await f.message({ type: "edith-page", tags: { channel: "Comedian" } });
+  f.advance(10);
+  await f.tick();
+  f.advance(10);
+  await f.tick();
+  expect(f.sent.at(-1).tags.channel).toBe("Comedian");
+  f.title("Video list");
+  f.advance(10);
+  await f.tick();
+  f.advance(10);
+  await f.tick();
+  expect(f.sent.at(-1).tags.channel).toBeUndefined();
 });

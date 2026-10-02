@@ -234,14 +234,14 @@ private struct AttentionRulesEditor: View {
             let rule = model.settings.rules[index]
             return
                 ([rule.name] + rule.bundleIDs + rule.domains + rule.urls + rule.keywords
-                + rule.contexts).contains { $0.lowercased().contains(query) }
+                + rule.contexts + rule.browserProfiles).contains { $0.lowercased().contains(query) }
         }
         AttentionCard {
             HStack {
                 SettingsTitle(
                     "Rules",
                     subtitle:
-                        "Your rules run before the \(AttentionCatalog.rules.count) built-in ones. A rule with only apps or domains names an identity; add URL prefixes, title keywords or Edith context such as page=herdr or machine=tuf to categorize just part of it."
+                        "Your rules run before the \(AttentionCatalog.rules.count) built-in ones. A rule with only apps or domains names an identity; add URL prefixes, title keywords, channel or repository context, or browser profile labels to categorize part of it. Enable separate reporting to give those matches their own time totals."
                 )
                 Spacer()
                 Button("Add rule") { model.addRule() }
@@ -296,6 +296,7 @@ private struct AttentionRuleEditor: View {
                 Spacer()
             }
             .font(.system(size: UIScale.pt(11)))
+            Toggle("Report matches separately using this rule’s name", isOn: $rule.reportSeparately)
             Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 6) {
                 GridRow {
                     field("Apps", \.bundleIDs, "com.apple.dt.Xcode, com.jetbrains.*")
@@ -306,8 +307,8 @@ private struct AttentionRuleEditor: View {
                     field("Title keywords", \.keywords, "swift, tutorial")
                 }
                 GridRow {
-                    field("Edith context", \.contexts, "page=herdr, machine=tuf, agent=Codex")
-                        .gridCellColumns(2)
+                    field("Context", \.contexts, "page=herdr, channel=Example, repo=owner/repo")
+                    field("Browser profiles", \.browserProfiles, "Work, Personal")
                 }
             }
             .font(.system(size: UIScale.pt(11)))

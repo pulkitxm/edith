@@ -9,7 +9,7 @@ ed attention categories set <entity> <category> [--name <display-name>]
 ```
 
 Use an entity ID from `ed attention summary --json`. Accepted forms are
-`name:<identity name>`, `app:<bundle-id>`, and `web:<domain>`. A `name:` entity
+`name:<identity name>`, `app:<bundle-id>`, and `web:<domain>` and `rule:<id>`. A `rule:` entity updates the matching scoped rule. A `name:` entity
 updates every rule with that name, or copies the built-in rule of that name into
 your rules.
 

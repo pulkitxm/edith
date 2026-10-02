@@ -164,6 +164,9 @@ public enum UserOperationCatalog {
         registrations += DatabaseConnectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        registrations += DatabasePackOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         registrations += WorkspaceOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -1728,5 +1731,20 @@ private extension MachineFileOperation {
 private extension CompanionMindRuntimeOperation {
     var interfaceExposure: UserOperationExposure {
         .userInterface(placements)
+    }
+}
+
+private extension DatabasePackOperation {
+    var interfaceExposure: UserOperationExposure {
+        switch self {
+        case .install:
+            userInterface("Database pack sheet", "download and verify database drivers")
+        case .status:
+            .commandLineOnly(reason: "The app checks driver readiness while opening databases.")
+        case .remove:
+            .commandLineOnly(
+                reason: "The app installs required database drivers but does not remove their pack."
+            )
+        }
     }
 }

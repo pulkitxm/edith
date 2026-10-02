@@ -41,7 +41,7 @@ import Testing
         let sent = Self.matches(
             #"(?:AppBridge|IPC)\.post\(\s*IPC\.Name\.(\w+)"#, in: Self.cli)
         let observed = Self.matches(
-            #"IPC\.observe\(\s*\n?\s*IPC\.Name\.(\w+)"#, in: Self.app)
+            #"(?:IPC\.observe\(\s*|\.publisher\(for:\s*)IPC\.Name\.(\w+)"#, in: Self.app)
         #expect(!sent.isEmpty, "the CLI sends nothing, so this test proves nothing")
         #expect(
             sent.subtracting(observed).isEmpty,

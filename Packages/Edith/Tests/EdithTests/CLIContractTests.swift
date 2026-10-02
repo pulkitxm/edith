@@ -29,6 +29,7 @@ enum JSONContract {
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
         JSONCase("ed brew status", ["brew", "status", "--json"]),
+        JSONCase("ed brew cancel", ["brew", "cancel", "--json"], fixtureArguments: { _ in [] }),
         JSONCase("ed brew ls", ["brew", "ls", "--json"]),
         JSONCase("ed brew search", ["brew", "search", "edith", "--json"]),
         JSONCase(
@@ -135,6 +136,13 @@ enum JSONContract {
             ["maintenance", "backup-updates", "/tmp/edith-update-contract.json", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed completions source", ["completions", "source", "--json"]),
+        JSONCase(
+            "ed attention extension install", ["attention", "extension", "install", "--json"],
+            mutatesTheMachine: true),
+        JSONCase(
+            "ed attention extension open", ["attention", "extension", "open", "--json"],
+            mutatesTheMachine: true),
+        JSONCase("ed attention extension token", ["attention", "extension", "token", "--json"]),
         JSONCase("ed attention status", ["attention", "status", "--json"]),
         JSONCase("ed attention summary", ["attention", "summary", "--json"]),
         JSONCase(
@@ -143,6 +151,13 @@ enum JSONContract {
         JSONCase("ed attention timeline", ["attention", "timeline", "--json"]),
         JSONCase("ed attention music", ["attention", "music", "--json"]),
         JSONCase("ed attention categories ls", ["attention", "categories", "ls", "--json"]),
+        JSONCase(
+            "ed attention rules import", ["attention", "rules", "import", "--dry-run", "--json"],
+            fixtureArguments: { world in
+                let file = world.sandbox.appendingPathComponent("attention-rules.json")
+                try Data(#"{"categories":[],"rules":[]}"#.utf8).write(to: file)
+                return [file.path]
+            }),
         JSONCase(
             "ed attention categories auto", ["attention", "categories", "auto", "--json"],
             mutatesTheMachine: true),
@@ -166,6 +181,10 @@ enum JSONContract {
         JSONCase(
             "ed completions install", ["completions", "install", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed app route", ["app", "route", "--json"]),
+        JSONCase("ed app navigate", ["app", "navigate", "docs", "--json"]),
+        JSONCase("ed app back", ["app", "back", "--json"]),
+        JSONCase("ed app forward", ["app", "forward", "--json"]),
         JSONCase("ed app actions", ["app", "actions", "--json"]),
         JSONCase("ed app info", ["app", "info", "--json"]),
         JSONCase("ed app diagnostics", ["app", "diagnostics", "--json"]),
@@ -238,6 +257,10 @@ enum JSONContract {
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
         JSONCase("ed tools ls", ["tools", "ls", "--json"]),
+        JSONCase("ed studio cancel", ["studio", "cancel", "--json"]),
+        JSONCase("ed studio open", ["studio", "open", "/nonexistent/studio-result.pdf", "--json"]),
+        JSONCase(
+            "ed studio reveal", ["studio", "reveal", "/nonexistent/studio-result.pdf", "--json"]),
         JSONCase("ed studio tools", ["studio", "tools", "--kind", "pdf", "--json"]),
         JSONCase("ed studio info", ["studio", "info", "pdf.merge", "--json"]),
         JSONCase(
@@ -754,6 +777,8 @@ enum JSONContract {
         JSONCase("ed shelf rm", ["shelf", "rm", "1", "--json"]),
         JSONCase("ed shelf clear", ["shelf", "clear", "--json"]),
         JSONCase("ed shelf purge", ["shelf", "purge", "oneDay", "--json"]),
+        JSONCase(
+            "ed companion stop", ["companion", "stop", "--json"], fixtureArguments: { _ in [] }),
         JSONCase("ed companion status", ["companion", "status", "--json"]),
         JSONCase("ed companion hosts", ["companion", "hosts", "--json"]),
         JSONCase(
@@ -944,6 +969,7 @@ enum JSONContract {
         JSONCase("ed camera source", ["camera", "source", "1", "--json"]),
         JSONCase("ed camera zoom", ["camera", "zoom", "1.5", "--json"]),
         JSONCase("ed camera frame", ["camera", "frame", "--x", "0.4", "--json"]),
+        JSONCase("ed camera reset-look", ["camera", "reset-look", "--json"]),
         JSONCase("ed camera reset", ["camera", "reset", "--json"]),
         JSONCase("ed camera look", ["camera", "look", "studio", "--json"]),
         JSONCase("ed camera background", ["camera", "background", "blur", "--json"]),
@@ -1054,6 +1080,9 @@ enum JSONContract {
         JSONCase(
             "ed presenter stop", ["presenter", "stop", "--json"],
             mutatesTheMachine: true),
+        JSONCase("ed herdr space ls", ["herdr", "space", "ls", "--json"]),
+        JSONCase("ed herdr space terminal", ["herdr", "space", "terminal", "--json"]),
+        JSONCase("ed herdr space split", ["herdr", "space", "split", "--json"]),
         JSONCase("ed herdr ls", ["herdr", "ls", "--json"]),
         JSONCase("ed herdr layout ls", ["herdr", "layout", "ls", "--json"]),
         JSONCase(

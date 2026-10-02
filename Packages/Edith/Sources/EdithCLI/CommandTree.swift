@@ -838,6 +838,8 @@ public enum CommandTree {
         "ed attention categories set": Spec(
             options: ["--json", "--help", "--name", "--productivity", "--sphere"],
             arguments: [.attentionEntity, .attentionCategory]),
+        "ed attention rules import": Spec(
+            options: ["--json", "--dry-run"], arguments: [.localPath]),
         "ed attention focus status": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention focus start": Spec(options: ["--json", "--help", "--for", "--name"]),
         "ed attention focus stop": Spec(options: ["--json", "-h", "--help", "--version"]),

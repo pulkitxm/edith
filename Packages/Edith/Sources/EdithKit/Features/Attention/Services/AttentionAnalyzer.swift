@@ -517,6 +517,9 @@ struct AttentionSummaryBuilder {
         if let location = AttentionText.location(interval.url) {
             keys.append((AttentionDimension.url, location))
         }
+        if let profile = interval.browserProfile, !profile.isEmpty {
+            keys.append(("profile", profile))
+        }
         for key in AttentionTag.dimensions {
             if let value = interval.tags?[key], !value.isEmpty { keys.append((key, value)) }
         }

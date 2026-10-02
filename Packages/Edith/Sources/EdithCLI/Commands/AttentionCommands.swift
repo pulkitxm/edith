@@ -17,7 +17,7 @@ struct AttentionCommand: AsyncParsableCommand {
             AttentionStatusCommand.self, AttentionSummaryCommand.self,
             AttentionBreakdownCommand.self, AttentionAgentsCommand.self,
             AttentionTimelineCommand.self, AttentionMusicCommand.self,
-            AttentionCategoriesCommand.self, AttentionFocusCommand.self,
+            AttentionCategoriesCommand.self, AttentionRulesCommand.self, AttentionFocusCommand.self,
             AttentionDoctorCommand.self, AttentionExtensionCommand.self,
             AttentionBackupCommand.self, AttentionRestoreCommand.self,
         ],
@@ -139,7 +139,7 @@ enum AttentionCLI {
         "project": AttentionTag.project, "repo": AttentionTag.repository,
         "section": AttentionTag.section, "channel": AttentionTag.channel,
         "group": AttentionTag.group, "search": AttentionTag.search,
-        "doc": AttentionTag.document,
+        "doc": AttentionTag.document, "profile": "profile",
     ]
 
     static func secondsJSON(_ values: [String: TimeInterval]) -> JSONValue {
@@ -492,7 +492,7 @@ struct AttentionBreakdownCommand: AsyncParsableCommand {
     @Option(
         name: .customLong("by"),
         help:
-            "app, title, url, page, machine, agent, project, repo, section, channel, group, search or doc."
+            "app, title, url, page, machine, agent, project, repo, section, channel, group, search, doc or profile."
     )
     var by = "app"
     @Option(help: "Window: today, yesterday, 24h, 7d, 30d, week, month or all.")
