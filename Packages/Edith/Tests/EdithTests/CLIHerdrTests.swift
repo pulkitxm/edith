@@ -121,7 +121,8 @@ private final class HerdrPipeReadBox: @unchecked Sendable {
     }
 
     @Test(arguments: [
-        "\u{1B}[<0;122;31M", "\u{1B}[<0;122;31m", "\u{1B}[<32;122;31M", "\u{1B}[I", "\u{1B}[O",
+        "\u{1B}[<0;122;31M", "\u{1B}[<0;122;31m", "\u{1B}[<32;122;31M",
+        "\u{1B}[<66;95;22M", "\u{1B}[<67;95;22M", "\u{1B}[I", "\u{1B}[O",
     ])
     func scrollOnlyBridgeDropsReportsAtEveryReadBoundary(report: String) throws {
         let bytes = Data(report.utf8)
