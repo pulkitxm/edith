@@ -77,6 +77,13 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
         }
     }
 
+    public func firstEventDate() throws -> Date? {
+        try store.read { database in
+            try Date.fetchOne(
+                database, sql: "SELECT startedAt FROM attention_event ORDER BY startedAt LIMIT 1")
+        }
+    }
+
     public func events(from: Date, to: Date) throws -> [AttentionEvent] {
         guard to > from else { return [] }
         return try store.read { database in
@@ -90,6 +97,7 @@ public struct AttentionEventStore: Sendable, AttentionEventSink {
                 arguments: [to, from.addingTimeInterval(-172_800)]
             )
             .compactMap { row -> AttentionEvent? in
+                try Task.checkCancellation()
                 guard let data: Data = row["payload"] else { return nil }
                 return try? AgentPayload.decode(AttentionEvent.self, from: data)
             }

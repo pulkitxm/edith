@@ -6,6 +6,136 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func refreshAndRangeChangesPreserveTheSelectedSectionAndFilters() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try fixture.repository.append(
+            AttentionEvent(
+                startedAt: Date().addingTimeInterval(-120), duration: 60,
+                source: .application, appName: "Xcode", bundleID: "com.apple.dt.Xcode"))
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        for section in [AttentionPageSection.overview, .timeline, .breakdown, .agents, .focus] {
+            model.section = section
+            await model.waitForReload()
+            model.toggle(level: .veryProductive)
+            let filter = model.levelFilter
+            model.reload()
+            await model.waitForReload()
+            #expect(model.section == section)
+            #expect(model.levelFilter == filter)
+            model.select(.last7)
+            await model.waitForReload()
+            #expect(model.section == section)
+            #expect(model.levelFilter == filter)
+            model.select(.today)
+            await model.waitForReload()
+            #expect(model.section == section)
+        }
+    }
+
+    @Test func rapidRangeAndTabChangesPublishOnlyTheLatestSelection() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let now = Date()
+        let yesterday = Calendar.current.startOfDay(for: now).addingTimeInterval(-3_600)
+        for (date, title) in [
+            (now.addingTimeInterval(-200 * 86_400), "Old note"), (yesterday, "Recent note"),
+        ] {
+            try fixture.repository.append(
+                AttentionEvent(
+                    startedAt: date, duration: 60, source: .application, appName: "Writing",
+                    bundleID: "app.writing", windowTitle: title))
+        }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.last7)
+        await model.waitForReload()
+        model.select(.allTime)
+        model.select(.last90)
+        model.select(.yesterday)
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.period.preset == .yesterday)
+        #expect(model.summary.from == Calendar.current.startOfDay(for: yesterday))
+        #expect(model.summary.activeDuration == 60)
+        #expect(
+            model.summary.dimensions.first { $0.key == AttentionDimension.title }?.rows.map(\.key)
+                == ["Recent note"])
+        #expect(!model.pending)
+        #expect(model.errorMessage == nil)
+        model.select(.today)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 0)
+        #expect(model.summary.dimensions.isEmpty)
+    }
+
+    @Test func missingTabReloadsRetainedDataWhenCategorizationChanges() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try fixture.repository.append(
+            AttentionEvent(
+                startedAt: Date().addingTimeInterval(-120), duration: 60, source: .application,
+                appName: "Writing", bundleID: "app.writing"))
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.reload()
+        await model.waitForReload()
+        let entity = try #require(model.summary.entities.first)
+        var settings = fixture.repository.loadSettings()
+        settings.assign(entityID: entity.id, categoryID: "focus")
+        try fixture.repository.saveSettings(settings)
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.summary.entities.first?.category.id == "focus")
+        #expect(model.summary.productiveDuration == 60)
+        #expect(
+            model.summary.dimensions.first { $0.key == AttentionDimension.entity }?
+                .rows.first?.categories["focus"] == 60)
+        model.section = .overview
+        #expect(!model.pending)
+    }
+
+    @Test func allTimeCoversEveryRecordedDayWithoutComparisonsOrStepping() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let now = Date()
+        let first = now.addingTimeInterval(-500 * 86_400)
+        for date in [first, now.addingTimeInterval(-120)] {
+            try fixture.repository.append(
+                AttentionEvent(
+                    startedAt: date, duration: 60, source: .application,
+                    appName: "Writing", bundleID: "app.writing"))
+        }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.allTime)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 120)
+        #expect(model.summary.from == Calendar.current.startOfDay(for: first))
+        #expect(model.summary.previous == nil)
+        #expect(model.period.title() == "All time")
+        #expect(model.period.comparePeriod == nil)
+        #expect(!model.canStepBackward)
+        #expect(!model.canStepForward)
+        #expect(model.refreshInterval == .seconds(120))
+        let period = model.period
+        model.step(-1)
+        #expect(model.period == period)
+        model.select(.last90)
+        await model.waitForReload()
+        #expect(model.summary.activeDuration == 60)
+    }
+
+    @Test func emptyAllTimeIsBoundedToToday() async {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.select(.allTime)
+        await model.waitForReload()
+        #expect(model.summary.from == Calendar.current.startOfDay(for: Date()))
+        #expect(model.summary.activeDuration == 0)
+        #expect(model.errorMessage == nil)
+    }
+
     @Test func dayRibbonRangeStaysValidForBlocksFromAnotherDay() {
         let day = DateInterval(start: Date(timeIntervalSince1970: 1_790_000_000), duration: 86_400)
         let later = [day.end.addingTimeInterval(7_200), day.end.addingTimeInterval(9_000)]
@@ -103,11 +233,32 @@ import Testing
         await model.waitForReload()
         #expect(model.timeline.isEmpty)
         #expect(!model.dayRibbon.isEmpty)
+        let entities = model.summary.entities
+        let interval = DateInterval(start: model.summary.from, end: model.summary.to)
         model.section = .timeline
         #expect(model.pending)
         await model.waitForReload()
         #expect(!model.pending)
         #expect(model.timeline.first?.blocks.count == 2)
+        #expect(model.summary.entities == entities)
+        #expect(model.summary.from == interval.start)
+        #expect(model.summary.to == interval.end)
+        let spans = model.summary.spans
+        model.section = .breakdown
+        await model.waitForReload()
+        #expect(model.summary.entities == entities)
+        #expect(model.summary.spans == spans)
+        #expect(model.timeline.first?.blocks.count == 2)
+        #expect(model.summary.dimensions.contains { $0.key == AttentionDimension.entity })
+        let dimensions = model.summary.dimensions
+        model.section = .agents
+        await model.waitForReload()
+        #expect(model.summary.dimensions == dimensions)
+        #expect(model.summary.entities == entities)
+        model.section = .overview
+        #expect(!model.pending)
+        model.section = .timeline
+        #expect(!model.pending)
         model.searchText = "slack"
         try await Task.sleep(for: .milliseconds(400))
         await model.waitForReload()

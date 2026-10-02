@@ -7,11 +7,11 @@ enum AttentionPalette {
 
     static func level(_ level: AttentionProductivity, dark: Bool) -> Color {
         switch level {
-        case .veryProductive: DashSkin.accent(dark)
-        case .productive: DashSkin.accent(dark).opacity(0.55)
+        case .veryProductive: Color(red: 0.20, green: 0.72, blue: 0.59)
+        case .productive: Color(red: 0.32, green: 0.66, blue: 0.78)
         case .neutral: DashSkin.lineStrong(dark)
-        case .distracting: DashSkin.inkFaint(dark)
-        case .veryDistracting: DashSkin.inkSoft(dark)
+        case .distracting: Color(red: 0.90, green: 0.62, blue: 0.30)
+        case .veryDistracting: Color(red: 0.89, green: 0.39, blue: 0.39)
         }
     }
 

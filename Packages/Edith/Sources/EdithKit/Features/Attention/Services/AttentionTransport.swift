@@ -114,11 +114,12 @@ public struct AttentionSummaryRequest: Codable, Sendable {
     public let comparePeriod: TimeInterval?
     public let window: AttentionTimeWindow
     public let parts: Set<AttentionSummaryPart>
+    public let allTime: Bool
 
     public init(
         from: Date, to: Date, settings: AttentionSettings? = nil,
         comparePeriod: TimeInterval? = nil, window: AttentionTimeWindow = .all,
-        parts: Set<AttentionSummaryPart> = Set(AttentionSummaryPart.allCases)
+        parts: Set<AttentionSummaryPart> = Set(AttentionSummaryPart.allCases), allTime: Bool = false
     ) {
         self.from = from
         self.to = to
@@ -126,6 +127,16 @@ public struct AttentionSummaryRequest: Codable, Sendable {
         self.comparePeriod = comparePeriod
         self.window = window
         self.parts = parts
+        self.allTime = allTime
+    }
+
+    public func coveringAllTime(since first: Date?, calendar: Calendar = .current)
+        -> AttentionSummaryRequest
+    {
+        guard allTime else { return self }
+        return AttentionSummaryRequest(
+            from: min(calendar.startOfDay(for: first ?? to), to), to: to, settings: settings,
+            window: window, parts: parts, allTime: true)
     }
 
     public var previousInterval: DateInterval? {
@@ -146,9 +157,12 @@ public struct AttentionPageSnapshot: Codable, Sendable {
     public var classifications: AttentionClassifications
 
     public init(request: AttentionSummaryRequest, repository: AttentionRepository) {
+        let all = repository.events(
+            from: request.allTime ? .distantPast : request.from, to: request.to)
+        let request = request.coveringAllTime(since: all.first?.startedAt)
         self.init(
             request: request, repository: repository,
-            all: repository.events(from: request.from, to: request.to),
+            all: all,
             previous: request.previousInterval.map {
                 repository.events(from: $0.start, to: $0.end)
             },

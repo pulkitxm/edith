@@ -263,16 +263,23 @@ private enum AttentionSyntheticWeek {
         await model.waitForReload()
         #expect(model.summary.activeDuration > 6 * 3_600)
         #expect(!model.summary.agents.isEmpty)
-        try render(model, height: 2_330, to: output.appendingPathComponent("overview-day.png"))
+        model.selectedEntityID = model.summary.entities.first { $0.domain == "youtube.com" }?.id
+        try render(model, height: 1_300, to: output.appendingPathComponent("overview-day.png"))
 
+        try render(
+            model, height: 1_300, to: output.appendingPathComponent("overview-light.png"),
+            scheme: .light)
+        try render(
+            model, height: 2_200, to: output.appendingPathComponent("overview-narrow.png"),
+            width: 760)
         model.section = .timeline
         await model.waitForReload()
         try render(model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
 
         model.section = .breakdown
-        model.breakdownDimension = AttentionTag.machine
+        model.breakdownDimension = AttentionDimension.title
         await model.waitForReload()
-        try render(model, height: 900, to: output.appendingPathComponent("breakdown-machine.png"))
+        try render(model, height: 1_100, to: output.appendingPathComponent("explorer-titles.png"))
 
         model.section = .overview
         await model.waitForReload()
@@ -288,19 +295,31 @@ private enum AttentionSyntheticWeek {
         model.breakdownDimension = AttentionTag.repository
         await model.waitForReload()
         try render(model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
+
+        model.section = .overview
+        model.select(.allTime)
+        await model.waitForReload()
+        try render(model, height: 1_500, to: output.appendingPathComponent("overview-all-time.png"))
+        try render(
+            model, height: 2_200, to: output.appendingPathComponent("all-time-narrow.png"),
+            width: 760)
     }
 
-    private func render(_ model: AttentionPageModel, height: CGFloat, to output: URL) throws {
+    private func render(
+        _ model: AttentionPageModel, height: CGFloat, to output: URL, width: CGFloat = 1440,
+        scheme: ColorScheme = .dark
+    ) throws {
         let host = NSHostingView(
             rootView: AttentionPage(model: model)
-                .environment(\.colorScheme, .dark)
+                .environment(\.colorScheme, scheme)
+                .environment(\.compactLayout, width < 900)
                 .transaction { $0.animation = nil }
         )
-        host.frame = NSRect(x: 0, y: 0, width: 1440, height: height)
-        host.appearance = NSAppearance(named: .darkAqua)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         window.contentView = host
         window.orderBack(nil)
         for _ in 0..<3 {

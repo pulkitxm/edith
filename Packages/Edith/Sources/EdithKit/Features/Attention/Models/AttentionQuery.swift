@@ -87,6 +87,41 @@ public enum AttentionSummaryPart: String, Codable, CaseIterable, Hashable, Senda
 }
 
 extension AttentionSummary {
+    public func preserving(
+        _ retained: Set<AttentionSummaryPart>, from current: AttentionSummary,
+        loading parts: Set<AttentionSummaryPart>
+    ) -> AttentionSummary {
+        guard current.from == from, current.to == to else { return self }
+        var copy = self
+        if !parts.contains(.overview), retained.contains(.overview) {
+            copy.entities = current.entities
+            copy.music = current.music
+            copy.transitions = current.transitions
+        }
+        if !parts.contains(.breakdown), retained.contains(.breakdown) {
+            copy.dimensions = current.dimensions
+        } else if !parts.contains(.breakdown), !parts.contains(.overview),
+            retained.contains(.overview)
+        {
+            copy.dimensions = current.dimensions
+        }
+        let singleDay = to.timeIntervalSince(from) <= 90_000
+        if !parts.contains(.timeline), !(parts.contains(.overview) && singleDay),
+            retained.contains(.timeline) || (retained.contains(.overview) && singleDay)
+        {
+            copy.spans = current.spans
+        }
+        if !parts.contains(.agents), retained.contains(.agents) {
+            copy.agents.sessions = current.agents.sessions
+            copy.agents.concurrency = current.agents.concurrency
+        } else if !parts.contains(.agents), !(parts.contains(.overview) && singleDay),
+            retained.contains(.overview) && singleDay
+        {
+            copy.agents.concurrency = current.agents.concurrency
+        }
+        return copy
+    }
+
     public func trimmed(to parts: Set<AttentionSummaryPart>) -> AttentionSummary {
         var copy = self
         let singleDay = to.timeIntervalSince(from) <= 90_000

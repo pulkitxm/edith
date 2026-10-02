@@ -95,14 +95,21 @@ private struct AttentionPeriodControl: View {
     @State private var customFrom = Date()
     @State private var customTo = Date()
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         let dark = scheme == .dark
         HStack(spacing: UIScale.pt(6)) {
-            ForEach([AttentionRangePreset.today, .last7, .last30], id: \.self) { preset in
+            ForEach(
+                compact
+                    ? [AttentionRangePreset.today, .allTime] : [.today, .last7, .last30, .allTime],
+                id: \.self
+            ) { preset in
                 chip(
-                    preset == .today ? "Today" : preset == .last7 ? "7 days" : "30 days",
-                    active: model.period == AttentionPeriod(preset), dark: dark
+                    preset == .last7 ? "7 days" : preset == .last30 ? "30 days" : preset.title,
+                    active: preset == .allTime
+                        ? model.period.preset == .allTime : model.period == AttentionPeriod(preset),
+                    dark: dark
                 ) { model.select(preset) }
             }
             Menu {
@@ -151,6 +158,7 @@ private struct AttentionPeriodControl: View {
                 Image(systemName: "chevron.left")
             }
             .buttonStyle(.edith(.iconOnly))
+            .disabled(!model.canStepBackward)
             .help("Previous period")
             Text(model.period.title())
                 .font(.system(size: UIScale.pt(12.5), weight: .semibold))
@@ -165,6 +173,7 @@ private struct AttentionPeriodControl: View {
             .disabled(!model.canStepForward)
             .help("Next period")
         }
+        .fixedSize(horizontal: true, vertical: true)
     }
 
     private func chip(_ title: String, active: Bool, dark: Bool, action: @escaping () -> Void)
@@ -185,6 +194,7 @@ private struct AttentionPeriodControl: View {
                 .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
         }
         .buttonStyle(.edith(.borderless))
+        .fixedSize()
     }
 }
 

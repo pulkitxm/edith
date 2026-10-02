@@ -251,6 +251,8 @@ public actor AttentionBackgroundService {
     {
         guard !stopped else { throw CancellationError() }
         try importSpool()
+        let request = try request.coveringAllTime(
+            since: request.allTime ? events.firstEventDate() : nil)
         let settings = request.settings ?? repository.loadSettings()
         let key = try summaryKey(request, settings: settings)
         let live = request.to > now.addingTimeInterval(-120)

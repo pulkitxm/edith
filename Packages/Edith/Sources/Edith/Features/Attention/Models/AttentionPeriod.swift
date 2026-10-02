@@ -12,6 +12,7 @@ enum AttentionRangePreset: String, CaseIterable, Identifiable {
     case lastMonth
     case last30
     case last90
+    case allTime
     case custom
 
     var id: String { rawValue }
@@ -28,6 +29,7 @@ enum AttentionRangePreset: String, CaseIterable, Identifiable {
         case .lastMonth: "Last month"
         case .last30: "Last 30 days"
         case .last90: "Last 90 days"
+        case .allTime: "All time"
         case .custom: "Custom range"
         }
     }
@@ -35,6 +37,7 @@ enum AttentionRangePreset: String, CaseIterable, Identifiable {
     static let groups: [[AttentionRangePreset]] = [
         [.today, .yesterday], [.thisWeek, .lastWeek, .last7, .last14],
         [.thisMonth, .lastMonth, .last30, .last90],
+        [.allTime],
     ]
 
     var stepsByMonth: Bool { self == .thisMonth || self == .lastMonth }
@@ -60,7 +63,7 @@ struct AttentionPeriod: Equatable {
         let week = calendar.dateInterval(of: .weekOfYear, for: now)
         let month = calendar.dateInterval(of: .month, for: now)
         switch preset {
-        case .today, .custom: self.init(start: today, end: day(1), preset: preset)
+        case .today, .custom, .allTime: self.init(start: today, end: day(1), preset: preset)
         case .yesterday: self.init(start: day(-1), end: today, preset: preset)
         case .thisWeek:
             self.init(start: week?.start ?? day(-6), end: week?.end ?? day(1), preset: preset)
@@ -101,11 +104,14 @@ struct AttentionPeriod: Equatable {
         DateInterval(start: start, end: max(start, min(end, now)))
     }
 
-    var comparePeriod: TimeInterval { end.timeIntervalSince(start) }
+    var comparePeriod: TimeInterval? {
+        preset == .allTime ? nil : end.timeIntervalSince(start)
+    }
 
     func isCurrent(now: Date = Date()) -> Bool { end > now }
 
     func shifted(by steps: Int, calendar: Calendar = .current) -> AttentionPeriod {
+        guard preset != .allTime else { return self }
         let from: Date
         let to: Date
         if preset.stepsByMonth {
@@ -123,13 +129,14 @@ struct AttentionPeriod: Equatable {
         let candidates: [AttentionRangePreset] =
             preset.stepsByMonth ? [.thisMonth, .lastMonth] : AttentionRangePreset.allCases
         return candidates.first {
-            $0 != .custom
+            $0 != .custom && $0 != .allTime
                 && AttentionPeriod($0, calendar: calendar).start == from
                 && AttentionPeriod($0, calendar: calendar).end == to
         } ?? (preset.stepsByMonth ? .lastMonth : .custom)
     }
 
     func title(calendar: Calendar = .current) -> String {
+        if preset == .allTime { return preset.title }
         if preset != .custom, AttentionPeriod(preset, calendar: calendar) == self {
             return preset.title
         }
