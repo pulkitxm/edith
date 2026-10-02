@@ -67,6 +67,12 @@ struct ShortcutsSettingsPane: View {
                         .kerning(2)
                         .foregroundStyle(.secondary)
                 }
+                LabeledContent("Toggle agent details") {
+                    Text("⇧⌘B")
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .kerning(2)
+                        .foregroundStyle(.secondary)
+                }
                 LabeledContent("Close panel") {
                     Text("Esc")
                         .font(.system(size: UIScale.pt(12), weight: .medium))

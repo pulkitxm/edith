@@ -164,7 +164,7 @@ struct HerdrTitlebarViewPicker: View {
                     )
             }
             .buttonStyle(.edith(.borderless, selected: store.detailOpen, tint: accent))
-            .help(store.detailOpen ? "Hide details" : "Show details")
+            .help(HerdrAgentDetailCommand.help(open: store.detailOpen))
             .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
         }
         .tint(accent)
