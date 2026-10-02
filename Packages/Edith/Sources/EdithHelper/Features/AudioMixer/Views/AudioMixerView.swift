@@ -15,8 +15,15 @@ struct NotchAudioTab: View {
 }
 
 @available(macOS 14.4, *)
-private struct AudioMixerView: View {
-    @State private var engine = MixerEngine.shared
+@MainActor
+struct AudioMixerView: View {
+    @State private var engine: MixerEngine
+    private let monitorsWhileVisible: Bool
+
+    init(engine: MixerEngine? = nil, monitorsWhileVisible: Bool = true) {
+        self.monitorsWhileVisible = monitorsWhileVisible
+        _engine = State(initialValue: engine ?? .shared)
+    }
 
     var body: some View {
         ScrollView {
@@ -36,8 +43,8 @@ private struct AudioMixerView: View {
             }
             .padding(.horizontal, 16).padding(.bottom, 12)
         }
-        .onAppear { engine.viewAppeared() }
-        .onDisappear { engine.viewDisappeared() }
+        .onAppear { if monitorsWhileVisible { engine.viewAppeared() } }
+        .onDisappear { if monitorsWhileVisible { engine.viewDisappeared() } }
     }
 
     private func row(_ app: MixerApp) -> some View {
