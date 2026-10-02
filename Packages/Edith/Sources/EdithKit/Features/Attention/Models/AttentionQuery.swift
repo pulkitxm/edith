@@ -93,8 +93,12 @@ extension AttentionSummary {
     ) -> AttentionSummary {
         guard current.from == from, current.to == to else { return self }
         var copy = self
-        if !parts.contains(.overview), retained.contains(.overview) {
+        if parts.isDisjoint(with: [.overview, .breakdown]),
+            !retained.isDisjoint(with: [.overview, .breakdown])
+        {
             copy.entities = current.entities
+        }
+        if !parts.contains(.overview), retained.contains(.overview) {
             copy.music = current.music
             copy.transitions = current.transitions
         }
@@ -137,8 +141,8 @@ extension AttentionSummary {
                     }
                 : []
         }
+        if parts.isDisjoint(with: [.overview, .breakdown]) { copy.entities = [] }
         if !parts.contains(.overview) {
-            copy.entities = []
             copy.music = []
             copy.transitions = []
         }
