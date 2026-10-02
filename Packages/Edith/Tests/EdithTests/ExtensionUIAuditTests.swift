@@ -101,6 +101,7 @@ struct ExtensionUIAuditTests {
         model.reload()
         await model.waitForReload()
         #expect(model.summary.entities.count == 3)
+        _ = await AttentionApplicationIcon.resolve(bundleID: "com.apple.Notes")
         let host = try auditHost(
             AttentionBreakdownView(model: model).padding(24), size: CGSize(width: 1150, height: 680)
         )
