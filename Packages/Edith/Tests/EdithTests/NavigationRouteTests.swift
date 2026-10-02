@@ -191,6 +191,27 @@ import Testing
         router.detach()
     }
 
+    @Test func rejectedNavigationKeepsTheCurrentRoute() {
+        let router = WindowRouter()
+        let window = TestWindowHost.window(
+            contentRect: NSRect(x: 0, y: 0, width: 20, height: 20))
+        defer {
+            router.detach()
+            window.orderOut(nil)
+        }
+        router.attach(window, role: .main)
+        router.register(
+            depth: 0, name: "section", value: "home",
+            accept: { $0.isEmpty || $0 == "home" }
+        ) { _ in }
+        let reply = NavigationCommands.perform(action: "navigate", route: "companion/chat")
+        #expect(reply["ok"] as? Bool == false)
+        #expect(reply["route"] as? String == "home")
+        #expect(router.location == "home")
+        #expect(!router.canGoBack)
+        #expect(router.history.current == "home")
+    }
+
     @Test func hiddenHostPublishesAndMovesTheRoute() {
         let host = NSHostingView(
             rootView: HiddenRouteProbe().environment(\.automaticViewActionsEnabled, false))

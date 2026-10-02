@@ -134,6 +134,7 @@ final class WindowRouter {
 
     private(set) var history = NavigationHistory()
     private(set) var restoring = false
+    private(set) var lastRestoreRejected = false
     @ObservationIgnored private var slots: [Slot] = []
     @ObservationIgnored private var pending: [String] = []
     @ObservationIgnored private var nextOrder = 0
@@ -268,6 +269,7 @@ final class WindowRouter {
 
     private func beginRestore(_ route: NavigationRoute) {
         restoring = true
+        lastRestoreRejected = false
         pending = route.segments
         settleGeneration += 1
         applyPending()
@@ -287,6 +289,7 @@ final class WindowRouter {
             }
         }
         let ordered = slots.sorted(by: Self.ordered)
+        let snapshot = ordered.map { (depth: $0.depth, name: $0.name, value: $0.value) }
         var pointer = 0
         var rejected = false
         applying = true
@@ -316,10 +319,20 @@ final class WindowRouter {
                 rejected = true
                 break
             }
-            write(slot, "")
-            clearDeeper(than: slot.depth)
             rejected = true
             break
+        }
+        if rejected {
+            for item in snapshot {
+                guard
+                    let index = slots.firstIndex(where: {
+                        $0.depth == item.depth && $0.name == item.name
+                    }),
+                    slots[index].value != item.value
+                else { continue }
+                write(slots[index], item.value)
+            }
+            lastRestoreRejected = true
         }
         applying = false
         if passAgain { return }
@@ -391,6 +404,15 @@ enum NavigationCommands {
                 return ["ok": false, "error": "route is empty or malformed"]
             }
             router.navigate(to: raw)
+            if router.lastRestoreRejected {
+                return [
+                    "ok": false,
+                    "error": "route was rejected",
+                    "route": router.location,
+                    "canGoBack": router.canGoBack,
+                    "canGoForward": router.canGoForward,
+                ]
+            }
         case "back":
             guard router.canGoBack else {
                 return ["ok": false, "error": "nothing to go back to"]
