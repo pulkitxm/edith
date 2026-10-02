@@ -149,9 +149,16 @@ final class WindowRouter {
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
 
-    var location: String {
+    private var slotLocation: String {
         let values = slots.sorted(by: Self.ordered).map(\.value).filter { !$0.isEmpty }
         return NavigationRoute(segments: values).description
+    }
+
+    var location: String {
+        let landed = slotLocation
+        guard !lastRestoreRejected, let current = history.current else { return landed }
+        if current == landed || current.hasPrefix(landed + "/") { return current }
+        return landed
     }
 
     static var commandTarget: WindowRouter? {
@@ -201,7 +208,7 @@ final class WindowRouter {
         slots[index].value = value
         if restoring || applying || passDepth > 0 { return }
         slots.removeAll { $0.depth > depth }
-        history.record(location)
+        history.record(slotLocation)
     }
 
     func register(
@@ -223,7 +230,7 @@ final class WindowRouter {
             applyPending()
             return
         }
-        let landed = location
+        let landed = slotLocation
         if history.current == nil {
             history.record(landed)
         } else if landed != history.current {
@@ -244,7 +251,7 @@ final class WindowRouter {
         slots[index].value = value
         if restoring || applying || passDepth > 0 { return }
         slots.removeAll { $0.depth > depth }
-        history.record(location)
+        history.record(slotLocation)
     }
 
     func unregister(depth: Int, name: String) {
@@ -364,7 +371,8 @@ final class WindowRouter {
         restoring = false
         pending = []
         settleGeneration += 1
-        let landed = location
+        let landed = slotLocation
+        guard lastRestoreRejected else { return }
         if landed.isEmpty {
             history.replaceCurrent(history.current ?? "")
         } else if landed != history.current {

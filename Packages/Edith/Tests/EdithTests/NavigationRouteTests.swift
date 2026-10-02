@@ -212,6 +212,19 @@ import Testing
         #expect(router.history.current == "home")
     }
 
+    @Test func navigationKeepsANestedRouteBeforeItsChildMounts() {
+        let router = WindowRouter()
+        router.register(
+            depth: 0, name: "section", value: "home",
+            accept: { $0.isEmpty || $0 == "home" || $0 == "companion" }
+        ) { _ in }
+        router.navigate(to: "companion/chat")
+        #expect(router.location == "companion/chat")
+        #expect(router.canGoBack)
+        router.goBack()
+        #expect(router.location == "home")
+    }
+
     @Test func hiddenHostPublishesAndMovesTheRoute() {
         let host = NSHostingView(
             rootView: HiddenRouteProbe().environment(\.automaticViewActionsEnabled, false))
