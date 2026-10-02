@@ -1005,10 +1005,19 @@ final class HerdrStore {
         guard snapshot.contains(agentID), !current.contains(agentID) else {
             return current.contains(agentID) ? current : adding([agentID], to: current)
         }
-        let survivors = current.panes.filter { snapshot.panes.contains($0) }
+        var survivors: [String] = []
+        for pane in current.panes where snapshot.contains(pane) {
+            survivors.append(pane)
+        }
         guard !survivors.isEmpty else { return adding([agentID], to: current) }
-        let missing = snapshot.panes.filter { $0 != agentID && !current.contains($0) }
-        let extras = current.panes.filter { !snapshot.contains($0) }
+        var missing: [String] = []
+        for pane in snapshot.panes where pane != agentID && !current.contains(pane) {
+            missing.append(pane)
+        }
+        var extras: [String] = []
+        for pane in current.panes where !snapshot.contains(pane) {
+            extras.append(pane)
+        }
         if missing.isEmpty, extras.isEmpty { return snapshot }
         if extras.isEmpty {
             var layout = snapshot
@@ -1714,14 +1723,23 @@ final class HerdrStore {
     }
 
     private func tabHoldingPlacement(_ record: HerdrClosedAgentRecord) -> HerdrTab? {
-        let others = Set(record.layout.panes.filter { $0 != record.agent.id })
+        var others = Set<String>()
+        for pane in record.layout.panes where pane != record.agent.id {
+            others.insert(pane)
+        }
         var best: HerdrTab?
         var bestCount = 0
         for tab in tabs {
-            let shared = tab.agentIDs.filter { others.contains($0) }.count
-            guard shared > bestCount, tab.agentIDs.allSatisfy({ others.contains($0) }) else {
-                continue
+            var shared = 0
+            var unrelated = false
+            for id in tab.agentIDs {
+                if others.contains(id) {
+                    shared += 1
+                } else {
+                    unrelated = true
+                }
             }
+            guard shared > bestCount, !unrelated else { continue }
             best = tab
             bestCount = shared
         }
