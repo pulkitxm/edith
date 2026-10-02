@@ -62,27 +62,38 @@ import Testing
         #expect(!TerminalZoomFocus.owns(NSView()))
     }
 
-    @Test func zoomGrowsContentAndStopsAtTheScreen() {
+    @Test @MainActor func zoomChangesTheScaleAndLeavesTheFramePolicyAlone() throws {
+        defer { UIScale.apply(1) }
+        UIScale.apply(1)
+        var stored = 1.0
+        WindowZoomCommit.perform(1.4) { stored = $0 }
+        #expect(stored == 1.4)
+        #expect(UIScale.current == 1.4)
+        #expect(UIScale.pt(10) == 14)
         let visible = NSRect(x: 0, y: 0, width: 1800, height: 1200)
-        let minimum = MainWindowFramePolicy.minimumSize(visibleFrame: visible, scale: 1.5)
-        #expect(minimum == NSSize(width: 1440, height: 960))
-        let grown = MainWindowFramePolicy.zoomedContentSize(
-            current: NSSize(width: 1000, height: 700), minimum: minimum, visible: visible.size,
-            from: 1, to: 1.5)
-        #expect(grown == NSSize(width: 1500, height: 1050))
-        let clamped = MainWindowFramePolicy.zoomedContentSize(
-            current: NSSize(width: 1200, height: 800),
-            minimum: MainWindowFramePolicy.minimumSize(visibleFrame: visible, scale: 1.6),
-            visible: NSSize(width: 1000, height: 700), from: 1, to: 1.6)
-        #expect(clamped == NSSize(width: 1000, height: 700))
-    }
-
-    @Test func zoomOutKeepsTheScaledMinimum() {
-        let minimum = NSSize(width: 768, height: 512)
-        let next = MainWindowFramePolicy.zoomedContentSize(
-            current: NSSize(width: 700, height: 400), minimum: minimum,
-            visible: NSSize(width: 2000, height: 1400), from: 1, to: 0.8)
-        #expect(next == NSSize(width: 768, height: 512))
+        #expect(
+            MainWindowFramePolicy.minimumSize(visibleFrame: visible)
+                == NSSize(width: 960, height: 640))
+        #expect(
+            MainWindowFramePolicy.defaultSize(visibleFrame: visible)
+                == NSSize(width: 1240, height: 820))
+        let frame = NSRect(x: 40, y: 80, width: 1000, height: 700)
+        #expect(
+            MainWindowFramePolicy.normalizedFrame(frame, visibleFrame: visible).size == frame.size)
+        #expect(
+            MainWindowFramePolicy.fitted(SectionWindow.baseContentSize, visible: visible.size)
+                == SectionWindow.baseContentSize)
+        #expect(
+            MainWindowFramePolicy.fitted(
+                SectionWindow.baseMinimumSize, visible: NSSize(width: 400, height: 300))
+                == NSSize(width: 400, height: 300))
+        let zoomOut = try #require(WindowZoom.adjusted(0.8, for: .zoomOut))
+        WindowZoomCommit.perform(zoomOut) { stored = $0 }
+        #expect(stored == 0.8)
+        #expect(UIScale.current == 0.8)
+        #expect(
+            MainWindowFramePolicy.minimumSize(visibleFrame: visible)
+                == NSSize(width: 960, height: 640))
     }
 
     @Test func tableMetricsAndPreviewTextFollowTheScale() {

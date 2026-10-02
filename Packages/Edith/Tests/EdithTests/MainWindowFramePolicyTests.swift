@@ -28,11 +28,14 @@ import Testing
         #expect(display.contains(normalized))
     }
 
-    @Test func scaledMinimumStaysInsideACompactDisplay() {
-        let compactDisplay = NSRect(x: 0, y: 0, width: 800, height: 560)
-        let minimum = MainWindowFramePolicy.minimumSize(visibleFrame: compactDisplay, scale: 1.6)
-        #expect(minimum.width == 800)
-        #expect(minimum.height == 560)
+    @Test func largeDisplaysKeepTheDesignMinimum() {
+        let visible = NSRect(x: 0, y: 0, width: 1800, height: 1200)
+        #expect(
+            MainWindowFramePolicy.minimumSize(visibleFrame: visible)
+                == NSSize(width: 960, height: 640))
+        #expect(
+            MainWindowFramePolicy.defaultSize(visibleFrame: visible)
+                == NSSize(width: 1240, height: 820))
     }
 
     @Test func compactDisplaysBoundTheMinimumToTheVisibleArea() {
