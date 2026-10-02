@@ -6,6 +6,41 @@ import Testing
 
 @MainActor
 @Suite struct HerdrNewAgentPopupModelTests {
+    @Test func layoutChoiceSurvivesReopeningAndSwitchingTabs() throws {
+        let store = HerdrStore(liveWatcher: { _ in }, machinesProvider: { [] })
+        store.tabs = [HerdrTab(agentID: "demo-1"), HerdrTab(agentID: "demo-2")]
+        let first = store.tabs[0].id
+        let second = store.tabs[1].id
+        store.selectedTab = second
+        let popup = store.newAgentPopupModel()
+        #expect(popup.layoutChoice == .newTab)
+        popup.layoutChoice = .sideBySide
+        #expect(store.newAgentPopupModel().layoutChoice == .sideBySide)
+
+        store.selectedTab = first
+        #expect(store.newAgentPopupModel().layoutChoice == .newTab)
+        store.selectedTab = HerdrStore.boardID
+        #expect(store.newAgentPopupModel().layoutChoice == .newTab)
+        store.newAgentPopupModel().layoutChoice = .sideBySide
+        store.selectedTab = second
+        #expect(store.newAgentPopupModel().layoutChoice == .sideBySide)
+        store.newAgentPopupModel().layoutChoice = .newTab
+        #expect(store.newAgentPopupModel().layoutChoice == .newTab)
+        store.selectedTab = HerdrStore.boardID
+        #expect(store.newAgentPopupModel().layoutChoice == .sideBySide)
+
+        store.selectedTab = first
+        popup.layoutChoice = .sideBySide
+        #expect(store.newAgentPopupModel().layoutChoice == .newTab)
+        store.selectedTab = second
+        #expect(store.newAgentPopupModel().layoutChoice == .sideBySide)
+
+        let space = try #require(
+            HerdrAgentSpace.group([spaceAgent(.local(herdrPresent: true))]).first)
+        store.newAgentPopupModel(space: space).layoutChoice = .newTab
+        #expect(store.newAgentPopupModel().layoutChoice == .sideBySide)
+    }
+
     @Test func matchingKindsFiltersCaseInsensitively() {
         #expect(HerdrNewAgentPopupModel.matchingKinds("") == HerdrKind.filterLabels)
         #expect(HerdrNewAgentPopupModel.matchingKinds("codex") == ["Codex"])

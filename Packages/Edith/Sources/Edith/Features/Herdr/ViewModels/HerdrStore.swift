@@ -109,6 +109,17 @@ final class HerdrStore {
         }
     }
     var searchPresented = false
+    private var newAgentLayouts: [String: HerdrNewAgentPopupModel.LayoutChoice] = [:]
+
+    func newAgentPopupModel(space: HerdrAgentSpace? = nil) -> HerdrNewAgentPopupModel {
+        guard space == nil else { return HerdrNewAgentPopupModel(space: space) }
+        let tabID = selectedTab
+        return HerdrNewAgentPopupModel(layoutChoice: newAgentLayouts[tabID] ?? .newTab) {
+            [weak self] choice in
+            self?.newAgentLayouts[tabID] = choice
+        }
+    }
+
     var machineFilter = "all" {
         didSet {
             guard machineFilter != oldValue else { return }

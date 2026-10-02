@@ -12,7 +12,7 @@ struct HerdrNewAgentPopup: View {
 
     init(store: HerdrStore, space: HerdrAgentSpace? = nil) {
         self.store = store
-        _model = State(initialValue: HerdrNewAgentPopupModel(space: space))
+        _model = State(initialValue: store.newAgentPopupModel(space: space))
     }
 
     private var dark: Bool { scheme == .dark }
