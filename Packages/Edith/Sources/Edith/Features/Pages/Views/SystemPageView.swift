@@ -10,6 +10,7 @@ struct SystemPage: View {
     @State private var pendingQuit: RunningAppRow?
 
     private var dark: Bool { scheme == .dark }
+    private var hidesRunningApps: Bool { PresenterState.shared.hides(.runningApps) }
 
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
@@ -35,12 +36,15 @@ struct SystemPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
         .confirmationDialog(
-            "Quit \(pendingQuit?.name ?? "app")?",
+            hidesRunningApps ? "Quit this app?" : "Quit \(pendingQuit?.name ?? "app")?",
             isPresented: Binding(
                 get: { pendingQuit != nil }, set: { if !$0 { pendingQuit = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Quit \(pendingQuit?.name ?? "app")", role: .destructive) {
+            Button(
+                hidesRunningApps ? "Quit app" : "Quit \(pendingQuit?.name ?? "app")",
+                role: .destructive
+            ) {
                 if let app = pendingQuit { model.quit(app) }
                 pendingQuit = nil
             }
@@ -84,6 +88,7 @@ struct SystemPage: View {
             Image(systemName: presentation.symbol)
             Text(status.message)
                 .font(.system(size: UIScale.pt(12), weight: .medium))
+                .presenterBlur(.runningApps)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 model.clearActionStatus()
@@ -313,17 +318,23 @@ struct SystemAppRow: View {
     let onQuit: () -> Void
     @State private var hovering = false
 
+    private var hidesName: Bool { PresenterState.shared.hides(.runningApps) }
+
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
-            if let icon = app.icon {
-                Image(nsImage: icon).resizable().frame(
-                    width: UIScale.pt(22), height: UIScale.pt(22))
-            } else {
-                Image(systemName: "app.fill")
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+            Group {
+                if let icon = app.icon {
+                    Image(nsImage: icon).resizable().frame(
+                        width: UIScale.pt(22), height: UIScale.pt(22))
+                } else {
+                    Image(systemName: "app.fill")
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                        .frame(width: UIScale.pt(22), height: UIScale.pt(22))
+                }
             }
+            .presenterCover(.runningApps)
             Text(app.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
+                .presenterBlur(.runningApps)
             Spacer()
             Text(SystemPage.cpuLabel(app.cpuPercent))
                 .font(.system(size: UIScale.pt(12), design: .monospaced))
@@ -341,8 +352,11 @@ struct SystemAppRow: View {
             }
             .buttonStyle(EdithButtonStyle(.iconOnly, tint: DashSkin.accent(dark)))
             .disabled(!canQuit)
-            .accessibilityLabel("Quit \(app.name)")
-            .help(canQuit ? "Quit \(app.name)" : "\(app.name) stays open")
+            .accessibilityLabel(hidesName ? "Quit app" : "Quit \(app.name)")
+            .help(
+                hidesName
+                    ? (canQuit ? "Quit app" : "This app stays open")
+                    : (canQuit ? "Quit \(app.name)" : "\(app.name) stays open"))
         }
         .padding(.horizontal, UIScale.pt(6))
         .padding(.vertical, UIScale.pt(7))

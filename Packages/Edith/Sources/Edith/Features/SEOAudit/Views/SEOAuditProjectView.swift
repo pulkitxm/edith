@@ -44,7 +44,9 @@ struct SEOAuditProjectView: View {
             }
         }
         .confirmationDialog(
-            "Delete \(project.name)?", isPresented: $confirmsDeletion,
+            PresenterState.shared.hides(.siteAudit)
+                ? "Delete this project?" : "Delete \(project.name)?",
+            isPresented: $confirmsDeletion,
             titleVisibility: .visible
         ) {
             Button("Delete Project", role: .destructive) {
@@ -639,6 +641,7 @@ private struct SEOAuditPageSelectionSheet: View {
         }
         .frame(minWidth: UIScale.pt(620), minHeight: UIScale.pt(520))
         .background(DashSkin.paper(dark))
+        .presenterCover(.siteAudit)
         .onDisappear { model.pageSelectionQuery = "" }
     }
 }

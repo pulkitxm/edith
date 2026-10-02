@@ -158,10 +158,12 @@ struct VirtualCameraStage: View {
             } else if model.cameraAccess == .authorized || model.display.current != nil {
                 VirtualCameraPreview(
                     display: model.display, mirrored: model.state.mirrorPreview,
+                    covered: PresenterState.shared.hides(.camera),
                     onPan: { model.pan(by: $0, in: $1) },
                     onZoom: { model.zoom(by: $0, anchor: $1) },
                     onReset: { model.resetFraming() }
                 )
+                .presenterCover(.camera)
                 .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous))
             } else {
                 VirtualCameraAccessPrompt(model: model)
@@ -352,8 +354,11 @@ struct VirtualCameraSceneStrip: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 Spacer()
                 if let active = model.state.activeScene, model.state.activeSceneIsModified {
-                    Button("Update \(active.name)") { model.updateScene(active) }
-                        .buttonStyle(.edith(.borderless))
+                    Button(
+                        PresenterState.shared.hides(.camera)
+                            ? "Update scene" : "Update \(active.name)"
+                    ) { model.updateScene(active) }
+                    .buttonStyle(.edith(.borderless))
                 }
                 Button {
                     newName = model.suggestedSceneName()
@@ -386,7 +391,9 @@ struct VirtualCameraSceneStrip: View {
         .edithSurface(cornerRadius: 12)
         .popover(item: $renaming) { scene in
             VirtualCameraNamePrompt(
-                title: "Rename \(scene.name)", text: $renameText, confirm: "Rename"
+                title: PresenterState.shared.hides(.camera)
+                    ? "Rename scene" : "Rename \(scene.name)",
+                text: $renameText, confirm: "Rename"
             ) {
                 model.renameScene(scene, to: renameText)
                 renaming = nil
@@ -408,6 +415,7 @@ struct VirtualCameraSceneStrip: View {
                 }
                 Text(scene.name)
                     .font(.system(size: UIScale.pt(12), weight: active ? .semibold : .regular))
+                    .presenterBlur(.camera)
                 if active, model.state.activeSceneIsModified {
                     Circle().fill(DashSkin.warn).frame(width: UIScale.pt(6), height: UIScale.pt(6))
                         .help("Changed since you applied it")

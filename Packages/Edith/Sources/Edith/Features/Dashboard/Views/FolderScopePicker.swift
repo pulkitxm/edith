@@ -102,11 +102,13 @@ struct FolderScopePicker: View {
                                 size: UIScale.pt(11.5), weight: selected ? .semibold : .regular)
                         )
                         .foregroundStyle(DashSkin.ink(dark))
+                        .presenterBlur(.agents)
                     if let detail {
                         Text(detail)
                             .font(DashSkin.mono(9.5))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .lineLimit(1)
+                            .presenterBlur(.agents)
                             .truncationMode(.head)
                     }
                 }

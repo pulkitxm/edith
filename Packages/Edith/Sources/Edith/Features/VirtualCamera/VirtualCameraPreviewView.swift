@@ -52,6 +52,9 @@ final class VirtualCameraPreviewNSView: NSView {
     var mirrored = false {
         didSet { applyMirror() }
     }
+    var covered = false {
+        didSet { applyCover() }
+    }
     private let content = CALayer()
     private var lastDrag: NSPoint?
 
@@ -99,6 +102,13 @@ final class VirtualCameraPreviewNSView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         content.contents = buffer.flatMap { CVPixelBufferGetIOSurface($0)?.takeUnretainedValue() }
+        CATransaction.commit()
+    }
+
+    private func applyCover() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        content.isHidden = covered
         CATransaction.commit()
     }
 
@@ -170,6 +180,7 @@ final class VirtualCameraPreviewNSView: NSView {
 struct VirtualCameraPreview: NSViewRepresentable {
     let display: VirtualCameraPreviewDisplay
     let mirrored: Bool
+    var covered = false
     let onPan: (CGSize, CGSize) -> Void
     let onZoom: (Double, CGPoint) -> Void
     let onReset: () -> Void
@@ -186,6 +197,7 @@ struct VirtualCameraPreview: NSViewRepresentable {
         view.onZoom = onZoom
         view.onReset = onReset
         view.mirrored = mirrored
+        view.covered = covered
         if display.view !== view {
             display.view = view
             view.show(display.current)

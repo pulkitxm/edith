@@ -183,7 +183,8 @@ struct StudioFileCard: View {
                 }
                 .buttonStyle(.edith(.borderless))
                 .onDrag { NSItemProvider(object: item.url as NSURL) }
-                .accessibilityLabel("Select \(item.name)")
+                .accessibilityLabel(
+                    PresenterState.shared.hides(.studio) ? "Select file" : "Select \(item.name)")
                 HStack {
                     Button {
                         model.toggleSelection(item.url)
@@ -208,7 +209,7 @@ struct StudioFileCard: View {
                     .font(.system(size: UIScale.pt(12.5), weight: .medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(item.url.path)
+                    .help(PresenterState.shared.hides(.studio) ? "File" : item.url.path)
                 Text(StudioFileActions.describe(facts, kind: item.kind))
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(.secondary)

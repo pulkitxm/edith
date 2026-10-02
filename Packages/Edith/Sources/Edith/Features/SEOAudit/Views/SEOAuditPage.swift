@@ -38,6 +38,7 @@ struct SEOAuditPage: View {
                 SEOAuditProjectsView(model: model)
             }
         }
+        .presenterCover(.siteAudit)
         .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("project", selection: projectBinding, isValid: projectIsValid)
         .task {
@@ -55,7 +56,10 @@ struct SEOAuditPage: View {
         ) {
             Button("OK") { model.errorMessage = nil }
         } message: {
-            Text(model.errorMessage ?? "")
+            Text(
+                PresenterState.shared.hides(.siteAudit)
+                    ? "The audit ran into a problem."
+                    : (model.errorMessage ?? ""))
         }
     }
 }
@@ -97,7 +101,9 @@ private struct SEOAuditProjectsView: View {
             }
         }
         .alert(
-            "Delete \(projectBeingDeleted?.name ?? "project")?",
+            PresenterState.shared.hides(.siteAudit)
+                ? "Delete this project?"
+                : "Delete \(projectBeingDeleted?.name ?? "project")?",
             isPresented: Binding(
                 get: { projectBeingDeleted != nil },
                 set: { if !$0 { projectBeingDeleted = nil } })
@@ -226,6 +232,7 @@ private struct SEOAuditNewProjectSheet: View {
         .padding(UIScale.pt(24))
         .frame(width: UIScale.pt(500))
         .background(DashSkin.paper(dark))
+        .presenterCover(.siteAudit)
     }
 
     private func fieldLabel(_ value: String) -> some View {
@@ -504,6 +511,7 @@ private struct SEOAuditRenameProjectSheet: View {
         }
         .padding(UIScale.pt(24))
         .frame(width: UIScale.pt(420))
+        .presenterCover(.siteAudit)
     }
 
     private func submit() {

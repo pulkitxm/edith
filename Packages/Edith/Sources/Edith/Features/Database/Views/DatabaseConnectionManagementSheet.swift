@@ -79,6 +79,7 @@ struct DatabaseConnectionManagementSheet: View {
             idealHeight: UIScale.pt(presentation == .edit ? 680 : 360)
         )
         .background(palette.canvas)
+        .presenterCover(.database)
         .interactiveDismissDisabled(preventsDismissal)
         .task(id: taskID) {
             await prepare()

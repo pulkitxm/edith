@@ -109,26 +109,28 @@ struct StudioPage: View {
             StudioHome(model: model)
         case let .tool(id):
             if let job = model.job(id) {
-                StudioRunnerView(model: model, job: job)
+                StudioRunnerView(model: model, job: job).presenterCover(.studio)
             } else {
                 StudioHome(model: model)
             }
         case let .imageEditor(url):
-            StudioImageEditorView(model: model, url: url)
+            StudioImageEditorView(model: model, url: url).presenterCover(.studio)
         case let .pdfEditor(url, mode):
-            StudioPDFEditorView(model: model, url: url, mode: mode)
+            StudioPDFEditorView(model: model, url: url, mode: mode).presenterCover(.studio)
         case let .videoEditor(media, project):
-            StudioVideoHost(model: model, media: media, project: project)
+            StudioVideoHost(model: model, media: media, project: project).presenterCover(.studio)
         case let .commandVideoEditor(requestID):
             if let presentation = model.commandEditor, presentation.request.requestID == requestID {
                 StudioVideoHost(
                     model: model, media: [],
                     project: URL(fileURLWithPath: presentation.request.path), command: presentation
                 )
+                .presenterCover(.studio)
                 .id(requestID)
             }
         case let .compare(original, revised):
             StudioCompareView(model: model, original: original, revised: revised)
+                .presenterCover(.studio)
         }
     }
 
@@ -192,9 +194,9 @@ struct StudioHome: View {
                     }
                 })
             switch model.tab {
-            case .files: StudioFilesView(model: model)
+            case .files: StudioFilesView(model: model).presenterCover(.studio)
             case .tools: StudioToolsView(model: model)
-            case .projects: StudioProjectsView(model: model)
+            case .projects: StudioProjectsView(model: model).presenterCover(.studio)
             }
         }
     }

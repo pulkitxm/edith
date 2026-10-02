@@ -25,6 +25,7 @@ struct QuinjetPage: View {
                 }
             }
         }
+        .presenterCover(.review)
         .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
         .environment(\.quinjetLaunchConfiguration, configuration)

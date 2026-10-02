@@ -935,8 +935,12 @@ struct MusicPage: View {
                 newFolderName = ""
             }
         } message: {
+            let folder =
+                remote.folderPath.isEmpty ? "your music library" : remote.folderPath
             Text(
-                "Creates a folder inside \(remote.folderPath.isEmpty ? "your music library" : remote.folderPath)."
+                PresenterState.shared.hides(.music)
+                    ? "Creates a folder inside your music library."
+                    : "Creates a folder inside \(folder)."
             )
         }
         .alert("Rename folder", isPresented: renameFolderBinding) {
@@ -959,7 +963,11 @@ struct MusicPage: View {
                 deleteFolderTarget = nil
             }
         } message: { folder in
-            Text("\"\(folder.name)\" and everything inside it will be moved to the Trash.")
+            Text(
+                PresenterState.shared.hides(.music)
+                    ? "This folder and everything inside it will be moved to the Trash."
+                    : "\"\(folder.name)\" and everything inside it will be moved to the Trash."
+            )
         }
         .alert(
             "Move to Trash?", isPresented: deleteAlertBinding,
@@ -971,7 +979,11 @@ struct MusicPage: View {
                 deleteTarget = nil
             }
         } message: { track in
-            Text("\"\(track.title)\" will be moved to the Trash.")
+            Text(
+                PresenterState.shared.hides(.music)
+                    ? "This track will be moved to the Trash."
+                    : "\"\(track.title)\" will be moved to the Trash."
+            )
         }
         .alert(
             "Music library error",
@@ -1162,7 +1174,9 @@ struct MusicPage: View {
             } else {
                 Menu {
                     ForEach(folders) { folder in
-                        Button(folder.name) { remote.navigate(to: folder.relativePath) }
+                        Button(
+                            PresenterState.shared.hides(.music) ? "Folder" : folder.name
+                        ) { remote.navigate(to: folder.relativePath) }
                     }
                 } label: {
                     Image(systemName: "chevron.right")
@@ -1200,8 +1214,11 @@ struct MusicPage: View {
                 Text(
                     remote.showingFavourites
                         ? "Tap the heart on a track to add it here"
-                        : TrackMeta.url(for: remote.folderPath).path
+                        : PresenterState.shared.hides(.music)
+                            ? "This music folder"
+                            : TrackMeta.url(for: remote.folderPath).path
                 )
+                .presenterBlur(.music)
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(.tertiary)
             }
@@ -1386,7 +1403,7 @@ private struct CrumbButton: View {
                 if let systemImage {
                     Image(systemName: systemImage).font(.system(size: UIScale.pt(10)))
                 }
-                Text(name).lineLimit(1)
+                Text(name).lineLimit(1).presenterBlur(.music)
             }
             .font(.system(size: UIScale.pt(12), weight: isCurrent ? .semibold : .regular))
             .foregroundStyle(isCurrent ? AnyShapeStyle(theme) : AnyShapeStyle(.secondary))
@@ -1439,9 +1456,11 @@ private struct MusicFolderRow: View {
                             .font(.system(size: UIScale.pt(13), weight: .medium))
                             .lineLimit(1)
                             .foregroundStyle(.primary)
+                            .presenterBlur(.music)
                         Text(
                             location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " "
                         )
+                        .presenterBlur(location != nil && PresenterState.shared.hides(.music))
                         .font(.system(size: UIScale.pt(10.5)))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -1543,6 +1562,7 @@ private struct MusicPageRow: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.head)
+                                .presenterBlur(.music)
                         }
                     }
                     Spacer()
@@ -1712,7 +1732,8 @@ private struct MusicFolderTile: View {
                     .frame(width: MusicTile.artSize, height: MusicTile.artSize)
                 }
                 .buttonStyle(.edith(.borderless))
-                .accessibilityLabel("Open \(folder.name)")
+                .accessibilityLabel(
+                    PresenterState.shared.hides(.music) ? "Open folder" : "Open \(folder.name)")
                 Button(action: onPlay) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: UIScale.pt(24)))
@@ -1729,11 +1750,13 @@ private struct MusicFolderTile: View {
                 Text(folder.name)
                     .font(.system(size: UIScale.pt(12), weight: .medium))
                     .lineLimit(1)
+                    .presenterBlur(.music)
                 Text(location ?? trackCount.map { "\($0) track\($0 == 1 ? "" : "s")" } ?? " ")
                     .font(.system(size: UIScale.pt(10.5)))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .truncationMode(.head)
+                    .presenterBlur(location != nil && PresenterState.shared.hides(.music))
             }
             .frame(width: MusicTile.artSize)
         }
@@ -1830,6 +1853,7 @@ private struct MusicTrackTile: View {
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
                         .truncationMode(.head)
+                        .presenterBlur(location != nil && PresenterState.shared.hides(.music))
                 }
                 .frame(width: MusicTile.artSize)
             }
@@ -1927,7 +1951,11 @@ struct MusicDetailOverlay: View {
                 deleteTarget = nil
             }
         } message: { track in
-            Text("\"\(track.title)\" will be moved to the Trash.")
+            Text(
+                PresenterState.shared.hides(.music)
+                    ? "This track will be moved to the Trash."
+                    : "\"\(track.title)\" will be moved to the Trash."
+            )
         }
     }
 }
@@ -2032,6 +2060,7 @@ private struct MusicDetailSheet: View {
         if track.isVideo {
             VideoStage(track: track, startAt: isCurrent ? remote.elapsed : 0)
                 .id(track.id)
+                .presenterCover(.music)
                 .transition(.opacity)
         } else {
             artwork
@@ -2050,6 +2079,7 @@ private struct MusicDetailSheet: View {
                 Text(parent.isEmpty ? "Music" : parent.replacingOccurrences(of: "/", with: " / "))
                     .lineLimit(1)
                     .truncationMode(.head)
+                    .presenterBlur(.music)
                 Image(systemName: "arrow.right")
                     .font(.system(size: UIScale.pt(8), weight: .semibold))
             }
@@ -2091,6 +2121,7 @@ private struct MusicDetailSheet: View {
             .font(.system(size: UIScale.pt(17), weight: .semibold))
             .multilineTextAlignment(.center)
             .foregroundStyle(DashSkin.ink(dark))
+            .presenterBlur(.music)
             .focused($nameFocused)
             .padding(.horizontal, UIScale.pt(14))
             .padding(.vertical, UIScale.pt(10))
@@ -2522,6 +2553,7 @@ private struct PageArtworkThumb: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+        .presenterCover(.music)
         .task(id: track.id) {
             if track.isVideo, TrackMeta.artworkCached(for: track) == nil {
                 try? await Task.sleep(for: .milliseconds(250))
@@ -2560,6 +2592,7 @@ struct MusicSidebarPill: View {
                         .font(.system(size: UIScale.pt(11.5), weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .presenterBlur(.music)
                     Spacer(minLength: 0)
                     if remote.current != nil {
                         PlaybackWave(

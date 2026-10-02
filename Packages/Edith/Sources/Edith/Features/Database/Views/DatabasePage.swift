@@ -134,7 +134,7 @@ struct DatabasePage: View {
                 cancel: dismissConnectionManagement)
         }
         .confirmationDialog(
-            actionConfirmation?.title ?? "Confirm connection change",
+            connectionConfirmationTitle,
             isPresented: Binding(
                 get: { actionConfirmation != nil },
                 set: { presented in
@@ -204,7 +204,7 @@ struct DatabasePage: View {
                 showsDetails: $showsServiceDetails,
                 repair: { Task { await model.repair() } })
         case .ready:
-            readyContent
+            readyContent.presenterCover(.database)
         }
     }
 
@@ -431,6 +431,21 @@ struct DatabasePage: View {
             title: "Connection change failed",
             detail: connectionManagement.failure ?? "The saved connection could not be changed."
         )
+    }
+
+    private var connectionConfirmationTitle: String {
+        guard let confirmation = actionConfirmation else {
+            return "Confirm connection change"
+        }
+        guard PresenterState.shared.hides(.database) else { return confirmation.title }
+        switch confirmation {
+        case .favorite(let connection):
+            return connection.isFavorite
+                ? "Remove this connection from favorites?"
+                : "Add this connection to favorites?"
+        case .delete:
+            return "Delete this connection?"
+        }
     }
 
     private var connectionListTaskID: DatabaseConnectionListTaskID {
