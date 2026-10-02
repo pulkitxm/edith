@@ -135,6 +135,8 @@ private struct SkillCatalogRow: View {
                                 if let image = SkillBrand.menuImage(for: agent.id) {
                                     Image(nsImage: image)
                                         .renderingMode(image.isTemplate ? .template : .original)
+                                } else {
+                                    Image(systemName: "terminal")
                                 }
                             }
                         }

@@ -38,6 +38,12 @@ public struct HomebrewPackage: Codable, Equatable, Identifiable, Sendable {
     public var id: String { "\(kind.rawValue):\(name)" }
     public var installed: Bool { !installedVersions.isEmpty }
     public var installedVersion: String? { installedVersions.last }
+    public var subtitle: String? {
+        [description, name].compactMap { $0 }.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty && $0.caseInsensitiveCompare(displayName) != .orderedSame }
+    }
+
     public var versionSummary: String {
         guard let installedVersion else { return currentVersion ?? "Available" }
         guard outdated, let currentVersion else { return installedVersion }

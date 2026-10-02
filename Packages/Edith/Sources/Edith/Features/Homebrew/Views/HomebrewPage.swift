@@ -484,10 +484,12 @@ private struct HomebrewPackageRow: View {
                             .background(Color.orange.opacity(0.13), in: Capsule())
                     }
                 }
-                Text(package.description ?? package.name)
-                    .font(.system(size: UIScale.pt(11.5)))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                if let subtitle = package.subtitle {
+                    Text(subtitle)
+                        .font(.system(size: UIScale.pt(11.5)))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 Text(package.versionSummary)
                     .font(.system(size: UIScale.pt(10.5), design: .monospaced))
                     .foregroundStyle(.tertiary)
