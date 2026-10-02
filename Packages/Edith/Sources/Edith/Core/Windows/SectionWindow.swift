@@ -88,25 +88,6 @@ enum SectionWindow {
         return entries.contains { $0.window === window }
     }
 
-    static func resizeForZoom(from oldScale: Double, to newScale: Double) {
-        guard oldScale > 0, abs(oldScale - newScale) > 0.000_1 else { return }
-        for entry in entries {
-            let window = entry.window
-            let visible = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
-            let minimum = MainWindowFramePolicy.scaled(
-                baseMinimumSize, by: newScale, visible: visible.size)
-            window.contentMinSize = minimum
-            guard !window.styleMask.contains(.fullScreen) else { continue }
-            let content = window.contentRect(forFrameRect: window.frame)
-            let size = MainWindowFramePolicy.zoomedContentSize(
-                current: content.size, minimum: minimum, visible: visible.size, from: oldScale,
-                to: newScale)
-            let rect = MainWindowFramePolicy.centeredContentRect(
-                current: content, size: size, visible: visible)
-            window.setFrame(window.frameRect(forContentRect: rect), display: true)
-        }
-    }
-
     static func open(_ destination: MainDestination, mode: SectionOpenMode = .reuseMostRecent) {
         if focusExisting(destination) { return }
         makeWindow(destination, tabbedInto: mode == .reuseMostRecent ? entries.first?.window : nil)
@@ -115,9 +96,8 @@ enum SectionWindow {
     private static func makeWindow(_ destination: MainDestination, tabbedInto host: NSWindow?) {
         let controller = SectionWindowController(destination: destination)
         let visible = NSScreen.main?.visibleFrame.size ?? NSSize(width: 1440, height: 900)
-        let scale = UIScale.current
-        let size = MainWindowFramePolicy.scaled(baseContentSize, by: scale, visible: visible)
-        let minimum = MainWindowFramePolicy.scaled(baseMinimumSize, by: scale, visible: visible)
+        let size = MainWindowFramePolicy.fitted(baseContentSize, visible: visible)
+        let minimum = MainWindowFramePolicy.fitted(baseMinimumSize, visible: visible)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
@@ -149,8 +129,8 @@ enum SectionWindow {
         let occupied = NSApp.windows.filter { $0 !== window && $0.isVisible }.map(\.frame)
         var frame = window.frame
         if frame.size.width > screen.visibleFrame.width * 0.9 {
-            frame.size = MainWindowFramePolicy.scaled(
-                baseContentSize, by: UIScale.current, visible: screen.visibleFrame.size)
+            frame.size = MainWindowFramePolicy.fitted(
+                baseContentSize, visible: screen.visibleFrame.size)
         }
         var attempts = 0
         while occupied.contains(where: { abs($0.origin.x - frame.origin.x) < 12 })
