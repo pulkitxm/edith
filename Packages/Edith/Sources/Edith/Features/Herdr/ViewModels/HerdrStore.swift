@@ -20,6 +20,17 @@ struct HerdrClosedTabRecord: Equatable {
     let rightNeighborID: String?
 }
 
+private struct HerdrClosedAgentRecord: Equatable {
+    let agent: HerdrAgent
+    let tabID: String
+    let layout: HerdrLayout
+}
+
+private enum HerdrClosedRecord: Equatable {
+    case tab(HerdrClosedTabRecord)
+    case agent(HerdrClosedAgentRecord)
+}
+
 typealias HerdrNewAgentLauncher =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
@@ -122,8 +133,8 @@ final class HerdrStore {
         didSet { scheduleTerminalRetarget(from: oldValue) }
     }
     private(set) var sessions: [HerdrOpenTab] = []
-    private var closedTabHistory: [HerdrClosedTabRecord] = []
-    private let closedTabHistoryLimit = 10
+    private var closedHistory: [HerdrClosedRecord] = []
+    private let closedHistoryLimit = 10
     var refreshing = false
     var copiedID: String?
     var detailOpen = true {
@@ -986,6 +997,67 @@ final class HerdrStore {
         return ids.reduce(layout) { result, id in result.inserting(.pane(id), atEdge: .right) }
     }
 
+    private static func restoring(
+        _ agentID: String, into current: HerdrLayout, from snapshot: HerdrLayout
+    )
+        -> HerdrLayout
+    {
+        guard snapshot.contains(agentID), !current.contains(agentID) else {
+            return current.contains(agentID) ? current : adding([agentID], to: current)
+        }
+        var survivors: [String] = []
+        for pane in current.panes where snapshot.contains(pane) {
+            survivors.append(pane)
+        }
+        guard !survivors.isEmpty else { return adding([agentID], to: current) }
+        var missing: [String] = []
+        for pane in snapshot.panes where pane != agentID && !current.contains(pane) {
+            missing.append(pane)
+        }
+        var extras: [String] = []
+        for pane in current.panes where !snapshot.contains(pane) {
+            extras.append(pane)
+        }
+        if missing.isEmpty, extras.isEmpty { return snapshot }
+        if extras.isEmpty {
+            var layout = snapshot
+            for pane in missing {
+                layout = layout.removing(pane) ?? .pane(agentID)
+            }
+            return layout.contains(agentID) ? layout : adding([agentID], to: current)
+        }
+        return insertingRestored(agentID, into: current, from: snapshot)
+    }
+
+    private static func insertingRestored(
+        _ agentID: String, into current: HerdrLayout, from snapshot: HerdrLayout
+    ) -> HerdrLayout {
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let frames = snapshot.frames(in: unit)
+        guard let origin = frames[agentID] else { return adding([agentID], to: current) }
+        var best: (distance: CGFloat, side: InsertSide, neighbor: String)?
+        for side in [InsertSide.left, .right, .top, .bottom] {
+            guard let neighbor = snapshot.neighbor(of: agentID, toward: side),
+                current.contains(neighbor),
+                let frame = frames[neighbor]
+            else { continue }
+            let distance =
+                side.axis == .horizontal
+                ? abs(frame.midX - origin.midX) : abs(frame.midY - origin.midY)
+            let previous = best?.distance ?? .greatestFiniteMagnitude
+            if distance < previous { best = (distance, side, neighbor) }
+        }
+        guard let best else { return adding([agentID], to: current) }
+        let towardAgent: InsertSide
+        switch best.side {
+        case .left: towardAgent = .right
+        case .right: towardAgent = .left
+        case .top: towardAgent = .bottom
+        case .bottom: towardAgent = .top
+        }
+        return current.inserting(.pane(agentID), near: best.neighbor, side: towardAgent)
+    }
+
     private func detachFromLayout(_ agentID: String) {
         guard let index = tabs.firstIndex(where: { $0.layout.contains(agentID) }) else { return }
         guard let remaining = tabs[index].layout.removing(agentID) else {
@@ -1009,8 +1081,8 @@ final class HerdrStore {
         }
     }
 
-    func close(_ id: String) {
-        closeSequentially([id][...])
+    func close(_ id: String, rememberingPlacement: Bool = true) {
+        closeSequentially([id][...], rememberingPlacement: rememberingPlacement)
     }
 
     func closeTab(_ tabID: String) {
@@ -1296,37 +1368,55 @@ final class HerdrStore {
                 guard let found = session(agentID)?.agent else { continue }
                 agentsInTab.append(found)
             }
-            closedTabHistory.append(
-                HerdrClosedTabRecord(
-                    tabID: tab.id, layout: tab.layout, focused: tab.focused, zoomed: tab.zoomed,
-                    agents: agentsInTab, rightNeighborID: rightNeighborID))
-            if closedTabHistory.count > closedTabHistoryLimit { closedTabHistory.removeFirst() }
+            remember(
+                .tab(
+                    HerdrClosedTabRecord(
+                        tabID: tab.id, layout: tab.layout, focused: tab.focused,
+                        zoomed: tab.zoomed, agents: agentsInTab, rightNeighborID: rightNeighborID)))
             for agentID in tab.agentIDs { ids.append(agentID) }
         }
         guard matchedAny else { return }
         closeSequentially(ids[...])
     }
 
-    private func closeSequentially(_ ids: ArraySlice<String>) {
+    private func closeSequentially(
+        _ ids: ArraySlice<String>, rememberingPlacement: Bool = false
+    ) {
         guard let id = ids.first else { return }
         let remaining = ids.dropFirst()
         guard let index = sessions.firstIndex(where: { $0.id == id }) else {
-            closeSequentially(remaining)
+            closeSequentially(remaining, rememberingPlacement: rememberingPlacement)
             return
         }
         if !sessions[index].agent.isTerminal {
             let holder = sessions[index].holder
             holder.stop()
+            if rememberingPlacement { rememberClosedAgent(id) }
             removeClosedSession(id, holder: holder)
-            closeSequentially(remaining)
+            closeSequentially(remaining, rememberingPlacement: rememberingPlacement)
             return
         }
         let holder = sessions[index].holder
         requestUserClose(holder) { [weak self, weak holder] confirmed in
             guard let self else { return }
-            if confirmed, let holder { self.removeClosedSession(id, holder: holder) }
-            self.closeSequentially(remaining)
+            if confirmed, let holder {
+                if rememberingPlacement { self.rememberClosedAgent(id) }
+                self.removeClosedSession(id, holder: holder)
+            }
+            self.closeSequentially(remaining, rememberingPlacement: rememberingPlacement)
         }
+    }
+
+    private func remember(_ record: HerdrClosedRecord) {
+        closedHistory.append(record)
+        if closedHistory.count > closedHistoryLimit { closedHistory.removeFirst() }
+    }
+
+    private func rememberClosedAgent(_ id: String) {
+        guard let tab = tab(containing: id), tab.isSplit, let agent = session(id)?.agent,
+            tab.layout.removing(id) != nil
+        else { return }
+        remember(.agent(HerdrClosedAgentRecord(agent: agent, tabID: tab.id, layout: tab.layout)))
     }
 
     private func removeClosedSession(_ id: String, holder: TerminalSessionHolder) {
@@ -1591,16 +1681,69 @@ final class HerdrStore {
 
     @discardableResult
     func reopenLastClosedTab() -> Bool {
-        while let candidate = closedTabHistory.popLast() {
-            let liveAgents = candidate.agents.filter { recorded in
-                agents.contains { $0.id == recorded.id }
-                    && tab(containing: recorded.id) == nil
+        while let candidate = closedHistory.popLast() {
+            switch candidate {
+            case let .tab(record):
+                let liveAgents = record.agents.filter { recorded in
+                    agents.contains { $0.id == recorded.id }
+                        && tab(containing: recorded.id) == nil
+                }
+                guard !liveAgents.isEmpty else { continue }
+                openReopenedTab(record, liveAgents: liveAgents)
+                return true
+            case let .agent(record):
+                guard reopenClosedAgent(record) else { continue }
+                return true
             }
-            guard !liveAgents.isEmpty else { continue }
-            openReopenedTab(candidate, liveAgents: liveAgents)
-            return true
         }
         return false
+    }
+
+    private func reopenClosedAgent(_ record: HerdrClosedAgentRecord) -> Bool {
+        guard agents.contains(where: { $0.id == record.agent.id }) else { return false }
+        guard tab(containing: record.agent.id) == nil else { return false }
+        if !sessions.contains(where: { $0.id == record.agent.id }) {
+            adoptSession(for: record.agent, showing: nil)
+        }
+        if let host = tab(record.tabID) ?? tabHoldingPlacement(record) {
+            updateTab(host.id) { tab in
+                tab.layout = Self.restoring(record.agent.id, into: tab.layout, from: record.layout)
+                tab.focused = record.agent.id
+                tab.zoomed = nil
+            }
+            revealSpace(containing: record.agent)
+            selectedTab = host.id
+            return true
+        }
+        let tab = HerdrTab(agentID: record.agent.id)
+        tabs.append(tab)
+        revealSpace(containing: record.agent)
+        selectedTab = tab.id
+        return true
+    }
+
+    private func tabHoldingPlacement(_ record: HerdrClosedAgentRecord) -> HerdrTab? {
+        var others = Set<String>()
+        for pane in record.layout.panes where pane != record.agent.id {
+            others.insert(pane)
+        }
+        var best: HerdrTab?
+        var bestCount = 0
+        for tab in tabs {
+            var shared = 0
+            var unrelated = false
+            for id in tab.agentIDs {
+                if others.contains(id) {
+                    shared += 1
+                } else {
+                    unrelated = true
+                }
+            }
+            guard shared > bestCount, !unrelated else { continue }
+            best = tab
+            bestCount = shared
+        }
+        return best
     }
 
     private func openReopenedTab(_ record: HerdrClosedTabRecord, liveAgents: [HerdrAgent]) {

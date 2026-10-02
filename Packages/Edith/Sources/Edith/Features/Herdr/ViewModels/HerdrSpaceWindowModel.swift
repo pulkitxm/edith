@@ -232,7 +232,7 @@ final class HerdrSpaceWindowModel {
         spaceTitle = space.title
         contexts = HerdrSpaceTerminalContext.unique(for: space.agents)
         tabs = space.agents.map { agent in
-            store.close(agent.id)
+            store.close(agent.id, rememberingPlacement: false)
             return HerdrSpaceTabModel(
                 agent: agent, tab: store.makeTab(for: agent),
                 context: HerdrSpaceTerminalContext.make(for: agent))
