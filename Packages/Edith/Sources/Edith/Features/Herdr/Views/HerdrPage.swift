@@ -421,8 +421,9 @@ struct HerdrPage: View {
 
     private var tabBarActions: some View {
         HStack(spacing: UIScale.pt(4)) {
-            if let tab = store.currentTab, !tab.isSplit,
-                let session = store.session(tab.focused), !session.agent.isTerminal
+            if let tab = store.currentTab,
+                let sessionID = tab.isSplit ? tab.zoomed : tab.focused,
+                let session = store.session(sessionID), !session.agent.isTerminal
             {
                 viewModes(for: session)
             }

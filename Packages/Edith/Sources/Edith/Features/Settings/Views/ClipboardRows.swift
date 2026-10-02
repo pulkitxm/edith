@@ -88,7 +88,9 @@ struct ClipboardRows: View {
                 } else if recent.loading, recent.entries.isEmpty {
                     HStack {
                         SkeletonGroup {
-                            SkeletonBlock(width: 220, height: 9, corner: 4)
+                            SkeletonBlock(width: 168, height: 9, corner: 4)
+                            Spacer()
+                            SkeletonBlock(width: 72, height: 9, corner: 4)
                         }
                     }
                     .settingsCaption()

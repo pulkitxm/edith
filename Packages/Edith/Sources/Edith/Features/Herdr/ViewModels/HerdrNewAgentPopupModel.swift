@@ -40,7 +40,10 @@ final class HerdrNewAgentPopupModel {
     }
 
     var step = Step.kind
-    var layoutChoice = LayoutChoice.newTab
+    var layoutChoice: LayoutChoice {
+        didSet { onLayoutChange(layoutChoice) }
+    }
+    private let onLayoutChange: (LayoutChoice) -> Void
     var kindQuery = ""
     var selectedKind: String?
     var machineQuery = ""
@@ -53,8 +56,13 @@ final class HerdrNewAgentPopupModel {
     var launching = false
     let space: HerdrAgentSpace?
 
-    init(space: HerdrAgentSpace? = nil) {
+    init(
+        space: HerdrAgentSpace? = nil, layoutChoice: LayoutChoice = .newTab,
+        onLayoutChange: @escaping (LayoutChoice) -> Void = { _ in }
+    ) {
         self.space = space
+        self.layoutChoice = layoutChoice
+        self.onLayoutChange = onLayoutChange
     }
 
     func launchInSpace(
