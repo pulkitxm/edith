@@ -79,6 +79,7 @@ struct DatabaseSafetyReviewSheet: View {
             idealHeight: UIScale.pt(720)
         )
         .background(palette.canvas)
+        .presenterCover(.database)
         .interactiveDismissDisabled(activePhase.blocksInteractiveDismissal)
         .onAppear {
             announce("Destructive database operation requires review.")

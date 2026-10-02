@@ -560,15 +560,7 @@ public enum ExtensionLiveAdapters {
         ].contains { key, fallback in
             defaults.object(forKey: key) as? Bool ?? fallback
         }
-        let protected = [
-            (AppStorageKeys.Presenter.blurAgents, true),
-            (AppStorageKeys.Presenter.blurCalendar, true),
-            (AppStorageKeys.Presenter.blurMoney, true),
-            (AppStorageKeys.Presenter.blurMusic, true),
-            (AppStorageKeys.Presenter.blurUsage, false),
-        ].filter { key, fallback in
-            defaults.object(forKey: key) as? Bool ?? fallback
-        }.count
+        let protected = PresenterPrivacy.allCases.filter { $0.isEnabled(in: defaults) }.count
         return ExtensionAdapterFacts(
             configured: protected > 0,
             degradedReason: auto && !detectionEnabled

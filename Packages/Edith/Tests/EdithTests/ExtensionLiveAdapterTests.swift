@@ -373,15 +373,12 @@ import EdithCore
                     "A stored dim intensity, animation duration, or display mode is invalid."))
 
         defaults.removeObject(forKey: AppStorageKeys.FocusDim.intensity)
+        let protected = PresenterPrivacy.allCases.filter(\.fallback).count
         #expect(
             ExtensionLiveAdapters.presenterReadiness(defaults: defaults)
-                == .ready("Presenter protects 4 data categories."))
-        for key in [
-            AppStorageKeys.Presenter.blurAgents, AppStorageKeys.Presenter.blurCalendar,
-            AppStorageKeys.Presenter.blurMoney, AppStorageKeys.Presenter.blurMusic,
-            AppStorageKeys.Presenter.blurUsage,
-        ] {
-            defaults.set(false, forKey: key)
+                == .ready("Presenter protects \(protected) data categories."))
+        for category in PresenterPrivacy.allCases {
+            defaults.set(false, forKey: category.storageKey)
         }
         #expect(
             ExtensionLiveAdapters.presenterReadiness(defaults: defaults)

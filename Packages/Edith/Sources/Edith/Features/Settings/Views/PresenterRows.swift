@@ -9,19 +9,6 @@ struct PresenterRows: View {
         false
     @AppStorage(AppStorageKeys.Presenter.mode, store: SharedDefaults.store) private
         var presenterMode = false
-    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-        var presenterBlurMusic =
-        true
-    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-        var presenterBlurMoney =
-        true
-    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
-        var presenterBlurUsage =
-        false
-    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
-    private var presenterBlurCalendar = true
-    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
-    private var presenterBlurAgents = true
     @AppStorage(AppStorageKeys.Presenter.autoEnabled, store: SharedDefaults.store) private
         var autoEnabled = false
     @AppStorage(AppStorageKeys.Presenter.hideMenuBarNumbers, store: SharedDefaults.store)
@@ -46,7 +33,8 @@ struct PresenterRows: View {
                     HStack(spacing: UIScale.pt(6)) {
                         Text("Manual presenter mode")
                         InfoDot(
-                            "Blurs sensitive numbers and track names everywhere in Edith until you turn it back off."
+                            "Blurs the private details you choose, everywhere in Edith, "
+                                + "until you turn it back off."
                         )
                     }
                 }
@@ -54,26 +42,9 @@ struct PresenterRows: View {
                     _ = PresenterRuntimeOperationExecution.perform(
                         presenterMode ? .start : .stop)
                 }
-                Toggle(
-                    "Blur music",
-                    isOn: $presenterBlurMusic.configured(AppStorageKeys.Presenter.blurMusic)
-                )
-                Toggle(
-                    "Blur cost figures",
-                    isOn: $presenterBlurMoney.configured(AppStorageKeys.Presenter.blurMoney)
-                )
-                Toggle(
-                    "Blur usage figures",
-                    isOn: $presenterBlurUsage.configured(AppStorageKeys.Presenter.blurUsage)
-                )
-                Toggle(
-                    "Blur calendar events",
-                    isOn: $presenterBlurCalendar.configured(AppStorageKeys.Presenter.blurCalendar)
-                )
-                Toggle(
-                    "Blur agents",
-                    isOn: $presenterBlurAgents.configured(AppStorageKeys.Presenter.blurAgents)
-                )
+                ForEach(PresenterPrivacy.allCases) { category in
+                    PresenterPrivacySettingToggle(category: category)
+                }
             } header: {
                 Text("Manual")
             }
@@ -177,5 +148,60 @@ struct PresenterRows: View {
         }
         .disabled(!presenterEnabled)
         .opacity(presenterEnabled ? 1 : 0.5)
+    }
+}
+
+struct PresenterPrivacySettingToggle: View {
+    let category: PresenterPrivacy
+    @AppStorage private var stored: Bool
+
+    init(category: PresenterPrivacy) {
+        self.category = category
+        _stored = AppStorage(
+            wrappedValue: category.fallback, category.storageKey, store: SharedDefaults.store)
+    }
+
+    var body: some View {
+        Toggle(category.title, isOn: $stored.configured(category.storageKey))
+    }
+}
+
+struct PresenterPrivacyQuickToggle: View {
+    let category: PresenterPrivacy
+    @AppStorage private var stored: Bool
+    @State private var hovering = false
+
+    init(category: PresenterPrivacy) {
+        self.category = category
+        _stored = AppStorage(
+            wrappedValue: category.fallback, category.storageKey, store: SharedDefaults.store)
+    }
+
+    var body: some View {
+        Button {
+            storedBinding.wrappedValue.toggle()
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                Text(category.title)
+                    .font(.system(size: UIScale.pt(12.5)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Toggle("", isOn: storedBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, UIScale.pt(8))
+            .padding(.vertical, UIScale.pt(8))
+            .background(hovering ? Color.primary.opacity(0.06) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .onHover { hovering = $0 }
+    }
+
+    private var storedBinding: Binding<Bool> {
+        $stored.configured(category.storageKey)
     }
 }

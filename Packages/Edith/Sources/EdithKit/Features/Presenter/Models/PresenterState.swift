@@ -14,6 +14,11 @@ public final class PresenterState {
     }
 
     public private(set) var enabled = false
+    public private(set) var hiddenPrivacy: Set<PresenterPrivacy> = []
+
+    public func hides(_ category: PresenterPrivacy) -> Bool {
+        active && hiddenPrivacy.contains(category)
+    }
 
     private var localToken: NSObjectProtocol?
     private var settingsToken: NSObjectProtocol?
@@ -69,5 +74,7 @@ public final class PresenterState {
         if manual != newManual { manual = newManual }
         if autoActive != newAutoActive { autoActive = newAutoActive }
         if autoReason != newAutoReason { autoReason = newAutoReason }
+        let hidden = Set(PresenterPrivacy.allCases.filter { $0.isEnabled(in: d) })
+        if hiddenPrivacy != hidden { hiddenPrivacy = hidden }
     }
 }

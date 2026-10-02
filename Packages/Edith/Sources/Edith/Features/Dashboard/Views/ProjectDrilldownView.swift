@@ -100,6 +100,7 @@ struct ProjectDrilldownView: View {
                             }
                             if displayNodes.isEmpty, !debouncedQuery.isEmpty {
                                 Text("No projects match “\(model.projQuery)”")
+                                    .presenterBlur(.agents)
                                     .font(.system(size: UIScale.pt(11)))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                     .padding(UIScale.pt(12))
@@ -392,11 +393,13 @@ private struct ProjectRow: View {
         HStack(spacing: UIScale.pt(5)) {
             Text(node.label).font(.system(size: UIScale.pt(11))).lineLimit(1)
                 .truncationMode(.tail)
+                .presenterBlur(.agents)
             if let note = node.note {
                 Text(note)
                     .font(.system(size: UIScale.pt(9)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                     .lineLimit(1)
+                    .presenterBlur(.agents)
             }
         }
     }

@@ -28,49 +28,58 @@ struct NotchBrowserPane<Leading: View>: View {
     }
 
     private var content: some View {
-        BrowserWebViewHost(webView: store.selectedTab?.webView)
-            .padding(.horizontal, NotchBrowserGeometry.chromePadding)
-            .padding(.bottom, NotchBrowserGeometry.contentInset)
-            .overlay {
-                if let dialog = store.dialog {
-                    NotchBrowserDialogView(dialog: dialog)
-                        .id(dialog.id)
-                }
+        BrowserWebViewHost(
+            webView: store.selectedTab?.webView,
+            covered: PresenterState.shared.hides(.browser)
+        )
+        .padding(.horizontal, NotchBrowserGeometry.chromePadding)
+        .padding(.bottom, NotchBrowserGeometry.contentInset)
+        .overlay {
+            if let dialog = store.dialog {
+                NotchBrowserDialogView(dialog: dialog)
+                    .id(dialog.id)
             }
-            .overlay(alignment: .bottom) {
-                if let toast = store.toast {
-                    Text(toast)
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .frame(height: 28)
-                        .background(.black.opacity(0.8), in: Capsule())
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 1))
-                        .padding(.bottom, 22)
-                        .transition(.opacity)
-                }
+        }
+        .overlay(alignment: .bottom) {
+            if let toast = store.toast {
+                Text(toast)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(.black.opacity(0.8), in: Capsule())
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 1))
+                    .padding(.bottom, 22)
+                    .transition(.opacity)
             }
-            .animation(.easeOut(duration: 0.18), value: store.toast)
+        }
+        .animation(.easeOut(duration: 0.18), value: store.toast)
+        .presenterCover(.browser)
     }
 }
 
 struct BrowserWebViewHost: NSViewRepresentable {
     let webView: WKWebView?
+    var covered = false
 
     func makeNSView(context: Context) -> BrowserWebContainerView {
         let container = BrowserWebContainerView()
         container.show(webView)
+        container.setCovered(covered)
         return container
     }
 
     func updateNSView(_ container: BrowserWebContainerView, context: Context) {
         container.show(webView)
+        container.setCovered(covered)
     }
 }
 
 final class BrowserWebContainerView: NSView {
     static let cornerRadius: CGFloat =
         NotchGeometry.expandedBottomRadius - NotchBrowserGeometry.contentInset
+
+    private let cover = BrowserPresenterCover()
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -79,6 +88,8 @@ final class BrowserWebContainerView: NSView {
         layer?.cornerRadius = Self.cornerRadius
         layer?.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         layer?.masksToBounds = true
+        cover.isHidden = true
+        addSubview(cover)
     }
 
     @available(*, unavailable)
@@ -87,32 +98,73 @@ final class BrowserWebContainerView: NSView {
     }
 
     func show(_ webView: WKWebView?) {
-        if let webView, subviews.first === webView { return }
-        for view in subviews where view !== webView { view.removeFromSuperview() }
-        guard let webView else { return }
+        if let webView, hostedWebView === webView {
+            placeCover()
+            return
+        }
+        for view in subviews where view !== webView && view !== cover {
+            view.removeFromSuperview()
+        }
+        guard let webView else {
+            placeCover()
+            return
+        }
         webView.removeFromSuperview()
         webView.autoresizingMask = []
         layer?.backgroundColor = webView.underPageBackgroundColor.cgColor
         addSubview(webView)
         fitWebView()
+        placeCover()
+    }
+
+    func setCovered(_ covered: Bool) {
+        hostedWebView?.alphaValue = covered ? 0 : 1
+        cover.isHidden = !covered
+        if covered { placeCover() }
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         fitWebView()
+        cover.frame = bounds
     }
 
     override func layout() {
         super.layout()
         fitWebView()
+        cover.frame = bounds
+    }
+
+    private var hostedWebView: WKWebView? {
+        subviews.compactMap { $0 as? WKWebView }.first
+    }
+
+    private func placeCover() {
+        cover.frame = bounds
+        addSubview(cover)
     }
 
     private func fitWebView() {
-        guard !bounds.isEmpty, let webView = subviews.first, webView.frame != bounds else {
+        guard !bounds.isEmpty, let webView = hostedWebView, webView.frame != bounds else {
             return
         }
         webView.frame = bounds
     }
+}
+
+private final class BrowserPresenterCover: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.backgroundColor = NSColor(white: 0.08, alpha: 1).cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 struct NotchBrowserDialogView: View {

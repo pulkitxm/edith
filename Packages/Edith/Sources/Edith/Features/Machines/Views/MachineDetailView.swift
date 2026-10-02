@@ -173,8 +173,12 @@ struct MachineWindowView: View {
                         Text(model.isLocal(machineID) ? "Local" : session.machine.subtitle)
                             .font(DashSkin.mono(11))
                             .foregroundStyle(DashSkin.inkFaint(dark))
-                    })
+                            .presenterBlur(.fleet)
+                    }
+                )
+                .presenterBlur(.fleet)
                 MachineDetailView(session: session, model: model, tab: $tab)
+                    .presenterCover(.fleet)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DashSkin.paper(dark))

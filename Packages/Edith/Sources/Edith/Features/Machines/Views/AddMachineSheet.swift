@@ -94,6 +94,7 @@ struct AddMachineSheet: View {
                     testSection
                 }
                 .padding(UIScale.pt(20))
+                .presenterCover(.fleet)
             }
             Divider()
             footerBar

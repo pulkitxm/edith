@@ -573,6 +573,7 @@ fileprivate struct NotchNowPlayingCard: View {
             Group {
                 if let image = controller.nowPlayingArtwork {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                        .presenterCover(.music)
                 } else {
                     Image(systemName: "music.note")
                         .font(.system(size: 18)).foregroundStyle(.white.opacity(0.5))
@@ -737,6 +738,7 @@ private struct NotchUsageRings: View {
                         value: value.text)
             }
             .frame(width: 52, height: 52)
+            .presenterCover(.usage)
             Text(label)
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
@@ -978,6 +980,7 @@ private struct NotchMusicWings: View {
                 .aspectRatio(contentMode: .fill)
                 .frame(width: 20, height: 20)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
+                .presenterCover(.music)
         } else {
             Image(systemName: "music.note")
                 .font(.system(size: 12))
@@ -1002,11 +1005,13 @@ private struct ShelfItemView: View {
             .aspectRatio(contentMode: .fit)
             .frame(width: 38, height: 38)
             .clipShape(RoundedRectangle(cornerRadius: 4))
+            .presenterCover(.shelf)
             Text(item.name)
                 .font(.system(size: 10))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .frame(width: 64)
+                .presenterBlur(.shelf)
         }
         .padding(4)
         .background(
