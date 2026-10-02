@@ -294,6 +294,7 @@ private struct CalendarEventRow: View {
                         .font(.system(size: style.locationSize))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
+                        .presenterBlur(blurEvents)
                 }
             }
             Spacer(minLength: style.trailingSpacerMinLength)
@@ -317,6 +318,7 @@ private struct CalendarEventRow: View {
             }
             if let attendees = CalendarText.attendeeSummary(for: event) {
                 CalendarMetadataLabel(systemImage: "person.2", text: attendees)
+                    .presenterBlur(blurEvents)
             }
             if event.isRecurring {
                 CalendarMetadataLabel(systemImage: "repeat", text: "Recurring")
@@ -332,7 +334,8 @@ private struct CalendarEventRow: View {
                     title: "Join",
                     systemImage: "video.fill",
                     color: CalendarText.providerColor(for: url, fallback: accentColor),
-                    help: "Join meeting at \(url.host ?? url.absoluteString)"
+                    help: blurEvents
+                        ? "Join meeting" : "Join meeting at \(url.host ?? url.absoluteString)"
                 ) {
                     onOpenMeeting(url)
                 }

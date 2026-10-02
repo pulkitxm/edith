@@ -352,11 +352,22 @@ not here cannot be set, and `import` skips it.
 | `presenterDetectScreenSharing` | bool | none | shared | Treat screen sharing as a share. |
 | `presenterDetectMirroring` | bool | none | shared | Treat display mirroring as a share. |
 | `presenterHideMenuBarNumbers` | bool | none | shared | Hide menu bar percentages while presenting. |
+| `presenterBlurMusic` | bool | none | shared | Blur track names, artwork and folders. |
 | `presenterBlurMoney` | bool | none | shared | Blur spend figures. |
 | `presenterBlurUsage` | bool | none | shared | Blur usage percentages. |
-| `presenterBlurMusic` | bool | none | shared | Blur track names. |
 | `presenterBlurCalendar` | bool | none | shared | Blur calendar entries. |
 | `presenterBlurAgents` | bool | none | shared | Hide live Herdr titles and blur attached terminals. |
+| `presenterBlurAttention` | bool | none | shared | Blur attention activity, titles and sites. |
+| `presenterBlurCamera` | bool | none | shared | Blur the virtual camera picture and personal backdrops. |
+| `presenterBlurStudio` | bool | none | shared | Blur Studio files, projects and previews. |
+| `presenterBlurDatabase` | bool | none | shared | Blur database connections and rows. |
+| `presenterBlurMemory` | bool | none | shared | Blur memory chats, notes and captures. |
+| `presenterBlurFleet` | bool | none | shared | Blur machine names, files and terminals. |
+| `presenterBlurReview` | bool | none | shared | Blur review sessions. |
+| `presenterBlurSiteAudit` | bool | none | shared | Blur site audit projects and pages. |
+| `presenterBlurRunningApps` | bool | none | shared | Blur running app names and icons. |
+| `presenterBlurShelf` | bool | none | shared | Blur files parked on the shelf. |
+| `presenterBlurBrowser` | bool | none | shared | Blur the notch browser, including the address and page titles. |
 | `presenterHotKeyCode` | int | none | shared | Virtual key code of the presenter shortcut. |
 | `presenterHotKeyMods` | int | none | shared | Carbon modifier mask of the presenter shortcut. |
 | `presenterHotKeyLabel` | string | none | shared | Printable label for the presenter shortcut. |

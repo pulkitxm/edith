@@ -428,6 +428,7 @@ struct VirtualCameraImageRow: View {
             }
             .frame(width: UIScale.pt(56), height: UIScale.pt(36))
             .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(6)))
+            .presenterCover(.camera)
             .background(RoundedRectangle(cornerRadius: UIScale.pt(6)).fill(DashSkin.paper2(dark)))
             Text(path == nil ? "No image" : title)
                 .font(.system(size: UIScale.pt(12)))

@@ -49,7 +49,9 @@ struct MachinesPage: View {
             }
         }
         .confirmationDialog(
-            "Remove \(confirmRemoval?.name ?? "machine")?",
+            PresenterState.shared.hides(.fleet)
+                ? "Remove this machine?"
+                : "Remove \(confirmRemoval?.name ?? "machine")?",
             isPresented: Binding(
                 get: { confirmRemoval != nil }, set: { if !$0 { confirmRemoval = nil } }),
             titleVisibility: .visible
@@ -133,7 +135,9 @@ struct MachinesPage: View {
                                 MachineWindow.open(machineID: machine.id, title: machine.name)
                             },
                             onEdit: { editingMachine = machine },
-                            onRemove: { confirmRemoval = machine })
+                            onRemove: { confirmRemoval = machine }
+                        )
+                        .presenterCover(.fleet)
                     }
                 }
             }
@@ -174,6 +178,11 @@ struct MachinesPage: View {
 
     @ViewBuilder
     private var content: some View {
+        fleetContent.presenterCover(.fleet)
+    }
+
+    @ViewBuilder
+    private var fleetContent: some View {
         if !connectionsEnabled {
             Color.clear
         } else if mode == .fleet {

@@ -76,6 +76,19 @@ import Testing
         #expect(violations.isEmpty, "theme token bypasses: \(violations.sorted())")
     }
 
+    @Test func heatmapLevelsGetLighterAsActivityRises() {
+        for dark in [false, true] {
+            let levels = (0...3).map { luminance(DashSkin.heat($0, dark)) }
+            #expect(levels == levels.sorted(), "dark=\(dark) \(levels)")
+            #expect(Set(levels).count == levels.count, "dark=\(dark) \(levels)")
+        }
+    }
+
+    private func luminance(_ color: Color) -> Double {
+        let channels = rgb(color).map(Double.init)
+        return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+    }
+
     private func rgb(_ color: Color) -> [Int] {
         let resolved = NSColor(color).usingColorSpace(.sRGB) ?? .black
         return [resolved.redComponent, resolved.greenComponent, resolved.blueComponent].map {

@@ -429,19 +429,6 @@ struct MainWindowView: View {
     @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
         var presenterEnabled =
         false
-    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-        var presenterBlurMusic =
-        true
-    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-        var presenterBlurMoney =
-        true
-    @AppStorage(AppStorageKeys.Presenter.blurUsage, store: SharedDefaults.store) private
-        var presenterBlurUsage =
-        false
-    @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
-    private var presenterBlurCalendar = true
-    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
-    private var presenterBlurAgents = true
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @AppStorage(AppStorageKeys.General.creditHidden, store: SharedDefaults.store) private
@@ -1191,7 +1178,7 @@ struct MainWindowView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.edith(.borderless))
-            .help("Blur sensitive numbers and track names everywhere in Edith")
+            .help("Blur the private details you choose, everywhere in Edith")
 
             Rectangle()
                 .fill(presenterMode ? Color.white.opacity(0.24) : Color.primary.opacity(0.08))
@@ -1229,26 +1216,15 @@ struct MainWindowView: View {
                 "Presenter mode",
                 isOn: Binding(get: { presenterMode }, set: { setPresenterMode($0) })
             )
-            Divider()
-            presenterQuickActionToggle(
-                "Blur music",
-                isOn: $presenterBlurMusic.configured(AppStorageKeys.Presenter.blurMusic))
-            Divider()
-            presenterQuickActionToggle(
-                "Blur cost figures",
-                isOn: $presenterBlurMoney.configured(AppStorageKeys.Presenter.blurMoney))
-            Divider()
-            presenterQuickActionToggle(
-                "Blur usage figures",
-                isOn: $presenterBlurUsage.configured(AppStorageKeys.Presenter.blurUsage))
-            Divider()
-            presenterQuickActionToggle(
-                "Blur calendar events",
-                isOn: $presenterBlurCalendar.configured(AppStorageKeys.Presenter.blurCalendar))
-            Divider()
-            presenterQuickActionToggle(
-                "Blur agents",
-                isOn: $presenterBlurAgents.configured(AppStorageKeys.Presenter.blurAgents))
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(0)) {
+                    ForEach(PresenterPrivacy.allCases) { category in
+                        Divider()
+                        PresenterPrivacyQuickToggle(category: category)
+                    }
+                }
+            }
+            .frame(maxHeight: UIScale.pt(360))
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))

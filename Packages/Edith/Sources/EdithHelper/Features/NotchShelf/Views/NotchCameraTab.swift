@@ -12,13 +12,16 @@ struct NotchCameraTab: View {
         Group {
             switch status {
             case .authorized:
-                CameraPreview(deviceID: selectedID)
-                    .overlay(alignment: .bottomTrailing) {
-                        if devices.count > 1 {
-                            switchButton
-                        }
+                CameraPreview(
+                    deviceID: selectedID, covered: PresenterState.shared.hides(.camera)
+                )
+                .presenterCover(.camera)
+                .overlay(alignment: .bottomTrailing) {
+                    if devices.count > 1 {
+                        switchButton
                     }
-                    .onAppear(perform: refreshDevices)
+                }
+                .onAppear(perform: refreshDevices)
             case .notDetermined:
                 prompt {
                     PermissionsModel.shared.request(.camera)
@@ -118,15 +121,18 @@ struct NotchCameraTab: View {
 
 private struct CameraPreview: NSViewRepresentable {
     var deviceID: String?
+    var covered = false
 
     func makeNSView(context: Context) -> CameraPreviewView {
         let view = CameraPreviewView()
         view.setDevice(deviceID)
+        view.setCovered(covered)
         return view
     }
 
     func updateNSView(_ nsView: CameraPreviewView, context: Context) {
         nsView.setDevice(deviceID)
+        nsView.setCovered(covered)
     }
 
     static func dismantleNSView(_ nsView: CameraPreviewView, coordinator: ()) { nsView.stop() }
@@ -162,6 +168,10 @@ final class CameraPreviewView: NSView {
             self.session.commitConfiguration()
             self.session.startRunning()
         }
+    }
+
+    func setCovered(_ covered: Bool) {
+        previewLayer?.isHidden = covered
     }
 
     func setDevice(_ id: String?) {

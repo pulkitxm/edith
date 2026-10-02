@@ -71,6 +71,7 @@ struct DatabaseConnectionCreationSheet: View {
             minHeight: UIScale.pt(480), idealHeight: UIScale.pt(640)
         )
         .background(palette.canvas)
+        .presenterCover(.database)
         .interactiveDismissDisabled(isWorking)
         .onDisappear {
             submissionTask?.cancel()

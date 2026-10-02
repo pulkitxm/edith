@@ -483,6 +483,7 @@ struct HeatCard: View {
             ForEach(detail.projects.prefix(4)) { p in
                 HStack {
                     Text(p.name).font(.system(size: UIScale.pt(10))).lineLimit(1)
+                        .presenterBlur(.agents)
                     Spacer()
                     Text(DashFmt.tokens(p.value)).font(.system(size: UIScale.pt(9)))
                         .foregroundStyle(.secondary)

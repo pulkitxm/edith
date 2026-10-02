@@ -94,7 +94,7 @@ struct CompanionPage: View {
             header
             tabBar
             Divider().opacity(0.35)
-            screens
+            screens.presenterCover(.memory)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(pageBackground)

@@ -90,12 +90,14 @@ struct NotchBrowserTabItem: View {
         } label: {
             HStack(spacing: 6) {
                 NotchBrowserFavicon(tab: tab)
+                    .presenterCover(.browser)
                 if width >= 64 {
                     Text(tab.displayTitle)
                         .font(.system(size: 11, weight: selected ? .semibold : .regular))
                         .foregroundStyle(.white.opacity(selected ? 0.95 : 0.65))
                         .lineLimit(1)
                         .truncationMode(.tail)
+                        .presenterBlur(.browser)
                 }
                 Spacer(minLength: 0)
             }
@@ -124,7 +126,7 @@ struct NotchBrowserTabItem: View {
             }
         }
         .onHover { hovering = $0 }
-        .help(tab.displayTitle)
+        .help(PresenterState.shared.hides(.browser) ? "Tab" : tab.displayTitle)
         .contextMenu { menu }
     }
 
@@ -239,6 +241,7 @@ struct NotchBrowserToolbar: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.92))
+                .presenterBlur(.browser)
                 .focused($editing)
                 .onSubmit {
                     store.submitAddress(draft)
@@ -273,9 +276,13 @@ struct NotchBrowserToolbar: View {
     private var profileMenu: some View {
         Menu {
             if let profile = store.profile {
-                Text(profile.email.map { "\(profile.name) (\($0))" } ?? profile.name)
-                if let summary = store.syncSummary {
-                    Text(summary)
+                if PresenterState.shared.hides(.browser) {
+                    Text("Chrome profile")
+                } else {
+                    Text(profile.email.map { "\(profile.name) (\($0))" } ?? profile.name)
+                    if let summary = store.syncSummary {
+                        Text(summary)
+                    }
                 }
             }
             Divider()
@@ -288,6 +295,7 @@ struct NotchBrowserToolbar: View {
         } label: {
             if let profile = store.profile {
                 Image(nsImage: ChromeProfileAvatar.badge(for: profile, diameter: 20))
+                    .presenterCover(.browser)
             } else {
                 Image(systemName: "person.crop.circle")
             }
@@ -296,7 +304,10 @@ struct NotchBrowserToolbar: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .frame(width: 28, height: 26)
-        .help(store.profile.map { "Chrome profile: \($0.name)" } ?? "Chrome profile")
+        .help(
+            PresenterState.shared.hides(.browser)
+                ? "Chrome profile"
+                : (store.profile.map { "Chrome profile: \($0.name)" } ?? "Chrome profile"))
     }
 
     private func control(

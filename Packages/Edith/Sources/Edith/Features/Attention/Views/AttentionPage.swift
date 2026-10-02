@@ -48,20 +48,25 @@ struct AttentionPage: View {
                     Group {
                         if model.needsSetup {
                             AttentionSetupView(model: model)
+                        } else if model.section == .settings {
+                            AttentionSettingsView(model: model)
                         } else {
-                            switch model.section {
-                            case .overview:
-                                if model.hasActivity {
-                                    AttentionOverview(model: model)
-                                } else {
-                                    AttentionCollectingView(model: model)
+                            Group {
+                                switch model.section {
+                                case .overview:
+                                    if model.hasActivity {
+                                        AttentionOverview(model: model)
+                                    } else {
+                                        AttentionCollectingView(model: model)
+                                    }
+                                case .timeline: AttentionTimelineView(model: model)
+                                case .breakdown: AttentionBreakdownView(model: model)
+                                case .agents: AttentionAgentsView(model: model)
+                                case .focus: AttentionFocusView(model: model)
+                                case .settings: EmptyView()
                                 }
-                            case .timeline: AttentionTimelineView(model: model)
-                            case .breakdown: AttentionBreakdownView(model: model)
-                            case .agents: AttentionAgentsView(model: model)
-                            case .focus: AttentionFocusView(model: model)
-                            case .settings: AttentionSettingsView(model: model)
                             }
+                            .presenterCover(.attention)
                         }
                     }
                     .opacity(model.pending && model.section.usesPeriod ? 0.45 : 1)

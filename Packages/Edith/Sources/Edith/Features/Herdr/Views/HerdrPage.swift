@@ -120,7 +120,7 @@ struct HerdrPage: View {
             drag.gap = UIScale.pt(6)
             drag.onTearOff = { agent in
                 if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-                store.close(agent.id)
+                store.close(agent.id, rememberingPlacement: false)
                 HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             }
         }
@@ -1045,7 +1045,7 @@ struct HerdrPage: View {
         }
         Button("Open in New Window") {
             if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-            store.close(agent.id)
+            store.close(agent.id, rememberingPlacement: false)
             HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
         }
         if !agent.isTerminal {
@@ -1075,7 +1075,7 @@ struct HerdrPage: View {
         if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         let detaching = NSEvent.modifierFlags.contains(.command)
         if detaching {
-            store.close(agent.id)
+            store.close(agent.id, rememberingPlacement: false)
             HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             return
         }

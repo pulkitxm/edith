@@ -1172,6 +1172,7 @@ private struct HomeArtworkThumb: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
+        .presenterCover(.music)
         .task(id: track.id) { artwork = await TrackMeta.artwork(for: track) }
     }
 }

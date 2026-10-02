@@ -73,6 +73,7 @@ struct UsageMachinesPicker: View {
                             .system(size: UIScale.pt(11.5), weight: shown ? .semibold : .regular)
                         )
                         .foregroundStyle(DashSkin.ink(dark))
+                        .presenterBlur(.fleet)
                     Text(group.agentSummary)
                         .font(DashSkin.mono(9.5))
                         .foregroundStyle(DashSkin.inkFaint(dark))
