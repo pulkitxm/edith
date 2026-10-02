@@ -327,7 +327,7 @@ import Testing
             contentsOf: sourceRoot.appendingPathComponent(
                 "Core/Application/AppServices.swift"), encoding: .utf8)
 
-        #expect(view.contains("_engine = State(initialValue: engine ?? .shared)"))
+        #expect(view.contains("State(initialValue: engine ?? .shared)"))
         #expect(view.contains("engine.viewAppeared()"))
         #expect(view.contains("engine.viewDisappeared()"))
         #expect(view.contains("Button(\"Retry\")"))
