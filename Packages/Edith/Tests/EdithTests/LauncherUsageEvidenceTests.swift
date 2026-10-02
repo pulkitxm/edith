@@ -9,6 +9,56 @@ import Testing
 @MainActor
 @Suite(.serialized) struct LauncherUsageEvidenceTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_LAUNCHER_EVIDENCE_DIR"] != nil))
+    func tabLayoutChoicesRenderInTheActualPopup() throws {
+        let environment = ProcessInfo.processInfo.environment
+        let runtime = try #require(environment["EDITH_TEST_RUNTIME_ROOT"])
+        let dataRoot = try #require(environment["EDITH_DATA_ROOT"])
+        try #require(dataRoot.hasPrefix(runtime + "/"))
+        let output = URL(fileURLWithPath: try #require(environment["EDITH_LAUNCHER_EVIDENCE_DIR"]))
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let suite = "LauncherLayoutEvidenceTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = HerdrStore(defaults: defaults, liveWatcher: { _ in }, machinesProvider: { [] })
+        store.tabs = [HerdrTab(agentID: "demo-1"), HerdrTab(agentID: "demo-2")]
+        store.selectedTab = store.tabs[1].id
+        store.newAgentPopupModel().layoutChoice = .sideBySide
+        let reopened = store.newAgentPopupModel()
+        store.selectedTab = store.tabs[0].id
+        let otherTab = store.newAgentPopupModel()
+        store.selectedTab = store.tabs[1].id
+        let returned = store.newAgentPopupModel()
+        #expect(reopened.layoutChoice == .sideBySide)
+        #expect(otherTab.layoutChoice == .newTab)
+        #expect(returned.layoutChoice == .sideBySide)
+        let stages = [
+            ("Tab 2: reopen Command-N", reopened),
+            ("Switch to Tab 1", otherTab),
+            ("Return to Tab 2", returned),
+        ]
+        try render(
+            HStack(alignment: .top, spacing: 16) {
+                ForEach(Array(stages.enumerated()), id: \.offset) { _, stage in
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(stage.0).font(.system(size: 16, weight: .semibold))
+                        Label(
+                            stage.1.layoutChoice.title, systemImage: stage.1.layoutChoice.symbolName
+                        )
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        HerdrNewAgentPopup(store: store, model: stage.1)
+                            .background(Color(nsColor: .windowBackgroundColor))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+            .padding(20)
+            .background(DashSkin.paper(true)),
+            size: NSSize(width: UIScale.pt(1320) + 72, height: UIScale.pt(380) + 100)
+        ).write(to: output.appendingPathComponent("launcher-tab-layouts.png"), options: .atomic)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_LAUNCHER_EVIDENCE_DIR"] != nil))
     func recentItemsRenderInTheActualPickers() throws {
         let environment = ProcessInfo.processInfo.environment
         let runtime = try #require(environment["EDITH_TEST_RUNTIME_ROOT"])
