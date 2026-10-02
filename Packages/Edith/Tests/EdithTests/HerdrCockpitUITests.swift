@@ -478,3 +478,109 @@ private actor HerdrCloseCapture {
 private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
     store.tab(containing: agent.id)?.id ?? ""
 }
+
+@MainActor
+@Suite(.serialized) struct HerdrAgentDetailCommandTests {
+    @Test func commandShiftBIsTheOnlyChord() {
+        #expect(HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .shift]))
+        #expect(HerdrAgentDetailCommand.matches(characters: "B", modifiers: [.command, .shift]))
+        #expect(
+            HerdrAgentDetailCommand.matches(
+                characters: "b", modifiers: [.command, .shift, .capsLock]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .command))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .shift))
+        #expect(
+            !HerdrAgentDetailCommand.matches(
+                characters: "b", modifiers: [.command, .option, .shift]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "j", modifiers: [.command, .shift]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: nil, modifiers: [.command, .shift]))
+    }
+
+    @Test func theShortcutStaysInsideAnOpenAgentSession() {
+        #expect(HerdrAgentDetailCommand.applies(to: .agentWindow, sessionsOnScreen: false))
+        #expect(
+            HerdrAgentDetailCommand.applies(to: .space(hasAgent: true), sessionsOnScreen: false))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .space(hasAgent: false), sessionsOnScreen: true))
+        #expect(
+            HerdrAgentDetailCommand.applies(
+                to: .mainSessions(agentSessionOpen: true), sessionsOnScreen: true))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .mainSessions(agentSessionOpen: true), sessionsOnScreen: false))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .mainSessions(agentSessionOpen: false), sessionsOnScreen: true))
+        #expect(
+            HerdrAgentDetailCommand.applies(
+                to: .detachedSessions(agentSessionOpen: true), sessionsOnScreen: false))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .detachedSessions(agentSessionOpen: false), sessionsOnScreen: true))
+        #expect(!HerdrAgentDetailCommand.applies(to: .elsewhere, sessionsOnScreen: true))
+        #expect(HerdrAgentDetailCommand.help(open: true) == "Hide details (⇧⌘B)")
+        #expect(HerdrAgentDetailCommand.help(open: false) == "Show details (⇧⌘B)")
+        #expect(HerdrAgentDetailCommand.help(open: true, available: false) == "Hide details")
+    }
+
+    @Test func commandShiftBCollapsesAndRestoresTheOpenSessionDetails() {
+        let store = HerdrStore(defaults: detailDefaults(), liveWatcher: { _ in })
+        store.apply([detailHost])
+        let main = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
+        defer { main.orderOut(nil) }
+        main.identifier = NSUserInterfaceItemIdentifier(MainWindowIdentifier.value)
+        let other = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
+        defer { other.orderOut(nil) }
+
+        #expect(store.detailOpen)
+        #expect(
+            HerdrAgentDetailCommand.surface(of: main, store: store)
+                == .mainSessions(agentSessionOpen: false))
+        #expect(!toggle("b", in: main, store: store, sessionsOnScreen: true))
+        #expect(store.detailOpen)
+
+        store.open(detailAgent)
+        #expect(
+            HerdrAgentDetailCommand.surface(of: main, store: store)
+                == .mainSessions(agentSessionOpen: true))
+        #expect(HerdrAgentDetailCommand.surface(of: other, store: store) == .elsewhere)
+        #expect(HerdrAgentDetailCommand.surface(of: nil, store: store) == .elsewhere)
+        #expect(!toggle("b", in: other, store: store, sessionsOnScreen: true))
+        #expect(!toggle("b", in: main, store: store, sessionsOnScreen: false))
+        #expect(!toggle("b", in: nil, store: store, sessionsOnScreen: true))
+        #expect(!toggle("b", modifiers: .command, in: main, store: store, sessionsOnScreen: true))
+        #expect(store.detailOpen)
+
+        #expect(toggle("b", in: main, store: store, sessionsOnScreen: true))
+        #expect(!store.detailOpen)
+        #expect(toggle("B", repeats: true, in: main, store: store, sessionsOnScreen: true))
+        #expect(!store.detailOpen)
+        #expect(toggle("b", in: main, store: store, sessionsOnScreen: true))
+        #expect(store.detailOpen)
+    }
+
+    private func toggle(
+        _ characters: String, modifiers: NSEvent.ModifierFlags = [.command, .shift],
+        repeats: Bool = false, in window: NSWindow?, store: HerdrStore, sessionsOnScreen: Bool
+    ) -> Bool {
+        HerdrAgentDetailCommand.perform(
+            characters: characters, modifiers: modifiers, repeats: repeats, in: window,
+            store: store, sessionsOnScreen: { sessionsOnScreen })
+    }
+
+    private func detailDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "herdr.agent-details.\(UUID().uuidString)")!
+    }
+
+    private var detailAgent: HerdrAgent {
+        HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p1", kind: "Grok", status: .done,
+            title: "Keep the window frame", workspace: "edith", cwd: "/repo")
+    }
+
+    private var detailHost: HerdrHostSnapshot {
+        .local(herdrPresent: true, agents: [detailAgent])
+    }
+}

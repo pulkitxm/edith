@@ -841,6 +841,12 @@ final class HerdrStore {
         focus(next)
     }
 
+    func toggleAgentDetails() {
+        withAnimation(layoutAnimation) {
+            detailOpen.toggle()
+        }
+    }
+
     func performLayoutKey(
         keyCode: UInt16, modifiers: NSEvent.ModifierFlags, in window: NSWindow?
     ) -> Bool {

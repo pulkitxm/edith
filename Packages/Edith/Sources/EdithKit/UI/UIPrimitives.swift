@@ -219,6 +219,11 @@ private struct PresenterPrivacyMask: ViewModifier {
     let cover: Bool
     fileprivate var presenter = PresenterState.shared
 
+    init(category: PresenterPrivacy, cover: Bool) {
+        self.category = category
+        self.cover = cover
+    }
+
     @ViewBuilder func body(content: Content) -> some View {
         let on = presenter.hides(category)
         if cover {

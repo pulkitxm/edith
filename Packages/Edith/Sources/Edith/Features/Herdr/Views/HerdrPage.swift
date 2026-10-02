@@ -288,7 +288,7 @@ struct HerdrPage: View {
                 )
         }
         .buttonStyle(.edith(.borderless))
-        .help(store.detailOpen ? "Hide details" : "Show details")
+        .help(HerdrAgentDetailCommand.help(open: store.detailOpen))
         .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
     }
 

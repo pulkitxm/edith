@@ -429,7 +429,8 @@ struct HerdrSpaceView: View {
                 enabled: (tab?.paneCount ?? 0) > 1
             ) { model.closeFocusedPane() }
             controlButton(
-                "sidebar.right", help: store.detailOpen ? "Hide details" : "Show details",
+                "sidebar.right",
+                help: HerdrAgentDetailCommand.help(open: store.detailOpen, available: agent != nil),
                 enabled: agent != nil, selected: store.detailOpen
             ) { store.detailOpen.toggle() }
         }
