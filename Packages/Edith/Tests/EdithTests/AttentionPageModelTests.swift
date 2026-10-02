@@ -6,6 +6,27 @@ import Testing
 
 @MainActor
 @Suite struct AttentionPageModelTests {
+    @Test func openingBreakdownDirectlyRetainsEntityIconSourcesAcrossTabs() async throws {
+        let fixture = fixture()
+        defer { fixture.cleanup() }
+        try fixture.repository.append(
+            AttentionEvent(
+                startedAt: Date().addingTimeInterval(-120), duration: 60, source: .application,
+                appName: "Sample Notes", bundleID: "test.notes"))
+        let model = AttentionPageModel(repository: fixture.repository)
+        model.section = .breakdown
+        model.reload()
+        await model.waitForReload()
+        let entity = try #require(model.summary.entities.first)
+        #expect(entity.bundleID == "test.notes")
+        #expect(
+            model.summary.dimensions.first { $0.key == AttentionDimension.entity }?.rows.first?
+                .entityIDs == [entity.id])
+        model.section = .timeline
+        await model.waitForReload()
+        #expect(model.summary.entities.first?.bundleID == "test.notes")
+    }
+
     @Test func refreshAndRangeChangesPreserveTheSelectedSectionAndFilters() async throws {
         let fixture = fixture()
         defer { fixture.cleanup() }

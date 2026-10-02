@@ -26,7 +26,6 @@ final class DatabasePageModel {
         },
         repairService: @escaping @Sendable () async throws -> Void = {
             try await DatabaseBrokerServiceRepairer().repair()
-            try await DatabaseBrokerClientCoordinator.shared.ensureReady()
         },
         preparePack:
             @escaping @Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void = {
@@ -71,6 +70,7 @@ final class DatabasePageModel {
                 }
             }
             guard generation == requestGeneration, !Task.isCancelled else { return }
+            readiness = pendingState
             try await operation()
             guard generation == requestGeneration, !Task.isCancelled else { return }
             readiness = .ready
@@ -91,6 +91,14 @@ final class DatabasePageModel {
     }
 
     private static func message(for error: Error) -> String {
+        if let repair = error as? DatabaseBrokerRepairError {
+            switch repair {
+            case .launchFailed:
+                return "The database pack could not launch; retry to reinstall and start it again."
+            case .shutdownTimedOut:
+                return "The previous database service did not stop; retry to restart it."
+            }
+        }
         if let pack = error as? DatabasePackInstallError {
             switch pack {
             case .checksumMismatch:

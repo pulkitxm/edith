@@ -28,9 +28,23 @@ struct StudioFilesView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                         StudioFileFilters(model: model)
-                        LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(14)) {
-                            ForEach(model.visibleFiles) { item in
-                                StudioFileCard(model: model, item: item)
+                        if model.visibleFiles.isEmpty {
+                            ContentUnavailableView {
+                                Label(
+                                    "No files match this filter",
+                                    systemImage: "line.3.horizontal.decrease.circle")
+                            } description: {
+                                Text("Choose another file type or show all files.")
+                            } actions: {
+                                Button("Show all files") { model.kindFilter = nil }
+                            }
+                        } else {
+                            LazyVGrid(
+                                columns: columns, alignment: .leading, spacing: UIScale.pt(14)
+                            ) {
+                                ForEach(model.visibleFiles) { item in
+                                    StudioFileCard(model: model, item: item)
+                                }
                             }
                         }
                     }

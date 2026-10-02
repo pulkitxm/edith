@@ -15,8 +15,15 @@ struct NotchAudioTab: View {
 }
 
 @available(macOS 14.4, *)
-private struct AudioMixerView: View {
-    @State private var engine = MixerEngine.shared
+@MainActor
+struct AudioMixerView: View {
+    @State private var engine: MixerEngine
+    private let monitorsWhileVisible: Bool
+
+    init(engine: MixerEngine? = nil, monitorsWhileVisible: Bool = true) {
+        self.monitorsWhileVisible = monitorsWhileVisible
+        _engine = State(initialValue: engine ?? .shared)
+    }
 
     var body: some View {
         ScrollView {
@@ -24,7 +31,7 @@ private struct AudioMixerView: View {
                 if let error = engine.errorMessage {
                     errorView(error)
                 }
-                if engine.apps.isEmpty {
+                if engine.apps.isEmpty, engine.errorMessage == nil {
                     Text("Play audio in an app to control it here")
                         .font(.system(size: 12)).foregroundStyle(.white.opacity(0.5))
                         .frame(maxWidth: .infinity, minHeight: 60)
@@ -36,14 +43,18 @@ private struct AudioMixerView: View {
             }
             .padding(.horizontal, 16).padding(.bottom, 12)
         }
-        .onAppear { engine.viewAppeared() }
-        .onDisappear { engine.viewDisappeared() }
+        .onAppear { if monitorsWhileVisible { engine.viewAppeared() } }
+        .onDisappear { if monitorsWhileVisible { engine.viewDisappeared() } }
     }
 
     private func row(_ app: MixerApp) -> some View {
         HStack(spacing: 10) {
             if let icon = app.icon {
                 Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+            } else {
+                Image(systemName: "app.fill")
+                    .foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 22, height: 22)
             }
             Text(app.name).font(.system(size: 12)).foregroundStyle(.white).lineLimit(1)
                 .frame(width: 80, alignment: .leading)

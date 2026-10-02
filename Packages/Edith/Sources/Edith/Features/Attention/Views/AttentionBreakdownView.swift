@@ -10,6 +10,18 @@ struct AttentionBreakdownItem: Identifiable {
     var duration: TimeInterval
     var categories: [String: TimeInterval]
     var names: [String]
+    var entity: AttentionEntity? = nil
+
+    var subtitle: String? {
+        let candidates = names + [entity?.domain, entity?.category.name].compactMap { $0 }
+        var seen = Set([label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()])
+        let distinct = candidates.compactMap { value -> String? in
+            let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, seen.insert(text.lowercased()).inserted else { return nil }
+            return text
+        }
+        return distinct.isEmpty ? nil : distinct.joined(separator: ", ")
+    }
     var interactions: Int
 }
 
@@ -54,7 +66,9 @@ struct AttentionBreakdownView: View {
                 }
                 return AttentionBreakdownItem(
                     key: row.key, label: label, duration: duration, categories: row.categories,
-                    names: row.entityNames, interactions: row.interactions)
+                    names: row.entityNames,
+                    entity: model.summary.entities.first { row.entityIDs.contains($0.id) },
+                    interactions: row.interactions)
             })
     }
 
@@ -187,14 +201,22 @@ struct AttentionBreakdownView: View {
                         Button {
                             self.selected = row.key
                         } label: {
-                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            HStack(spacing: 10) {
+                                if let entity = row.entity {
+                                    AttentionEntityIcon(entity: entity, size: 28)
+                                } else {
+                                    AttentionResolvedIcon(
+                                        descriptor: .symbol("square.grid.2x2"),
+                                        fallbackColor: DashSkin.inkSoft(scheme == .dark), size: 28)
+                                }
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(row.label).font(
                                         .system(size: UIScale.pt(12.5), weight: .medium)
                                     ).lineLimit(2).help(row.label)
-                                    Text(row.names.joined(separator: ", ")).font(
-                                        .system(size: UIScale.pt(11))
-                                    ).foregroundStyle(.secondary).lineLimit(1)
+                                    if let subtitle = row.subtitle {
+                                        Text(subtitle).font(.system(size: UIScale.pt(11)))
+                                            .foregroundStyle(.secondary).lineLimit(1)
+                                    }
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                                 Text(AttentionFormat.duration(row.duration)).monospacedDigit().font(
                                     .system(size: UIScale.pt(13), weight: .semibold)

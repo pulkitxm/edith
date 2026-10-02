@@ -33,7 +33,8 @@ final class CleanerModel {
     private var driveSelection: Set<String>?
     private var scanToken: CancelToken?
 
-    init() {
+    init(scanned: Bool = false) {
+        self.scanned = scanned
         let confirmed = Set(
             SharedDefaults.store.array(forKey: Self.confirmedExternalPathsKey) as? [String] ?? [])
         if let raw = SharedDefaults.store.array(forKey: "cleanerSelectedDrives") as? [String] {
@@ -316,10 +317,16 @@ final class CleanerModel {
 struct CleanerCard: View {
     let dark: Bool
     var framed = true
-    @State private var model = CleanerModel.shared
+    @State private var model: CleanerModel
     @State private var showDrivePicker = false
     @State private var pickerScans = false
     @State private var confirmClean = false
+
+    init(dark: Bool, framed: Bool = true, model: CleanerModel = .shared) {
+        self.dark = dark
+        self.framed = framed
+        _model = State(initialValue: model)
+    }
 
     var body: some View {
         Group {
@@ -361,6 +368,11 @@ struct CleanerCard: View {
                     if !model.categories.isEmpty {
                         searchBar
                         selectAllRow
+                        if model.filteredCategories.isEmpty {
+                            Label("No items match this search", systemImage: "magnifyingglass")
+                                .font(.system(size: UIScale.pt(12)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
                         ForEach(model.filteredCategories) { category in
                             CleanerCategoryRow(model: model, category: category, dark: dark)
                         }
@@ -420,6 +432,9 @@ struct CleanerCard: View {
                 .buttonStyle(.edith(.borderless))
             }
             Spacer()
+            if !model.scanning {
+                Button("Scan again", systemImage: "arrow.clockwise") { openPicker(scan: true) }
+            }
         }
     }
 

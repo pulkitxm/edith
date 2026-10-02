@@ -225,12 +225,14 @@ public struct AttentionBreakdownRow: Codable, Equatable, Identifiable, Sendable 
     public var categories: [String: TimeInterval]
     public var interactions: Int
     public var entityNames: [String]
+    public var entityIDs: [String]
     public var levels: [String: TimeInterval]
     public var spheres: [String: TimeInterval]
 
     public init(
         key: String, duration: TimeInterval = 0, categories: [String: TimeInterval] = [:],
-        interactions: Int = 0, entityNames: [String] = [], levels: [String: TimeInterval] = [:],
+        interactions: Int = 0, entityNames: [String] = [], entityIDs: [String] = [],
+        levels: [String: TimeInterval] = [:],
         spheres: [String: TimeInterval] = [:]
     ) {
         self.key = key
@@ -240,6 +242,7 @@ public struct AttentionBreakdownRow: Codable, Equatable, Identifiable, Sendable 
         self.spheres = spheres
         self.interactions = interactions
         self.entityNames = entityNames
+        self.entityIDs = entityIDs
     }
 }
 

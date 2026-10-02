@@ -49,6 +49,23 @@ struct DatabasePageModelTests {
         #expect(await calls.repairCount == 1)
     }
 
+    @Test func repairLaunchFailureKeepsAWorkingRetry() async {
+        let calls = DatabasePageCallRecorder()
+        let model = DatabasePageModel(
+            ensureReady: {},
+            repairService: {
+                await calls.recordRepair()
+                if await calls.repairCount == 1 { throw DatabaseBrokerRepairError.launchFailed }
+            }, preparePack: { _ in })
+        await model.repair()
+        #expect(
+            model.failureDetail
+                == "The database pack could not launch; retry to reinstall and start it again.")
+        await model.repair()
+        #expect(model.readiness == .ready)
+        #expect(await calls.repairCount == 2)
+    }
+
     @Test("Cancelled readiness enters a recoverable terminal state")
     func cancelledReadiness() async {
         let model = DatabasePageModel(

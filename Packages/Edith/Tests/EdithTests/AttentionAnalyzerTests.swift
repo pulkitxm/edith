@@ -198,6 +198,7 @@ import Testing
         let machines = result.dimension(AttentionTag.machine)?.rows ?? []
         #expect(machines.map(\.key) == ["tuf", "This Mac"])
         #expect(machines.first?.duration == 300)
+        #expect(machines.first?.entityIDs == result.entities.map(\.id))
         #expect(result.dimension(AttentionTag.agent)?.total == 500)
         #expect(result.entities.count == 1)
         #expect(result.entities.first?.visits == 1)

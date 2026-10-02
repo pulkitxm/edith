@@ -3,9 +3,10 @@ import EdithDatabase
 import EdithKit
 import SwiftUI
 
+@MainActor
 struct DatabasePage: View {
-    @State private var model = DatabasePageModel()
-    @State private var connectionWorkspace = DatabaseConnectionWorkspaceModel()
+    @State private var model: DatabasePageModel
+    @State private var connectionWorkspace: DatabaseConnectionWorkspaceModel
     @State private var connectionManagement = DatabaseConnectionManagementModel()
     @State private var connectionCreation: DatabaseConnectionCreationModel?
     @State private var connectionManagementRoute: DatabaseConnectionManagementRoute?
@@ -24,6 +25,15 @@ struct DatabasePage: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+
+    init(
+        model: DatabasePageModel? = nil,
+        connectionWorkspace: DatabaseConnectionWorkspaceModel? = nil
+    ) {
+        _model = State(initialValue: model ?? DatabasePageModel())
+        _connectionWorkspace = State(
+            initialValue: connectionWorkspace ?? DatabaseConnectionWorkspaceModel())
+    }
 
     private var dark: Bool { scheme == .dark }
     private var connectionBinding: Binding<String> {

@@ -540,6 +540,9 @@ struct AttentionSummaryBuilder {
             if row.entityNames.count < 3, !row.entityNames.contains(classification.entityName) {
                 row.entityNames.append(classification.entityName)
             }
+            if !row.entityIDs.contains(classification.entityID) {
+                row.entityIDs.append(classification.entityID)
+            }
             dimensions[dimension, default: [:]][value] = row
         }
     }

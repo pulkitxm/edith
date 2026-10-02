@@ -111,6 +111,11 @@ final class VirtualCameraPageModel: ObservableObject {
         case helper
     }
 
+    var hasNoCameraSource: Bool {
+        cameraAccess == .authorized && sources.isEmpty && display.current == nil
+            && state.privacy == .live
+    }
+
     var showsHelperPreview: Bool { previewFeed == .helper }
 
     var composition: VirtualCameraComposition { state.composition }

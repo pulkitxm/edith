@@ -50,6 +50,7 @@ public enum IPC {
             "com.pulkit.edith.requestEmojiPanel")
         public static let requestEmojiInsert = IPC.scopedName(
             "com.pulkit.edith.requestEmojiInsert")
+        public static let emojiUsageChanged = IPC.scopedName("com.pulkit.edith.emojiUsageChanged")
         public static let emojiInsertResult = IPC.scopedName(
             "com.pulkit.edith.emojiInsertResult")
         public static let shelfChanged = IPC.scopedName("com.pulkit.edith.shelfChanged")

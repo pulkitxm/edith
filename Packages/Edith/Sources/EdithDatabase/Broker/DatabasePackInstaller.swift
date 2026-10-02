@@ -184,10 +184,17 @@ public struct DatabasePackInstaller: Sendable {
             progress: progress)
     }
 
-    public func install() async throws -> DatabasePackInspection {
+    public func install(reinstall: Bool = false) async throws -> DatabasePackInspection {
         let current = DatabasePackStore.inspect(
             expectedVersion: expectedVersion, directories: directories)
-        if current.state == .current { return current }
+        if current.state == .current, !reinstall || !allowsDownload {
+            do {
+                try validateSignature(current.path, requirement)
+                return current
+            } catch {
+                guard allowsDownload else { throw DatabasePackInstallError.signatureRejected }
+            }
+        }
         guard allowsDownload else {
             if current.state == .mismatched || current.state == .invalid {
                 try DatabasePackStore.remove(directories: directories)

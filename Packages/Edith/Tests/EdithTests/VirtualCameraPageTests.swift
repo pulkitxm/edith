@@ -18,7 +18,10 @@ import Testing
         VirtualCameraSource(id: "cam-b", name: "Desk View Camera", kind: .deskView),
     ]
 
-    static func model() -> (VirtualCameraPageModel, UserDefaults, String) {
+    static func model(
+        access: AVAuthorizationStatus = .denied,
+        sourceProvider: (() -> [VirtualCameraSource])? = nil
+    ) -> (VirtualCameraPageModel, UserDefaults, String) {
         let name = "test.edith.virtual-camera-page.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         let model = VirtualCameraPageModel(
@@ -29,12 +32,30 @@ import Testing
                 environment: VirtualCameraExtensionEnvironment(
                     bundleURL: URL(fileURLWithPath: "/tmp/Missing.app"),
                     hasInstallEntitlement: { false }, deviceVisible: { false })),
-            accessProvider: { .denied }, sourceProvider: { sources },
+            accessProvider: { access }, sourceProvider: sourceProvider ?? { sources },
             previewBus: VirtualCameraPreviewBus(
                 file: FileManager.default.temporaryDirectory.appendingPathComponent(
                     "camera-preview-\(UUID().uuidString).bin"),
                 unlinkOnClose: true))
         return (model, defaults, name)
+    }
+
+    @Test func missingCameraExplainsThePreviewAndRefreshRecovers() throws {
+        var available: [VirtualCameraSource] = []
+        let (model, defaults, name) = Self.model(access: .authorized, sourceProvider: { available })
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.refreshSources()
+        #expect(model.hasNoCameraSource)
+        let host = try auditHost(
+            VirtualCameraStage(model: model, dark: true), size: CGSize(width: 800, height: 450))
+        #expect(try auditText(host).contains("No camera connected"))
+        #expect(try auditText(host).contains("Refresh cameras"))
+        available = Self.sources
+        model.refreshSources()
+        #expect(!model.hasNoCameraSource)
+        #expect(model.sources == Self.sources)
+        model.pause(.blank)
+        #expect(!model.hasNoCameraSource)
     }
 
     @Test func editsPersistAfterTheDebouncedSave() {

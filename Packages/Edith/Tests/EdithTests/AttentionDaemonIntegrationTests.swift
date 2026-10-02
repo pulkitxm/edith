@@ -443,7 +443,8 @@ private struct AttentionDaemonFixture {
             AttentionSummaryRequest(
                 from: request.from, to: request.to, parts: [.breakdown]), now: now)
         #expect(cached.summary.activeDuration == 600)
-        #expect(cached.summary.entities.isEmpty)
+        #expect(cached.summary.entities.count == first.summary.entities.count)
+        #expect(cached.summary.entities.first?.bundleID == first.summary.entities.first?.bundleID)
         #expect(!cached.summary.dimensions.isEmpty)
         let other = AttentionTimeWindow(startHour: (hour + 2) % 24, endHour: (hour + 3) % 24 + 1)
         let windowed = try await fixture.service.summary(

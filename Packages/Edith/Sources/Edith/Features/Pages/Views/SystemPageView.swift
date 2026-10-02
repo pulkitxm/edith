@@ -306,7 +306,7 @@ private struct ScrollPauseMonitor: NSViewRepresentable {
     }
 }
 
-private struct SystemAppRow: View {
+struct SystemAppRow: View {
     let app: RunningAppRow
     let dark: Bool
     let canQuit: Bool
@@ -318,6 +318,10 @@ private struct SystemAppRow: View {
             if let icon = app.icon {
                 Image(nsImage: icon).resizable().frame(
                     width: UIScale.pt(22), height: UIScale.pt(22))
+            } else {
+                Image(systemName: "app.fill")
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .frame(width: UIScale.pt(22), height: UIScale.pt(22))
             }
             Text(app.name).font(.system(size: UIScale.pt(13))).lineLimit(1)
             Spacer()

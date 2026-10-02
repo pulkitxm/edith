@@ -16,6 +16,8 @@ struct EmojiRows: View {
 
     private var tone: EmojiSkinTone { EmojiSkinTone(rawValue: skinTone) ?? .standard }
 
+    @State private var historyObserver: NSObjectProtocol?
+
     var body: some View {
         Group {
             Section {
@@ -68,19 +70,36 @@ struct EmojiRows: View {
             .disabled(!emojiEnabled)
             .opacity(emojiEnabled ? 1 : 0.5)
 
-            if emojiEnabled, !frequent.isEmpty {
+            if emojiEnabled, frequentCount > 0 {
                 Section {
-                    EmojiFrequentGrid(characters: frequent)
-                    Button("Clear frequently used", role: .destructive) {
-                        _ = try? EmojiOperationExecution.perform(.clear)
-                        frequent = EmojiCatalogSummary.frequent()
+                    if frequent.isEmpty {
+                        Label(
+                            "No frequently used emoji yet. Pick an emoji to get started.",
+                            systemImage: "face.smiling"
+                        )
+                        .settingsCaption()
+                    } else {
+                        EmojiFrequentGrid(characters: frequent)
+                        Button("Clear frequently used", role: .destructive) {
+                            _ = try? EmojiOperationExecution.perform(.clear)
+                            frequent = EmojiCatalogSummary.frequent()
+                        }
                     }
                 } header: {
                     Text("Frequently Used")
                 }
             }
         }
-        .onAppear { frequent = EmojiCatalogSummary.frequent() }
+        .onAppear {
+            frequent = EmojiCatalogSummary.frequent()
+            historyObserver = IPC.observe(IPC.Name.emojiUsageChanged) {
+                frequent = EmojiCatalogSummary.frequent()
+            }
+        }
+        .onDisappear {
+            if let historyObserver { IPC.stopObserving(historyObserver) }
+            historyObserver = nil
+        }
         .onChange(of: frequentCount) { _, _ in frequent = EmojiCatalogSummary.frequent() }
         .onChange(of: tone) { _, _ in frequent = EmojiCatalogSummary.frequent() }
     }

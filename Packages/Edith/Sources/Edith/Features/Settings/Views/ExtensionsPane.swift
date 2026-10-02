@@ -1064,7 +1064,7 @@ private struct ExtensionPermissionRows: View {
     }
 }
 
-private struct ExtensionDetailRows: View {
+struct ExtensionDetailRows: View {
     let entry: ExtensionRegistryEntry
 
     @ViewBuilder var body: some View {
