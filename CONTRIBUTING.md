@@ -34,6 +34,11 @@ preferences and permission grants; `./build.sh --gc` does the same for slots who
 worktree is gone. `--branch` and `--pr` select the source without enabling
 installation. `make install` and `make reinstall` build a Release configuration
 before replacing the installed app, and only `/Applications/Edith.app` runs as Edith.
+Local installation reads signing settings from `.env` in the selected worktree,
+falling back to the primary checkout. It imports the configured certificate into
+a temporary keychain when needed and removes that keychain after the build.
+Developer ID signing remains the default. Local development signing requires
+`EDITH_RELEASE_ALLOW_DEV_SIGNING=1` in the signing configuration.
 
 Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
 is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
