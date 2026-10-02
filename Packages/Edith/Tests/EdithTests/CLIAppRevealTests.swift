@@ -115,8 +115,15 @@ import Testing
                     "windows": #"[{"id":"desk","title":"Desk","tabs":2,"panes":1}]"#,
                 ]
             }
+            let listed = await CLIProbe.capture(["herdr", "space", "--json"])
+            #expect(listed.code == 0)
+            #expect(
+                (listed.object?["windows"] as? [[String: Any]])?.first?["id"] as? String == "desk")
+            #expect(
+                world.postedPayloads(for: IPC.Name.requestHerdrSpaceAction).last?["action"]
+                    as? String == "list")
             let result = await CLIProbe.capture([
-                "herdr", "space", "terminal", "--window", "desk", "--json",
+                "herdr", "space", "--json", "terminal", "--window", "desk",
             ])
             #expect(result.code == 0)
             let windows = result.object?["windows"] as? [[String: Any]]

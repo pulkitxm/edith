@@ -37,6 +37,8 @@ struct AttentionExtensionCommand: AsyncParsableCommand {
             AttentionExtensionTokenCommand.self,
         ],
         defaultSubcommand: AttentionExtensionInstallCommand.self)
+
+    @OptionGroup var output: JSONOutputOptions
 }
 
 struct AttentionExtensionInstallCommand: AsyncParsableCommand {
@@ -52,8 +54,7 @@ struct AttentionExtensionInstallCommand: AsyncParsableCommand {
             ed attention extension install --json
             """, aliases: ["reveal"])
 
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
+    @OptionGroup var output: JSONOutputOptions
 
     func run() async throws {
         try await execute {
@@ -64,7 +65,7 @@ struct AttentionExtensionInstallCommand: AsyncParsableCommand {
             } catch {
                 throw CLIFailure.unavailable(error.localizedDescription)
             }
-            guard !json else {
+            guard !output.json else {
                 CLIOut.json(
                     AttentionExtensionCLI.payload(action: "install", path: directory.path))
                 return
@@ -86,8 +87,7 @@ struct AttentionExtensionOpenCommand: AsyncParsableCommand {
             ed attention extension open --json
             """)
 
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
+    @OptionGroup var output: JSONOutputOptions
 
     func run() async throws {
         try await execute {
@@ -95,7 +95,7 @@ struct AttentionExtensionOpenCommand: AsyncParsableCommand {
             guard opened else {
                 throw CLIFailure.unavailable("could not open chrome://extensions")
             }
-            guard !json else {
+            guard !output.json else {
                 CLIOut.json(
                     AttentionExtensionCLI.payload(
                         action: "open", opened: true))
@@ -121,14 +121,13 @@ struct AttentionExtensionTokenCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Also put the token on the pasteboard.")
     var copy = false
 
-    @Flag(name: .long, help: "Emit JSON on stdout.")
-    var json = false
+    @OptionGroup var output: JSONOutputOptions
 
     func run() async throws {
         try await execute {
             let token = AttentionExtensionCLI.repository().loadSettings().serverToken
             if copy { AttentionExtensionCLI.copyToken(token) }
-            guard !json else {
+            guard !output.json else {
                 CLIOut.json(AttentionExtensionCLI.payload(action: "token", token: token))
                 return
             }

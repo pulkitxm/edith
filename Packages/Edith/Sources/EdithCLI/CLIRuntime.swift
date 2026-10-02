@@ -1,3 +1,4 @@
+import ArgumentParser
 import EdithCore
 import Foundation
 
@@ -73,6 +74,11 @@ public enum ArgumentChecks {
         }
         return value
     }
+}
+
+struct JSONOutputOptions: ParsableArguments {
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
 }
 
 public enum CLIOut {

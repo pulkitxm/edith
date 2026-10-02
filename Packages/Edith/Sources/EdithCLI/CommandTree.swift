@@ -463,6 +463,7 @@ public enum CommandTree {
             optionValues: ["--tab": .free], arguments: [.free]),
         "ed herdr swap": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.free, .free]),
+        "ed herdr space": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed herdr space ls": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed herdr space terminal": Spec(
             options: ["--json", "-h", "--help", "--version", "--window"],
@@ -844,6 +845,7 @@ public enum CommandTree {
         "ed attention focus start": Spec(options: ["--json", "--help", "--for", "--name"]),
         "ed attention focus stop": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention doctor": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed attention extension": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention extension install": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention extension open": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed attention extension token": Spec(
