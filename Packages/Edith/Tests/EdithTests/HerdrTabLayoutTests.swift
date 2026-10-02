@@ -345,6 +345,134 @@ import Testing
         #expect(store.currentTab?.focused == claude.id)
     }
 
+    @Test func reopeningTheBottomAgentOfAStackPutsItBackBelow() throws {
+        let agents = ["top", "middle", "bottom"].map { agent("Codex", pane: $0) }
+        let store = stacked(agents)
+        let tabID = try #require(store.currentTab).id
+        let before = try #require(store.currentTab).layout
+        let bottom = agents[2]
+
+        store.focus(bottom.id)
+        #expect(store.closeFocusedTab())
+        #expect(store.reopenLastClosedTab())
+
+        let after = try #require(store.currentTab).layout
+        #expect(store.tabs.count == 1)
+        #expect(store.currentTab?.id == tabID)
+        #expect(store.currentTab?.focused == bottom.id)
+        #expect(frames(of: after) == frames(of: before))
+        #expect(after.neighbor(of: bottom.id, toward: .top) == agents[1].id)
+        #expect(after.neighbor(of: bottom.id, toward: .bottom) == nil)
+    }
+
+    @Test func reopeningTheMiddleAgentPutsItBackBetweenTheAgentsAboveAndBelow() throws {
+        let agents = ["top", "middle", "bottom"].map { agent("Codex", pane: $0) }
+        let store = stacked(agents)
+        let before = try #require(store.currentTab).layout
+        let middle = agents[1]
+
+        store.close(middle.id)
+        #expect(store.currentTab?.layout.contains(middle.id) == false)
+        #expect(store.reopenLastClosedTab())
+
+        let after = try #require(store.currentTab).layout
+        #expect(frames(of: after) == frames(of: before))
+        #expect(after.neighbor(of: middle.id, toward: .top) == agents[0].id)
+        #expect(after.neighbor(of: middle.id, toward: .bottom) == agents[2].id)
+    }
+
+    @Test func reopeningTheLowerCellOfAThreeByThreeGridRestoresThatCell() throws {
+        let agents = (0..<9).map { agent("Codex", pane: "p\($0)") }
+        let store = gridded(agents)
+        let tabID = try #require(store.currentTab).id
+        let before = try #require(store.currentTab).layout
+        let lower = try #require(
+            agents.first { agent in
+                before.neighbor(of: agent.id, toward: .top) != nil
+                    && before.neighbor(of: agent.id, toward: .bottom) == nil
+                    && before.neighbor(of: agent.id, toward: .left) != nil
+            })
+        let above = try #require(before.neighbor(of: lower.id, toward: .top))
+
+        store.close(lower.id)
+        #expect(store.reopenLastClosedTab())
+
+        let after = try #require(store.currentTab).layout
+        #expect(store.tabs.count == 1)
+        #expect(store.currentTab?.id == tabID)
+        #expect(frames(of: after) == frames(of: before))
+        #expect(after.neighbor(of: lower.id, toward: .top) == above)
+        #expect(after.neighbor(of: lower.id, toward: .bottom) == nil)
+    }
+
+    @Test func reopeningTheCenterOfAThreeByThreeGridKeepsTheAgentsAboveAndBelow() throws {
+        let agents = (0..<9).map { agent("Codex", pane: "p\($0)") }
+        let store = gridded(agents)
+        let before = try #require(store.currentTab).layout
+        let center = try #require(
+            agents.first { agent in
+                before.neighbor(of: agent.id, toward: .top) != nil
+                    && before.neighbor(of: agent.id, toward: .bottom) != nil
+                    && before.neighbor(of: agent.id, toward: .left) != nil
+                    && before.neighbor(of: agent.id, toward: .right) != nil
+            })
+        let above = try #require(before.neighbor(of: center.id, toward: .top))
+        let below = try #require(before.neighbor(of: center.id, toward: .bottom))
+
+        store.close(center.id)
+        store.close(below)
+        #expect(store.reopenLastClosedTab())
+        #expect(store.currentTab?.layout.contains(below) == true)
+        #expect(store.currentTab?.layout.contains(center.id) == false)
+        #expect(store.reopenLastClosedTab())
+
+        let after = try #require(store.currentTab).layout
+        #expect(frames(of: after) == frames(of: before))
+        #expect(after.neighbor(of: center.id, toward: .top) == above)
+        #expect(after.neighbor(of: center.id, toward: .bottom) == below)
+    }
+
+    @Test func reopeningASplitAgentAfterAClosedTabRestoresTheTabFirst() throws {
+        let solo = agent("Claude Code", pane: "solo")
+        let agents = ["top", "middle", "bottom"].map { agent("Codex", pane: $0) }
+        let store = stacked(agents)
+        store.hosts = [.local(herdrPresent: true, agents: agents + [solo])]
+        store.open(solo)
+        let soloTab = try #require(store.tab(containing: solo.id)).id
+        store.selectedTab = try #require(store.tab(containing: agents[2].id)).id
+        let before = try #require(store.currentTab).layout
+
+        store.close(agents[2].id)
+        store.closeTab(soloTab)
+
+        #expect(store.reopenLastClosedTab())
+        #expect(store.currentTab?.agentIDs == [solo.id])
+        #expect(store.reopenLastClosedTab())
+        let restored = try #require(store.tab(containing: agents[2].id)).layout
+        #expect(frames(of: restored) == frames(of: before))
+    }
+
+    @Test func movingASplitAgentOutDoesNotReopenItInTheOldSlot() throws {
+        let agents = ["top", "middle", "bottom"].map { agent("Codex", pane: $0) }
+        let store = stacked(agents)
+        let before = try #require(store.currentTab).layout
+
+        store.close(agents[2].id, rememberingPlacement: false)
+
+        #expect(store.reopenLastClosedTab() == false)
+        #expect(store.currentTab?.layout.panes == before.removing(agents[2].id)?.panes)
+    }
+
+    @Test func reopeningASplitAgentSkipsOneThatIsNoLongerLive() throws {
+        let agents = ["top", "middle", "bottom"].map { agent("Codex", pane: $0) }
+        let store = stacked(agents)
+        store.close(agents[2].id)
+        store.hosts = [.local(herdrPresent: true, agents: Array(agents.prefix(2)))]
+
+        #expect(store.reopenLastClosedTab() == false)
+        #expect(store.currentTab?.layout.contains(agents[2].id) == false)
+    }
+
     @Test func swappingKeepsTheShape() throws {
         let store = HerdrStore(defaults: Self.scratchDefaults())
         let claude = agent("Claude Code", pane: "a")
@@ -355,6 +483,33 @@ import Testing
         store.swap(claude.id, codex.id)
 
         #expect(store.currentTab?.agentIDs == [codex.id, claude.id])
+    }
+
+    private func stacked(_ agents: [HerdrAgent]) -> HerdrStore {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        store.hosts = [.local(herdrPresent: true, agents: agents)]
+        store.open(agents[0])
+        for agent in agents.dropFirst() {
+            store.open(agent, beside: .bottom)
+        }
+        return store
+    }
+
+    private func gridded(_ agents: [HerdrAgent]) -> HerdrStore {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        store.hosts = [.local(herdrPresent: true, agents: agents)]
+        store.open(agents[0])
+        for agent in agents.dropFirst() {
+            store.open(agent, beside: .right)
+        }
+        let tabID = store.currentTab?.id ?? ""
+        store.focus(agents[0].id)
+        store.arrange(tabID, as: .grid)
+        return store
+    }
+
+    private func frames(of layout: HerdrLayout) -> [String: CGRect] {
+        layout.frames(in: CGRect(x: 0, y: 0, width: 1, height: 1))
     }
 
     private static func scratchDefaults() -> UserDefaults {
