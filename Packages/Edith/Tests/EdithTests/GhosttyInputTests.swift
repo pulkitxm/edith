@@ -6,7 +6,7 @@ import Testing
 
 @Suite struct GhosttyInputTests {
     @Test(arguments: [false, true], [1000, 1002, 1003]) @MainActor
-    func plainDragSelectsAndCopiesInsideAMouseReportingChild(focusClick: Bool, mode: Int)
+    func plainDragReachesAMouseReportingChildAndShiftDragCopies(focusClick: Bool, mode: Int)
         async throws
     {
         _ = TestWindowHost.application
@@ -46,12 +46,15 @@ import Testing
         let cellHeight = CGFloat(size.cell_height_px) / window.backingScaleFactor
         let start = NSPoint(x: 6 + cellWidth * 0.1, y: 600 - 4 - cellHeight * 0.5)
         let end = NSPoint(x: start.x + cellWidth * 5, y: start.y)
-        func event(_ type: NSEvent.EventType, at point: NSPoint, number: Int) throws -> NSEvent {
+        func event(
+            _ type: NSEvent.EventType, at point: NSPoint, number: Int,
+            flags: NSEvent.ModifierFlags = []
+        ) throws -> NSEvent {
             try #require(
                 NSEvent.mouseEvent(
-                    with: type, location: point, modifierFlags: [], timestamp: Double(number),
-                    windowNumber: window.windowNumber, context: nil, eventNumber: number,
-                    clickCount: 1, pressure: 0))
+                    with: type, location: point, modifierFlags: flags,
+                    timestamp: Double(number), windowNumber: window.windowNumber, context: nil,
+                    eventNumber: number, clickCount: 1, pressure: 0))
         }
         board.clearContents()
         board.setString("previous clipboard", forType: .string)
@@ -63,36 +66,48 @@ import Testing
             view.mouseDown(with: down)
         }
         view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 2))
+        #expect(view.programOwnsMouseGesture)
+        #expect(!view.selectionMouseReportingSuspended)
+        view.mouseUp(with: try event(.leftMouseUp, at: end, number: 3))
+
+        func isRelease(_ report: String) -> Bool {
+            report.hasPrefix("[<0;") && report.hasSuffix("m")
+        }
+        var reports: [String] = []
+        for _ in 0..<200 {
+            if let data = try? Data(contentsOf: output) {
+                reports = String(decoding: data, as: UTF8.self)
+                    .split(separator: "\u{1B}").map(String.init)
+                if reports.contains(where: isRelease) { break }
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(reports.contains { $0.hasPrefix("[<0;") && $0.hasSuffix("M") })
+        #expect(reports.contains(where: isRelease))
+        #expect(reports.contains { $0.hasPrefix("[<32;") } == (mode != 1000))
+        #expect(!view.programOwnsMouseGesture)
+        #expect(view.selectedText()?.isEmpty ?? true)
         try await Task.sleep(for: .milliseconds(150))
         #expect(board.string(forType: .string) == "previous clipboard")
-        view.mouseUp(with: try event(.leftMouseUp, at: end, number: 3))
+
+        view.mouseDown(with: try event(.leftMouseDown, at: start, number: 4, flags: .shift))
+        view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 5, flags: .shift))
+        #expect(view.selectionMouseReportingSuspended)
+        #expect(!view.programOwnsMouseGesture)
+        view.mouseUp(with: try event(.leftMouseUp, at: end, number: 6, flags: .shift))
 
         #expect(view.selectedText() == "alpha")
         #expect(board.string(forType: .string) == "alpha")
         #expect(!view.selectionMouseReportingSuspended)
-        try await Task.sleep(for: .milliseconds(150))
-        #expect((try? Data(contentsOf: output))?.isEmpty == true)
 
-        view.mouseDown(with: try event(.leftMouseDown, at: start, number: 4))
-        view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 5))
+        view.mouseDown(with: try event(.leftMouseDown, at: start, number: 7, flags: .shift))
+        view.mouseDragged(with: try event(.leftMouseDragged, at: end, number: 8, flags: .shift))
         #expect(view.selectionMouseReportingSuspended)
         view.setRenderingActive(false)
         #expect(!view.selectionMouseReportingSuspended)
         #expect(!view.selectionMouseActive)
-        #expect(view.pendingSelectionMouseDown == nil)
+        #expect(!view.programOwnsMouseGesture)
         view.setRenderingActive(true)
-
-        let hover = NSPoint(x: 200, y: 300)
-        view.mouseDown(with: try event(.leftMouseDown, at: hover, number: 6))
-        view.mouseUp(with: try event(.leftMouseUp, at: hover, number: 7))
-        for _ in 0..<100 {
-            if let data = try? Data(contentsOf: output), !data.isEmpty { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        let reports = String(decoding: try Data(contentsOf: output), as: UTF8.self)
-        #expect(reports.contains("\u{1B}[<0;"))
-        #expect(reports.contains("m"))
-        #expect(board.string(forType: .string) == "alpha")
     }
 
     @Test func onlyConfiguredInterruptsRequestTerminalReset() {
@@ -230,7 +245,7 @@ import Testing
         view.mouseDown(with: try event(.leftMouseDown, number: 2))
         let jitter = try #require(
             NSEvent.mouseEvent(
-                with: .leftMouseDragged, location: NSPoint(x: flags.isEmpty ? 81 : 200, y: 500),
+                with: .leftMouseDragged, location: NSPoint(x: 200, y: 500),
                 modifierFlags: flags,
                 timestamp: 2.1, windowNumber: window.windowNumber, context: nil, eventNumber: 6,
                 clickCount: 1, pressure: 0))
@@ -259,9 +274,7 @@ import Testing
         let leftCode = flags.contains(.option) ? 8 : flags.contains(.control) ? 16 : 0
         #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("M") })
         #expect(reports.contains { $0.hasPrefix("[<\(leftCode);") && $0.hasSuffix("m") })
-        if !flags.isEmpty {
-            #expect(reports.contains { $0.hasPrefix("[<\(leftCode + 32);") && $0.hasSuffix("M") })
-        }
+        #expect(reports.contains { $0.hasPrefix("[<\(leftCode + 32);") && $0.hasSuffix("M") })
         #expect(!view.selectionMouseReportingSuspended)
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("M") })
         #expect(reports.contains { $0.hasPrefix("[<2;") && $0.hasSuffix("m") })
