@@ -752,9 +752,10 @@ struct UsageRefreshCommand: AsyncParsableCommand {
             Edith app is open. If a refresh is already running somewhere else, this
             attaches to it and reports its progress instead of starting a second one.
 
-            Machines counted towards usage are topped up first, if nothing has collected
-            from them in the last half hour. `--machines` collects from all of them
-            regardless, `--no-machines` leaves them alone.
+            Machines counted towards usage are collected at the same time as this Mac's
+            own agents, if nothing has collected from them in the last half hour.
+            `--machines` collects from all of them first and stops if any fails,
+            `--no-machines` leaves them alone.
             Changes the state this command names.
 
             ed usage refresh
@@ -788,9 +789,8 @@ struct UsageRefreshCommand: AsyncParsableCommand {
             let sink: @Sendable (UsageRefreshEvent) -> Void = { printer.show($0) }
 
             progress.header("EDITH · refresh usage · " + UsageRefreshPrinter.stamp(Date()))
-            if !skipMachines, !follow {
-                try await Self.topUpMachines(
-                    force: forceMachines, progress: progress, sink: sink)
+            if forceMachines, !follow {
+                try await Self.collectEveryMachineFirst(progress: progress, sink: sink)
             }
             guard (try? CLIEnvironment.verifyAgentHandshake()) != nil else {
                 throw CLIFailure.unavailable(
@@ -808,7 +808,8 @@ struct UsageRefreshCommand: AsyncParsableCommand {
                     refresh = try await UsageRefreshFollower.follow(onEvent: sink)
                 } else {
                     progress.begin("starting")
-                    let runID = try CLIEnvironment.requestUsageRefresh(.skip)
+                    let runID = try CLIEnvironment.requestUsageRefresh(
+                        Self.machinePolicy(forced: forceMachines, skipped: skipMachines))
                     if UsageRefreshRunner.isRunning {
                         attached = true
                         progress.note("a refresh is already running, attaching to it")
@@ -836,8 +837,12 @@ struct UsageRefreshCommand: AsyncParsableCommand {
         }
     }
 
-    private static func topUpMachines(
-        force: Bool, progress: CLIProgress,
+    static func machinePolicy(forced: Bool, skipped: Bool) -> UsageMachineRefreshPolicy {
+        forced || skipped ? .skip : .due
+    }
+
+    private static func collectEveryMachineFirst(
+        progress: CLIProgress,
         sink: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws {
         let registry = MachineRegistry.machines()
@@ -845,7 +850,7 @@ struct UsageRefreshCommand: AsyncParsableCommand {
         let due = MachineUsageRound.due(
             bindings.included(
                 registry, selected: MachineUsageSelection.machineIDs(CLIEnvironment.sharedDefaults)),
-            force: force,
+            force: true,
             collectedAt: { bindings.summaries[$0]?.collectedAt })
         guard !due.isEmpty else { return }
         progress.begin(due.count == 1 ? "reaching \(due[0].name)" : "reaching the machines")
@@ -856,12 +861,8 @@ struct UsageRefreshCommand: AsyncParsableCommand {
             includeSuccessfulMachines: false, store: CLIEnvironment.sharedDefaults,
             onEvent: sink,
             afterChange: { _ = try? UsageAgentOperations.requestRefresh() })
-        let round = result.round
         progress.end()
-        if force, let failure = forcedMachineCollectionFailure(round) { throw failure }
-        if round.skippedBecauseBusy {
-            progress.note("another collection is already running, leaving the machines to it")
-        }
+        if let failure = forcedMachineCollectionFailure(result.round) { throw failure }
     }
 
     static func forcedMachineCollectionFailure(_ round: MachineUsageRoundResult) -> CLIFailure? {
