@@ -394,11 +394,11 @@ enum HerdrAgentDetailCommand {
     static func help(open: Bool, available: Bool = true) -> String {
         let title = open ? "Hide details" : "Show details"
         guard available else { return title }
-        return "\(title) (⇧⌘B)"
+        return "\(title) (⌃⌘B)"
     }
 
     static func matches(characters: String?, modifiers: NSEvent.ModifierFlags) -> Bool {
-        modifiers.chordOnly == [.command, .shift] && characters?.lowercased() == "b"
+        modifiers.chordOnly == [.command, .control] && characters?.lowercased() == "b"
     }
 
     static func applies(
