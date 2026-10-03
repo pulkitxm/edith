@@ -485,6 +485,157 @@ import Testing
             sources: ["cli"], days: 5, cost: 1, tokens: 2)
         #expect(MachineUsageRound.describe(summary) == "5 days · 1 agent")
     }
+
+    private func roundDirectory() throws -> URL {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("machine-round-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func collection(for input: MachineUsageAttempt) -> MachineUsageCollection {
+        MachineUsageCollection(
+            summary: MachineUsageSummary(
+                machineID: input.machine.id, name: input.machine.name, slug: input.slug,
+                host: input.machine.host, collectedAt: Date(), sources: ["cli"], days: 1,
+                cost: 1, tokens: 1),
+            log: "")
+    }
+
+    @Test func everyMachineIsCollectedAtTheSameTime() async throws {
+        let dir = try roundDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machines = ["lan", "cloud", "edge"].map { Machine(name: $0, host: "h-\($0)") }
+        let events = LockedEvents()
+        let clock = ContinuousClock()
+        let started = clock.now
+        let result = await MachineUsageRound.collect(
+            machines, registry: machines, dataDir: dir, onEvent: events.append,
+            attempt: { input in
+                let pause = input.machine.name == "lan" ? 0.2 : 0.8
+                try await Task.sleep(for: .seconds(pause))
+                return Self.collection(for: input)
+            })
+        #expect(clock.now - started < .seconds(1.6))
+        #expect(result.collected.map(\.name) == ["lan", "cloud", "edge"])
+        #expect(result.failures.isEmpty)
+        let phases = events.all.compactMap { event -> String? in
+            guard case let .phase(name, _, _) = event else { return nil }
+            return name
+        }
+        #expect(phases.first == "lan")
+        #expect(Set(phases) == ["lan", "cloud", "edge"])
+    }
+
+    @Test func anUnreachableMachineDoesNotHoldUpTheOthers() async throws {
+        let dir = try roundDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machines = [Machine(name: "offline", host: "a"), Machine(name: "online", host: "b")]
+        let events = LockedEvents()
+        let result = await MachineUsageRound.collect(
+            machines, registry: machines, dataDir: dir, onEvent: events.append,
+            attempt: { input in
+                guard input.machine.name == "online" else {
+                    throw SSHConnectionError.connectFailed(
+                        SSHConnectFailure(message: "Connection timed out.", isRecoverable: true))
+                }
+                return Self.collection(for: input)
+            })
+        #expect(result.collected.map(\.name) == ["online"])
+        #expect(result.failures.map(\.machine) == ["offline"])
+        #expect(result.failures.first?.reason == "Connection timed out.")
+        #expect(events.all.contains(.note("offline: Connection timed out.")))
+    }
+
+    @Test func aMachineThatHangsIsCutOffAtItsDeadline() async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+        await #expect(throws: MachineUsageError.timedOut("stuck", seconds: 1)) {
+            try await MachineUsageRound.withinDeadline(0.2, machine: "stuck") {
+                try await Task.sleep(for: .seconds(30))
+                return 1
+            }
+        }
+        #expect(clock.now - started < .seconds(5))
+    }
+
+    @Test func aMachineThatAnswersInTimeKeepsItsResult() async throws {
+        let value = try await MachineUsageRound.withinDeadline(5, machine: "quick") { 7 }
+        #expect(value == 7)
+    }
+
+    @Test func aDroppedConnectionIsRetriedOnce() async throws {
+        let attempts = LockedCounter()
+        try await MachineUsageRound.retryingOnceWhenRecoverable(pause: .zero) {
+            if attempts.increment() == 1 {
+                throw SSHConnectionError.connectFailed(
+                    SSHConnectFailure(message: "Connection timed out.", isRecoverable: true))
+            }
+        }
+        #expect(attempts.value == 2)
+    }
+
+    @Test func aRejectedLoginIsNotRetried() async {
+        let attempts = LockedCounter()
+        await #expect(throws: SSHConnectionError.self) {
+            try await MachineUsageRound.retryingOnceWhenRecoverable(pause: .zero) {
+                attempts.increment()
+                throw SSHConnectionError.connectFailed(
+                    SSHConnectFailure(message: "Authentication failed.", isRecoverable: false))
+            }
+        }
+        #expect(attempts.value == 1)
+    }
+}
+
+private final class LockedEvents: @unchecked Sendable {
+    private let lock = NSLock()
+    private var events: [UsageRefreshEvent] = []
+
+    var all: [UsageRefreshEvent] { lock.withLock { events } }
+
+    @Sendable func append(_ event: UsageRefreshEvent) {
+        lock.withLock { events.append(event) }
+    }
+}
+
+private final class LockedCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var value: Int { lock.withLock { count } }
+
+    @discardableResult
+    func increment() -> Int {
+        lock.withLock {
+            count += 1
+            return count
+        }
+    }
+}
+
+@Suite struct MachineReachTests {
+    @Test(arguments: [
+        "10.77.0.2", "192.168.1.20", "172.20.4.1", "169.254.3.3", "127.0.0.1", "::1",
+        "fe80::1%en0", "fd7a:115c:a1e0::1", "tuf.local", "localhost",
+    ])
+    func machinesOnThisNetworkGetAShortConnectTimeout(host: String) {
+        #expect(MachineReach(host: host) == .local)
+        #expect(MachineReach(host: host).connectTimeout == 3)
+    }
+
+    @Test(arguments: [
+        "34.47.145.94", "172.32.0.1", "100.101.102.103", "2001:4860:4860::8888",
+        "box.example.com", "noveum-gcp-prsnl",
+    ])
+    func machinesElsewhereGetMoreTimeToAnswer(host: String) {
+        #expect(MachineReach(host: host) == .remote)
+        #expect(MachineReach(host: host).connectTimeout == 6)
+    }
+
+    @Test func bothAreQuickerThanTheInteractiveDefault() {
+        #expect(MachineReach.remote.connectTimeout < SSHConnection.defaultConnectTimeout)
+    }
 }
 
 @Suite struct UsageMachineFilterTests {
