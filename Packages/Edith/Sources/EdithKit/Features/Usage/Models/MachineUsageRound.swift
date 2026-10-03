@@ -183,23 +183,57 @@ public enum MachineUsageRound {
     }
 
     static func reconnecting(
-        while keepReconnecting: @Sendable () -> Bool,
+        while keepReconnecting: @escaping @Sendable () -> Bool,
         pause: Duration = .seconds(1), longestPause: Duration = .seconds(8),
-        _ connect: () async throws -> Void
+        _ connect: @escaping @Sendable () async throws -> Void
     ) async throws {
+        var failure: SSHConnectFailure
+        do {
+            try await connect()
+            return
+        } catch let SSHConnectionError.connectFailed(dropped) where dropped.isRecoverable {
+            failure = dropped
+        }
+        try await Task.sleep(for: pause)
         var wait = pause
-        var retried = false
+        var guaranteed = true
         while true {
             do {
-                try await connect()
+                if guaranteed {
+                    try await connect()
+                } else {
+                    guard try await finishes(unless: keepReconnecting, connect) else { break }
+                }
                 return
-            } catch let SSHConnectionError.connectFailed(failure)
-                where failure.isRecoverable && (!retried || keepReconnecting())
-            {
-                retried = true
-                try await Task.sleep(for: wait)
-                wait = min(wait * 2, longestPause)
+            } catch let SSHConnectionError.connectFailed(dropped) where dropped.isRecoverable {
+                failure = dropped
             }
+            guaranteed = false
+            wait = min(wait * 2, longestPause)
+            let paused = try await finishes(unless: keepReconnecting) {
+                try await Task.sleep(for: wait)
+            }
+            guard paused else { break }
+        }
+        throw SSHConnectionError.connectFailed(failure)
+    }
+
+    static func finishes(
+        unless keepGoing: @escaping @Sendable () -> Bool,
+        _ body: @escaping @Sendable () async throws -> Void
+    ) async throws -> Bool {
+        guard keepGoing() else { return false }
+        return try await withThrowingTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                try await body()
+                return true
+            }
+            group.addTask {
+                while keepGoing() { try await Task.sleep(for: .milliseconds(100)) }
+                return false
+            }
+            defer { group.cancelAll() }
+            return try await group.next() ?? false
         }
     }
 

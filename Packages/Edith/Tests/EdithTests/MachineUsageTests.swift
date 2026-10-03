@@ -612,16 +612,37 @@ import Testing
 
     @Test func reconnectingStopsOnceThePipelineNeedsTheMachines() async {
         let attempts = LockedCounter()
-        let checks = LockedCounter()
         await #expect(throws: SSHConnectionError.self) {
             try await MachineUsageRound.reconnecting(
-                while: { checks.increment() <= 2 }, pause: .zero
+                while: { attempts.value < 4 }, pause: .zero
             ) {
                 attempts.increment()
                 throw Self.hostDown
             }
         }
         #expect(attempts.value == 4)
+    }
+
+    @Test func aRetryInFlightIsAbandonedWhenThePipelineNeedsTheMachines() async {
+        let attempts = LockedCounter()
+        let wanted = LockedCounter()
+        let clock = ContinuousClock()
+        let started = clock.now
+        let signal = Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            wanted.increment()
+        }
+        await #expect(throws: SSHConnectionError.self) {
+            try await MachineUsageRound.reconnecting(
+                while: { wanted.value == 0 }, pause: .zero
+            ) {
+                if attempts.increment() <= 2 { throw Self.hostDown }
+                try await Task.sleep(for: .seconds(30))
+            }
+        }
+        await signal.value
+        #expect(attempts.value == 3)
+        #expect(clock.now - started < .seconds(5))
     }
 
     @Test func aRejectedLoginIsNotRetried() async {
