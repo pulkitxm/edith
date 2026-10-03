@@ -43,9 +43,15 @@ public enum MachineUsageRound {
 
     public static let interval: TimeInterval = 1800
     public static let setupAllowance: TimeInterval = 120
+    public static let maximumConcurrentMachines = 8
 
     public static func deadline(timeout: TimeInterval) -> TimeInterval {
         timeout + setupAllowance
+    }
+
+    public static func roundDeadline(machines: Int, timeout: TimeInterval) -> TimeInterval {
+        let waves = (max(machines, 1) + maximumConcurrentMachines - 1) / maximumConcurrentMachines
+        return deadline(timeout: timeout) * TimeInterval(waves)
     }
 
     public static func lockURL(dataDir: URL = Repo.dataDir) -> URL {
@@ -97,30 +103,28 @@ public enum MachineUsageRound {
                 slug: slugs[machine.id] ?? MachineUsageSlug.slug(for: machine.name),
                 history: bindings.summaries[machine.id], directory: directory, timeout: timeout)
         }
-        let limit = deadline(timeout: timeout)
+        let cutoff = deadline(timeout: timeout)
         let outcomes = await withTaskGroup(
             of: (Int, Result<MachineUsageCollection, Error>, TimeInterval).self
         ) { group in
-            for (index, input) in attempts.enumerated() {
-                group.addTask {
-                    let startedAt = Date()
-                    do {
-                        let run = try await withinDeadline(limit, machine: input.machine.name) {
-                            try await attempt(input)
-                        }
-                        return (index, .success(run), Date().timeIntervalSince(startedAt))
-                    } catch {
-                        return (index, .failure(error), Date().timeIntervalSince(startedAt))
-                    }
-                }
-            }
             var ordered = [Result<MachineUsageCollection, Error>?](
                 repeating: nil, count: attempts.count)
-            for await (index, outcome, seconds) in group {
+            var started = 0
+            while started < attempts.count, started < maximumConcurrentMachines {
+                let index = started
+                group.addTask { await run(attempts[index], at: index, cutoff, attempt) }
+                started += 1
+            }
+            while let (index, outcome, seconds) = await group.next() {
                 ordered[index] = outcome
                 report(
                     outcome, from: attempts[index].machine, seconds: seconds, verbose: verbose,
                     onEvent: onEvent)
+                if started < attempts.count {
+                    let next = started
+                    group.addTask { await run(attempts[next], at: next, cutoff, attempt) }
+                    started += 1
+                }
             }
             return ordered
         }
@@ -134,6 +138,21 @@ public enum MachineUsageRound {
             }
         }
         return result
+    }
+
+    private static func run(
+        _ input: MachineUsageAttempt, at index: Int, _ cutoff: TimeInterval,
+        _ attempt: @escaping Attempt
+    ) async -> (Int, Result<MachineUsageCollection, Error>, TimeInterval) {
+        let startedAt = Date()
+        do {
+            let run = try await withinDeadline(cutoff, machine: input.machine.name) {
+                try await attempt(input)
+            }
+            return (index, .success(run), Date().timeIntervalSince(startedAt))
+        } catch {
+            return (index, .failure(error), Date().timeIntervalSince(startedAt))
+        }
     }
 
     @Sendable public static func overSSH(_ input: MachineUsageAttempt) async throws

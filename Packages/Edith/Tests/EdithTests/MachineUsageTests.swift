@@ -527,6 +527,32 @@ import Testing
         #expect(Set(phases) == ["lan", "cloud", "edge"])
     }
 
+    @Test func aLargeFleetIsCollectedInBoundedWaves() async throws {
+        let dir = try roundDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let machines = (0..<11).map { Machine(name: "box-\($0)", host: "h\($0)") }
+        let inFlight = LockedCounter()
+        let peak = LockedCounter()
+        let result = await MachineUsageRound.collect(
+            machines, registry: machines, dataDir: dir,
+            attempt: { input in
+                peak.raise(to: inFlight.increment())
+                try await Task.sleep(for: .milliseconds(50))
+                inFlight.decrement()
+                return Self.collection(for: input)
+            })
+        #expect(result.collected.map(\.name) == machines.map(\.name))
+        #expect(peak.value == MachineUsageRound.maximumConcurrentMachines)
+    }
+
+    @Test func theRoundDeadlineCoversEveryWave() {
+        let one = MachineUsageRound.deadline(timeout: 900)
+        #expect(one == 1_020)
+        #expect(MachineUsageRound.roundDeadline(machines: 0, timeout: 900) == one)
+        #expect(MachineUsageRound.roundDeadline(machines: 8, timeout: 900) == one)
+        #expect(MachineUsageRound.roundDeadline(machines: 9, timeout: 900) == one * 2)
+    }
+
     @Test func anUnreachableMachineDoesNotHoldUpTheOthers() async throws {
         let dir = try roundDirectory()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -611,6 +637,14 @@ private final class LockedCounter: @unchecked Sendable {
             count += 1
             return count
         }
+    }
+
+    func decrement() {
+        lock.withLock { count -= 1 }
+    }
+
+    func raise(to candidate: Int) {
+        lock.withLock { count = max(count, candidate) }
     }
 }
 

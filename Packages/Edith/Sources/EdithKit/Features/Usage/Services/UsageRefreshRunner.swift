@@ -232,7 +232,9 @@ public enum UsageRefreshRunner {
             var timeout = pipelineTimeout
             if machinePolicy != .skip {
                 environment["EDITH_USAGE_MACHINES_GATE"] = machinesGate.path
-                timeout += MachineUsageRound.deadline(timeout: MachineUsageCollector.defaultTimeout)
+                timeout += MachineUsageRound.roundDeadline(
+                    machines: MachineRegistry.machines().count,
+                    timeout: MachineUsageCollector.defaultTimeout)
             }
             async let collected = collectMachinesForTheFold(
                 machinePolicy, onto: staged, dataDir: dataDir, gate: machinesGate,
