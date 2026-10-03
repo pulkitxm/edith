@@ -218,26 +218,22 @@ struct UsageStatusLineRecordCommand: AsyncParsableCommand {
                 return
             }
             if let then {
-                FileHandle.standardOutput.write(Self.output(of: then, input: data))
+                let output = await Self.output(of: then, input: data)
+                FileHandle.standardOutput.write(output)
                 return
             }
             if let limits { CLIOut.out(ClaudeStatusLine.line(for: limits)) }
         }
     }
 
-    static func output(of command: String, input: Data) -> Data {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", command]
-        let stdin = Pipe()
-        let stdout = Pipe()
-        process.standardInput = stdin
-        process.standardOutput = stdout
-        guard (try? process.run()) != nil else { return Data() }
-        stdin.fileHandleForWriting.write(input)
-        try? stdin.fileHandleForWriting.close()
-        let output = stdout.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return output
+    static func output(of command: String, input: Data) async -> Data {
+        let request = CLICommandRequest(
+            executableURL: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", command],
+            environment: ProcessInfo.processInfo.environment, timeout: 10,
+            maximumOutputBytes: 65_536, standardInputData: input, discardsStandardError: true,
+            terminatesProcessGroup: true)
+        guard let result = try? await CLICommandRunner.runLocal(request, onLine: { _ in })
+        else { return Data() }
+        return result.standardOutputData
     }
 }

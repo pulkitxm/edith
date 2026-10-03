@@ -74,7 +74,8 @@ import Testing
         let settings = root.appendingPathComponent("settings.json")
         try Data(#"{"model":"synthetic","hooks":{}}"#.utf8).write(to: settings)
 
-        #expect(try ClaudeStatusLine.install(executable: executable, settings: settings) == .installed)
+        #expect(
+            try ClaudeStatusLine.install(executable: executable, settings: settings) == .installed)
         #expect(
             try ClaudeStatusLine.install(executable: executable, settings: settings) == .unchanged)
 
@@ -94,7 +95,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let settings = root.appendingPathComponent("config/settings.json")
 
-        #expect(try ClaudeStatusLine.install(executable: executable, settings: settings) == .installed)
+        #expect(
+            try ClaudeStatusLine.install(executable: executable, settings: settings) == .installed)
         #expect(ClaudeStatusLine.isInstalled(settings: settings))
     }
 
@@ -108,7 +110,8 @@ import Testing
         ]
         try JSONSerialization.data(withJSONObject: original).write(to: settings)
 
-        #expect(try ClaudeStatusLine.install(executable: executable, settings: settings) == .wrapped)
+        #expect(
+            try ClaudeStatusLine.install(executable: executable, settings: settings) == .wrapped)
         let installed = try #require(try document(at: settings)["statusLine"] as? [String: Any])
         let command = try #require(installed["command"] as? String)
         #expect(ClaudeStatusLine.isRecorder(command))
@@ -206,11 +209,11 @@ import Testing
         #expect(snapshot.week?.percent == 15)
     }
 
-    @Test func recordPassesTheSameInputToTheWrappedCommand() {
+    @Test func recordPassesTheSameInputToTheWrappedCommand() async {
         let input = Data(#"{"rate_limits":{}}"#.utf8)
-        #expect(UsageStatusLineRecordCommand.output(of: "cat", input: input) == input)
+        #expect(await UsageStatusLineRecordCommand.output(of: "cat", input: input) == input)
         #expect(
-            UsageStatusLineRecordCommand.output(of: "printf previous", input: input)
+            await UsageStatusLineRecordCommand.output(of: "printf previous", input: input)
                 == Data("previous".utf8))
     }
 }
