@@ -253,8 +253,11 @@ final class TerminalSessionHolder {
 
     private var appliedFontSize = 0.0
 
-    func applyTheme(_ palette: TerminalPalette, scale: Double = 1) {
-        let fontSize = 12.5 * scale
+    func applyTheme(
+        _ palette: TerminalPalette, scale: Double = 1,
+        fontSize: Double = HerdrTerminalSettings.fontSizeDefault
+    ) {
+        let fontSize = HerdrTerminalSettings.clampedFontSize(fontSize) * scale
         guard palette != appliedPalette || abs(fontSize - appliedFontSize) > 0.01 else { return }
         TerminalFontRegistry.register()
         appliedPalette = palette
@@ -385,4 +388,3 @@ private final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewD
         onExit(exitCode)
     }
 }
-

@@ -13,6 +13,14 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
             frame: .zero, font: nil, options: TerminalOptions(scrollback: scrollback))
     }
 
+    var onFocus: (() -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+        if window?.firstResponder === self { onFocus?() }
+    }
+
     var focusRequested = false
     private(set) var renderingActive = true
     private(set) var deferredDisplayPasses = 0
@@ -151,4 +159,3 @@ final class EdithTerminalView: LocalProcessTerminalView, DirectKeyboardInputResp
         }
     }
 }
-

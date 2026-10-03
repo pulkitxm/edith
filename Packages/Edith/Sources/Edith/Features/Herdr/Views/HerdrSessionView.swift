@@ -135,6 +135,9 @@ struct HerdrSessionView: View {
     private var quinjetThemeName = QuinjetThemePreference.app
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var appThemeName = AppTheme.accent.rawValue
+    @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
+    private var mouse = HerdrTerminalMouse.buttons
+    @State private var startedMouse: HerdrTerminalMouse?
     @State private var connectError: String?
     @State private var starting = false
     @State private var dragWidth: CGFloat?
@@ -162,7 +165,7 @@ struct HerdrSessionView: View {
                     presenterID: tab.id)
             }
         }
-        .task(id: tab.id) { await startIfNeeded() }
+        .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
             store.messaging.adopt($0)
@@ -427,7 +430,11 @@ struct HerdrSessionView: View {
     }
 
     private func startIfNeeded() async {
-        guard launchEnabled, !tab.holder.started else { return }
+        guard launchEnabled else { return }
+        if tab.holder.started {
+            guard !agent.isTerminal, let startedMouse, startedMouse != mouse else { return }
+            tab.holder.stop()
+        }
         connectError = nil
         starting = true
         defer { starting = false }
@@ -439,6 +446,7 @@ struct HerdrSessionView: View {
                 executable: request.executable, arguments: request.arguments,
                 environment: request.environment,
                 allowsLocalFileLinks: tab.agent.machineIsLocal)
+            startedMouse = mouse
         } catch {
             connectError = error.localizedDescription
         }

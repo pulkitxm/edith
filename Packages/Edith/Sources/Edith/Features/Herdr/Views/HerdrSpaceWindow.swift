@@ -590,7 +590,6 @@ private struct HerdrSpacePaneView: View {
                 )
                 .allowsHitTesting(false)
         }
-        .onTapGesture { tab.focus(pane.id) }
     }
 
     private var selectedTarget: PaneTarget? {
