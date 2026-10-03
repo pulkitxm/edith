@@ -84,12 +84,19 @@ backward through `limits-history.jsonl` and reports the newest valid line it
 finds for each provider. One provider's newer rows cannot hide another
 provider's history, and a partial final row is ignored.
 
+Claude's rows are written by Claude Code's status line through
+[`ed usage statusline record`](./statusline.md), so they are only as fresh as
+your last Claude Code response, and none appear until
+`ed usage statusline install` has run. The other providers are polled by the
+background agent.
+
 `percent` is what the provider reported, stored rounded to one decimal place.
 `resetsAt` is the reset time the provider gave, or `null` when it gave none, and
 `resetsInSeconds` is computed at print time from your clock, so it goes negative
 once the reset moment has passed.
 
-`--refresh` asks the background agent to poll the providers again and waits up
+`--refresh` asks the background agent to poll the providers again, which for
+Claude means rereading the newest status line row, and waits up
 to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`
 is not running: exit 4 with `refreshing the rate limits needs the background
 agent`, hinted with `run ed agent restart or enable the background agent in
@@ -114,12 +121,13 @@ fresh install reports the emptiness afterwards if nothing landed.
 
 ```
 $ ed usage limits
-PROVIDER  SESSION  WEEKLY  SESSION RESETS  OBSERVED
-Codex     -        0.0%    -               2026-08-08T16:39:59Z
-Claude    30.0%    61.0%   3h 10m          2026-08-08T16:39:58Z
+PROVIDER  LIMIT                USED   RESETS  OBSERVED
+Claude    5-hour limit         42.0%  2h 29m  2026-08-08T16:39:58Z
+Claude    Weekly · all models  18.0%  4d 20h  2026-08-08T16:39:58Z
 ```
 
 ## Where to go next
 
+- [`ed usage statusline`](./statusline.md), where Claude's numbers come from
 - [`ed usage`](./README.md), the rest of this group
 - [All `ed` commands](../README.md)

@@ -268,7 +268,11 @@ public enum ExtensionLifecycleCatalog {
                 instruction(
                     "provider", "Sign in to an agent CLI",
                     "Install and authenticate Claude Code, Codex, or both.",
-                    "ed tools ls --json")
+                    "ed tools ls --json"),
+                instruction(
+                    "claude", "Connect Claude Code",
+                    "Let Claude Code's status line pass its rate limits to Edith.",
+                    "ed usage statusline install"),
             ],
             examples: ["ed extensions enable usage", "ed usage limits --json"],
             docs: [documentation("guide", "Agent Usage guide", "docs/cli/usage/README.md")],
