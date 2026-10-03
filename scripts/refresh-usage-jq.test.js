@@ -118,6 +118,7 @@ function runCollectorFixture({
   archivedBaseline,
   missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
+  lateMachineJSON,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
   const home = join(root, "home");
@@ -309,9 +310,35 @@ exec "$REAL_JQ" "$@"
     });
     archive.close();
   }
+  const lateMachine = {};
+  let deliverer;
+  if (lateMachineJSON !== undefined) {
+    const late = join(root, "late-machine.json");
+    writeFileSync(late, lateMachineJSON);
+    lateMachine.EDITH_USAGE_MACHINES_GATE = join(root, "machines.gate");
+    deliverer = Bun.spawn(
+      [
+        "sh",
+        "-c",
+        `sleep 4
+mkdir -p "$(dirname "$ORIGINAL_MACHINE")"
+cp "$LATE_MACHINE" "$ORIGINAL_MACHINE"
+: > "$EDITH_USAGE_MACHINES_GATE"`,
+      ],
+      {
+        env: {
+          ...lateMachine,
+          PATH: globalThis.process.env.PATH,
+          LATE_MACHINE: late,
+          ORIGINAL_MACHINE: originalMachine,
+        },
+      },
+    );
+  }
   const process = Bun.spawnSync(["bash", scriptPath, output], {
     env: {
       ...isolatedGitEnvironment,
+      ...lateMachine,
       HOME: home,
       EDITH_CACHE_DIR: cache,
       FAKE_LOCAL_USAGE: hasLocalUsage ? "1" : "0",
@@ -325,6 +352,7 @@ exec "$REAL_JQ" "$@"
       REAL_BUN: globalThis.process.execPath,
     },
   });
+  deliverer?.kill();
   const result = {
     exitCode: process.exitCode,
     stdout: process.stdout.toString(),
@@ -2698,6 +2726,19 @@ describe("collector failure handling", () => {
     expect(report.machines.map((machine) => machine.name)).toEqual(["tuf"]);
     expect(report.sources).toContain(tufCLI);
   }, 15_000);
+
+  for (const hasLocalUsage of [true, false]) {
+    test(`machine snapshots collected during the run are folded in after the gate opens (local usage: ${hasLocalUsage})`, () => {
+      const result = runCollectorFixture({
+        hasLocalUsage,
+        lateMachineJSON: JSON.stringify(machineDoc()),
+      });
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      const report = JSON.parse(result.output);
+      expect(report.machines.map((machine) => machine.name)).toEqual(["tuf"]);
+      expect(report.sources).toContain(tufCLI);
+    }, 30_000);
+  }
 
   test("detail assembly failure preserves the existing report", () => {
     const result = runCollectorFixture({
