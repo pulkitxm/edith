@@ -257,7 +257,8 @@ tabs, and 1 when only some running tabs receive the line.
   `~/.ssh/known_hosts`, with `StrictHostKeyChecking=accept-new`, so a new
   machine is trusted on first sight and a changed key is refused with a specific
   message. `ConnectTimeout` is 12 seconds, keepalives go every 15 seconds and
-  give up after three.
+  give up after three. Usage collection is the exception: it uses 3 seconds for
+  a machine on this network and 6 for anything else.
 - The control socket path is derived from the machine's id, the first ten hex
   digits with the dashes removed, plus `.sk`, under
   `~/Library/Application Support/Edith/machines/sockets`. It is reported as

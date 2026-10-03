@@ -1332,10 +1332,30 @@ collect_cursor
 
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 HAS_MACHINES=0
+MACHINES_STAGED=0
 MACHINE_FILES=()
 MACHINE_STAGING="$TMP/machines"
 mkdir "$MACHINE_STAGING"
-if [ -d "$MACHINES_DIR" ]; then
+
+wait_for_machines() {
+  local gate="${EDITH_USAGE_MACHINES_GATE:-}"
+  [ -n "$gate" ] && [ ! -e "$gate" ] || return 0
+  [ -z "${EDITH_USAGE_MACHINES_WANTED:-}" ] || : >"$EDITH_USAGE_MACHINES_WANTED"
+  _note "waiting for machines"
+  while [ ! -e "$gate" ]; do
+    kill -0 "$PPID" 2>/dev/null || {
+      _error "machine collection stopped before it finished; previous data preserved"
+      exit 1
+    }
+    sleep 0.1
+  done
+}
+
+stage_machines() {
+  [ "$MACHINES_STAGED" = "0" ] || return 0
+  MACHINES_STAGED=1
+  wait_for_machines
+  [ -d "$MACHINES_DIR" ] || return 0
   inspected=0
   machine_bytes=0
   while IFS= read -r -d '' candidate; do
@@ -1353,12 +1373,15 @@ if [ -d "$MACHINES_DIR" ]; then
     MACHINE_FILES+=("$staged")
     [ "${#MACHINE_FILES[@]}" -lt 1000 ] || break
   done < <(find "$MACHINES_DIR" -xdev ! -path "$MACHINES_DIR" -prune -print0 2>/dev/null)
-fi
-[ "${#MACHINE_FILES[@]}" -gt 0 ] && HAS_MACHINES=1
+  [ "${#MACHINE_FILES[@]}" -eq 0 ] || HAS_MACHINES=1
+}
 
-if [ ! -s "$TMP/manifest.jsonl" ] && [ "$HAS_MACHINES" = "0" ]; then
-  _error "no usage found from any source"
-  exit 3
+if [ ! -s "$TMP/manifest.jsonl" ]; then
+  stage_machines
+  if [ "$HAS_MACHINES" = "0" ]; then
+    _error "no usage found from any source"
+    exit 3
+  fi
 fi
 [ -s "$TMP/sessions.jsonl" ] || : >"$TMP/sessions.jsonl"
 
@@ -2183,6 +2206,7 @@ if [ -s "$OUT" ] && jq -e "$HISTORY_INPUT" "$OUT" >/dev/null 2>&1; then
   fi
 fi
 
+stage_machines
 if [ "$HAS_MACHINES" = "1" ]; then
   if ! jq -s "$FLEET" "$TMP/usage.json" "${MACHINE_FILES[@]}" >"$TMP/fleet.json"; then
     _error "machine snapshot assembly failed; previous data preserved"

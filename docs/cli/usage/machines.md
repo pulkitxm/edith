@@ -118,6 +118,12 @@ when the merge could not run at all, and the numbers then sit on disk until the
 next `ed usage refresh`. A refresh already running elsewhere counts as merged,
 because that run picks the new files up.
 
+Every machine is collected at the same time, so a round takes as long as its
+slowest machine. Machines on this network get 3 seconds to accept the SSH
+connection and others get 6, a recoverable connection failure is retried once,
+and a machine that is still running after `--timeout` plus two minutes is
+stopped and listed in `failed`.
+
 Progress goes to stderr as each machine lands, so stdout stays parseable:
 
 ```

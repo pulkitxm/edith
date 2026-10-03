@@ -78,6 +78,7 @@ public enum MachineUsageError: LocalizedError, Equatable {
     case noUsageThere(String)
     case collectorFailed(machine: String, status: Int32, detail: String)
     case documentUnreadable(String)
+    case timedOut(String, seconds: Int)
 
     public var errorDescription: String? {
         switch self {
@@ -96,6 +97,8 @@ public enum MachineUsageError: LocalizedError, Equatable {
                 : "the collector exited \(status) on \(name): \(tail)"
         case let .documentUnreadable(name):
             return "\(name) produced a usage file this build cannot read"
+        case let .timedOut(name, seconds):
+            return "\(name) did not finish collecting within \(seconds)s"
         }
     }
 }

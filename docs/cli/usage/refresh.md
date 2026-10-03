@@ -7,19 +7,19 @@ rewrites `usage.json`.
 ed usage refresh [--follow] [--machines | --no-machines] [--json]
 ```
 
-Machines counted towards usage are topped up first, but only the stale ones:
-a machine collected within the last half hour is left alone, so a refresh on a
-loop does not open an SSH connection every time. `--machines` collects from all
-of them regardless of when they were last seen, `--no-machines` skips them and
-merges whatever is already on disk. `--follow` never collects, since it is
-watching a run that someone else started.
+Machines counted towards usage are collected at the same time as this Mac's
+own agents, but only the stale ones: a machine collected within the last half
+hour is left alone, so a refresh on a loop does not open an SSH connection every
+time. `--machines` collects from all of them first, regardless of when they were
+last seen, `--no-machines` skips them and merges whatever is already on disk.
+`--follow` never collects, since it is watching a run that someone else started.
 
 ## Options
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
 | `--follow` | flag | off | Attach to a refresh that is already running instead of starting one, and fail when there is nothing to watch |
-| `--machines` | flag | off | Force every counted machine to collect first; fail before the local pipeline if any machine is busy or fails |
+| `--machines` | flag | off | Force every counted machine to collect before the local pipeline starts; fail if any machine is busy or fails |
 | `--no-machines` | flag | off | Skip machine collection and merge the machine snapshots already on disk |
 | `--json` | flag | off | Emit JSON on stdout |
 
@@ -104,11 +104,28 @@ reported becomes the message, exit 4, hinted at `data/refresh.log`, which is
 where the same transcript is written line by line while the run happens. A run
 that was attached to and then stopped without finishing fails the same way.
 
-The default stale-machine top-up is best effort. A machine that is offline,
-busy, or fails collection does not prevent this Mac from refreshing and merging
-the last snapshot on disk. `--machines` is strict instead: it forces every
-counted machine regardless of freshness, and any busy or failed machine exits 4
-before the local pipeline starts. Passing both machine flags is invalid.
+The default stale-machine collection is best effort and runs inside the same
+agent refresh. Every stale machine is collected at once, in parallel with this
+Mac's collectors, and the pipeline only waits for them at the very end, right
+before it folds the machine snapshots in. A refresh therefore takes about as
+long as the slower of the two halves instead of their sum, and a `waiting for
+machines` line appears when the machines are the slower half. A machine that is
+offline, busy, or fails collection does not prevent this Mac from refreshing
+and merging the last snapshot on disk.
+
+Each machine connects with a timeout sized to where it lives: 3 seconds for a
+machine on this network (a private, loopback, link-local or `.local` address)
+and 6 seconds for anything else. A machine whose connection drops or flaps is
+retried with a growing pause (1, 2, 4, then every 8 seconds) for as long as
+this Mac's own collectors are still running, up to two minutes, because those
+retries cost the refresh nothing. Once the pipeline is ready to fold the
+machines in, a machine still unreachable keeps its last snapshot. A machine
+that has not finished within the collector timeout plus two minutes is stopped
+so it cannot hold the refresh open.
+
+`--machines` is strict instead: it forces every counted machine regardless of
+freshness, collects them all before the local pipeline starts, and any busy or
+failed machine exits 4. Passing both machine flags is invalid.
 
 ```
 $ ed usage refresh

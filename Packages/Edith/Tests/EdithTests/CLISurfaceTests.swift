@@ -170,6 +170,12 @@ import Testing
         #expect(skipped.skipMachines)
     }
 
+    @Test func aPlainRefreshCollectsDueMachinesAlongsideTheLocalPipeline() {
+        #expect(UsageRefreshCommand.machinePolicy(forced: false, skipped: false) == .due)
+        #expect(UsageRefreshCommand.machinePolicy(forced: false, skipped: true) == .skip)
+        #expect(UsageRefreshCommand.machinePolicy(forced: true, skipped: false) == .skip)
+    }
+
     @Test func refreshRejectsConflictingMachineFlags() async {
         let result = await CLIProbe.run([
             "usage", "refresh", "--machines", "--no-machines",

@@ -153,13 +153,16 @@ public actor SSHConnection {
     private let socketPath: String
     private let knownHostsArgument: String
     private let taskClient: AgentTaskClient?
+    private let connectTimeout: Int
 
     public init(
         machine: Machine, controlSocketMode: SSHControlSocketMode = .isolated,
-        taskClient: AgentTaskClient? = nil
+        taskClient: AgentTaskClient? = nil,
+        connectTimeout: Int = SSHConnection.defaultConnectTimeout
     ) {
         self.machine = machine
         self.taskClient = taskClient
+        self.connectTimeout = connectTimeout
         let connectionID = controlSocketMode == .isolated ? UUID() : nil
         socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
         let userKnownHosts = FileManager.default.homeDirectoryForCurrentUser
@@ -169,6 +172,7 @@ public actor SSHConnection {
     }
 
     public nonisolated static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
+    public nonisolated static let defaultConnectTimeout = 12
 
     nonisolated var fileTaskClient: AgentTaskClient? {
         taskClient ?? (AgentCommandRouting.isEnabled ? AgentTaskClient() : nil)
@@ -219,7 +223,14 @@ public actor SSHConnection {
                 throw SSHConnectionError.connectFailed(
                     Self.friendlyConnectError(String(decoding: buffer.snapshot(), as: UTF8.self)))
             }
-            try? await Task.sleep(for: .milliseconds(100))
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                process.terminate()
+                masterProcess = nil
+                stderrPipe.fileHandleForReading.readabilityHandler = nil
+                throw error
+            }
         }
         process.terminate()
         masterProcess = nil
@@ -710,7 +721,7 @@ public actor SSHConnection {
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", "ServerAliveInterval=15",
             "-o", "ServerAliveCountMax=3",
-            "-o", "ConnectTimeout=12",
+            "-o", "ConnectTimeout=\(connectTimeout)",
         ]
     }
 
