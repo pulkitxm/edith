@@ -158,26 +158,72 @@ import Testing
             FileManager.default.fileExists(atPath: dir.appendingPathComponent("usage.json").path))
     }
 
-    @Test func machineCollectionRunsBeforeThePublicationBaseline() async throws {
+    @Test func machinesAreCollectedWhileTheLocalPipelineRuns() async throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let fresh = try usage(period: "2026-09-12", source: "remote")
         let script = dir.appendingPathComponent("collector.sh")
         try """
+        : > "$1/local-started"
+        test -n "${EDITH_USAGE_MACHINES_GATE:-}" || exit 7
+        while [ ! -e "$EDITH_USAGE_MACHINES_GATE" ]; do sleep 0.02; done
         cp "$1/remote.json" "$EDITH_USAGE_OUTPUT"
         printf 'done\\t0.1\\n'
         """.write(to: script, atomically: true, encoding: .utf8)
-        _ = try await UsageRefreshRunner.run(
+        let result = try await UsageRefreshRunner.run(
             dataDir: dir, workingDirectory: dir, machinePolicy: .due, script: script,
-            collectMachines: { policy, root, _ in
+            collectMachines: { policy, root, onEvent in
                 #expect(policy == .due)
+                let started = root.appendingPathComponent("local-started")
+                for _ in 0..<500 where !FileManager.default.fileExists(atPath: started.path) {
+                    try? await Task.sleep(for: .milliseconds(10))
+                }
+                #expect(FileManager.default.fileExists(atPath: started.path))
                 try? fresh.write(to: root.appendingPathComponent("remote.json"))
                 try? Data("fresh generation".utf8)
                     .write(to: root.appendingPathComponent("machines.generation"))
+                onEvent(.phase(name: "tuf", detail: "1 days · 1 agent", seconds: 0.1))
             })
         let published = try Data(contentsOf: dir.appendingPathComponent("usage.json"))
         let document = try #require(JSONSerialization.jsonObject(with: published) as? [String: Any])
         #expect(document["sources"] as? [String] == ["remote"])
+        #expect(
+            result.events.contains(.phase(name: "tuf", detail: "1 days · 1 agent", seconds: 0.1)))
+    }
+
+    @Test func aRefreshWithoutMachinesNeverWaitsForThem() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try usage(period: "2026-09-12", source: "local")
+            .write(to: dir.appendingPathComponent("local.json"))
+        let script = dir.appendingPathComponent("collector.sh")
+        try """
+        test -z "${EDITH_USAGE_MACHINES_GATE:-}" || exit 7
+        cp "$1/local.json" "$EDITH_USAGE_OUTPUT"
+        printf 'done\\t0.1\\n'
+        """.write(to: script, atomically: true, encoding: .utf8)
+        _ = try await UsageRefreshRunner.run(
+            dataDir: dir, workingDirectory: dir, script: script,
+            collectMachines: { _, _, _ in Issue.record("machines were collected") })
+        #expect(
+            FileManager.default.fileExists(atPath: dir.appendingPathComponent("usage.json").path))
+    }
+
+    @Test func aFailedLocalPipelineDoesNotWaitForSlowMachines() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let script = dir.appendingPathComponent("collector.sh")
+        try "exit 4\n".write(to: script, atomically: true, encoding: .utf8)
+        let clock = ContinuousClock()
+        let started = clock.now
+        await #expect(throws: UsageRefreshFailure.self) {
+            try await UsageRefreshRunner.run(
+                dataDir: dir, workingDirectory: dir, machinePolicy: .all, script: script,
+                collectMachines: { _, _, _ in try? await Task.sleep(for: .seconds(30)) })
+        }
+        #expect(clock.now - started < .seconds(10))
+        #expect(
+            !FileManager.default.fileExists(atPath: dir.appendingPathComponent("usage.json").path))
     }
 
     @Test func pipelinePublicationFailureIsObservedByFollowers() async throws {

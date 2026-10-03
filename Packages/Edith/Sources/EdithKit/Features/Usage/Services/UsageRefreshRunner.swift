@@ -124,6 +124,14 @@ public final class UsageRefreshLock: @unchecked Sendable {
 }
 
 public enum UsageRefreshRunner {
+    public typealias MachineCollector =
+        @Sendable (
+            UsageMachineRefreshPolicy, URL,
+            @escaping @Sendable (UsageRefreshEvent) -> Void
+        ) async -> Void
+
+    public static let pipelineTimeout: TimeInterval = 900
+
     public static func scriptURL() -> URL? { UsageCollector.scriptURL() }
 
     public static func lockURL(dataDir: URL = Repo.dataDir) -> URL {
@@ -165,13 +173,9 @@ public enum UsageRefreshRunner {
         machinePolicy: UsageMachineRefreshPolicy = .skip,
         runID: String = UUID().uuidString,
         script: URL? = nil,
-        collectMachines:
-            @escaping @Sendable (
-                UsageMachineRefreshPolicy, URL,
-                @escaping @Sendable (UsageRefreshEvent) -> Void
-            ) async -> Void = { policy, dataDir, onEvent in
-                await collectDueMachines(policy, dataDir: dataDir, onEvent: onEvent)
-            },
+        collectMachines: @escaping MachineCollector = { policy, dataDir, onEvent in
+            await collectDueMachines(policy, dataDir: dataDir, onEvent: onEvent)
+        },
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in }
     ) async throws -> UsageRefreshResult {
         let refreshTrace = PerformanceTrace.begin(.git, "usage.refresh")
@@ -213,19 +217,26 @@ public enum UsageRefreshRunner {
             guard let script = script ?? scriptURL() else {
                 throw UsageRefreshFailure.scriptMissing
             }
-            if machinePolicy != .skip {
-                await collectMachines(machinePolicy, dataDir) { event in
-                    collector.ingestStandardOutput(Data((event.wireLine + "\n").utf8))
-                }
-            }
             try Task.checkCancellation()
-            let baseline: UsageRefreshBaseline
+            let staged: UsageRefreshBaseline
             do {
-                baseline = try stageCurrentUsage(at: stagedUsage, dataDir: dataDir)
+                staged = try stageCurrentUsage(at: stagedUsage, dataDir: dataDir)
             } catch {
                 throw UsageRefreshFailure.reported(
                     "usage refresh staging failed; previous data preserved")
             }
+
+            let machinesGate = stagingDirectory.appendingPathComponent(
+                "\(UUID().uuidString).gate")
+            defer { try? FileManager.default.removeItem(at: machinesGate) }
+            var timeout = pipelineTimeout
+            if machinePolicy != .skip {
+                environment["EDITH_USAGE_MACHINES_GATE"] = machinesGate.path
+                timeout += MachineUsageRound.deadline(timeout: MachineUsageCollector.defaultTimeout)
+            }
+            async let collected = collectMachinesForTheFold(
+                machinePolicy, onto: staged, dataDir: dataDir, gate: machinesGate,
+                collect: collectMachines, onEvent: { collector.ingest($0) })
 
             let result: CLICommandResult
             do {
@@ -233,7 +244,7 @@ public enum UsageRefreshRunner {
                     CLICommandRequest(
                         executableURL: URL(fileURLWithPath: "/bin/bash"),
                         arguments: [script.path, dataDir.path], environment: environment,
-                        currentDirectoryURL: workingDirectory, timeout: 900,
+                        currentDirectoryURL: workingDirectory, timeout: timeout,
                         maximumOutputBytes: 2 * 1_024 * 1_024,
                         terminatesProcessGroup: true),
                     streamsWhileRunning: true,
@@ -268,6 +279,13 @@ public enum UsageRefreshRunner {
             guard status == 0 else {
                 throw UsageRefreshFailure.exited(status, collector.diagnosticTail)
             }
+            let baseline: UsageRefreshBaseline
+            do {
+                baseline = try await collected
+            } catch {
+                throw UsageRefreshFailure.reported(
+                    "usage refresh staging failed; previous data preserved")
+            }
             do {
                 let retained = try publish(
                     stagedUsage: stagedUsage, baseline: baseline, dataDir: dataDir)
@@ -291,6 +309,20 @@ public enum UsageRefreshRunner {
             collector.fail(error.localizedDescription)
             throw error
         }
+    }
+
+    static func collectMachinesForTheFold(
+        _ policy: UsageMachineRefreshPolicy, onto staged: UsageRefreshBaseline, dataDir: URL,
+        gate: URL, collect: MachineCollector,
+        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+    ) async throws -> UsageRefreshBaseline {
+        guard policy != .skip else { return staged }
+        defer { FileManager.default.createFile(atPath: gate.path, contents: nil) }
+        await collect(policy, dataDir, onEvent)
+        let machines = try UsageDataLock.withLock(dataDirectory: dataDir) {
+            try MachineUsageStore.generation(in: dataDir.appendingPathComponent("machines"))
+        }
+        return UsageRefreshBaseline(usage: staged.usage, machines: machines)
     }
 
     public static func collectDueMachines(
@@ -386,7 +418,7 @@ public enum UsageRefreshRunner {
             let url = enumerator.nextObject() as? URL
         {
             inspected += 1
-            guard url.pathExtension == "json" else { continue }
+            guard ["json", "gate"].contains(url.pathExtension) else { continue }
             guard
                 let values = try? url.resourceValues(forKeys: [
                     .contentModificationDateKey, .isRegularFileKey, .isSymbolicLinkKey,
@@ -402,6 +434,7 @@ public enum UsageRefreshRunner {
 
 final class UsageRefreshCollector: @unchecked Sendable {
     private let lock = NSLock()
+    private let ingestion = NSLock()
     private let sink: UsageRefreshSink
     private let onEvent: @Sendable (UsageRefreshEvent) -> Void
     private var outBuffer = ""
@@ -444,23 +477,33 @@ final class UsageRefreshCollector: @unchecked Sendable {
 
     func ingestStandardOutput(_ data: Data) {
         guard !data.isEmpty else { return }
-        let lines = takeLines(String(decoding: data, as: UTF8.self), buffer: &outBuffer)
-        for line in lines { handle(line) }
+        ingestion.withLock {
+            let lines = takeLines(String(decoding: data, as: UTF8.self), buffer: &outBuffer)
+            for line in lines { handle(line) }
+        }
     }
 
     func ingestStandardError(_ data: Data) {
         guard !data.isEmpty else { return }
-        let lines = takeLines(String(decoding: data, as: UTF8.self), buffer: &errBuffer)
-        for line in lines { recordDiagnostic(line) }
+        ingestion.withLock {
+            let lines = takeLines(String(decoding: data, as: UTF8.self), buffer: &errBuffer)
+            for line in lines { recordDiagnostic(line) }
+        }
+    }
+
+    func ingest(_ event: UsageRefreshEvent) {
+        ingestion.withLock { emit(event) }
     }
 
     func flush() {
-        let pending = outBuffer
-        outBuffer = ""
-        if !pending.isEmpty { handle(pending) }
-        let pendingError = errBuffer
-        errBuffer = ""
-        if !pendingError.isEmpty { recordDiagnostic(pendingError) }
+        ingestion.withLock {
+            let pending = outBuffer
+            outBuffer = ""
+            if !pending.isEmpty { handle(pending) }
+            let pendingError = errBuffer
+            errBuffer = ""
+            if !pendingError.isEmpty { recordDiagnostic(pendingError) }
+        }
         sink.flush()
     }
 
@@ -494,12 +537,12 @@ final class UsageRefreshCollector: @unchecked Sendable {
     }
 
     func complete(seconds: Double) {
-        emit(.finished(seconds: seconds))
+        ingestion.withLock { emit(.finished(seconds: seconds)) }
     }
 
     func fail(_ message: String) {
         guard reportedFailure == nil else { return }
-        emit(.failure(message))
+        ingestion.withLock { emit(.failure(message)) }
     }
 
     private func emit(_ event: UsageRefreshEvent) {
