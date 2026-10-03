@@ -45,6 +45,11 @@ closed.
 | `ed usage machines disable` | Stops collecting from a machine, keeping what it already gave |
 | `ed usage machines forget` | Drops what a machine gave and stops counting it |
 | `ed usage refresh` | Re-collects local usage and tops up counted machines that are stale |
+| `ed usage statusline` | Runs `ed usage statusline status`, the default subcommand |
+| `ed usage statusline status` | Whether Claude Code's status line feeds Edith, and when it last did |
+| `ed usage statusline install` | Points Claude Code's status line at Edith so Claude limits flow in |
+| `ed usage statusline remove` | Takes Edith out of Claude Code's status line |
+| `ed usage statusline record` | Saves the windows Claude Code passes to its status line |
 
 ## Commands
 
@@ -64,6 +69,7 @@ closed.
 - [`ed usage export`](./export.md)
 - [`ed usage machines`](./machines.md)
 - [`ed usage refresh`](./refresh.md)
+- [`ed usage statusline`](./statusline.md)
 
 ## Exit codes
 
@@ -105,10 +111,13 @@ closed.
   0 from either does mean the work happened. `observedAt` can still repeat after
   `ed usage limits --refresh`, because the app appends a history row only when
   the values changed.
+- Claude limits come from Claude Code's status line, not from Anthropic.
+  `ed usage statusline install` sets that up; until then the Claude ring reports
+  that it needs the status line. See [`ed usage statusline`](./statusline.md).
 - `ed config set tabUsageEnabled false` turns off the Agent Usage extension, and
   with it the app's own collection and the limit polling; `claudeLimitsEnabled`,
   `codexLimitsEnabled`, `cursorLimitsEnabled` and `grokLimitsEnabled` do the same
-  for a single provider's polling.
+  for a single provider.
   `ed usage refresh` runs the pipeline itself and collects either way. The read
   verbs keep working against whatever was collected before that, so
   `ed usage limits` keeps printing a silenced provider's newest valid row.
