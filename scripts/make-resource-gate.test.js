@@ -1,5 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,7 +33,8 @@ afterEach(() => {
   for (const child of children.splice(0)) {
     if (child.exitCode === null) child.kill();
   }
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 function tempDir() {
@@ -94,7 +101,11 @@ function gateEnv(root, overrides = {}) {
 }
 
 test("light targets skip the budget", () => {
-  const decision = decide(["ci-comments"], loaded, [seated(0), seated(1), seated(2)]);
+  const decision = decide(["ci-comments"], loaded, [
+    seated(0),
+    seated(1),
+    seated(2),
+  ]);
   expect(decision.action).toBe("skip");
   expect(decision.need_threads).toBeNull();
 });
@@ -183,7 +194,11 @@ test("the only gated make still starts when the host is already tight", () => {
 });
 
 test("mixed goals take the heavier target", () => {
-  const heavy = decide(["ci-comments", "build"], healthy, [seated(0), seated(1), seated(2)]);
+  const heavy = decide(["ci-comments", "build"], healthy, [
+    seated(0),
+    seated(1),
+    seated(2),
+  ]);
   expect(heavy.action).toBe("wait");
   expect(heavy.profile).toBe("xcode build");
   const tests = decide(["ci-swift-test"], healthy, []);
@@ -225,7 +240,10 @@ test("five concurrent app builds stay inside the live budget", async () => {
     }),
   );
   const stderr = finished.map((item) => item.stderr).join("\n");
-  expect(finished.every((item) => item.code === 0), stderr).toBe(true);
+  expect(
+    finished.every((item) => item.code === 0),
+    stderr,
+  ).toBe(true);
   const events = [];
   for (const item of finished) {
     const lines = readFileSync(item.trace, "utf8").trim().split("\n");
@@ -247,7 +265,9 @@ test("five concurrent app builds stay inside the live budget", async () => {
   expect(stderr).toContain("still waiting");
   expect(stderr).toContain("slot table");
   expect(stderr).toContain("checking every 1s, giving up after 20s");
-  expect(readdirSync(root).filter((name) => name.endsWith(".json"))).toEqual([]);
+  expect(readdirSync(root).filter((name) => name.endsWith(".json"))).toEqual(
+    [],
+  );
 }, 25000);
 
 test("a stale slot is dropped and a full budget gives up", async () => {
@@ -341,9 +361,13 @@ test("a stale slot is dropped and a full budget gives up", async () => {
   children.push(waiter);
   expect(await waiter.exited).toBe(1);
   const stderr = await new Response(waiter.stderr).text();
-  expect(stderr).toContain("stopped waiting after 2s and did not start `make ci-swift`");
+  expect(stderr).toContain(
+    "stopped waiting after 2s and did not start `make ci-swift`",
+  );
   expect(stderr).toContain("reason:");
-  expect(await new Response(waiter.stdout).text()).not.toContain("should-not-run");
+  expect(await new Response(waiter.stdout).text()).not.toContain(
+    "should-not-run",
+  );
   expect(await holder.exited).toBe(0);
 }, 20000);
 
@@ -359,17 +383,16 @@ test("make runs light targets through the gate without waiting", async () => {
   expect(printed.stdout.toString()).toContain("scripts/make-resource-gate.py");
 
   const root = tempDir();
-  const ran = Bun.spawn(
-    ["make", "ci-community"],
-    {
-      env: gateEnv(root, { EDITH_MAKE_GATE_TIMEOUT: "5" }),
-      stdout: "pipe",
-      stderr: "pipe",
-    },
-  );
+  const ran = Bun.spawn(["make", "ci-community"], {
+    env: gateEnv(root, { EDITH_MAKE_GATE_TIMEOUT: "5" }),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
   children.push(ran);
   expect(await ran.exited).toBe(0);
   const stderr = await new Response(ran.stderr).text();
   expect(stderr).not.toContain("waiting to start");
-  expect(readdirSync(root).filter((name) => name.endsWith(".json"))).toEqual([]);
+  expect(readdirSync(root).filter((name) => name.endsWith(".json"))).toEqual(
+    [],
+  );
 }, 20000);
