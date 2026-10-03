@@ -481,23 +481,24 @@ private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
 
 @MainActor
 @Suite(.serialized) struct HerdrAgentDetailCommandTests {
-    @Test func controlCommandBIsTheOnlyChord() {
-        #expect(HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .control]))
-        #expect(HerdrAgentDetailCommand.matches(characters: "B", modifiers: [.command, .control]))
+    @Test func optionCommandBIsTheOnlyChord() {
+        #expect(HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .option]))
+        #expect(HerdrAgentDetailCommand.matches(characters: "B", modifiers: [.command, .option]))
         #expect(
             HerdrAgentDetailCommand.matches(
-                characters: "b", modifiers: [.command, .control, .capsLock]))
+                characters: "b", modifiers: [.command, .option, .capsLock]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .control]))
         #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .shift]))
         #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .command))
-        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .control))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .option))
         #expect(
             !HerdrAgentDetailCommand.matches(
-                characters: "b", modifiers: [.command, .control, .shift]))
+                characters: "b", modifiers: [.command, .option, .shift]))
         #expect(
             !HerdrAgentDetailCommand.matches(
-                characters: "b", modifiers: [.command, .control, .option]))
-        #expect(!HerdrAgentDetailCommand.matches(characters: "j", modifiers: [.command, .control]))
-        #expect(!HerdrAgentDetailCommand.matches(characters: nil, modifiers: [.command, .control]))
+                characters: "b", modifiers: [.command, .option, .control]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "j", modifiers: [.command, .option]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: nil, modifiers: [.command, .option]))
     }
 
     @Test func theShortcutStaysInsideAnOpenAgentSession() {
@@ -523,12 +524,12 @@ private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
             !HerdrAgentDetailCommand.applies(
                 to: .detachedSessions(agentSessionOpen: false), sessionsOnScreen: true))
         #expect(!HerdrAgentDetailCommand.applies(to: .elsewhere, sessionsOnScreen: true))
-        #expect(HerdrAgentDetailCommand.help(open: true) == "Hide details (⌃⌘B)")
-        #expect(HerdrAgentDetailCommand.help(open: false) == "Show details (⌃⌘B)")
+        #expect(HerdrAgentDetailCommand.help(open: true) == "Hide details (⌥⌘B)")
+        #expect(HerdrAgentDetailCommand.help(open: false) == "Show details (⌥⌘B)")
         #expect(HerdrAgentDetailCommand.help(open: true, available: false) == "Hide details")
     }
 
-    @Test func controlCommandBCollapsesAndRestoresTheOpenSessionDetails() {
+    @Test func optionCommandBCollapsesAndRestoresTheOpenSessionDetails() {
         let store = HerdrStore(defaults: detailDefaults(), liveWatcher: { _ in })
         store.apply([detailHost])
         let main = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
@@ -565,7 +566,7 @@ private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
     }
 
     private func toggle(
-        _ characters: String, modifiers: NSEvent.ModifierFlags = [.command, .control],
+        _ characters: String, modifiers: NSEvent.ModifierFlags = [.command, .option],
         repeats: Bool = false, in window: NSWindow?, store: HerdrStore, sessionsOnScreen: Bool
     ) -> Bool {
         HerdrAgentDetailCommand.perform(
