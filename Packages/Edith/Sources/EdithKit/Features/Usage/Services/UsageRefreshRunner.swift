@@ -126,7 +126,7 @@ public final class UsageRefreshLock: @unchecked Sendable {
 public enum UsageRefreshRunner {
     public typealias MachineCollector =
         @Sendable (
-            UsageMachineRefreshPolicy, URL,
+            UsageMachineRefreshPolicy, URL, @escaping @Sendable () -> Bool,
             @escaping @Sendable (UsageRefreshEvent) -> Void
         ) async -> Void
 
@@ -173,8 +173,10 @@ public enum UsageRefreshRunner {
         machinePolicy: UsageMachineRefreshPolicy = .skip,
         runID: String = UUID().uuidString,
         script: URL? = nil,
-        collectMachines: @escaping MachineCollector = { policy, dataDir, onEvent in
-            await collectDueMachines(policy, dataDir: dataDir, onEvent: onEvent)
+        collectMachines: @escaping MachineCollector = {
+            policy, dataDir, keepReconnecting, onEvent in
+            await collectDueMachines(
+                policy, dataDir: dataDir, keepReconnecting: keepReconnecting, onEvent: onEvent)
         },
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in }
     ) async throws -> UsageRefreshResult {
@@ -226,19 +228,25 @@ public enum UsageRefreshRunner {
                     "usage refresh staging failed; previous data preserved")
             }
 
-            let machinesGate = stagingDirectory.appendingPathComponent(
-                "\(UUID().uuidString).gate")
-            defer { try? FileManager.default.removeItem(at: machinesGate) }
+            let gateID = UUID().uuidString
+            let machinesGate = stagingDirectory.appendingPathComponent("\(gateID).gate")
+            let machinesWanted = stagingDirectory.appendingPathComponent("\(gateID)-wanted.gate")
+            defer {
+                try? FileManager.default.removeItem(at: machinesGate)
+                try? FileManager.default.removeItem(at: machinesWanted)
+            }
             var timeout = pipelineTimeout
             if machinePolicy != .skip {
                 environment["EDITH_USAGE_MACHINES_GATE"] = machinesGate.path
+                environment["EDITH_USAGE_MACHINES_WANTED"] = machinesWanted.path
                 timeout += MachineUsageRound.roundDeadline(
                     machines: MachineRegistry.machines().count,
                     timeout: MachineUsageCollector.defaultTimeout)
             }
             async let collected = collectMachinesForTheFold(
                 machinePolicy, onto: staged, dataDir: dataDir, gate: machinesGate,
-                collect: collectMachines, onEvent: { collector.ingest($0) })
+                wanted: machinesWanted, collect: collectMachines,
+                onEvent: { collector.ingest($0) })
 
             let result: CLICommandResult
             do {
@@ -315,12 +323,17 @@ public enum UsageRefreshRunner {
 
     static func collectMachinesForTheFold(
         _ policy: UsageMachineRefreshPolicy, onto staged: UsageRefreshBaseline, dataDir: URL,
-        gate: URL, collect: MachineCollector,
+        gate: URL, wanted: URL, collect: MachineCollector,
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> UsageRefreshBaseline {
         guard policy != .skip else { return staged }
         defer { FileManager.default.createFile(atPath: gate.path, contents: nil) }
-        await collect(policy, dataDir, onEvent)
+        let startedAt = Date()
+        let keepReconnecting: @Sendable () -> Bool = {
+            Date().timeIntervalSince(startedAt) < MachineUsageRound.reconnectWindow
+                && !FileManager.default.fileExists(atPath: wanted.path)
+        }
+        await collect(policy, dataDir, keepReconnecting, onEvent)
         let machines = try UsageDataLock.withLock(dataDirectory: dataDir) {
             try MachineUsageStore.generation(in: dataDir.appendingPathComponent("machines"))
         }
@@ -329,6 +342,7 @@ public enum UsageRefreshRunner {
 
     public static func collectDueMachines(
         _ policy: UsageMachineRefreshPolicy, dataDir: URL,
+        keepReconnecting: @escaping @Sendable () -> Bool = { false },
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async {
         let registry = MachineRegistry.machines()
@@ -341,7 +355,8 @@ public enum UsageRefreshRunner {
         guard !targets.isEmpty else { return }
         onEvent(.note("collecting usage from \(targets.count) included machines"))
         let round = await MachineUsageRound.collect(
-            targets, registry: registry, dataDir: dataDir, onEvent: onEvent)
+            targets, registry: registry, dataDir: dataDir, onEvent: onEvent,
+            keepReconnecting: keepReconnecting)
         if round.skippedBecauseBusy {
             onEvent(.note("machine collection is already running; retaining its previous snapshot"))
         }

@@ -1340,6 +1340,7 @@ mkdir "$MACHINE_STAGING"
 wait_for_machines() {
   local gate="${EDITH_USAGE_MACHINES_GATE:-}"
   [ -n "$gate" ] && [ ! -e "$gate" ] || return 0
+  [ -z "${EDITH_USAGE_MACHINES_WANTED:-}" ] || : >"$EDITH_USAGE_MACHINES_WANTED"
   _note "waiting for machines"
   while [ ! -e "$gate" ]; do
     kill -0 "$PPID" 2>/dev/null || {

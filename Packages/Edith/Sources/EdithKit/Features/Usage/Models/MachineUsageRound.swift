@@ -24,16 +24,18 @@ public struct MachineUsageAttempt: Sendable {
     public let history: MachineUsageSummary?
     public let directory: URL
     public let timeout: TimeInterval
+    public let keepReconnecting: @Sendable () -> Bool
 
     public init(
         machine: Machine, slug: String, history: MachineUsageSummary?, directory: URL,
-        timeout: TimeInterval
+        timeout: TimeInterval, keepReconnecting: @escaping @Sendable () -> Bool = { false }
     ) {
         self.machine = machine
         self.slug = slug
         self.history = history
         self.directory = directory
         self.timeout = timeout
+        self.keepReconnecting = keepReconnecting
     }
 }
 
@@ -44,6 +46,7 @@ public enum MachineUsageRound {
     public static let interval: TimeInterval = 1800
     public static let setupAllowance: TimeInterval = 120
     public static let maximumConcurrentMachines = 8
+    public static let reconnectWindow: TimeInterval = 120
 
     public static func deadline(timeout: TimeInterval) -> TimeInterval {
         timeout + setupAllowance
@@ -85,6 +88,7 @@ public enum MachineUsageRound {
         timeout: TimeInterval = MachineUsageCollector.defaultTimeout,
         echoingTheCollector verbose: Bool = false,
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void = { _ in },
+        keepReconnecting: @escaping @Sendable () -> Bool = { false },
         attempt: @escaping Attempt = overSSH
     ) async -> MachineUsageRoundResult {
         guard !machines.isEmpty else { return MachineUsageRoundResult() }
@@ -101,7 +105,8 @@ public enum MachineUsageRound {
             MachineUsageAttempt(
                 machine: machine,
                 slug: slugs[machine.id] ?? MachineUsageSlug.slug(for: machine.name),
-                history: bindings.summaries[machine.id], directory: directory, timeout: timeout)
+                history: bindings.summaries[machine.id], directory: directory, timeout: timeout,
+                keepReconnecting: keepReconnecting)
         }
         let cutoff = deadline(timeout: timeout)
         let outcomes = await withTaskGroup(
@@ -161,7 +166,9 @@ public enum MachineUsageRound {
         let connection = SSHConnection(
             machine: input.machine, connectTimeout: input.machine.reach.connectTimeout)
         do {
-            try await retryingOnceWhenRecoverable { try await connection.connect() }
+            try await reconnecting(while: input.keepReconnecting) {
+                try await connection.connect()
+            }
             let run = try await withOneRetryOnADroppedLink(connection) {
                 try await MachineUsageCollector.collect(
                     machine: input.machine, slug: input.slug, over: connection,
@@ -175,14 +182,24 @@ public enum MachineUsageRound {
         }
     }
 
-    static func retryingOnceWhenRecoverable(
-        pause: Duration = .seconds(1), _ connect: () async throws -> Void
+    static func reconnecting(
+        while keepReconnecting: @Sendable () -> Bool,
+        pause: Duration = .seconds(1), longestPause: Duration = .seconds(8),
+        _ connect: () async throws -> Void
     ) async throws {
-        do {
-            try await connect()
-        } catch let SSHConnectionError.connectFailed(failure) where failure.isRecoverable {
-            try await Task.sleep(for: pause)
-            try await connect()
+        var wait = pause
+        var retried = false
+        while true {
+            do {
+                try await connect()
+                return
+            } catch let SSHConnectionError.connectFailed(failure)
+                where failure.isRecoverable && (!retried || keepReconnecting())
+            {
+                retried = true
+                try await Task.sleep(for: wait)
+                wait = min(wait * 2, longestPause)
+            }
         }
     }
 

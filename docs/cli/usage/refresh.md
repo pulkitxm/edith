@@ -115,9 +115,13 @@ and merging the last snapshot on disk.
 
 Each machine connects with a timeout sized to where it lives: 3 seconds for a
 machine on this network (a private, loopback, link-local or `.local` address)
-and 6 seconds for anything else. A recoverable connection failure is retried
-once after a second, and a machine that has not finished within the collector
-timeout plus two minutes is stopped so it cannot hold the refresh open.
+and 6 seconds for anything else. A machine whose connection drops or flaps is
+retried with a growing pause (1, 2, 4, then every 8 seconds) for as long as
+this Mac's own collectors are still running, up to two minutes, because those
+retries cost the refresh nothing. Once the pipeline is ready to fold the
+machines in, a machine still unreachable keeps its last snapshot. A machine
+that has not finished within the collector timeout plus two minutes is stopped
+so it cannot hold the refresh open.
 
 `--machines` is strict instead: it forces every counted machine regardless of
 freshness, collects them all before the local pipeline starts, and any busy or

@@ -316,11 +316,19 @@ exec "$REAL_JQ" "$@"
     const late = join(root, "late-machine.json");
     writeFileSync(late, lateMachineJSON);
     lateMachine.EDITH_USAGE_MACHINES_GATE = join(root, "machines.gate");
+    lateMachine.EDITH_USAGE_MACHINES_WANTED = join(
+      root,
+      "machines-wanted.gate",
+    );
     deliverer = Bun.spawn(
       [
         "sh",
         "-c",
-        `sleep 4
+        `for attempt in $(seq 1 500); do
+  [ -e "$EDITH_USAGE_MACHINES_WANTED" ] && break
+  sleep 0.05
+done
+[ -e "$EDITH_USAGE_MACHINES_WANTED" ] || exit 1
 mkdir -p "$(dirname "$ORIGINAL_MACHINE")"
 cp "$LATE_MACHINE" "$ORIGINAL_MACHINE"
 : > "$EDITH_USAGE_MACHINES_GATE"`,
@@ -2734,6 +2742,7 @@ describe("collector failure handling", () => {
         lateMachineJSON: JSON.stringify(machineDoc()),
       });
       expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      expect(result.stdout).toContain("note\twaiting for machines");
       const report = JSON.parse(result.output);
       expect(report.machines.map((machine) => machine.name)).toEqual(["tuf"]);
       expect(report.sources).toContain(tufCLI);

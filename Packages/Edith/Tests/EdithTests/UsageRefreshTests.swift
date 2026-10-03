@@ -172,7 +172,7 @@ import Testing
         """.write(to: script, atomically: true, encoding: .utf8)
         let result = try await UsageRefreshRunner.run(
             dataDir: dir, workingDirectory: dir, machinePolicy: .due, script: script,
-            collectMachines: { policy, root, onEvent in
+            collectMachines: { policy, root, _, onEvent in
                 #expect(policy == .due)
                 let started = root.appendingPathComponent("local-started")
                 for _ in 0..<500 where !FileManager.default.fileExists(atPath: started.path) {
@@ -191,6 +191,33 @@ import Testing
             result.events.contains(.phase(name: "tuf", detail: "1 days · 1 agent", seconds: 0.1)))
     }
 
+    @Test func machinesStopReconnectingOnceThePipelineNeedsThem() async throws {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try usage(period: "2026-09-12", source: "local")
+            .write(to: dir.appendingPathComponent("local.json"))
+        let script = dir.appendingPathComponent("collector.sh")
+        try """
+        test -n "${EDITH_USAGE_MACHINES_WANTED:-}" || exit 7
+        : > "$EDITH_USAGE_MACHINES_WANTED"
+        while [ ! -e "$EDITH_USAGE_MACHINES_GATE" ]; do sleep 0.02; done
+        cp "$1/local.json" "$EDITH_USAGE_OUTPUT"
+        printf 'done\\t0.1\\n'
+        """.write(to: script, atomically: true, encoding: .utf8)
+        let clock = ContinuousClock()
+        let started = clock.now
+        _ = try await UsageRefreshRunner.run(
+            dataDir: dir, workingDirectory: dir, machinePolicy: .due, script: script,
+            collectMachines: { _, _, keepReconnecting, _ in
+                for _ in 0..<500 where keepReconnecting() {
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+            })
+        #expect(clock.now - started < .seconds(8))
+        #expect(
+            FileManager.default.fileExists(atPath: dir.appendingPathComponent("usage.json").path))
+    }
+
     @Test func aRefreshWithoutMachinesNeverWaitsForThem() async throws {
         let dir = tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -204,7 +231,7 @@ import Testing
         """.write(to: script, atomically: true, encoding: .utf8)
         _ = try await UsageRefreshRunner.run(
             dataDir: dir, workingDirectory: dir, script: script,
-            collectMachines: { _, _, _ in Issue.record("machines were collected") })
+            collectMachines: { _, _, _, _ in Issue.record("machines were collected") })
         #expect(
             FileManager.default.fileExists(atPath: dir.appendingPathComponent("usage.json").path))
     }
@@ -219,7 +246,7 @@ import Testing
         await #expect(throws: UsageRefreshFailure.self) {
             try await UsageRefreshRunner.run(
                 dataDir: dir, workingDirectory: dir, machinePolicy: .all, script: script,
-                collectMachines: { _, _, _ in try? await Task.sleep(for: .seconds(30)) })
+                collectMachines: { _, _, _, _ in try? await Task.sleep(for: .seconds(30)) })
         }
         #expect(clock.now - started < .seconds(10))
         #expect(

@@ -590,21 +590,44 @@ import Testing
         #expect(value == 7)
     }
 
+    private static let hostDown = SSHConnectionError.connectFailed(
+        SSHConnectFailure(
+            message: "ssh: connect to host 10.0.0.2 port 22: Host is down", isRecoverable: true))
+
     @Test func aDroppedConnectionIsRetriedOnce() async throws {
         let attempts = LockedCounter()
-        try await MachineUsageRound.retryingOnceWhenRecoverable(pause: .zero) {
-            if attempts.increment() == 1 {
-                throw SSHConnectionError.connectFailed(
-                    SSHConnectFailure(message: "Connection timed out.", isRecoverable: true))
-            }
+        try await MachineUsageRound.reconnecting(while: { false }, pause: .zero) {
+            if attempts.increment() == 1 { throw Self.hostDown }
         }
         #expect(attempts.value == 2)
+    }
+
+    @Test func aFlappingMachineIsRetriedWhileThePipelineIsStillBusy() async throws {
+        let attempts = LockedCounter()
+        try await MachineUsageRound.reconnecting(while: { true }, pause: .zero) {
+            if attempts.increment() < 5 { throw Self.hostDown }
+        }
+        #expect(attempts.value == 5)
+    }
+
+    @Test func reconnectingStopsOnceThePipelineNeedsTheMachines() async {
+        let attempts = LockedCounter()
+        let checks = LockedCounter()
+        await #expect(throws: SSHConnectionError.self) {
+            try await MachineUsageRound.reconnecting(
+                while: { checks.increment() <= 2 }, pause: .zero
+            ) {
+                attempts.increment()
+                throw Self.hostDown
+            }
+        }
+        #expect(attempts.value == 4)
     }
 
     @Test func aRejectedLoginIsNotRetried() async {
         let attempts = LockedCounter()
         await #expect(throws: SSHConnectionError.self) {
-            try await MachineUsageRound.retryingOnceWhenRecoverable(pause: .zero) {
+            try await MachineUsageRound.reconnecting(while: { true }, pause: .zero) {
                 attempts.increment()
                 throw SSHConnectionError.connectFailed(
                     SSHConnectFailure(message: "Authentication failed.", isRecoverable: false))
