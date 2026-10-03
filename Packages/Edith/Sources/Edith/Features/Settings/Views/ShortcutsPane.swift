@@ -68,7 +68,7 @@ struct ShortcutsSettingsPane: View {
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent("Toggle agent details") {
-                    Text("⇧⌘B")
+                    Text("⌃⌘B")
                         .font(.system(size: UIScale.pt(12), weight: .medium))
                         .kerning(2)
                         .foregroundStyle(.secondary)
