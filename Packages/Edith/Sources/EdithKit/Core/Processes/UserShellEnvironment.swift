@@ -50,7 +50,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
     private let now: @Sendable () -> Date
 
     public init(
-        shell: URL = ClaudeShellCredentialResolver.loginShell(),
+        shell: URL = UserShellEnvironment.loginShell(),
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         now: @escaping @Sendable () -> Date = { Date() },
@@ -64,6 +64,15 @@ public final class UserShellEnvironment: @unchecked Sendable {
         self.baseEnvironment = baseEnvironment
         self.now = now
         self.capture = capture
+    }
+
+    public static func loginShell() -> URL {
+        guard let entry = getpwuid(getuid()), let shell = entry.pointee.pw_shell else {
+            return URL(fileURLWithPath: "/bin/zsh")
+        }
+        let path = String(cString: shell)
+        guard path.hasPrefix("/") else { return URL(fileURLWithPath: "/bin/zsh") }
+        return URL(fileURLWithPath: path)
     }
 
     public func enable(after delay: Duration = .zero) {

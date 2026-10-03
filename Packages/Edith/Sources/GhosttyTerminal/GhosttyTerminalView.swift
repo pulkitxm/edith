@@ -43,7 +43,7 @@ public final class GhosttyTerminalView: NSView {
     var localEventMonitor: Any?
     var suppressNextLeftMouseUp = false
     var focusMouseDown: NSEvent?
-    var pendingSelectionMouseDown: NSEvent?
+    var programOwnsMouseGesture = false
     var selectionMouseActive = false
     var selectionCopyPending = false
     var selectionMouseReportingSuspended = false
@@ -170,7 +170,7 @@ public final class GhosttyTerminalView: NSView {
         accessibilitySelectionTask?.cancel()
         accessibilitySelectionTask = nil
         focusMouseDown = nil
-        pendingSelectionMouseDown = nil
+        programOwnsMouseGesture = false
         selectionMouseActive = false
         selectionCopyPending = false
         secureInputRequested = false

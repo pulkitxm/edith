@@ -141,16 +141,6 @@ private final class MutableHistoryURL: @unchecked Sendable {
                 == now.addingTimeInterval(300))
     }
 
-    @Test func usageStatusMappingDistinguishesPermissionFailures() {
-        #expect(LimitsCollector.fetchError(statusCode: 401) == .unauthorized)
-        #expect(LimitsCollector.fetchError(statusCode: 403) == .permissionDenied)
-        #expect(
-            LimitsCollector.fetchError(statusCode: 429, retryAfter: 120)
-                == .rateLimited(after: 120))
-        #expect(LimitsCollector.fetchError(statusCode: 500) == .http(500))
-        #expect(LimitsCollector.fetchError(statusCode: 200) == nil)
-    }
-
     @Test func delayedOlderReloadCannotReplaceANewerPublication() async {
         let harness = UsageReloadPublicationHarness()
         let release = AsyncStream<Void>.makeStream()

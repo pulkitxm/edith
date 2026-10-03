@@ -1038,6 +1038,31 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase(
             "ed usage summary --machine", ["usage", "summary", "--machine", "local", "--json"]),
+        JSONCase(
+            "ed usage statusline status", ["usage", "statusline", "status", "--json"],
+            fixtureArguments: { world in
+                ["--settings", world.sandbox.appendingPathComponent("settings.json").path]
+            }),
+        JSONCase(
+            "ed usage statusline install", ["usage", "statusline", "install", "--json"],
+            fixtureArguments: { world in
+                ["--settings", world.sandbox.appendingPathComponent("settings.json").path]
+            }),
+        JSONCase(
+            "ed usage statusline remove", ["usage", "statusline", "remove", "--json"],
+            fixtureArguments: { world in
+                ["--settings", world.sandbox.appendingPathComponent("settings.json").path]
+            }),
+        JSONCase(
+            "ed usage statusline record", ["usage", "statusline", "record", "--json"],
+            fixtureArguments: { world in
+                let input = world.sandbox.appendingPathComponent("status.json")
+                try Data(
+                    #"{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":4102444800}}}"#
+                        .utf8
+                ).write(to: input)
+                return ["--input", input.path]
+            }),
         JSONCase("ed usage machines ls", ["usage", "machines", "ls", "--json"]),
         JSONCase(
             "ed usage machines collect",

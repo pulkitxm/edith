@@ -33,7 +33,7 @@ Edith requires macOS 14 or later on Apple Silicon.
 **Agent usage**
 
 - **Local accounting** - Claude, Codex and pi activity is attributed to the right machine, repository, worktree and chat without sending the history anywhere.
-- **Rate-limit rings** - Claude, Codex and Cursor limits as live gauges with second-by-second countdowns and history. Claude and Codex show the session and weekly windows, Cursor shows Cursor Models and Other Models for the billing cycle, and Claude's scoped Fable window is tracked too.
+- **Rate-limit rings** - Claude, Codex and Cursor limits as live gauges with second-by-second countdowns and history. Claude and Codex show the session and weekly windows, and Cursor shows Cursor Models and Other Models for the billing cycle. Claude's numbers come from Claude Code's status line once `ed usage statusline install` has connected it.
 - **Menu bar readout** - choose which Claude, Codex and Cursor windows appear, with compact or roomy layouts and a time-aware risk tint.
 - **Alerts** - threshold, ahead-of-pace, burning-hot, back-to-green and pre-reset notifications, all optional.
 - **Dashboard** - KPIs with per-day, model, source, project and hourly charts, plus a sortable model table.

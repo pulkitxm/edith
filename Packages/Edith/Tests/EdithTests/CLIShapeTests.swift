@@ -239,7 +239,7 @@ enum CommandCrawler {
             "ed studio record", "ed studio workflow",
             "ed studio edit publications",
             "ed machines workspace",
-            "ed usage machines",
+            "ed usage machines", "ed usage statusline",
             "ed brew",
             "ed companion", "ed companion reason", "ed companion core",
             "ed companion inquire", "ed companion eval", "ed companion machines",

@@ -454,7 +454,7 @@ extension GhosttyTerminalView {
         suppressNextLeftMouseUp = false
         focusMouseDown = nil
         resumeSelectionMouseReporting()
-        pendingSelectionMouseDown = nil
+        programOwnsMouseGesture = false
         selectionMouseActive = true
         window?.makeFirstResponder(self)
         let local = convert(event.locationInWindow, from: nil)
@@ -462,17 +462,12 @@ extension GhosttyTerminalView {
         commandClickGesture.begin(
             active: commandClick, at: local,
             candidate: commandClick ? commandClickTarget(for: event) : nil)
-        if let surface, configuredMouseReporting, ghostty_surface_mouse_captured(surface),
-            event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
-                || event.modifierFlags.contains(.shift) || commandClick
-        {
-            if event.clickCount == 1,
-                event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
-            {
-                pendingSelectionMouseDown = event
-                return
+        if let surface, configuredMouseReporting, ghostty_surface_mouse_captured(surface) {
+            if event.modifierFlags.contains(.shift) || commandClick {
+                selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
+            } else {
+                programOwnsMouseGesture = true
             }
-            selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
         }
         if event.clickCount == 1 {
             button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
@@ -492,14 +487,10 @@ extension GhosttyTerminalView {
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         let target = hoveredLink ?? terminalTargetAtPointer()
         commandClickOpenedTarget = false
-        let forwardsClick = pendingSelectionMouseDown != nil
-        if let down = pendingSelectionMouseDown {
-            pendingSelectionMouseDown = nil
-            button(down, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
-        }
         button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
         selectionMouseActive = false
-        if !forwardsClick { copyTerminalSelection(nil) }
+        if !programOwnsMouseGesture { copyTerminalSelection(nil) }
+        programOwnsMouseGesture = false
         resumeSelectionMouseReporting()
         if let target = commandClickGesture.finish(
             active: event.modifierFlags.contains(.command), opened: commandClickOpenedTarget,
@@ -544,14 +535,6 @@ extension GhosttyTerminalView {
     public override func mouseDragged(with event: NSEvent) {
         if let focusMouseDown { mouseDown(with: focusMouseDown) }
         guard !suppressNextLeftMouseUp else { return }
-        if let down = pendingSelectionMouseDown {
-            let origin = convert(down.locationInWindow, from: nil)
-            let point = convert(event.locationInWindow, from: nil)
-            guard hypot(point.x - origin.x, point.y - origin.y) >= 3 else { return }
-            pendingSelectionMouseDown = nil
-            selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
-            button(down, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
-        }
         commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
         moved(event)
     }
@@ -563,11 +546,11 @@ extension GhosttyTerminalView {
     }
 
     func cancelSelectionGesture() {
-        if selectionMouseActive, pendingSelectionMouseDown == nil, let surface {
+        if selectionMouseActive, let surface {
             _ = ghostty_surface_mouse_button(
                 surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, GHOSTTY_MODS_NONE)
         }
-        pendingSelectionMouseDown = nil
+        programOwnsMouseGesture = false
         focusMouseDown = nil
         selectionMouseActive = false
         selectionCopyPending = false

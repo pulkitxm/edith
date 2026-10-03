@@ -339,6 +339,14 @@ public enum CommandTree {
         "ed usage machines disable": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage machines forget": Spec(options: ["--json"], arguments: [.machine]),
         "ed usage refresh": Spec(options: ["--json", "--follow", "--machines", "--no-machines"]),
+        "ed usage statusline status": Spec(
+            options: ["--json", "--settings"], optionValues: ["--settings": .localPath]),
+        "ed usage statusline install": Spec(
+            options: ["--json", "--settings"], optionValues: ["--settings": .localPath]),
+        "ed usage statusline remove": Spec(
+            options: ["--json", "--settings"], optionValues: ["--settings": .localPath]),
+        "ed usage statusline record": Spec(
+            options: ["--json", "--input", "--then"], optionValues: ["--input": .localPath]),
         "ed system stats": Spec(options: ["--json", "-f", "--follow", "--interval", "--processes"]),
         "ed system disks": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed music": Spec(
