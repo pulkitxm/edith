@@ -4,6 +4,7 @@ import Testing
 
 @testable import Edith
 @testable import EdithKit
+@testable import EdithCLI
 
 private actor HerdrPanelHerdr {
     private(set) var opened: [(session: String, cwd: String?, machine: UUID?)] = []
@@ -108,6 +109,48 @@ private actor HerdrPanelHerdr {
         #expect(store.performTerminalPanelKey(keyCode: 38, characters: "j", modifiers: .command))
         #expect(!store.terminalPanels.isOpen(owner))
         try await eventually { await herdr.openedSessions.count == 1 }
+    }
+
+    @Test(arguments: [HerdrTerminalMouse.buttons, .scroll])
+    func commandJAndSessionAttachmentsUseTheSameInputPolicy(mouse: HerdrTerminalMouse) async throws
+    {
+        let herdr = HerdrPanelHerdr()
+        let defaults = Self.scratchDefaults()
+        defaults.set(mouse.rawValue, forKey: AppStorageKeys.Herdr.terminalMouse)
+        let store = HerdrStore(
+            defaults: defaults,
+            terminalPanels: HerdrTerminalPanels(defaults: defaults, operations: herdr.operations))
+        store.open(agent("Cursor Agent", pane: "a"))
+        let owner = store.selectedTab
+        let session = try #require(store.sessions.first)
+        #expect(store.performTerminalPanelKey(keyCode: 38, characters: "j", modifiers: .command))
+        let id = try #require(store.terminalPanels.terminals(of: owner).first?.id)
+        try await eventually { store.terminalPanels.terminals[id]?.pane != nil }
+        let terminal = try #require(store.terminalPanels.terminals[id])
+        let executable = URL(fileURLWithPath: "/tmp/herdr")
+        let bridge = URL(fileURLWithPath: "/tmp/ed")
+        let sessionRequest = try await store.attachRequest(
+            for: session, environment: [], localExecutable: executable, bridgeExecutable: bridge)
+        let panelRequest = try await store.attachRequest(
+            for: terminal, environment: [], localExecutable: executable, bridgeExecutable: bridge)
+        let reports = Data("\u{1B}[<0;3;2M\u{1B}[<32;4;2M\u{1B}[<0;4;2m".utf8)
+        for request in [sessionRequest, panelRequest] {
+            let specification = try HerdrTerminalBridgeSpecification(
+                encoded: #require(request.arguments.last))
+            #expect(specification.mouse == mouse)
+            var router = HerdrTerminalInputRouter(mouse: specification.mouse)
+            let commands = try router.commands(for: reports)
+            if mouse == .buttons {
+                #expect(commands.count == 1)
+                let command = try #require(commands.first)
+                let record = try #require(
+                    JSONSerialization.jsonObject(with: command) as? [String: Any])
+                let bytes = try #require(record["bytes"] as? String)
+                #expect(Data(base64Encoded: bytes) == reports)
+            } else {
+                #expect(commands.isEmpty)
+            }
+        }
     }
 
     @Test func eachTabKeepsItsOwnTerminals() async throws {
@@ -526,6 +569,9 @@ private actor HerdrPanelHerdr {
     @Test func terminalSettingsFallBackToCleanDefaults() {
         let defaults = Self.scratchDefaults()
         #expect(HerdrTerminalSettings.load(defaults) == HerdrTerminalSettings())
+        #expect(HerdrTerminalSettings.load(defaults).mouse == .buttons)
+        defaults.set("invalid", forKey: AppStorageKeys.Herdr.terminalMouse)
+        #expect(HerdrTerminalSettings.load(defaults).mouse == .buttons)
         defaults.set("buttons", forKey: AppStorageKeys.Herdr.terminalMouse)
         defaults.set(40.0, forKey: AppStorageKeys.Herdr.terminalFontSize)
         let loaded = HerdrTerminalSettings.load(defaults)

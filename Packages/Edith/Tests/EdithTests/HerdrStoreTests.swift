@@ -483,7 +483,7 @@ private actor HerdrWatchHarness {
             for: selected, environment: environment, executable: executable)
         let expected = try HerdrTerminalBridge.launchRequest(
             bridgeExecutable: bridge, controller: controller,
-            mouse: HerdrKind.displayName(for: kind) == "Cursor Agent" ? .scroll : .buttons)
+            mouse: .buttons)
 
         #expect(request == expected)
     }

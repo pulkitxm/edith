@@ -23,7 +23,7 @@ public struct HerdrTerminalSettings: Equatable, Sendable {
     public var confirmClose: Bool
 
     public init(
-        mouse: HerdrTerminalMouse = .scroll, fontSize: Double = fontSizeDefault,
+        mouse: HerdrTerminalMouse = .buttons, fontSize: Double = fontSizeDefault,
         startFolder: StartFolder = .agent, startupCommand: String = "", confirmClose: Bool = true
     ) {
         self.mouse = mouse
@@ -37,7 +37,7 @@ public struct HerdrTerminalSettings: Equatable, Sendable {
         let size = defaults.object(forKey: AppStorageKeys.Herdr.terminalFontSize) as? Double
         return HerdrTerminalSettings(
             mouse: defaults.string(forKey: AppStorageKeys.Herdr.terminalMouse)
-                .flatMap(HerdrTerminalMouse.init(rawValue:)) ?? .scroll,
+                .flatMap(HerdrTerminalMouse.init(rawValue:)) ?? .buttons,
             fontSize: clampedFontSize(size ?? fontSizeDefault),
             startFolder: defaults.string(forKey: AppStorageKeys.Herdr.terminalStartFolder)
                 .flatMap(StartFolder.init(rawValue:)) ?? .agent,

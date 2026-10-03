@@ -191,7 +191,7 @@
           "contains": "largeHistoriesRenderOnlyTheFirstPage"
         },
         {
-          "path": "Packages/Edith/Sources/Edith/Features/Machines/Views/MachineTerminalTab.swift",
+          "path": "Packages/Edith/Sources/Edith/Shared/Terminal/EdithTerminalView.swift",
           "contains": "guard !hasDeferredDisplay else { return }"
         },
         {

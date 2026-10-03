@@ -32,7 +32,7 @@ extension GhosttyTerminalView {
     public override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
 
     public override func accessibilityHelp() -> String? {
-        "Drag to select and copy text automatically. Click to interact with terminal applications. Hold Option to send drags to terminal applications."
+        "Click and drag to interact with terminal applications. Hold Shift to select and copy text when an application captures the mouse."
     }
 
     public override func accessibilityValue() -> Any? { accessibilitySnapshot().value }

@@ -10,8 +10,6 @@ struct HerdrTerminalPanelView: View {
     let maximumHeight: CGFloat
     var hideAgents = false
     @Environment(\.colorScheme) private var scheme
-    @AppStorage(AppStorageKeys.Herdr.terminalFontSize, store: SharedDefaults.store)
-    private var fontSize = HerdrTerminalSettings.fontSizeDefault
     @State private var dragBaseHeight: Double?
     @State private var liveHeight: Double?
 
@@ -49,14 +47,13 @@ struct HerdrTerminalPanelView: View {
 
     private var content: some View {
         let selectedID = panels.selectedID(in: owner)
-        let size = HerdrTerminalSettings.clampedFontSize(fontSize)
         return ZStack {
             ForEach(panels.terminals(of: owner)) { terminal in
                 let selected = terminal.id == selectedID
                 HerdrPanelTerminalView(
                     store: store, terminal: terminal, selected: selected,
                     wantsFocus: selected && panels.holdsFocus(owner),
-                    launchEnabled: launchEnabled, fontSize: size,
+                    launchEnabled: launchEnabled,
                     onFocus: { panels.focus(owner) }
                 )
                 .opacity(selected ? 1 : 0)
@@ -270,7 +267,7 @@ private struct HerdrTerminalList: View {
 
 struct HerdrTerminalSettingsView: View {
     @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
-    private var mouse = HerdrTerminalMouse.scroll
+    private var mouse = HerdrTerminalMouse.buttons
     @AppStorage(AppStorageKeys.Herdr.terminalFontSize, store: SharedDefaults.store)
     private var fontSize = HerdrTerminalSettings.fontSizeDefault
     @AppStorage(AppStorageKeys.Herdr.terminalStartFolder, store: SharedDefaults.store)
@@ -297,7 +294,7 @@ struct HerdrTerminalSettingsView: View {
                 Text(
                     mouse == .scroll
                         ? "The wheel scrolls. Clicks and pointer moves never reach the shell."
-                        : "The wheel scrolls, and clicks reach apps that use the mouse, like vim."
+                        : "Clicks and drags reach terminal apps. Hold Shift to select and copy text."
                 )
                 .settingsCaption()
             }
@@ -317,17 +314,16 @@ struct HerdrTerminalSettingsView: View {
     }
 }
 
-private struct HerdrPanelTerminalView: View {
+struct HerdrPanelTerminalView: View {
     var store: HerdrStore
     let terminal: HerdrPanelTerminal
     let selected: Bool
     let wantsFocus: Bool
     let launchEnabled: Bool
-    let fontSize: Double
     let onFocus: () -> Void
     @Environment(\.colorScheme) private var scheme
     @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
-    private var mouse = HerdrTerminalMouse.scroll
+    private var mouse = HerdrTerminalMouse.buttons
     @State private var starting = false
     @State private var startedMouse: HerdrTerminalMouse?
 
@@ -338,7 +334,7 @@ private struct HerdrPanelTerminalView: View {
         ZStack {
             TerminalPane(
                 holder: terminal.holder, palette: palette, active: selected,
-                wantsFocus: wantsFocus, fontSize: fontSize,
+                wantsFocus: wantsFocus,
                 onDropFiles: terminal.host.isLocal ? nil : handleRemoteDrop,
                 onFocus: onFocus
             )

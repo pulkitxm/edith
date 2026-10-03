@@ -21,6 +21,31 @@ import Testing
         #expect(holder.themeApplicationCount == 2)
     }
 
+    @Test func fallbackTerminalReportsFocusAndAppliesTheSharedFontSize() throws {
+        let holder = TerminalSessionHolder()
+        let view = holder.terminalView
+        let window = TestWindowHost.window(
+            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
+        window.contentView = view
+        var reports = 0
+        view.onFocus = { reports += 1 }
+        defer { window.contentView = nil }
+        _ = window.makeFirstResponder(nil)
+
+        let click = try #require(
+            NSEvent.mouseEvent(
+                with: .leftMouseDown, location: NSPoint(x: 20, y: 20), modifierFlags: [],
+                timestamp: 1, windowNumber: window.windowNumber, context: nil, eventNumber: 1,
+                clickCount: 1, pressure: 0))
+        view.mouseDown(with: click)
+        #expect(window.firstResponder === view)
+        #expect(reports == 1)
+        holder.applyTheme(.edith(dark: true), scale: 1.5, fontSize: 18)
+        #expect(view.font.pointSize == 27)
+        holder.applyTheme(.edith(dark: true), scale: 1.5, fontSize: 18)
+        #expect(holder.themeApplicationCount == 1)
+    }
+
     @Test func terminalPaletteChangesWithTheAppTheme() {
         let blue = TerminalPalette.edith(dark: true, theme: .blue)
         let orange = TerminalPalette.edith(dark: true, theme: .orange)

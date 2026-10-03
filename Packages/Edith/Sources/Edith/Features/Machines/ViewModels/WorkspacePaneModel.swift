@@ -113,11 +113,16 @@ struct WorkspacePaneView: View {
             RoundedRectangle(cornerRadius: UIScale.pt(6))
                 .strokeBorder(
                     focused ? DashSkin.accent(dark).opacity(0.7) : DashSkin.line(dark),
-                    lineWidth: UIScale.pt(focused ? 2 : 1))
+                    lineWidth: UIScale.pt(focused ? 2 : 1)
+                )
+                .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.16), value: focused)
         .contentShape(Rectangle())
-        .onTapGesture { model.apply { $0.focused = pane.id } }
+        .gesture(
+            TapGesture().onEnded { model.apply { $0.focused = pane.id } },
+            including: selectedTab?.target.screen == .terminal ? .none : .all
+        )
         .onChange(of: focused) { _, isFocused in
             guard isFocused else { return }
             moveKeyboardFocusHere()
