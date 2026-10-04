@@ -126,6 +126,7 @@ final class CodeStatsModel {
 
     func apply(_ next: CodeStatsStatus) async {
         let previous = status
+        guard next.revision >= previous?.revision ?? 0 else { return }
         status = next
         identity = next.settings.identity
         let finished = previous?.isRunning == true && !next.isRunning

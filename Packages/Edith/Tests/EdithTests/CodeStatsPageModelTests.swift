@@ -106,6 +106,23 @@ import Testing
         #expect(agent.recorded == ["status"])
     }
 
+    @Test func anOlderStatusNeverReplacesANewerOne() async {
+        let active = CodeStatsActiveRun(trigger: .manual, startedAt: Date())
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(active: active, revision: 5))
+        let model = model(agent)
+        await model.apply(
+            CodeStatsPageFixture.status(
+                storage: .volumeDisconnected(volumeName: "Archive"), revision: 9))
+        await model.loadStatus()
+        #expect(model.status?.revision == 9)
+        #expect(!model.isRunning)
+        #expect(model.status?.storage == .volumeDisconnected(volumeName: "Archive"))
+        agent.status = CodeStatsPageFixture.status(revision: 12)
+        await model.loadStatus()
+        #expect(model.status?.storage.isReady == true)
+    }
+
     @Test func finishingARunReloadsTheReport() async {
         let active = CodeStatsActiveRun(trigger: .scheduled, startedAt: Date())
         let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status(active: active))

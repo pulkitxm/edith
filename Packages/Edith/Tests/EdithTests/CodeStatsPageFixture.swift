@@ -45,7 +45,7 @@ enum CodeStatsPageFixture {
         reportedAt: Date? = nil, active: CodeStatsActiveRun? = nil,
         progress: CodeStatsRunProgress? = nil, waitingFor: String? = nil,
         gitAvailable: Bool = true, githubAvailable: Bool = true,
-        github: CodeStatsGitHubError? = nil
+        github: CodeStatsGitHubError? = nil, revision: UInt64 = 0
     ) -> CodeStatsStatus {
         let lastRun = github.map {
             CodeStatsRunResult(
@@ -58,7 +58,7 @@ enum CodeStatsPageFixture {
             state: CodeStatsState(
                 lastRun: lastRun, lastRunAt: reportedAt, reportedAt: reportedAt, active: active,
                 waitingFor: waitingFor),
-            nextRunAt: nil, progress: progress)
+            nextRunAt: nil, progress: progress, revision: revision)
     }
 }
 

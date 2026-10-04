@@ -82,6 +82,7 @@ public actor CodeStatsWorkflow {
     private var githubInstalled: (checkedAt: Date, available: Bool)?
     private var storage: (folder: String?, checkedAt: Date, status: CodeStatsStorageStatus)?
     private var authorsFlight: Task<[CodeStatsDiscoveredAuthor], Error>?
+    private var revision: UInt64 = 0
 
     public init(
         environment: CodeStatsEnvironment = .live,
@@ -408,13 +409,15 @@ public actor CodeStatsWorkflow {
 
     private func snapshot(probingStorage: Bool = false) -> CodeStatsStatus {
         let settings = environment.settings()
+        let milliseconds = UInt64(max(environment.now().timeIntervalSince1970 * 1_000, 0))
+        revision = max(revision + 1, milliseconds)
         return CodeStatsStatus(
             settings: settings,
             storage: storageStatus(for: settings.folder, probing: probingStorage),
             gitAvailable: gitAvailable, githubAvailable: githubAvailable(), state: state,
             nextRunAt: settings.schedule.nextRun(
                 after: state.scheduleBase, calendar: environment.calendar),
-            progress: state.active == nil ? nil : progress)
+            progress: state.active == nil ? nil : progress, revision: revision)
     }
 
     private func storageStatus(for folder: String?, probing: Bool) -> CodeStatsStorageStatus {

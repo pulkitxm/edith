@@ -406,6 +406,19 @@ struct CodeStatsWorkflowHarness {
             harness.published.update { $0.last?.settings.schedule }
                 == .weekly(weekday: 2, hour: 8))
     }
+
+    @Test func everySnapshotCarriesANewerRevision() async throws {
+        let harness = try CodeStatsWorkflowHarness()
+        defer { harness.fixture.remove() }
+        let workflow = await harness.workflow()
+        let first = try await harness.status(workflow)
+        await workflow.settingsChanged()
+        let published = try #require(harness.published.update { $0.last })
+        let second = try await harness.status(workflow)
+        #expect(first.revision > 0)
+        #expect(published.revision > first.revision)
+        #expect(second.revision > published.revision)
+    }
 }
 
 @Suite struct CodeStatsScheduleJobTests {
