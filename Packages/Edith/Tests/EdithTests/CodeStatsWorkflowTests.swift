@@ -358,7 +358,8 @@ struct CodeStatsWorkflowHarness {
         #expect(signedIn.profile?.login == "octocat")
         #expect(signedIn.emails == ["7+octocat@users.noreply.github.com"])
         #expect(signedIn.issue == nil)
-        #expect(try await harness.status(await harness.workflow()).state.profile?.login == "octocat")
+        let reloaded = try await harness.status(await harness.workflow())
+        #expect(reloaded.state.profile?.login == "octocat")
 
         let signedOut = await harness.workflow(
             github: CodeStatsWorkflowGitHub(failure: .signedOut)
