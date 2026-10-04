@@ -131,7 +131,7 @@ import Testing
         let root = DataRoot.support.path
         for url in [
             DataRoot.machines, DataRoot.clipboard, DataRoot.siteAudit, DataRoot.settingsExport,
-            DataRoot.music, DataRoot.usage,
+            DataRoot.music, DataRoot.usage, DataRoot.codeStats,
         ] {
             #expect(url.path.hasPrefix(root), "\(url.path) escapes the data root")
         }

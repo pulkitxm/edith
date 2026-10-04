@@ -73,6 +73,57 @@ private final class CommandLineRecorder: @unchecked Sendable {
         #expect(result.output == "eventdiagnostic")
     }
 
+    @Test func nonRetainingStreamDeliversEveryLineWithoutBufferingTheOutput() async throws {
+        let counter = CommandLineRecorder()
+        let result = try await CLICommandRunner.runLocalSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "yes 0123456789abcdef | head -n 200000; printf tail"],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 20,
+                maximumOutputBytes: 1_024, terminatesProcessGroup: true),
+            retainsStandardOutput: false,
+            onStandardOutputLine: { line in
+                if line != "0123456789abcdef" { counter.append(line) }
+            },
+            onStandardErrorLine: { _ in })
+        #expect(result.terminationStatus == 0)
+        #expect(result.standardOutputData.isEmpty)
+        #expect(counter.snapshot == ["tail"])
+    }
+
+    @Test func nonRetainingStreamTruncatesHugeLinesAndKeepsCarriageReturnsInside() async throws {
+        let lines = CommandLineRecorder()
+        _ = try await CLICommandRunner.runLocalSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: [
+                    "-c", "head -c 300000 /dev/zero | tr '\\\\0' a; printf '\\nx\\ry\\r\\nend'",
+                ],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 20,
+                terminatesProcessGroup: true),
+            retainsStandardOutput: false,
+            onStandardOutputLine: { lines.append($0) },
+            onStandardErrorLine: { _ in })
+        let captured = lines.snapshot
+        #expect(captured.count == 3)
+        #expect(captured.first?.utf8.count == 64 * 1_024)
+        #expect(Array(captured.dropFirst()) == ["x\ry", "end"])
+    }
+
+    @Test func nonRetainingStreamReadsToTheEndAfterTheCommandExits() async throws {
+        let lines = CommandLineRecorder()
+        let result = try await CLICommandRunner.runLocalSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "printf 'first\\n'; (sleep 1; printf 'late\\n') &"],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 20),
+            retainsStandardOutput: false,
+            onStandardOutputLine: { lines.append($0) },
+            onStandardErrorLine: { _ in })
+        #expect(result.terminationStatus == 0)
+        #expect(lines.snapshot == ["first", "late"])
+    }
+
     @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {
         let callbackStarted = DispatchSemaphore(value: 0)
         let releaseCallback = DispatchSemaphore(value: 0)

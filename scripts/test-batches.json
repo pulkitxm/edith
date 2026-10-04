@@ -26,7 +26,7 @@
       "name": "media",
       "filter": "^EdithTests\\.(Music|VirtualCamera|Ghostty|Audio|Video|Terminal|Emoji)"
     },
-    { "name": "dashboard", "filter": "^EdithTests\\.Dashboard" },
+    { "name": "dashboard", "filter": "^EdithTests\\.(Dashboard|CodeStats)" },
     { "name": "extensions", "filter": "^EdithTests\\.(Extension|Lid)" },
     { "name": "files", "filter": "^EdithTests\\.(File|Finder|Shelf)" },
     { "name": "database-ui", "filter": "^EdithTests\\.Database" },
