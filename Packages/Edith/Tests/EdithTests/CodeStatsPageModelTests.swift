@@ -86,26 +86,6 @@ import Testing
         #expect(!model.canStart)
     }
 
-    @Test func remountRunsTheBlockedScheduleCheck() async {
-        let agent = CodeStatsFakeAgent(
-            status: CodeStatsPageFixture.status(
-                storage: .volumeDisconnected(volumeName: "Archive"), reportedAt: Date(),
-                waitingFor: "Archive"))
-        let model = model(agent)
-        await model.loadStatus()
-        agent.status = CodeStatsPageFixture.status(reportedAt: Date(), waitingFor: "Archive")
-        await model.volumesChanged()
-        #expect(model.status?.storage.isReady == true)
-        #expect(agent.recorded.contains("checkSchedule"))
-    }
-
-    @Test func remountWithoutAWaitingRunOnlyRefreshesStatus() async {
-        let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status(reportedAt: Date()))
-        let model = model(agent)
-        await model.volumesChanged()
-        #expect(agent.recorded == ["status"])
-    }
-
     @Test func anOlderStatusNeverReplacesANewerOne() async {
         let active = CodeStatsActiveRun(trigger: .manual, startedAt: Date())
         let agent = CodeStatsFakeAgent(

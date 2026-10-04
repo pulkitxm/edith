@@ -74,7 +74,6 @@ final class CodeStatsModel {
     func observe() async {
         await withTaskGroup(of: Void.self) { group in
             group.addTask { await self.followAgent() }
-            group.addTask { await self.followVolumes() }
             group.addTask { await self.refresh() }
         }
     }
@@ -133,18 +132,6 @@ final class CodeStatsModel {
         let reported = previous?.state.reportedAt != next.state.reportedAt
         if finished || (previous != nil && reported) {
             await loadReport()
-        }
-    }
-
-    func volumesChanged() async {
-        let wasWaiting = status?.state.waitingFor != nil
-        await loadStatus()
-        guard let status, status.storage.isReady, !status.isRunning else { return }
-        guard wasWaiting || status.state.waitingFor != nil else { return }
-        do {
-            try await service.checkSchedule()
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 
@@ -238,13 +225,6 @@ final class CodeStatsModel {
         for await next in service.updates() {
             guard !Task.isCancelled else { return }
             await apply(next)
-        }
-    }
-
-    private func followVolumes() async {
-        for await _ in service.volumeEvents() {
-            guard !Task.isCancelled else { return }
-            await volumesChanged()
         }
     }
 }

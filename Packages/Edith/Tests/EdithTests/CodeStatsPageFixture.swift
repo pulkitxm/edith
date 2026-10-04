@@ -69,14 +69,11 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
     private var calls: [String] = []
     let updates: AsyncStream<CodeStatsStatus>
     let updatesContinuation: AsyncStream<CodeStatsStatus>.Continuation
-    let volumes: AsyncStream<Void>
-    let volumesContinuation: AsyncStream<Void>.Continuation
 
     init(status: CodeStatsStatus, reports: [CodeStatsRange: CodeStatsReport] = [:]) {
         currentStatus = status
         self.reports = reports
         (updates, updatesContinuation) = AsyncStream.makeStream(of: CodeStatsStatus.self)
-        (volumes, volumesContinuation) = AsyncStream.makeStream(of: Void.self)
     }
 
     var status: CodeStatsStatus {
@@ -125,8 +122,6 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
                         name: "Octo", email: "octo@example.com", commits: 12, countedAsYou: false)
                 ]
             },
-            checkSchedule: { self.record("checkSchedule") },
-            updates: { self.updates },
-            volumeEvents: { self.volumes })
+            updates: { self.updates })
     }
 }
