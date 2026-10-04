@@ -4,7 +4,7 @@ import Testing
 @testable import EdithAgent
 @testable import EdithKit
 
-private struct WorkflowGitHub: CodeStatsGitHubClient {
+struct CodeStatsWorkflowGitHub: CodeStatsGitHubClient {
     var listing: [CodeStatsRemoteRepository] = []
 
     func profile() async throws -> CodeStatsProfile {
@@ -16,7 +16,7 @@ private struct WorkflowGitHub: CodeStatsGitHubClient {
     func repositories() async throws -> [CodeStatsRemoteRepository] { listing }
 }
 
-private struct WorkflowHarness {
+struct CodeStatsWorkflowHarness {
     let fixture: CodeStatsGitFixture
     let mirror: URL
     let settings: CodeStatsLocked<CodeStatsSettings>
@@ -38,7 +38,7 @@ private struct WorkflowHarness {
     }
 
     func workflow(
-        github: WorkflowGitHub? = WorkflowGitHub(), git: CodeStatsGit? = nil,
+        github: CodeStatsWorkflowGitHub? = CodeStatsWorkflowGitHub(), git: CodeStatsGit? = nil,
         probe: CodeStatsFileProbe = .live, enabled: Bool = true, constrained: Bool = false
     ) async -> CodeStatsWorkflow {
         let settings = settings
@@ -89,11 +89,11 @@ private struct WorkflowHarness {
 
 @Suite struct CodeStatsWorkflowTests {
     @Test func aSubmittedRunPublishesProgressAndKeepsOneFlight() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         let remote = try await harness.remote("demo")
         let workflow = await harness.workflow(
-            github: WorkflowGitHub(listing: [
+            github: CodeStatsWorkflowGitHub(listing: [
                 CodeStatsRemoteRepository(fullName: "octo/demo", cloneURL: remote.path)
             ]))
         let run = try await workflow.start(.manual)
@@ -131,11 +131,11 @@ private struct WorkflowHarness {
     }
 
     @Test func cancellingStopsTheRunAndRecordsIt() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         let blocking = try harness.fixture.blockingTool(on: "clone")
         let workflow = await harness.workflow(
-            github: WorkflowGitHub(listing: [
+            github: CodeStatsWorkflowGitHub(listing: [
                 CodeStatsRemoteRepository(fullName: "octo/huge", cloneURL: "/nowhere/huge.git")
             ]), git: blocking.tool)
         let run = try await workflow.start(.manual)
@@ -150,7 +150,7 @@ private struct WorkflowHarness {
     }
 
     @Test func aDriveThatDisappearsMidRunLeavesTheRunInterruptedAndWaiting() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         let local = try await harness.fixture.makeRepository("mirror/octo/local")
         try await harness.fixture.commit(
@@ -179,7 +179,7 @@ private struct WorkflowHarness {
     }
 
     @Test func anInterruptedRunIsRecoveredWithoutRestarting() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         let started = Date(timeIntervalSince1970: 1_700_000_000)
         try harness.store.saveState(
@@ -194,7 +194,7 @@ private struct WorkflowHarness {
     }
 
     @Test func anEmptyIdentityIsSeededFromTheGitHubProfile() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         harness.settings.update { $0.identity = CodeStatsIdentity() }
         let workflow = await harness.workflow()
@@ -206,7 +206,7 @@ private struct WorkflowHarness {
     }
 
     @Test func aDisabledAbilityRefusesToStart() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         let workflow = await harness.workflow(enabled: false)
         await #expect(throws: AgentError.self) { _ = try await workflow.start(.manual) }
@@ -215,7 +215,7 @@ private struct WorkflowHarness {
 }
 
 @Suite struct CodeStatsScheduleJobTests {
-    private func schedule(_ harness: WorkflowHarness, lastRunAt: Date?) throws {
+    private func schedule(_ harness: CodeStatsWorkflowHarness, lastRunAt: Date?) throws {
         harness.settings.update { $0.schedule = .daily(hour: 3) }
         try harness.store.saveState(CodeStatsState(lastRunAt: lastRunAt))
     }
@@ -228,7 +228,7 @@ private struct WorkflowHarness {
     }
 
     @Test func aScheduleWithoutAFirstRunIsNotDue() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         try schedule(harness, lastRunAt: nil)
         let status = try await job(await harness.workflow())
@@ -238,7 +238,7 @@ private struct WorkflowHarness {
     }
 
     @Test func aRecentRunIsNotDueYet() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         try schedule(harness, lastRunAt: Date().addingTimeInterval(-60))
         let status = try await job(await harness.workflow())
@@ -248,7 +248,7 @@ private struct WorkflowHarness {
     }
 
     @Test func aDueScheduleSubmitsOneScheduledRun() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         try schedule(harness, lastRunAt: Date().addingTimeInterval(-3 * 86_400))
         let workflow = await harness.workflow()
@@ -264,7 +264,7 @@ private struct WorkflowHarness {
     }
 
     @Test func aDueScheduleWaitsForTheDriveWithoutRunning() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         try schedule(harness, lastRunAt: Date().addingTimeInterval(-3 * 86_400))
         let mounted = CodeStatsLocked(false)
@@ -286,7 +286,7 @@ private struct WorkflowHarness {
     }
 
     @Test func seriousThermalPressureDefersADueRun() async throws {
-        let harness = try WorkflowHarness()
+        let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
         try schedule(harness, lastRunAt: Date().addingTimeInterval(-3 * 86_400))
         let status = try await job(await harness.workflow(constrained: true))

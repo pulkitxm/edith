@@ -178,6 +178,20 @@ not here cannot be set, and `import` skips it.
 | `projSort` | string | `cost` | shared | Project drilldown sort column. |
 | `projSortAsc` | bool | `false` | shared | Sort the project drilldown ascending. |
 
+### `codestats`
+
+| Key | Type | Default | Scope | What it controls |
+| --- | --- | --- | --- | --- |
+| `tabCodeStatsEnabled` | bool | `false` | shared | Code Stats extension: mirror GitHub repositories and chart your own commits. |
+| `codeStatsFolderPath` | string, read-only | none | shared | Folder holding the repository mirror. Change it with ed code-stats folder. |
+| `codeStatsScheduleKind` | string: `manual`, `daily`, `weekly` | `manual` | shared | How often Code Stats refreshes on its own. |
+| `codeStatsScheduleHour` | int, 0 to 23 | `9` | shared | Hour of the day a scheduled refresh runs. |
+| `codeStatsScheduleWeekday` | int, 1 to 7 | `2` | shared | Weekday a weekly refresh runs, from 1 for Sunday to 7 for Saturday. |
+| `codeStatsIncludeForks` | bool | `false` | shared | Mirror and count repositories that are forks. |
+| `codeStatsIncludeArchived` | bool | `true` | shared | Mirror and count archived repositories. |
+| `codeStatsIdentitySubstrings` | stringList | none | shared | Name or login fragments that mark a commit as yours. |
+| `codeStatsIdentityEmails` | stringList | none | shared | Author emails that mark a commit as yours. |
+
 ### `machines`
 
 | Key | Type | Default | Scope | What it controls |

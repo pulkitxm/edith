@@ -606,6 +606,9 @@ public enum Guide {
         ed seo ls                       saved site-audit projects
         ed seo pages <id> --refresh     discover pages and choose with --all or --only
         ed seo start <id> --json        audit the selected pages
+        ed code-stats status            mirror folder, schedule and live progress
+        ed code-stats run --wait        refresh the GitHub mirror and recount
+        ed code-stats report --range 90d
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio

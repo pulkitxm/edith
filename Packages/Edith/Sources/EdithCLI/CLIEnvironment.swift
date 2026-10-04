@@ -225,6 +225,7 @@ public enum CLIEnvironment {
         homeDirectory = FileManager.default.homeDirectoryForCurrentUser
         clipboardPasteboard = .general
         ClipboardCLIEnvironment.reset()
+        CodeStatsCLIEnvironment.reset()
         downloadQueueFile = DownloadQueue.file
         ClipboardPaths.root = AppData.supportDir
         MachinePaths.root = AppData.supportDir

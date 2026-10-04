@@ -26,6 +26,7 @@ system query failure produces `failed` with runtime phase `error`.
 | Herdr | Herdr presence on this Mac or a configured machine | collected sessions and per-host errors | `ed herdr ls --json`; `ed extensions verify herdr` |
 | Quinjet | verified Quinjet executable, terminal and theme values, and cmux when selected | terminal integration can be resolved | `ed tools install quinjet`; `ed config set quinjetTerminal embedded` |
 | Site Audit | local project storage and optional Lighthouse CLI | saved projects and bounded run history | `ed extensions verify seoAudit`; `ed extensions doctor seoAudit` |
+| Code Stats | `git`, the optional `gh` CLI, and the mirror folder, reporting a disconnected drive as degraded | mirrored repositories and the stored report | `ed extensions doctor codeStats`; `ed code-stats status` |
 | System | built-in running-application module | regular applications visible through AppKit | `ed apps ls --json`; `ed app relaunch` |
 | App Maintenance | built-in app and package inspection | readable application and package sources | `ed extensions verify appMaintenance`; `ed tools install homebrew` |
 | Machines | readable machine registry with valid names, hosts, and SSH ports | configured machine count | `ed machines ls --json`; `ed machines add --help` |

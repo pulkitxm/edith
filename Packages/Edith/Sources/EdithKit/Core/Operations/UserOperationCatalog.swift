@@ -90,6 +90,9 @@ public enum UserOperationCatalog {
         + MusicFolderSelectionOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + CodeStatsOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
         + MusicTransportOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
@@ -872,6 +875,31 @@ private extension DownloadOperation {
             userInterface("Download sheet", "open a completed result", ["1"])
         case .tool:
             userInterface("Download sheet", "update yt-dlp", ["--update"])
+        }
+    }
+}
+
+private extension CodeStatsOperation {
+    var interfaceExposure: UserOperationExposure {
+        let settings = "Code Stats extension settings"
+        let page = "Code Stats page"
+        return switch self {
+        case .status: userInterface(page, "show the refresh status and live progress")
+        case .run:
+            .userInterface([
+                UserInterfaceActionPlacement(surface: settings, action: "refresh now"),
+                UserInterfaceActionPlacement(surface: page, action: "refresh now"),
+            ])
+        case .cancel: userInterface(page, "cancel the running refresh")
+        case .report: userInterface(page, "switch the report range", ["--range", "90d"])
+        case .folder: userInterface(settings, "choose the mirror folder", ["~/GitHub"])
+        case .schedule:
+            userInterface(settings, "choose the refresh schedule", ["daily", "--hour", "9"])
+        case .identityAdd: userInterface(settings, "add an identity", ["you@example.com"])
+        case .identityRemove:
+            userInterface(settings, "remove an identity", ["you@example.com"])
+        case .identityList: userInterface(settings, "list the identities")
+        case .authors: userInterface(page, "list authors found in the mirror")
         }
     }
 }

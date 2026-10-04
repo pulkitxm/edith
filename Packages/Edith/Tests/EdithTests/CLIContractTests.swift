@@ -61,6 +61,23 @@ enum JSONContract {
             mutatesTheMachine: true),
         JSONCase("ed maintenance history", ["maintenance", "history", "--json"]),
         JSONCase("ed seo ls", ["seo", "ls", "--json"]),
+        JSONCase("ed code-stats status", ["code-stats", "status", "--json"]),
+        JSONCase("ed code-stats run", ["code-stats", "run", "--json"]),
+        JSONCase("ed code-stats cancel", ["code-stats", "cancel", "--json"]),
+        JSONCase("ed code-stats report", ["code-stats", "report", "--range", "90d", "--json"]),
+        JSONCase(
+            "ed code-stats folder", ["code-stats", "folder", "--json"],
+            fixtureArguments: { [$0.sandbox.path] }),
+        JSONCase(
+            "ed code-stats schedule", ["code-stats", "schedule", "daily", "--hour", "9", "--json"]),
+        JSONCase("ed code-stats identity list", ["code-stats", "identity", "list", "--json"]),
+        JSONCase(
+            "ed code-stats identity add",
+            ["code-stats", "identity", "add", "you@example.com", "--json"]),
+        JSONCase(
+            "ed code-stats identity remove",
+            ["code-stats", "identity", "remove", "you@example.com", "--json"]),
+        JSONCase("ed code-stats authors", ["code-stats", "authors", "--json"]),
         JSONCase(
             "ed seo create",
             ["seo", "create", "https://example.com", "--name", "Example", "--json"],

@@ -420,38 +420,45 @@ public enum ExtensionLifecycleCatalog {
             workflows: [
                 instruction(
                     "refresh", "Refresh the mirror",
-                    "Clone new repositories, fetch the rest and count your commits."),
+                    "Clone new repositories, fetch the rest and count your commits.",
+                    "ed code-stats run --wait"),
                 instruction(
                     "report", "Read the report",
-                    "Commits, lines, streaks, languages and habits for a range."),
+                    "Commits, lines, streaks, languages and habits for a range.",
+                    "ed code-stats report --range 90d"),
             ],
             prerequisites: [
                 instruction(
                     "folder", "Choose a mirror folder",
-                    "Pick a folder with room for every repository, such as an external drive."),
+                    "Pick a folder with room for every repository, such as an external drive.",
+                    "ed code-stats folder ~/GitHub"),
                 instruction(
                     "github", "Sign in to GitHub",
                     "Install the GitHub CLI and run gh auth login so Edith can list repositories.",
                     "ed tools install gh"),
             ],
             examples: [
-                "ed extensions enable codeStats", "ed extensions doctor codeStats --json",
+                "ed extensions enable codeStats", "ed code-stats status --json",
+                "ed code-stats schedule daily --hour 9",
             ],
             docs: [
-                documentation(
-                    "extensions", "Extensions guide", "docs/cli/extensions/README.md")
+                documentation("cli", "Code Stats commands", "docs/cli/code-stats/README.md")
             ],
             recovery: [
                 instruction(
                     "doctor", "Check Code Stats readiness",
                     "Verify Git, the GitHub CLI and the mirror folder.",
-                    "ed extensions doctor codeStats --json")
+                    "ed extensions doctor codeStats --json"),
+                instruction(
+                    "identity", "Count the right commits",
+                    "List the authors in the mirror and add the ones that are you.",
+                    "ed code-stats authors"),
             ],
             verification: [
                 instruction(
                     "status", "Verify Code Stats",
-                    "Confirm Git is installed and the mirror folder is ready.",
-                    "ed extensions doctor codeStats --json")
+                    "Confirm the folder is ready and the last refresh completed.",
+                    "ed code-stats status --json")
             ]),
         descriptor(
             "system",
