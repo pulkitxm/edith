@@ -145,6 +145,22 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             arguments: ["install", "pulkitxm/tap/quinjet"],
             instruction: "Install with `brew install pulkitxm/tap/quinjet`."))
 
+    public static let git = CLIToolSpec(
+        id: "git", displayName: "Git",
+        why: "Mirrors your GitHub repositories and reads their history for Code Stats.",
+        presenceStrategy: .executable(name: "git", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "git"],
+            instruction: "Install with `xcode-select --install` or `brew install git`."))
+
+    public static let githubCLI = CLIToolSpec(
+        id: "gh", displayName: "GitHub CLI",
+        why: "Lists the GitHub repositories you can reach and signs Code Stats clones in.",
+        presenceStrategy: .executable(name: "gh", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "gh"],
+            instruction: "Install with `brew install gh`, then run `gh auth login`."))
+
     public static let homebrew = CLIToolSpec(
         id: "homebrew", displayName: "Homebrew",
         why: "Provides the formula and cask catalog managed by this extension.",

@@ -253,6 +253,7 @@ import Testing
             ("herdr", "HerdrRows", "enabled", "ExtensionsPane.swift"),
             ("quinjet", "QuinjetRows", "enabled", "ExtensionsPane.swift"),
             ("seoAudit", "SEOAuditRows", "enabled", "ExtensionsPane.swift"),
+            ("codeStats", "CodeStatsRows", "enabled", "CodeStatsRows.swift"),
             ("system", "SystemRows", "enabled", "ExtensionsPane.swift"),
             ("keepAwake", "KeepAwakeRows", "enabled", "ExtensionsPane.swift"),
             ("appMaintenance", "AppMaintenanceRows", "enabled", "ExtensionsPane.swift"),

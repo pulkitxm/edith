@@ -301,6 +301,13 @@ public enum ExtensionRegistry {
             subtitle: "Crawl sitemaps, inspect page metadata, and keep every run local.",
             symbolName: "doc.text.magnifyingglass", suite: .data, host: .agent, featured: false,
             defaultsKey: "tabSEOAuditEnabled", requiredCapabilities: [.siteAuditing]),
+        ExtensionRegistryEntry(
+            id: "codeStats", title: "Code Stats",
+            subtitle: "Mirror your GitHub repositories and see how your own code grows.",
+            symbolName: "chart.line.uptrend.xyaxis", suite: .data, host: .agent,
+            featured: false, defaultsKey: "tabCodeStatsEnabled",
+            requiredCapabilities: [.codeStatistics], requiredToolIDs: ["git"],
+            optionalToolIDs: ["gh"]),
     ]
 
     public static func entry(_ id: String) -> ExtensionRegistryEntry? {

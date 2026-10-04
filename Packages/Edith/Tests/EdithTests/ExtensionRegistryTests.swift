@@ -39,6 +39,7 @@ import Testing
         "tabDatabaseEnabled",
         "tabAttentionEnabled",
         "tabSEOAuditEnabled",
+        "tabCodeStatsEnabled",
     ]
 
     @Test func registryIdentifiersAreUnique() {
@@ -56,7 +57,7 @@ import Testing
                 "focusDim", "windowSweaters", "presenter",
                 "studio", "music", "downloads", "notchShelf", "audioMixer",
                 "calendar", "virtualCamera",
-                "database", "attention", "seoAudit",
+                "database", "attention", "seoAudit", "codeStats",
             ])
     }
 
@@ -232,6 +233,9 @@ import Testing
         #expect(maintenance.requiredTools.isEmpty)
         #expect(maintenance.optionalTools == [.homebrew])
         #expect(homebrew.requiredTools == [.homebrew])
+        let codeStats = ExtensionRegistry.entry("codeStats")!
+        #expect(codeStats.requiredTools == [.git])
+        #expect(codeStats.optionalTools == [.githubCLI])
         #expect(CLIToolSpec.claudeCode.requirement == .always)
         #expect(
             CLIToolSpec.codex.requirement
@@ -365,6 +369,7 @@ import Testing
             "database": [],
             "attention": [],
             "seoAudit": [],
+            "codeStats": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "usage": [.notifications],
@@ -399,6 +404,7 @@ import Testing
             "database": [],
             "attention": [],
             "seoAudit": [],
+            "codeStats": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

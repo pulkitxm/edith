@@ -20,7 +20,7 @@ import Testing
                 "focusDim", "windowSweaters", "presenter",
                 "studio", "music", "downloads", "notchShelf", "audioMixer",
                 "calendar", "virtualCamera",
-                "database", "attention", "seoAudit",
+                "database", "attention", "seoAudit", "codeStats",
             ])
     }
 
@@ -51,6 +51,8 @@ import Testing
         #expect(requiredByExtension["quinjet"] == ["quinjet"])
         #expect(requiredByExtension["homebrew"] == ["homebrew"])
         #expect(optionalByExtension["appMaintenance"] == ["homebrew"])
+        #expect(requiredByExtension["codeStats"] == ["git"])
+        #expect(optionalByExtension["codeStats"] == ["gh"])
     }
 
     @Test func suiteToolsCoverTheirAbilities() {

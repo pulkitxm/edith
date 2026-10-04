@@ -48,7 +48,7 @@ public enum ConfigCatalog {
         "agent", "suites", "appearance", "panel", "attention", "usage", "limits", "menubar",
         "alerts",
         "budget",
-        "dashboard", "database",
+        "dashboard", "database", "codestats",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
         "music", "studio", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
@@ -59,7 +59,8 @@ public enum ConfigCatalog {
 
     public static let settings: [SettingDefinition] =
         agent + suites + appearance + panel + attention + usageAndLimits
-        + menuBar + alerts + budget + dashboard + database + machines + herdr + quinjet + companion
+        + menuBar + alerts + budget + dashboard + database + codeStats + machines + herdr + quinjet
+        + companion
         + finder + system + homebrew + cleaner
         + music + studio + calendar + virtualCamera + clipboard + keystrokeHighlight + notch
         + focusDim
@@ -713,6 +714,43 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.Music.backup, .bool, group: "music",
             summary: "Include the music folder in the iCloud backup."),
+    ]
+
+    private static let codeStats: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.codeStatsEnabled, .bool, group: "codestats",
+            summary: "Code Stats extension: mirror GitHub repositories and chart your own commits.",
+            fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.folder, .string, group: "codestats",
+            summary: "Folder holding the repository mirror. Change it with ed code-stats folder.",
+            readOnly: true),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.scheduleKind, .string, group: "codestats",
+            summary: "How often Code Stats refreshes on its own.",
+            allowed: CodeStatsScheduleKind.allCases.map(\.rawValue), fallback: .string("manual")),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.scheduleHour, .int, group: "codestats",
+            summary: "Hour of the day a scheduled refresh runs.",
+            integerRange: CodeStatsPreferences.hours,
+            fallback: .int(CodeStatsPreferences.defaultHour)),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.scheduleWeekday, .int, group: "codestats",
+            summary: "Weekday a weekly refresh runs, from 1 for Sunday to 7 for Saturday.",
+            integerRange: CodeStatsPreferences.weekdays,
+            fallback: .int(CodeStatsPreferences.defaultWeekday)),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.includeForks, .bool, group: "codestats",
+            summary: "Mirror and count repositories that are forks.", fallback: .bool(false)),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.includeArchived, .bool, group: "codestats",
+            summary: "Mirror and count archived repositories.", fallback: .bool(true)),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.identitySubstrings, .stringList, group: "codestats",
+            summary: "Name or login fragments that mark a commit as yours."),
+        SettingDefinition(
+            AppStorageKeys.CodeStats.identityEmails, .stringList, group: "codestats",
+            summary: "Author emails that mark a commit as yours."),
     ]
 
     private static let studio: [SettingDefinition] = [
