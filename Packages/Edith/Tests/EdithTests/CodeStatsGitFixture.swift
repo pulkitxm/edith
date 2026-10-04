@@ -30,6 +30,59 @@ struct CodeStatsGitFixture {
         CodeStatsGit(executable: Self.executable, environment: Self.environment)
     }
 
+    func blockingTool(
+        on subcommand: String, networkTimeout: TimeInterval = CodeStatsGit.defaultNetworkTimeout
+    ) throws -> (tool: CodeStatsGit, pidFile: URL) {
+        let pidFile = root.appendingPathComponent("blocked-\(subcommand).pid")
+        let script = root.appendingPathComponent("git-blocking-\(subcommand)")
+        let body = """
+            #!/bin/sh
+            for argument in "$@"; do last="$argument"; done
+            for argument in "$@"; do
+                if [ "$argument" = "\(subcommand)" ]; then
+                    if [ "\(subcommand)" = clone ]; then mkdir -p "$last"; fi
+                    echo $$ > '\(pidFile.path)'
+                    exec sleep 30
+                fi
+            done
+            exec '\(Self.executable.path)' "$@"
+
+            """
+        try body.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: script.path)
+        return (
+            CodeStatsGit(
+                executable: script, environment: Self.environment,
+                networkTimeout: networkTimeout),
+            pidFile
+        )
+    }
+
+    func waitForProcess(_ pidFile: URL, timeout: TimeInterval = 20) async throws -> pid_t? {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if let text = try? String(contentsOf: pidFile, encoding: .utf8),
+                let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            {
+                return pid
+            }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        return nil
+    }
+
+    static func eventually(
+        timeout: TimeInterval = 5, _ condition: () -> Bool
+    ) async throws -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            if condition() { return true }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        return condition()
+    }
+
     @discardableResult
     func git(
         _ arguments: [String], in directory: URL? = nil, author: (String, String) = ("x", "x@x"),

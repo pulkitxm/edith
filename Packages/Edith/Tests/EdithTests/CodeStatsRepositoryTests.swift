@@ -36,6 +36,17 @@ import Testing
             CodeStatsRepositoryDiscovery.mirrorURL(root: fixture.root, fullName: "octo/demo").path
                 == fixture.root.appendingPathComponent("octo/demo.git").path)
     }
+
+    @Test func stagingFoldersAreRecognisedOnlyByTheirOwnNames() {
+        let destination = URL(fileURLWithPath: "/tmp/mirror/octo/demo.git")
+        let staging = CodeStatsRepositoryDiscovery.stagingURL(for: destination)
+        #expect(staging.deletingLastPathComponent() == destination.deletingLastPathComponent())
+        #expect(staging.lastPathComponent.hasPrefix(".demo.git.partial-"))
+        #expect(CodeStatsRepositoryDiscovery.isStaging(staging.lastPathComponent))
+        #expect(!CodeStatsRepositoryDiscovery.isStaging("demo.git.partial-\(UUID().uuidString)"))
+        #expect(!CodeStatsRepositoryDiscovery.isStaging(".demo.git.partial-draft"))
+        #expect(!CodeStatsRepositoryDiscovery.isStaging(".git"))
+    }
 }
 
 @Suite struct CodeStatsCacheTests {
@@ -138,6 +149,94 @@ import Testing
         let authors = try await fixture.tool.authors(in: found[0])
         #expect(authors.first { $0.name == "Octocat" }?.commits == 3)
         #expect(authors.first { $0.email == "s@x.com" }?.commits == 1)
+    }
+
+    @Test func stashesAndNotesAreNeitherCountedNorPartOfTheFingerprint() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let me = ("Octocat", "you@example.com")
+        let url = try await fixture.makeRepository("octo/stash")
+        try await fixture.commit(
+            ["a.swift": "let a = 1\n"], in: url, author: me, date: "2026-06-01T09:00:00+00:00")
+        let repository = CodeStatsRepository(fullName: "octo/stash", path: url.path, isBare: false)
+        let before = try await fixture.tool.refsFingerprint(repository)
+        try "let a = 1\nlet b = 2\n".write(
+            to: url.appendingPathComponent("a.swift"), atomically: true, encoding: .utf8)
+        try await fixture.git(["add", "a.swift"], in: url, author: me)
+        try await fixture.git(["stash", "-q"], in: url, author: me)
+        try await fixture.git(["notes", "add", "-m", "note"], in: url, author: me)
+
+        #expect(try await fixture.tool.refsFingerprint(repository) == before)
+        let commits = try await fixture.tool.commits(
+            in: repository, identity: CodeStatsGitFixture.me)
+        #expect(commits.count == 1)
+        #expect(commits.first?.languages == ["Swift": CodeStatsLanguageCounts(added: 1)])
+        let authors = try await fixture.tool.authors(in: repository)
+        #expect(authors.map(\.commits) == [1])
+    }
+
+    @Test func networkRunsBoundSSHUnlessTheUserConfiguredIt() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        var environment = CodeStatsGitFixture.environment
+        environment["GIT_SSH_COMMAND"] = nil
+        environment["GIT_SSH"] = nil
+        let git = CodeStatsGit(executable: CodeStatsGitFixture.executable, environment: environment)
+        let bounded = "core.sshCommand=" + CodeStatsGit.sshCommand
+        #expect(CodeStatsGit.sshCommand.contains("BatchMode=yes"))
+        #expect(CodeStatsGit.sshCommand.contains("ServerAliveInterval="))
+        #expect(await git.networkArguments(in: fixture.root.path).contains(bounded))
+
+        let url = try await fixture.makeRepository("octo/custom")
+        try await fixture.git(["config", "core.sshCommand", "ssh -i key"], in: url)
+        #expect(!(await git.networkArguments(in: url.path).contains(bounded)))
+
+        environment["GIT_SSH_COMMAND"] = "ssh"
+        let overridden = CodeStatsGit(
+            executable: CodeStatsGitFixture.executable, environment: environment)
+        #expect(!(await overridden.networkArguments(in: fixture.root.path).contains(bounded)))
+    }
+
+    @Test func resolvingRequiresAWorkingGit() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let environment = CodeStatsGitFixture.environment
+        let script = { (name: String, body: String) throws -> URL in
+            let url = fixture.root.appendingPathComponent(name)
+            try ("#!/bin/sh\n" + body + "\n").write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: url.path)
+            return url
+        }
+        let working = try script("git-working", "echo 'git version 2.50.0'")
+        let broken = try script("git-broken", "echo 'xcrun: error: invalid active developer path' >&2; exit 1")
+        let calls = CodeStatsLocked(0)
+        let noDeveloperTools: @Sendable () async -> String? = {
+            calls.update { $0 += 1 }
+            return nil
+        }
+
+        let resolved = await CodeStatsGit.resolve(
+            candidate: working, environment: environment, developerDirectory: noDeveloperTools)
+        #expect(resolved?.executable == working)
+        #expect(
+            await CodeStatsGit.resolve(
+                candidate: broken, environment: environment, developerDirectory: noDeveloperTools)
+                == nil)
+        #expect(
+            await CodeStatsGit.resolve(
+                candidate: nil, environment: environment, developerDirectory: noDeveloperTools)
+                == nil)
+        #expect(calls.update { $0 } == 0)
+        #expect(
+            await CodeStatsGit.resolve(
+                candidate: URL(fileURLWithPath: "/usr/bin/git"), environment: environment,
+                developerDirectory: noDeveloperTools) == nil)
+        #expect(calls.update { $0 } == 1)
+        #expect(
+            await CodeStatsGit.resolve(
+                candidate: URL(fileURLWithPath: "/usr/bin/git"), environment: environment,
+                developerDirectory: { fixture.root.path }) == nil)
     }
 
     @Test func theRefsFingerprintChangesWhenRefsChange() async throws {

@@ -19,6 +19,36 @@ public enum CodeStatsRepositoryDiscovery {
             .appendingPathComponent((parts.count > 1 ? parts[1] : fullName) + ".git")
     }
 
+    static let stagingMarker = ".git.partial-"
+
+    public static func stagingURL(for destination: URL) -> URL {
+        destination.deletingLastPathComponent().appendingPathComponent(
+            "." + destination.deletingPathExtension().lastPathComponent + stagingMarker
+                + UUID().uuidString)
+    }
+
+    static func isStaging(_ name: String) -> Bool {
+        guard name.hasPrefix("."), let marker = name.range(of: stagingMarker, options: .backwards)
+        else { return false }
+        return UUID(uuidString: String(name[marker.upperBound...])) != nil
+    }
+
+    @discardableResult
+    public static func removeAbandonedStaging(
+        root: URL, fileManager: FileManager = .default
+    ) -> Int {
+        var removed = 0
+        for owner in visibleDirectories(in: root, fileManager: fileManager) {
+            let children =
+                (try? fileManager.contentsOfDirectory(
+                    at: owner, includingPropertiesForKeys: nil)) ?? []
+            for child in children where isStaging(child.lastPathComponent) {
+                if (try? fileManager.removeItem(at: child)) != nil { removed += 1 }
+            }
+        }
+        return removed
+    }
+
     public static func discover(
         root: URL, fileManager: FileManager = .default
     ) -> [CodeStatsRepository] {
