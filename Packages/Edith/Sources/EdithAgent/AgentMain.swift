@@ -73,6 +73,11 @@ public enum AgentBoot {
                 }
             },
             completed: { IPC.post(IPC.Name.musicFolderChanged) })
+        let codeStats = CodeStatsWorkflow(publish: { status in
+            if let payload = try? AgentPayload.encode(status) {
+                await runtime.publish(topic: .codeStats, payload: payload)
+            }
+        })
         let power = LivePowerSource()
         let scheduler = JobScheduler(
             publish: { topic, payload, revision in
@@ -111,6 +116,7 @@ public enum AgentBoot {
                 await StorageInspectionWorkflow().register(on: tasks)
                 await AgentMachineOperations.register(on: tasks)
                 await downloads.registerEstimate(on: tasks)
+                await codeStats.register(on: tasks, runtime: runtime)
                 try await SEOAuditWorkflow().register(on: tasks, runtime: runtime)
                 await AgentTaskOperations.register(on: runtime, service: tasks)
             } catch {
@@ -128,7 +134,7 @@ public enum AgentBoot {
             }
             for job in AgentJobCatalog.jobs(
                 store: store, scheduler: scheduler, downloads: downloads, metrics: metrics,
-                attention: attention)
+                attention: attention, codeStats: codeStats)
             {
                 await scheduler.register(job)
             }
