@@ -81,7 +81,8 @@ public enum AgentJobCatalog {
                 guard let codeStats else {
                     throw AgentError(.unavailable, "Code Stats is unavailable.")
                 }
-                return try AgentPayload.encode(await codeStats.scheduledCheck())
+                _ = await codeStats.scheduledCheck()
+                return nil
             },
         ]
     }

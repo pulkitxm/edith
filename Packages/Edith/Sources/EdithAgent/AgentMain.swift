@@ -157,6 +157,7 @@ public enum AgentBoot {
         _ = IPC.observe(IPC.Name.settingsChanged) {
             Task {
                 await downloads.refresh()
+                await codeStats.settingsChanged()
                 await scheduler.setPauseAmbientOnBattery(
                     SharedDefaults.store.bool(
                         forKey: AgentSettingsKeys.pauseAmbientOnBattery))

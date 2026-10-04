@@ -24,11 +24,12 @@ public struct CodeStatsState: Codable, Equatable, Sendable {
     public var profile: CodeStatsProfile?
     public var active: CodeStatsActiveRun?
     public var waitingFor: String?
+    public var firstAttemptAt: Date?
 
     public init(
         lastRun: CodeStatsRunResult? = nil, lastRunAt: Date? = nil, reportedAt: Date? = nil,
         profile: CodeStatsProfile? = nil, active: CodeStatsActiveRun? = nil,
-        waitingFor: String? = nil
+        waitingFor: String? = nil, firstAttemptAt: Date? = nil
     ) {
         self.lastRun = lastRun
         self.lastRunAt = lastRunAt
@@ -36,7 +37,10 @@ public struct CodeStatsState: Codable, Equatable, Sendable {
         self.profile = profile
         self.active = active
         self.waitingFor = waitingFor
+        self.firstAttemptAt = firstAttemptAt
     }
+
+    public var scheduleBase: Date? { lastRunAt ?? firstAttemptAt }
 }
 
 public struct CodeStatsStatus: Codable, Equatable, Sendable {
@@ -63,6 +67,22 @@ public struct CodeStatsStatus: Codable, Equatable, Sendable {
     }
 
     public var isRunning: Bool { state.active != nil }
+    public var githubIssue: CodeStatsGitHubError? { state.lastRun?.github }
+}
+
+public struct CodeStatsProfileLookup: Codable, Equatable, Sendable {
+    public var profile: CodeStatsProfile?
+    public var emails: [String]
+    public var issue: CodeStatsGitHubError?
+
+    public init(
+        profile: CodeStatsProfile? = nil, emails: [String] = [],
+        issue: CodeStatsGitHubError? = nil
+    ) {
+        self.profile = profile
+        self.emails = emails
+        self.issue = issue
+    }
 }
 
 public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Sendable {
@@ -94,6 +114,26 @@ extension CodeStatsStorageStatus {
         case .missing: "The mirror folder no longer exists."
         case .notDirectory: "The mirror folder path is not a folder."
         case .notWritable: "Edith cannot write to the mirror folder."
+        }
+    }
+}
+
+extension CodeStatsGitHubError {
+    public var state: String {
+        switch self {
+        case .unavailable: "unavailable"
+        case .signedOut: "signedOut"
+        case .failed: "failed"
+        }
+    }
+
+    public var summary: String {
+        switch self {
+        case .unavailable:
+            "The GitHub CLI is not installed. Install it with ed tools install gh, then run "
+                + "gh auth login."
+        case .signedOut: "The GitHub CLI is signed out. Run gh auth login."
+        case .failed(let message): "GitHub could not be read: " + message
         }
     }
 }

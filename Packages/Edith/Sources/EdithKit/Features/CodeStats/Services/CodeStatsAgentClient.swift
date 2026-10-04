@@ -7,7 +7,8 @@ public enum CodeStatsAgentOperation {
     public static let authors = "codestats.authors"
     public static let start = "codestats.start"
     public static let cancel = "codestats.cancel"
-    public static let internalOperations = [status, report, authors, start, cancel]
+    public static let profile = "codestats.profile"
+    public static let internalOperations = [status, report, authors, start, cancel, profile]
 }
 
 public struct CodeStatsAgentClient: Sendable {
@@ -15,6 +16,7 @@ public struct CodeStatsAgentClient: Sendable {
 
     public static let authorsTimeout: TimeInterval = 600
     public static let reportTimeout: TimeInterval = 30
+    public static let profileTimeout: TimeInterval = 120
 
     private let perform: Perform
 
@@ -46,6 +48,12 @@ public struct CodeStatsAgentClient: Sendable {
         try await request(
             CodeStatsActiveRun.self, CodeStatsAgentOperation.start,
             AgentPayload.encode(CodeStatsTrigger.manual))
+    }
+
+    public func profile() async throws -> CodeStatsProfileLookup {
+        try await request(
+            CodeStatsProfileLookup.self, CodeStatsAgentOperation.profile,
+            timeout: Self.profileTimeout)
     }
 
     public func cancel() async throws -> CodeStatsStatus {
