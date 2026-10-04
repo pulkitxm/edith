@@ -189,7 +189,8 @@ public struct CodeStatsGit: Sendable {
         let staging = CodeStatsRepositoryDiscovery.stagingURL(for: destination)
         try Self.ensureDirectory(owner)
         do {
-            try await run(["clone", "--bare", "--quiet", url, staging.path], in: owner.path, network: true)
+            try await run(
+                ["clone", "--bare", "--quiet", url, staging.path], in: owner.path, network: true)
             try await run(
                 ["config", "remote.origin.fetch", "+refs/heads/*:refs/heads/*"], in: staging.path)
             try FileManager.default.moveItem(at: staging, to: destination)

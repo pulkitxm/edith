@@ -257,9 +257,11 @@ private struct FakeGitHub: CodeStatsGitHubClient {
         }
         #expect(!FileManager.default.fileExists(atPath: mirror.path))
         try FileManager.default.createDirectory(at: mirror, withIntermediateDirectories: true)
-        let destination = CodeStatsRepositoryDiscovery.mirrorURL(root: mirror, fullName: "octo/demo")
+        let destination = CodeStatsRepositoryDiscovery.mirrorURL(
+            root: mirror, fullName: "octo/demo")
         try await fixture.tool.cloneMirror(from: demo.remote.path, to: destination)
-        #expect(FileManager.default.fileExists(atPath: destination.appendingPathComponent("HEAD").path))
+        let head = destination.appendingPathComponent("HEAD")
+        #expect(FileManager.default.fileExists(atPath: head.path))
     }
 
     @Test func aVanishedDriveInterruptsTheRunAndKeepsTheCache() async throws {

@@ -139,9 +139,9 @@ import Testing
             let day = CodeStatsDay(date: today, calendar: calendar).advanced(by: -offset).string
             return commit("r\(offset)", day, ["Go": .init(added: 1)])
         }
+        let first = CodeStatsDay(year: 2025, month: 1, day: 1)
         let old = (0..<60).map { offset in
-            commit("o\(offset)", CodeStatsDay(year: 2025, month: 1, day: 1).advanced(by: offset)
-                .string, ["Go": .init(added: 1)])
+            commit("o\(offset)", first.advanced(by: offset).string, ["Go": .init(added: 1)])
         }
         let month = build(recent + old, .days(30), today: "2026-06-30").totals
         #expect(month.currentStreak == 45)

@@ -209,7 +209,8 @@ import Testing
             return url
         }
         let working = try script("git-working", "echo 'git version 2.50.0'")
-        let broken = try script("git-broken", "echo 'xcrun: error: invalid active developer path' >&2; exit 1")
+        let broken = try script(
+            "git-broken", "echo 'xcrun: error: invalid active developer path' >&2; exit 1")
         let calls = CodeStatsLocked(0)
         let noDeveloperTools: @Sendable () async -> String? = {
             calls.update { $0 += 1 }
