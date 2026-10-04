@@ -415,6 +415,45 @@ public enum ExtensionLifecycleCatalog {
                     "ed extensions doctor seoAudit --json")
             ]),
         descriptor(
+            "codeStats",
+            "Mirror every GitHub repository you can reach and see how your own code grows.",
+            workflows: [
+                instruction(
+                    "refresh", "Refresh the mirror",
+                    "Clone new repositories, fetch the rest and count your commits."),
+                instruction(
+                    "report", "Read the report",
+                    "Commits, lines, streaks, languages and habits for a range."),
+            ],
+            prerequisites: [
+                instruction(
+                    "folder", "Choose a mirror folder",
+                    "Pick a folder with room for every repository, such as an external drive."),
+                instruction(
+                    "github", "Sign in to GitHub",
+                    "Install the GitHub CLI and run gh auth login so Edith can list repositories.",
+                    "ed tools install gh"),
+            ],
+            examples: [
+                "ed extensions enable codeStats", "ed extensions doctor codeStats --json",
+            ],
+            docs: [
+                documentation(
+                    "extensions", "Extensions guide", "docs/cli/extensions/README.md")
+            ],
+            recovery: [
+                instruction(
+                    "doctor", "Check Code Stats readiness",
+                    "Verify Git, the GitHub CLI and the mirror folder.",
+                    "ed extensions doctor codeStats --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify Code Stats",
+                    "Confirm Git is installed and the mirror folder is ready.",
+                    "ed extensions doctor codeStats --json")
+            ]),
+        descriptor(
             "system",
             "Control running apps and keyboard cleaning from one panel.",
             workflows: [

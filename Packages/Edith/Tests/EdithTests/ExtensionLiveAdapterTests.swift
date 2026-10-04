@@ -127,6 +127,32 @@ import EdithCore
                 == .ready("Site Audit is ready to store projects and run history locally."))
     }
 
+    @Test func codeStatsNeedsGitAFolderAndPrefersTheGitHubCLI() throws {
+        let tool = URL(fileURLWithPath: "/usr/bin/true")
+        let folder = FileManager.default.temporaryDirectory.path
+        #expect(
+            ExtensionLiveAdapters.codeStatsReadiness(folder: folder, git: nil, github: tool)
+                == .uninstalled("Install Git to mirror and analyse your repositories."))
+        #expect(
+            ExtensionLiveAdapters.codeStatsReadiness(folder: nil, git: tool, github: tool)
+                == .needsSetup(CodeStatsStorageStatus.notConfigured.summary))
+        var probe = CodeStatsFileProbe.live
+        probe.volume = { _ in CodeStatsVolume(name: "Archive", mountPoint: "/Volumes/Archive") }
+        probe.isMounted = { _ in false }
+        #expect(
+            ExtensionLiveAdapters.codeStatsReadiness(
+                folder: "/Volumes/Archive/GitHub", git: tool, github: tool, probe: probe)
+                == .degraded(
+                    "Archive is disconnected. Reconnect it or choose another folder."))
+        #expect(
+            ExtensionLiveAdapters.codeStatsReadiness(folder: folder, git: tool, github: nil)
+                == .degraded(
+                    "Install the GitHub CLI and run gh auth login to list your repositories."))
+        #expect(
+            ExtensionLiveAdapters.codeStatsReadiness(folder: folder, git: tool, github: tool)
+                == .ready("Git, the GitHub CLI and the mirror folder are ready."))
+    }
+
     @Test func attentionRequiresAnEnabledTrackingSource() {
         #expect(
             ExtensionLiveAdapters.attentionReadiness(settings: AttentionSettings())

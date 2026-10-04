@@ -1075,6 +1075,7 @@ struct ExtensionDetailRows: View {
             case .herdr: HerdrRows()
             case .quinjet: QuinjetRows()
             case .seoAudit: SEOAuditRows()
+            case .codeStats: CodeStatsRows()
             case .system: SystemRows()
             case .keepAwake: KeepAwakeRows()
             case .appMaintenance: AppMaintenanceRows()

@@ -113,6 +113,7 @@ struct ExtensionUIAuditTests {
         try auditCapture(host, name: "attention-activity")
     }
     @Test func seoAudit() throws { try render("seoAudit") }
+    @Test func codeStats() throws { try render("codeStats") }
 
     private func render(_ id: String) throws {
         let entry = try #require(ExtensionRegistry.entry(id))
