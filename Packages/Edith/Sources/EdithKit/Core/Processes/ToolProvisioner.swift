@@ -95,8 +95,11 @@ public enum CLIToolProvisionState: Equatable, Sendable {
 }
 
 private final class CLIStreamingOutput: @unchecked Sendable {
+    static let streamedLineLimit = 64 * 1_024
+
     private let lock = NSLock()
     private let maximumBytes: Int?
+    private let retainsOutput: Bool
     private let onLine: (@Sendable (String) -> Void)?
     private let onLimit: (@Sendable () -> Void)?
     private var pending = Data()
@@ -105,10 +108,11 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     private var readFailed = false
 
     init(
-        maximumBytes: Int?, onLine: (@Sendable (String) -> Void)?,
+        maximumBytes: Int?, retainsOutput: Bool = true, onLine: (@Sendable (String) -> Void)?,
         onLimit: (@Sendable () -> Void)? = nil
     ) {
         self.maximumBytes = maximumBytes
+        self.retainsOutput = retainsOutput
         self.onLine = onLine
         self.onLimit = onLimit
     }
@@ -116,33 +120,52 @@ private final class CLIStreamingOutput: @unchecked Sendable {
     func receive(_ data: Data) {
         let limited = lock.withLock { () -> (Bool, [String]) in
             guard !exceededLimit else { return (false, []) }
-            if let maximumBytes, complete.count + data.count > maximumBytes {
-                complete.removeAll(keepingCapacity: false)
-                pending.removeAll(keepingCapacity: false)
-                exceededLimit = true
-                return (true, [])
+            if retainsOutput {
+                if let maximumBytes, complete.count + data.count > maximumBytes {
+                    complete.removeAll(keepingCapacity: false)
+                    pending.removeAll(keepingCapacity: false)
+                    exceededLimit = true
+                    return (true, [])
+                }
+                complete.append(data)
             }
-            complete.append(data)
             guard onLine != nil else { return (false, []) }
             var lines: [String] = []
             var start = data.startIndex
-            for index in data.indices where data[index] == 10 || data[index] == 13 {
-                pending.append(data[start..<index])
-                if !pending.isEmpty { lines.append(String(decoding: pending, as: UTF8.self)) }
-                pending.removeAll(keepingCapacity: true)
+            for index in data.indices where endsLine(data[index]) {
+                appendPending(data[start..<index])
+                if let line = takePendingLine() { lines.append(line) }
                 start = data.index(after: index)
             }
-            pending.append(data[start..<data.endIndex])
+            appendPending(data[start..<data.endIndex])
             return (false, lines)
         }
         if limited.0 { onLimit?() }
         for line in limited.1 { onLine?(line) }
     }
 
+    private func endsLine(_ byte: UInt8) -> Bool {
+        byte == 10 || (retainsOutput && byte == 13)
+    }
+
+    private func appendPending(_ bytes: Data) {
+        guard !retainsOutput else {
+            pending.append(bytes)
+            return
+        }
+        let room = Self.streamedLineLimit - pending.count
+        if room > 0 { pending.append(bytes.prefix(room)) }
+    }
+
+    private func takePendingLine() -> String? {
+        if !retainsOutput, pending.last == 13 { pending.removeLast() }
+        defer { pending.removeAll(keepingCapacity: true) }
+        return pending.isEmpty ? nil : String(decoding: pending, as: UTF8.self)
+    }
+
     func finish() -> (output: Data, exceededLimit: Bool) {
         let finished = lock.withLock { () -> (String?, Data, Bool) in
-            let line =
-                !exceededLimit && !pending.isEmpty ? String(decoding: pending, as: UTF8.self) : nil
+            let line = exceededLimit ? nil : takePendingLine()
             pending.removeAll(keepingCapacity: false)
             return (line, complete, exceededLimit)
         }
@@ -346,6 +369,7 @@ public enum CLICommandRunner {
 
     public static func runLocalSeparated(
         _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
+        retainsStandardOutput: Bool = true,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void
     ) async throws -> CLICommandResult {
@@ -354,6 +378,7 @@ public enum CLICommandRunner {
             let running = try await BlockingWork.perform {
                 try launchSeparated(
                     request, streamsWhileRunning: streamsWhileRunning,
+                    retainsStandardOutput: retainsStandardOutput,
                     onStandardOutputLine: onStandardOutputLine,
                     onStandardErrorLine: onStandardErrorLine,
                     cancellationRequested: { cancellation.isCancelled })
@@ -368,6 +393,7 @@ public enum CLICommandRunner {
 
     private static func launchSeparated(
         _ request: CLICommandRequest, streamsWhileRunning: Bool = false,
+        retainsStandardOutput: Bool = true,
         onStandardOutputLine: @escaping @Sendable (String) -> Void,
         onStandardErrorLine: @escaping @Sendable (String) -> Void,
         cancellationRequested: @escaping @Sendable () -> Bool
@@ -381,8 +407,8 @@ public enum CLICommandRunner {
         let standardOutput = Pipe()
         let standardError = Pipe()
         let output = CLIStreamingOutput(
-            maximumBytes: request.maximumOutputBytes,
-            onLine: streamsWhileRunning ? onStandardOutputLine : nil,
+            maximumBytes: request.maximumOutputBytes, retainsOutput: retainsStandardOutput,
+            onLine: streamsWhileRunning || !retainsStandardOutput ? onStandardOutputLine : nil,
             onLimit: { lifecycle.finish(.outputLimitExceeded) })
         let error = CLIStreamingOutput(
             maximumBytes: request.maximumOutputBytes,

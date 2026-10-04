@@ -28,6 +28,8 @@ public enum DataRoot {
 
     public static var siteAudit: URL { support.appendingPathComponent("seo") }
 
+    public static var codeStats: URL { support.appendingPathComponent("code-stats") }
+
     public static var settingsExport: URL { support.appendingPathComponent("settings.json") }
 
     public static var music: URL { support.appendingPathComponent("music") }
