@@ -12,6 +12,7 @@ final class CodeStatsModel {
     private(set) var projection = CodeStatsProjection()
     private(set) var reportLoaded = false
     private(set) var profileLookup: CodeStatsProfileLookup?
+    private(set) var profileLoading = false
     private(set) var authors: [CodeStatsDiscoveredAuthor] = []
     private(set) var authorsLoading = false
     private(set) var identity: CodeStatsIdentity
@@ -158,7 +159,15 @@ final class CodeStatsModel {
         }
     }
 
+    func loadProfileIfNeeded() async {
+        guard profileLookup?.profile == nil else { return }
+        await loadProfile()
+    }
+
     func loadProfile() async {
+        guard !profileLoading else { return }
+        profileLoading = true
+        defer { profileLoading = false }
         do {
             profileLookup = try await service.profile()
         } catch {

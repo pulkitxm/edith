@@ -87,7 +87,7 @@ public struct CodeStatsProfileLookup: Codable, Equatable, Sendable {
     }
 }
 
-public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Sendable {
+public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var email: String
     public var commits: Int
@@ -99,6 +99,8 @@ public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Sendable {
         self.commits = commits
         self.countedAsYou = countedAsYou
     }
+
+    public var id: String { name + "\t" + email }
 }
 
 extension CodeStatsStorageStatus {

@@ -67,6 +67,12 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
     private var currentStatus: CodeStatsStatus
     private var reports: [CodeStatsRange: CodeStatsReport]
     private var calls: [String] = []
+    private var lookup = CodeStatsProfileLookup(
+        profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
+    private var discovered = [
+        CodeStatsDiscoveredAuthor(
+            name: "Octo", email: "octo@example.com", commits: 12, countedAsYou: false)
+    ]
     let updates: AsyncStream<CodeStatsStatus>
     let updatesContinuation: AsyncStream<CodeStatsStatus>.Continuation
 
@@ -83,6 +89,16 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
 
     func setReport(_ report: CodeStatsReport?, for range: CodeStatsRange) {
         lock.withLock { reports[range] = report }
+    }
+
+    var profileLookup: CodeStatsProfileLookup {
+        get { lock.withLock { lookup } }
+        set { lock.withLock { lookup = newValue } }
+    }
+
+    var authors: [CodeStatsDiscoveredAuthor] {
+        get { lock.withLock { discovered } }
+        set { lock.withLock { discovered = newValue } }
     }
 
     var recorded: [String] { lock.withLock { calls } }
@@ -111,16 +127,11 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
             },
             profile: {
                 self.record("profile")
-                return CodeStatsProfileLookup(
-                    profile: CodeStatsProfile(id: 7, login: "octo"),
-                    emails: ["octo@example.com"])
+                return self.profileLookup
             },
             authors: {
                 self.record("authors")
-                return [
-                    CodeStatsDiscoveredAuthor(
-                        name: "Octo", email: "octo@example.com", commits: 12, countedAsYou: false)
-                ]
+                return self.authors
             },
             updates: { self.updates })
     }

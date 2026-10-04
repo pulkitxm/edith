@@ -45,8 +45,8 @@ struct CodeStatsSetupView: View {
             }
         }
         .task {
-            guard automaticActionsEnabled, model.profileLookup == nil else { return }
-            await model.loadProfile()
+            guard automaticActionsEnabled else { return }
+            await model.loadProfileIfNeeded()
         }
     }
 
@@ -92,8 +92,16 @@ struct CodeStatsSetupView: View {
         ) {
             if let profile = lookup?.profile {
                 CodeStatsProfileBadge(profile: profile, dark: dark)
-            } else if let command = lookup?.issue.flatMap({ CodeStatsBanner.github($0).command }) {
-                CodeStatsCommandHint(command: command, dark: dark)
+            } else if let issue = lookup?.issue {
+                HStack(spacing: UIScale.pt(10)) {
+                    if let command = CodeStatsBanner.github(issue).command {
+                        CodeStatsCommandHint(command: command, dark: dark)
+                    }
+                    Button(model.profileLoading ? "Checking..." : "Check again") {
+                        Task { await model.loadProfile() }
+                    }
+                    .disabled(model.profileLoading)
+                }
             }
         }
     }
@@ -126,7 +134,7 @@ struct CodeStatsSetupView: View {
                 }
                 .disabled(model.authorsLoading || model.status?.storage.isReady != true)
             }
-            ForEach(model.authors.prefix(8), id: \.email) { author in
+            ForEach(model.authors.prefix(8)) { author in
                 HStack {
                     Text("\(author.name) <\(author.email)>").lineLimit(1)
                     Text("\(author.commits) commits").foregroundStyle(DashSkin.inkFaint(dark))

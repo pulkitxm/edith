@@ -170,6 +170,38 @@ import Testing
         #expect(model.authors.first?.countedAsYou == false)
     }
 
+    @Test func aSignedOutProfileIsCheckedAgainUntilItLoads() async {
+        let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
+        agent.profileLookup = CodeStatsProfileLookup(issue: .signedOut)
+        let model = model(agent)
+        await model.loadProfileIfNeeded()
+        #expect(model.profileLookup?.issue == .signedOut)
+        #expect(model.seededIdentity == nil)
+        agent.profileLookup = CodeStatsProfileLookup(
+            profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
+        await model.loadProfileIfNeeded()
+        #expect(model.profileLookup?.profile?.login == "octo")
+        #expect(model.seededIdentity?.substrings == ["octo"])
+        await model.loadProfileIfNeeded()
+        #expect(agent.recorded.filter { $0 == "profile" }.count == 2)
+        #expect(!model.profileLoading)
+    }
+
+    @Test func authorsSharingAnEmailKeepDistinctIdentities() async {
+        let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
+        agent.authors = [
+            CodeStatsDiscoveredAuthor(
+                name: "Pulkit", email: "a@x.com", commits: 9, countedAsYou: false),
+            CodeStatsDiscoveredAuthor(
+                name: "pulkitxm", email: "a@x.com", commits: 4, countedAsYou: false),
+        ]
+        let model = model(agent)
+        await model.discoverAuthors()
+        #expect(Set(model.authors.map(\.id)).count == 2)
+        model.addIdentity("a@x.com")
+        #expect(model.authors.allSatisfy { $0.countedAsYou })
+    }
+
     @Test func toolingBannersCarryTheirCommands() {
         let signedOut = CodeStatsBanner.banners(
             for: CodeStatsPageFixture.status(gitAvailable: false, github: .signedOut))
