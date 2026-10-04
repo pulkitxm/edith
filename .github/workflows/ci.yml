@@ -240,7 +240,7 @@ jobs:
           - lane: usage-media
             batches: usage attention companion browser media
           - lane: dashboard-app
-            batches: dashboard code-stats extensions files database-ui app
+            batches: dashboard extensions files database-ui app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
