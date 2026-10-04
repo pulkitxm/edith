@@ -6,6 +6,7 @@ public actor CodeStatsEngine {
         max(ProcessInfo.processInfo.activeProcessorCount - 1, 1)
     }
     public static let recentErrorLimit = 5
+    public static let errorLimit = 50
 
     private let github: (any CodeStatsGitHubClient)?
     private let git: CodeStatsGit
@@ -156,10 +157,11 @@ public actor CodeStatsEngine {
     }
 
     public static func authors(
-        root: URL, identity: CodeStatsIdentity, git: CodeStatsGit, limit: Int = 60
+        root: URL, identity: CodeStatsIdentity, git: CodeStatsGit, limit: Int = 60,
+        concurrency: Int = analysisLimit
     ) async -> [(author: CodeStatsAuthor, countedAsYou: Bool)] {
         let repositories = CodeStatsRepositoryDiscovery.discover(root: root)
-        let lists = await BoundedTaskRunner.map(repositories, limit: analysisLimit) {
+        let lists = await BoundedTaskRunner.map(repositories, limit: concurrency) {
             _, repository in
             (try? await git.authors(in: repository)) ?? []
         }
@@ -258,6 +260,7 @@ public actor CodeStatsEngine {
         if let error, !(error is CancellationError), !Task.isCancelled, storageReady(root) {
             progress.failed += 1
             errors.append(name + ": " + Self.describe(error))
+            if errors.count > Self.errorLimit { errors.removeFirst(errors.count - Self.errorLimit) }
             progress.recentErrors = Array(errors.suffix(Self.recentErrorLimit))
         }
         emit()
