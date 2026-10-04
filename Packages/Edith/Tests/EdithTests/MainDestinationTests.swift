@@ -97,7 +97,7 @@ import Testing
                 .system, .runningApps,
                 .desk,
                 .media, .studio, .downloads, .music, .calendar, .virtualCamera,
-                .data, .database, .attention, .seoAudit,
+                .data, .database, .attention, .seoAudit, .codeStats,
             ])
     }
 

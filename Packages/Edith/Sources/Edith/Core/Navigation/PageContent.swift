@@ -36,6 +36,7 @@ struct PageContent: View {
         case .database: DatabasePage()
         case .attention: AttentionPage()
         case .seoAudit: SEOAuditPage()
+        case .codeStats: CodeStatsPage()
         case .extensions: ExtensionsPane()
         case .settings: SettingsPane(updater: updater)
         case .about: AboutPane()

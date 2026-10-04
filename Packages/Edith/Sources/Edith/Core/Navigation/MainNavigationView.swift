@@ -371,6 +371,8 @@ struct MainWindowView: View {
         var quinjetEnabled = false
     @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
         var seoAuditEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.codeStatsEnabled, store: SharedDefaults.store) private
+        var codeStatsEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -867,8 +869,8 @@ struct MainWindowView: View {
             appMaintenanceEnabled, blitzTreeEnabled,
             homebrewEnabled, cleanerEnabled, systemEnabled, keepAwakeEnabled, musicEnabled,
             calendarEnabled,
-            databaseEnabled, attentionEnabled, seoAuditEnabled, agentsSuite, maintenanceSuite,
-            systemSuite, mediaSuite, dataSuite,
+            databaseEnabled, attentionEnabled, seoAuditEnabled, codeStatsEnabled, agentsSuite,
+            maintenanceSuite, systemSuite, mediaSuite, dataSuite,
         ]
     }
 

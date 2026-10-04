@@ -193,6 +193,9 @@ enum NavigationCatalog {
         SidebarPage(
             id: "seoAudit", title: "Site Audit", symbolName: "doc.text.magnifyingglass",
             band: .suite(.data), abilityIDs: ["seoAudit"], parentID: "data"),
+        SidebarPage(
+            id: "codeStats", title: "Code Stats", symbolName: "chart.line.uptrend.xyaxis",
+            band: .suite(.data), abilityIDs: ["codeStats"], parentID: "data"),
 
         SidebarPage(
             id: "extensions", title: "Extensions", symbolName: "puzzlepiece.extension",
@@ -284,7 +287,7 @@ enum MainDestination: String, CaseIterable, Identifiable {
     case system, runningApps
     case desk
     case media, studio, downloads, music, calendar, virtualCamera
-    case data, database, attention, seoAudit
+    case data, database, attention, seoAudit, codeStats
     case extensions, settings, about
 
     var id: String { rawValue }
