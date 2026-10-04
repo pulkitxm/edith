@@ -883,6 +883,14 @@ private extension CodeStatsOperation {
     var interfaceExposure: UserOperationExposure {
         let settings = "Code Stats extension settings"
         let page = "Code Stats page"
+        func both(_ action: String, _ exampleArguments: [String]) -> UserOperationExposure {
+            .userInterface([
+                UserInterfaceActionPlacement(
+                    surface: settings, action: action, exampleArguments: exampleArguments),
+                UserInterfaceActionPlacement(
+                    surface: page, action: action, exampleArguments: exampleArguments),
+            ])
+        }
         return switch self {
         case .status: userInterface(page, "show the refresh status and live progress")
         case .run:
@@ -892,12 +900,10 @@ private extension CodeStatsOperation {
             ])
         case .cancel: userInterface(page, "cancel the running refresh")
         case .report: userInterface(page, "switch the report range", ["--range", "90d"])
-        case .folder: userInterface(settings, "choose the mirror folder", ["~/GitHub"])
-        case .schedule:
-            userInterface(settings, "choose the refresh schedule", ["daily", "--hour", "9"])
-        case .identityAdd: userInterface(settings, "add an identity", ["you@example.com"])
-        case .identityRemove:
-            userInterface(settings, "remove an identity", ["you@example.com"])
+        case .folder: both("choose the mirror folder", ["~/GitHub"])
+        case .schedule: both("choose the refresh schedule", ["daily", "--hour", "9"])
+        case .identityAdd: both("add an identity", ["you@example.com"])
+        case .identityRemove: both("remove an identity", ["you@example.com"])
         case .identityList: userInterface(settings, "list the identities")
         case .authors: userInterface(page, "list authors found in the mirror")
         }
