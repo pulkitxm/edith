@@ -20,22 +20,26 @@ import Testing
     @Test func manualNeverRuns() {
         let schedule = CodeStatsSchedule.manual
         #expect(
-            schedule.nextRun(after: nil, now: date("2026-06-01 09:00"), calendar: calendar()) == nil
+            schedule.nextRun(after: nil, calendar: calendar()) == nil
         )
         #expect(!schedule.isDue(lastRun: nil, now: date("2026-06-01 09:00"), calendar: calendar()))
     }
 
-    @Test func aScheduleThatNeverRanIsDueImmediately() {
+    @Test func aScheduleThatNeverRanWaitsForTheFirstExplicitRun() {
         let now = date("2026-06-01 09:30")
-        #expect(
-            CodeStatsSchedule.daily(hour: 3).isDue(lastRun: nil, now: now, calendar: calendar()))
+        let later = date("2026-06-09 03:00")
+        for schedule in [CodeStatsSchedule.daily(hour: 3), .weekly(weekday: 2, hour: 3)] {
+            #expect(schedule.nextRun(after: nil, calendar: calendar()) == nil)
+            #expect(!schedule.isDue(lastRun: nil, now: now, calendar: calendar()))
+            #expect(!schedule.isDue(lastRun: nil, now: later, calendar: calendar()))
+        }
     }
 
     @Test func dailyRunsAtTheNextSlotAfterTheLastRun() {
         let schedule = CodeStatsSchedule.daily(hour: 9)
         let last = date("2026-06-01 09:05")
         #expect(
-            schedule.nextRun(after: last, now: last, calendar: calendar())
+            schedule.nextRun(after: last, calendar: calendar())
                 == date("2026-06-02 09:00"))
         #expect(!schedule.isDue(lastRun: last, now: date("2026-06-02 08:59"), calendar: calendar()))
         #expect(schedule.isDue(lastRun: last, now: date("2026-06-02 09:00"), calendar: calendar()))
@@ -45,7 +49,7 @@ import Testing
         let schedule = CodeStatsSchedule.weekly(weekday: 2, hour: 6)
         let last = date("2026-06-01 06:10")
         #expect(
-            schedule.nextRun(after: last, now: last, calendar: calendar())
+            schedule.nextRun(after: last, calendar: calendar())
                 == date("2026-06-08 06:00"))
         #expect(!schedule.isDue(lastRun: last, now: date("2026-06-07 23:00"), calendar: calendar()))
     }
@@ -59,7 +63,7 @@ import Testing
             !schedule.isDue(
                 lastRun: reconnected, now: date("2026-06-05 08:00"), calendar: calendar()))
         #expect(
-            schedule.nextRun(after: reconnected, now: reconnected, calendar: calendar())
+            schedule.nextRun(after: reconnected, calendar: calendar())
                 == date("2026-06-05 09:00"))
     }
 
@@ -67,9 +71,9 @@ import Testing
         let zone = "America/Los_Angeles"
         let schedule = CodeStatsSchedule.daily(hour: 2)
         let last = date("2026-03-07 02:00", zone)
-        let skipped = schedule.nextRun(after: last, now: last, calendar: calendar(zone))
+        let skipped = schedule.nextRun(after: last, calendar: calendar(zone))
         #expect(skipped == date("2026-03-08 03:00", zone))
-        let following = schedule.nextRun(after: skipped, now: last, calendar: calendar(zone))
+        let following = schedule.nextRun(after: skipped, calendar: calendar(zone))
         #expect(following == date("2026-03-09 02:00", zone))
     }
 
@@ -77,10 +81,10 @@ import Testing
         let zone = "America/Los_Angeles"
         let schedule = CodeStatsSchedule.daily(hour: 1)
         let last = date("2026-10-31 01:00", zone)
-        let first = try #require(schedule.nextRun(after: last, now: last, calendar: calendar(zone)))
+        let first = try #require(schedule.nextRun(after: last, calendar: calendar(zone)))
         #expect(first.timeIntervalSince(last) == 24 * 3_600)
         let next = try #require(
-            schedule.nextRun(after: first, now: first, calendar: calendar(zone)))
+            schedule.nextRun(after: first, calendar: calendar(zone)))
         #expect(next.timeIntervalSince(first) == 25 * 3_600)
     }
 }

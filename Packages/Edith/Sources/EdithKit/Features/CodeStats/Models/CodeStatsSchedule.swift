@@ -18,16 +18,15 @@ public enum CodeStatsSchedule: Codable, Equatable, Hashable, Sendable {
         }
     }
 
-    public func nextRun(after lastRun: Date?, now: Date, calendar: Calendar) -> Date? {
-        guard let slot else { return nil }
-        guard let lastRun else { return now }
+    public func nextRun(after lastRun: Date?, calendar: Calendar) -> Date? {
+        guard let slot, let lastRun else { return nil }
         return calendar.nextDate(
             after: lastRun, matching: slot, matchingPolicy: .nextTime,
             repeatedTimePolicy: .first, direction: .forward)
     }
 
     public func isDue(lastRun: Date?, now: Date, calendar: Calendar) -> Bool {
-        guard let next = nextRun(after: lastRun, now: now, calendar: calendar) else {
+        guard let next = nextRun(after: lastRun, calendar: calendar) else {
             return false
         }
         return next <= now
