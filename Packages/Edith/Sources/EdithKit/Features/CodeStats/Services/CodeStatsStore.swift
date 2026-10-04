@@ -34,6 +34,7 @@ public struct CodeStatsStore: Sendable {
 
     private var repositoriesFolder: URL { root.appendingPathComponent("repositories") }
     private var reportsFile: URL { root.appendingPathComponent("reports.json") }
+    private var stateFile: URL { root.appendingPathComponent("state.json") }
 
     private func cacheFile(for repository: String) -> URL {
         repository.split(separator: "/").reduce(repositoriesFolder) {
@@ -84,5 +85,15 @@ public struct CodeStatsStore: Sendable {
     public func saveReports(_ reports: [CodeStatsReport]) throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try JSONEncoder().encode(reports).write(to: reportsFile, options: .atomic)
+    }
+
+    public func loadState() -> CodeStatsState {
+        guard let data = try? Data(contentsOf: stateFile) else { return CodeStatsState() }
+        return (try? JSONDecoder().decode(CodeStatsState.self, from: data)) ?? CodeStatsState()
+    }
+
+    public func saveState(_ state: CodeStatsState) throws {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try JSONEncoder().encode(state).write(to: stateFile, options: .atomic)
     }
 }

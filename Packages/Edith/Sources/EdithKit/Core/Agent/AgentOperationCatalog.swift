@@ -22,7 +22,7 @@ public enum AgentOperationCatalog {
             AgentNotificationOperation.pending, AgentNotificationOperation.acknowledge,
             CompanionBackgroundOperation.refresh, AgentMachineMetricsRefresh.operation,
         ] + AgentTaskOperation.internalOperations + AgentDownloadOperation.internalOperations
-        + SEOAuditTaskOperation.internalOperations
+        + SEOAuditTaskOperation.internalOperations + CodeStatsAgentOperation.internalOperations
         + AgentClipboardOperation.internalOperations
         + JevAgentOperation.internalOperations + AgentSearchOperation.internalOperations
         + HerdrHookOperation.internalOperations

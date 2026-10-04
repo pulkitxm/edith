@@ -64,13 +64,14 @@ public struct CodeStatsRunProgress: Codable, Equatable, Sendable {
 public enum CodeStatsRunOutcome: Codable, Equatable, Sendable {
     case completed
     case cancelled
+    case interrupted
     case volumeDisconnected(volumeName: String)
     case storageUnavailable(CodeStatsStorageStatus)
     case failed(message: String)
 
     public var isInterrupted: Bool {
         switch self {
-        case .cancelled, .volumeDisconnected: true
+        case .cancelled, .interrupted, .volumeDisconnected: true
         default: false
         }
     }
@@ -86,4 +87,20 @@ public struct CodeStatsRunResult: Codable, Equatable, Sendable {
     public var synced: Int
     public var failed: Int
     public var errors: [String]
+
+    public init(
+        outcome: CodeStatsRunOutcome, startedAt: Date, finishedAt: Date,
+        profile: CodeStatsProfile? = nil, github: CodeStatsGitHubError? = nil,
+        repositories: Int = 0, synced: Int = 0, failed: Int = 0, errors: [String] = []
+    ) {
+        self.outcome = outcome
+        self.startedAt = startedAt
+        self.finishedAt = finishedAt
+        self.profile = profile
+        self.github = github
+        self.repositories = repositories
+        self.synced = synced
+        self.failed = failed
+        self.errors = errors
+    }
 }

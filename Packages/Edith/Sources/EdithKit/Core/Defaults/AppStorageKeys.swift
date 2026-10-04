@@ -110,6 +110,18 @@ public enum AppStorageKeys {
         public static let lastBackupAt = "lastClipboardBackupAt"
     }
 
+    public enum CodeStats {
+        public static let folder = "codeStatsFolderPath"
+        public static let folderConfirmation = "codeStatsFolderExternalConfirmation"
+        public static let scheduleKind = "codeStatsScheduleKind"
+        public static let scheduleHour = "codeStatsScheduleHour"
+        public static let scheduleWeekday = "codeStatsScheduleWeekday"
+        public static let includeForks = "codeStatsIncludeForks"
+        public static let includeArchived = "codeStatsIncludeArchived"
+        public static let identitySubstrings = "codeStatsIdentitySubstrings"
+        public static let identityEmails = "codeStatsIdentityEmails"
+    }
+
     public enum ColorPicker {
         public static let copyFormat = "colorPickerCopyFormat"
         public static let enabled = "colorPickerEnabled"
@@ -351,6 +363,7 @@ public enum AppStorageKeys {
         public static let blitzTreeEnabled = "tabBlitzTreeEnabled"
         public static let attentionEnabled = "tabAttentionEnabled"
         public static let calendarEnabled = "tabCalendarEnabled"
+        public static let codeStatsEnabled = "tabCodeStatsEnabled"
         public static let companionEnabled = "tabCompanionEnabled"
         public static let pluginsEnabled = "tabPluginsEnabled"
         public static let databaseEnabled = "tabDatabaseEnabled"

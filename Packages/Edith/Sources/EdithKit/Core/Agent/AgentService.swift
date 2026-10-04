@@ -76,6 +76,7 @@ public enum AgentTopic: String, CaseIterable, Codable, Sendable {
     case attention
     case companion
     case siteAudit
+    case codeStats
     case backup
     case jobs
     case events
@@ -95,6 +96,7 @@ public enum AgentTopic: String, CaseIterable, Codable, Sendable {
         case .attention: "Attention"
         case .companion: "Memory"
         case .siteAudit: "Site Audit"
+        case .codeStats: "Code Stats"
         case .backup: "Backup"
         case .jobs: "Jobs"
         case .events: "Events"
