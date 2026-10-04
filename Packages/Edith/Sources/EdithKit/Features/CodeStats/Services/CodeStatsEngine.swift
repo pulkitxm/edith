@@ -71,6 +71,7 @@ public actor CodeStatsEngine {
         var profile: CodeStatsProfile?
         var issue: CodeStatsGitHubError?
         var remote: [CodeStatsRemoteRepository] = []
+        var excluded = Set<String>()
         if let github {
             do {
                 profile = try await github.profile()
@@ -82,6 +83,10 @@ public actor CodeStatsEngine {
                 do {
                     let listed = try await github.repositories()
                     remote = listed.filter(settings.includes)
+                    excluded = Set(
+                        listed.lazy.filter { !settings.includes($0) }.map {
+                            $0.fullName.lowercased()
+                        })
                     progress.skipped = listed.count - remote.count
                     progress.listedKilobytes = remote.reduce(0) { $0 + $1.sizeKilobytes }
                 } catch {
@@ -95,9 +100,14 @@ public actor CodeStatsEngine {
         if Task.isCancelled { return result(.cancelled, startedAt, profile, issue) }
 
         enter(.syncing, total: remote.count)
-        let local = Dictionary(
-            CodeStatsRepositoryDiscovery.discover(root: root).map { ($0.fullName.lowercased(), $0) }
-        ) { first, _ in first }
+        let local = await BlockingWork.value {
+            CodeStatsRepositoryDiscovery.removeAbandonedStaging(root: root)
+            return Dictionary(
+                CodeStatsRepositoryDiscovery.discover(root: root).map {
+                    ($0.fullName.lowercased(), $0)
+                }
+            ) { first, _ in first }
+        }
         _ = await BoundedTaskRunner.map(remote, limit: syncLimit) { _, repository in
             await self.sync(repository, root: root, existing: local)
         }
@@ -105,7 +115,10 @@ public actor CodeStatsEngine {
             return result(interrupted, startedAt, profile, issue)
         }
 
-        let repositories = CodeStatsRepositoryDiscovery.discover(root: root)
+        let discovered = await BlockingWork.value {
+            CodeStatsRepositoryDiscovery.discover(root: root)
+        }
+        let repositories = discovered.filter { !excluded.contains($0.fullName.lowercased()) }
         repositoryCount = repositories.count
         enter(.analyzing, total: repositories.count)
         let store = store
@@ -131,7 +144,7 @@ public actor CodeStatsEngine {
                         CodeStatsReportBuilder.build(
                             commits: commits, range: $0, today: today, calendar: calendar)
                     })
-                store.removeCaches(except: Set(repositories.map(\.fullName)))
+                store.removeCaches(except: Set(discovered.map(\.fullName)))
             }
         } catch {
             return result(.failed(message: "\(error)"), startedAt, profile, issue)

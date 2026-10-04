@@ -130,6 +130,138 @@ private struct FakeGitHub: CodeStatsGitHubClient {
         #expect(ProcessInfo.processInfo.systemUptime - started < 5)
     }
 
+    private func hiddenEntries(_ folder: URL) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).filter {
+            $0.hasPrefix(".")
+        }
+    }
+
+    @Test func cancellingMidCloneStopsGitAndRemovesTheStagingFolder() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let mirror = try mirror(fixture)
+        let blocking = try fixture.blockingTool(on: "clone")
+        let engine = CodeStatsEngine(
+            github: FakeGitHub(listing: [
+                CodeStatsRemoteRepository(fullName: "octo/huge", cloneURL: "/nowhere/huge.git")
+            ]), git: blocking.tool,
+            store: CodeStatsStore(root: fixture.root.appendingPathComponent("state")),
+            progressInterval: 0)
+        let settings = CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me)
+        let task = Task { await engine.run(settings: settings) }
+        let pid = try #require(await fixture.waitForProcess(blocking.pidFile))
+        let owner = mirror.appendingPathComponent("octo")
+        #expect(hiddenEntries(owner).count == 1)
+        let cancelled = ProcessInfo.processInfo.systemUptime
+        task.cancel()
+        let result = await task.value
+        #expect(result.outcome == .cancelled)
+        #expect(ProcessInfo.processInfo.systemUptime - cancelled < 5)
+        #expect(try await CodeStatsGitFixture.eventually { kill(pid, 0) != 0 })
+        #expect(try await CodeStatsGitFixture.eventually { hiddenEntries(owner).isEmpty })
+    }
+
+    @Test func cancellingMidAnalysisStopsTheLogProcess() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let mirror = try mirror(fixture)
+        let local = try await fixture.makeRepository("mirror/octo/local")
+        try await fixture.commit(
+            ["a.swift": "let a = 1\n"], in: local, author: me, date: "2024-05-01T10:00:00+00:00")
+        let blocking = try fixture.blockingTool(on: "log")
+        let engine = CodeStatsEngine(
+            github: nil, git: blocking.tool,
+            store: CodeStatsStore(root: fixture.root.appendingPathComponent("state")),
+            progressInterval: 0)
+        let settings = CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me)
+        let task = Task { await engine.run(settings: settings) }
+        let pid = try #require(await fixture.waitForProcess(blocking.pidFile))
+        let cancelled = ProcessInfo.processInfo.systemUptime
+        task.cancel()
+        let result = await task.value
+        #expect(result.outcome == .cancelled)
+        #expect(result.github == .unavailable)
+        #expect(ProcessInfo.processInfo.systemUptime - cancelled < 5)
+        #expect(try await CodeStatsGitFixture.eventually { kill(pid, 0) != 0 })
+    }
+
+    @Test func aStalledFetchTimesOutAndTheRunStillCompletes() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let mirror = try mirror(fixture)
+        let local = try await fixture.makeRepository("mirror/octo/slow")
+        try await fixture.commit(
+            ["a.swift": "let a = 1\n"], in: local, author: me, date: "2024-05-01T10:00:00+00:00")
+        let blocking = try fixture.blockingTool(on: "fetch", networkTimeout: 1)
+        let store = CodeStatsStore(root: fixture.root.appendingPathComponent("state"))
+        let engine = CodeStatsEngine(
+            github: FakeGitHub(listing: [
+                CodeStatsRemoteRepository(fullName: "octo/slow", cloneURL: "/nowhere/slow.git")
+            ]), git: blocking.tool, store: store, progressInterval: 0)
+        let started = ProcessInfo.processInfo.systemUptime
+        let result = await engine.run(
+            settings: CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me))
+        #expect(result.outcome == .completed)
+        #expect(result.failed == 1)
+        #expect(result.errors.first?.hasPrefix("octo/slow: ") == true)
+        #expect(ProcessInfo.processInfo.systemUptime - started < 15)
+        #expect(allTime(store)?.totals.commits == 1)
+    }
+
+    @Test func excludedForksAreNeitherSyncedNorCountedAndStaleStagingIsSwept() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let mirror = try mirror(fixture)
+        for name in ["mine", "fork"] {
+            let url = try await fixture.makeRepository("mirror/octo/\(name)")
+            try await fixture.commit(
+                ["\(name).swift": "let a = 1\n"], in: url, author: me,
+                date: "2024-05-01T10:00:00+00:00", message: name)
+        }
+        let owner = mirror.appendingPathComponent("octo")
+        let abandoned = owner.appendingPathComponent(".gone.git.partial-\(UUID().uuidString)")
+        let unrelated = owner.appendingPathComponent(".keep.git.partial-notes")
+        for folder in [abandoned, unrelated] {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        let store = CodeStatsStore(root: fixture.root.appendingPathComponent("state"))
+        let engine = CodeStatsEngine(
+            github: FakeGitHub(listing: [
+                CodeStatsRemoteRepository(fullName: "octo/mine", cloneURL: "/nowhere/mine.git"),
+                CodeStatsRemoteRepository(
+                    fullName: "octo/fork", cloneURL: "/nowhere/fork.git", isFork: true),
+            ]), git: fixture.tool, store: store, progressInterval: 0)
+        let result = await engine.run(
+            settings: CodeStatsSettings(folder: mirror.path, identity: CodeStatsGitFixture.me))
+        #expect(result.outcome == .completed)
+        #expect(result.repositories == 1)
+        #expect(allTime(store)?.repositories.map(\.repository) == ["octo/mine"])
+        #expect(hiddenEntries(owner) == [unrelated.lastPathComponent])
+
+        let withForks = await engine.run(
+            settings: CodeStatsSettings(
+                folder: mirror.path, identity: CodeStatsGitFixture.me, includeForks: true))
+        #expect(withForks.repositories == 2)
+        #expect(allTime(store)?.totals.commits == 2)
+    }
+
+    @Test func aRemovedMirrorFolderIsNeverRecreatedByAClone() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let demo = try await remote("demo", in: fixture)
+        let mirror = fixture.root.appendingPathComponent("gone", isDirectory: true)
+        await #expect(throws: (any Error).self) {
+            try await fixture.tool.cloneMirror(
+                from: demo.remote.path,
+                to: CodeStatsRepositoryDiscovery.mirrorURL(root: mirror, fullName: "octo/demo"))
+        }
+        #expect(!FileManager.default.fileExists(atPath: mirror.path))
+        try FileManager.default.createDirectory(at: mirror, withIntermediateDirectories: true)
+        let destination = CodeStatsRepositoryDiscovery.mirrorURL(root: mirror, fullName: "octo/demo")
+        try await fixture.tool.cloneMirror(from: demo.remote.path, to: destination)
+        #expect(FileManager.default.fileExists(atPath: destination.appendingPathComponent("HEAD").path))
+    }
+
     @Test func aVanishedDriveInterruptsTheRunAndKeepsTheCache() async throws {
         let fixture = try CodeStatsGitFixture()
         defer { fixture.remove() }
