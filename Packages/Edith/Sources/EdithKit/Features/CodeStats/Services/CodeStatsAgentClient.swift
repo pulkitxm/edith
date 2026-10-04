@@ -8,6 +8,7 @@ public enum CodeStatsAgentOperation {
     public static let start = "codestats.start"
     public static let cancel = "codestats.cancel"
     public static let profile = "codestats.profile"
+    public static let scheduleJob = "codestats.schedule"
     public static let internalOperations = [status, report, authors, start, cancel, profile]
 }
 

@@ -65,7 +65,7 @@ public struct CodeStatsEnvironment: Sendable {
 
 public actor CodeStatsWorkflow {
     public static let abilityID = "codeStats"
-    public static let scheduleJobID = "codestats.schedule"
+    public static let scheduleJobID = CodeStatsAgentOperation.scheduleJob
     static let gitRecheckInterval: TimeInterval = 60
     static let storageRecheckInterval: TimeInterval = 10
     static let gitMissing = "git is not installed. Install it with ed tools install git."

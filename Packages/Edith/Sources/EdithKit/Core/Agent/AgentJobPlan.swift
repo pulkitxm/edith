@@ -38,8 +38,8 @@ public enum AgentJobPlan {
             topic: .companion, cadence: .every(ambient: 60, live: 20), power: .any,
             abilityID: "companion"),
         AgentJobDescriptor(
-            id: "codestats.schedule", title: "Code Stats schedule", trigger: .timer,
-            topic: .codeStats, cadence: .every(ambient: 600), power: .any,
+            id: CodeStatsAgentOperation.scheduleJob, title: "Code Stats schedule",
+            trigger: .timer, topic: .codeStats, cadence: .every(ambient: 600), power: .any,
             abilityID: "codeStats"),
         AgentJobDescriptor(
             id: "backup.sync", title: "iCloud backup", trigger: .fileSystem, topic: .backup,
