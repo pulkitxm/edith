@@ -213,6 +213,11 @@ final class CLIWorld: @unchecked Sendable {
             try await clipboard.perform(operation: $0, payload: $1)
         }
         CLIEnvironment.standardDefaults = standard
+        CodeStatsCLIEnvironment.client = {
+            CodeStatsAgentClient { _, _, _ in
+                throw AgentError(.unavailable, "the background agent is not running in tests")
+            }
+        }
         CLIEnvironment.isHelperRunning = { false }
         CLIEnvironment.isMainAppRunning = { false }
         CLIEnvironment.executableNamed = { _ in nil }

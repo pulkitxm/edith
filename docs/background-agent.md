@@ -118,6 +118,7 @@ power, and cadence policy.
 | Download queue | Queue | On demand | On demand | Downloads |
 | Attention ingestion | Timer | 15 minutes | 15 minutes | Attention |
 | Memory health | Timer | 1 minute | 20 seconds | Companion |
+| Code Stats schedule | Timer | 10 minutes | Same | Code Stats |
 | iCloud backup | File changes | 1 day | Same | Backup |
 
 Filesystem notifications are hints, not permission to bypass cadence. The usage watcher
@@ -134,7 +135,8 @@ or while the screen is locked.
 
 `AgentTaskService` owns work that needs progress, cancellation, retained output, or a
 result after the submitting UI disappears. The registered workflows cover storage
-inspection, site audits, machine operations, and download estimates. Tasks have bounded
+inspection, site audits, Code Stats refreshes, machine operations, and download
+estimates. Tasks have bounded
 concurrency, persisted terminal states, explicit cancellation, and a retained event ID.
 
 The app and CLI submit task specifications and inspect task receipts. They do not retain

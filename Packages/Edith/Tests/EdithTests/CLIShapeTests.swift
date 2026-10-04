@@ -252,6 +252,7 @@ enum CommandCrawler {
             "ed attention focus",
             "ed attention rules", "ed attention rules export",
             "ed quinjet",
+            "ed code-stats", "ed code-stats identity",
             "ed database", "ed database connections", "ed database saved-queries",
             "ed database mutations", "ed database operations", "ed database pack",
             "ed database mcp",

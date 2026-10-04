@@ -43,6 +43,8 @@ public enum ArgumentKind: Equatable, Sendable {
     case attentionEntity
     case attentionCategory
     case downloadKind
+    case codeStatsRange
+    case codeStatsSchedule
     case quinjetAppearance
     case quinjetMachine
     case quinjetPath
@@ -1579,6 +1581,23 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version", "--endpoint", "--yes"],
             destructivePolicy: .previewThenYes),
         "ed seo ls": Spec(options: ["--json", "--help"]),
+        "ed code-stats status": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed code-stats run": Spec(options: ["--json", "--help", "--wait"]),
+        "ed code-stats cancel": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed code-stats report": Spec(
+            options: ["--json", "--help", "--range"], optionValues: ["--range": .codeStatsRange]),
+        "ed code-stats folder": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.localPath]),
+        "ed code-stats schedule": Spec(
+            options: ["--json", "--help", "--hour", "--weekday"],
+            optionValues: ["--hour": .free, "--weekday": .free],
+            arguments: [.codeStatsSchedule]),
+        "ed code-stats identity list": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed code-stats identity add": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed code-stats identity remove": Spec(
+            options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
+        "ed code-stats authors": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed seo create": Spec(
             options: ["--json", "--help", "--name"], optionValues: ["--name": .free],
             arguments: [.free]),

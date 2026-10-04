@@ -5,8 +5,8 @@ Edith's extensions shell out to, and where are they? Seven tools are in the
 catalogue, and the catalogue is fixed in the binary: `yt-dlp`, which the Music
 extension and the whole download queue run, `ffmpeg` for media conversion,
 `deno` for YouTube extraction,
-`claude` and `codex` for Agent Usage, `quinjet` for workspace review, and
-`homebrew` for package management.
+`claude` and `codex` for Agent Usage, `quinjet` for workspace review, `git` and
+`gh` for Code Stats, and `homebrew` for package management.
 
 `ls` looks for each one and asks it for its version. `install` reports the tool
 when it is already there and otherwise fetches it itself, in this process, the
@@ -39,6 +39,8 @@ switched on.
 | `claude` | Claude Code | The Agent Usage extension | `claude` is on the assembled PATH and answers `--version` successfully | `brew install --cask claude-code`, falling back to `npm install -g @anthropic-ai/claude-code` |
 | `codex` | Codex | The Agent Usage extension, and only while `codexLimitsEnabled` is on, which it is unless you turn it off | `codex` is on the assembled PATH and answers `--version` successfully | `brew install --cask codex`, falling back to `npm install -g @openai/codex` |
 | `quinjet` | Quinjet | The Quinjet extension | an executable called `quinjet` is on the assembled PATH and answers `--version` successfully | `brew install pulkitxm/tap/quinjet` |
+| `git` | Git | The Code Stats extension | `git` answers `--version` successfully | `brew install git`, or `xcode-select --install` by hand |
+| `gh` | GitHub CLI | The Code Stats extension, to list repositories and sign clones in | `gh` answers `--version` successfully | `brew install gh`, then `gh auth login` by hand |
 | `homebrew` | Homebrew | Homebrew extension | `brew` answers `--version` successfully | manual installation from [Homebrew](https://brew.sh) |
 
 The version string in every case is the first non-empty line the tool prints on
@@ -62,6 +64,8 @@ deno     Install with `brew install deno`.
 claude   Install with `brew install --cask claude-code` or `npm install -g @anthropic-ai/claude-code`.
 codex    Install with `brew install --cask codex` or `npm install -g @openai/codex`.
 quinjet  Install with `brew install pulkitxm/tap/quinjet`.
+git      Install with `xcode-select --install` or `brew install git`.
+gh       Install with `brew install gh`, then run `gh auth login`.
 ```
 
 `ed` does not search your shell's `PATH`. It builds its own, in this order,
@@ -106,7 +110,7 @@ read Codex limits, so what `ed tools ls` reports is what the app will find.
 | --- | --- |
 | 0 | The listing printed; the tool was already installed; the install finished and the tool answered `--version`. Also `--help` on the group or on either verb. |
 | 2 | The command line was wrong in ArgumentParser's own terms: `ed tools install` with no tool, an unknown flag, or an extra argument (`ed tools ls extra` and `ed tools bogus` both land here, because the unmatched word is offered to the default subcommand `ls`, which takes none). |
-| 3 | `install` was given something that is not one of `yt-dlp`, `ffmpeg`, `deno`, `claude`, `codex`, `quinjet` or `homebrew`, under either its id or its display name. |
+| 3 | `install` was given something that is not one of `yt-dlp`, `ffmpeg`, `deno`, `claude`, `codex`, `quinjet`, `git`, `gh` or `homebrew`, under either its id or its display name. |
 | 4 | `install` ran and could not finish: neither Homebrew nor npm available, a `curl`, `chmod`, `brew` or `npm` that exited non-zero, or a tool that could not be verified afterwards. |
 
 Nothing here exits 1. The only failures are a name that does not resolve and an

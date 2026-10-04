@@ -33,10 +33,10 @@ enables immediately and reports missing grants in plain text or JSON.
 | `ed extensions enable <id>` | Turns one on, and names on stderr any required permission still missing |
 | `ed extensions disable <id>` | Turns one off |
 | `ed extensions info <id>` | Describes one: name, summary, key, group, state, permissions |
-| `ed extensions status [id]` | Summarises readiness for one extension or all thirty-two |
+| `ed extensions status [id]` | Summarises readiness for one extension or all thirty-three |
 | `ed extensions setup <id>` | Enables one and reports the setup that remains |
 | `ed extensions verify <id>` | Runs every readiness check for one extension |
-| `ed extensions doctor [id]` | Diagnoses one extension or all thirty-two, with recovery commands |
+| `ed extensions doctor [id]` | Diagnoses one extension or all thirty-three, with recovery commands |
 
 The Extensions pane and each extension settings modal use these same typed read
 operations. Marketplace browsing maps to `ls`, opening a modal maps to `info`,
@@ -52,7 +52,7 @@ operations as their command-line equivalents.
 ## The registry
 
 `ExtensionRegistry.entries` in EdithCore is the single list every command here
-walks, and its order is the order `ls` prints. Thirty-two entries, in this order:
+walks, and its order is the order `ls` prints. Thirty-three entries, in this order:
 
 | ID | Name | Suite | What it does |
 | --- | --- | --- | --- |
@@ -87,8 +87,9 @@ walks, and its order is the order `ls` prints. Thirty-two entries, in this order
 | `database` | Database | Data | Explore databases and run guarded production mutations |
 | `attention` | Attention | Data | Understand where your time goes and protect focused work! |
 | `seoAudit` | Site Audit | Data | Crawl sitemaps, inspect page metadata, and keep every run local |
+| `codeStats` | Code Stats | Data | Mirror your GitHub repositories and see how your own code grows |
 
-The same thirty-two, with what each one is made of. `Key` is the preference the app
+The same thirty-three, with what each one is made of. `Key` is the preference the app
 reads, and the key `ed config` writes for the same feature. `Featured` marks the
 twelve the welcome tour shows before you ask it for all of them.
 
@@ -125,6 +126,7 @@ twelve the welcome tour shows before you ask it for all of them.
 | `database` | `tabDatabaseEnabled` | yes | none | none | none | none |
 | `attention` | `tabAttentionEnabled` | yes | none | none | none | none |
 | `seoAudit` | `tabSEOAuditEnabled` | no | none | none | none | none |
+| `codeStats` | `tabCodeStatsEnabled` | no | none | none | `git` | `gh` |
 
 The JSON form also exposes the platform capability registry. Capabilities are
 not permission ids. They say which implementation an extension requires from
@@ -163,6 +165,7 @@ the current platform, and which missing implementations merely degrade it:
 | `database` | `databaseBroker` | none |
 | `attention` | `runningApplications` | none |
 | `seoAudit` | `siteAuditing` | none |
+| `codeStats` | `codeStatistics` | none |
 
 An id is matched exactly and case-insensitively against the `ID` column first,
 then against the `Key` column, so `ed extensions info clipboard`,
