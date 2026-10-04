@@ -55,6 +55,8 @@ enum CodeStatsCLI {
             case .unavailable, .incompatible:
                 return CLIFailure.unavailable(
                     agent.message, hint: "open Edith so the background agent is running")
+            case .refused:
+                return CLIFailure.unavailable(agent.message)
             default:
                 return CLIFailure(agent.message)
             }
@@ -63,6 +65,42 @@ enum CodeStatsCLI {
             return CLIFailure(failure.snapshot.failure ?? "the refresh failed")
         }
         return error
+    }
+
+    static func outcome(of run: CodeStatsActiveRun) async throws -> CodeStatsRunResult {
+        do {
+            let data = try await CodeStatsCLIEnvironment.wait(run.taskID) { CLIOut.note($0) }
+            return try AgentPayload.decode(CodeStatsRunResult.self, from: data)
+        } catch let failure as AgentTaskFailure {
+            if let data = failure.result,
+                let result = try? AgentPayload.decode(CodeStatsRunResult.self, from: data)
+            {
+                return result
+            }
+            return await recorded(run)
+                ?? CodeStatsRunResult(
+                    outcome: .failed(message: failure.snapshot.failure ?? "the refresh failed"),
+                    startedAt: run.startedAt, finishedAt: Date())
+        } catch is CancellationError {
+            return await recorded(run)
+                ?? CodeStatsRunResult(
+                    outcome: .cancelled, startedAt: run.startedAt, finishedAt: Date())
+        } catch {
+            throw failure(error)
+        }
+    }
+
+    static func recorded(_ run: CodeStatsActiveRun) async -> CodeStatsRunResult? {
+        guard let status = try? await CodeStatsCLIEnvironment.client().status(),
+            let last = status.state.lastRun, last.startedAt == run.startedAt
+        else { return nil }
+        return last
+    }
+
+    static func github(_ status: CodeStatsStatus) -> String {
+        guard status.githubAvailable else { return "gh missing" }
+        guard let issue = status.githubIssue, issue != .unavailable else { return "gh installed" }
+        return issue.summary
     }
 
     static func line(_ label: String, _ value: String) -> String {
@@ -133,6 +171,9 @@ enum CodeStatsCLI {
             "startedAt": .date(run.startedAt), "finishedAt": .date(run.finishedAt),
             "repositories": .int(run.repositories), "synced": .int(run.synced),
             "failed": .int(run.failed), "errors": .strings(run.errors),
+            "github": run.github.map {
+                .object(["state": .string($0.state), "summary": .string($0.summary)])
+            } ?? .null,
         ])
     }
 
@@ -189,7 +230,7 @@ enum CodeStatsCLI {
                 status.settings.identity.isEmpty
                     ? "none yet" : status.settings.identity.labels.joined(separator: ", ")),
             CodeStatsCLI.line("git", status.gitAvailable ? "installed" : "missing"),
-            CodeStatsCLI.line("github", status.githubAvailable ? "gh installed" : "gh missing"),
+            CodeStatsCLI.line("github", github(status)),
             CodeStatsCLI.line("last run", status.state.lastRun?.outcome.summary ?? "never"),
             CodeStatsCLI.line("updated", date(status.state.reportedAt)),
             CodeStatsCLI.line("next run", date(status.nextRunAt)),
@@ -243,8 +284,9 @@ struct CodeStatsRunCommand: AsyncParsableCommand {
         discussion: """
             Starts a refresh in the background agent, or joins the one already running: \
             new repositories are cloned, the rest are fetched, and your commits are counted \
-            again. Changes the mirror folder and the stored report. With --wait it prints \
-            progress on stderr until the refresh ends.
+            again. Changes the mirror folder and the stored report. Refuses when the folder \
+            is not ready or git is missing. With --wait it prints progress on stderr, then \
+            the outcome, and exits 1 unless the refresh completed.
             Example: ed code-stats run --wait
             """)
 
@@ -272,17 +314,16 @@ struct CodeStatsRunCommand: AsyncParsableCommand {
                 }
                 return
             }
-            let data = try await CodeStatsCLI.call {
-                try await CodeStatsCLIEnvironment.wait(run.taskID) { CLIOut.note($0) }
-            }
-            let result = try AgentPayload.decode(CodeStatsRunResult.self, from: data)
+            let result = try await CodeStatsCLI.outcome(of: run)
             if json {
                 CLIOut.json(CodeStatsCLI.lastRun(result))
             } else {
                 CLIOut.out(
                     "refresh \(result.outcome.summary): \(result.repositories) repositories, "
                         + "\(result.synced) synced, \(result.failed) failed")
+                if let issue = result.github { CLIOut.note(issue.summary) }
             }
+            guard result.outcome == .completed else { throw ExitCode(ExitCodes.failure) }
         }
     }
 }

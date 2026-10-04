@@ -131,4 +131,73 @@ import Testing
         }
         _ = workflow
     }
+
+    @Test func runWaitPrintsAnUnfinishedOutcomeAndExitsWithFailure() async throws {
+        let run = CodeStatsActiveRun(
+            trigger: .manual, startedAt: Date(timeIntervalSince1970: 1_700_000_000))
+        let recorded = CodeStatsRunResult(
+            outcome: .cancelled, startedAt: run.startedAt, finishedAt: run.startedAt,
+            github: .signedOut)
+        let failed = CodeStatsRunResult(
+            outcome: .failed(message: "disk full"), startedAt: run.startedAt,
+            finishedAt: run.startedAt)
+        let status = CodeStatsStatus(
+            settings: CodeStatsSettings(), storage: .notConfigured, gitAvailable: true,
+            githubAvailable: true, state: CodeStatsState(lastRun: recorded), nextRunAt: nil,
+            progress: nil)
+        try await CLIProbe.inWorld { _ in
+            CodeStatsCLIEnvironment.client = {
+                CodeStatsAgentClient { operation, _, _ in
+                    switch operation {
+                    case CodeStatsAgentOperation.start: return try AgentPayload.encode(run)
+                    case CodeStatsAgentOperation.status: return try AgentPayload.encode(status)
+                    default: throw AgentError(.unknownOperation, operation)
+                    }
+                }
+            }
+            CodeStatsCLIEnvironment.wait = { _, _ in throw CancellationError() }
+            let cancelled = await CLIProbe.capture(["code-stats", "run", "--wait", "--json"])
+            #expect(cancelled.code == ExitCodes.failure)
+            #expect(cancelled.object?["outcome"] as? String == "cancelled")
+            let github = cancelled.object?["github"] as? [String: Any]
+            #expect(github?["state"] as? String == "signedOut")
+            let text = await CLIProbe.capture(["code-stats", "run", "--wait"])
+            #expect(text.code == ExitCodes.failure)
+            #expect(text.stdout.contains("refresh cancelled"))
+            #expect(text.stderr.contains("gh auth login"))
+
+            CodeStatsCLIEnvironment.wait = { id, _ in
+                throw AgentTaskFailure(
+                    snapshot: AgentTaskSnapshot(
+                        id: id, operation: CodeStatsAgentOperation.run,
+                        title: "Code Stats refresh", state: .failed, failure: "disk full"),
+                    result: try AgentPayload.encode(failed))
+            }
+            let failure = await CLIProbe.capture(["code-stats", "run", "--wait", "--json"])
+            #expect(failure.code == ExitCodes.failure)
+            #expect(failure.object?["outcome"] as? String == "failed")
+            #expect(failure.object?["summary"] as? String == "disk full")
+
+            let human = await CLIProbe.capture(["code-stats", "status"])
+            #expect(human.stdout.contains("github: The GitHub CLI is signed out"))
+            let json = await CLIProbe.capture(["code-stats", "status", "--json"])
+            let lastRun = json.object?["lastRun"] as? [String: Any]
+            #expect((lastRun?["github"] as? [String: Any])?["state"] as? String == "signedOut")
+        }
+    }
+
+    @Test func aRefusedRunExitsUnavailableWithTheAgentReason() async throws {
+        try await CLIProbe.inWorld { _ in
+            CodeStatsCLIEnvironment.client = {
+                CodeStatsAgentClient { _, _, _ in
+                    throw AgentError(.refused, CodeStatsStorageStatus.notConfigured.summary)
+                }
+            }
+            let refused = await CLIProbe.capture(["code-stats", "run"])
+            #expect(refused.code == ExitCodes.unavailable)
+            #expect(refused.stdout.isEmpty)
+            #expect(refused.stderr.contains("No mirror folder is chosen"))
+            #expect(!refused.stderr.contains("open Edith"))
+        }
+    }
 }
