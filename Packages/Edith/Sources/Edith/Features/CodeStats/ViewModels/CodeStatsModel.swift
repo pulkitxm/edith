@@ -51,8 +51,8 @@ final class CodeStatsModel {
     }
 
     var banners: [CodeStatsBanner] {
-        guard let status else { return [] }
-        return CodeStatsBanner.banners(for: status, includeSetup: phase != .setup)
+        guard let status, ![.loading, .setup].contains(phase) else { return [] }
+        return CodeStatsBanner.banners(for: status)
     }
 
     var canStart: Bool {

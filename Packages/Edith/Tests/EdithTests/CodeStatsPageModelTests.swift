@@ -175,21 +175,17 @@ import Testing
 
     @Test func toolingBannersCarryTheirCommands() {
         let signedOut = CodeStatsBanner.banners(
-            for: CodeStatsPageFixture.status(gitAvailable: false, github: .signedOut),
-            includeSetup: true)
+            for: CodeStatsPageFixture.status(gitAvailable: false, github: .signedOut))
         #expect(signedOut.map(\.id) == ["git", "github"])
         #expect(signedOut.map(\.command) == ["ed tools install git", "gh auth login"])
         let missing = CodeStatsBanner.banners(
-            for: CodeStatsPageFixture.status(githubAvailable: false), includeSetup: true)
+            for: CodeStatsPageFixture.status(githubAvailable: false))
         #expect(missing.map(\.command) == ["ed tools install gh"])
-        let unconfigured = CodeStatsPageFixture.status(storage: .notConfigured)
-        #expect(CodeStatsBanner.banners(for: unconfigured, includeSetup: false).isEmpty)
         #expect(
-            CodeStatsBanner.banners(for: unconfigured, includeSetup: true).map(\.id)
-                == ["storage"])
+            CodeStatsBanner.banners(for: CodeStatsPageFixture.status(storage: .notConfigured))
+                .map(\.id) == ["storage"])
         #expect(
-            CodeStatsBanner.banners(
-                for: CodeStatsPageFixture.status(storage: .notWritable), includeSetup: false
-            ).first?.tone == .danger)
+            CodeStatsBanner.banners(for: CodeStatsPageFixture.status(storage: .notWritable))
+                .first?.tone == .danger)
     }
 }

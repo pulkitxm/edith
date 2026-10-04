@@ -32,9 +32,9 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
     var choosesFolder = false
     var tone = CodeStatsBannerTone.warning
 
-    static func banners(for status: CodeStatsStatus, includeSetup: Bool) -> [CodeStatsBanner] {
+    static func banners(for status: CodeStatsStatus) -> [CodeStatsBanner] {
         var banners: [CodeStatsBanner] = []
-        if let storage = storage(status, includeSetup: includeSetup) { banners.append(storage) }
+        if let storage = storage(status) { banners.append(storage) }
         if !status.gitAvailable {
             banners.append(
                 CodeStatsBanner(
@@ -70,14 +70,11 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
         }
     }
 
-    private static func storage(_ status: CodeStatsStatus, includeSetup: Bool)
-        -> CodeStatsBanner?
-    {
+    private static func storage(_ status: CodeStatsStatus) -> CodeStatsBanner? {
         switch status.storage {
         case .ready:
             return nil
         case .notConfigured:
-            guard includeSetup else { return nil }
             return CodeStatsBanner(
                 id: "storage", symbol: "folder.badge.questionmark", title: "No mirror folder",
                 message: status.storage.summary, choosesFolder: true)
