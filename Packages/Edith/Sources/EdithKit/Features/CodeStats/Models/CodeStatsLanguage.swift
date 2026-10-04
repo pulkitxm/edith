@@ -8,7 +8,7 @@ public enum CodeStatsLanguage {
         "**/out/**", "**/coverage/**", "**/.turbo/**", "**/*.min.js", "**/*.min.css",
         "**/package-lock.json", "**/yarn.lock", "**/pnpm-lock.yaml", "**/bun.lockb",
         "**/*.lock", "**/go.sum", "**/poetry.lock", "**/composer.lock", "**/Gemfile.lock",
-    ].map { ":(exclude)" + $0 }
+    ].map { ":(exclude,glob)" + $0 }
 
     private static let lockBasenames: Set<String> = [
         "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "cargo.lock",

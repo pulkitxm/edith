@@ -290,7 +290,7 @@ import Testing
     @Test func isGeneratedIsExposedForReuse() {
         #expect(CodeStatsLanguage.isGenerated("a/b/.next/c.js"))
         #expect(!CodeStatsLanguage.isGenerated("src/app.ts"))
-        #expect(CodeStatsLanguage.excludedPathspecs.contains(":(exclude)**/*.lock"))
+        #expect(CodeStatsLanguage.excludedPathspecs.contains(":(exclude,glob)**/*.lock"))
     }
 }
 

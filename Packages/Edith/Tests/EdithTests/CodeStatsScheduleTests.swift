@@ -90,7 +90,7 @@ import Testing
         mounted: Bool = true, entry: CodeStatsFileEntry = .directory, writable: Bool = true
     ) -> CodeStatsFileProbe {
         CodeStatsFileProbe(
-            volume: CodeStatsFileProbe.externalVolume(of:), isMounted: { _ in mounted },
+            volume: { CodeStatsFileProbe.externalVolume(of: $0) }, isMounted: { _ in mounted },
             entry: { _ in entry }, isWritable: { _ in writable }, freeBytes: { _ in 42 })
     }
 

@@ -61,7 +61,7 @@ public struct CodeStatsFileProbe: Sendable {
     }
 
     public static let live = CodeStatsFileProbe(
-        volume: externalVolume(of:),
+        volume: { externalVolume(of: $0) },
         isMounted: { volume in
             let resolved = URL(fileURLWithPath: volume.mountPoint).resolvingSymlinksInPath().path
             var mount = stat()
