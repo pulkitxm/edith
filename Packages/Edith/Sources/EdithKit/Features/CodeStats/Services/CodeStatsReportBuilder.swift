@@ -50,7 +50,8 @@ public enum CodeStatsReportBuilder {
         let firstWeekday = calendar.firstWeekday
         return CodeStatsReport(
             range: range, startDay: start.string, endDay: end.string,
-            totals: totals(selected, dated, days: days, end: end), momentum: momentum,
+            totals: totals(selected, dated, days: days, start: start, end: end),
+            momentum: momentum,
             daily: daily,
             weekly: periods(
                 selected, from: start.weekStart(firstWeekday: firstWeekday), to: end,
@@ -78,31 +79,40 @@ public enum CodeStatsReportBuilder {
     }
 
     private static func totals(
-        _ selected: [Dated], _ all: [Dated], days: [CodeStatsDay: Bucket], end: CodeStatsDay
+        _ selected: [Dated], _ all: [Dated], days: [CodeStatsDay: Bucket], start: CodeStatsDay,
+        end: CodeStatsDay
     ) -> CodeStatsTotals {
         let counts = selected.reduce(into: CodeStatsLanguageCounts()) { $0.add($1.commit.totals) }
-        let everyActiveDay = Set(all.map(\.day))
-        var current = 0
-        var cursor = everyActiveDay.contains(end) ? end : end.advanced(by: -1)
-        while everyActiveDay.contains(cursor) {
-            current += 1
-            cursor = cursor.advanced(by: -1)
-        }
-        var longest = 0
-        var run = 0
-        var previous: CodeStatsDay?
-        for day in days.keys.sorted() {
-            run = previous.map { $0.advanced(by: 1) == day } == true ? run + 1 : 1
-            longest = max(longest, run)
-            previous = day
-        }
+        let streaks = streaks(activeDays: Set(all.map(\.day)), start: start, end: end)
         return CodeStatsTotals(
             commits: selected.count, authored: counts.authored, added: counts.added,
             updated: counts.updated, deleted: counts.deleted, net: counts.net,
             activeDays: days.count,
             repositories: Set(selected.map(\.commit.repository)).count,
-            currentStreak: current, longestStreak: longest,
+            currentStreak: streaks.current, longestStreak: streaks.longest,
             averagePerActiveDay: days.isEmpty ? 0 : Double(counts.authored) / Double(days.count))
+    }
+
+    static func streaks(
+        activeDays: Set<CodeStatsDay>, start: CodeStatsDay, end: CodeStatsDay
+    ) -> (current: Int, longest: Int) {
+        var current = 0
+        var cursor = activeDays.contains(end) ? end : end.advanced(by: -1)
+        while activeDays.contains(cursor) {
+            current += 1
+            cursor = cursor.advanced(by: -1)
+        }
+        var longest = current
+        var runStart: CodeStatsDay?
+        var previous: CodeStatsDay?
+        for day in activeDays.sorted() {
+            if previous?.advanced(by: 1) != day { runStart = day }
+            if let runStart, day >= start, runStart <= end {
+                longest = max(longest, runStart.distance(to: day) + 1)
+            }
+            previous = day
+        }
+        return (current, longest)
     }
 
     private static func previousMomentum(

@@ -133,6 +133,32 @@ import Testing
         #expect(narrow.currentStreak == 2)
     }
 
+    @Test func theLongestStreakIsNeverShorterThanTheCurrentOne() {
+        let today = date("2026-06-30")
+        let recent = (0..<45).map { offset in
+            let day = CodeStatsDay(date: today, calendar: calendar).advanced(by: -offset).string
+            return commit("r\(offset)", day, ["Go": .init(added: 1)])
+        }
+        let old = (0..<60).map { offset in
+            commit("o\(offset)", CodeStatsDay(year: 2025, month: 1, day: 1).advanced(by: offset)
+                .string, ["Go": .init(added: 1)])
+        }
+        let month = build(recent + old, .days(30), today: "2026-06-30").totals
+        #expect(month.currentStreak == 45)
+        #expect(month.longestStreak == 45)
+        #expect(build(recent + old, .all, today: "2026-06-30").totals.longestStreak == 60)
+        let pair = [
+            commit("p1", "2026-05-05", ["Go": .init(added: 1)]),
+            commit("p2", "2026-05-06", ["Go": .init(added: 1)]),
+        ]
+        let single = build(pair, .days(1), today: "2026-05-06").totals
+        #expect(single.currentStreak == 2)
+        #expect(single.longestStreak == 2)
+        let afterwards = build(pair, .days(1), today: "2026-05-07").totals
+        #expect(afterwards.currentStreak == 2)
+        #expect(afterwards.longestStreak >= afterwards.currentStreak)
+    }
+
     @Test func momentumComparesWithThePreviousPeriodOfEqualLength() {
         let previous = (1...2).map { commit("p\($0)", "2026-06-0\($0)", ["Go": .init(added: 10)]) }
         let current = (1...3).map { commit("c\($0)", "2026-06-1\($0)", ["Go": .init(added: 10)]) }
