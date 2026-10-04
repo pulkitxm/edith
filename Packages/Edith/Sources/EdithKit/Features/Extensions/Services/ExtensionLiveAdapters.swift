@@ -114,7 +114,8 @@ public enum ExtensionLiveAdapters {
         case "codeStats":
             codeStatsReadiness(
                 folder: CodeStatsPreferences.load(from: defaults).folder,
-                git: executableNamed("git"), github: executableNamed("gh"))
+                git: executableNamed("git"), github: executableNamed("gh"),
+                githubIssue: CodeStatsStore().loadState().lastRun?.github)
         case "system": await systemReadiness()
         case "keepAwake": .ready("Keep Awake is ready to prevent idle sleep without System.")
         case "appMaintenance": appMaintenanceReadiness()
@@ -163,7 +164,8 @@ public enum ExtensionLiveAdapters {
     }
 
     static func codeStatsReadiness(
-        folder: String?, git: URL?, github: URL?, probe: CodeStatsFileProbe = .live
+        folder: String?, git: URL?, github: URL?, githubIssue: CodeStatsGitHubError? = nil,
+        probe: CodeStatsFileProbe = .live
     ) -> ExtensionAdapterReadiness {
         guard git != nil else {
             return .uninstalled("Install Git to mirror and analyse your repositories.")
@@ -174,6 +176,9 @@ public enum ExtensionLiveAdapters {
             guard github != nil else {
                 return .degraded(
                     "Install the GitHub CLI and run gh auth login to list your repositories.")
+            }
+            if githubIssue == .signedOut {
+                return .degraded(CodeStatsGitHubError.signedOut.summary)
             }
             return .ready("Git, the GitHub CLI and the mirror folder are ready.")
         case .volumeDisconnected:

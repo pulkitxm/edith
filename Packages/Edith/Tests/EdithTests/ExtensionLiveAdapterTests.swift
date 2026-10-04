@@ -151,6 +151,10 @@ import EdithCore
         #expect(
             ExtensionLiveAdapters.codeStatsReadiness(folder: folder, git: tool, github: tool)
                 == .ready("Git, the GitHub CLI and the mirror folder are ready."))
+        #expect(
+            ExtensionLiveAdapters.codeStatsReadiness(
+                folder: folder, git: tool, github: tool, githubIssue: .signedOut)
+                == .degraded("The GitHub CLI is signed out. Run gh auth login."))
     }
 
     @Test func attentionRequiresAnEnabledTrackingSource() {
