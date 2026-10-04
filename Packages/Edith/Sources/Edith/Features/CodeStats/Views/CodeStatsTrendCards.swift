@@ -214,7 +214,7 @@ private struct CodeStatsRepositoryTable: View {
                 if sort == column { Image(systemName: "chevron.down") }
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .foregroundStyle(sort == column ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
         .accessibilityLabel("Sort by \(column.title)")
     }
