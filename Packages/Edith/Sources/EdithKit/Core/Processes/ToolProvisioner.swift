@@ -99,7 +99,7 @@ private final class CLIStreamingOutput: @unchecked Sendable {
 
     private let lock = NSLock()
     private let maximumBytes: Int?
-    private let retainsOutput: Bool
+    let retainsOutput: Bool
     private let onLine: (@Sendable (String) -> Void)?
     private let onLimit: (@Sendable () -> Void)?
     private var pending = Data()
@@ -330,6 +330,7 @@ private final class CommandLifecycle: @unchecked Sendable {
 
 public enum CLICommandRunner {
     private static let terminationGrace: TimeInterval = 0.25
+    private static let streamedDrainPatience: TimeInterval = 10
     private static let lifecyclePoll: TimeInterval = 0.01
 
     public static func run(
@@ -540,7 +541,14 @@ public enum CLICommandRunner {
             if process.ownsProcessGroup, process.groupIsAlive {
                 terminateProcessGroup(process, processFinished: processFinished)
             }
-            guard drain(outputReader), drain(errorReader) else {
+            let streamsOnly = !output.retainsOutput
+            guard
+                drain(
+                    outputReader,
+                    patience: streamsOnly ? streamedDrainPatience : terminationGrace,
+                    requiresEnd: streamsOnly),
+                drain(errorReader)
+            else {
                 throw CLICommandRunnerError.streamFailed
             }
             guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
@@ -600,11 +608,15 @@ public enum CLICommandRunner {
     }
 
     @discardableResult
-    private static func drain(_ reader: CLIProcessOutputReader?) -> Bool {
+    private static func drain(
+        _ reader: CLIProcessOutputReader?, patience: TimeInterval = terminationGrace,
+        requiresEnd: Bool = false
+    ) -> Bool {
         guard let reader else { return true }
-        if reader.finished.wait(timeout: .now() + terminationGrace) == .success { return true }
+        if reader.finished.wait(timeout: .now() + patience) == .success { return true }
         reader.cancel()
         return reader.finished.wait(timeout: .now() + terminationGrace) == .success
+            && !requiresEnd
     }
 }
 

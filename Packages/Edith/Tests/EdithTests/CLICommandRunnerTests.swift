@@ -110,6 +110,20 @@ private final class CommandLineRecorder: @unchecked Sendable {
         #expect(Array(captured.dropFirst()) == ["x\ry", "end"])
     }
 
+    @Test func nonRetainingStreamReadsToTheEndAfterTheCommandExits() async throws {
+        let lines = CommandLineRecorder()
+        let result = try await CLICommandRunner.runLocalSeparated(
+            CLICommandRequest(
+                executableURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "printf 'first\\n'; (sleep 1; printf 'late\\n') &"],
+                environment: ["PATH": "/usr/bin:/bin"], timeout: 20),
+            retainsStandardOutput: false,
+            onStandardOutputLine: { lines.append($0) },
+            onStandardErrorLine: { _ in })
+        #expect(result.terminationStatus == 0)
+        #expect(lines.snapshot == ["first", "late"])
+    }
+
     @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {
         let callbackStarted = DispatchSemaphore(value: 0)
         let releaseCallback = DispatchSemaphore(value: 0)
