@@ -60,14 +60,16 @@ final class CodeStatsModel {
 
     var banners: [CodeStatsBanner] {
         guard let status else { return [] }
-        let report = reportError.map { [CodeStatsBanner.report($0)] } ?? []
         switch phase {
         case .loading:
             return []
         case .setup:
-            return CodeStatsBanner.lastRun(status).map { [$0] } ?? []
+            guard let lastRun = CodeStatsBanner.lastRun(status) else { return [] }
+            return [lastRun]
         case .firstRun, .content, .unavailable:
-            return report + CodeStatsBanner.banners(for: status)
+            var banners = CodeStatsBanner.banners(for: status)
+            if let reportError { banners.insert(CodeStatsBanner.report(reportError), at: 0) }
+            return banners
         }
     }
 
