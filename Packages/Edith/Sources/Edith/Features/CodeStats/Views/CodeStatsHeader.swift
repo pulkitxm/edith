@@ -88,10 +88,7 @@ private struct CodeStatsRunTimes: View {
                 status.state.reportedAt.map {
                     $0.formatted(.relative(presentation: .named))
                 } ?? "Never")
-            label(
-                "Next run",
-                status.nextRunAt.map { $0.formatted(date: .abbreviated, time: .shortened) }
-                    ?? (status.settings.schedule == .manual ? "Manual" : "After first sync"))
+            label("Next run", status.nextRunLabel(now: Date()))
         }
     }
 

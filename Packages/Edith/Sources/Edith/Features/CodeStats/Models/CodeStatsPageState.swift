@@ -112,14 +112,13 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
                 message: status.storage.summary, choosesFolder: true)
         case .volumeDisconnected(let volume):
             let since = status.state.reportedAt.map {
-                " Showing results from " + $0.formatted(date: .abbreviated, time: .shortened)
-                    + "."
+                "Showing results from " + $0.formatted(date: .abbreviated, time: .shortened)
+                    + ". "
             }
             return CodeStatsBanner(
                 id: "storage", symbol: "externaldrive.badge.xmark",
                 title: "\(volume) is disconnected",
-                message: "\(volume) is disconnected." + (since ?? "")
-                    + " Reconnect it or choose another folder.",
+                message: (since ?? "") + "Reconnect it or choose another folder.",
                 choosesFolder: true)
         case .missing, .notDirectory, .notWritable:
             return CodeStatsBanner(
@@ -170,5 +169,16 @@ enum CodeStatsProgressMath {
         if seconds < 60 { return "\(seconds)s" }
         if seconds < 3_600 { return "\(seconds / 60)m \(seconds % 60)s" }
         return "\(seconds / 3_600)h \(seconds % 3_600 / 60)m"
+    }
+}
+
+extension CodeStatsStatus {
+    func nextRunLabel(now: Date) -> String {
+        if isRunning { return "Running now" }
+        if settings.schedule == .manual { return "Manual" }
+        if let volume = state.waitingFor { return "When \(volume) is back" }
+        guard let next = nextRunAt else { return "After first sync" }
+        if next <= now { return "Due now" }
+        return next.formatted(date: .abbreviated, time: .shortened)
     }
 }

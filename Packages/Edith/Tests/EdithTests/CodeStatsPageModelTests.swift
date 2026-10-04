@@ -80,7 +80,7 @@ import Testing
         #expect(model.report?.totals.commits == 4)
         let banner = try #require(model.banners.first)
         #expect(banner.title == "Archive is disconnected")
-        #expect(banner.message.hasPrefix("Archive is disconnected. Showing results from "))
+        #expect(banner.message.hasPrefix("Showing results from "))
         #expect(banner.message.hasSuffix("Reconnect it or choose another folder."))
         #expect(banner.choosesFolder)
         #expect(!model.canStart)
@@ -276,5 +276,34 @@ import Testing
         #expect(
             CodeStatsBanner.banners(for: CodeStatsPageFixture.status(storage: .notWritable))
                 .first?.tone == .danger)
+    }
+
+    @Test func nextRunLabelReflectsRunsDrivesAndDueSchedules() {
+        let now = CodeStatsPageFixture.date("2026-10-05", hour: 12)
+        func status(
+            _ schedule: CodeStatsSchedule, next: Date?, waitingFor: String? = nil,
+            active: CodeStatsActiveRun? = nil
+        ) -> CodeStatsStatus {
+            CodeStatsStatus(
+                settings: CodeStatsSettings(folder: "/Volumes/Archive/GitHub", schedule: schedule),
+                storage: .ready(freeBytes: 1), gitAvailable: true, githubAvailable: true,
+                state: CodeStatsState(active: active, waitingFor: waitingFor), nextRunAt: next,
+                progress: nil)
+        }
+        let daily = CodeStatsSchedule.daily(hour: 9)
+        #expect(status(.manual, next: nil).nextRunLabel(now: now) == "Manual")
+        #expect(status(daily, next: nil).nextRunLabel(now: now) == "After first sync")
+        #expect(
+            status(daily, next: now, waitingFor: "Archive").nextRunLabel(now: now)
+                == "When Archive is back")
+        #expect(
+            status(daily, next: now.addingTimeInterval(-60)).nextRunLabel(now: now) == "Due now")
+        #expect(
+            status(
+                daily, next: nil, active: CodeStatsActiveRun(trigger: .scheduled, startedAt: now)
+            ).nextRunLabel(now: now) == "Running now")
+        #expect(
+            status(daily, next: now.addingTimeInterval(3600)).nextRunLabel(now: now)
+                != "Due now")
     }
 }
