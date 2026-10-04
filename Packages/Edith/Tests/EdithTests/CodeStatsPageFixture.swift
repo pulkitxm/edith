@@ -45,13 +45,16 @@ enum CodeStatsPageFixture {
         reportedAt: Date? = nil, active: CodeStatsActiveRun? = nil,
         progress: CodeStatsRunProgress? = nil, waitingFor: String? = nil,
         gitAvailable: Bool = true, githubAvailable: Bool = true,
-        github: CodeStatsGitHubError? = nil, revision: UInt64 = 0
+        github: CodeStatsGitHubError? = nil, lastRun: CodeStatsRunResult? = nil,
+        revision: UInt64 = 0
     ) -> CodeStatsStatus {
-        let lastRun = github.map {
-            CodeStatsRunResult(
-                outcome: .completed, startedAt: date("2026-10-01"),
-                finishedAt: date("2026-10-01"), github: $0)
-        }
+        let lastRun =
+            lastRun
+            ?? github.map {
+                CodeStatsRunResult(
+                    outcome: .completed, startedAt: date("2026-10-01"),
+                    finishedAt: date("2026-10-01"), github: $0)
+            }
         return CodeStatsStatus(
             settings: CodeStatsSettings(folder: "/Volumes/Archive/GitHub"), storage: storage,
             gitAvailable: gitAvailable, githubAvailable: githubAvailable,
@@ -67,6 +70,7 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
     private var currentStatus: CodeStatsStatus
     private var reports: [CodeStatsRange: CodeStatsReport]
     private var calls: [String] = []
+    private var failing: Set<CodeStatsRange> = []
     private var lookup = CodeStatsProfileLookup(
         profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
     private var discovered = [
@@ -101,6 +105,11 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
         set { lock.withLock { discovered = newValue } }
     }
 
+    var failingReports: Set<CodeStatsRange> {
+        get { lock.withLock { failing } }
+        set { lock.withLock { failing = newValue } }
+    }
+
     var recorded: [String] { lock.withLock { calls } }
 
     private func record(_ call: String) {
@@ -115,6 +124,9 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
             },
             report: { range in
                 self.record("report " + range.argument)
+                if self.failingReports.contains(range) {
+                    throw AgentError(.unavailable, "The agent is restarting.")
+                }
                 return self.lock.withLock { self.reports[range] }
             },
             start: {

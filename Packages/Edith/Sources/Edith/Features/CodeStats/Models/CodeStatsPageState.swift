@@ -6,13 +6,15 @@ enum CodeStatsPagePhase: Equatable, Sendable {
     case setup
     case firstRun
     case content
+    case unavailable
 
     static func resolve(
-        status: CodeStatsStatus?, hasReport: Bool, reportLoaded: Bool
+        status: CodeStatsStatus?, hasReport: Bool, reportLoaded: Bool, reportFailed: Bool = false
     ) -> CodeStatsPagePhase {
         guard let status else { return .loading }
         if hasReport { return .content }
         if status.isRunning { return .firstRun }
+        if status.state.reportedAt != nil, reportFailed { return .unavailable }
         if status.state.reportedAt != nil, !reportLoaded { return .loading }
         return .setup
     }
@@ -30,10 +32,12 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
     let message: String
     var command: String?
     var choosesFolder = false
+    var retriesReport = false
     var tone = CodeStatsBannerTone.warning
 
     static func banners(for status: CodeStatsStatus) -> [CodeStatsBanner] {
         var banners: [CodeStatsBanner] = []
+        if let lastRun = lastRun(status) { banners.append(lastRun) }
         if let storage = storage(status) { banners.append(storage) }
         if !status.gitAvailable {
             banners.append(
@@ -45,6 +49,34 @@ struct CodeStatsBanner: Identifiable, Equatable, Sendable {
         let github = status.githubAvailable ? status.githubIssue : .unavailable
         if let github { banners.append(Self.github(github)) }
         return banners
+    }
+
+    static func lastRun(_ status: CodeStatsStatus) -> CodeStatsBanner? {
+        guard !status.isRunning, let run = status.state.lastRun,
+            run.finishedAt > status.state.reportedAt ?? .distantPast
+        else { return nil }
+        let firstError = run.errors.first.map { " " + $0 } ?? ""
+        switch run.outcome {
+        case .failed(let message):
+            return CodeStatsBanner(
+                id: "lastRun", symbol: "exclamationmark.octagon",
+                title: "The last refresh failed", message: message + firstError, tone: .danger)
+        case .interrupted:
+            return CodeStatsBanner(
+                id: "lastRun", symbol: "exclamationmark.arrow.circlepath",
+                title: "The last refresh stopped early",
+                message:
+                    "Edith stopped before the refresh finished. Repositories it finished are kept; refresh to continue."
+                    + firstError)
+        default:
+            return nil
+        }
+    }
+
+    static func report(_ message: String) -> CodeStatsBanner {
+        CodeStatsBanner(
+            id: "report", symbol: "chart.bar.xaxis", title: "Results could not be loaded",
+            message: message, retriesReport: true, tone: .danger)
     }
 
     static func github(_ issue: CodeStatsGitHubError) -> CodeStatsBanner {

@@ -202,6 +202,66 @@ import Testing
         #expect(model.authors.allSatisfy { $0.countedAsYou })
     }
 
+    @Test func aFailedRefreshIsExplainedUntilANewerReportLands() async throws {
+        let failed = CodeStatsRunResult(
+            outcome: .failed(message: "Saving the report failed."),
+            startedAt: CodeStatsPageFixture.date("2026-10-03"),
+            finishedAt: CodeStatsPageFixture.date("2026-10-03"),
+            errors: ["octo/app: disk full"])
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(lastRun: failed),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        let model = model(agent)
+        await model.loadStatus()
+        #expect(model.phase == .setup)
+        let banner = try #require(model.banners.first)
+        #expect(banner.id == "lastRun")
+        #expect(banner.tone == .danger)
+        #expect(banner.message == "Saving the report failed. octo/app: disk full")
+        let older = CodeStatsPageFixture.status(
+            reportedAt: CodeStatsPageFixture.date("2026-10-04"), lastRun: failed)
+        #expect(CodeStatsBanner.lastRun(older) == nil)
+        let interrupted = CodeStatsRunResult(
+            outcome: .interrupted, startedAt: CodeStatsPageFixture.date("2026-10-05"),
+            finishedAt: CodeStatsPageFixture.date("2026-10-05"))
+        let banners = CodeStatsBanner.banners(
+            for: CodeStatsPageFixture.status(
+                reportedAt: CodeStatsPageFixture.date("2026-10-04"), lastRun: interrupted))
+        #expect(banners.map(\.title) == ["The last refresh stopped early"])
+    }
+
+    @Test func aFailedReportLoadOffersRetryInsteadOfSetup() async throws {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(reportedAt: Date()),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        agent.failingReports = [.days(90)]
+        let model = model(agent)
+        await model.refresh()
+        #expect(model.phase == .unavailable)
+        #expect(model.errorMessage == nil)
+        let banner = try #require(model.banners.first)
+        #expect(banner.id == "report")
+        #expect(banner.retriesReport)
+        agent.failingReports = []
+        await model.loadReport()
+        #expect(model.phase == .content)
+        #expect(model.banners.isEmpty)
+    }
+
+    @Test func aFailedRangeSwitchKeepsThePreviousRangeMarkedAsLoading() async {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(reportedAt: Date()),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        agent.failingReports = [.all]
+        let model = model(agent)
+        await model.refresh()
+        #expect(!model.showsPreviousRange)
+        await model.select(.all)
+        #expect(model.phase == .content)
+        #expect(model.showsPreviousRange)
+        #expect(model.banners.map(\.id) == ["report"])
+    }
+
     @Test func toolingBannersCarryTheirCommands() {
         let signedOut = CodeStatsBanner.banners(
             for: CodeStatsPageFixture.status(gitAvailable: false, github: .signedOut))

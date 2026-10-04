@@ -40,10 +40,58 @@ struct CodeStatsReportSkeleton: View {
                         .frame(height: UIScale.pt(180), alignment: .bottom)
                     }
                 }
+                CodeStatsHabitSkeleton(dark: dark)
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Loading code stats")
+    }
+}
+
+private struct CodeStatsHabitSkeleton: View {
+    let dark: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                punchcard.frame(minWidth: UIScale.pt(560))
+                topDays.frame(width: UIScale.pt(300))
+            }
+            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                punchcard
+                topDays
+            }
+        }
+    }
+
+    private var punchcard: some View {
+        CodeStatsCardSkeleton(title: "When you commit", dark: dark) {
+            VStack(spacing: UIScale.pt(2)) {
+                ForEach(0..<7, id: \.self) { _ in
+                    HStack(spacing: UIScale.pt(2)) {
+                        SkeletonBlock(width: 24, height: 9)
+                        ForEach(0..<24, id: \.self) { _ in
+                            SkeletonBlock(height: 16, corner: 2)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var topDays: some View {
+        CodeStatsCardSkeleton(title: "Top days", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(9)) {
+                ForEach(0..<6, id: \.self) { _ in
+                    HStack(spacing: UIScale.pt(8)) {
+                        SkeletonBlock(width: 14, height: 10)
+                        SkeletonBlock(width: 96, height: 11)
+                        Spacer()
+                        SkeletonBlock(width: 64, height: 11)
+                    }
+                }
+            }
+        }
     }
 }
 

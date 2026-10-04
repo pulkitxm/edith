@@ -110,6 +110,7 @@ private struct CodeStatsRunTimes: View {
 struct CodeStatsBannerView: View {
     let banner: CodeStatsBanner
     let choose: () -> Void
+    let retry: () -> Void
     @Environment(\.colorScheme) private var scheme
 
     private var tint: Color { banner.tone == .danger ? DashSkin.danger : DashSkin.warn }
@@ -136,6 +137,9 @@ struct CodeStatsBannerView: View {
             Spacer(minLength: UIScale.pt(8))
             if banner.choosesFolder {
                 Button("Choose folder...", action: choose)
+            }
+            if banner.retriesReport {
+                Button("Retry", action: retry)
             }
         }
         .padding(UIScale.pt(14))

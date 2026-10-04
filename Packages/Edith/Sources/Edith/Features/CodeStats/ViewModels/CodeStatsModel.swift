@@ -11,6 +11,7 @@ final class CodeStatsModel {
     private(set) var report: CodeStatsReport?
     private(set) var projection = CodeStatsProjection()
     private(set) var reportLoaded = false
+    private(set) var reportError: String?
     private(set) var profileLookup: CodeStatsProfileLookup?
     private(set) var profileLoading = false
     private(set) var authors: [CodeStatsDiscoveredAuthor] = []
@@ -39,7 +40,13 @@ final class CodeStatsModel {
 
     var phase: CodeStatsPagePhase {
         CodeStatsPagePhase.resolve(
-            status: status, hasReport: report != nil, reportLoaded: reportLoaded)
+            status: status, hasReport: report != nil, reportLoaded: reportLoaded,
+            reportFailed: reportError != nil)
+    }
+
+    var showsPreviousRange: Bool {
+        guard let report else { return false }
+        return report.range != range
     }
 
     var isRunning: Bool { status?.isRunning ?? false }
@@ -52,8 +59,16 @@ final class CodeStatsModel {
     }
 
     var banners: [CodeStatsBanner] {
-        guard let status, ![.loading, .setup].contains(phase) else { return [] }
-        return CodeStatsBanner.banners(for: status)
+        guard let status else { return [] }
+        let report = reportError.map { [CodeStatsBanner.report($0)] } ?? []
+        switch phase {
+        case .loading:
+            return []
+        case .setup:
+            return CodeStatsBanner.lastRun(status).map { [$0] } ?? []
+        case .firstRun, .content, .unavailable:
+            return report + CodeStatsBanner.banners(for: status)
+        }
     }
 
     var canStart: Bool {
@@ -111,10 +126,10 @@ final class CodeStatsModel {
             report = next
             projection = projected ?? CodeStatsProjection()
             reportLoaded = true
+            reportError = nil
         } catch {
             guard generation == reportGeneration else { return }
-            reportLoaded = true
-            errorMessage = error.localizedDescription
+            reportError = error.localizedDescription
         }
     }
 

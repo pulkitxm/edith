@@ -20,7 +20,9 @@ struct CodeStatsPage: View {
                 CodeStatsHeader(model: model)
                 Group {
                     ForEach(model.banners) { banner in
-                        CodeStatsBannerView(banner: banner, choose: chooseFolder)
+                        CodeStatsBannerView(banner: banner, choose: chooseFolder) {
+                            Task { await model.loadReport() }
+                        }
                     }
                     if let progress = model.progress {
                         CodeStatsProgressCard(
@@ -59,13 +61,22 @@ struct CodeStatsPage: View {
             CodeStatsReportSkeleton(dark: dark)
         case .setup:
             CodeStatsSetupView(model: model, choose: chooseFolder)
+        case .unavailable:
+            EmptyView()
         case .content:
             CodeStatsRangePicker(range: model.range) { range in
                 Task { await model.select(range) }
             }
             if let report = model.report {
-                CodeStatsReportSections(
-                    report: report, projection: model.projection, dark: dark)
+                if model.showsPreviousRange {
+                    SkeletonReplica("Loading \(CodeStatsRangePicker.title(model.range))") {
+                        CodeStatsReportSections(
+                            report: report, projection: model.projection, dark: dark)
+                    }
+                } else {
+                    CodeStatsReportSections(
+                        report: report, projection: model.projection, dark: dark)
+                }
             }
         }
     }
