@@ -77,6 +77,7 @@ public actor CodeStatsWorkflow {
     private var executing: UUID?
     private var resolvedGit: CodeStatsGit?
     private var gitCheckedAt: Date?
+    private var githubInstalled: (checkedAt: Date, available: Bool)?
 
     public init(
         environment: CodeStatsEnvironment = .live,
@@ -144,7 +145,7 @@ public actor CodeStatsWorkflow {
             settings: settings,
             storage: CodeStatsStorageEvaluator.status(
                 for: settings.folder, probe: environment.probe),
-            gitAvailable: await git() != nil, githubAvailable: environment.github() != nil,
+            gitAvailable: await git() != nil, githubAvailable: githubAvailable(),
             state: state,
             nextRunAt: settings.schedule.nextRun(
                 after: state.lastRunAt, calendar: environment.calendar),
@@ -357,6 +358,18 @@ public actor CodeStatsWorkflow {
             CodeStatsRunResult(
                 outcome: outcome, startedAt: active.startedAt, finishedAt: environment.now()),
             active)
+    }
+
+    private func githubAvailable() -> Bool {
+        let now = environment.now()
+        if let githubInstalled,
+            now.timeIntervalSince(githubInstalled.checkedAt) < Self.gitRecheckInterval
+        {
+            return githubInstalled.available
+        }
+        let available = environment.github() != nil
+        githubInstalled = (now, available)
+        return available
     }
 
     private func git() async -> CodeStatsGit? {
