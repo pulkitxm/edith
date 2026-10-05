@@ -156,7 +156,7 @@ ci-swift-build: approve-package-plugins
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
 
 ci-swift-test: ci-studio
-	cd $(PKG) && ./test.sh
+	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
 
 ci-swift-test-batch:
 	@test -n "$(BATCH)" || { echo "set BATCH to a swift test batch" >&2; exit 1; }

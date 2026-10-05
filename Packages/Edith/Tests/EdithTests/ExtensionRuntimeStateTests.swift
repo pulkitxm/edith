@@ -146,7 +146,9 @@ import Testing
         #expect(source.contains("ExtensionReadinessModel"))
         #expect(source.contains("await readiness.refresh(.status).value"))
         #expect(source.contains("readiness.refresh(.verify)"))
-        #expect(source.contains(".pageTask(id: \"\\(entry.id):\\(invalidation)\", cancel: readiness.cancel)"))
+        #expect(
+            source.contains(
+                ".pageTask(id: \"\\(entry.id):\\(invalidation)\", cancel: readiness.cancel)"))
         #expect(!source.contains("Task { await refresh() }"))
         #expect(
             source.components(
