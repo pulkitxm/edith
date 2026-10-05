@@ -1,3 +1,4 @@
+import EdithKit
 import Foundation
 
 public enum ExecutableLaunch {
@@ -5,11 +6,15 @@ public enum ExecutableLaunch {
         case application
         case commandLine
         case databaseBroker
+        case askpass
     }
 
     public static func destination(
         environment: [String: String]
     ) -> Destination {
+        if environment[AskpassEntry.accountVariable]?.isEmpty == false {
+            return .askpass
+        }
         if environment["EDITH_DATABASE_BROKER"] == "1" {
             return .databaseBroker
         }
@@ -17,6 +22,11 @@ public enum ExecutableLaunch {
             return .commandLine
         }
         return .application
+    }
+
+    public static func answerAskpass() -> Never {
+        _ = AskpassEntry.runIfRequested()
+        exit(1)
     }
 
     public static func isApplication(environment: [String: String]) -> Bool {
