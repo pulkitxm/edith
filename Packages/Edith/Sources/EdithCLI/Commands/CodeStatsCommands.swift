@@ -37,6 +37,7 @@ struct CodeStatsCommand: AsyncParsableCommand {
             CodeStatsReportCommand.self, CodeStatsFolderCommand.self,
             CodeStatsScheduleCommand.self, CodeStatsIdentityCommand.self,
             CodeStatsAuthorsCommand.self, CodeStatsAuditCommand.self,
+            CodeStatsExportCommand.self,
         ],
         defaultSubcommand: CodeStatsStatusCommand.self)
 }

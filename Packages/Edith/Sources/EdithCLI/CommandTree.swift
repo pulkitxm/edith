@@ -44,6 +44,7 @@ public enum ArgumentKind: Equatable, Sendable {
     case attentionCategory
     case downloadKind
     case codeStatsRange
+    case codeStatsExportCard
     case codeStatsSchedule
     case quinjetAppearance
     case quinjetMachine
@@ -1607,6 +1608,12 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "ed code-stats authors": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed code-stats audit": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed code-stats export": Spec(
+            options: ["--json", "--help", "--range", "--card", "-o", "--output", "--clipboard"],
+            optionValues: [
+                "--range": .codeStatsRange, "--card": .codeStatsExportCard,
+                "--output": .localPath, "-o": .localPath,
+            ]),
         "ed seo create": Spec(
             options: ["--json", "--help", "--name"], optionValues: ["--name": .free],
             arguments: [.free]),

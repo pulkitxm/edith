@@ -609,6 +609,7 @@ public enum Guide {
         ed code-stats status            mirror folder, schedule and live progress
         ed code-stats run --wait        refresh the GitHub mirror and recount
         ed code-stats report --range 90d
+        ed code-stats export --card highlights -o ~/Desktop
         ed download ls                  the yt-dlp queue
         ed download status              lifecycle totals for the queue
         ed download add <url> --kind audio
