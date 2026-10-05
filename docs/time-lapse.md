@@ -62,7 +62,9 @@ survive interruptions. An
 interrupted session can export completed segments; the unfinished segment may be
 lost. The library keeps the original segments after export.
 
-After stopping, select a session and an export quality:
+Recordings appear in a visible list with their mode, date, playback duration, and
+interruption status. Select a row, choose an export quality below the list, and
+click Export video:
 
 - Compact HEVC exports up to 1080p.
 - High quality HEVC exports at the recorded resolution.

@@ -41,9 +41,7 @@ struct TimeLapseControls: View {
         _recorder = State(initialValue: recorder ?? TimeLapseRecorder.shared)
         _recordings = State(initialValue: recordings)
         _selected = State(initialValue: recordings.first?.id)
-        _libraryExpanded = State(
-            initialValue: !recordings.isEmpty && recorder?.preview != nil
-                && recorder?.recording == false)
+        _libraryExpanded = State(initialValue: !recordings.isEmpty)
         self.loadsSources = loadsSources
     }
 
@@ -132,7 +130,9 @@ struct TimeLapseControls: View {
             recorder.recording
             ? UIScale.pt(narrow ? 120 : 60)
             : UIScale.pt(narrow ? 290 : 200)
-        let library = libraryExpanded ? UIScale.pt(160) : UIScale.pt(32)
+        let library =
+            libraryExpanded
+            ? UIScale.pt(120 + Double(min(recordings.count, 3)) * 68) : UIScale.pt(32)
         let options = optionsExpanded && !recorder.recording ? UIScale.pt(narrow ? 240 : 150) : 0
         let reserved = padding * 2 + UIScale.pt(160) + controls + library + options
         return max(UIScale.pt(120), min(width * ratio, size.height - reserved))
@@ -364,28 +364,23 @@ struct TimeLapseControls: View {
                 if recordings.isEmpty {
                     Text("Your recordings will appear here.").foregroundStyle(.secondary)
                 } else {
-                    Picker("Recording", selection: $selected) {
-                        Text("Choose a recording").tag(UUID?.none)
+                    LazyVStack(spacing: UIScale.pt(8)) {
                         ForEach(recordings) { recording in
-                            Text(
-                                "\(recording.session.settings.mode.rawValue) · \(recording.session.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration(recording.session.playbackSeconds))\(recording.session.endedAt == nil ? " · interrupted" : "")"
-                            )
-                            .tag(Optional(recording.id))
+                            recordingRow(recording)
                         }
                     }
                     if let recording = recordings.first(where: { $0.id == selected }) {
-                        Picker("Export quality", selection: $quality) {
-                            ForEach(TimeLapseExportQuality.allCases) { quality in
-                                Text(quality.rawValue).tag(quality)
+                        captureLayout {
+                            Picker("Export quality", selection: $quality) {
+                                ForEach(TimeLapseExportQuality.allCases) { quality in
+                                    Text(quality.rawValue).tag(quality)
+                                }
                             }
+                            Button(exporting ? "Exporting…" : "Export video…") { export(recording) }
+                                .disabled(exporting || recording.session.frames == 0)
                         }
                         if let failure = recording.session.failure {
                             Text(failure).font(.callout).foregroundStyle(.orange)
-                        }
-                        HStack {
-                            Button(exporting ? "Exporting…" : "Export video…") { export(recording) }
-                                .disabled(exporting || recording.session.frames == 0)
-
                         }
                     }
                 }
@@ -405,6 +400,47 @@ struct TimeLapseControls: View {
         }
     }
 
+    private func recordingRow(_ recording: TimeLapseRecording) -> some View {
+        let isSelected = selected == recording.id
+        return Button {
+            selected = recording.id
+        } label: {
+            HStack(spacing: UIScale.pt(12)) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text(recording.session.settings.mode.rawValue).font(.callout.weight(.medium))
+                    Text(
+                        recording.session.startedAt.formatted(date: .abbreviated, time: .shortened)
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: UIScale.pt(8))
+                VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                    Text(duration(recording.session.playbackSeconds))
+                        .font(.callout).monospacedDigit()
+                    if recording.session.endedAt == nil {
+                        Text("Interrupted").font(.caption).foregroundStyle(.orange)
+                    }
+                }
+            }
+            .padding(UIScale.pt(12))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            isSelected ? Color.accentColor.opacity(0.12) : Color.secondary.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: UIScale.pt(8))
+                .stroke(
+                    isSelected ? Color.accentColor.opacity(0.5) : .clear, lineWidth: UIScale.pt(1))
+        }
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+
     private func duration(_ seconds: Double) -> String {
         let seconds = max(0, Int(seconds))
         return String(format: "%02d:%02d:%02d", seconds / 3600, seconds / 60 % 60, seconds % 60)
@@ -417,7 +453,10 @@ struct TimeLapseControls: View {
             recordings = try await Task.detached(priority: .utility) {
                 try TimeLapseRecording.load(in: root).filter { $0.directory != active }
             }.value
-            if selected == nil { selected = recordings.first?.id }
+            if !recordings.contains(where: { $0.id == selected }) {
+                selected = recordings.first?.id
+                libraryExpanded = !recordings.isEmpty
+            }
         } catch { message = error.localizedDescription }
     }
 
