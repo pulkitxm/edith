@@ -50,7 +50,8 @@ private struct HerdrLaunchKindRow: View {
     @State private var options = AgentLaunchOptions.none
     @State private var catalog: AgentLaunchCatalog?
     @State private var refreshes = 0
-    @State private var loading = false
+    @State private var catalogLoad = ContentLoad()
+    private var loading: Bool { catalogLoad.isRunning }
 
     private var launchKind: AgentLaunchKind? { AgentLaunchKind(kind: kind) }
 
@@ -74,7 +75,7 @@ private struct HerdrLaunchKindRow: View {
         .padding(.horizontal, UIScale.pt(18))
         .padding(.vertical, UIScale.pt(10))
         .onAppear(perform: reload)
-        .task(id: refreshes) { await loadCatalog() }
+        .pageTask(id: refreshes, cancel: { catalogLoad.cancel() }) { await loadCatalog() }
     }
 
     private var commandLine: some View {
@@ -207,11 +208,9 @@ private struct HerdrLaunchKindRow: View {
 
     private func loadCatalog() async {
         guard let launchKind, launchKind.discoveryCommand != nil else { return }
-        loading = true
-        let loaded = await AgentLaunchCatalogs.shared.catalog(
-            for: launchKind, refresh: refreshes > 0)
-        guard !Task.isCancelled else { return }
-        catalog = loaded
-        loading = false
+        let refresh = refreshes > 0
+        await catalogLoad.perform(operation: {
+            await AgentLaunchCatalogs.shared.catalog(for: launchKind, refresh: refresh)
+        }) { catalog = $0 }
     }
 }

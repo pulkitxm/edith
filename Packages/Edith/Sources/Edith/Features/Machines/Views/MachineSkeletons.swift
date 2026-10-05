@@ -112,51 +112,6 @@ struct MachineOverviewSkeleton: View {
     }
 }
 
-struct FleetHomeSkeleton: View {
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                BannerSkeleton(dark: dark)
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: UIScale.pt(12)),
-                        GridItem(.flexible(), spacing: UIScale.pt(12)),
-                    ], spacing: UIScale.pt(12)
-                ) {
-                    MetricCardSkeleton(dark: dark)
-                    MetricCardSkeleton(dark: dark)
-                }
-                MeterRowsSkeleton(title: "Storage", rows: 2, dark: dark)
-                PageCard(title: "Machines") {
-                    VStack(spacing: UIScale.pt(0)) {
-                        ForEach(0..<2, id: \.self) { index in
-                            HStack(spacing: UIScale.pt(12)) {
-                                SkeletonBlock(width: 15, height: 15, corner: 4)
-                                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                    SkeletonBlock(width: 84, height: 11)
-                                    SkeletonBlock(width: 116, height: 8)
-                                }
-                                .frame(width: UIScale.pt(150), alignment: .leading)
-                                ForEach(0..<3, id: \.self) { _ in
-                                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                        SkeletonBlock(width: 44, height: 7)
-                                        SkeletonBlock(height: 6, corner: 3)
-                                    }
-                                }
-                                SkeletonBlock(width: 48, height: 9)
-                            }
-                            .padding(.vertical, UIScale.pt(11))
-                            if index == 0 { Divider().opacity(0.25) }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 struct FinderSkeleton: View {
     let mode: FileViewMode
     let iconSize: Double

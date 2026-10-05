@@ -38,10 +38,18 @@ struct BlitzTreePage: View {
                         .foregroundStyle(.orange)
                         .textSelection(.enabled)
                 }
-                if let report = model.report {
-                    results(report)
-                } else {
+                if model.root == nil {
                     emptyState
+                } else {
+                    PageLoading(
+                        state: model.loading.state,
+                        message: model.loading.errorMessage ?? "The folder scan was interrupted.",
+                        layout: .analytics, refreshing: model.loading.isRefreshing,
+                        retry: { if let root = model.root { model.scan(root, remember: false) } },
+                        cancel: model.cancel
+                    ) {
+                        if let report = model.report { results(report) }
+                    }
                 }
             }
         }

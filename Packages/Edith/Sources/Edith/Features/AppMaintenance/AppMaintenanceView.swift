@@ -48,7 +48,7 @@ final class AppMaintenanceModel {
     private let discover: AppMaintenanceDiscover
     private let updateExecutor = AppUpdateExecutor()
     private var task: Task<Void, Never>?
-    private var generation = UUID()
+    let loading = ContentLoad()
     private var discovered: [AppUpdateItem] = []
     private var brewCache: Data?
     private var brewCachedAt: Date?
@@ -102,8 +102,7 @@ final class AppMaintenanceModel {
 
     func refresh(automatic: Bool = false, interval: TimeInterval = 86_400) {
         task?.cancel()
-        let generation = UUID()
-        self.generation = generation
+        let generation = loading.begin()
         refreshInterval = interval
         var previousIDs: Set<String> = []
         previousIDs.reserveCapacity(updates.count)
@@ -122,13 +121,13 @@ final class AppMaintenanceModel {
     }
 
     private func performRefresh(
-        generation: UUID, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
+        generation: UInt64, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
     ) async {
         let claim = await snapshots.claim()
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         let snapshot = await snapshots.load()
         let state = await Task.detached { [updatePersistence] in updatePersistence.load() }.value
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         updateState = state
         updateHistory = state.history
         lastUpdateRefresh = state.lastRefresh
@@ -140,15 +139,17 @@ final class AppMaintenanceModel {
             brewCachedAt = snapshot.homebrewCachedAt
             if !applications.isEmpty || !updates.isEmpty {
                 phase = .ready
+                loading.retainContent()
             }
         }
         let brewFresh = brewCachedAt.map { Date().timeIntervalSince($0) < interval } ?? false
         reuseCachedBrew = brewFresh
         let scanned = await inventory(brewFresh ? brewCache : nil)
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         let keptSelection = selectedApplicationID
         applications = scanned
         phase = .ready
+        loading.retainContent()
         if let keptSelection, !scanned.contains(where: { $0.id == keptSelection }) {
             selectedApplicationID = nil
             plan = nil
@@ -157,7 +158,7 @@ final class AppMaintenanceModel {
         let found = await discover(scanned, brewFresh ? brewCache : nil, brewFresh) { batch in
             await self.absorb(batch, generation: generation)
         }
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         discovered = found
         updates = updatePersistence.visible(found, state: updateState, now: Date())
         reconcileUpdates()
@@ -173,20 +174,25 @@ final class AppMaintenanceModel {
             }.value
             try await snapshots.save(snapshotToSave, replacing: claim)
         } catch {
-            guard !Task.isCancelled, generation == self.generation else { return }
+            guard loading.isCurrent(generation) else { return }
             errorMessage = error.localizedDescription
         }
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         checkingUpdates = false
         phase = .ready
+        if let errorMessage {
+            loading.fail(generation, message: errorMessage)
+        } else {
+            loading.complete(generation)
+        }
         guard automatic else { return }
         var freshCount = 0
         for update in updates where !previousIDs.contains(update.id) { freshCount += 1 }
         if freshCount > 0 { await notify(updateCount: freshCount) }
     }
 
-    private func absorb(_ batch: AppUpdateDiscoveryBatch, generation: UUID) {
-        guard generation == self.generation, !Task.isCancelled else { return }
+    private func absorb(_ batch: AppUpdateDiscoveryBatch, generation: UInt64) {
+        guard loading.isCurrent(generation) else { return }
         if batch.channel == .homebrew, let data = batch.homebrewData {
             applications = AppMaintenanceInventory.applyingHomebrewUpdates(data, to: applications)
             if brewCache != data || !reuseCachedBrew {
@@ -452,6 +458,7 @@ final class AppMaintenanceModel {
     }
 
     func cancel() {
+        loading.cancel()
         task?.cancel()
         task = nil
         Task { await updateExecutor.cancel() }
@@ -1161,110 +1168,6 @@ struct AppMaintenanceView: View {
             Label(message, systemImage: "checkmark.circle.fill")
                 .font(.edithText(.caption))
                 .foregroundStyle(.green)
-        }
-    }
-}
-
-struct AppMaintenanceSectionSkeleton: View {
-    let section: AppMaintenanceSection
-    @Environment(\.compactLayout) private var compact
-
-    var body: some View {
-        SkeletonGroup {
-            if compact {
-                VStack(spacing: 0) {
-                    inventory.frame(height: UIScale.pt(180))
-                    Divider()
-                    detail
-                }
-            } else {
-                HSplitView {
-                    inventory
-                        .frame(
-                            minWidth: UIScale.pt(260), idealWidth: UIScale.pt(300),
-                            maxWidth: UIScale.pt(380),
-                            maxHeight: .infinity)
-                    detail
-                        .frame(minWidth: UIScale.pt(360), maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityLabel("Loading \(section.rawValue)")
-    }
-
-    @ViewBuilder
-    private var inventory: some View {
-        if section == .history {
-            VStack(spacing: 0) {
-                ForEach(0..<7, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        HStack {
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? 118 : 154,
-                                height: 10)
-                            Spacer()
-                            SkeletonBlock(width: 14, height: 14, corner: 7)
-                        }
-                        SkeletonBlock(width: 104, height: 8)
-                        SkeletonBlock(width: 76, height: 8)
-                    }
-                    .padding(.horizontal, UIScale.pt(12))
-                    .padding(.vertical, UIScale.pt(9))
-                }
-                Spacer(minLength: 0)
-            }
-        } else {
-            VStack(spacing: 0) {
-                SkeletonBlock(height: 24, corner: 6)
-                    .padding(UIScale.pt(12))
-                Divider()
-                VStack(spacing: 0) {
-                    ForEach(0..<7, id: \.self) { index in
-                        HStack(spacing: UIScale.pt(9)) {
-                            if section == .updates {
-                                SkeletonBlock(width: 14, height: 14, corner: 3)
-                            }
-                            SkeletonBlock(width: 28, height: 28, corner: 7)
-                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                SkeletonBlock(
-                                    width: index.isMultiple(of: 2) ? 112 : 148,
-                                    height: 10)
-                                SkeletonBlock(width: 82, height: 8)
-                            }
-                            Spacer(minLength: 0)
-                            if section == .updates {
-                                SkeletonBlock(width: 48, height: 8)
-                            }
-                        }
-                        .padding(.horizontal, UIScale.pt(12))
-                        .padding(.vertical, UIScale.pt(9))
-                    }
-                    Spacer(minLength: 0)
-                }
-                Divider()
-                HStack {
-                    SkeletonBlock(width: 82, height: 8)
-                    Spacer()
-                    SkeletonBlock(width: 62, height: 8)
-                }
-                .padding(.horizontal, UIScale.pt(12))
-                .frame(height: UIScale.pt(34))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var detail: some View {
-        switch section {
-        case .updates:
-            AppMaintenanceUpdateSkeleton()
-        case .removal:
-            AppMaintenanceRemovalSkeleton()
-        case .history:
-            AppMaintenanceHistorySkeleton()
-        case .packages, .cleaner:
-            EmptyView()
         }
     }
 }

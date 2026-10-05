@@ -5,8 +5,9 @@ import Observation
     public static let shared = SkillsModel()
     public let skills = EdithSkillLibrary.skills
     public private(set) var agents: [SkillAgent] = []
-    public private(set) var agentsLoaded = false
-    public private(set) var isDiscovering = false
+    public let discoveryLoad = ContentLoad()
+    public var agentsLoaded: Bool { discoveryLoad.hasContent }
+    public var isDiscovering: Bool { discoveryLoad.isRunning }
     public var presentedSkill: EdithSkill?
     public private(set) var selectedAgentIDs: Set<String> = []
     public private(set) var isInstalling = false
@@ -19,8 +20,7 @@ import Observation
     private var installationID = UUID()
     private let defaults: UserDefaults
     private let detectAgents: @Sendable () -> [SkillAgent]
-    private var discoveryTask: Task<([SkillAgent], Bool), Never>?
-    private var discoveryID = UUID()
+    private var discoveryTask: Task<Void, Never>?
     private let installer: SkillInstaller
 
     public init(
@@ -34,32 +34,22 @@ import Observation
     }
 
     public func discoverAgents() async {
-        let task: Task<([SkillAgent], Bool), Never>
         if let existing = discoveryTask {
-            task = existing
-        } else {
-            let detect = detectAgents
-            task = Task { await Self.discover(using: detect) }
-            discoveryID = UUID()
-            discoveryTask = task
-            isDiscovering = true
+            await existing.value
+            return
         }
-        let token = discoveryID
-        let result = await task.value
-        guard token == discoveryID else { return }
-        agents = result.0
-        installerAvailable = result.1
-        agentsLoaded = true
-        isDiscovering = false
-        discoveryTask = nil
-    }
-
-    private nonisolated static func discover(
-        using detect: @escaping @Sendable () -> [SkillAgent]
-    ) async -> ([SkillAgent], Bool) {
-        await Task.detached(priority: .userInitiated) {
-            (detect(), CLIToolEnvironment.executable(named: "npx") != nil)
-        }.value
+        let detect = detectAgents
+        let task = Task {
+            await discoveryLoad.perform(operation: {
+                (detect(), CLIToolEnvironment.executable(named: "npx") != nil)
+            }) { result in
+                agents = result.0
+                installerAvailable = result.1
+            }
+            discoveryTask = nil
+        }
+        discoveryTask = task
+        await task.value
     }
 
     public func present(_ skill: EdithSkill, agentID: String? = nil) async {

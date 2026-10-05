@@ -652,7 +652,8 @@ struct HerdrPage: View {
             if store.hosts.isEmpty,
                 !store.inventoryReceived || store.refreshing || store.settling
             {
-                HerdrBoardSkeleton(dark: dark, compact: compact)
+                PageLoading(state: .loading, layout: .cards) { EmptyView() }
+                    .pageContent(compact)
             } else if store.agents.isEmpty, let failure = store.inventoryFailureMessage {
                 emptyState(title: "Unable to load Herdr sessions", detail: failure)
             } else if store.hosts.isEmpty {

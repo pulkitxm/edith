@@ -26,7 +26,8 @@ final class CleanerModel {
     private(set) var lastReclaimed: Int64 = 0
     private(set) var drives: [DriveInfo] = []
     private(set) var driveOptions: [DriveInfo] = []
-    private(set) var loadingDriveOptions = false
+    let driveOptionsLoad = ContentLoad()
+    var loadingDriveOptions: Bool { driveOptionsLoad.isRunning }
     private(set) var customFolders: [String] = []
     var search = ""
     private(set) var expanded: Set<String> = []
@@ -111,11 +112,10 @@ final class CleanerModel {
     }
 
     func loadDriveOptions() {
-        loadingDriveOptions = true
         Task {
-            let all = await Task.detached { JunkScanner.drives() }.value
-            driveOptions = all
-            loadingDriveOptions = false
+            await driveOptionsLoad.perform(operation: { JunkScanner.drives() }) {
+                driveOptions = $0
+            }
         }
     }
 

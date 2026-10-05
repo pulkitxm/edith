@@ -165,7 +165,7 @@ final class StudioPDFEditorModel {
     private var saveTask: Task<Void, Never>?
     private var signaturesTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
-    private var loadGeneration = 0
+    let loading = ContentLoad()
 
     init(url: URL, mode: StudioPDFEditorMode) {
         self.url = url
@@ -195,8 +195,7 @@ final class StudioPDFEditorModel {
 
     func load() {
         loadTask?.cancel()
-        loadGeneration += 1
-        let generation = loadGeneration
+        let generation = loading.begin(preservingContent: session != nil)
         let url = url
         let password = password.isEmpty ? nil : password
         loadTask = Task { [weak self] in
@@ -204,13 +203,15 @@ final class StudioPDFEditorModel {
                 let loaded = try await Task.detached(priority: .userInitiated) {
                     LoadedSession(session: try PDFEditSession(url: url, password: password))
                 }.value
-                guard !Task.isCancelled, let self, generation == self.loadGeneration else { return }
+                guard let self, self.loading.isCurrent(generation) else { return }
                 self.session = loaded.session
                 self.needsPassword = false
                 self.loadError = nil
                 self.revision += 1
+                self.loading.complete(generation)
             } catch {
-                guard !Task.isCancelled, let self, generation == self.loadGeneration else { return }
+                guard let self, self.loading.owns(generation) else { return }
+                self.loading.fail(generation, error: error)
                 if let error = error as? StudioError {
                     switch error {
                     case .needsPassword, .wrongPassword: self.needsPassword = true
@@ -226,7 +227,7 @@ final class StudioPDFEditorModel {
     }
 
     func cancelLoading() {
-        loadGeneration += 1
+        loading.cancel()
         loadTask?.cancel()
         loadTask = nil
         signaturesTask?.cancel()

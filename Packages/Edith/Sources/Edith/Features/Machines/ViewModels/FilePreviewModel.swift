@@ -31,6 +31,7 @@ final class FilePreviewModel {
     }
 
     private(set) var content = Content.empty
+    let loading = ContentLoad()
     private var task: Task<Void, Never>?
     private let materializeFile: Materialize
     private let imageLoader: ImageLoader
@@ -67,6 +68,7 @@ final class FilePreviewModel {
         entry: RemoteFileEntry?, session: MachineSession, explicit: Bool
     ) {
         task?.cancel()
+        loading.reset()
         guard let entry, !entry.isDirectory else {
             content = .empty
             return
@@ -86,25 +88,35 @@ final class FilePreviewModel {
             }
         }
         content = .loading
+        let request = loading.begin(preservingContent: false)
         task = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if Task.isCancelled {
+                    loading.cancel(request)
+                } else if case let .failed(message) = content {
+                    loading.fail(request, message: message)
+                } else {
+                    loading.complete(request)
+                }
+            }
             let kind = resolvedKind(for: entry)
             if kind == .text {
-                await loadText(entry: entry, session: session)
+                await loadText(entry: entry, session: session, request: request)
                 return
             }
             guard
                 let url = await materialize(
-                    entry: entry, session: session,
+                    entry: entry, session: session, request: request,
                     maximumBytes: explicit
                         ? RemoteFileOperationExecution.cacheLimitBytes
                         : RemoteFileOperationExecution.automaticPreviewLimitBytes)
             else { return }
-            guard !Task.isCancelled else { return }
+            guard loading.isCurrent(request) else { return }
             switch kind {
             case .image:
                 let image = await imageLoader(url)
-                guard !Task.isCancelled else { return }
+                guard loading.isCurrent(request) else { return }
                 if let image {
                     content = .image(image)
                 } else {
@@ -115,7 +127,7 @@ final class FilePreviewModel {
             case .media:
                 let asset = AVURLAsset(url: url)
                 let playable = (try? await asset.load(.isPlayable)) ?? false
-                guard !Task.isCancelled else { return }
+                guard loading.isCurrent(request) else { return }
                 content =
                     playable
                     ? .media(url)
@@ -137,7 +149,13 @@ final class FilePreviewModel {
         return byExtension
     }
 
-    private func loadText(entry: RemoteFileEntry, session: MachineSession) async {
+    func cancelLoading() {
+        task?.cancel()
+        task = nil
+        loading.cancel()
+    }
+
+    private func loadText(entry: RemoteFileEntry, session: MachineSession, request: UInt64) async {
         if session.isLocal {
             let path = entry.path
             let data: Data? = await Task.detached(priority: .utility) { () -> Data? in
@@ -147,7 +165,7 @@ final class FilePreviewModel {
                 try? handle.close()
                 return data
             }.value
-            guard !Task.isCancelled else { return }
+            guard loading.isCurrent(request) else { return }
             guard let data else {
                 content = .failed("Could not read this file.")
                 return
@@ -160,7 +178,7 @@ final class FilePreviewModel {
         let command = RemoteFileOperationExecution.previewCommand(
             path: entry.path, platform: session.remotePlatform ?? .linux)
         let result = await session.runCommand(command, timeout: 45)
-        guard !Task.isCancelled else { return }
+        guard loading.isCurrent(request) else { return }
         switch result {
         case let .success(text):
             let preview = RemoteFileOperationExecution.textPreview(text)
@@ -173,12 +191,12 @@ final class FilePreviewModel {
     }
 
     private func materialize(
-        entry: RemoteFileEntry, session: MachineSession, maximumBytes: Int64
+        entry: RemoteFileEntry, session: MachineSession, request: UInt64, maximumBytes: Int64
     ) async -> URL? {
         do {
             return try await materializeFile(entry, session, maximumBytes)
         } catch {
-            guard !Task.isCancelled else { return nil }
+            guard loading.isCurrent(request) else { return nil }
             content = .failed(error.localizedDescription)
             return nil
         }
@@ -200,10 +218,9 @@ struct FilePreviewPane: View {
             content
         }
         .background(DashSkin.paper2(dark))
-        .onChange(of: entry?.id) { _, _ in
+        .pageTask(id: entry?.id, cancel: model.cancelLoading) {
             model.load(entry: entry, session: session)
         }
-        .onAppear { model.load(entry: entry, session: session) }
     }
 
     private var header: some View {

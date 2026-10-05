@@ -28,23 +28,23 @@ final class DockerDetailModel {
 
     var inspectFailed = false
     var processesFailed = false
-    private(set) var inspectLoading = false
-    private(set) var processesLoading = false
+    let inspectLoad = ContentLoad()
+    let processesLoad = ContentLoad()
+    let filesLoad = ContentLoad()
+    var inspectLoading: Bool { inspectLoad.isRunning }
+    var processesLoading: Bool { processesLoad.isRunning }
     private(set) var processesLoaded = false
-    private(set) var filesLoading = false
+    var filesLoading: Bool { filesLoad.isRunning }
     private(set) var filesLoaded = false
     private(set) var filesFailed = false
 
     private var stream: SSHLineStream?
     private var nextLogID = 0
     private var logGeneration = 0
-    private var fileToken = 0
     private var pending: [DockerLogLine] = []
     private var flushTask: Task<Void, Never>?
     private var reattempts = 0
     private var detailContainerID: String?
-    private var inspectRequest = 0
-    private var processesRequest = 0
     private var logsSuspended = false
     private let logProcess: @MainActor (MachineSession, DockerContainer) -> Process?
 
@@ -105,16 +105,13 @@ final class DockerDetailModel {
         inspect = nil
         inspectFailed = false
         processesFailed = false
-        inspectLoading = false
-        processesLoading = false
+        inspectLoad.reset()
+        processesLoad.reset()
+        filesLoad.reset()
         processesLoaded = false
-        filesLoading = false
         filesLoaded = false
         filesFailed = false
         detailContainerID = container.id
-        inspectRequest &+= 1
-        processesRequest &+= 1
-        fileToken &+= 1
         streamEnded = false
         reattempts = 0
         logGeneration += 1
@@ -177,12 +174,9 @@ final class DockerDetailModel {
     func suspend() {
         stopLogs()
         logsSuspended = true
-        inspectRequest &+= 1
-        processesRequest &+= 1
-        fileToken &+= 1
-        inspectLoading = false
-        processesLoading = false
-        filesLoading = false
+        inspectLoad.cancel()
+        processesLoad.cancel()
+        filesLoad.cancel()
     }
 
     private func enqueue(_ line: DockerLogLine) {
@@ -216,22 +210,21 @@ final class DockerDetailModel {
         using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
-        inspectRequest &+= 1
-        let request = inspectRequest
+        let request = inspectLoad.begin()
+        defer { if Task.isCancelled { inspectLoad.cancel(request) } }
         inspectFailed = false
-        inspectLoading = true
         let result = await DockerDetailOperationExecution.inspect(
             containerID: container.id, platform: platform, using: run)
         guard
-            !Task.isCancelled, detailContainerID == container.id, inspectRequest == request
+            detailContainerID == container.id, inspectLoad.isCurrent(request)
         else { return }
-        inspectLoading = false
         guard case let .success(summary) = result else {
-            inspect = nil
             inspectFailed = true
+            if case let .failure(error) = result { inspectLoad.fail(request, error: error) }
             return
         }
         inspect = summary
+        inspectLoad.complete(request)
     }
 
     func loadProcesses(session: MachineSession, container: DockerContainer) async {
@@ -247,24 +240,22 @@ final class DockerDetailModel {
         using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
-        processesRequest &+= 1
-        let request = processesRequest
+        let request = processesLoad.begin()
+        defer { if Task.isCancelled { processesLoad.cancel(request) } }
         processesFailed = false
-        processesLoading = true
-        processesLoaded = false
         let result = await DockerDetailOperationExecution.processes(
             containerID: container.id, platform: platform, using: run)
         guard
-            !Task.isCancelled, detailContainerID == container.id, processesRequest == request
+            detailContainerID == container.id, processesLoad.isCurrent(request)
         else { return }
-        processesLoading = false
         processesLoaded = true
         guard case let .success(rows) = result else {
-            processes = []
             processesFailed = true
+            if case let .failure(error) = result { processesLoad.fail(request, error: error) }
             return
         }
         processes = rows
+        processesLoad.complete(request)
     }
 
     func loadFiles(session: MachineSession, container: DockerContainer, path: String) async {
@@ -282,26 +273,24 @@ final class DockerDetailModel {
         using run: DockerDetailOperationExecution.Run
     ) async {
         guard detailContainerID == container.id else { return }
-        fileToken &+= 1
-        let token = fileToken
+        let token = filesLoad.begin(preservingContent: filePath == path)
+        defer { if Task.isCancelled { filesLoad.cancel(token) } }
         filePath = path
-        filesLoading = true
-        filesLoaded = false
         filesFailed = false
         let result = await run(
             DockerCommands.listFiles(
                 containerID: container.id, path: path, platform: platform), 30)
-        guard !Task.isCancelled, detailContainerID == container.id, token == fileToken else {
+        guard detailContainerID == container.id, filesLoad.isCurrent(token) else {
             return
         }
-        filesLoading = false
         filesLoaded = true
         guard case let .success(output) = result else {
-            files = []
             filesFailed = true
+            if case let .failure(error) = result { filesLoad.fail(token, error: error) }
             return
         }
         files = FileListing.parse(output: output, parent: path)
+        filesLoad.complete(token)
     }
 
     func loadDetails(
@@ -405,11 +394,7 @@ struct DockerContainerDetail: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationRoute("tab", selection: $tab)
-        .task(id: loadRequest) {
-            guard presented else {
-                model.suspend()
-                return
-            }
+        .pageTask(id: loadRequest, active: presented, cancel: model.suspend) {
             let switched = model.activate(
                 session: session, container: container, streamLogs: tab == .logs)
             if switched, requestedFilePath != "/" {
@@ -650,6 +635,12 @@ struct DockerContainerDetail: View {
     private var inspectView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                if model.inspectLoad.isRefreshing { LoadingIndicator("Refreshing configuration") }
+                if model.inspectLoad.hasContent, let message = model.inspectLoad.errorMessage {
+                    PageNotice(message, tone: .error) {
+                        Button("Retry") { loadGeneration &+= 1 }
+                    }
+                }
                 if let inspect = model.inspect {
                     section("Image", [inspect.image])
                     section("Command", [inspect.command])
@@ -780,9 +771,17 @@ struct DockerContainerDetail: View {
 
     private var processesView: some View {
         ScrollView {
-            if model.processesLoading || !model.processesLoaded && !model.processesFailed {
+            if model.processesLoad.isRefreshing { LoadingIndicator("Refreshing processes") }
+            if model.processesLoad.hasContent, let message = model.processesLoad.errorMessage {
+                PageNotice(message, tone: .error) {
+                    Button("Retry") { loadGeneration &+= 1 }
+                }
+            }
+            if !model.processesLoad.hasContent,
+                model.processesLoading || !model.processesLoaded && !model.processesFailed
+            {
                 DockerProcessRowsSkeleton()
-            } else if model.processesFailed {
+            } else if model.processesFailed, !model.processesLoad.hasContent {
                 HStack(spacing: UIScale.pt(8)) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(DashSkin.warn)
@@ -853,7 +852,15 @@ struct DockerContainerDetail: View {
             Divider().opacity(0.3)
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    if model.filesLoading || !model.filesLoaded && !model.filesFailed {
+                    if model.filesLoad.isRefreshing { LoadingIndicator("Refreshing files") }
+                    if model.filesLoad.hasContent, let message = model.filesLoad.errorMessage {
+                        PageNotice(message, tone: .error) {
+                            Button("Retry") { loadGeneration &+= 1 }
+                        }
+                    }
+                    if !model.filesLoad.hasContent,
+                        model.filesLoading || !model.filesLoaded && !model.filesFailed
+                    {
                         DockerFileRowsSkeleton()
                     } else if model.filesFailed {
                         HStack(spacing: UIScale.pt(8)) {

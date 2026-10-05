@@ -35,10 +35,6 @@ struct StudioPDFEditorView: View {
             Divider()
             if editor.needsPassword {
                 StudioPDFPasswordPrompt(editor: editor)
-            } else if let failure = editor.loadError {
-                StudioEmptyNote(symbol: "exclamationmark.triangle", text: failure)
-                    .padding(UIScale.pt(20))
-                Spacer()
             } else if editor.session != nil {
                 StudioPDFModeBar(editor: editor)
                 Divider()
@@ -75,10 +71,12 @@ struct StudioPDFEditorView: View {
                     .background(.bar)
                 }
             } else {
-                LoadingContainer(state: .loading) {
+                PageLoading(
+                    state: editor.loading.state,
+                    message: editor.loadError ?? "The PDF could not be opened.",
+                    layout: .editor, retry: editor.load
+                ) {
                     EmptyView()
-                } placeholder: {
-                    LoadingIndicator("Opening PDF")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -111,8 +109,7 @@ struct StudioPDFEditorView: View {
                 showsSignaturePad = false
             }
         }
-        .task { if editor.session == nil { editor.load() } }
-        .onDisappear { editor.cancelLoading() }
+        .pageTask(cancel: editor.cancelLoading) { if editor.session == nil { editor.load() } }
     }
 
     private func leave() {
