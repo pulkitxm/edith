@@ -80,7 +80,8 @@ public enum CodeStatsFactBuilder {
                     commits: commits, counts: counts, raw: raw))
         }
         for commit in kept {
-            guard let day = CodeStatsDay(commit.day), let repository = repositoryIndex[commit.repository]
+            guard let day = CodeStatsDay(commit.day),
+                let repository = repositoryIndex[commit.repository]
             else { continue }
             var flags = commit.flags
             let totals = commit.totals

@@ -1,27 +1,52 @@
+import CryptoKit
 import Foundation
 
+public struct CodeStatsRefState: Equatable, Sendable {
+    public var fingerprint: String
+    public var tips: [String]
+
+    public init(lines: [String]) {
+        var hasher = SHA256()
+        for line in lines { hasher.update(data: Data((line + "\n").utf8)) }
+        fingerprint = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        tips = Array(Set(lines.compactMap { $0.split(separator: " ").first.map(String.init) }))
+            .sorted()
+    }
+}
+
 public struct CodeStatsRepositoryCache: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
 
     public var version: Int
     public var repository: String
     public var refsFingerprint: String
     public var identityFingerprint: String
+    public var tips: [String]
+    public var integrated: [String]
+    public var authors: [CodeStatsAuthor]
     public var commits: [CodeStatsCommit]
 
     public init(
         repository: String, refsFingerprint: String, identityFingerprint: String,
+        tips: [String] = [], integrated: [String] = [], authors: [CodeStatsAuthor] = [],
         commits: [CodeStatsCommit]
     ) {
         version = Self.currentVersion
         self.repository = repository
         self.refsFingerprint = refsFingerprint
         self.identityFingerprint = identityFingerprint
+        self.tips = tips
+        self.integrated = integrated
+        self.authors = authors
         self.commits = commits
     }
 
     public func freshCommits(refs: String, identity: String) -> [CodeStatsCommit]? {
         refsFingerprint == refs && identityFingerprint == identity ? commits : nil
+    }
+
+    public func extendable(identity: String) -> Bool {
+        identityFingerprint == identity && !tips.isEmpty
     }
 }
 
@@ -34,6 +59,7 @@ public struct CodeStatsStore: Sendable {
 
     private var repositoriesFolder: URL { root.appendingPathComponent("repositories") }
     private var reportsFile: URL { root.appendingPathComponent("reports.json") }
+    private var factsFile: URL { root.appendingPathComponent("facts.json") }
     private var stateFile: URL { root.appendingPathComponent("state.json") }
 
     private func cacheFile(for repository: String) -> URL {
@@ -85,6 +111,16 @@ public struct CodeStatsStore: Sendable {
     public func saveReports(_ reports: [CodeStatsReport]) throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         try JSONEncoder().encode(reports).write(to: reportsFile, options: .atomic)
+    }
+
+    public func loadFacts() -> CodeStatsFactTable? {
+        guard let data = try? Data(contentsOf: factsFile) else { return nil }
+        return try? JSONDecoder().decode(CodeStatsFactTable.self, from: data)
+    }
+
+    public func saveFacts(_ table: CodeStatsFactTable) throws {
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try JSONEncoder().encode(table).write(to: factsFile, options: .atomic)
     }
 
     public func loadState() -> CodeStatsState {

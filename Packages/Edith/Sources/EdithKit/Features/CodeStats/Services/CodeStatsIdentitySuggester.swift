@@ -83,7 +83,9 @@ public enum CodeStatsIdentitySuggester {
         _ author: CodeStatsAuthor, references: Set<String>
     ) -> (CodeStatsSuggestionReason, Int)? {
         let email = author.email.lowercased()
-        let domain = email.split(separator: "@", maxSplits: 1).dropFirst().first.map(String.init)
+        let domain =
+            email.split(separator: "@", maxSplits: 1).dropFirst().first
+            .map(String.init)
             ?? ""
         let local = normalize(localPart(email))
         if domain == noreplyDomain, references.contains(local) { return (.noreply, 100) }

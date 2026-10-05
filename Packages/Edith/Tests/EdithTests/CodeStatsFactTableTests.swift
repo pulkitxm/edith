@@ -156,9 +156,13 @@ import Testing
                 commit("wip2", changes: [code("Swift", 20)]),
             ], integrated: ["wip1", "wip2"])
         #expect(table.integrated == CodeStatsTally(commits: 2, lines: 50))
-        #expect(report(table).totals == report(
-            CodeStatsFactBuilder.build(commits: [commit("squash", changes: [code("Swift", 50)])])
-        ).totals)
+        #expect(
+            report(table).totals
+                == report(
+                    CodeStatsFactBuilder.build(commits: [
+                        commit("squash", changes: [code("Swift", 50)])
+                    ])
+                ).totals)
     }
 
     @Test func repositoriesSharingMostFingerprintsAreReportedAsCopies() {
@@ -248,11 +252,15 @@ import Testing
         let audit = CodeStatsAuditBuilder.build(table: table)
         #expect(audit.counted == CodeStatsTally(commits: 6, lines: 148))
         #expect(audit.raw.commits == 8)
-        #expect(audit.entry(.bulk) == CodeStatsAuditEntry(
-            reason: .bulk, counted: false, commits: 1, lines: 600))
+        #expect(
+            audit.entry(.bulk)
+                == CodeStatsAuditEntry(
+                    reason: .bulk, counted: false, commits: 1, lines: 600))
         #expect(audit.entry(.formatting)?.lines == 2)
-        #expect(audit.entry(.agentAssisted) == CodeStatsAuditEntry(
-            reason: .agentAssisted, counted: true, commits: 1, lines: 40))
+        #expect(
+            audit.entry(.agentAssisted)
+                == CodeStatsAuditEntry(
+                    reason: .agentAssisted, counted: true, commits: 1, lines: 40))
         #expect(audit.entry(.data)?.lines == 70)
         #expect(audit.entry(.data)?.counted == false)
         #expect(audit.entry(.generated)?.lines == 9)

@@ -87,8 +87,8 @@ public enum CodeStatsLanguage {
         if isGenerated(path) { return true }
         let segments = path.lowercased().split(separator: "/")
         let base = String(segments.last ?? "")
-        if segments.dropLast().contains(where: { generatedArtifactSegments.contains(String($0)) })
-        {
+        let folders = segments.dropLast().map(String.init)
+        if folders.contains(where: generatedArtifactSegments.contains) {
             return true
         }
         if base.hasSuffix(".snap") || base.hasSuffix("_pb2.py") { return true }

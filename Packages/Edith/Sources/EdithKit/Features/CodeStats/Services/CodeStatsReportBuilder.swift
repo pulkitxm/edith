@@ -55,7 +55,8 @@ public enum CodeStatsReportBuilder {
                 counts: bucket.counts)
         }
         let firstWeekday = calendar.firstWeekday
-        let summaries = repositories(selected, names: table.repositories, languages: table.languages)
+        let summaries = repositories(
+            selected, names: table.repositories, languages: table.languages)
         let languageTotals = languages(selected, names: table.languages)
         return CodeStatsReport(
             range: range, startDay: start.string, endDay: end.string,
@@ -106,7 +107,8 @@ public enum CodeStatsReportBuilder {
                 row.flags.isDisjoint(with: excludedCommits)
             else { continue }
             let counted =
-                filter.categories.contains(row.category) && row.flags.isDisjoint(with: excludedLines)
+                filter.categories.contains(row.category)
+                && row.flags.isDisjoint(with: excludedLines)
             let counts = counted ? row.counts : .zero
             guard row.commits > 0 || !counts.isEmpty else { continue }
             result.append(

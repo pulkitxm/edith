@@ -125,25 +125,40 @@ public actor CodeStatsEngine {
         let store = store
         let caches = await BlockingWork.value { store.loadCaches() }
         let identity = settings.identity
+        let logins = Set(
+            ([profile?.login].compactMap { $0 } + identity.substrings).map { $0.lowercased() })
         let analyzed = await BoundedTaskRunner.map(repositories, limit: analysisLimit) {
             _, repository in
             await self.analyze(
-                repository, root: root, cache: caches[repository.fullName], identity: identity)
+                repository, root: root, cache: caches[repository.fullName],
+                attribution: CodeStatsAttribution(
+                    identity: identity,
+                    owned: CodeStatsAttribution.isOwned(repository.fullName, logins: logins)))
         }
         if let interrupted = interruption() {
             return result(interrupted, startedAt, profile, issue)
         }
 
         enter(.reporting)
-        let commits = analyzed.flatMap { $0 }
+        let entries = analyzed.compactMap { $0 }
         let today = now()
         let calendar = calendar
+        let login = profile?.login
+        let name = profile?.name
         do {
             try await BlockingWork.perform {
+                let table = CodeStatsFactBuilder.build(
+                    commits: entries.flatMap(\.commits),
+                    integrated: Set(entries.flatMap(\.integrated)),
+                    suggestions: CodeStatsIdentitySuggester.suggestions(
+                        authors: entries.flatMap(\.authors), identity: identity, login: login,
+                        name: name))
+                try store.saveFacts(table)
                 try store.saveReports(
                     CodeStatsRange.presets.map {
                         CodeStatsReportBuilder.build(
-                            commits: commits, range: $0, today: today, calendar: calendar)
+                            table: table, filter: .default, range: $0, today: today,
+                            calendar: calendar)
                     })
                 store.removeCaches(except: Set(discovered.map(\.fullName)))
             }
@@ -225,27 +240,41 @@ public actor CodeStatsEngine {
 
     private func analyze(
         _ repository: CodeStatsRepository, root: URL, cache: CodeStatsRepositoryCache?,
-        identity: CodeStatsIdentity
-    ) async -> [CodeStatsCommit] {
-        guard !Task.isCancelled, storageReady(root) else { return cache?.commits ?? [] }
+        attribution: CodeStatsAttribution
+    ) async -> CodeStatsRepositoryCache? {
+        guard !Task.isCancelled, storageReady(root) else { return cache }
         begin(repository.fullName)
         do {
-            let refs = try await git.refsFingerprint(repository)
-            if let fresh = cache?.freshCommits(refs: refs, identity: identity.fingerprint) {
+            let refs = try await git.refState(repository)
+            let identity = attribution.fingerprint
+            if let cache, cache.freshCommits(refs: refs.fingerprint, identity: identity) != nil {
                 end(repository.fullName, error: nil, root: root)
-                return fresh
+                return cache
             }
-            let commits = try await git.commits(in: repository, identity: identity)
+            var commits: [CodeStatsCommit]
+            if let cache, cache.extendable(identity: identity),
+                await git.canExtend(repository, from: cache.tips)
+            {
+                let added = try await git.commits(
+                    in: repository, attribution: attribution, excluding: cache.tips)
+                let known = Set(cache.commits.map(\.sha))
+                commits = cache.commits + added.filter { !known.contains($0.sha) }
+            } else {
+                commits = try await git.commits(in: repository, attribution: attribution)
+            }
+            let integrated = try await git.integratedCommits(in: repository)
+            let authors = try await git.authors(in: repository)
             let entry = CodeStatsRepositoryCache(
-                repository: repository.fullName, refsFingerprint: refs,
-                identityFingerprint: identity.fingerprint, commits: commits)
+                repository: repository.fullName, refsFingerprint: refs.fingerprint,
+                identityFingerprint: identity, tips: refs.tips,
+                integrated: integrated.sorted(), authors: authors, commits: commits)
             let store = store
             try await BlockingWork.perform { try store.save(entry) }
             end(repository.fullName, error: nil, root: root)
-            return commits
+            return entry
         } catch {
             end(repository.fullName, error: error, root: root)
-            return cache?.commits ?? []
+            return cache
         }
     }
 

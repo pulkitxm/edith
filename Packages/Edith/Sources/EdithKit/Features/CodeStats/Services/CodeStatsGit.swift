@@ -142,33 +142,111 @@ public struct CodeStatsGit: Sendable {
     }
 
     public func refsFingerprint(_ repository: CodeStatsRepository) async throws -> String {
-        let hasher = CodeStatsLocked(SHA256())
+        try await refState(repository).fingerprint
+    }
+
+    public func refState(_ repository: CodeStatsRepository) async throws -> CodeStatsRefState {
+        let lines = CodeStatsLocked([String]())
         try await run(
             ["for-each-ref", "--format=%(objectname) %(refname)"] + Self.historyRefPrefixes,
             in: repository.path,
-            onLine: { line in hasher.update { $0.update(data: Data((line + "\n").utf8)) } })
-        return hasher.update { $0.finalize() }.map { String(format: "%02x", $0) }.joined()
+            onLine: { line in lines.update { $0.append(line) } })
+        return CodeStatsRefState(lines: lines.update { $0 })
     }
 
     public func commits(
         in repository: CodeStatsRepository, identity: CodeStatsIdentity
     ) async throws -> [CodeStatsCommit] {
-        guard !identity.isEmpty else { return [] }
+        try await commits(
+            in: repository, attribution: CodeStatsAttribution(identity: identity, owned: false))
+    }
+
+    public func commits(
+        in repository: CodeStatsRepository, attribution: CodeStatsAttribution,
+        excluding previousTips: [String] = []
+    ) async throws -> [CodeStatsCommit] {
+        guard !attribution.identity.isEmpty else { return [] }
         let parser = CodeStatsLocked(
-            CodeStatsLogParser(repository: repository.fullName, isMine: identity.matcher()))
+            CodeStatsLogParser(repository: repository.fullName) { name, email, coAuthors in
+                attribution.flags(name: name, email: email, coAuthors: coAuthors)
+            })
+        let authorFilter =
+            attribution.owned
+            ? []
+            : ["--regexp-ignore-case", "--extended-regexp"]
+                + attribution.identity.authorPatterns.map { "--author=" + $0 }
+        let exclusions = previousTips.isEmpty ? [] : ["--not"] + previousTips
         let arguments =
-            ["log"] + Self.historyRefs
-            + ["--no-merges", "--regexp-ignore-case", "--extended-regexp"]
-            + identity.authorPatterns.map { "--author=" + $0 }
+            ["log", "--no-merges"] + authorFilter
             + [
                 "--pretty=format:" + CodeStatsLogParser.prettyFormat, "-p", "-U0", "-M", "-C",
                 "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/",
-                "--dst-prefix=b/", "--", ".",
-            ] + CodeStatsLanguage.excludedPathspecs
+                "--dst-prefix=b/",
+            ] + Self.historyRefs + exclusions + ["--", "."]
+            + CodeStatsLanguage.excludedPathspecs
         try await run(
             arguments, in: repository.path,
             onLine: { line in parser.update { $0.push(line) } })
         return parser.update { $0.finish() }
+    }
+
+    public func canExtend(
+        _ repository: CodeStatsRepository, from previousTips: [String]
+    ) async -> Bool {
+        guard !previousTips.isEmpty else { return false }
+        let output = CodeStatsLocked("")
+        do {
+            try await run(
+                ["rev-list", "--count"] + previousTips + ["--not"] + Self.historyRefs,
+                in: repository.path,
+                onLine: { line in output.update { $0 += line } })
+        } catch {
+            return false
+        }
+        return output.update { $0.trimmingCharacters(in: .whitespaces) } == "0"
+    }
+
+    public func integratedCommits(in repository: CodeStatsRepository) async throws -> Set<String> {
+        let head = CodeStatsLocked([String]())
+        do {
+            try await run(
+                ["rev-parse", "HEAD", "HEAD^{tree}"], in: repository.path,
+                onLine: { line in head.update { $0.append(line) } })
+        } catch {
+            return []
+        }
+        let resolved = head.update { $0 }
+        guard resolved.count == 2 else { return [] }
+        let tree = resolved[1]
+        let branches = CodeStatsLocked([String]())
+        try await run(
+            [
+                "for-each-ref", "--no-merged=HEAD", "--format=%(refname)", "refs/heads",
+                "refs/remotes",
+            ],
+            in: repository.path,
+            onLine: { line in
+                if !line.hasSuffix("/HEAD") { branches.update { $0.append(line) } }
+            })
+        var integrated = Set<String>()
+        for branch in branches.update({ $0 }) {
+            if Task.isCancelled { break }
+            let merged = CodeStatsLocked("")
+            do {
+                try await run(
+                    ["merge-tree", "--write-tree", "HEAD", branch], in: repository.path,
+                    onLine: { line in merged.update { if $0.isEmpty { $0 = line } } })
+            } catch {
+                continue
+            }
+            guard merged.update({ $0 }) == tree else { continue }
+            let unique = CodeStatsLocked([String]())
+            try await run(
+                ["rev-list", "--no-merges", branch, "^HEAD"], in: repository.path,
+                onLine: { line in unique.update { $0.append(line) } })
+            integrated.formUnion(unique.update { $0 })
+        }
+        return integrated
     }
 
     public func authors(in repository: CodeStatsRepository) async throws -> [CodeStatsAuthor] {
