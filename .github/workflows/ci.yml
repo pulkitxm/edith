@@ -101,8 +101,8 @@ jobs:
     needs: changes
     runs-on: ubuntu-latest
     concurrency:
-      group: ci-checks-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
-      cancel-in-progress: ${{ github.event_name == 'push' }}
+      group: ci-checks-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -153,8 +153,8 @@ jobs:
     if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: ci-promo-video-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
-      cancel-in-progress: ${{ github.event_name == 'push' }}
+      group: ci-promo-video-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -180,8 +180,8 @@ jobs:
       || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
     concurrency:
-      group: ci-swift-build-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
-      cancel-in-progress: ${{ github.event_name == 'push' }}
+      group: ci-swift-build-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -234,8 +234,8 @@ jobs:
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
     concurrency:
-      group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
-      cancel-in-progress: ${{ github.event_name == 'push' }}
+      group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -323,8 +323,8 @@ jobs:
       || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     concurrency:
-      group: ci-companion-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
-      cancel-in-progress: ${{ github.event_name == 'push' }}
+      group: ci-companion-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
     services:
       postgres:
         image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a
