@@ -66,6 +66,8 @@ try:
     for name, identity in [('ed', 'ed'), ('edithd', 'com.pulkit.edith.agent')]:
         shutil.copy2(build / name, root / name)
         call(['/usr/bin/codesign', '--force', '--sign', '-', '--identifier', identity, str(root / name)])
+    if (build / 'Sparkle.framework').exists():
+        shutil.copytree(build / 'Sparkle.framework', root / 'Sparkle.framework', symlinks=True)
     for key in ['suiteAgentsEnabled', 'suiteMaintenanceEnabled', 'suiteSystemEnabled',
                 'suiteDeskEnabled', 'suiteMediaEnabled', 'suiteDataEnabled', 'icloudBackup']:
         call(['/usr/bin/defaults', 'write', suite, key, '-bool', 'false'])
@@ -193,6 +195,43 @@ try:
     assert interrupted['state'] == 'interrupted'
     record('09 daemon restart stops the running download child and preserves retryable history',
            downloadID=interrupted['id'], state=interrupted['state'], childStopped=True)
+    ticks = root / 'schedule-ticks.txt'
+
+    def tick_count():
+        return len(ticks.read_text().splitlines()) if ticks.exists() else 0
+
+    def schedule(name):
+        return next((item for item in value('schedule', 'ls', '--json') if item['definition']['name'] == name), None)
+
+    added = value('schedule', 'add', 'tick', '--cron', '* * * * *', '--timeout', '30', '--json', '--',
+                  '/bin/sh', '-c', "printf 'tick\\n' >> " + str(ticks))
+    assert added['enabled'] and added['nextRunAt'] and added.get('lastRunAt') is None
+    refused = cli('schedule', 'add', 'tick', '--every', '5m', '--json', '--', '/usr/bin/true', check=False)
+    assert refused.returncode != 0
+    manual = value('schedule', 'run', 'tick', '--json')
+    wait_for(lambda: inspect(manual['id']), lambda item: item['snapshot']['state'] == 'succeeded')
+    assert tick_count() == 1
+    record('10 a scheduled command runs on demand through the task queue', taskID=manual['id'])
+    wait_for(tick_count, lambda count: count >= 2, timeout=90)
+    fired = wait_for(lambda: schedule('tick'), lambda item: item.get('lastState') == 'succeeded')
+    assert fired['lastRunAt'] and fired['nextRunAt'] > fired['lastRunAt']
+    record('11 a cron schedule fires by itself and the run is an inspectable task', ticks=tick_count())
+    before_schedule_restart = value('status', '--json')['pid']
+    cli('restart', '--json')
+    wait_for(lambda: value('status', '--json'), lambda item: item['pid'] != before_schedule_restart, timeout=25)
+    survived = wait_for(lambda: schedule('tick'), lambda item: item is not None)
+    assert survived['enabled'] and survived['id'] == added['id']
+    record('12 a schedule survives a daemon restart')
+    paused = value('schedule', 'disable', 'tick', '--json')
+    assert not paused['enabled'] and paused.get('nextRunAt') is None
+    settled = tick_count()
+    time.sleep(2)
+    assert tick_count() == settled
+    resumed = value('schedule', 'enable', 'tick', '--json')
+    assert resumed['enabled'] and resumed['nextRunAt']
+    value('schedule', 'rm', 'tick', '--json')
+    assert schedule('tick') is None
+    record('13 a schedule can be paused, resumed and removed')
 finally:
     if booted:
         call(['/bin/launchctl', 'bootout', target], check=False)

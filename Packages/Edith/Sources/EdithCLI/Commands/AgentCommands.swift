@@ -78,7 +78,7 @@ struct AgentCommand: AsyncParsableCommand {
             AgentStatusCommand.self, AgentJobsCommand.self, AgentRestartCommand.self,
             AgentLogsCommand.self,
             AgentEventsCommand.self, AgentRunCommand.self, AgentCancelCommand.self,
-            AgentTasksCommand.self,
+            AgentTasksCommand.self, AgentScheduleCommand.self,
         ],
         defaultSubcommand: AgentStatusCommand.self)
 }

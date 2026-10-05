@@ -123,6 +123,11 @@ public enum AgentBoot {
                 await codeStats.register(on: tasks, runtime: runtime)
                 try await SEOAuditWorkflow().register(on: tasks, runtime: runtime)
                 await AgentTaskOperations.register(on: runtime, service: tasks)
+                if let store {
+                    let schedules = ScheduleService(store: store, tasks: tasks)
+                    await AgentScheduleOperations.register(on: runtime, service: schedules)
+                    await schedules.start()
+                }
             } catch {
                 await runtime.record(
                     AgentEvent(
