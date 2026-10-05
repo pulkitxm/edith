@@ -62,5 +62,12 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
         .animation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: selection)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
+        .onKeyPress(keys: [.leftArrow, .rightArrow]) { press in
+            guard enabled, let index = options.firstIndex(of: selection), !options.isEmpty
+            else { return .ignored }
+            let step = press.key == .leftArrow ? -1 : 1
+            selection = options[(index + step + options.count) % options.count]
+            return .handled
+        }
     }
 }
