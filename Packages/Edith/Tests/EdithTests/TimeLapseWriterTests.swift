@@ -194,6 +194,80 @@ import Testing
         }
     }
 
+    @Test func previewUsesCapturedMosaicAndStopsRenderingWhenHidden() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let previews = PreviewFrames()
+        let writer = try TimeLapseWriter(
+            directory: directory,
+            session: TimeLapseSession(settings: TimeLapseSettings(), width: 1920, height: 1080),
+            sourceCount: 2, failure: { _ in }, progress: { _, _ in },
+            preview: { previews.append($0) })
+        let red = try buffer(color: .red)
+        let blue = try buffer(color: .blue)
+        let uptime = ProcessInfo.processInfo.systemUptime
+        for index in 0..<3 {
+            writer.setPreviewEnabled(index == 1)
+            await withCheckedContinuation { continuation in
+                writer.queue.async {
+                    writer.setFrame(red, source: 0)
+                    writer.setFrame(blue, source: 1)
+                    writer.capture(at: uptime + Double(index) * 5)
+                    continuation.resume()
+                }
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let session = await writer.stop()
+        #expect(session.failure == nil)
+        #expect(session.frames == 3)
+        let images = previews.snapshot
+        #expect(images.count == 1)
+        let image = try #require(images.first)
+        #expect(image.width == 960 && image.height == 540)
+        var left: [UInt8] = [0, 0, 0, 0]
+        var right: [UInt8] = [0, 0, 0, 0]
+        let context = CIContext()
+        let pixels = CIImage(cgImage: image)
+        context.render(
+            pixels, toBitmap: &left, rowBytes: 4,
+            bounds: CGRect(x: 240, y: 270, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
+        context.render(
+            pixels, toBitmap: &right, rowBytes: 4,
+            bounds: CGRect(x: 720, y: 270, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
+        #expect(left[0] > 200 && left[2] < 40)
+        #expect(right[2] > 200 && right[0] < 40)
+    }
+
+    @Test func firstFrameArrivesWithoutWaitingForTheCaptureInterval() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var settings = TimeLapseSettings()
+        settings.interval = 60
+        let writer = try TimeLapseWriter(
+            directory: directory,
+            session: TimeLapseSession(settings: settings, width: 64, height: 64),
+            sourceCount: 1, failure: { _ in }, progress: { _, _ in })
+        writer.startTimer()
+        let image = try buffer(color: .green)
+        await withCheckedContinuation { continuation in
+            writer.queue.async {
+                writer.setFrame(image, source: 0)
+                continuation.resume()
+            }
+        }
+        let session = await writer.stop()
+        #expect(session.failure == nil)
+        #expect(session.frames == 1)
+    }
+
+    private final class PreviewFrames: @unchecked Sendable {
+        private let lock = NSLock()
+        private var images: [CGImage] = []
+        func append(_ image: CGImage) { lock.withLock { images.append(image) } }
+        var snapshot: [CGImage] { lock.withLock { images } }
+    }
+
     private func audioSample(at seconds: Double) throws -> CMSampleBuffer {
         var description = AudioStreamBasicDescription(
             mSampleRate: 48000,

@@ -25,6 +25,8 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var frames: Int64 = 0
     var bytes: Int64 = 0
     var lastDirectory: URL?
+    var preview: CGImage?
+    private var previewVisible = false
     private var streams: [SCStream] = []
     private var outputs: [TimeLapseCaptureOutput] = []
     private var writer: TimeLapseWriter?
@@ -57,10 +59,16 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         } catch { self.error = error.localizedDescription }
     }
 
+    func showPreview(_ visible: Bool) {
+        previewVisible = visible
+        writer?.setPreviewEnabled(visible)
+    }
+
     func start() async {
         guard canStart else { return }
         busy = true
         error = nil
+        preview = nil
         defer { busy = false }
         do {
             settings.microphoneID = microphone.isEmpty ? nil : microphone
@@ -102,7 +110,14 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                     Task { @MainActor in
                         self?.frames = frames; self?.bytes = bytes
                     }
+                },
+                preview: { [weak self] image in
+                    Task { @MainActor in
+                        guard let self, self.recording else { return }
+                        self.preview = image
+                    }
                 })
+            writer.setPreviewEnabled(previewVisible)
             self.writer = writer
             lastDirectory = directory
             for (index, filter) in filters.enumerated() {

@@ -24,6 +24,8 @@ final class TimeLapseWriter: @unchecked Sendable {
     private let failure: @Sendable (String) -> Void
     private let progress: @Sendable (Int64, Int64) -> Void
     private var storedBytes: Int64 = 0
+    private var previewEnabled = false
+    private let preview: (@Sendable (CGImage) -> Void)?
     private let availableBytes: @Sendable (URL) throws -> Int64
 
     private final class Chunk {
@@ -55,7 +57,8 @@ final class TimeLapseWriter: @unchecked Sendable {
             try TimeLapseWriter.freeBytes($0)
         },
         failure: @escaping @Sendable (String) -> Void,
-        progress: @escaping @Sendable (Int64, Int64) -> Void
+        progress: @escaping @Sendable (Int64, Int64) -> Void,
+        preview: (@Sendable (CGImage) -> Void)? = nil
     ) throws {
         try session.validate()
         guard sourceCount > 0, sourceCount <= 16 else { throw TimeLapseError.missingSource }
@@ -65,6 +68,7 @@ final class TimeLapseWriter: @unchecked Sendable {
         self.availableBytes = availableBytes
         self.failure = failure
         self.progress = progress
+        self.preview = preview
         clock = TimeLapseClock(interval: session.settings.interval)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try checkDisk(at: ProcessInfo.processInfo.systemUptime)
@@ -95,6 +99,10 @@ final class TimeLapseWriter: @unchecked Sendable {
         }
     }
 
+    func setPreviewEnabled(_ enabled: Bool) {
+        queue.async { [self] in previewEnabled = enabled }
+    }
+
     func ingest(_ sample: CMSampleBuffer, source: Int, kind: String) {
         guard !closing, CMSampleBufferIsValid(sample) else { return }
         if kind == "video" {
@@ -113,7 +121,7 @@ final class TimeLapseWriter: @unchecked Sendable {
             guard status == SCFrameStatus.complete.rawValue,
                 let buffer = CMSampleBufferGetImageBuffer(sample)
             else { return }
-            latest[source] = buffer
+            setFrame(buffer, source: source)
         } else {
             do { try appendAudio(sample, kind: kind) } catch { fail(error) }
         }
@@ -122,6 +130,9 @@ final class TimeLapseWriter: @unchecked Sendable {
     func setFrame(_ buffer: CVPixelBuffer, source: Int) {
         guard !closing else { return }
         latest[source] = buffer
+        if timer != nil, clock.frames == 0 {
+            capture(at: ProcessInfo.processInfo.systemUptime)
+        }
     }
 
     func capture(at uptime: Double) {
@@ -150,6 +161,15 @@ final class TimeLapseWriter: @unchecked Sendable {
             video.frames += 1
             video.end = CMTime(value: Int64(video.frames), timescale: TimeLapseSettings.playbackFPS)
             clock.accepted(at: uptime)
+            if previewEnabled, let preview {
+                let image = CIImage(cvPixelBuffer: buffer)
+                let scale = min(1, 960 / image.extent.width, 540 / image.extent.height)
+                let thumbnail = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+                let bounds = CGRect(
+                    x: 0, y: 0, width: floor(thumbnail.extent.width),
+                    height: floor(thumbnail.extent.height))
+                if let image = context.createCGImage(thumbnail, from: bounds) { preview(image) }
+            }
             let activeBytes = [video] + Array(audio.values)
             let bytes = activeBytes.reduce(storedBytes) { result, chunk in
                 result + fileBytes(chunk.file)
