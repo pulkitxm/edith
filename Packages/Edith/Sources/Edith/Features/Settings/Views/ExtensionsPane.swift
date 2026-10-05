@@ -817,12 +817,11 @@ private struct ExtensionLifecycleRows: View {
                 }
             }
         }
-        .task(id: "\(entry.id):\(invalidation)") {
+        .pageTask(id: "\(entry.id):\(invalidation)", cancel: readiness.cancel) {
             let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
             defer { PerformanceTrace.end(discoveryTrace) }
             await readiness.refresh(.status).value
         }
-        .onDisappear { readiness.cancel() }
     }
 
     private func checkRow(_ check: ExtensionLifecycleCheck) -> some View {
@@ -1378,7 +1377,7 @@ private struct AttentionRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .task { model.reload() }
+        .pageTask { model.reload() }
     }
 }
 
@@ -1526,8 +1525,7 @@ private struct QuinjetRows: View {
                     Text(option.label).tag(option.rawValue)
                 }
             }
-            .task {
-                guard automaticActionsEnabled else { return }
+            .pageTask {
                 themes = (try? await QuinjetClient.live.themes()) ?? QuinjetTheme.allCases
             }
         }
@@ -1710,7 +1708,11 @@ private struct ClaudeStatusLineRow: View {
                     .disabled(connected == nil)
             }
         }
-        .task { connected = await ClaudeStatusLine.isConnected() }
+        .pageTask {
+            let result = await ClaudeStatusLine.isConnected()
+            guard !Task.isCancelled else { return }
+            connected = result
+        }
     }
 
     private func toggle() {
@@ -2097,7 +2099,11 @@ private struct UsageRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .task(id: notifyMaster) { projections = await LimitAlertInspector.previewLines() }
+        .pageTask(id: notifyMaster) {
+            let result = await LimitAlertInspector.previewLines()
+            guard !Task.isCancelled else { return }
+            projections = result
+        }
         .onChange(of: claudeEnabled) { reconcileProviders() }
         .onChange(of: codexEnabled) {
             if enabled && codexEnabled {

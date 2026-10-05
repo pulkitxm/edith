@@ -23,7 +23,7 @@ struct TerminalSettingsPane: View {
         }
         .edithForm()
         .navigationTitle("Terminal")
-        .task {
+        .pageTask {
             if terminalLaunchEnabled { await refresh() }
         }
         .onReceive(

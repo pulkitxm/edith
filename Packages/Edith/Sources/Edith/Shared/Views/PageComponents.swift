@@ -179,3 +179,25 @@ struct PageColumns<Content: View>: View {
         layout { content() }
     }
 }
+
+struct PageGrid<Primary: View, Secondary: View, Full: View>: View {
+    @ViewBuilder let primary: () -> Primary
+    @ViewBuilder let secondary: () -> Secondary
+    @ViewBuilder let full: () -> Full
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            PageColumns {
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    primary()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    secondary()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            full()
+        }
+    }
+}

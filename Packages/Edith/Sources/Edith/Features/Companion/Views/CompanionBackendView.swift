@@ -19,22 +19,19 @@ struct CompanionBackendScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                CompanionGrid(width: proxy.size.width) {
-                    whereItRunsCard
-                    configurationCard
-                } secondary: {
-                    if model.deployment != nil { servicesCard }
-                    secretsCard
-                    if model.deployment != nil { teardownCard }
-                } full: {
-                    if !model.lastLog.isEmpty { logCard }
-                }
-                .pageContent(compact)
+        PageScaffold(pinnedHeader: true, header: {}) {
+            PageGrid {
+                whereItRunsCard
+                configurationCard
+            } secondary: {
+                if model.deployment != nil { servicesCard }
+                secretsCard
+                if model.deployment != nil { teardownCard }
+            } full: {
+                if !model.lastLog.isEmpty { logCard }
             }
         }
-        .task(id: isActive ? generation : -1) {
+        .pageTask(id: generation, active: isActive && requestsEnabled) {
             guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
             await model.refresh()
             if !Task.isCancelled { refreshedGeneration = generation }

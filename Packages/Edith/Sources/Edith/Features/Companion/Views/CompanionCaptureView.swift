@@ -337,24 +337,16 @@ struct CompanionCaptureScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                if !model.waiting.isEmpty {
-                    waitingBanner
-                }
-                let layout =
-                    compact
-                    ? AnyLayout(VStackLayout(spacing: UIScale.pt(12)))
-                    : AnyLayout(HStackLayout(alignment: .top, spacing: UIScale.pt(12)))
-                layout {
-                    speakCard
-                    writeCard
-                }
+        PageScaffold(pinnedHeader: true, header: {}) {
+            if !model.waiting.isEmpty {
+                waitingBanner
             }
-            .pageContent(compact)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            PageColumns {
+                speakCard
+                writeCard
+            }
         }
-        .task(id: isActive ? generation : -1) {
+        .pageTask(id: generation, active: isActive) {
             guard isActive, refreshedGeneration != generation else { return }
             await model.refreshWaiting()
             if !Task.isCancelled { refreshedGeneration = generation }

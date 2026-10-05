@@ -325,9 +325,9 @@ struct ClipboardRows: View {
 @Observable
 final class ClipboardRecentModel {
     private(set) var entries: [ClipboardEntry] = []
-    private(set) var error: String?
-    private(set) var loading = false
-    private var revision = 0
+    let contentLoad = ContentLoad()
+    var error: String? { contentLoad.errorMessage }
+    var loading: Bool { contentLoad.isRunning }
     private let load: @Sendable () async throws -> [ClipboardEntry]
 
     init(
@@ -340,18 +340,6 @@ final class ClipboardRecentModel {
     }
 
     func refresh() async {
-        revision += 1
-        let current = revision
-        loading = true
-        defer { if revision == current { loading = false } }
-        do {
-            let loaded = try await load()
-            guard !Task.isCancelled, revision == current else { return }
-            entries = loaded
-            error = nil
-        } catch {
-            guard !Task.isCancelled, revision == current else { return }
-            self.error = error.localizedDescription
-        }
+        await contentLoad.perform(operation: load) { entries = $0 }
     }
 }

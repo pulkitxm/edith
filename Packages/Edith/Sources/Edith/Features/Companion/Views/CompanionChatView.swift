@@ -52,8 +52,10 @@ final class CompanionChatModel {
     private var generation: UUID?
     private(set) var model: String?
     private(set) var failure: ChatFailure?
-    private(set) var loaded = false
-    private(set) var loadError: String?
+    let loading = ContentLoad()
+    let messageLoad = ContentLoad()
+    var loaded: Bool { loading.hasContent }
+    var loadError: String? { loading.errorMessage }
     private(set) var personas: [CompanionPersona] = []
     var persona: String?
     private(set) var council: CompanionCouncil?
@@ -106,29 +108,30 @@ final class CompanionChatModel {
     }
 
     func loadConversations() async {
-        do {
-            let client = client
-            conversations = try await CompanionChatLibraryOperationExecution.conversations(
+        let client = client
+        await loading.perform(operation: {
+            try await CompanionChatLibraryOperationExecution.conversations(
                 limit: 50
             ) { limit in
                 try await client.conversations(limit: limit)
             }
-            loaded = true
-            loadError = nil
-        } catch {
-            if !loaded { loadError = error.localizedDescription }
-        }
+        }) { conversations = $0 }
     }
 
     func open(_ id: String) async {
         if streaming { stop() }
         activeConversationId = id
-        do {
-            let client = client
-            let detail = try await CompanionChatLibraryOperationExecution.conversation(id: id) {
-                id in
-                try await client.conversation(id: id)
+        messages = []
+        let client = client
+        await messageLoad.perform(
+            preservingContent: false,
+            operation: {
+                try await CompanionChatLibraryOperationExecution.conversation(id: id) {
+                    id in
+                    try await client.conversation(id: id)
+                }
             }
+        ) { detail in
             messages = detail.messages.map {
                 DisplayMessage(
                     id: $0.id, role: $0.role, content: $0.content,
@@ -137,13 +140,15 @@ final class CompanionChatModel {
             }
             failure = nil
             focusTick += 1
-        } catch {
-            failure = ChatFailure(message: error.localizedDescription, retryText: nil)
+        }
+        if let message = messageLoad.errorMessage {
+            failure = ChatFailure(message: message, retryText: nil)
         }
     }
 
     func newChat() {
         guard !streaming else { return }
+        messageLoad.cancel()
         activeConversationId = nil
         messages = []
         failure = nil
@@ -166,6 +171,8 @@ final class CompanionChatModel {
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !streaming else { return }
+        guard !messageLoad.isRunning else { return }
+        messageLoad.setContent()
         draft = ""
         failure = nil
         streaming = true
@@ -321,7 +328,9 @@ struct CompanionChatScreen: View {
             }
             thread
         }
-        .task(id: isActive ? generation : -1) {
+        .pageTask(
+            id: generation, active: isActive && requestsEnabled, cancel: { model.loading.cancel() }
+        ) {
             guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
             await model.loadConversations()
             await model.loadPersonas()
@@ -381,33 +390,34 @@ struct CompanionChatScreen: View {
             .help("Start a fresh conversation (⌘N)")
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    if !model.loaded, model.loadError == nil {
-                        ConversationRailSkeleton(dark: dark)
-                    } else if let loadError = model.loadError, model.conversations.isEmpty {
-                        CompanionStatusLine(text: loadError, tone: .error)
-                            .padding(.horizontal, UIScale.pt(10))
-                            .padding(.top, UIScale.pt(8))
-                    } else if model.conversations.isEmpty {
-                        Text("Nothing yet. The first chat starts the record.")
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .padding(.horizontal, UIScale.pt(10))
-                            .padding(.top, UIScale.pt(8))
-                    } else {
-                        ForEach(buckets, id: \.label) { bucket in
-                            Text(bucket.label.uppercased())
-                                .font(.system(size: UIScale.pt(9.5), weight: .semibold))
-                                .tracking(UIScale.pt(0.8))
+                    PageLoading(
+                        state: model.loading.state,
+                        message: model.loadError ?? "Conversations could not be loaded.",
+                        layout: .list, refreshing: model.loading.isRefreshing,
+                        retry: { Task { await model.loadConversations() } }
+                    ) {
+                        if model.conversations.isEmpty {
+                            Text("Nothing yet. The first chat starts the record.")
+                                .font(.system(size: UIScale.pt(11)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
                                 .padding(.horizontal, UIScale.pt(10))
-                                .padding(.top, UIScale.pt(10))
-                            ForEach(bucket.items) { conversation in
-                                ConversationRow(
-                                    conversation: conversation,
-                                    active: conversation.id == model.activeConversationId,
-                                    dark: dark,
-                                    open: { Task { await model.open(conversation.id) } },
-                                    delete: { pendingDeletion = conversation })
+                                .padding(.top, UIScale.pt(8))
+                        } else {
+                            ForEach(buckets, id: \.label) { bucket in
+                                Text(bucket.label.uppercased())
+                                    .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+                                    .tracking(UIScale.pt(0.8))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                    .padding(.horizontal, UIScale.pt(10))
+                                    .padding(.top, UIScale.pt(10))
+                                ForEach(bucket.items) { conversation in
+                                    ConversationRow(
+                                        conversation: conversation,
+                                        active: conversation.id == model.activeConversationId,
+                                        dark: dark,
+                                        open: { Task { await model.open(conversation.id) } },
+                                        delete: { pendingDeletion = conversation })
+                                }
                             }
                         }
                     }
@@ -421,7 +431,19 @@ struct CompanionChatScreen: View {
 
     private var thread: some View {
         VStack(spacing: UIScale.pt(0)) {
-            if model.messages.isEmpty {
+            if model.activeConversationId != nil {
+                PageLoading(
+                    state: model.messageLoad.state,
+                    message: model.messageLoad.errorMessage
+                        ?? "The conversation could not be loaded.",
+                    layout: .editor,
+                    retry: {
+                        if let id = model.activeConversationId { Task { await model.open(id) } }
+                    }
+                ) {
+                    transcript
+                }
+            } else if model.messages.isEmpty {
                 greeting
             } else {
                 transcript
@@ -926,35 +948,6 @@ private struct StreamingCaret: View {
             }
         }
         .accessibilityLabel("Companion is responding")
-    }
-}
-
-private struct ConversationRailSkeleton: View {
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                SkeletonBlock(width: 48, height: 7)
-                    .padding(.horizontal, UIScale.pt(10))
-                    .padding(.top, UIScale.pt(10))
-                ForEach(0..<5, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? 142 : 176,
-                            height: 9)
-                        SkeletonBlock(width: 82, height: 7)
-                    }
-                    .padding(.horizontal, UIScale.pt(10))
-                    .padding(.vertical, UIScale.pt(7))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        DashSkin.paper2(dark).opacity(0.35),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
-                }
-            }
-        }
-        .accessibilityLabel("Loading conversations")
     }
 }
 

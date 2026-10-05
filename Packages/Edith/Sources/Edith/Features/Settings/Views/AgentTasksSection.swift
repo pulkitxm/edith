@@ -65,7 +65,7 @@ struct AgentTasksSection: View {
                 "Completed tasks remain available after restarting Edith. Command output may contain information from the tools you run."
             )
         }
-        .task(id: expandedID) { await observeDetail() }
+        .pageTask(id: expandedID) { await observeDetail() }
     }
 
     @ViewBuilder

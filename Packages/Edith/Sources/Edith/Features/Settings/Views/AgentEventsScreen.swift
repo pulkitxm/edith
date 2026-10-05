@@ -182,11 +182,10 @@ struct AgentEventsScreen: View {
         )
         .background(.regularMaterial)
         .disclosureGroupStyle(EdithDisclosureGroupStyle())
-        .task(id: "\(model.paused)-\(retryID)") {
-            guard automaticActionsEnabled else { return }
+        .pageTask(id: retryID, active: !model.paused, cancel: { model.contentLoad.cancel() }) {
             await model.observe()
         }
-        .task(id: search) {
+        .pageTask(id: search) {
             do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
             model.filter(search: search, errorsOnly: errorsOnly)
         }

@@ -23,7 +23,8 @@ final class CompanionSettingsModel {
     private(set) var reasonerStatus: String?
     private(set) var reasonerStatusIsError = false
     private(set) var error: String?
-    private(set) var loaded = false
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
     private(set) var connectors: CompanionConnectorSettings?
     var githubToken = ""
     var notionToken = ""
@@ -48,15 +49,18 @@ final class CompanionSettingsModel {
     }
 
     func load() async {
-        do {
-            let settings = try await client.reasonSettings()
-            apply(settings, refreshDrafts: !loaded)
-            connectors = try? await client.connectorSettings()
-            loaded = true
+        let client = client
+        let refreshDrafts = !loaded
+        await loading.perform(operation: {
+            async let reason = client.reasonSettings()
+            async let connectors = client.connectorSettings()
+            return try await (reason, connectors)
+        }) { result in
+            apply(result.0, refreshDrafts: refreshDrafts)
+            connectors = result.1
             error = nil
-        } catch {
-            self.error = error.localizedDescription
         }
+        if let message = loading.errorMessage { error = message }
     }
 
     func saveTokens() async {
@@ -289,37 +293,29 @@ struct CompanionSettingsScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                Group {
-                    if !model.loaded {
-                        if let error = model.error {
-                            unreachableCard(error)
-                                .frame(
-                                    maxWidth: CompanionMetrics.columnWidth,
-                                    alignment: .leading)
-                        } else {
-                            CompanionSettingsLoadingSkeleton(
-                                width: proxy.size.width,
-                                dark: dark)
-                        }
-                    } else {
-                        CompanionGrid(width: proxy.size.width) {
-                            reasonerCard
-                            connectorsCard
-                            dataCard
-                        } secondary: {
-                            healthCard
-                            connectionCard
-                            dangerCard
-                        } full: {
-                        }
-                    }
+        PageScaffold(pinnedHeader: true, header: {}) {
+            PageLoading(
+                state: model.loading.state,
+                message: model.loading.errorMessage
+                    ?? "Companion settings could not be loaded.",
+                layout: .cards, refreshing: model.loading.isRefreshing,
+                retry: { Task { await model.load() } }
+            ) {
+                PageGrid {
+                    reasonerCard
+                    connectorsCard
+                    dataCard
+                } secondary: {
+                    healthCard
+                    connectionCard
+                    dangerCard
+                } full: {
                 }
-                .pageContent(compact)
             }
         }
-        .task(id: isActive ? generation : -1) {
+        .pageTask(
+            id: generation, active: isActive && requestsEnabled, cancel: { model.loading.cancel() }
+        ) {
             guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
             await model.load()
             if !Task.isCancelled { refreshedGeneration = generation }
@@ -793,120 +789,5 @@ private struct CompanionHealthRowsSkeleton: View {
                 }
             }
         }
-    }
-}
-
-private struct CompanionSettingsLoadingSkeleton: View {
-    let width: CGFloat
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            CompanionGrid(width: width) {
-                reasoner
-                connectors
-                data
-            } secondary: {
-                health
-                connection
-                danger
-            } full: {
-            }
-        }
-        .accessibilityLabel("Loading companion settings")
-    }
-
-    private var reasoner: some View {
-        CompanionSkeletonCard(titleWidth: 72, noteWidth: 86, dark: dark) {
-            VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
-                field(width: 280, label: 54)
-                field(label: 34)
-                field(label: 46)
-                SkeletonBlock(width: 328, height: 8)
-                actions([54, 98])
-            }
-        }
-    }
-
-    private var connectors: some View {
-        CompanionSkeletonCard(titleWidth: 84, noteWidth: 148, dark: dark) {
-            VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
-                field(label: 76, detail: 58)
-                field(label: 76, detail: 58)
-                actions([82, 88, 88])
-                Divider().opacity(0.3)
-                actions([66, 56, 68], label: 94)
-                SkeletonBlock(width: 336, height: 8)
-                SkeletonBlock(width: 278, height: 8)
-            }
-        }
-    }
-
-    private var data: some View {
-        CompanionSkeletonCard(titleWidth: 72, noteWidth: 124, dark: dark) {
-            operationRow(action: 62)
-            Divider().opacity(0.3)
-            operationRow(action: 58)
-        }
-    }
-
-    private var health: some View {
-        CompanionSkeletonCard(titleWidth: 50, noteWidth: 48, dark: dark) {
-            CompanionHealthRowsSkeleton()
-        }
-    }
-
-    private var connection: some View {
-        CompanionSkeletonCard(titleWidth: 84, dark: dark) {
-            field(label: 112)
-            SkeletonBlock(width: 318, height: 8)
-        }
-    }
-
-    private var danger: some View {
-        CompanionSkeletonCard(titleWidth: 92, noteWidth: 144, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                operationRow(action: 68)
-                Divider().opacity(0.3)
-                operationRow(action: 66)
-                Divider().opacity(0.3)
-                operationRow(action: 52)
-            }
-        }
-    }
-
-    private func field(width: Double? = nil, label: Double, detail: Double? = nil) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-            HStack {
-                SkeletonBlock(width: label, height: 8)
-                Spacer(minLength: 0)
-                if let detail { SkeletonBlock(width: detail, height: 8) }
-            }
-            SkeletonBlock(width: width, height: 30, corner: 9)
-        }
-    }
-
-    private func actions(_ widths: [Double], label: Double? = nil) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-            if let label { SkeletonBlock(width: label, height: 8) }
-            HStack(spacing: UIScale.pt(8)) {
-                ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
-                    SkeletonBlock(width: width, height: 26, corner: 8)
-                }
-            }
-        }
-    }
-
-    private func operationRow(action: Double) -> some View {
-        HStack(alignment: .center, spacing: UIScale.pt(12)) {
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                SkeletonBlock(width: 142, height: 10)
-                SkeletonBlock(width: 276, height: 8)
-                SkeletonBlock(width: 224, height: 8)
-            }
-            Spacer(minLength: UIScale.pt(12))
-            SkeletonBlock(width: action, height: 26, corner: 8)
-        }
-        .padding(.vertical, UIScale.pt(8))
     }
 }

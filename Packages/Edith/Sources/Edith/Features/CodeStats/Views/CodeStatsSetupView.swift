@@ -43,8 +43,7 @@ struct CodeStatsSetupView: View {
                 }
             }
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await model.loadProfileIfNeeded()
         }
     }

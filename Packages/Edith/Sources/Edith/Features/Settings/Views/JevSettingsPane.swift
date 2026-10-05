@@ -73,7 +73,7 @@ struct JevSettingsPane: View {
         }
         .edithForm()
         .navigationTitle("Jev")
-        .task {
+        .pageTask {
             if automaticActionsEnabled { await model.load(probe: false) }
         }
     }

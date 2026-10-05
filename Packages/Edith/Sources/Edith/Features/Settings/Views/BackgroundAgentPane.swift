@@ -128,8 +128,10 @@ struct BackgroundAgentPane: View {
         .edithSheet(isPresented: $showingEvents) {
             AgentEventsScreen()
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: {
+            model.contentLoad.cancel()
+            model.tasksLoad.cancel()
+        }) {
             await model.observe()
         }
     }

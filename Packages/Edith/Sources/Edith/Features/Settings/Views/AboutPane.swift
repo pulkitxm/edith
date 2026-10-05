@@ -24,17 +24,9 @@ struct AboutPane: View {
         """
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(spacing: UIScale.pt(0)) {
-                    Spacer(minLength: 44)
-                    content
-                    Spacer(minLength: 44)
-                }
-                .frame(maxWidth: .infinity, minHeight: proxy.size.height)
-            }
+        PageScaffold(width: .readable, pinnedHeader: true, header: {}) {
+            content.padding(.vertical, UIScale.pt(44))
         }
-        .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("About")
     }
 
@@ -90,11 +82,12 @@ struct AboutPane: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, UIScale.pt(32))
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             let cacheSnapshot = Contributors.cacheSnapshot()
             contributors = cacheSnapshot.people
-            contributors = await Contributors.load(cacheSnapshot: cacheSnapshot)
+            let loaded = await Contributors.load(cacheSnapshot: cacheSnapshot)
+            guard !Task.isCancelled else { return }
+            contributors = loaded
         }
     }
 
