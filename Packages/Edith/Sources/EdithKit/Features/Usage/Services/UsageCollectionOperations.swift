@@ -8,6 +8,8 @@ public enum UsageCollectionOperation: String, CaseIterable, Sendable {
     case machineDisable
     case machineCollect
     case machineForget
+    case statusLineConnect
+    case statusLineDisconnect
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -23,6 +25,8 @@ public enum UsageCollectionOperation: String, CaseIterable, Sendable {
         case .machineDisable: "usage.machines.disable"
         case .machineCollect: "usage.machines.collect"
         case .machineForget: "usage.machines.forget"
+        case .statusLineConnect: "usage.statusline.install"
+        case .statusLineDisconnect: "usage.statusline.remove"
         }
     }
 
@@ -34,6 +38,8 @@ public enum UsageCollectionOperation: String, CaseIterable, Sendable {
         case .machineDisable: ["usage", "machines", "disable"]
         case .machineCollect: ["usage", "machines", "collect"]
         case .machineForget: ["usage", "machines", "forget"]
+        case .statusLineConnect: ["usage", "statusline", "install"]
+        case .statusLineDisconnect: ["usage", "statusline", "remove"]
         }
     }
 
@@ -45,6 +51,9 @@ public enum UsageCollectionOperation: String, CaseIterable, Sendable {
         case .machineDisable: "Stop collecting agent usage from a machine."
         case .machineCollect: "Collect agent usage from included machines."
         case .machineForget: "Drop a machine's collected agent usage."
+        case .statusLineConnect:
+            "Connect Claude Code's status line so Edith receives Claude limits."
+        case .statusLineDisconnect: "Disconnect Claude Code's status line and stop reconnecting it."
         }
     }
 

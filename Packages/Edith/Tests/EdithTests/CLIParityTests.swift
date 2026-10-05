@@ -59,10 +59,6 @@ enum UIParity {
             "the Docker window never pulls images, for a project or otherwise",
         "ed database pack remove":
             "the extensions pane installs the driver pack but never deletes it",
-        "ed usage statusline install":
-            "the app never edits Claude Code's settings, only the CLI does",
-        "ed usage statusline remove":
-            "the app never edits Claude Code's settings, only the CLI does",
     ]
 
     static let auditedCapabilities: [UICapability] = [

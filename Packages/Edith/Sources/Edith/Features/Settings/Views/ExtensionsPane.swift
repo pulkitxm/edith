@@ -1666,6 +1666,39 @@ private struct ExtensionPermissionSheet: View {
     }
 }
 
+private struct ClaudeStatusLineRow: View {
+    @State private var connected: Bool?
+    @State private var failure: String?
+
+    var body: some View {
+        LabeledContent("Claude Code status line") {
+            HStack(spacing: 8) {
+                if let failure {
+                    Text(failure).font(.caption).foregroundStyle(.secondary)
+                }
+                Text(connected == true ? "Connected" : "Not connected")
+                    .foregroundStyle(.secondary)
+                Button(connected == true ? "Disconnect" : "Connect") { toggle() }
+                    .disabled(connected == nil)
+            }
+        }
+        .task { connected = await ClaudeStatusLine.isConnected() }
+    }
+
+    private func toggle() {
+        let connect = connected != true
+        failure = nil
+        Task {
+            do {
+                let change = try await ClaudeStatusLine.setConnected(connect)
+                connected = change != .removed && change != .restored && change != .absent
+            } catch {
+                failure = error.localizedDescription
+            }
+        }
+    }
+}
+
 private struct UsageRows: View {
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private var enabled =
         false
@@ -1764,6 +1797,9 @@ private struct UsageRows: View {
                     "Claude limits",
                     isOn: $claudeEnabled.configured(AppStorageKeys.Limits.claudeEnabled)
                 )
+                if claudeEnabled {
+                    ClaudeStatusLineRow()
+                }
                 Toggle(
                     "Codex limits",
                     isOn: $codexEnabled.configured(AppStorageKeys.Limits.codexEnabled)
