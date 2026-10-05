@@ -5,6 +5,7 @@ public struct TimeLapseSettings: Codable, Equatable, Sendable {
     public static let framesPerSegment = 300
     public static let diskReserve: Int64 = 512 * 1024 * 1024
     public static let intervals: [Double] = [1, 2, 5, 10, 30, 60]
+    public static var speeds: [Double] { intervals.map { $0 * Double(playbackFPS) } }
 
     public var interval: Double = 5
     public var maximumDimension = 3840
@@ -22,7 +23,10 @@ public struct TimeLapseSettings: Codable, Equatable, Sendable {
 
     public var segmentFrameLimit: Int { min(Self.framesPerSegment, max(1, Int(300 / interval))) }
 
-    public var speed: Double { interval * Double(Self.playbackFPS) }
+    public var speed: Double {
+        get { interval * Double(Self.playbackFPS) }
+        set { interval = newValue / Double(Self.playbackFPS) }
+    }
     public var videoBitRate: Int {
         maximumDimension <= 1920 ? 6_000_000 : (maximumDimension <= 3840 ? 12_000_000 : 48_000_000)
     }

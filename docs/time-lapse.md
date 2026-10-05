@@ -4,22 +4,26 @@ Enable Time-lapse in Extensions, then open it from the Media suite. Recording
 requires macOS 15 or later and Screen Recording permission. Microphone access
 is requested only when a microphone is selected.
 
-Open Source to choose displays or windows, including multiple windows from
-different apps or displays. Expand Audio & options to select audio, the cursor,
+Open Source to choose displays or windows from a visual thumbnail grid. Select
+multiple cards, search by app or window name, and confirm with Use selection.
+Cancel keeps the previous selection. Thumbnails are small, one-shot previews
+loaded while browsing, and sources with unavailable previews remain selectable.
+Expand Audio & options to select audio, the cursor,
 and whether to keep the Mac awake. Up to sixteen sources form a grid in a stable order. Windows are
 captured independently, so overlapping windows do not cover each other. Refresh
 sources after connecting a display or microphone or opening a new window.
 
-Choose an interval from one to sixty seconds and a capture resolution up to
-1080p, 4K, or the source resolution capped at 8K. Frames play at 30 fps. The
-default five-second interval plays 150 times faster: five hours becomes two
+Choose a time-lapse speed from 30× to 1800× and a capture resolution up to
+1080p, 4K, or the source resolution capped at 8K. The estimate shows how one hour
+becomes a shorter video. Frames play at 30 fps. The
+default 150× speed makes five hours become two
 minutes. The default video bitrate budget is about 180 MB for those five hours;
-actual file size depends on the screen content and encoding overhead. Longer
-intervals use less storage. The encoder writes sampled frames directly rather
+actual file size depends on the screen content and encoding overhead. Faster
+speeds use less storage. The encoder writes sampled frames directly rather
 than storing a full-speed video first.
 
 While recording, the preview shows the last captured frame and updates at the
-chosen interval. Elapsed time, playback length, saved size, and Stop stay visible
+chosen speed. Elapsed time, playback length, saved size, and Stop stay visible
 below it. The first frame appears as soon as the selected sources are ready.
 
 System audio and the selected microphone are optional. They are recorded at

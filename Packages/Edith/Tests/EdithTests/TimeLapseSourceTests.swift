@@ -70,6 +70,53 @@ import Testing
         }
         #expect(await probe.calls == 1)
     }
+
+    @Test func selectionPreservesEachSourceTypeAndEnforcesTheLimit() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [99], windows: [], systemAudio: false)
+        for id in UInt32(1)...20 { selection.toggle(id) }
+        #expect(selection.windows == Set(UInt32(1)...16))
+        selection.toggle(5)
+        selection.toggle(20)
+        #expect(selection.windows.count == 16)
+        #expect(selection.windows.contains(20))
+        #expect(!selection.windows.contains(5))
+        selection.mode = "displays"
+        #expect(selection.selected == [99])
+        selection.toggle(100)
+        #expect(selection.displays == [99, 100])
+        #expect(selection.windows.count == 16)
+    }
+
+    @Test func refreshingSourcesRemovesMissingSelections() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [1, 2], windows: [3, 4], systemAudio: true)
+        selection.reconcile(displays: [2], windows: [4])
+        #expect(selection.displays == [2])
+        #expect(selection.windows == [4])
+        selection.reconcile(displays: [], windows: [])
+        #expect(selection.selected.isEmpty)
+    }
+
+    @Test @MainActor func draftChangesAreAppliedOnlyWhenConfirmed() {
+        guard #available(macOS 15.0, *) else { return }
+        let recorder = TimeLapseRecorder()
+        recorder.selectedDisplays = [1]
+        var selection = TimeLapseSourceSelection(
+            mode: recorder.sourceMode, displays: recorder.selectedDisplays,
+            windows: recorder.selectedWindows, systemAudio: recorder.settings.systemAudio)
+        selection.mode = "windows"
+        selection.toggle(7)
+        selection.systemAudio = true
+        #expect(recorder.sourceMode == "displays")
+        #expect(recorder.selectedWindows.isEmpty)
+        #expect(!recorder.settings.systemAudio)
+        selection.apply(to: recorder)
+        #expect(recorder.sourceMode == "windows")
+        #expect(recorder.selectedDisplays == [1])
+        #expect(recorder.selectedWindows == [7])
+        #expect(recorder.settings.systemAudio)
+    }
 }
 
 private actor ThumbnailProbe {

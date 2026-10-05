@@ -84,6 +84,9 @@ struct TimeLapseControls: View {
             }
         }
         .navigationTitle("Time-lapse")
+        .sheet(isPresented: $choosingSources) {
+            TimeLapseSourcePicker(recorder: recorder, compact: compact)
+        }
         .onAppear { recorder.showPreview(true) }
         .onDisappear { recorder.showPreview(false) }
         .task {
@@ -131,7 +134,7 @@ struct TimeLapseControls: View {
                 Spacer()
                 Text(
                     recorder.recording
-                        ? "One frame every \(Int(recorder.settings.interval))s"
+                        ? "\(Int(recorder.settings.speed))× speed"
                         : "Last captured frame")
             }.font(.caption).foregroundStyle(.secondary).monospacedDigit()
         }
@@ -153,19 +156,19 @@ struct TimeLapseControls: View {
                             Spacer()
                             Image(systemName: "chevron.down").font(.caption)
                         }.frame(maxWidth: .infinity)
-                    }.popover(isPresented: $choosingSources) { sourceChoices }
+                    }
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: UIScale.pt(16)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        Text("Interval").font(.caption).foregroundStyle(.secondary)
-                        Picker("Capture interval", selection: $recorder.settings.interval) {
-                            ForEach(TimeLapseSettings.intervals, id: \.self) { interval in
-                                Text("Every \(Int(interval))s").tag(interval)
+                        Text("Time-lapse speed").font(.caption).foregroundStyle(.secondary)
+                        Picker("Time-lapse speed", selection: $recorder.settings.speed) {
+                            ForEach(TimeLapseSettings.speeds, id: \.self) { speed in
+                                Text("\(Int(speed))×").tag(speed)
                             }
                         }.labelsHidden()
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        Text("Quality").font(.caption).foregroundStyle(.secondary)
+                        Text("Capture quality").font(.caption).foregroundStyle(.secondary)
                         Picker("Capture resolution", selection: $recorder.settings.maximumDimension)
                         {
                             Text("1080p").tag(1920)
@@ -213,50 +216,11 @@ struct TimeLapseControls: View {
                     Text(audioSummary).font(.caption).foregroundStyle(.secondary)
                 }.font(.callout)
             }
-            Text("\(Int(recorder.settings.speed))× playback · About \(estimatedStorage) per hour")
+            Text("1 hour becomes \(playbackEstimate) · About \(estimatedStorage) per hour")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(UIScale.pt(20))
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
-    }
-
-    private var sourceChoices: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            HStack {
-                Text("Capture source").font(.headline)
-                Spacer()
-                Button {
-                    Task { await recorder.loadSources() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }.buttonStyle(.borderless).help("Refresh sources").disabled(recorder.busy)
-                    .accessibilityLabel("Refresh sources")
-            }
-            Picker("Record", selection: $recorder.sourceMode) {
-                Text("Displays").tag("displays")
-                Text("Windows").tag("windows")
-            }.pickerStyle(.segmented).labelsHidden()
-            ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    if recorder.sourceMode == "displays" {
-                        ForEach(Array(recorder.displays.enumerated()), id: \.element.id) {
-                            index, display in
-                            Toggle(
-                                "Display \(index + 1) · \(display.width) × \(display.height)",
-                                isOn: membership(display.id, in: $recorder.selectedDisplays))
-                        }
-                    } else {
-                        ForEach(recorder.windows, id: \.id) { window in
-                            Toggle(
-                                "\(window.application): \(window.title)",
-                                isOn: membership(window.id, in: $recorder.selectedWindows))
-                        }
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(maxHeight: UIScale.pt(220))
-            Text("Select up to 16. Each window is captured independently.")
-                .font(.caption).foregroundStyle(.secondary)
-        }.padding(UIScale.pt(20)).frame(width: UIScale.pt(380))
     }
 
     private var captureLayout: AnyLayout {
@@ -287,6 +251,15 @@ struct TimeLapseControls: View {
         settings.microphoneID = recorder.microphone.isEmpty ? nil : recorder.microphone
         return ByteCountFormatter.string(
             fromByteCount: Int64(settings.estimatedBytes(hours: 1)), countStyle: .file)
+    }
+
+    private var playbackEstimate: String {
+        let seconds = Int((3600 / recorder.settings.speed).rounded())
+        if seconds >= 60 {
+            let minutes = seconds / 60
+            return "\(minutes) minute\(minutes == 1 ? "" : "s")"
+        }
+        return "\(seconds) seconds"
     }
 
     private var recordingStatus: some View {
@@ -385,20 +358,6 @@ struct TimeLapseControls: View {
                     .accessibilityLabel("Refresh recordings")
             }
         }
-    }
-
-    private func membership<Value: Hashable>(_ value: Value, in selection: Binding<Set<Value>>)
-        -> Binding<Bool>
-    {
-        Binding(
-            get: { selection.wrappedValue.contains(value) },
-            set: { selected in
-                if selected {
-                    selection.wrappedValue.insert(value)
-                } else {
-                    selection.wrappedValue.remove(value)
-                }
-            })
     }
 
     private func duration(_ seconds: Double) -> String {

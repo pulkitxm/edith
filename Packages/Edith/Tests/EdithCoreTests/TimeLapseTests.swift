@@ -4,6 +4,17 @@ import Testing
 @testable import EdithCore
 
 @Suite struct TimeLapseTests {
+    @Test(arguments: [30.0, 60, 150, 300, 900, 1800])
+    func selectedSpeedControlsCaptureTimingAndStorage(speed: Double) throws {
+        var settings = TimeLapseSettings()
+        settings.speed = speed
+        try settings.validate()
+        #expect(settings.interval == speed / 30)
+        #expect(settings.speed == speed)
+        #expect(settings.estimatedBytes(hours: 1) * speed == 5_400_000_000)
+        #expect(TimeLapseSettings.speeds.contains(speed))
+    }
+
     @Test func fiveHoursIsTwoMinutesOfPlayback() {
         let settings = TimeLapseSettings()
         #expect(settings.speed == 150)
