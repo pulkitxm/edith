@@ -76,7 +76,7 @@ public enum TimeLapseError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidSettings: "Choose a supported capture interval and resolution."
+        case .invalidSettings: "Choose a supported time-lapse speed and capture quality."
         case .missingSource: "The selected display or windows are unavailable. Refresh sources."
         case .diskFull: "Recording stopped to leave 512 MB free on the recording drive."
         case .encoding(let message): message
