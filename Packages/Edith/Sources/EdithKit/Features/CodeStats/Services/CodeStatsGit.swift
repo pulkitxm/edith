@@ -120,13 +120,14 @@ public struct CodeStatsGit: Sendable {
     @discardableResult
     private func run(
         _ arguments: [String], in directory: String? = nil, network: Bool = false,
-        timeout: TimeInterval? = nil, onLine: (@Sendable (String) -> Void)? = nil
+        timeout: TimeInterval? = nil, extraEnvironment: [String: String] = [:],
+        onLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> CLICommandResult {
         let prefix = network ? await networkArguments(in: directory) : []
         let request = CLICommandRequest(
             executableURL: executable,
             arguments: baseArguments + prefix + arguments,
-            environment: environment,
+            environment: environment.merging(extraEnvironment) { _, extra in extra },
             currentDirectoryURL: directory.map { URL(fileURLWithPath: $0) },
             timeout: network ? networkTimeout : timeout,
             maximumOutputBytes: 1_048_576, terminatesProcessGroup: true)
@@ -228,13 +229,28 @@ public struct CodeStatsGit: Sendable {
             onLine: { line in
                 if !line.hasSuffix("/HEAD") { branches.update { $0.append(line) } }
             })
+        let candidates = branches.update { $0 }
+        guard !candidates.isEmpty else { return [] }
+        let objects = CodeStatsLocked("")
+        try await run(
+            ["rev-parse", "--path-format=absolute", "--git-path", "objects"],
+            in: repository.path, onLine: { line in objects.update { $0 = line } })
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "code-stats-merge-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let isolated = [
+            "GIT_OBJECT_DIRECTORY": scratch.path,
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects.update { $0 },
+        ]
         var integrated = Set<String>()
-        for branch in branches.update({ $0 }) {
+        for branch in candidates {
             if Task.isCancelled { break }
             let merged = CodeStatsLocked("")
             do {
                 try await run(
                     ["merge-tree", "--write-tree", "HEAD", branch], in: repository.path,
+                    extraEnvironment: isolated,
                     onLine: { line in merged.update { if $0.isEmpty { $0 = line } } })
             } catch {
                 continue

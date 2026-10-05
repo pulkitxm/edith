@@ -100,8 +100,10 @@ import Testing
             ["commit", "-q", "-m", "feature (#1)"], in: url, author: Self.me,
             date: "2026-06-05T10:00:00Z")
 
+        let objectsBefore = try await fixture.git(["count-objects", "-v"], in: url)
         let integrated = try await fixture.tool.integratedCommits(in: repo)
         #expect(featureCommits.count == 2)
         #expect(integrated == featureCommits)
+        #expect(try await fixture.git(["count-objects", "-v"], in: url) == objectsBefore)
     }
 }

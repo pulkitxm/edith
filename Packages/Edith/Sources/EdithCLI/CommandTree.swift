@@ -1598,6 +1598,7 @@ public enum CommandTree {
         "ed code-stats identity remove": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.free]),
         "ed code-stats authors": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed code-stats audit": Spec(options: ["--json", "-h", "--help", "--version"]),
         "ed seo create": Spec(
             options: ["--json", "--help", "--name"], optionValues: ["--name": .free],
             arguments: [.free]),

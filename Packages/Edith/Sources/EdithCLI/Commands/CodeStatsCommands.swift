@@ -36,7 +36,7 @@ struct CodeStatsCommand: AsyncParsableCommand {
             CodeStatsStatusCommand.self, CodeStatsRunCommand.self, CodeStatsCancelCommand.self,
             CodeStatsReportCommand.self, CodeStatsFolderCommand.self,
             CodeStatsScheduleCommand.self, CodeStatsIdentityCommand.self,
-            CodeStatsAuthorsCommand.self,
+            CodeStatsAuthorsCommand.self, CodeStatsAuditCommand.self,
         ],
         defaultSubcommand: CodeStatsStatusCommand.self)
 }
@@ -239,9 +239,11 @@ enum CodeStatsCLI {
             lines.append(
                 CodeStatsCLI.line(
                     "running",
-                    progress.phase.rawValue + " " + CodeStatsNumberFormat.grouped(progress.completed) + " of "
+                    progress.phase.rawValue + " "
+                        + CodeStatsNumberFormat.grouped(progress.completed) + " of "
                         + CodeStatsNumberFormat.grouped(progress.total) + ", "
-                        + CodeStatsNumberFormat.percent(progress.overallFraction * 100) + " overall"))
+                        + CodeStatsNumberFormat.percent(progress.overallFraction * 100) + " overall"
+                ))
         }
         if let waiting = status.state.waitingFor {
             lines.append(CodeStatsCLI.line("waiting for", waiting))
@@ -408,11 +410,13 @@ struct CodeStatsReportCommand: AsyncParsableCommand {
                     "streak",
                     CodeStatsNumberFormat.grouped(totals.currentStreak) + " current, "
                         + CodeStatsNumberFormat.grouped(totals.longestStreak) + " longest"),
-                CodeStatsCLI.line("repositories", CodeStatsNumberFormat.grouped(totals.repositories)),
+                CodeStatsCLI.line(
+                    "repositories", CodeStatsNumberFormat.grouped(totals.repositories)),
             ]
             if let change = report.momentum?.commitChange {
                 lines.append(
-                    CodeStatsCLI.line("momentum", CodeStatsNumberFormat.signedPercent(change) + " commits"))
+                    CodeStatsCLI.line(
+                        "momentum", CodeStatsNumberFormat.signedPercent(change) + " commits"))
             }
             lines.append(
                 CodeStatsCLI.line(
@@ -695,8 +699,82 @@ struct CodeStatsAuthorsCommand: AsyncParsableCommand {
                 TextTable.render(
                     headers: ["COMMITS", "YOU", "NAME", "EMAIL"],
                     rows: authors.map {
-                        [CodeStatsNumberFormat.grouped($0.commits), $0.countedAsYou ? "yes" : "", $0.name, $0.email]
+                        [
+                            CodeStatsNumberFormat.grouped($0.commits), $0.countedAsYou ? "yes" : "",
+                            $0.name, $0.email,
+                        ]
                     }))
+        }
+    }
+}
+
+struct CodeStatsAuditCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "audit",
+        abstract: "Explain what was counted and what was excluded, and why.",
+        discussion: """
+            Reads the fact table the last refresh stored and compares the raw commits and \
+            lines with what the report counts: bulk imports, formatter runs, generated files, \
+            data and markup, whitespace-only lines, duplicate content, squash-merged branches, \
+            agent-assisted and co-authored work, and authors that look like you but are not \
+            in your identities. It does not refresh or change anything.
+            Example: ed code-stats audit --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            let audit = try await CodeStatsCLI.call {
+                try await CodeStatsCLIEnvironment.client().audit()
+            }
+            guard let audit else {
+                throw CLIFailure.notFound(
+                    "no code stats audit exists yet", hint: "run ed code-stats run --wait")
+            }
+            if json {
+                try CodeStatsCLI.print(audit)
+                return
+            }
+            var lines = [
+                CodeStatsCLI.line(
+                    "counted",
+                    CodeStatsNumberFormat.grouped(audit.counted.commits) + " commits, "
+                        + CodeStatsNumberFormat.grouped(audit.counted.lines) + " lines"),
+                CodeStatsCLI.line(
+                    "raw",
+                    CodeStatsNumberFormat.grouped(audit.raw.commits) + " commits, "
+                        + CodeStatsNumberFormat.grouped(audit.raw.lines) + " lines"),
+                CodeStatsCLI.line(
+                    "bulk threshold", CodeStatsNumberFormat.grouped(audit.bulkThreshold) + " lines"),
+            ]
+            for entry in audit.entries {
+                let parts = [
+                    entry.commits.map { CodeStatsNumberFormat.grouped($0) + " commits" },
+                    entry.lines.map { CodeStatsNumberFormat.grouped($0) + " lines" },
+                ].compactMap { $0 }
+                guard !parts.isEmpty else { continue }
+                lines.append(
+                    CodeStatsCLI.line(
+                        entry.reason.title.lowercased(),
+                        parts.joined(separator: ", ") + (entry.counted ? " counted" : " excluded")))
+            }
+            for duplicate in audit.duplicateRepositories.prefix(10) {
+                lines.append(
+                    CodeStatsCLI.line(
+                        "duplicate repo",
+                        duplicate.repository + " copies " + duplicate.original + " ("
+                            + CodeStatsNumberFormat.grouped(duplicate.shared) + " commits)"))
+            }
+            for suggestion in audit.suggestions.prefix(10) {
+                lines.append(
+                    CodeStatsCLI.line(
+                        "maybe you",
+                        suggestion.value + " (" + CodeStatsNumberFormat.grouped(suggestion.commits)
+                            + " commits, " + suggestion.reason.summary + ")"))
+            }
+            lines.forEach(CLIOut.out)
         }
     }
 }
