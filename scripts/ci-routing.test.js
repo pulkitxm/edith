@@ -320,15 +320,57 @@ test("every workflow change runs the runtime guard", () => {
   );
 });
 
-test("contributor refresh pushes cannot replace pending product validation", () => {
+test("a push never queues behind or replaces another run of the workflow", () => {
   expect(ciWorkflow).toContain(
     "github.event_name == 'workflow_dispatch' && github.run_id",
   );
-  expect(ciWorkflow).toContain(
-    "startsWith(github.event.head_commit.message, 'Refresh the contributor list')",
-  );
-  expect(ciWorkflow).toContain("&& github.sha)");
+  expect(ciWorkflow).toContain("|| github.event_name == 'push' && github.sha");
   expect(ciWorkflow).toContain("|| 'active'");
+  expect(ciWorkflow).toContain(
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub expression, not a template
+    "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+  );
+});
+
+test("only a push that changes product code cancels the checks of an older push", () => {
+  const productPush =
+    "github.event_name == 'push' && needs.changes.outputs.swift == 'true'";
+  for (const job of [
+    "checks",
+    "promo-video",
+    "swift-build",
+    "swift-test",
+    "companion",
+  ]) {
+    const start = ciWorkflow.indexOf(`\n  ${job}:`);
+    const body = ciWorkflow.slice(
+      start,
+      ciWorkflow.indexOf("\n    steps:", start),
+    );
+    expect(body).toContain(`group: ci-${job}-`);
+    expect(body).toContain(`${productPush} && 'product' || github.run_id`);
+    expect(body).toContain(`cancel-in-progress: \${{ ${productPush} }}`);
+  }
+  expect(ciWorkflow).toContain(
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub expression, not a template
+    "group: ci-swift-test-${{ matrix.lane }}-",
+  );
+});
+
+test("the release jobs are never cancelled by a newer push", () => {
+  for (const job of ["version", "dmg", "publish"]) {
+    const start = ciWorkflow.indexOf(`\n  ${job}:`);
+    const next = ciWorkflow.indexOf("\n  ", start + 5);
+    const body = ciWorkflow.slice(
+      start,
+      next > start ? ciWorkflow.indexOf("\n    steps:", start) : undefined,
+    );
+    expect(body).not.toContain("cancel-in-progress: ${{");
+    expect(body).not.toContain("cancel-in-progress: true");
+  }
+  const publish = ciWorkflow.slice(ciWorkflow.indexOf("\n  publish:"));
+  expect(publish).toContain("group: release-publication");
+  expect(publish).toContain("cancel-in-progress: false");
 });
 
 test("manual production workflows require main", () => {
