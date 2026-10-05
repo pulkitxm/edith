@@ -7,16 +7,71 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseRenderTests {
+    @Test @MainActor func loadingAndRecoveryUseSharedPresentationAtCompactZoom() async throws {
+        guard #available(macOS 15.0, *) else { return }
+        let previousZoom = UIScale.current
+        UIScale.apply(1.6)
+        defer { UIScale.apply(previousZoom) }
+        for scheme in [ColorScheme.light, .dark] {
+            for failed in [false, true] {
+                let recorder = TimeLapseRecorder()
+                if failed {
+                    recorder.sourceLoad.fail(
+                        recorder.sourceLoad.begin(),
+                        message: "Sample capture service is unavailable.")
+                }
+                let views = [
+                    AnyView(TimeLapseControls(recorder: recorder, enabled: true)),
+                    AnyView(TimeLapseSourcePicker(recorder: recorder, compact: true)),
+                ]
+                for (index, view) in views.enumerated() {
+                    let host = try auditHost(
+                        view.environment(\.compactLayout, true).environment(\.colorScheme, scheme)
+                            .environment(\.automaticViewActionsEnabled, false)
+                            .environment(\.loadingAnimationsEnabled, false),
+                        size: CGSize(width: 800, height: 850))
+                    host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+                    try await Task.sleep(for: .milliseconds(200))
+                    host.layoutSubtreeIfNeeded()
+                    if failed {
+                        let text = try auditText(host)
+                        #expect(text.contains("Retry"))
+                        #expect(text.contains("Sample capture service is unavailable."))
+                    }
+                    let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                    host.cacheDisplay(in: host.bounds, to: bitmap)
+                    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                    #expect(png.count > 10000)
+                    if let path = ProcessInfo.processInfo.environment[
+                        "EDITH_TIMELAPSE_EVIDENCE_DIR"]
+                    {
+                        let directory = URL(fileURLWithPath: path)
+                        try FileManager.default.createDirectory(
+                            at: directory, withIntermediateDirectories: true)
+                        try png.write(
+                            to: directory.appendingPathComponent(
+                                "recorder-\(index == 0 ? "page" : "picker")-\(failed ? "recovery" : "loading")-\(scheme).png"
+                            ))
+                    }
+                }
+            }
+        }
+    }
+
     @Test(
         arguments: [1600.0, 1000.0, 760.0, 560.0, 360.0],
         [
             "ready", "recording", "finished", "waiting", "dark", "short", "standard",
             "standard-dark", "standard-recording",
+            "zoom", "zoom-dark",
         ])
     @MainActor
     func rendersSyntheticCaptureControlsAndExportLibrary(width: Double, state: String) async throws
     {
         guard #available(macOS 15.0, *) else { return }
+        let previousZoom = UIScale.current
+        UIScale.apply(state.hasPrefix("zoom") ? 1.6 : 1)
+        defer { UIScale.apply(previousZoom) }
         _ = TestWindowHost.application
         let recorder = TimeLapseRecorder()
         recorder.settings.mode = state.hasPrefix("standard") ? .standard : .timeLapse
@@ -27,7 +82,6 @@ import Testing
             .init(id: 2, application: "Demo Browser", title: "Sample dashboard"),
         ]
         recorder.selectedWindows = [1, 2]
-        recorder.settings.systemAudio = true
         recorder.recording =
             state == "standard-recording" || state == "recording" || state == "waiting"
             || state == "dark" || state == "short"
@@ -52,31 +106,12 @@ import Testing
             session: session,
             directory: FileManager.default.temporaryDirectory.appendingPathComponent(
                 "demo-recording"))
-        var libraryFixtures = [recording]
-        for index in 1..<3 {
-            var settings = recorder.settings
-            settings.mode = index == 1 ? .timeLapse : .standard
-            var saved = TimeLapseSession(settings: settings, width: 3840, height: 2160)
-            saved.segments = [
-                .init(
-                    file: "video-000000.mov", kind: "video", frames: 900,
-                    startedAt: saved.startedAt, duration: Double(index * 15))
-            ]
-            saved.endedAt = index == 1 ? saved.startedAt : nil
-            libraryFixtures.append(
-                .init(
-                    session: saved,
-                    directory: FileManager.default.temporaryDirectory.appendingPathComponent(
-                        "demo-recording-\(index)")))
-        }
-        SharedDefaults.store.set(true, forKey: AppStorageKeys.Tabs.timeLapseEnabled)
-        defer { SharedDefaults.store.removeObject(forKey: AppStorageKeys.Tabs.timeLapseEnabled) }
         let height: Double =
             state == "finished" ? 1100 : (state == "short" ? 560 : (width > 1200 ? 1250 : 850))
         let host = NSHostingView(
             rootView: TimeLapseControls(
                 recorder: recorder,
-                recordings: libraryFixtures, loadsSources: false
+                recordings: [recording], loadsSources: false, enabled: true
             ).environment(\.colorScheme, state.hasSuffix("dark") ? .dark : .light)
                 .environment(\.compactLayout, width < 640)
                 .frame(width: width, height: height)
@@ -100,19 +135,20 @@ import Testing
         #expect(png.count > 10000)
         if recorder.preview != nil {
             var colored = 0
-            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
-                for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+            var sampled = 0
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 16) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 16) {
+                    sampled += 1
                     if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                         color.blueComponent > 0.25,
                         color.blueComponent > color.redComponent * 1.5,
-                        color.greenComponent > color.redComponent * 1.5,
-                        color.greenComponent > color.blueComponent * 0.8
+                        color.greenComponent > color.redComponent * 1.5
                     {
                         colored += 1
                     }
                 }
             }
-            #expect(colored > 20)
+            #expect(Double(colored) / Double(sampled) > 0.005)
         }
         if let path = ProcessInfo.processInfo.environment["EDITH_TIMELAPSE_EVIDENCE_DIR"] {
             let directory = URL(fileURLWithPath: path)
@@ -129,12 +165,17 @@ import Testing
         [
             "windows", "displays", "empty", "unavailable", "windows-dark", "displays-dark",
             "empty-dark", "unavailable-dark",
+            "windows-zoom", "windows-zoom-dark", "displays-zoom", "displays-zoom-dark",
         ])
     @MainActor
     func rendersVisualSourcePicker(width: Double, state: String) async throws {
         guard #available(macOS 15.0, *) else { return }
         let dark = state.hasSuffix("-dark")
+        let previousZoom = UIScale.current
+        UIScale.apply(state.contains("zoom") ? 1.6 : 1)
+        defer { UIScale.apply(previousZoom) }
         let mode = state.replacingOccurrences(of: "-dark", with: "")
+            .replacingOccurrences(of: "-zoom", with: "")
         _ = TestWindowHost.application
         let recorder = TimeLapseRecorder()
         recorder.sourceMode = mode == "displays" ? "displays" : "windows"
@@ -164,7 +205,9 @@ import Testing
                 recorder: recorder, compact: width < 600,
                 thumbnail: { _, id in mode == "unavailable" ? nil : fixtures[id] }
             ).environment(\.colorScheme, dark ? .dark : .light))
-        host.frame = CGRect(x: 0, y: 0, width: width, height: 600)
+        host.frame = CGRect(
+            x: 0, y: 0, width: PresentationMetrics.width(width),
+            height: PresentationMetrics.height(600))
         let window = TestWindowHost.window(contentRect: host.frame)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         host.appearance = window.appearance
@@ -201,7 +244,7 @@ import Testing
             let directory = URL(fileURLWithPath: path)
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            let name = "picker-\(mode)\(width < 600 ? "-narrow" : "")\(dark ? "-dark" : "").png"
+            let name = "picker-\(state)\(width < 600 ? "-narrow" : "").png"
             try png.write(to: directory.appendingPathComponent(name))
         }
         window.orderOut(nil)

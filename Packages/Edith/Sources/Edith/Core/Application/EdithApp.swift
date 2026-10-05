@@ -197,6 +197,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         if #available(macOS 15.0, *),
             TimeLapseRecorder.shared.recording || TimeLapseRecorder.shared.busy
+                || TimeLapseRecorder.shared.library.exporting
         {
             return false
         }

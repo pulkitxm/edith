@@ -3,11 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct TimeLapseSourceSelection {
-    var mode: String {
-        didSet {
-            if mode == "windows", !windows.isEmpty { systemAudio = true }
-        }
-    }
+    var mode: String
     var displays: Set<UInt32>
     var windows: Set<UInt32>
     var systemAudio: Bool
@@ -24,7 +20,6 @@ struct TimeLapseSourceSelection {
             selected.remove(id)
         } else if selected.count < 16 {
             selected.insert(id)
-            if mode == "windows" { systemAudio = true }
         }
     }
 
@@ -47,8 +42,10 @@ struct TimeLapseSourcePicker: View {
     let recorder: TimeLapseRecorder
     let compact: Bool
     private let thumbnail: @MainActor (String, UInt32) async -> CGImage?
+    private let loadsSources: Bool
     @State private var selection: TimeLapseSourceSelection
     @State private var search = ""
+    @State private var refresh = 0
     @Environment(\.dismiss) private var dismiss
 
     init(
@@ -57,6 +54,7 @@ struct TimeLapseSourcePicker: View {
     ) {
         self.recorder = recorder
         self.compact = compact
+        loadsSources = thumbnail == nil
         self.thumbnail =
             thumbnail ?? { [weak recorder] mode, id in
                 await recorder?.sourceThumbnail(mode: mode, id: id)
@@ -64,94 +62,100 @@ struct TimeLapseSourcePicker: View {
         _selection = State(
             initialValue: TimeLapseSourceSelection(
                 mode: recorder.sourceMode, displays: recorder.selectedDisplays,
-                windows: recorder.selectedWindows,
-                systemAudio: recorder.sourceMode == "windows" || recorder.settings.systemAudio))
+                windows: recorder.selectedWindows, systemAudio: recorder.settings.systemAudio))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Text("Choose what to record").font(.title3.weight(.semibold))
+                    Text("Choose what to record").font(.edithText(.title3)).fontWeight(.semibold)
                     Text("Select up to 16 sources. Each window is captured independently.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
-                    Task { await recorder.loadSources() }
+                    refresh += 1
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                }.buttonStyle(.borderless).disabled(recorder.busy)
+                }.buttonStyle(.edith(.borderless)).disabled(recorder.sourceLoad.isRunning)
                     .help("Refresh sources").accessibilityLabel("Refresh sources")
             }
-            HStack(spacing: 0) {
-                sourceTab("Windows", mode: "windows", symbol: "macwindow")
-                sourceTab("Displays", mode: "displays", symbol: "display")
-            }
+            EdithSegmentedPicker(
+                "Source type", selection: $selection.mode,
+                options: ["windows", "displays"],
+                label: { $0 == "windows" ? "Windows" : "Displays" })
             if selection.mode == "windows" {
                 TextField("Search apps or windows", text: $search).textFieldStyle(.roundedBorder)
             }
             ScrollView {
-                if recorder.busy {
-                    ProgressView("Loading sources…").frame(maxWidth: .infinity)
-                        .padding(UIScale.pt(40))
-                } else if choices.isEmpty {
-                    ContentUnavailableView(
-                        search.isEmpty ? "No sources available" : "No matching windows",
-                        systemImage: selection.mode == "displays" ? "display" : "macwindow",
-                        description: Text(
-                            search.isEmpty
-                                ? "Open a window or connect a display, then refresh."
-                                : "Try another app or window name."))
-                } else {
-                    LazyVGrid(columns: columns, spacing: UIScale.pt(16)) {
-                        ForEach(choices) { choice in
-                            TimeLapseSourceCard(
-                                choice: choice, selected: selection.selected.contains(choice.id),
-                                disabled: !selection.selected.contains(choice.id)
-                                    && selection.selected.count >= 16,
-                                revision: recorder.sourceRevision,
-                                thumbnail: { await thumbnail(selection.mode, choice.id) },
-                                action: { selection.toggle(choice.id) })
-                        }
-                    }.padding(UIScale.pt(2))
+                PageLoading(
+                    state: loadsSources ? recorder.sourceLoad.state : .content,
+                    message: recorder.sourceLoad.errorMessage ?? "Choose displays or windows.",
+                    layout: .cards, refreshing: recorder.sourceLoad.isRefreshing,
+                    retry: { refresh += 1 }
+                ) {
+                    if choices.isEmpty {
+                        ContentUnavailableView(
+                            search.isEmpty ? "No sources available" : "No matching windows",
+                            systemImage: selection.mode == "displays" ? "display" : "macwindow",
+                            description: Text(
+                                search.isEmpty
+                                    ? "Open a window or connect a display, then refresh."
+                                    : "Try another app or window name."))
+                    } else {
+                        LazyVGrid(columns: columns, spacing: UIScale.pt(16)) {
+                            ForEach(choices) { choice in
+                                TimeLapseSourceCard(
+                                    choice: choice,
+                                    selected: selection.selected.contains(choice.id),
+                                    disabled: !selection.selected.contains(choice.id)
+                                        && selection.selected.count >= 16,
+                                    revision: recorder.sourceRevision,
+                                    thumbnail: { await thumbnail(selection.mode, choice.id) },
+                                    action: { selection.toggle(choice.id) })
+                            }
+                        }.padding(UIScale.pt(2))
+                    }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
-            if let error = recorder.error {
-                Text(error).font(.caption).foregroundStyle(.red).lineLimit(3)
+            if recorder.sourceLoad.hasContent, let error = recorder.sourceLoad.errorMessage {
+                PageNotice(
+                    error, tone: .error,
+                    actions: {
+                        Button("Retry") { refresh += 1 }
+                    })
             }
             Divider()
             HStack {
-                Label(
-                    selection.mode == "windows" ? "Selected app audio" : "System audio",
-                    systemImage: "speaker.wave.2")
+                Label("System audio", systemImage: "speaker.wave.2")
                 Spacer()
-                Toggle(
-                    selection.mode == "windows" ? "Selected app audio" : "System audio",
-                    isOn: $selection.systemAudio
-                ).labelsHidden()
+                Toggle("System audio", isOn: $selection.systemAudio).labelsHidden()
                     .toggleStyle(.switch)
-            }.font(.callout)
-            if selection.mode == "windows" {
-                Text("Audio follows the selected apps, including their other windows.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            HStack {
-                Text(selectionSummary).font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Use selection") {
-                    selection.apply(to: recorder)
-                    dismiss()
-                }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-                    .disabled(
-                        recorder.busy || selection.selected.isEmpty || selection.selected.count > 16
-                    )
+            }.font(.edithText(.callout))
+            PageSectionHeader(selectionSummary) {
+                HStack {
+                    Button("Cancel") { dismiss() }.buttonStyle(.edith(.secondary))
+                        .keyboardShortcut(.cancelAction)
+                    Button("Use selection") {
+                        selection.apply(to: recorder)
+                        dismiss()
+                    }.buttonStyle(.edith(.primary)).keyboardShortcut(.defaultAction)
+                        .disabled(
+                            recorder.sourceLoad.isRunning || recorder.busy || recorder.recording
+                                || selection.selected.isEmpty
+                                || selection.selected.count > 16
+                        )
+                }
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(compact ? 500 : 700), height: UIScale.pt(600))
-        .background(.background)
+        .frame(
+            width: PresentationMetrics.width(compact ? 500 : 700),
+            height: PresentationMetrics.height(600)
+        )
+        .pageSurface()
+        .pageTask(id: refresh, active: loadsSources) { await recorder.loadSources() }
         .onChange(of: recorder.sourceRevision) { _, _ in
             selection.reconcile(
                 displays: Set(recorder.displays.map(\.id)),
@@ -160,27 +164,7 @@ struct TimeLapseSourcePicker: View {
     }
 
     private var columns: [GridItem] {
-        let spacing = UIScale.pt(16)
-        return selection.mode == "displays"
-            ? Array(repeating: GridItem(.flexible(), spacing: spacing), count: 2)
-            : [GridItem(.adaptive(minimum: UIScale.pt(180)), spacing: spacing)]
-    }
-
-    private func sourceTab(_ title: String, mode: String, symbol: String) -> some View {
-        Button {
-            selection.mode = mode
-        } label: {
-            Label(title, systemImage: symbol)
-                .font(.callout.weight(selection.mode == mode ? .semibold : .regular))
-                .foregroundStyle(selection.mode == mode ? Color.accentColor : .secondary)
-                .frame(maxWidth: .infinity).padding(.vertical, UIScale.pt(10))
-                .contentShape(Rectangle())
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(selection.mode == mode ? Color.accentColor : .clear)
-                        .frame(height: UIScale.pt(2))
-                }
-        }.buttonStyle(.plain)
-            .accessibilityValue(selection.mode == mode ? "Selected" : "Not selected")
+        PageMetrics.cardColumns(false, minimum: 180, maximum: 320, spacing: 16)
     }
 
     private var selectionSummary: String {
@@ -223,7 +207,7 @@ private struct TimeLapseSourceCard: View {
     let thumbnail: @MainActor () async -> CGImage?
     let action: () -> Void
     @State private var image: CGImage?
-    @State private var loading = true
+    @State private var loading = ContentLoad()
 
     var body: some View {
         Button(action: action) {
@@ -234,18 +218,18 @@ private struct TimeLapseSourceCard: View {
                         if let image {
                             Image(image, scale: 1, label: Text(choice.title))
                                 .resizable().scaledToFit().padding(UIScale.pt(5))
-                        } else if loading {
-                            ProgressView().controlSize(.small)
+                        } else if loading.state == .loading {
+                            SkeletonBlock(height: 100, corner: 10)
                         } else {
                             VStack(spacing: UIScale.pt(6)) {
-                                Image(systemName: choice.symbol).font(.title2)
-                                Text("Preview unavailable").font(.caption2)
+                                Image(systemName: choice.symbol).font(.edithText(.title2))
+                                Text("Preview unavailable").font(.edithText(.caption2))
                             }.foregroundStyle(.secondary)
                         }
                     }
                     .overlay(alignment: .topTrailing) {
                         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                            .font(.title3).foregroundStyle(
+                            .font(.edithText(.title3)).foregroundStyle(
                                 selected ? Color.accentColor : .secondary
                             )
                             .background(.regularMaterial, in: Circle()).padding(UIScale.pt(8))
@@ -256,20 +240,21 @@ private struct TimeLapseSourceCard: View {
                                 selected ? Color.accentColor : Color.secondary.opacity(0.25),
                                 lineWidth: UIScale.pt(selected ? 2 : 1))
                     }
-                Text(choice.title).font(.callout.weight(.medium)).lineLimit(1)
+                Text(choice.title).font(.edithText(.callout)).fontWeight(.medium).lineLimit(1)
                 Label(choice.subtitle, systemImage: choice.symbol)
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
             }.contentShape(Rectangle())
         }
-        .buttonStyle(.plain).disabled(disabled)
+        .buttonStyle(.edith(.borderless)).disabled(disabled)
         .help("\(choice.title)\n\(choice.subtitle)")
         .accessibilityLabel("\(choice.title), \(choice.subtitle)")
         .accessibilityValue(selected ? "Selected" : "Not selected")
-        .task(id: revision) {
-            loading = true
-            image = await thumbnail()
-            guard !Task.isCancelled else { return }
-            loading = false
+        .pageTask(id: revision, cancel: { loading.cancel() }) {
+            let request = loading.begin()
+            let result = await thumbnail()
+            guard loading.isCurrent(request) else { return }
+            image = result
+            loading.complete(request)
         }
     }
 }

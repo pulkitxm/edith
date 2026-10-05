@@ -50,7 +50,13 @@ hour for each selected source. There is no separate audio export.
 
 Keep Mac and screen awake prevents idle system and display sleep while recording,
 at the cost of power. Recording continues when leaving the page or closing its
-window. Sleeping, blank or unavailable sources are skipped, with no burst of
+window.
+Preview rendering pauses when no recorder window is visible. Multiple windows
+share the active recording and export, so closing one does not disable another
+window's preview. Source discovery and library refresh use the shared loading
+animation and retain the last successful result when a refresh fails.
+
+Sleeping, blank or unavailable sources are skipped, with no burst of
 catch-up frames. Quitting Edith finalizes the active recording before exit. A
 disconnected source or full drive stops recording;
 512 MB is reserved for finalization. No recorder can store unlimited days in a
@@ -75,3 +81,6 @@ click Export video:
 Higher export quality cannot restore detail that was not captured. Choose the
 capture resolution before starting. Click Export video and choose a destination. The saved MP4 or MOV includes audio;
 internal recording segments remain in the local library.
+Exports continue when leaving the page and can be cancelled from Recordings.
+Quitting waits for an active export to finish. Cancelled or failed exports leave
+an existing destination intact and remove temporary media files.

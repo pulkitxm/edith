@@ -19,6 +19,7 @@ Feature code supplies data, actions, and domain-specific content to these APIs.
 | Herdr | `PageWorkspace`, shared board loading, page-owned inventory observation, session-owned attachments |
 | Companion | Retained window session, shared page composition, list and detail load owners, shared cards, grids, forms, controls, and motion |
 | Studio | `PageWorkspace`, retained editors, separate source and render load owners, shared editor placeholders and recovery |
+| Screen Recorder | `PageScaffold`, shared source and library load owners, visibility-owned thumbnails and previews, service-owned recordings and cancellable exports |
 | Virtual Camera | `PageWorkspace`, window-owned pipeline, shared loading presentation, asynchronous thumbnail construction |
 | Database | `PageWorkspace`, shared readiness and connection-list request ownership, resource-owned connected sessions |
 | SEO Audit | Shared page composition, `PageLoading`, component skeletons using the shared motion clock |
