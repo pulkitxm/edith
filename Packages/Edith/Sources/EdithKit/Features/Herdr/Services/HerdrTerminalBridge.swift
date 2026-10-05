@@ -20,6 +20,11 @@ public enum HerdrTerminalMouse: String, Codable, CaseIterable, Sendable {
 }
 
 public struct HerdrTerminalBridgeSpecification: Codable, Equatable, Sendable {
+    public enum Transport: String, Codable, Sendable {
+        case terminal
+        case records
+    }
+
     public static let columnsToken = "{columns}"
     public static let rowsToken = "{rows}"
 
@@ -27,12 +32,17 @@ public struct HerdrTerminalBridgeSpecification: Codable, Equatable, Sendable {
     public let arguments: [String]
     public let environment: [String]
     public let mouse: HerdrTerminalMouse
+    public let transport: Transport
 
-    public init(controller: TerminalLaunchRequest, mouse: HerdrTerminalMouse = .buttons) {
+    public init(
+        controller: TerminalLaunchRequest, mouse: HerdrTerminalMouse = .buttons,
+        transport: Transport = .records
+    ) {
         executable = controller.executable
         arguments = controller.arguments
         environment = controller.environment
         self.mouse = mouse
+        self.transport = transport
     }
 
     public init(encoded: String) throws {
@@ -141,10 +151,11 @@ public enum HerdrTerminalBridge {
 
     public static func launchRequest(
         bridgeExecutable: URL, controller: TerminalLaunchRequest,
-        mouse: HerdrTerminalMouse = .buttons
+        mouse: HerdrTerminalMouse = .buttons,
+        transport: HerdrTerminalBridgeSpecification.Transport = .records
     ) throws -> TerminalLaunchRequest {
         let specification = try HerdrTerminalBridgeSpecification(
-            controller: controller, mouse: mouse
+            controller: controller, mouse: mouse, transport: transport
         ).encoded()
         return TerminalLaunchRequest(
             executable: bridgeExecutable.path,

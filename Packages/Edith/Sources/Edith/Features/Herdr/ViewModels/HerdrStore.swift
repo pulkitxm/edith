@@ -1933,21 +1933,32 @@ final class HerdrStore {
             throw HerdrTerminalBridgeError.executableUnavailable
         }
         let controller: TerminalLaunchRequest
+        let transport: HerdrTerminalBridgeSpecification.Transport
         if agent.machineIsLocal {
-            controller = HerdrOperationExecution.localControlRequest(
+            controller = HerdrOperationExecution.localAttachRequest(
                 for: agent, environment: environment, executable: localExecutable)
+            transport = .terminal
         } else {
             guard let machine else {
                 throw HerdrQuinjetError.machineUnavailable
             }
             let connection = try await connection(for: machine)
             let platform = await connection.remotePlatform ?? .linux
-            controller = HerdrOperationExecution.remoteControlRequest(
-                for: agent, connection: connection, environment: environment,
-                platform: platform)
+            if platform == .windows {
+                controller = HerdrOperationExecution.remoteControlRequest(
+                    for: agent, connection: connection, environment: environment,
+                    platform: platform)
+                transport = .records
+            } else {
+                controller = HerdrOperationExecution.remoteAttachRequest(
+                    for: agent, connection: connection, environment: environment,
+                    platform: platform)
+                transport = .terminal
+            }
         }
         return try HerdrTerminalBridge.launchRequest(
-            bridgeExecutable: bridgeExecutable, controller: controller, mouse: mouse)
+            bridgeExecutable: bridgeExecutable, controller: controller, mouse: mouse,
+            transport: transport)
     }
 
     func terminalOrigins(for owner: String) -> [HerdrTerminalOrigin] {

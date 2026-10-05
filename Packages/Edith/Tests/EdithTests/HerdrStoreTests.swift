@@ -467,7 +467,7 @@ private actor HerdrWatchHarness {
     }
 
     @Test(arguments: ["Cursor Agent", "cursor-agent-cli", "Codex", "OpenCode"])
-    func localAgentAttachmentUsesTheRawTerminalBridge(kind: String) async throws {
+    func localAgentAttachmentUsesTheGraphicsCapableTerminalClient(kind: String) async throws {
         let store = HerdrStore()
         let selected = agent(kind, pane: "pane-1")
         store.open(selected)
@@ -479,11 +479,11 @@ private actor HerdrWatchHarness {
         let request = try await store.attachRequest(
             for: tab, environment: environment, localExecutable: executable,
             bridgeExecutable: bridge)
-        let controller = HerdrOperationExecution.localControlRequest(
+        let controller = HerdrOperationExecution.localAttachRequest(
             for: selected, environment: environment, executable: executable)
         let expected = try HerdrTerminalBridge.launchRequest(
             bridgeExecutable: bridge, controller: controller,
-            mouse: .buttons)
+            mouse: .buttons, transport: .terminal)
 
         #expect(request == expected)
     }
