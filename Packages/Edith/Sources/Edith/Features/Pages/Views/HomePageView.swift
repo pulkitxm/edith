@@ -13,6 +13,10 @@ struct HomePage: View {
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
         var musicEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.codeStatsEnabled, store: SharedDefaults.store) private
+        var codeStatsEnabled = false
+    @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
+        var dataSuiteEnabled = false
     @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
         var calendarEnabled =
         false
@@ -90,6 +94,9 @@ struct HomePage: View {
                                     RateLimitsDialsView(dark: dark, showsJumpLink: true)
                                 }
                                 if musicEnabled { MusicCard(dark: dark) }
+                                if codeStatsEnabled, dataSuiteEnabled {
+                                    CodeStatsHomeCard(dark: dark)
+                                }
                             }
                             .frame(maxHeight: .infinity, alignment: .top)
                         }

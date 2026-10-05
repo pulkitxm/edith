@@ -108,6 +108,7 @@ public struct CodeStatsFilter: Codable, Equatable, Hashable, Sendable {
     public var includeFormatting: Bool
     public var includeAgentAssisted: Bool
     public var includeCoAuthored: Bool
+    public var excludedRepositories: Set<String>
 
     public static let `default` = CodeStatsFilter()
 
@@ -115,7 +116,7 @@ public struct CodeStatsFilter: Codable, Equatable, Hashable, Sendable {
         repositories: Set<String> = [], owners: Set<String> = [], languages: Set<String> = [],
         categories: Set<CodeStatsCategory> = CodeStatsCategory.counted, includeBulk: Bool = false,
         includeFormatting: Bool = false, includeAgentAssisted: Bool = true,
-        includeCoAuthored: Bool = true
+        includeCoAuthored: Bool = true, excludedRepositories: Set<String> = []
     ) {
         self.repositories = repositories
         self.owners = owners
@@ -125,6 +126,27 @@ public struct CodeStatsFilter: Codable, Equatable, Hashable, Sendable {
         self.includeFormatting = includeFormatting
         self.includeAgentAssisted = includeAgentAssisted
         self.includeCoAuthored = includeCoAuthored
+        self.excludedRepositories = excludedRepositories
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            repositories: try container.decodeIfPresent(Set<String>.self, forKey: .repositories)
+                ?? [],
+            owners: try container.decodeIfPresent(Set<String>.self, forKey: .owners) ?? [],
+            languages: try container.decodeIfPresent(Set<String>.self, forKey: .languages) ?? [],
+            categories: try container.decodeIfPresent(
+                Set<CodeStatsCategory>.self, forKey: .categories) ?? CodeStatsCategory.counted,
+            includeBulk: try container.decodeIfPresent(Bool.self, forKey: .includeBulk) ?? false,
+            includeFormatting: try container.decodeIfPresent(
+                Bool.self, forKey: .includeFormatting) ?? false,
+            includeAgentAssisted: try container.decodeIfPresent(
+                Bool.self, forKey: .includeAgentAssisted) ?? true,
+            includeCoAuthored: try container.decodeIfPresent(
+                Bool.self, forKey: .includeCoAuthored) ?? true,
+            excludedRepositories: try container.decodeIfPresent(
+                Set<String>.self, forKey: .excludedRepositories) ?? [])
     }
 
     public var excludedLineFlags: CodeStatsCommitFlags {

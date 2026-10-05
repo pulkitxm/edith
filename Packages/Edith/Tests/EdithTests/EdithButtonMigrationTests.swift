@@ -33,6 +33,8 @@ import Testing
     @Test func onlyDirectManipulationGesturesRemain() throws {
         let expected = [
             "Edith/Core/Navigation/MainNavigationView.swift": 1,
+            "Edith/Features/CodeStats/Views/CodeStatsExplorerCards.swift": 1,
+            "Edith/Features/CodeStats/Views/CodeStatsTrendCards.swift": 2,
             "Edith/Features/Herdr/Views/HerdrCanvas.swift": 1,
             "Edith/Features/Herdr/Views/HerdrPage.swift": 1,
             "Edith/Features/Herdr/Views/HerdrSessionView.swift": 1,

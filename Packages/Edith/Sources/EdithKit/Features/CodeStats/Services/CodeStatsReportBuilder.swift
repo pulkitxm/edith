@@ -6,13 +6,13 @@ public enum CodeStatsReportBuilder {
     public static let weeklyRollingWindow = 4
     public static let monthlyRollingWindow = 3
 
-    struct Entry: Sendable {
-        let day: CodeStatsDay
-        let hour: Int
-        let repository: Int
-        let language: Int
-        let commits: Int
-        let counts: CodeStatsLanguageCounts
+    public struct Entry: Sendable {
+        public let day: CodeStatsDay
+        public let hour: Int
+        public let repository: Int
+        public let language: Int
+        public let commits: Int
+        public let counts: CodeStatsLanguageCounts
     }
 
     private struct Bucket {
@@ -38,12 +38,16 @@ public enum CodeStatsReportBuilder {
         calendar: Calendar
     ) -> CodeStatsReport {
         let all = entries(table, filter: filter)
-        let end = CodeStatsDay(date: today, calendar: calendar)
+        var end = CodeStatsDay(date: today, calendar: calendar)
         let length: Int
         switch range {
         case .days(let count): length = max(count, 1)
         case .year: length = 365
         case .all: length = max((all.map(\.day).min()?.distance(to: end) ?? 0) + 1, 1)
+        case .between(let first, let last):
+            let lower = CodeStatsDay(first) ?? end
+            end = CodeStatsDay(last) ?? end
+            length = max(lower.distance(to: end) + 1, 1)
         }
         let start = end.advanced(by: -(length - 1))
         let selected = all.filter { $0.day >= start && $0.day <= end }
@@ -85,9 +89,12 @@ public enum CodeStatsReportBuilder {
             }.prefix(topDayCount).map { $0 })
     }
 
-    static func entries(_ table: CodeStatsFactTable, filter: CodeStatsFilter) -> [Entry] {
+    public static func entries(
+        _ table: CodeStatsFactTable, filter: CodeStatsFilter
+    ) -> [Entry] {
         let repositoryAllowed = table.repositories.map { name in
-            (filter.repositories.isEmpty || filter.repositories.contains(name))
+            !filter.excludedRepositories.contains(name)
+                && (filter.repositories.isEmpty || filter.repositories.contains(name))
                 && (filter.owners.isEmpty
                     || filter.owners.contains(
                         name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))

@@ -106,4 +106,22 @@ import Testing
         #expect(integrated == featureCommits)
         #expect(try await fixture.git(["count-objects", "-v"], in: url) == objectsBefore)
     }
+
+    @Test func commitsThatOnlyTouchExcludedFilesStillCountAsCommits() async throws {
+        let fixture = try CodeStatsGitFixture()
+        defer { fixture.remove() }
+        let (url, repo) = try await repository(fixture, "octocat/lockfiles")
+        try await fixture.commit(
+            ["a.swift": "let a = 1\n"], in: url, author: Self.me, date: "2026-06-01T10:00:00Z")
+        try await fixture.commit(
+            ["package-lock.json": "{\"lockfileVersion\": 3}\n"], in: url, author: Self.me,
+            date: "2026-06-02T10:00:00Z", message: "bump lockfile")
+        let commits = try await fixture.tool.commits(
+            in: repo,
+            attribution: CodeStatsAttribution(identity: CodeStatsGitFixture.me, owned: true))
+        #expect(commits.count == 2)
+        let lockOnly = commits.first { $0.subject == "bump lockfile" }
+        #expect(lockOnly?.totals.authored == 0)
+        #expect(lockOnly?.day == "2026-06-02")
+    }
 }
