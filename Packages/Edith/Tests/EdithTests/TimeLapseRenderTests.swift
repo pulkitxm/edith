@@ -8,13 +8,19 @@ import Testing
 
 @Suite(.serialized) struct TimeLapseRenderTests {
     @Test(
-        arguments: [1000.0, 560.0], ["ready", "recording", "finished", "waiting", "dark", "short"])
+        arguments: [1600.0, 1000.0, 760.0, 560.0, 360.0],
+        [
+            "ready", "recording", "finished", "waiting", "dark", "short", "standard",
+            "standard-dark", "standard-recording",
+        ])
     @MainActor
     func rendersSyntheticCaptureControlsAndExportLibrary(width: Double, state: String) async throws
     {
         guard #available(macOS 15.0, *) else { return }
         _ = TestWindowHost.application
         let recorder = TimeLapseRecorder()
+        recorder.settings.mode = state.hasPrefix("standard") ? .standard : .timeLapse
+        recorder.playbackSeconds = state.hasPrefix("standard") ? 5400 : 36
         recorder.sourceMode = "windows"
         recorder.windows = [
             .init(id: 1, application: "Demo Editor", title: "Sample project"),
@@ -22,16 +28,19 @@ import Testing
         ]
         recorder.selectedWindows = [1, 2]
         recorder.recording =
-            state == "recording" || state == "waiting" || state == "dark" || state == "short"
+            state == "standard-recording" || state == "recording" || state == "waiting"
+            || state == "dark" || state == "short"
         recorder.startedAt = Date().addingTimeInterval(-5400)
-        recorder.frames = 1080
+        recorder.frames = state.hasPrefix("standard") ? 162000 : 1080
         recorder.bytes = 24_000_000
-        if state == "recording" || state == "finished" || state == "dark" || state == "short" {
+        if state == "standard-recording" || state == "recording" || state == "finished"
+            || state == "dark" || state == "short"
+        {
             recorder.preview = try preview()
         }
         recorder.displays = [.init(id: 1, width: 3840, height: 2160)]
         recorder.microphones = [.init(id: "demo-microphone", name: "Demo microphone")]
-        var session = TimeLapseSession(settings: TimeLapseSettings(), width: 3840, height: 2160)
+        var session = TimeLapseSession(settings: recorder.settings, width: 3840, height: 2160)
         session.segments = [
             .init(
                 file: "video-000000.mov", kind: "video", frames: 3600,
@@ -44,18 +53,19 @@ import Testing
                 "demo-recording"))
         SharedDefaults.store.set(true, forKey: AppStorageKeys.Tabs.timeLapseEnabled)
         defer { SharedDefaults.store.removeObject(forKey: AppStorageKeys.Tabs.timeLapseEnabled) }
-        let height: Double = state == "finished" ? 1100 : (state == "short" ? 560 : 850)
+        let height: Double =
+            state == "finished" ? 1100 : (state == "short" ? 560 : (width > 1200 ? 1250 : 850))
         let host = NSHostingView(
             rootView: TimeLapseControls(
                 recorder: recorder,
                 recordings: [recording], loadsSources: false
-            ).environment(\.colorScheme, state == "dark" ? .dark : .light)
+            ).environment(\.colorScheme, state.hasSuffix("dark") ? .dark : .light)
                 .environment(\.compactLayout, width < 640)
                 .frame(width: width, height: height)
-                .background(state == "dark" ? Color(white: 0.1) : Color.white))
+                .background(state.hasSuffix("dark") ? Color(white: 0.1) : Color.white))
         host.frame = CGRect(x: 0, y: 0, width: width, height: height)
         let window = TestWindowHost.window(contentRect: host.frame)
-        window.appearance = NSAppearance(named: state == "dark" ? .darkAqua : .aqua)
+        window.appearance = NSAppearance(named: state.hasSuffix("dark") ? .darkAqua : .aqua)
         host.appearance = window.appearance
         window.contentView = host
         window.orderBack(nil)
@@ -91,7 +101,7 @@ import Testing
             let directory = URL(fileURLWithPath: path)
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            let name = "time-lapse-\(state)\(width < 640 ? "-narrow" : "").png"
+            let name = "recorder-\(state)-\(Int(width)).png"
             try png.write(to: directory.appendingPathComponent(name))
         }
         window.orderOut(nil)

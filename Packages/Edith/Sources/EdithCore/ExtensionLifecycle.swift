@@ -793,11 +793,11 @@ public enum ExtensionLifecycleCatalog {
             ]),
         descriptor(
             "timeLapse",
-            "Record long screen sessions with sampled frames and native HEVC encoding.",
+            "Record screens at normal speed or as a time-lapse with native HEVC encoding.",
             workflows: [
                 instruction(
-                    "capture", "Record a time-lapse",
-                    "Select displays or windows, a capture interval, and optional audio in Time-lapse."
+                    "capture", "Record your screen",
+                    "Select displays or windows, Standard or Time-lapse mode, and optional audio in Screen Recorder."
                 ),
                 instruction(
                     "export", "Export a saved session",
@@ -811,7 +811,7 @@ public enum ExtensionLifecycleCatalog {
                     "ed permissions request screenRecording")
             ],
             examples: ["ed extensions enable timeLapse", "ed extensions doctor timeLapse --json"],
-            docs: [documentation("guide", "Time-lapse guide", "docs/time-lapse.md")],
+            docs: [documentation("guide", "Screen recording guide", "docs/time-lapse.md")],
             recovery: [
                 instruction(
                     "recover", "Export completed segments",
@@ -820,7 +820,7 @@ public enum ExtensionLifecycleCatalog {
             ],
             verification: [
                 instruction(
-                    "status", "Verify Time-lapse readiness",
+                    "status", "Verify Screen Recorder readiness",
                     "Confirm the extension and Screen Recording permission are ready.",
                     "ed extensions doctor timeLapse --json")
             ]),

@@ -1206,9 +1206,9 @@ private struct TimeLapseRows: View {
 
     var body: some View {
         Section("Recorder") {
-            Button("Open Time-lapse") { SectionWindow.open(.timeLapse) }
+            Button("Open Screen Recorder") { SectionWindow.open(.timeLapse) }
             Text(
-                "Sample displays or selected windows into a compact video. Choose export quality after stopping."
+                "Record displays or selected windows at normal speed, or choose Time-lapse. Choose export quality after stopping."
             )
             .settingsCaption()
         }

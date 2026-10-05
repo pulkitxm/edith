@@ -113,7 +113,7 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .screenShareDetection: .permissionRequired,
                     .screenTimeLapse: version.majorVersion >= 15
                         ? .permissionRequired
-                        : .unsupported("Screen time-lapse recording requires macOS 15 or later."),
+                        : .unsupported("Screen recording requires macOS 15 or later."),
                     .virtualCamera: .permissionRequired,
                     .windowDimming: .permissionRequired,
                 ]))

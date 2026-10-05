@@ -131,7 +131,9 @@ public enum ExtensionLiveAdapters {
         case "lidAwake": lidAwakeReadiness()
         case "studio": .ready("Drop files into Studio in the Edith window to edit or convert them.")
         case "timeLapse":
-            .ready("Choose displays or windows in Edith to start a time-lapse recording.")
+            .ready(
+                "Choose displays or windows in Screen Recorder, then select Standard or Time-lapse mode."
+            )
         case "music": musicReadiness()
         case "calendar": calendarReadiness()
         case "virtualCamera": virtualCameraReadiness()

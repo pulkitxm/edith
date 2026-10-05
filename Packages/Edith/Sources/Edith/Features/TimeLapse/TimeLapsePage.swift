@@ -11,7 +11,7 @@ struct TimeLapsePage: View {
             TimeLapseControls()
         } else {
             ContentUnavailableView(
-                "Time-lapse needs macOS 15", systemImage: "timelapse",
+                "Screen Recorder needs macOS 15", systemImage: "record.circle",
                 description: Text("Update macOS to record displays, windows and optional audio."))
         }
     }
@@ -22,12 +22,13 @@ struct TimeLapseControls: View {
     @State private var recorder = TimeLapseRecorder.shared
     @State private var recordings: [TimeLapseRecording] = []
     @State private var selected: UUID?
-    @State private var quality = TimeLapseExportQuality.original
+    @State private var quality = TimeLapseExportQuality.high
     @State private var exporting = false
     @State private var message: String?
     @State private var choosingSources = false
     @State private var optionsExpanded = false
     @State private var libraryExpanded = false
+    @State private var viewportWidth: CGFloat = 0
     @AppStorage(AppStorageKeys.Tabs.timeLapseEnabled, store: SharedDefaults.store) private
         var enabled = false
     @Environment(\.compactLayout) private var compact
@@ -51,24 +52,24 @@ struct TimeLapseControls: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(20)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        Label("Time-lapse", systemImage: "timelapse").font(
+                        Label("Screen Recorder", systemImage: "record.circle").font(
                             .title2.weight(.semibold))
-                        Text(recorder.recording ? recordingSummary : "Capture hours in minutes.")
-                            .font(.callout).foregroundStyle(.secondary)
-                    }
-                    if recorder.recording || recorder.preview != nil {
-                        capturePreview(
-                            height: min(
-                                UIScale.pt(compact ? 260 : 400),
-                                max(UIScale.pt(180), geometry.size.height - UIScale.pt(280))))
+                        Text(
+                            recorder.recording
+                                ? recordingSummary : "Record your screen, at your pace."
+                        )
+                        .font(.callout).foregroundStyle(.secondary)
                     }
                     if recorder.recording {
                         recordingStatus
                     } else {
                         captureControls.disabled(recorder.busy || !enabled)
                     }
+                    if recorder.recording || recorder.preview != nil {
+                        capturePreview(height: previewHeight(in: geometry.size))
+                    }
                     if !enabled {
-                        Text("Enable Time-lapse in Extensions to record.")
+                        Text("Enable Screen Recorder in Extensions to record.")
                             .font(.callout).foregroundStyle(.secondary)
                     }
                     if let error = recorder.error {
@@ -79,13 +80,18 @@ struct TimeLapseControls: View {
                     library
                     if let message { Text(message).font(.callout).textSelection(.enabled) }
                 }
-                .padding(UIScale.pt(24)).frame(maxWidth: UIScale.pt(960))
-                .frame(maxWidth: .infinity)
+                .padding(UIScale.pt(narrow ? 16 : 24))
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .navigationTitle("Time-lapse")
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            viewportWidth = $0
+        }
+        .navigationTitle("Screen Recorder")
         .sheet(isPresented: $choosingSources) {
-            TimeLapseSourcePicker(recorder: recorder, compact: compact)
+            TimeLapseSourcePicker(recorder: recorder, compact: narrow)
         }
         .onAppear { recorder.showPreview(true) }
         .onDisappear { recorder.showPreview(false) }
@@ -98,9 +104,38 @@ struct TimeLapseControls: View {
         .onChange(of: recorder.recording) { _, recording in
             if !recording {
                 libraryExpanded = true
-                if loadsSources { Task { await refreshLibrary() } }
+                if loadsSources {
+                    Task {
+                        await refreshLibrary()
+                        selected = recordings.first?.id
+                    }
+                }
             }
         }
+    }
+
+    private var narrow: Bool {
+        viewportWidth > 0 ? viewportWidth < UIScale.pt(800) : compact
+    }
+
+    private var captureSettingsLayout: AnyLayout {
+        viewportWidth > 0 && viewportWidth < UIScale.pt(480)
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(12)))
+            : AnyLayout(HStackLayout(alignment: .bottom, spacing: UIScale.pt(16)))
+    }
+
+    private func previewHeight(in size: CGSize) -> CGFloat {
+        let padding = UIScale.pt(narrow ? 16 : 24)
+        let width = max(UIScale.pt(120), size.width - padding * 2)
+        let ratio = recorder.preview.map { CGFloat($0.height) / CGFloat($0.width) } ?? 9 / 16
+        let controls =
+            recorder.recording
+            ? UIScale.pt(narrow ? 120 : 60)
+            : UIScale.pt(narrow ? 290 : 200)
+        let library = libraryExpanded ? UIScale.pt(160) : UIScale.pt(32)
+        let options = optionsExpanded && !recorder.recording ? UIScale.pt(narrow ? 240 : 150) : 0
+        let reserved = padding * 2 + UIScale.pt(160) + controls + library + options
+        return max(UIScale.pt(120), min(width * ratio, size.height - reserved))
     }
 
     private func capturePreview(height: CGFloat) -> some View {
@@ -142,6 +177,9 @@ struct TimeLapseControls: View {
 
     private var captureControls: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            Picker("Recording mode", selection: $recorder.settings.mode) {
+                ForEach(ScreenRecordingMode.allCases) { mode in Text(mode.rawValue).tag(mode) }
+            }.pickerStyle(.segmented).labelsHidden()
             captureLayout {
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text("Source").font(.caption).foregroundStyle(.secondary)
@@ -158,14 +196,24 @@ struct TimeLapseControls: View {
                         }.frame(maxWidth: .infinity)
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: UIScale.pt(16)) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                        Text("Time-lapse speed").font(.caption).foregroundStyle(.secondary)
-                        Picker("Time-lapse speed", selection: $recorder.settings.speed) {
-                            ForEach(TimeLapseSettings.speeds, id: \.self) { speed in
-                                Text("\(Int(speed))×").tag(speed)
-                            }
-                        }.labelsHidden()
+                captureSettingsLayout {
+                    if recorder.settings.mode == .timeLapse {
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            Text("Time-lapse speed").font(.caption).foregroundStyle(.secondary)
+                            Picker("Time-lapse speed", selection: $recorder.settings.speed) {
+                                ForEach(TimeLapseSettings.speeds, id: \.self) { speed in
+                                    Text("\(Int(speed))×").tag(speed)
+                                }
+                            }.labelsHidden()
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            Text("Frame rate").font(.caption).foregroundStyle(.secondary)
+                            Picker("Frame rate", selection: $recorder.settings.frameRate) {
+                                Text("30 fps").tag(Int32(30))
+                                Text("60 fps").tag(Int32(60))
+                            }.labelsHidden()
+                        }
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                         Text("Capture quality").font(.caption).foregroundStyle(.secondary)
@@ -183,7 +231,7 @@ struct TimeLapseControls: View {
                     Task { await recorder.start() }
                 } label: {
                     Label(recorder.busy ? "Starting…" : "Record", systemImage: "record.circle")
-                        .frame(maxWidth: compact ? .infinity : nil)
+                        .frame(maxWidth: narrow ? .infinity : nil)
                 }.buttonStyle(.borderedProminent).tint(.red)
                     .disabled(!recorder.canStart)
             }
@@ -205,7 +253,9 @@ struct TimeLapseControls: View {
                             .help("Prevents idle sleep while recording and uses more power.")
                     }
                     Text(
-                        "Audio is recorded at normal speed and exported separately. System audio includes apps across the desktop."
+                        recorder.settings.mode == .standard
+                            ? "Audio stays synchronized and is included in your video. System audio includes apps across the desktop."
+                            : "Audio is sped up with your time-lapse and included in the video. System audio includes apps across the desktop."
                     )
                     .font(.caption).foregroundStyle(.secondary)
                 }.padding(.top, UIScale.pt(10))
@@ -216,15 +266,19 @@ struct TimeLapseControls: View {
                     Text(audioSummary).font(.caption).foregroundStyle(.secondary)
                 }.font(.callout)
             }
-            Text("1 hour becomes \(playbackEstimate) · About \(estimatedStorage) per hour")
-                .font(.caption).foregroundStyle(.secondary)
+            Text(
+                recorder.settings.mode == .standard
+                    ? "Normal speed · About \(estimatedStorage) per hour"
+                    : "1 hour becomes \(playbackEstimate) · About \(estimatedStorage) per hour"
+            )
+            .font(.caption).foregroundStyle(.secondary)
         }
         .padding(UIScale.pt(20))
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
 
     private var captureLayout: AnyLayout {
-        compact
+        narrow
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(12)))
             : AnyLayout(HStackLayout(alignment: .bottom, spacing: UIScale.pt(16)))
     }
@@ -243,7 +297,7 @@ struct TimeLapseControls: View {
     }
 
     private var recordingSummary: String {
-        "\(sourceSummary) · \(Int(recorder.settings.speed))× · \(audioSummary)"
+        "\(sourceSummary) · \(recorder.settings.mode.rawValue) · \(Int(recorder.settings.speed))× · \(audioSummary)"
     }
 
     private var estimatedStorage: String {
@@ -270,7 +324,7 @@ struct TimeLapseControls: View {
                         "Elapsed",
                         duration(context.date.timeIntervalSince(recorder.startedAt ?? context.date))
                     )
-                    metric("Playback", duration(Double(recorder.frames) / 30))
+                    metric("Playback", duration(recorder.playbackSeconds))
                     metric(
                         "Saved",
                         ByteCountFormatter.string(fromByteCount: recorder.bytes, countStyle: .file))
@@ -280,7 +334,7 @@ struct TimeLapseControls: View {
                 Task { await recorder.stop() }
             } label: {
                 Label(recorder.busy ? "Finishing…" : "Stop recording", systemImage: "stop.fill")
-                    .frame(maxWidth: compact ? .infinity : nil)
+                    .frame(maxWidth: narrow ? .infinity : nil)
             }.buttonStyle(.borderedProminent).tint(.red).disabled(recorder.busy)
         }
     }
@@ -302,7 +356,7 @@ struct TimeLapseControls: View {
                         Text("Choose a recording").tag(UUID?.none)
                         ForEach(recordings) { recording in
                             Text(
-                                "\(recording.session.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration(recording.session.playbackSeconds))\(recording.session.endedAt == nil ? " · interrupted" : "")"
+                                "\(recording.session.settings.mode.rawValue) · \(recording.session.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration(recording.session.playbackSeconds))\(recording.session.endedAt == nil ? " · interrupted" : "")"
                             )
                             .tag(Optional(recording.id))
                         }
@@ -319,28 +373,7 @@ struct TimeLapseControls: View {
                         HStack {
                             Button(exporting ? "Exporting…" : "Export video…") { export(recording) }
                                 .disabled(exporting || recording.session.frames == 0)
-                            if recording.session.segments.contains(where: { $0.kind != "video" }) {
-                                Menu("Export audio") {
-                                    ForEach(["system", "microphone"], id: \.self) { kind in
-                                        if recording.session.segments.contains(where: {
-                                            $0.kind == kind
-                                        }) {
-                                            Button(
-                                                kind == "system" ? "System audio…" : "Microphone…"
-                                            ) {
-                                                export(recording, kind: kind)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            Spacer()
-                            Button {
-                                NSWorkspace.shared.open(recording.directory)
-                            } label: {
-                                Image(systemName: "folder")
-                            }.help("Show recording files").accessibilityLabel(
-                                "Show recording files")
+
                         }
                     }
                 }
@@ -376,13 +409,13 @@ struct TimeLapseControls: View {
         } catch { message = error.localizedDescription }
     }
 
-    private func export(_ recording: TimeLapseRecording, kind: String = "video") {
+    private func export(_ recording: TimeLapseRecording) {
         let panel = NSSavePanel()
-        let video = kind == "video"
         let quality = quality
-        let extensionName = video ? quality.fileExtension : "m4a"
+        let extensionName = quality.fileExtension
         panel.allowedContentTypes = [UTType(filenameExtension: extensionName)!]
-        panel.nameFieldStringValue = "Time-lapse-\(kind).\(extensionName)"
+        panel.nameFieldStringValue =
+            "\(recording.session.settings.mode == .standard ? "Recording" : "Time-lapse").\(extensionName)"
         guard panel.runModal() == .OK, let destination = panel.url else { return }
         exporting = true
         message = "Exporting..."
@@ -390,7 +423,7 @@ struct TimeLapseControls: View {
             defer { exporting = false }
             do {
                 try await TimeLapseExporter.export(
-                    recording, quality: quality, to: destination, kind: kind)
+                    recording, quality: quality, to: destination)
                 message = "Saved \(destination.lastPathComponent)."
                 NSWorkspace.shared.activateFileViewerSelecting([destination])
             } catch { message = error.localizedDescription }

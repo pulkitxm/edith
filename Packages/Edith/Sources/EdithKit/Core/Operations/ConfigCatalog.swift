@@ -756,7 +756,8 @@ public enum ConfigCatalog {
     private static let studio: [SettingDefinition] = [
         SettingDefinition(
             AppStorageKeys.Tabs.timeLapseEnabled, .bool, group: "studio",
-            summary: "Time-lapse extension: record sampled displays or windows for long sessions.",
+            summary:
+                "Screen Recorder extension: record displays or windows at normal speed or as a time-lapse.",
             fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Tabs.studioEnabled, .bool, group: "studio",

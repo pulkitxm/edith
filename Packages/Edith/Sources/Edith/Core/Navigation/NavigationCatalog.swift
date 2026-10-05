@@ -169,7 +169,7 @@ enum NavigationCatalog {
             id: "studio", title: "Studio", symbolName: "wand.and.stars",
             band: .suite(.media), abilityIDs: ["studio"], parentID: "media"),
         SidebarPage(
-            id: "timeLapse", title: "Time-lapse", symbolName: "timelapse",
+            id: "timeLapse", title: "Screen Recorder", symbolName: "record.circle",
             band: .suite(.media), abilityIDs: ["timeLapse"], parentID: "media"),
         SidebarPage(
             id: "downloads", title: "Downloads", symbolName: "arrow.down.circle",

@@ -1,6 +1,6 @@
-# Screen time-lapse
+# Screen Recorder
 
-Enable Time-lapse in Extensions, then open it from the Media suite. Recording
+Enable Screen Recorder in Extensions, then open it from the Media suite. Recording
 requires macOS 15 or later and Screen Recording permission. Microphone access
 is requested only when a microphone is selected.
 
@@ -13,7 +13,14 @@ and whether to keep the Mac awake. Up to sixteen sources form a grid in a stable
 captured independently, so overlapping windows do not cover each other. Refresh
 sources after connecting a display or microphone or opening a new window.
 
-Choose a time-lapse speed from 30× to 1800× and a capture resolution up to
+Standard is the default recording mode. Choose 30 or 60 fps, a source and capture
+quality, then click Record. Click Stop recording when finished and export from
+Recordings. The video plays at normal speed, with system audio and the selected
+microphone synchronized and included in the export. When both audio sources are
+selected, they are mixed into one soundtrack. Standard recording uses more space
+than time-lapse, and shows its own hourly storage estimate.
+
+Choose Time-lapse mode for a compact accelerated recording. Choose a time-lapse speed from 30× to 1800× and a capture resolution up to
 1080p, 4K, or the source resolution capped at 8K. The estimate shows how one hour
 becomes a shorter video. Frames play at 30 fps. The
 default 150× speed makes five hours become two
@@ -22,16 +29,19 @@ actual file size depends on the screen content and encoding overhead. Faster
 speeds use less storage. The encoder writes sampled frames directly rather
 than storing a full-speed video first.
 
+The recorder fills the window width, scales the preview to the available space,
+and stacks controls in narrower windows. Record and Stop remain above the preview.
 While recording, the preview shows the last captured frame and updates at the
-chosen speed. Elapsed time, playback length, saved size, and Stop stay visible
+chosen speed in Time-lapse, or up to ten times per second in Standard. Elapsed time, playback length, saved size, and Stop stay visible
 below it. The first frame appears as soon as the selected sources are ready.
 
-System audio and the selected microphone are optional. They are recorded at
-normal speed into separate AAC tracks, so speech remains usable. Each enabled
-audio source adds about 58 MB per hour. System audio captures apps across the
-desktop, including when the video source is a selection of windows. Audio is
-exported separately and is not
-synchronized to the accelerated video.
+System audio and the selected microphone are optional. Every export produces one
+video containing the selected audio. Standard keeps audio synchronized at normal
+speed. Time-lapse accelerates the audio by the chosen speed while preserving its pitch.
+When both sources are selected, they are mixed into one soundtrack. System audio
+captures apps across the desktop, including when recording selected windows.
+Audio is stored internally at normal speed for export, adding about 58 MB per
+hour for each selected source. There is no separate audio export.
 
 Keep Mac and screen awake prevents idle system and display sleep while recording,
 at the cost of power. Recording continues when leaving the page or closing its
@@ -51,10 +61,10 @@ After stopping, select a session and an export quality:
 
 - Compact HEVC exports up to 1080p.
 - High quality HEVC exports at the recorded resolution.
-- Original capture joins segments without re-encoding, preserving the recording
-  quality and exporting fastest.
+- Original capture preserves the encoded video without re-encoding. Audio is
+  mixed and accelerated as needed.
 - ProRes 422 exports a large editing master in a MOV file.
 
 Higher export quality cannot restore detail that was not captured. Choose the
-capture resolution before starting. Export system audio and microphone audio to
-separate M4A files when needed. Show files opens the session's local folder.
+capture resolution before starting. Click Export video and choose a destination. The saved MP4 or MOV includes audio;
+internal recording segments remain in the local library.

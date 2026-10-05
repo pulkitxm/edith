@@ -307,7 +307,7 @@ import Testing
         #expect(titleMatches.map(\.id) == ["audioMixer"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
         #expect(categoryMatches.allSatisfy { $0.suite == .desk })
-        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter"])
+        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter", "timeLapse"])
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
