@@ -3,10 +3,8 @@ import SwiftUI
 
 struct SuiteLandingPage: View {
     let suite: SuiteDescriptor
-    @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var dark: Bool { scheme == .dark }
 
@@ -61,10 +59,6 @@ struct SuiteLandingPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
         .navigationTitle(suite.title)
-        .onAppear {
-            guard automaticActionsEnabled else { return }
-            grantedPermissions = MainPermissionOperations.center.grantedPermissions()
-        }
     }
 }
 
@@ -92,6 +86,7 @@ private struct SuiteAbilityRow: View {
     @ExtensionEnablementStorage private var enabled: Bool
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
     @State private var hovering = false
+    @State private var setupPresented = false
 
     init(entry: ExtensionRegistryEntry, dark: Bool) {
         self.entry = entry
@@ -107,8 +102,15 @@ private struct SuiteAbilityRow: View {
                     lidAwakeOperations.perform(.disableExtension)
                     return
                 }
-                _ = ExtensionModalCoordinator(entry: entry, mutationCenter: .application)
+                switch ExtensionModalCoordinator(entry: entry, mutationCenter: .application)
                     .setEnabled(newValue)
+                {
+                case let .applied(result, missingRequiredTools):
+                    setupPresented =
+                        result.enabled && (!missingRequiredTools.isEmpty || entry.id == "database")
+                case .needsPermissions:
+                    setupPresented = true
+                }
             })
     }
 
@@ -161,6 +163,10 @@ private struct SuiteAbilityRow: View {
         .padding(.vertical, UIScale.pt(11))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .edithSheet(isPresented: $setupPresented) {
+            ExtensionSettingsSheet(
+                entry: entry, lidAwakeOperations: lidAwakeOperations, enableOnAppear: true)
+        }
     }
 }
 

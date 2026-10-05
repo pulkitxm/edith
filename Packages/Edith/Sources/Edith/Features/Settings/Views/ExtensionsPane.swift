@@ -94,10 +94,10 @@ struct ExtensionsPane: View {
         ) { _ in
             if automaticActionsEnabled { refreshPermissionState() }
         }
-        .sheet(item: $selectedEntry) { entry in
+        .edithSheet(item: $selectedEntry) { entry in
             ExtensionSettingsSheet(entry: entry, lidAwakeOperations: lidAwakeOperations)
         }
-        .sheet(item: $permissionRequest) { request in
+        .edithSheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
                 request: request, grantedPermissions: grantedPermissions,
                 grant: { _ = try MainPermissionOperations.center.request($0) },
@@ -106,7 +106,7 @@ struct ExtensionsPane: View {
                 enable: { enableRequestedExtension(request) },
                 refresh: requestPermissionRefresh)
         }
-        .sheet(item: $provisioningEntry) { entry in
+        .edithSheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry)
         }
         .sheet(isPresented: $installsDatabasePack) {
@@ -348,7 +348,7 @@ private struct SuiteHeader: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
             Rectangle()
                 .fill(DashSkin.line(dark))
                 .frame(height: UIScale.pt(1))
@@ -500,9 +500,11 @@ struct ExtensionSettingsHeader: View {
     }
 }
 
-private struct ExtensionSettingsSheet: View {
+struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
+    let enableOnAppear: Bool
+    @State private var startedEnableFlow = false
     @Environment(\.dismiss) private var dismiss
     @ExtensionEnablementStorage private var enabled: Bool
     @State private var grantedPermissions: [ExtensionPermission: Bool]
@@ -512,11 +514,15 @@ private struct ExtensionSettingsSheet: View {
     @State private var invalidation = 0
     @ObservedObject private var lidAwakeOperations: LidAwakeOperationModel
 
-    init(entry: ExtensionRegistryEntry, lidAwakeOperations: LidAwakeOperationModel) {
+    init(
+        entry: ExtensionRegistryEntry, lidAwakeOperations: LidAwakeOperationModel,
+        enableOnAppear: Bool = false
+    ) {
         let coordinator = ExtensionModalCoordinator(
             entry: entry, mutationCenter: .application)
         self.entry = entry
         self.coordinator = coordinator
+        self.enableOnAppear = enableOnAppear
         _lidAwakeOperations = ObservedObject(wrappedValue: lidAwakeOperations)
         _enabled = ExtensionEnablementStorage(entry: entry)
         _grantedPermissions = State(
@@ -565,6 +571,11 @@ private struct ExtensionSettingsSheet: View {
         .onChange(of: grantedPermissions) {
             enableAfterPermissionGrantIfReady()
         }
+        .task {
+            guard enableOnAppear, !startedEnableFlow else { return }
+            startedEnableFlow = true
+            enabledBinding.wrappedValue = true
+        }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)
@@ -581,7 +592,7 @@ private struct ExtensionSettingsSheet: View {
         .onReceive(NotificationCenter.default.publisher(for: .cliToolProvisioned)) { _ in
             invalidateReadiness()
         }
-        .sheet(item: $permissionRequest) { request in
+        .edithSheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
                 request: request, grantedPermissions: grantedPermissions,
                 grant: { _ = try MainPermissionOperations.center.request($0) },
@@ -590,7 +601,7 @@ private struct ExtensionSettingsSheet: View {
                 enable: { enableAfterPermissions() },
                 refresh: refreshPermissionState)
         }
-        .sheet(item: $provisioningEntry) { entry in
+        .edithSheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry) {
                 invalidateReadiness()
             }
@@ -609,9 +620,8 @@ private struct ExtensionSettingsSheet: View {
             Text(lidAwakeErrorMessage ?? "")
         }
         .frame(
-            minWidth: UIScale.pt(520), idealWidth: UIScale.pt(560), maxWidth: UIScale.pt(560),
-            minHeight: UIScale.pt(260),
-            idealHeight: idealHeight, maxHeight: UIScale.pt(620))
+            width: PresentationMetrics.width(560),
+            height: PresentationMetrics.height(Double(idealHeight)))
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -1568,14 +1578,17 @@ private struct ExtensionPermissionSheet: View {
                         .lineLimit(1)
                 }
             }
-            VStack(spacing: UIScale.pt(10)) {
-                ForEach(request.required, id: \.self) { permission in
-                    permissionCard(permission, required: true)
-                }
-                ForEach(request.optional, id: \.self) { permission in
-                    permissionCard(permission, required: false)
+            ScrollView {
+                VStack(spacing: UIScale.pt(10)) {
+                    ForEach(request.required, id: \.self) { permission in
+                        permissionCard(permission, required: true)
+                    }
+                    ForEach(request.optional, id: \.self) { permission in
+                        permissionCard(permission, required: false)
+                    }
                 }
             }
+            .frame(maxHeight: UIScale.pt(360))
             if let actionError {
                 Label(actionError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
@@ -1596,7 +1609,7 @@ private struct ExtensionPermissionSheet: View {
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(540))
+        .frame(width: PresentationMetrics.width(540), height: PresentationMetrics.height(560))
         .onAppear(perform: refresh)
         .onReceive(
             NotificationCenter.default.publisher(

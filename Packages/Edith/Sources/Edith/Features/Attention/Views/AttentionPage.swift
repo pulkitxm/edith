@@ -19,13 +19,16 @@ struct AttentionPage: View {
                 PageHeader(
                     title: { Text("Attention") },
                     trailing: {
-                        if !model.needsSetup, model.section.usesPeriod {
-                            AttentionPeriodControl(model: model)
-                        }
+                        EmptyView()
                     },
                     accessory: {
                         if !model.needsSetup {
                             AttentionSectionBar(model: model)
+                            if model.section.usesPeriod {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    AttentionPeriodControl(model: model)
+                                }
+                            }
                         }
                     })
 
@@ -273,13 +276,11 @@ private struct AttentionSectionBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Picker("Section", selection: $model.section) {
-                ForEach(AttentionPageSection.allCases) { section in
-                    Text(section.title).tag(section)
-                }
-            }
+            EdithSegmentedPicker(
+                "Section", selection: $model.section, options: AttentionPageSection.allCases,
+                label: { $0.title }
+            )
             .labelsHidden()
-            .pickerStyle(.segmented)
             .frame(maxWidth: compact ? .infinity : UIScale.pt(620), alignment: .leading)
             Spacer(minLength: 0)
         }
@@ -524,12 +525,16 @@ private struct AttentionSetupView: View {
                     subtitle:
                         "The browser extension and Mac collector apply this before writing to disk."
                 )
-                Picker("Privacy", selection: $model.settings.privacyLevel) {
-                    Text("Applications only").tag(AttentionPrivacyLevel.applications)
-                    Text("Domains").tag(AttentionPrivacyLevel.domains)
-                    Text("Detailed").tag(AttentionPrivacyLevel.detailed)
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Privacy", selection: $model.settings.privacyLevel,
+                    options: [AttentionPrivacyLevel.applications, .domains, .detailed],
+                    label: {
+                        switch $0 {
+                        case .applications: "Applications only"
+                        case .domains: "Domains"
+                        case .detailed: "Detailed"
+                        }
+                    })
                 Text(privacyDescription)
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)

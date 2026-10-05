@@ -60,13 +60,10 @@ struct ClipboardRows: View {
     var body: some View {
         Group {
             Section {
-                Picker("", selection: $tab) {
-                    Text("General").tag("general")
-                    Text("Storage").tag("storage")
-                    Text("Appearance").tag("appearance")
-                    Text("Ignore").tag("ignore")
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "", selection: $tab, options: ["general", "storage", "appearance", "ignore"],
+                    label: { $0.capitalized }
+                )
                 .labelsHidden()
             }
 
@@ -120,8 +117,8 @@ struct ClipboardRows: View {
             if let refreshObserver { IPC.stopObserving(refreshObserver) }
             refreshObserver = nil
         }
-        .sheet(isPresented: $showHistory) {
-            ClipboardHistoryView().transientPresentation()
+        .edithSheet(isPresented: $showHistory) {
+            ClipboardHistoryView()
         }
     }
 

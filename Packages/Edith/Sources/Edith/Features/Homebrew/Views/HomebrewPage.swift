@@ -32,7 +32,7 @@ struct HomebrewMaintenanceView: View {
     var body: some View {
         VStack(spacing: 0) {
             filterBar
-                .padding(.horizontal, 16)
+                .pageGutter(compact)
                 .padding(.vertical, 12)
             Divider()
             if showsLoadingSkeleton {
@@ -48,7 +48,7 @@ struct HomebrewMaintenanceView: View {
                             packageCard
                         }
                     }
-                    .padding(16)
+                    .pageContent(compact)
                 }
             }
         }
@@ -151,25 +151,22 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var kindPicker: some View {
-        Picker("Package kind", selection: $kindRaw) {
-            ForEach(HomebrewPackageKind.allCases) { kind in
-                Text(kind.pluralTitle).tag(kind.rawValue)
-            }
-        }
+        EdithSegmentedPicker(
+            "Package kind", selection: $kindRaw,
+            options: HomebrewPackageKind.allCases.map(\.rawValue),
+            label: { HomebrewPackageKind(rawValue: $0)?.pluralTitle ?? $0 }
+        )
         .labelsHidden()
-        .pickerStyle(.segmented)
         .frame(width: UIScale.pt(190))
         .disabled(model.isBusy)
     }
 
     private var modePicker: some View {
-        Picker("View", selection: $model.mode) {
-            ForEach(HomebrewPageMode.allCases) { mode in
-                Text(mode.title).tag(mode)
-            }
-        }
+        EdithSegmentedPicker(
+            "View", selection: $model.mode, options: HomebrewPageMode.allCases,
+            label: { $0.title }
+        )
         .labelsHidden()
-        .pickerStyle(.segmented)
         .frame(width: UIScale.pt(170))
     }
 
@@ -223,7 +220,7 @@ struct HomebrewMaintenanceView: View {
 
     private var summary: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: compact ? 150 : 190), spacing: 12)],
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: 12)],
             spacing: 12
         ) {
             HomebrewMetric(
@@ -381,7 +378,7 @@ struct HomebrewPageSkeleton: View {
                 VStack(alignment: .leading, spacing: 16) {
                     LazyVGrid(
                         columns: [
-                            GridItem(.adaptive(minimum: compact ? 150 : 190), spacing: 12)
+                            GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: 12)
                         ],
                         spacing: 12
                     ) {
@@ -416,7 +413,7 @@ struct HomebrewPageSkeleton: View {
                                         SkeletonBlock(
                                             width: index.isMultiple(of: 2) ? 118 : 152,
                                             height: 10)
-                                        SkeletonBlock(width: 236, height: 8)
+                                        SkeletonBlock(height: 8).frame(maxWidth: UIScale.pt(236))
                                         SkeletonBlock(width: 84, height: 8)
                                     }
                                     Spacer(minLength: 8)
@@ -427,7 +424,7 @@ struct HomebrewPageSkeleton: View {
                         }
                     }
                 }
-                .padding(16)
+                .pageContent(compact)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

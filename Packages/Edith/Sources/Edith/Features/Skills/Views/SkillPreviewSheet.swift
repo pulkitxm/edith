@@ -49,12 +49,9 @@ struct SkillPreviewSheet: View {
             }
             .padding(UIScale.pt(24))
             HStack {
-                Picker("View", selection: $mode) {
-                    ForEach(Mode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "View", selection: $mode, options: Mode.allCases, label: { $0.rawValue }
+                )
                 .labelsHidden()
                 .frame(width: UIScale.pt(210))
                 Spacer()
@@ -82,7 +79,7 @@ struct SkillPreviewSheet: View {
             Divider()
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: UIScale.pt(740), height: UIScale.pt(650))
+        .frame(width: PresentationMetrics.width(740), height: PresentationMetrics.height(650))
         .task(id: refreshID) {
             error = nil
             copied = false

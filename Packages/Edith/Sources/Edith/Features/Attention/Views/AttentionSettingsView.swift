@@ -278,22 +278,21 @@ private struct AttentionRuleEditor: View {
                 Button(role: .destructive, action: remove) { Image(systemName: "trash") }
                     .buttonStyle(.edith(.iconOnly))
             }
-            HStack {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 Picker("Productivity", selection: $rule.productivity) {
                     Text("Category default").tag(AttentionProductivity?.none)
                     ForEach(AttentionProductivity.ranked, id: \.self) { level in
                         Text(level.title).tag(AttentionProductivity?.some(level))
                     }
                 }
-                .frame(width: UIScale.pt(260))
+                .frame(maxWidth: UIScale.pt(360))
                 Picker("Part of", selection: $rule.sphere) {
                     Text("Category default").tag(AttentionSphere?.none)
                     ForEach(AttentionSphere.allCases, id: \.self) { sphere in
                         Text(sphere.title).tag(AttentionSphere?.some(sphere))
                     }
                 }
-                .frame(width: UIScale.pt(260))
-                Spacer()
+                .frame(maxWidth: UIScale.pt(360))
             }
             .font(.system(size: UIScale.pt(11)))
             Toggle("Report matches separately using this rule’s name", isOn: $rule.reportSeparately)

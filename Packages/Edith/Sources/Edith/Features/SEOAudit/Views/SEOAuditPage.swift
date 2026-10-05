@@ -40,12 +40,15 @@ struct SEOAuditPage: View {
         }
         .presenterCover(.siteAudit)
         .background(DashSkin.paper(scheme == .dark))
-        .navigationRoute("project", selection: projectBinding, isValid: projectIsValid)
+        .navigationRoute(
+            "project", selection: projectBinding, isValid: projectIsValid,
+            isReady: model.projectsLoaded
+        )
         .task {
             guard automaticActionsEnabled else { return }
             await model.refreshProjects()
         }
-        .sheet(isPresented: $model.newProjectPresented) {
+        .edithSheet(isPresented: $model.newProjectPresented, dismissible: false) {
             SEOAuditNewProjectSheet(model: model)
         }
         .alert(
@@ -95,7 +98,7 @@ private struct SEOAuditProjectsView: View {
             }
             .padding(.bottom, UIScale.pt(PageMetrics.bottom))
         }
-        .sheet(item: $projectBeingRenamed) { project in
+        .edithSheet(item: $projectBeingRenamed, dismissible: false) { project in
             SEOAuditRenameProjectSheet(project: project) { name in
                 Task { await model.renameProject(id: project.id, to: name) }
             }
@@ -119,8 +122,28 @@ private struct SEOAuditProjectsView: View {
         }
     }
 
-    @ViewBuilder
     private var projects: some View {
+        LoadingContainer(
+            state: !model.projectsLoaded
+                ? .loading
+                : model.projectsLoadError != nil && model.projects.isEmpty ? .error : .content,
+            message: model.projectsLoadError ?? "",
+            retry: { Task { await model.refreshProjects() } }
+        ) {
+            projectContent
+        } placeholder: {
+            SkeletonGroup {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    SkeletonBlock(height: 20)
+                    SkeletonBlock(height: 120, corner: 12)
+                    SkeletonBlock(height: 120, corner: 12)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var projectContent: some View {
         if model.projects.isEmpty {
             VStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "square.stack.3d.up.slash")
@@ -230,7 +253,7 @@ private struct SEOAuditNewProjectSheet: View {
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(500))
+        .frame(width: PresentationMetrics.width(500))
         .background(DashSkin.paper(dark))
         .presenterCover(.siteAudit)
     }
@@ -510,7 +533,7 @@ private struct SEOAuditRenameProjectSheet: View {
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(420))
+        .frame(width: PresentationMetrics.width(420))
         .presenterCover(.siteAudit)
     }
 

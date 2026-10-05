@@ -573,7 +573,6 @@ struct AppMaintenanceView: View {
             Divider()
             content
         }
-        .frame(minWidth: UIScale.pt(700), minHeight: UIScale.pt(520))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationRoute("section", selection: sectionBinding)
         .task { model.refresh(interval: updateRefreshInterval) }
@@ -594,7 +593,7 @@ struct AppMaintenanceView: View {
             guard case .success(let url) = result else { return }
             model.prepareDiskImage(url, destination: installDestination)
         }
-        .sheet(item: installPlanBinding) { plan in
+        .edithSheet(item: installPlanBinding, dismissible: model.phase != .installing) { plan in
             AppMaintenanceInstallReview(
                 plan: plan, installing: model.phase == .installing,
                 onCancel: { model.cancelInstallPlan() },
@@ -639,46 +638,56 @@ struct AppMaintenanceView: View {
                 .accessibilityLabel("App Maintenance section")
             },
             accessory: {
-                HStack(spacing: UIScale.pt(10)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                     Text(section.summary)
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(.secondary)
-                    Spacer()
+                        .lineLimit(2)
                     if section.usesApplicationInventory {
-                        Button {
-                            showingUpdateSettings.toggle()
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
-                        .help("Update settings")
-                        .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                        Menu {
-                            Picker("Destination", selection: $installDestinationRaw) {
-                                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
-                                    destination in
-                                    Text(destination.title).tag(destination.rawValue)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: UIScale.pt(10)) {
+                                Button {
+                                    showingUpdateSettings.toggle()
+                                } label: {
+                                    Image(systemName: "gearshape")
                                 }
+                                .help("Update settings")
+                                .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                                Menu {
+                                    Picker("Destination", selection: $installDestinationRaw) {
+                                        ForEach(
+                                            AppMaintenanceInstallDestination.allCases,
+                                            id: \.rawValue
+                                        ) {
+                                            destination in
+                                            Text(destination.title).tag(destination.rawValue)
+                                        }
+                                    }
+                                } label: {
+                                    Label(installDestination.title, systemImage: "folder")
+                                }
+                                if model.checkingUpdates {
+                                    Text("Checking updates")
+                                        .font(.system(size: UIScale.pt(12)))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Button {
+                                    showingDiskImagePicker = true
+                                } label: {
+                                    Label(
+                                        "Install Disk Image",
+                                        systemImage: "externaldrive.badge.plus")
+                                }
+                                .disabled(model.phase != .ready)
+                                Button {
+                                    model.refresh(interval: updateRefreshInterval)
+                                } label: {
+                                    Label("Refresh", systemImage: "arrow.clockwise")
+                                }
+                                .disabled(model.phase != .ready)
+                                .buttonStyle(.edith(.secondary))
                             }
-                        } label: {
-                            Label(installDestination.title, systemImage: "folder")
                         }
-                        if model.checkingUpdates {
-                            Text("Checking updates")
-                                .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(.secondary)
-                        }
-                        Button {
-                            showingDiskImagePicker = true
-                        } label: {
-                            Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
-                        }
-                        .disabled(model.phase != .ready)
-                        Button {
-                            model.refresh(interval: updateRefreshInterval)
-                        } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
-                        }
-                        .disabled(model.phase != .ready)
                     }
                 }
             }
@@ -699,15 +708,21 @@ struct AppMaintenanceView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.phase == .loading {
             AppMaintenanceSectionSkeleton(section: section)
+        } else if compact {
+            VStack(spacing: 0) {
+                sectionInventory.frame(height: UIScale.pt(180))
+                Divider()
+                detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             HSplitView {
                 sectionInventory
                     .frame(
-                        minWidth: UIScale.pt(280), idealWidth: UIScale.pt(320),
+                        minWidth: UIScale.pt(260), idealWidth: UIScale.pt(300),
                         maxWidth: UIScale.pt(380),
                         maxHeight: .infinity)
                 detail
-                    .frame(minWidth: UIScale.pt(460), maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: UIScale.pt(360), maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -956,11 +971,17 @@ struct AppMaintenanceView: View {
                 GroupBox("Release") {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                         if let title = item.releaseTitle { Text(title).fontWeight(.medium) }
-                        Text(
-                            item.releaseNotes ?? "Release notes are not available from this source."
-                        )
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                        ScrollView {
+                            Text(
+                                item.releaseNotes
+                                    ?? "Release notes are not available from this source."
+                            )
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: UIScale.pt(180))
                         if let releaseURL = item.releaseURL {
                             Link("Open release information", destination: releaseURL)
                         }
@@ -1003,7 +1024,8 @@ struct AppMaintenanceView: View {
                     Spacer()
                     Button(
                         item.action == .openUpdater && model.selectedUpdateIDs.count == 1
-                            ? "Open App Updater" : "Run \(model.selectedUpdateIDs.count) Updates"
+                            ? "Open App Updater"
+                            : "Run \(model.selectedUpdateIDs.count) Updates"
                     ) {
                         confirmingUpdates = true
                     }
@@ -1148,17 +1170,26 @@ struct AppMaintenanceView: View {
 
 struct AppMaintenanceSectionSkeleton: View {
     let section: AppMaintenanceSection
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         SkeletonGroup {
-            HSplitView {
-                inventory
-                    .frame(
-                        minWidth: UIScale.pt(280), idealWidth: UIScale.pt(320),
-                        maxWidth: UIScale.pt(380),
-                        maxHeight: .infinity)
-                detail
-                    .frame(minWidth: UIScale.pt(460), maxWidth: .infinity, maxHeight: .infinity)
+            if compact {
+                VStack(spacing: 0) {
+                    inventory.frame(height: UIScale.pt(180))
+                    Divider()
+                    detail
+                }
+            } else {
+                HSplitView {
+                    inventory
+                        .frame(
+                            minWidth: UIScale.pt(260), idealWidth: UIScale.pt(300),
+                            maxWidth: UIScale.pt(380),
+                            maxHeight: .infinity)
+                    detail
+                        .frame(minWidth: UIScale.pt(360), maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1495,6 +1526,7 @@ private struct AppMaintenanceInstallReview: View {
                 }
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                     .disabled(installing)
                 Button(plan.replacesExisting ? "Replace App" : "Install App") {
                     onInstall(replaceExisting, moveImageToTrash)
@@ -1504,7 +1536,7 @@ private struct AppMaintenanceInstallReview: View {
             }
             .padding(UIScale.pt(16))
         }
-        .frame(width: UIScale.pt(620), height: UIScale.pt(560))
+        .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(560))
         .interactiveDismissDisabled(installing)
     }
 }

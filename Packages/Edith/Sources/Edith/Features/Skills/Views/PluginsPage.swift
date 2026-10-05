@@ -62,10 +62,10 @@ struct PluginsPage: View {
             guard automaticActionsEnabled else { return }
             await model.discoverAgents()
         }
-        .sheet(item: $previewSkill) { skill in
-            SkillPreviewSheet(skill: skill).transientPresentation()
+        .edithSheet(item: $previewSkill) { skill in
+            SkillPreviewSheet(skill: skill)
         }
-        .sheet(item: $model.presentedSkill) { skill in
+        .edithSheet(item: $model.presentedSkill, dismissible: !model.isInstalling) { skill in
             SkillInstallSheet(model: model, skill: skill)
         }
     }

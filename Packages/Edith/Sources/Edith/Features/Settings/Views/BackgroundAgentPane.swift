@@ -120,8 +120,8 @@ struct BackgroundAgentPane: View {
         }
         .formStyle(.grouped)
         .disclosureGroupStyle(EdithDisclosureGroupStyle())
-        .sheet(isPresented: $showingEvents) {
-            AgentEventsScreen().transientPresentation()
+        .edithSheet(isPresented: $showingEvents) {
+            AgentEventsScreen()
         }
         .task {
             guard automaticActionsEnabled else { return }

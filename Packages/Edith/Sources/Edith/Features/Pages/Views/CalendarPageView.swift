@@ -3,7 +3,7 @@ import EdithKit
 import SwiftUI
 
 struct CalendarPage: View {
-    @State private var store = CalendarStore()
+    @State private var store = CalendarStore(startImmediately: false)
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.Presenter.blurCalendar, store: SharedDefaults.store)
     private var presenterBlurCalendar = true
@@ -29,7 +29,8 @@ struct CalendarPage: View {
         }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationTitle("Calendar")
-        .onAppear { store.refreshAuthStatus() }
+        .onAppear { store.start() }
+        .onDisappear { store.shutdown() }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)

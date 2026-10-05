@@ -214,12 +214,14 @@ private struct PermissionCard: View {
                     (usage.isGranted ? Color.green : Color.secondary).opacity(0.12),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous))
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                HStack(spacing: UIScale.pt(8)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text(permission.displayName)
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    statusBadge
-                    Spacer(minLength: 0)
-                    action
+                    HStack(spacing: UIScale.pt(8)) {
+                        statusBadge
+                        Spacer(minLength: 0)
+                        action
+                    }
                 }
                 Text(permission.firstUseExplanation ?? permission.reason)
                     .settingsCaption()
@@ -258,6 +260,8 @@ private struct PermissionCard: View {
 
     private func badge(_ text: String, color: Color) -> some View {
         Text(text)
+            .lineLimit(1)
+            .fixedSize()
             .font(.system(size: UIScale.pt(10), weight: .semibold))
             .foregroundStyle(color)
             .padding(.horizontal, UIScale.pt(7))
@@ -272,7 +276,7 @@ private struct PermissionCard: View {
     }
 
     private var usedByRow: some View {
-        HStack(spacing: UIScale.pt(6)) {
+        WrapHStack(spacing: UIScale.pt(6)) {
             ForEach(usage.users) { entry in
                 let enabled = usage.enabledUsers.contains(entry)
                 let required = usage.requiredBy.contains(entry)

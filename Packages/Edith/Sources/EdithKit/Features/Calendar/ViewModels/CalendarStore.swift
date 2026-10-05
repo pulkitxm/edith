@@ -15,14 +15,20 @@ public final class CalendarStore: FeatureModule {
     private static let eventStore = EKEventStore()
     private let snapshotStore: CalendarAgendaSnapshotStore
     private let fetchOverride: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?
-    private var changeObserver: NSObjectProtocol?
-    private var wakeObserver: NSObjectProtocol?
-    private var refreshDebounce: Task<Void, Never>?
-    private var fetchTask: Task<Void, Never>?
-    private var snapshotTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var changeObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var wakeCenter: NotificationCenter?
+    @ObservationIgnored private nonisolated(unsafe) var refreshDebounce: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var fetchTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var snapshotTask: Task<Void, Never>?
 
     public convenience init() {
+        self.init(startImmediately: true)
+    }
+
+    public convenience init(startImmediately: Bool) {
         self.init(snapshotStore: .standard, fetch: nil)
+        if startImmediately { start() }
     }
 
     public init(
@@ -31,6 +37,19 @@ public final class CalendarStore: FeatureModule {
     ) {
         self.snapshotStore = snapshotStore
         fetchOverride = fetch
+        authStatus = EKEventStore.authorizationStatus(for: .event)
+    }
+
+    deinit {
+        refreshDebounce?.cancel()
+        fetchTask?.cancel()
+        snapshotTask?.cancel()
+        if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
+        if let wakeObserver { wakeCenter?.removeObserver(wakeObserver) }
+    }
+
+    public func start() {
+        guard changeObserver == nil else { return }
         authStatus = EKEventStore.authorizationStatus(for: .event)
         if fetchOverride == nil {
             if authStatus == .fullAccess {
@@ -44,7 +63,8 @@ public final class CalendarStore: FeatureModule {
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleRefresh() }
         }
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+        wakeCenter = NSWorkspace.shared.notificationCenter
+        wakeObserver = wakeCenter?.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.scheduleRefresh() }
@@ -52,11 +72,13 @@ public final class CalendarStore: FeatureModule {
     }
 
     private func scheduleRefresh() {
+        guard changeObserver != nil else { return }
         refreshDebounce?.cancel()
         refreshDebounce = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
-            self?.refresh()
+            guard let self, self.changeObserver != nil else { return }
+            self.refresh()
         }
     }
 
@@ -65,21 +87,26 @@ public final class CalendarStore: FeatureModule {
         refreshDebounce = nil
         fetchTask?.cancel()
         fetchTask = nil
+        snapshotTask?.cancel()
+        snapshotTask = nil
         if let changeObserver { NotificationCenter.default.removeObserver(changeObserver) }
-        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        if let wakeObserver { wakeCenter?.removeObserver(wakeObserver) }
         changeObserver = nil
         wakeObserver = nil
+        wakeCenter = nil
     }
 
     public func refreshAuthStatus() {
         let status = EKEventStore.authorizationStatus(for: .event)
         guard status != authStatus else { return }
         authStatus = status
-        if status == .fullAccess { refresh() }
+        if status == .fullAccess, changeObserver != nil { refresh() }
     }
 
     public func restoreCachedAgenda() async {
-        guard events.isEmpty, let cached = await snapshotStore.load(), !cached.isEmpty else {
+        guard events.isEmpty, let cached = await snapshotStore.load(), !cached.isEmpty,
+            !Task.isCancelled
+        else {
             return
         }
         publish(cached, persist: false)

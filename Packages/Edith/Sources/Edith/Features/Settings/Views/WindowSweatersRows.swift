@@ -71,12 +71,9 @@ struct WindowSweatersRows: View {
 
             if selection == .plain {
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    Picker("Stitch", selection: $stitch.configured(Keys.stitch)) {
-                        ForEach(SweaterStitch.allCases, id: \.self) { value in
-                            Text(value.title).tag(value)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    EdithSegmentedPicker(
+                        "Stitch", selection: $stitch.configured(Keys.stitch),
+                        options: SweaterStitch.allCases, label: { $0.title })
                     Text("How the plain knitting is worked.")
                         .settingsCaption()
                 }
@@ -126,11 +123,10 @@ struct WindowSweatersRows: View {
             }
 
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Picker("Sits", selection: $order.configured(Keys.order)) {
-                    Text("Behind").tag(SweaterOrder.below)
-                    Text("In front").tag(SweaterOrder.above)
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Sits", selection: $order.configured(Keys.order),
+                    options: [SweaterOrder.below, .above],
+                    label: { $0 == .below ? "Behind" : "In front" })
                 Text(
                     "Behind tucks the knitting under the window edge. In front lays it over the edge, which reads more strongly but covers a sliver of the window."
                 )
@@ -151,11 +147,10 @@ struct WindowSweatersRows: View {
             }
 
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Picker("Repeat starts", selection: $anchor.configured(Keys.anchor)) {
-                    Text("At the corner").tag(SweaterAnchor.corner)
-                    Text("Centred").tag(SweaterAnchor.centre)
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Repeat starts", selection: $anchor.configured(Keys.anchor),
+                    options: [SweaterAnchor.corner, .centre],
+                    label: { $0 == .corner ? "At the corner" : "Centred" })
                 Text(
                     "Anchoring at the corner holds the pattern still while a window resizes. Centring composes each side, but slides as the window grows."
                 )

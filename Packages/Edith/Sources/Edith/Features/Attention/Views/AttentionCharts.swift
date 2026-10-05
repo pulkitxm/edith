@@ -96,7 +96,7 @@ struct AttentionDayRibbon: View {
         }
         .chartXSelection(value: $selected)
         .frame(height: UIScale.pt(height))
-        .padding(.top, UIScale.pt(hovered == nil ? 0 : 42))
+        .padding(.top, UIScale.pt(42))
         .accessibilityLabel("Timeline of the day by category")
     }
 }
@@ -302,7 +302,7 @@ struct AttentionHourBars: View {
             ForEach(values) { value in
                 BarMark(
                     x: .value("Hour", value.hour), y: .value("Minutes", value.minutes),
-                    width: .fixed(UIScale.pt(14))
+                    width: .ratio(0.7)
                 )
                 .foregroundStyle(AttentionPalette.level(value.level, dark: dark))
                 .cornerRadius(2)

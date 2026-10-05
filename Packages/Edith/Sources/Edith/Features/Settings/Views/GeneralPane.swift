@@ -178,7 +178,7 @@ private struct UpdatesPane: View {
                                     showingSchedule = true
                                 }
                             )
-                            .sheet(isPresented: $showingSchedule) {
+                            .edithSheet(isPresented: $showingSchedule) {
                                 UpdateSchedulePanel(updater: updater)
                             }
                             .accessibilityHint(
@@ -231,7 +231,7 @@ struct GeneralPane: View {
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
-                    HStack(spacing: UIScale.pt(10)) {
+                    WrapHStack(spacing: UIScale.pt(10)) {
                         Toggle(
                             "Use accent",
                             isOn: Binding(

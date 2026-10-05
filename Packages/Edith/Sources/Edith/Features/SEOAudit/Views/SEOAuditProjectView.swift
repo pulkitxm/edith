@@ -56,7 +56,7 @@ struct SEOAuditProjectView: View {
         } message: {
             Text("Every saved run and page result for this project will be removed from this Mac.")
         }
-        .sheet(isPresented: $pageSelectionPresented) {
+        .edithSheet(isPresented: $pageSelectionPresented) {
             SEOAuditPageSelectionSheet(model: model)
         }
         .onChange(of: model.selectedRunID) { _, _ in expandedPages.removeAll() }
@@ -639,7 +639,7 @@ private struct SEOAuditPageSelectionSheet: View {
                 .padding(.bottom, UIScale.pt(14))
             }
         }
-        .frame(minWidth: UIScale.pt(620), minHeight: UIScale.pt(520))
+        .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(520))
         .background(DashSkin.paper(dark))
         .presenterCover(.siteAudit)
         .onDisappear { model.pageSelectionQuery = "" }

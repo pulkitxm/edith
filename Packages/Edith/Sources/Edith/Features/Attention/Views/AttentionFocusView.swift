@@ -45,12 +45,10 @@ struct AttentionFocusView: View {
                     HStack(spacing: UIScale.pt(10)) {
                         TextField("What are you focusing on?", text: $focusName)
                             .textFieldStyle(.roundedBorder)
-                        Picker("Duration", selection: $focusMinutes) {
-                            ForEach([25, 45, 60, 90], id: \.self) { minutes in
-                                Text("\(minutes)m").tag(minutes)
-                            }
-                        }
-                        .pickerStyle(.segmented)
+                        EdithSegmentedPicker(
+                            "Duration", selection: $focusMinutes, options: [25, 45, 60, 90],
+                            label: { "\($0)m" }
+                        )
                         .frame(width: UIScale.pt(220))
                         Button("Start") {
                             model.startFocus(

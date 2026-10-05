@@ -69,7 +69,10 @@ struct DownloadSheet: View {
                 content
             }
         }
-        .frame(width: isPage ? nil : UIScale.pt(680), height: isPage ? nil : UIScale.pt(760))
+        .frame(
+            width: isPage ? nil : PresentationMetrics.width(680),
+            height: isPage ? nil : PresentationMetrics.height(760)
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DashSkin.paper(dark))
         .onAppear { downloader.checkAvailability() }
@@ -222,8 +225,8 @@ struct DownloadSheet: View {
             .padding(UIScale.pt(22))
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .sheet(item: $logItem) { item in
-            logSheet(item).transientPresentation()
+        .edithSheet(item: $logItem) { item in
+            logSheet(item)
         }
     }
 
@@ -844,7 +847,7 @@ struct DownloadSheet: View {
                 .onAppear { proxy.scrollTo("logBottom", anchor: .bottom) }
             }
         }
-        .frame(width: UIScale.pt(480), height: UIScale.pt(360))
+        .frame(width: PresentationMetrics.width(480), height: PresentationMetrics.height(360))
         .background(DashSkin.paper(dark))
     }
 

@@ -11,7 +11,8 @@ private struct TransientPresentation: ViewModifier {
             .background(
                 SheetDismissalMonitor(
                     dismissible: dismissible, dismissOnEscape: dismissOnEscape,
-                    dismiss: { dismiss() }))
+                    dismiss: { dismiss() })
+            )
             .interactiveDismissDisabled(!dismissible)
     }
 }

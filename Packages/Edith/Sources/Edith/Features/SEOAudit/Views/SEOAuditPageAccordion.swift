@@ -106,7 +106,7 @@ struct SEOAuditPageAccordion: View {
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            HStack(spacing: UIScale.pt(10)) {
+            WrapHStack(spacing: UIScale.pt(10)) {
                 if let url = URL(string: page.url) {
                     Link(destination: url) {
                         Label("Open page", systemImage: "arrow.up.right")
@@ -130,7 +130,6 @@ struct SEOAuditPageAccordion: View {
                         .font(.system(size: UIScale.pt(10.5), weight: .medium))
                         .foregroundStyle(DashSkin.warn)
                 }
-                Spacer()
                 Text(selected ? "Included in next audit" : "Excluded from next audit")
                     .font(DashSkin.mono(9, weight: .semibold))
                     .foregroundStyle(selected ? DashSkin.ok : .secondary)

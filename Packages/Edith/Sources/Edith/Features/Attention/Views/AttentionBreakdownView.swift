@@ -195,7 +195,7 @@ struct AttentionBreakdownView: View {
                 Text("TIME").frame(width: UIScale.pt(80), alignment: .trailing)
                 Text("SHARE").frame(width: UIScale.pt(55), alignment: .trailing)
             }.font(DashSkin.mono(10)).foregroundStyle(.secondary).padding(10)
-            ScrollView {
+            Group {
                 LazyVStack(spacing: 4) {
                     ForEach(rows.prefix(limit)) { row in
                         Button {
@@ -238,7 +238,7 @@ struct AttentionBreakdownView: View {
                         }.buttonStyle(.edith(.borderless))
                     }
                 }
-            }.frame(height: UIScale.pt(min(450, CGFloat(min(rows.count, limit)) * 57)))
+            }
             if rows.count > limit {
                 Button("Show \(min(40, rows.count - limit)) more of \(rows.count)") { limit += 40 }
                     .buttonStyle(.edith(.secondary)).padding(.top, 8)

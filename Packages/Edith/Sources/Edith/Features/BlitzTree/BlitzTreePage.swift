@@ -125,7 +125,10 @@ struct BlitzTreePage: View {
     }
 
     @ViewBuilder private func results(_ report: BlitzTreeReport) -> some View {
-        HStack(spacing: UIScale.pt(24)) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(130)), spacing: UIScale.pt(24))],
+            alignment: .leading
+        ) {
             metric("Allocated", bytes(report.summary.allocatedBytes))
             metric("Files", report.summary.fileCount.formatted())
             metric("Folders", report.summary.directoryCount.formatted())
@@ -143,12 +146,11 @@ struct BlitzTreePage: View {
             Text(model.removing ? "Moving to Trash..." : "Folder overview")
                 .font(.headline)
             Spacer()
-            Picker("Visualization", selection: $rings) {
-                Text("Treemap").tag(false)
-                Text("Rings").tag(true)
-            }
+            EdithSegmentedPicker(
+                "Visualization", selection: $rings, options: [false, true],
+                label: { $0 ? "Rings" : "Treemap" }
+            )
             .labelsHidden()
-            .pickerStyle(.segmented)
             .frame(width: UIScale.pt(180))
         }
         Group {
@@ -163,10 +165,8 @@ struct BlitzTreePage: View {
         Text("Allocated space, not guaranteed recoverable space. Click a folder to scan inside it.")
             .font(.caption)
             .foregroundStyle(.secondary)
-        Picker("Show", selection: $list) {
-            ForEach(BlitzTreeList.allCases) { item in Text(item.rawValue).tag(item) }
-        }
-        .pickerStyle(.segmented)
+        EdithSegmentedPicker(
+            "Show", selection: $list, options: BlitzTreeList.allCases, label: { $0.rawValue })
         if list == .candidates {
             Text(
                 "\(report.report.candidateCount) candidates. Review each folder in Finder before removing anything.\(report.report.truncated ? " Showing the largest 200." : "")"
@@ -192,7 +192,7 @@ struct BlitzTreePage: View {
                         activate(entry)
                     } label: {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            Text(entry.name).fontWeight(.medium)
+                            Text(entry.name).fontWeight(.medium).lineLimit(1)
                             Text(entry.reason ?? entry.path)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
