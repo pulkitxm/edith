@@ -114,6 +114,7 @@ struct StudioCompareView: View {
     let model: StudioModel
     @State private var compare: StudioCompareModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     @MainActor init(model: StudioModel, original: URL, revised: URL) {
         self.init(model: model, compare: StudioCompareModel(original: original, revised: revised))
@@ -149,19 +150,12 @@ struct StudioCompareView: View {
             } else if let original = compare.original, let revised = compare.revised,
                 let report = compare.report
             {
-                HStack(spacing: 0) {
-                    if compare.showsVisual {
-                        visualPane(pages: min(original.pageCount, revised.pageCount))
-                    } else {
-                        StudioCompareColumn(
-                            title: "Original", document: original, focus: focusFor(.original))
-                        Divider()
-                        StudioCompareColumn(
-                            title: "Revised", document: revised, focus: focusFor(.revised))
+                if compact {
+                    ScrollView {
+                        comparison(original: original, revised: revised, report: report)
                     }
-                    Divider()
-                    changesList(report)
-                        .frame(width: UIScale.pt(280))
+                } else {
+                    comparison(original: original, revised: revised, report: report)
                 }
             } else {
                 ProgressView("Comparing…")
@@ -175,6 +169,36 @@ struct StudioCompareView: View {
     private func focusFor(_ side: PDFComparison.Side) -> PDFComparison.Change? {
         guard let focused = compare.focused, focused.side == side else { return nil }
         return focused
+    }
+
+    private func comparison(
+        original: PDFDocument, revised: PDFDocument, report: PDFComparison.Report
+    ) -> some View {
+        let layout =
+            compact
+            ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+        return layout {
+            if compare.showsVisual {
+                visualPane(pages: min(original.pageCount, revised.pageCount))
+                    .frame(height: compact ? UIScale.pt(320) : nil)
+            } else {
+                layout {
+                    StudioCompareColumn(
+                        title: "Original", document: original, focus: focusFor(.original)
+                    )
+                    .frame(height: compact ? UIScale.pt(320) : nil)
+                    Divider()
+                    StudioCompareColumn(
+                        title: "Revised", document: revised, focus: focusFor(.revised)
+                    )
+                    .frame(height: compact ? UIScale.pt(320) : nil)
+                }
+            }
+            Divider()
+            changesList(report)
+                .frame(width: compact ? nil : UIScale.pt(280))
+                .frame(height: compact ? UIScale.pt(240) : nil)
+        }
     }
 
     private func changesList(_ report: PDFComparison.Report) -> some View {

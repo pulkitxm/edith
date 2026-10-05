@@ -6,6 +6,9 @@ import Testing
         for source in try swiftSources() {
             let text = try String(contentsOf: source, encoding: .utf8)
             #expect(!text.contains(".buttonStyle(.plain)"))
+            #expect(!text.contains(".buttonStyle(.bordered)"))
+            #expect(!text.contains(".buttonStyle(.borderedProminent)"))
+            #expect(!text.contains(".buttonStyle(.borderless)"))
             #expect(!text.contains("HoverButtonStyle"))
             #expect(!text.contains(".hoverButton()"))
             #expect(!text.contains(".shelfPointer()"))

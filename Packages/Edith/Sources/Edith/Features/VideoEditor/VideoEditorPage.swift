@@ -267,7 +267,7 @@ struct VideoEditorPage: View {
                 model.project?.clips.isEmpty == false ? "Add media" : "Import video",
                 systemImage: "square.and.arrow.down", action: model.importMedia
             )
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.edith(.primary))
             .labelStyle(.iconOnly)
             .help("Add video, audio, or images")
             Button {
@@ -279,7 +279,7 @@ struct VideoEditorPage: View {
             .labelStyle(.iconOnly)
             .help("Export")
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.edith(.borderless))
         .padding(.horizontal, UIScale.pt(18))
         .frame(height: UIScale.pt(52))
     }
@@ -314,28 +314,25 @@ struct VideoEditorPage: View {
                         .font(.system(size: UIScale.pt(52), weight: .ultraLight))
                         .foregroundStyle(.secondary)
                     Text("Make a video your own")
-                        .font(.title2.weight(.semibold))
+                        .font(.edithText(.title2).weight(.semibold))
                     Text("Import a video, highlight moments with zoom, add text, and export.")
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     HStack {
                         Button("Import video", action: model.importMedia)
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.edith(.primary))
                         Button("Open project", action: model.openProject)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(.edith(.secondary))
                     }
                     if !model.recentProjects.isEmpty {
                         Text("PROJECTS")
-                            .font(.caption.weight(.semibold))
+                            .font(.edithText(.caption).weight(.semibold))
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, UIScale.pt(22))
                         LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(200), maximum: UIScale.pt(280)),
-                                    spacing: UIScale.pt(18))
-                            ],
+                            columns: PageMetrics.cardColumns(
+                                compact, minimum: 200, maximum: 280, spacing: 18),
                             alignment: .leading, spacing: UIScale.pt(20)
                         ) {
                             ForEach(model.recentProjects) { item in
@@ -447,11 +444,11 @@ struct VideoEditorPage: View {
     private var mediaRail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             Label("Media", systemImage: "film.stack")
-                .font(.headline)
+                .font(.edithText(.headline))
             Button("Add video or image", systemImage: "plus", action: model.importMedia)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
             Text("SOURCES")
-                .font(.caption.weight(.semibold))
+                .font(.edithText(.caption).weight(.semibold))
                 .foregroundStyle(.secondary)
                 .padding(.top, UIScale.pt(8))
             ScrollView {
@@ -470,9 +467,9 @@ struct VideoEditorPage: View {
                                     Image(systemName: "film")
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Source \(index + 1)")
-                                            .font(.subheadline.weight(.medium))
+                                            .font(.edithText(.subheadline).weight(.medium))
                                         Text(timestamp(clip.duration))
-                                            .font(.caption.monospacedDigit())
+                                            .font(.edithText(.caption).monospacedDigit())
                                             .foregroundStyle(.secondary)
                                     }
                                     Spacer()
@@ -484,7 +481,7 @@ struct VideoEditorPage: View {
                                         ? Color.accentColor.opacity(0.2) : Color.gray.opacity(0.1),
                                     in: RoundedRectangle(cornerRadius: 9))
                             }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.edith(.borderless))
                         }
                     }
                 }
@@ -508,8 +505,7 @@ struct VideoEditorPage: View {
                                 systemImage: tool == .zoom
                                     ? "plus.magnifyingglass" : "textformat")
                         }
-                        .buttonStyle(.bordered)
-                        .tint(editorTool == tool ? .accentColor : .secondary)
+                        .buttonStyle(.edith(.secondary, selected: editorTool == tool))
                     }
                     Spacer(minLength: 0)
                     Button("Undo", systemImage: "arrow.uturn.backward", action: model.undo)
@@ -536,7 +532,7 @@ struct VideoEditorPage: View {
                     ? "Add zoom at playhead"
                     : "Drag frame to focus"
             )
-            .font(.caption)
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
             .lineLimit(1)
             HStack(spacing: UIScale.pt(12)) {
@@ -567,13 +563,13 @@ struct VideoEditorPage: View {
                     Text(String(format: "%.1fs", model.zoomDuration))
                         .monospacedDigit()
                 }
-                .font(.caption)
+                .font(.edithText(.caption))
                 .fixedSize(horizontal: true, vertical: false)
                 Button(
                     "Add zoom",
                     systemImage: "plus.magnifyingglass", action: model.addZoom
                 )
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .disabled(model.pipeline == nil)
                 if let id = model.editingZoomID {
                     Button {
@@ -603,10 +599,10 @@ struct VideoEditorPage: View {
                     Text(String(format: "%.1fs", model.captionDuration))
                         .monospacedDigit()
                 }
-                .font(.caption)
+                .font(.edithText(.caption))
                 .fixedSize(horizontal: true, vertical: false)
                 Button("Add text", systemImage: "plus", action: model.addCaption)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(model.pipeline == nil || model.captionText.isEmpty)
             }
     }
@@ -713,7 +709,7 @@ struct EditorAnnotationRow: View {
                 }
             }
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.edith(.borderless))
     }
 }
 
@@ -755,13 +751,13 @@ struct ZoomTimelineRegion: View {
                 .help("Drag to resize the start of this zoom")
             Button(action: select) {
                 Text(String(format: "%.1f×", magnification))
-                    .font(.caption.weight(.semibold))
+                    .font(.edithText(.caption).weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.edith(.borderless))
             .highPriorityGesture(drag("move"))
             Capsule()
                 .fill(.white.opacity(0.8))

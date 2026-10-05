@@ -32,14 +32,7 @@ struct DatabaseConnectionGallery: View {
         DatabaseThemePalette(dark: dark, theme: appTheme)
     }
     private var columns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(
-                    minimum: UIScale.pt(compact ? 220 : 270),
-                    maximum: UIScale.pt(360)),
-                spacing: UIScale.pt(14),
-                alignment: .top)
-        ]
+        PageMetrics.cardColumns(compact, minimum: 270, maximum: 360, spacing: 14, alignment: .top)
     }
 
     var body: some View {

@@ -565,7 +565,7 @@ private struct AttentionSetupView: View {
                         applicationTracking: applicationTracking,
                         browserTracking: browserTracking)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .controlSize(.large)
                 .disabled(!applicationTracking && !browserTracking)
             }
@@ -629,7 +629,7 @@ private struct AttentionCollectingView: View {
                         good: model.browserConnected)
                 }
                 Button("Review setup") { model.section = .settings }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.edith(.secondary))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 42)

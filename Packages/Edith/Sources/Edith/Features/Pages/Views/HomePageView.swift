@@ -32,6 +32,7 @@ struct HomePage: View {
     @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
         var keystrokeHighlightEnabled = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
@@ -39,8 +40,7 @@ struct HomePage: View {
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
-        GeometryReader { geo in
-            let compact = geo.size.width < UIScale.pt(640)
+        Group {
             VStack(spacing: UIScale.pt(0)) {
                 HomeHeader(dark: dark)
                 ScrollView {
@@ -80,11 +80,7 @@ struct HomePage: View {
                             }
                         }
                         LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(compact ? 260 : 340)),
-                                    spacing: UIScale.pt(16))
-                            ],
+                            columns: PageMetrics.cardColumns(compact, minimum: 340, spacing: 16),
                             alignment: .leading, spacing: UIScale.pt(16)
                         ) {
                             Group {
@@ -106,7 +102,6 @@ struct HomePage: View {
                 }
             }
             .background(background)
-            .environment(\.compactLayout, compact)
         }
         .navigationTitle("Home")
         .task(id: usageEnabled) {

@@ -136,11 +136,12 @@ struct AttentionLevelLegend: View {
     let levels: [String: TimeInterval]
     let total: TimeInterval
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         let dark = scheme == .dark
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(220)), alignment: .leading)],
+            columns: PageMetrics.cardColumns(compact, minimum: 220, alignment: .leading),
             alignment: .leading, spacing: UIScale.pt(8)
         ) {
             ForEach(AttentionPalette.levels, id: \.self) { level in

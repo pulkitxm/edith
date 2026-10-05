@@ -266,9 +266,8 @@ private struct QuinjetRemoteProjectPicker: View {
         } else {
             ScrollView {
                 LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: UIScale.pt(330)), spacing: UIScale.pt(14))
-                    ], spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
+                    spacing: UIScale.pt(14)
                 ) {
                     ForEach(projects) { project in
                         QuinjetProjectCard(

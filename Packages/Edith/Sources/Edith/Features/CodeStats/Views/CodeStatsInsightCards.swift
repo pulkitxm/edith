@@ -63,7 +63,7 @@ struct CodeStatsAuditCard: View {
                 Button(entry.counted ? "Exclude" : "Count") {
                     Task { await model.updateFilter(toggle) }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.edith(.borderless))
                 .font(.system(size: UIScale.pt(11), weight: .medium))
             }
         }
@@ -190,7 +190,7 @@ struct CodeStatsHygieneCard: View {
                             }
                             Spacer()
                             Button("Count as me") { model.addIdentity(suggestion.value) }
-                                .buttonStyle(.borderless)
+                                .buttonStyle(.edith(.borderless))
                         }
                     }
                     if model.identityPendingRecount {

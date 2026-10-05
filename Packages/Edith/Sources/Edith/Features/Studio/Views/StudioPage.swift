@@ -268,9 +268,10 @@ struct StudioTabBar: View {
 
 struct StudioHeaderActions: View {
     let model: StudioModel
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: UIScale.pt(8)) {
+        HStack(spacing: UIScale.pt(compact ? 4 : 8)) {
             if model.runningCount > 0 {
                 Menu {
                     ForEach(model.jobs) { job in

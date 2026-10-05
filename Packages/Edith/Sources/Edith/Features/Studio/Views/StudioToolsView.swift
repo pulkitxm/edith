@@ -99,13 +99,7 @@ struct StudioToolsView: View {
                             .font(DashSkin.mono(10, weight: .semibold))
                             .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                         LazyVGrid(
-                            columns: compact
-                                ? [GridItem(.flexible(minimum: 0))]
-                                : [
-                                    GridItem(
-                                        .adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12)
-                                    )
-                                ],
+                            columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
                             alignment: .leading, spacing: UIScale.pt(12)
                         ) {
                             ForEach(entry.tools) { tool in

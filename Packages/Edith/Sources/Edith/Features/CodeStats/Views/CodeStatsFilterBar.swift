@@ -72,7 +72,7 @@ struct CodeStatsFilterBar: View {
                 Spacer()
                 if model.hasActiveFilter {
                     Button("Reset filters") { Task { await model.resetFilter() } }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.edith(.borderless))
                 }
             }
             ScrollView(.horizontal, showsIndicators: false) {
@@ -233,7 +233,7 @@ private struct CodeStatsFacetPicker: View {
                         }
                     }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.edith(.borderless))
             }
         }
         .padding(UIScale.pt(12))

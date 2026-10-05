@@ -111,14 +111,14 @@ struct SEOAuditPageAccordion: View {
                     Link(destination: url) {
                         Label("Open page", systemImage: "arrow.up.right")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.edith(.secondary))
                 }
                 Button(action: runLighthouse) {
                     Label(
                         page.hasLighthouseScores ? "Run Lighthouse again" : "Run Lighthouse",
                         systemImage: "gauge.with.needle")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .disabled(!lighthouseAvailable || lighthouseRunning)
                 if lighthouseRunning {
                     SkeletonGroup {

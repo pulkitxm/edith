@@ -70,7 +70,7 @@ struct AttentionHeadline: View {
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(12))],
+            columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
             spacing: UIScale.pt(12)
         ) {
             AttentionTile(

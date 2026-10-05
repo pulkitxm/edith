@@ -53,7 +53,7 @@ struct CodeStatsTrendCard: View {
                         actions.zoom(brushed.lowerBound, brushed.upperBound)
                         self.brushed = nil
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .controlSize(.small)
                 }
             }
@@ -419,7 +419,7 @@ private struct CodeStatsRepositoryTable: View {
             }
             if sorted.count > Self.collapsedCount {
                 Button(expanded ? "Show fewer" : "Show all \(sorted.count)") { expanded.toggle() }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.edith(.borderless))
             }
         }
     }

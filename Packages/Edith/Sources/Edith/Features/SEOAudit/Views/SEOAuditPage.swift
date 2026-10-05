@@ -89,7 +89,7 @@ private struct SEOAuditProjectsView: View {
                         Button(action: model.presentNewProject) {
                             Label("New project", systemImage: "plus")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                         .disabled(model.isRunning)
                     }
                 }
@@ -157,7 +157,7 @@ private struct SEOAuditProjectsView: View {
                 Button(action: model.presentNewProject) {
                     Label("Create a project", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(52))
@@ -166,11 +166,8 @@ private struct SEOAuditProjectsView: View {
                 PageSectionHeader(
                     "Projects", subtitle: "\(model.projects.count) local workspaces")
                 LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(minimum: UIScale.pt(compact ? 240 : 290)),
-                            spacing: UIScale.pt(14))
-                    ], spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(compact, minimum: 290, spacing: 14),
+                    spacing: UIScale.pt(14)
                 ) {
                     ForEach(model.projects) { project in
                         let active = model.isRunning && model.selectedProject?.id == project.id
@@ -247,7 +244,7 @@ private struct SEOAuditNewProjectSheet: View {
                 Button(action: { Task { await model.beginNewProject() } }) {
                     Label("Create and discover", systemImage: "arrow.right")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)
                 .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -527,7 +524,7 @@ private struct SEOAuditRenameProjectSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save name", action: submit)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }

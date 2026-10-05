@@ -439,11 +439,8 @@ struct CompanionSettingsScreen: View {
                     .foregroundStyle(DashSkin.inkFaint(dark))
             } else {
                 LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(minimum: UIScale.pt(290)), spacing: UIScale.pt(14),
-                            alignment: .leading)
-                    ],
+                    columns: PageMetrics.cardColumns(
+                        compact, minimum: 290, spacing: 14, alignment: .leading),
                     alignment: .leading, spacing: UIScale.pt(7)
                 ) {
                     ForEach(home.checks, id: \.name) { check in
@@ -781,13 +778,12 @@ struct CompanionSettingsScreen: View {
 }
 
 private struct CompanionHealthRowsSkeleton: View {
+    @Environment(\.compactLayout) private var compact
+
     var body: some View {
         LazyVGrid(
-            columns: [
-                GridItem(
-                    .adaptive(minimum: UIScale.pt(290)), spacing: UIScale.pt(14),
-                    alignment: .leading)
-            ],
+            columns: PageMetrics.cardColumns(
+                compact, minimum: 290, spacing: 14, alignment: .leading),
             alignment: .leading, spacing: UIScale.pt(7)
         ) {
             ForEach(0..<6, id: \.self) { index in

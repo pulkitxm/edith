@@ -396,13 +396,13 @@ struct WorkspaceNodeView: View {
     private func splitBody(_ split: SplitNode) -> some View {
         let horizontal = split.axis == .horizontal
         let dividers = CGFloat(split.children.count - 1) * Self.dividerWidth
-        let available = (horizontal ? size.width : size.height) - dividers
+        let available = max(0, (horizontal ? size.width : size.height) - dividers)
         let layout =
             horizontal
             ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
         layout {
             ForEach(Array(split.children.enumerated()), id: \.element.id) { index, child in
-                let length = max(60, available * split.ratios[index])
+                let length = available * split.ratios[index]
                 WorkspaceNodeView(
                     node: child, model: model, machines: machines,
                     size: horizontal

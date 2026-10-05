@@ -39,7 +39,7 @@ struct CodeStatsHeader: View {
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(!model.canStart)
                 }
             }
@@ -178,7 +178,7 @@ struct CodeStatsCommandHint: View {
             } label: {
                 Image(systemName: "doc.on.doc")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.edith(.borderless))
             .help("Copy")
         }
         .padding(.horizontal, UIScale.pt(8))

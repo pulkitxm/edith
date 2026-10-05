@@ -178,7 +178,7 @@ struct HomebrewMaintenanceView: View {
                     .frame(maxWidth: compact ? .infinity : 320)
                     .onSubmit { runSearch() }
                 Button("Search", action: runSearch)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(
                         model.isBusy
                             || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -210,7 +210,7 @@ struct HomebrewMaintenanceView: View {
                 HStack {
                     Link("Open brew.sh", destination: URL(string: "https://brew.sh")!)
                     Button("Check Again") { model.activate(kind: kind) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                 }
             }
             .frame(maxWidth: .infinity)
@@ -220,7 +220,7 @@ struct HomebrewMaintenanceView: View {
 
     private var summary: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: 12)],
+            columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
             spacing: 12
         ) {
             HomebrewMetric(
@@ -377,9 +377,7 @@ struct HomebrewPageSkeleton: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     LazyVGrid(
-                        columns: [
-                            GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: 12)
-                        ],
+                        columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
                         spacing: 12
                     ) {
                         ForEach(0..<3, id: \.self) { index in
@@ -495,12 +493,12 @@ private struct HomebrewPackageRow: View {
             if package.installed {
                 if package.outdated {
                     Button("Upgrade") { perform(.upgrade) }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                 }
                 Button("Uninstall", role: .destructive, action: uninstall)
             } else {
                 Button("Install") { perform(.install) }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
             }
         }
         .padding(.vertical, 11)

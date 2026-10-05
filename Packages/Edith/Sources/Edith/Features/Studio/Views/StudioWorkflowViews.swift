@@ -69,6 +69,7 @@ final class StudioWorkflowDraft: Identifiable {
 struct StudioWorkflowSection: View {
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
@@ -76,7 +77,7 @@ struct StudioWorkflowSection: View {
                 .font(DashSkin.mono(10, weight: .semibold))
                 .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))],
+                columns: PageMetrics.cardColumns(compact, minimum: 240, spacing: 12),
                 alignment: .leading, spacing: UIScale.pt(12)
             ) {
                 ForEach(model.workflows) { workflow in
@@ -116,16 +117,10 @@ struct StudioWorkflowCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack(spacing: UIScale.pt(4)) {
-                ForEach(Array(workflow.tools.enumerated()), id: \.offset) { index, tool in
-                    if index > 0 {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: UIScale.pt(9), weight: .bold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    StudioToolIcon(tool: tool, size: 26)
-                }
+            ScrollView(.horizontal) {
+                toolChain
             }
+            .scrollIndicators(.automatic)
             Text(workflow.name)
                 .font(.system(size: UIScale.pt(13.5), weight: .semibold))
             Text(workflow.summary)
@@ -155,6 +150,19 @@ struct StudioWorkflowCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
                 DashSkin.line(scheme == .dark)))
+    }
+
+    private var toolChain: some View {
+        HStack(spacing: UIScale.pt(4)) {
+            ForEach(Array(workflow.tools.enumerated()), id: \.offset) { index, tool in
+                if index > 0 {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: UIScale.pt(9), weight: .bold))
+                        .foregroundStyle(.tertiary)
+                }
+                StudioToolIcon(tool: tool, size: 26)
+            }
+        }
     }
 }
 

@@ -97,7 +97,7 @@ struct SEOAuditProjectView: View {
                 Button(action: model.leaveForNewProject) {
                     Label("New project", systemImage: "plus")
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.edith(.secondary))
             }
             Menu {
                 Button("Delete Project", role: .destructive) { confirmsDeletion = true }
@@ -232,7 +232,7 @@ struct SEOAuditProjectView: View {
                     model.discoveredPageURLs.isEmpty ? "Discover pages" : "Discover more",
                     systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.edith(.secondary))
             .disabled(model.isRunning)
         }
     }
@@ -243,7 +243,7 @@ struct SEOAuditProjectView: View {
             detail: "of \(model.discoveredPageURLs.count) pages"
         ) {
             Button("Choose pages") { pageSelectionPresented = true }
-                .buttonStyle(.bordered)
+                .buttonStyle(.edith(.secondary))
                 .disabled(model.discoveredPageURLs.isEmpty || model.isRunning)
         }
     }
@@ -276,7 +276,7 @@ struct SEOAuditProjectView: View {
                 Label("Run selected", systemImage: "play.fill")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.edith(.primary))
             .disabled(model.selectedPageCount == 0 || model.isRunning)
         }
         .padding(UIScale.pt(12))
@@ -599,7 +599,7 @@ private struct SEOAuditPageSelectionSheet: View {
                 Button("Select all", action: model.selectAllPages)
                 Button("Clear", action: model.deselectAllPages)
                 Button("Done", action: dismiss.callAsFunction)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
             }
             .padding(UIScale.pt(18))
             Divider()

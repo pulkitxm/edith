@@ -13,7 +13,7 @@ struct AttentionAgentsView: View {
         let interval = model.period.interval()
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(12))],
+                columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
                 spacing: UIScale.pt(12)
             ) {
                 AttentionTile(

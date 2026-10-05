@@ -9,11 +9,7 @@ struct StudioFilesView: View {
     @Environment(\.compactLayout) private var compact
 
     private var columns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: UIScale.pt(222), maximum: UIScale.pt(280)),
-                spacing: UIScale.pt(14))
-        ]
+        PageMetrics.cardColumns(compact, minimum: 222, maximum: 280, spacing: 14)
     }
 
     var body: some View {
@@ -123,9 +119,7 @@ struct StudioDropHero: View {
                     .font(DashSkin.mono(10, weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                 LazyVGrid(
-                    columns: compact
-                        ? [GridItem(.flexible(minimum: 0))]
-                        : [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(10))],
+                    columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 10),
                     spacing: UIScale.pt(10)
                 ) {
                     ForEach(popular, id: \.self) { id in

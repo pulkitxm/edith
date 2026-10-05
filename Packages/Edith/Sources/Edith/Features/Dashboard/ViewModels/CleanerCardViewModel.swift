@@ -528,7 +528,7 @@ struct CleanerCard: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(9))
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.edith(.primary))
         .tint(DashSkin.accent(dark))
         .controlSize(.large)
         .disabled(model.scanning || model.selectedTotal == 0)

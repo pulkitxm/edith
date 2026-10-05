@@ -38,7 +38,7 @@ struct CodeStatsSetupView: View {
                     } label: {
                         Label("Start first sync", systemImage: "play.fill")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .controlSize(.large)
                     .disabled(!model.canStart)
                 }
@@ -224,7 +224,7 @@ private struct CodeStatsIdentityChips: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.edith(.borderless))
                         .accessibilityLabel("Remove \(label)")
                     }
                     .font(.system(size: UIScale.pt(11.5)))

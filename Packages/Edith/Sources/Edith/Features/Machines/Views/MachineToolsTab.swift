@@ -17,6 +17,7 @@ struct MachineToolsTab: View {
     @State private var runningSnippet = false
     @State private var message: String?
     @State private var serviceFilter = ""
+    @State private var servicesLoaded = false
     @State private var mounting = false
     @State private var pendingForwardRemoval: PortForward?
     @State private var pendingSnippetRemoval: CommandSnippet?
@@ -48,6 +49,8 @@ struct MachineToolsTab: View {
         .task(id: session.remotePlatform) {
             guard connectionsEnabled else { return }
             await session.refreshServices()
+            guard !Task.isCancelled else { return }
+            servicesLoaded = session.isLocal || session.remotePlatform != nil
             await session.restoreMount()
         }
         .onDisappear { cancelSnippetRun() }
@@ -262,19 +265,25 @@ struct MachineToolsTab: View {
                         .help("Remove")
                     }
                 }
-                HStack(spacing: UIScale.pt(8)) {
+                let layout =
+                    compact
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(8)))
+                    : AnyLayout(HStackLayout(spacing: UIScale.pt(8)))
+                layout {
                     TextField("Local port", text: $newForwardLocal)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: UIScale.pt(90))
-                    Image(systemName: "arrow.right")
-                        .font(.system(size: UIScale.pt(10)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
+                    if !compact {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: UIScale.pt(10)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
                     TextField("Remote host", text: $newForwardHost)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: UIScale.pt(130))
+                        .frame(maxWidth: compact ? .infinity : UIScale.pt(130))
                     TextField("Remote port", text: $newForwardRemote)
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: UIScale.pt(90))
+                        .frame(maxWidth: compact ? .infinity : UIScale.pt(90))
                     Button("Add") { addForward() }
                         .disabled(Int(newForwardLocal) == nil || Int(newForwardRemote) == nil)
                 }
@@ -338,39 +347,57 @@ struct MachineToolsTab: View {
 
     private var servicesCard: some View {
         SkinCard(
-            title: "Services", note: session.services.isEmpty ? "no services reported" : nil,
+            title: "Services",
+            note: servicesLoaded && session.services.isEmpty ? "no services reported" : nil,
             dark: dark
         ) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                if !session.services.isEmpty {
-                    SearchField(placeholder: "Filter services", text: $serviceFilter)
-                        .frame(maxWidth: UIScale.pt(240))
-                }
-                ForEach(filteredServices) { service in
-                    HStack(spacing: UIScale.pt(10)) {
-                        Circle()
-                            .fill(
-                                service.isFailed
-                                    ? DashSkin.danger
-                                    : (service.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
-                            )
-                            .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                        Text(service.displayName)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                        Text(service.describes)
-                            .font(.system(size: UIScale.pt(10.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                        Button("Restart") { runService("restart", unit: service.unit) }
-                            .font(.system(size: UIScale.pt(11)))
-                        Button(service.isRunning ? "Stop" : "Start") {
-                            runService(service.isRunning ? "stop" : "start", unit: service.unit)
+            LoadingContainer(
+                state: connectionsEnabled && !servicesLoaded && session.services.isEmpty
+                    ? .loading : .content
+            ) {
+                servicesContent
+            } placeholder: {
+                SkeletonGroup {
+                    VStack(spacing: UIScale.pt(8)) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            SkeletonBlock(height: 24)
                         }
-                        .font(.system(size: UIScale.pt(11)))
                     }
+                }
+            }
+        }
+    }
+
+    private var servicesContent: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            if !session.services.isEmpty {
+                SearchField(placeholder: "Filter services", text: $serviceFilter)
+                    .frame(maxWidth: UIScale.pt(240))
+            }
+            ForEach(filteredServices) { service in
+                HStack(spacing: UIScale.pt(10)) {
+                    Circle()
+                        .fill(
+                            service.isFailed
+                                ? DashSkin.danger
+                                : (service.isRunning ? DashSkin.ok : DashSkin.inkFaint(dark))
+                        )
+                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+                    Text(service.displayName)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(1)
+                    Text(service.describes)
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    Button("Restart") { runService("restart", unit: service.unit) }
+                        .font(.system(size: UIScale.pt(11)))
+                    Button(service.isRunning ? "Stop" : "Start") {
+                        runService(service.isRunning ? "stop" : "start", unit: service.unit)
+                    }
+                    .font(.system(size: UIScale.pt(11)))
                 }
             }
         }

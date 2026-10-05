@@ -40,12 +40,7 @@ struct PermissionsPane: View {
     }
 
     private var columns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: UIScale.pt(compact ? 280 : 360)),
-                spacing: UIScale.pt(12),
-                alignment: .top)
-        ]
+        PageMetrics.cardColumns(compact, minimum: 360, spacing: 12, alignment: .top)
     }
 
     @ViewBuilder
@@ -118,7 +113,7 @@ struct PermissionsPane: View {
                 Button("Grant \(pending.count) Remaining") {
                     for usage in pending { grant(usage) }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .tint(accent)
             }
         }

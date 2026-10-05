@@ -91,7 +91,7 @@ struct BifrostLibrarySection<Item: Identifiable & Codable & Equatable, Fields: V
                     } label: {
                         Image(systemName: "trash")
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.edith(.borderless))
                 }
             }
             HStack(spacing: UIScale.pt(8)) {
