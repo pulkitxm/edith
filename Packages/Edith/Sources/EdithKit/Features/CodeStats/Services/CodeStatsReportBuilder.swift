@@ -6,91 +6,134 @@ public enum CodeStatsReportBuilder {
     public static let weeklyRollingWindow = 4
     public static let monthlyRollingWindow = 3
 
+    struct Entry: Sendable {
+        let day: CodeStatsDay
+        let hour: Int
+        let repository: Int
+        let language: Int
+        let commits: Int
+        let counts: CodeStatsLanguageCounts
+    }
+
     private struct Bucket {
         var commits = 0
         var counts = CodeStatsLanguageCounts()
 
-        mutating func add(_ commit: CodeStatsCommit) {
-            commits += 1
-            counts.add(commit.totals)
+        mutating func add(_ entry: Entry) {
+            commits += entry.commits
+            counts.add(entry.counts)
         }
-    }
-
-    private struct Dated {
-        let commit: CodeStatsCommit
-        let day: CodeStatsDay
-    }
-
-    public static func deduplicated(_ commits: [CodeStatsCommit]) -> [CodeStatsCommit] {
-        var seen = Set<String>()
-        return commits.filter { seen.insert($0.sha).inserted }
     }
 
     public static func build(
         commits: [CodeStatsCommit], range: CodeStatsRange, today: Date, calendar: Calendar
     ) -> CodeStatsReport {
-        let dated = deduplicated(commits).compactMap { commit in
-            CodeStatsDay(commit.day).map { Dated(commit: commit, day: $0) }
-        }
+        build(
+            table: CodeStatsFactBuilder.build(commits: commits), filter: .default, range: range,
+            today: today, calendar: calendar)
+    }
+
+    public static func build(
+        table: CodeStatsFactTable, filter: CodeStatsFilter, range: CodeStatsRange, today: Date,
+        calendar: Calendar
+    ) -> CodeStatsReport {
+        let all = entries(table, filter: filter)
         let end = CodeStatsDay(date: today, calendar: calendar)
         let length: Int
         switch range {
         case .days(let count): length = max(count, 1)
         case .year: length = 365
-        case .all: length = max((dated.map(\.day).min()?.distance(to: end) ?? 0) + 1, 1)
+        case .all: length = max((all.map(\.day).min()?.distance(to: end) ?? 0) + 1, 1)
         }
         let start = end.advanced(by: -(length - 1))
-        let selected = dated.filter { $0.day >= start && $0.day <= end }
-        let days = Dictionary(grouping: selected, by: \.day).mapValues(bucket)
-        let daily = (start...end).map { point($0, days[$0] ?? Bucket()) }
-        let momentum: CodeStatsMomentum? =
-            range == .all
-            ? nil
-            : previousMomentum(selected, dated, start: start, length: length)
+        let selected = all.filter { $0.day >= start && $0.day <= end }
+        var days = [Bucket](repeating: Bucket(), count: length)
+        for entry in selected { days[start.distance(to: entry.day)].add(entry) }
+        let daily = days.enumerated().map { offset, bucket in
+            CodeStatsDayPoint(
+                day: start.advanced(by: offset).string, commits: bucket.commits,
+                counts: bucket.counts)
+        }
         let firstWeekday = calendar.firstWeekday
+        let summaries = repositories(selected, names: table.repositories, languages: table.languages)
+        let languageTotals = languages(selected, names: table.languages)
         return CodeStatsReport(
             range: range, startDay: start.string, endDay: end.string,
-            totals: totals(selected, dated, days: days, start: start, end: end),
-            momentum: momentum,
+            totals: totals(selected, all, days: days, start: start, end: end),
+            momentum: range == .all
+                ? nil : momentum(selected, all, start: start, length: length),
             daily: daily,
             weekly: periods(
-                selected, from: start.weekStart(firstWeekday: firstWeekday), to: end,
+                days, start: start, from: start.weekStart(firstWeekday: firstWeekday), to: end,
                 window: weeklyRollingWindow, next: { $0.advanced(by: 7) },
                 key: { $0.weekStart(firstWeekday: firstWeekday) }),
             monthly: periods(
-                selected, from: start.monthStart, to: end, window: monthlyRollingWindow,
-                next: \.nextMonthStart, key: \.monthStart),
-            repositories: repositories(selected),
-            repositoryMonthly: repositoryMonthly(selected, start: start, end: end),
-            languages: languages(selected),
-            languageMonthly: languageMonthly(selected, start: start, end: end),
+                days, start: start, from: start.monthStart, to: end,
+                window: monthlyRollingWindow, next: \.nextMonthStart, key: \.monthStart),
+            repositories: summaries,
+            repositoryMonthly: repositoryMonthly(
+                selected, top: summaries.prefix(topSeriesCount).map(\.repository),
+                names: table.repositories, start: start, end: end),
+            languages: languageTotals,
+            languageMonthly: languageMonthly(
+                selected, top: languageTotals.prefix(topSeriesCount).map(\.language),
+                names: table.languages, start: start, end: end),
             punchcard: punchcard(selected),
             topDays: daily.filter { $0.commits > 0 }.sorted {
                 ($0.counts.authored, $0.commits, $0.day) > ($1.counts.authored, $1.commits, $1.day)
             }.prefix(topDayCount).map { $0 })
     }
 
-    private static func bucket(_ entries: [Dated]) -> Bucket {
-        entries.reduce(into: Bucket()) { $0.add($1.commit) }
-    }
-
-    private static func point(_ day: CodeStatsDay, _ bucket: Bucket) -> CodeStatsDayPoint {
-        CodeStatsDayPoint(day: day.string, commits: bucket.commits, counts: bucket.counts)
+    static func entries(_ table: CodeStatsFactTable, filter: CodeStatsFilter) -> [Entry] {
+        let repositoryAllowed = table.repositories.map { name in
+            (filter.repositories.isEmpty || filter.repositories.contains(name))
+                && (filter.owners.isEmpty
+                    || filter.owners.contains(
+                        name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))
+        }
+        let languageAllowed = table.languages.map {
+            filter.languages.isEmpty || filter.languages.contains($0)
+        }
+        let excludedCommits = filter.excludedCommitFlags
+        let excludedLines = filter.excludedLineFlags
+        var result: [Entry] = []
+        result.reserveCapacity(table.rows.count)
+        for row in table.rows {
+            guard repositoryAllowed.indices.contains(row.repository),
+                repositoryAllowed[row.repository],
+                languageAllowed.indices.contains(row.language)
+                    ? languageAllowed[row.language] : filter.languages.isEmpty,
+                row.flags.isDisjoint(with: excludedCommits)
+            else { continue }
+            let counted =
+                filter.categories.contains(row.category) && row.flags.isDisjoint(with: excludedLines)
+            let counts = counted ? row.counts : .zero
+            guard row.commits > 0 || !counts.isEmpty else { continue }
+            result.append(
+                Entry(
+                    day: CodeStatsDay(ordinal: row.day), hour: row.hour,
+                    repository: row.repository, language: row.language, commits: row.commits,
+                    counts: counts))
+        }
+        return result
     }
 
     private static func totals(
-        _ selected: [Dated], _ all: [Dated], days: [CodeStatsDay: Bucket], start: CodeStatsDay,
+        _ selected: [Entry], _ all: [Entry], days: [Bucket], start: CodeStatsDay,
         end: CodeStatsDay
     ) -> CodeStatsTotals {
-        let counts = selected.reduce(into: CodeStatsLanguageCounts()) { $0.add($1.commit.totals) }
-        let streaks = streaks(activeDays: Set(all.map(\.day)), start: start, end: end)
+        let bucket = selected.reduce(into: Bucket()) { $0.add($1) }
+        let activeDays = days.filter { $0.commits > 0 }.count
+        let streaks = streaks(
+            activeDays: Set(all.lazy.filter { $0.commits > 0 }.map(\.day)), start: start, end: end)
         return CodeStatsTotals(
-            commits: selected.count, authored: counts.authored, added: counts.added,
-            updated: counts.updated, deleted: counts.deleted, net: counts.net,
-            activeDays: days.count,
-            repositories: Set(selected.map(\.commit.repository)).count,
+            commits: bucket.commits, authored: bucket.counts.authored,
+            added: bucket.counts.added, updated: bucket.counts.updated,
+            deleted: bucket.counts.deleted, net: bucket.counts.net, activeDays: activeDays,
+            repositories: Set(selected.lazy.filter { $0.commits > 0 }.map(\.repository)).count,
             currentStreak: streaks.current, longestStreak: streaks.longest,
-            averagePerActiveDay: days.isEmpty ? 0 : Double(counts.authored) / Double(days.count))
+            averagePerActiveDay: activeDays == 0
+                ? 0 : Double(bucket.counts.authored) / Double(activeDays))
     }
 
     static func streaks(
@@ -115,15 +158,16 @@ public enum CodeStatsReportBuilder {
         return (current, longest)
     }
 
-    private static func previousMomentum(
-        _ selected: [Dated], _ all: [Dated], start: CodeStatsDay, length: Int
+    private static func momentum(
+        _ selected: [Entry], _ all: [Entry], start: CodeStatsDay, length: Int
     ) -> CodeStatsMomentum {
         let previousStart = start.advanced(by: -length)
-        let previous = all.filter { $0.day >= previousStart && $0.day < start }
+        let previous = all.lazy.filter { $0.day >= previousStart && $0.day < start }
+            .reduce(into: Bucket()) { $0.add($1) }
+        let current = selected.reduce(into: Bucket()) { $0.add($1) }
         return CodeStatsMomentum(
-            commits: selected.count, previousCommits: previous.count,
-            lines: selected.reduce(0) { $0 + $1.commit.totals.authored },
-            previousLines: previous.reduce(0) { $0 + $1.commit.totals.authored })
+            commits: current.commits, previousCommits: previous.commits,
+            lines: current.counts.authored, previousLines: previous.counts.authored)
     }
 
     private static func periodStarts(
@@ -139,10 +183,15 @@ public enum CodeStatsReportBuilder {
     }
 
     private static func periods(
-        _ selected: [Dated], from first: CodeStatsDay, to end: CodeStatsDay, window: Int,
-        next: (CodeStatsDay) -> CodeStatsDay, key: (CodeStatsDay) -> CodeStatsDay
+        _ days: [Bucket], start: CodeStatsDay, from first: CodeStatsDay, to end: CodeStatsDay,
+        window: Int, next: (CodeStatsDay) -> CodeStatsDay, key: (CodeStatsDay) -> CodeStatsDay
     ) -> [CodeStatsPeriodPoint] {
-        let buckets = Dictionary(grouping: selected) { key($0.day) }.mapValues(bucket)
+        var buckets: [CodeStatsDay: Bucket] = [:]
+        for (offset, day) in days.enumerated() where day.commits > 0 || !day.counts.isEmpty {
+            let period = key(start.advanced(by: offset))
+            buckets[period, default: Bucket()].commits += day.commits
+            buckets[period, default: Bucket()].counts.add(day.counts)
+        }
         let values = periodStarts(from: first, to: end, next: next).map {
             ($0, buckets[$0] ?? Bucket())
         }
@@ -157,85 +206,111 @@ public enum CodeStatsReportBuilder {
         }
     }
 
-    private static func repositories(_ selected: [Dated]) -> [CodeStatsRepositorySummary] {
-        Dictionary(grouping: selected, by: \.commit.repository).map { name, entries in
-            var languages: [String: Int] = [:]
-            for entry in entries {
-                for (language, counts) in entry.commit.languages {
-                    languages[language, default: 0] += counts.authored
-                }
+    private static func repositories(
+        _ selected: [Entry], names: [String], languages: [String]
+    ) -> [CodeStatsRepositorySummary] {
+        struct Accumulator {
+            var bucket = Bucket()
+            var first: CodeStatsDay?
+            var last: CodeStatsDay?
+            var days = Set<CodeStatsDay>()
+            var languages: [Int: Int] = [:]
+        }
+        var accumulators = [Accumulator](repeating: Accumulator(), count: names.count)
+        for entry in selected where accumulators.indices.contains(entry.repository) {
+            let index = entry.repository
+            accumulators[index].bucket.add(entry)
+            accumulators[index].first = min(accumulators[index].first ?? entry.day, entry.day)
+            accumulators[index].last = max(accumulators[index].last ?? entry.day, entry.day)
+            if entry.commits > 0 { accumulators[index].days.insert(entry.day) }
+            if entry.language >= 0, entry.counts.authored > 0 {
+                accumulators[index].languages[entry.language, default: 0] += entry.counts.authored
             }
-            let days = entries.map(\.day)
+        }
+        return accumulators.enumerated().compactMap {
+            index, accumulator -> CodeStatsRepositorySummary? in
+            guard accumulator.bucket.commits > 0 else { return nil }
+            let top = accumulator.languages.max {
+                ($0.value, languages[$1.key]) < ($1.value, languages[$0.key])
+            }
             return CodeStatsRepositorySummary(
-                repository: name, commits: entries.count,
-                counts: entries.reduce(into: CodeStatsLanguageCounts()) {
-                    $0.add($1.commit.totals)
-                },
-                firstDay: days.min()?.string ?? "", lastDay: days.max()?.string ?? "",
-                activeDays: Set(days).count,
-                topLanguage: languages.max { ($0.value, $1.key) < ($1.value, $0.key) }?.key)
+                repository: names[index], commits: accumulator.bucket.commits,
+                counts: accumulator.bucket.counts, firstDay: accumulator.first?.string ?? "",
+                lastDay: accumulator.last?.string ?? "", activeDays: accumulator.days.count,
+                topLanguage: top.flatMap {
+                    languages.indices.contains($0.key) ? languages[$0.key] : nil
+                })
         }.sorted { ($0.commits, $1.repository) > ($1.commits, $0.repository) }
     }
 
     private static func repositoryMonthly(
-        _ selected: [Dated], start: CodeStatsDay, end: CodeStatsDay
+        _ selected: [Entry], top: [String], names: [String], start: CodeStatsDay,
+        end: CodeStatsDay
     ) -> [CodeStatsSeries] {
         let months = periodStarts(from: start.monthStart, to: end, next: \.nextMonthStart)
-        return repositories(selected).prefix(topSeriesCount).map { summary in
-            let entries = selected.filter { $0.commit.repository == summary.repository }
-            let counts = Dictionary(grouping: entries, by: \.day.monthStart).mapValues(\.count)
+        return top.map { repository in
+            let index = names.firstIndex(of: repository) ?? -1
+            var counts: [CodeStatsDay: Int] = [:]
+            for entry in selected where entry.repository == index {
+                counts[entry.day.monthStart, default: 0] += entry.commits
+            }
             return CodeStatsSeries(
-                name: summary.repository,
+                name: repository,
                 values: months.map {
                     CodeStatsSeriesValue(start: $0.string, value: Double(counts[$0] ?? 0))
                 })
         }
     }
 
-    private static func languageCounts(_ entries: [Dated]) -> [String: CodeStatsLanguageCounts] {
-        var totals: [String: CodeStatsLanguageCounts] = [:]
-        for entry in entries {
-            for (language, counts) in entry.commit.languages {
-                totals[language, default: .zero].add(counts)
-            }
+    private static func languages(_ selected: [Entry], names: [String]) -> [CodeStatsLanguageTotal]
+    {
+        var totals = [CodeStatsLanguageCounts](repeating: .zero, count: names.count)
+        for entry in selected where totals.indices.contains(entry.language) {
+            totals[entry.language].add(entry.counts)
         }
-        return totals
-    }
-
-    private static func languages(_ selected: [Dated]) -> [CodeStatsLanguageTotal] {
-        let totals = languageCounts(selected)
-        let authored = Double(totals.values.reduce(0) { $0 + $1.authored })
-        return totals.map { language, counts in
-            CodeStatsLanguageTotal(
-                language: language, counts: counts,
-                share: authored == 0 ? 0 : Double(counts.authored) / authored)
+        let authored = Double(totals.reduce(0) { $0 + $1.authored })
+        return totals.enumerated().compactMap { index, counts in
+            counts.isEmpty
+                ? nil
+                : CodeStatsLanguageTotal(
+                    language: names[index], counts: counts,
+                    share: authored == 0 ? 0 : Double(counts.authored) / authored)
         }.sorted { ($0.counts.authored, $1.language) > ($1.counts.authored, $0.language) }
     }
 
     private static func languageMonthly(
-        _ selected: [Dated], start: CodeStatsDay, end: CodeStatsDay
+        _ selected: [Entry], top: [String], names: [String], start: CodeStatsDay,
+        end: CodeStatsDay
     ) -> [CodeStatsSeries] {
         let months = periodStarts(from: start.monthStart, to: end, next: \.nextMonthStart)
-        let byMonth = Dictionary(grouping: selected, by: \.day.monthStart).mapValues(
-            languageCounts)
-        return languages(selected).prefix(topSeriesCount).map { total in
+        let indices = top.map { names.firstIndex(of: $0) ?? -1 }
+        var monthTotals: [CodeStatsDay: Int] = [:]
+        var languageTotals: [CodeStatsDay: [Int: Int]] = [:]
+        for entry in selected where entry.language >= 0 && entry.counts.authored > 0 {
+            let month = entry.day.monthStart
+            monthTotals[month, default: 0] += entry.counts.authored
+            if indices.contains(entry.language) {
+                languageTotals[month, default: [:]][entry.language, default: 0] +=
+                    entry.counts.authored
+            }
+        }
+        return zip(top, indices).map { language, index in
             CodeStatsSeries(
-                name: total.language,
+                name: language,
                 values: months.map { month in
-                    let counts = byMonth[month] ?? [:]
-                    let monthTotal = counts.values.reduce(0) { $0 + $1.authored }
+                    let total = monthTotals[month] ?? 0
                     let share =
-                        monthTotal == 0
-                        ? 0 : Double(counts[total.language]?.authored ?? 0) / Double(monthTotal)
+                        total == 0
+                        ? 0 : Double(languageTotals[month]?[index] ?? 0) / Double(total)
                     return CodeStatsSeriesValue(start: month.string, value: share)
                 })
         }
     }
 
-    private static func punchcard(_ selected: [Dated]) -> [[Int]] {
+    private static func punchcard(_ selected: [Entry]) -> [[Int]] {
         var grid = Array(repeating: Array(repeating: 0, count: 24), count: 7)
-        for entry in selected {
-            grid[entry.day.weekdayIndex][min(max(entry.commit.hour, 0), 23)] += 1
+        for entry in selected where entry.commits > 0 {
+            grid[entry.day.weekdayIndex][min(max(entry.hour, 0), 23)] += entry.commits
         }
         return grid
     }
