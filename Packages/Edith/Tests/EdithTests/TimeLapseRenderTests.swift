@@ -27,6 +27,7 @@ import Testing
             .init(id: 2, application: "Demo Browser", title: "Sample dashboard"),
         ]
         recorder.selectedWindows = [1, 2]
+        recorder.settings.systemAudio = true
         recorder.recording =
             state == "standard-recording" || state == "recording" || state == "waiting"
             || state == "dark" || state == "short"

@@ -238,7 +238,7 @@ struct TimeLapseControls: View {
             DisclosureGroup(isExpanded: $optionsExpanded) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     captureLayout {
-                        Toggle("System audio", isOn: $recorder.settings.systemAudio)
+                        Toggle(sourceAudioLabel, isOn: $recorder.settings.systemAudio)
                         Picker("Microphone", selection: $recorder.microphone) {
                             Text("None").tag("")
                             Text("System default").tag("default")
@@ -254,8 +254,8 @@ struct TimeLapseControls: View {
                     }
                     Text(
                         recorder.settings.mode == .standard
-                            ? "Audio stays synchronized and is included in your video. System audio includes apps across the desktop."
-                            : "Audio is sped up with your time-lapse and included in the video. System audio includes apps across the desktop."
+                            ? "Audio stays synchronized and is included in your video. \(audioScopeDescription)"
+                            : "Audio is sped up with your time-lapse and included in the video. \(audioScopeDescription)"
                     )
                     .font(.caption).foregroundStyle(.secondary)
                 }.padding(.top, UIScale.pt(10))
@@ -290,9 +290,21 @@ struct TimeLapseControls: View {
         return count == 0 ? "Choose \(noun)s" : "\(count) \(noun)\(count == 1 ? "" : "s")"
     }
 
+    private var sourceAudioLabel: String {
+        recorder.sourceMode == "windows" ? "Selected app audio" : "System audio"
+    }
+
+    private var audioScopeDescription: String {
+        recorder.sourceMode == "windows"
+            ? "Audio follows the selected apps, including their other windows."
+            : "System audio includes apps across the desktop."
+    }
+
     private var audioSummary: String {
-        if recorder.settings.systemAudio && !recorder.microphone.isEmpty { return "System + mic" }
-        if recorder.settings.systemAudio { return "System audio" }
+        if recorder.settings.systemAudio && !recorder.microphone.isEmpty {
+            return recorder.sourceMode == "windows" ? "App audio + mic" : "System + mic"
+        }
+        if recorder.settings.systemAudio { return sourceAudioLabel }
         return recorder.microphone.isEmpty ? "No audio" : "Microphone"
     }
 
