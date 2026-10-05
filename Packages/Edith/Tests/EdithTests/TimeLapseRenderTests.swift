@@ -72,8 +72,10 @@ import Testing
         #expect(png.count > 10000)
         if recorder.preview != nil {
             var colored = 0
+            var sampled = 0
             for y in stride(from: 0, to: bitmap.pixelsHigh, by: 16) {
                 for x in stride(from: 0, to: bitmap.pixelsWide, by: 16) {
+                    sampled += 1
                     if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                         color.blueComponent > 0.25,
                         color.blueComponent > color.redComponent * 1.5,
@@ -83,7 +85,7 @@ import Testing
                     }
                 }
             }
-            #expect(colored > 40)
+            #expect(Double(colored) / Double(sampled) > 0.005)
         }
         if let path = ProcessInfo.processInfo.environment["EDITH_TIMELAPSE_EVIDENCE_DIR"] {
             let directory = URL(fileURLWithPath: path)
