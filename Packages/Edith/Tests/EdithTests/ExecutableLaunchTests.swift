@@ -36,6 +36,24 @@ import Testing
             ) == .databaseBroker)
     }
 
+    @Test func sshAskingForAPasswordIsAnsweredEvenWhenTheCallerWasTheCLI() {
+        let environment = ["EDITH_CLI": "1", "EDITH_ASKPASS_ACCOUNT": "machine-account"]
+        #expect(ExecutableLaunch.destination(environment: environment) == .askpass)
+        #expect(!ExecutableLaunch.isApplication(environment: environment))
+        #expect(
+            ExecutableLaunch.destination(environment: ["EDITH_ASKPASS_ACCOUNT": "machine-account"])
+                == .askpass)
+    }
+
+    @Test func anEmptyAskpassAccountDoesNotChangeTheLaunch() {
+        #expect(
+            ExecutableLaunch.destination(environment: ["EDITH_ASKPASS_ACCOUNT": ""])
+                == .application)
+        #expect(
+            ExecutableLaunch.destination(
+                environment: ["EDITH_CLI": "1", "EDITH_ASKPASS_ACCOUNT": ""]) == .commandLine)
+    }
+
     @Test(arguments: ["", "0", "true", "yes"])
     func unrelatedValuesStartTheApplication(value: String) {
         for key in ["EDITH_DATABASE_BROKER", "EDITH_CLI"] {

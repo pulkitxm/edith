@@ -13,4 +13,6 @@ case .commandLine:
     await EdithCLIMain.run()
 case .databaseBroker:
     exit(1)
+case .askpass:
+    ExecutableLaunch.answerAskpass()
 }

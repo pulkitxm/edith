@@ -292,9 +292,7 @@ private final class LidAwakeDaemonRegistrar {
 public struct EdithApp: App {
     @NSApplicationDelegateAdaptor(MainAppDelegate.self) private var delegate
 
-    public init() {
-        _ = AskpassEntry.runIfRequested()
-    }
+    public init() {}
 
     public var body: some Scene {
         Settings {
