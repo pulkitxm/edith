@@ -176,7 +176,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                 configuration.captureMicrophone = settings.microphoneID != nil
                 configuration.microphoneCaptureDeviceID =
                     microphone == "default" ? nil : settings.microphoneID
-                configuration.excludesCurrentProcessAudio = true
+                configuration.excludesCurrentProcessAudio = sourceMode == "displays"
                 configuration.sampleRate = 48000
                 configuration.channelCount = 2
                 let output = TimeLapseCaptureOutput(writer: writer, index: -1)
