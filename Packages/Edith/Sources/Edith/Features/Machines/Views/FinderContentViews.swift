@@ -412,6 +412,7 @@ struct QuickLookOverlay: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.edith(.toolbar))
+            .keyboardShortcut(.cancelAction)
             .help("Close (space)")
             Spacer(minLength: 0)
             Text(entry?.name ?? "")
@@ -621,7 +622,7 @@ struct FinderInfoSheet: View {
             }
             .padding(UIScale.pt(14))
         }
-        .frame(width: UIScale.pt(420), height: UIScale.pt(360))
+        .frame(width: PresentationMetrics.width(420), height: PresentationMetrics.height(360))
         .background(DashSkin.paper(dark))
     }
 
@@ -688,7 +689,7 @@ struct FinderConflictSheet: View {
             }
         }
         .padding(UIScale.pt(20))
-        .frame(width: UIScale.pt(440), height: UIScale.pt(240))
+        .frame(width: PresentationMetrics.width(440), height: PresentationMetrics.height(240))
         .background(DashSkin.paper(dark))
     }
 

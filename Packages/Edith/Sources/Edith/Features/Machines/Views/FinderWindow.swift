@@ -91,10 +91,10 @@ struct FinderBody: View {
             .opacity(0.01)
         }
         .background(shortcuts)
-        .sheet(item: $model.infoTarget) { entry in
-            FinderInfoSheet(model: model, entry: entry).transientPresentation()
+        .edithSheet(item: $model.infoTarget) { entry in
+            FinderInfoSheet(model: model, entry: entry)
         }
-        .sheet(item: $model.pendingConflict) { conflict in
+        .edithSheet(item: $model.pendingConflict) { conflict in
             FinderConflictSheet(model: model, conflict: conflict)
         }
         .confirmationDialog(
@@ -234,12 +234,10 @@ struct FinderBody: View {
             }
             .buttonStyle(.edith(.toolbar))
 
-            Picker("", selection: viewModeBinding) {
-                ForEach(FileViewMode.allCases, id: \.self) { mode in
-                    Image(systemName: mode.symbol).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "", selection: viewModeBinding, options: FileViewMode.allCases,
+                label: { $0.title }
+            )
             .labelsHidden()
             .frame(width: UIScale.pt(90))
             .help("View as icons (⌘1) or list (⌘2)")

@@ -57,18 +57,16 @@ struct DockerContainerRowsSkeleton: View {
                     HStack(spacing: UIScale.pt(12)) {
                         SkeletonBlock(width: 8, height: 8, corner: 4)
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 124 : 168, height: 11)
-                            SkeletonBlock(width: index.isMultiple(of: 3) ? 184 : 224, height: 8)
+                            SkeletonBlock(height: 11)
+                                .frame(maxWidth: UIScale.pt(index.isMultiple(of: 2) ? 124 : 168))
+                            SkeletonBlock(height: 8)
+                                .frame(maxWidth: UIScale.pt(index.isMultiple(of: 3) ? 184 : 224))
                         }
-                        .frame(width: UIScale.pt(230), alignment: .leading)
-                        SkeletonBlock(width: 112, height: 9)
-                            .frame(width: UIScale.pt(150), alignment: .leading)
-                        SkeletonBlock(width: 92, height: 18, corner: 9)
-                            .frame(width: UIScale.pt(160), alignment: .leading)
-                        SkeletonBlock(width: 32, height: 9)
-                            .frame(width: UIScale.pt(54), alignment: .trailing)
-                        SkeletonBlock(width: 48, height: 9)
-                            .frame(width: UIScale.pt(70), alignment: .trailing)
+                        .frame(maxWidth: UIScale.pt(230), alignment: .leading)
+                        SkeletonBlock(height: 9).frame(maxWidth: UIScale.pt(112))
+                        SkeletonBlock(height: 18, corner: 9).frame(maxWidth: UIScale.pt(92))
+                        SkeletonBlock(height: 9).frame(maxWidth: UIScale.pt(32))
+                        SkeletonBlock(height: 9).frame(maxWidth: UIScale.pt(48))
                         Spacer(minLength: 0)
                         HStack(spacing: UIScale.pt(4)) {
                             SkeletonBlock(width: 20, height: 20, corner: 6)

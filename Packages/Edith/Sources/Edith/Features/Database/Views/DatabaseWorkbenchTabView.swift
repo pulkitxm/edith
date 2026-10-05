@@ -35,14 +35,13 @@ struct DatabaseWorkbenchTabView: View {
 
     private var toolbar: some View {
         HStack(spacing: UIScale.pt(10)) {
-            Picker(
+            EdithSegmentedPicker(
                 "Workspace mode",
                 selection: Binding(
-                    get: { mode }, set: { tab?.selectMode($0, connection: connection) })
-            ) {
-                ForEach(DatabaseWorkbenchMode.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().frame(width: UIScale.pt(208))
+                    get: { mode }, set: { tab?.selectMode($0, connection: connection) }),
+                options: DatabaseWorkbenchMode.allCases, label: { $0.title }
+            )
+            .labelsHidden().frame(width: UIScale.pt(208))
             .disabled(tab == nil || data.isLoading)
             if !compact {
                 Text(data.selectedObject?.path.joined(separator: ".") ?? "Select an object")
@@ -180,10 +179,13 @@ struct DatabaseWorkbenchTabView: View {
                         inspector.frame(width: UIScale.pt(300))
                     }
                 } else {
-                    VStack(spacing: 0) {
+                    VSplitView {
                         grid
-                        Divider()
-                        inspector.frame(maxHeight: UIScale.pt(compact ? 320 : 260))
+                            .frame(minHeight: min(UIScale.pt(160), geometry.size.height * 0.6))
+                        inspector.frame(
+                            minHeight: UIScale.pt(0),
+                            idealHeight: min(UIScale.pt(220), geometry.size.height * 0.4),
+                            maxHeight: geometry.size.height * 0.5)
                     }
                 }
             }

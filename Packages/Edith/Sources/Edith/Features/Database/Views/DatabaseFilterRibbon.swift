@@ -9,12 +9,10 @@ struct DatabaseFilterRibbon: View {
     let accent: Color
     let palette: DatabaseThemePalette
     let apply: () -> Void
-
     @State private var editorID: UUID?
     private var supportsRelatedFields: Bool {
         connection.product == .postgresql && data.resultMode == .browse
     }
-
     var body: some View {
         GeometryReader { proxy in
             Group {
@@ -53,14 +51,16 @@ struct DatabaseFilterRibbon: View {
     }
 
     private var condensedRail: some View {
-        HStack(spacing: UIScale.pt(7)) {
-            condensedFilterMenu
-            sortMenu
-            columnsMenu
-            clearControl
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: UIScale.pt(7)) {
+                condensedFilterMenu
+                sortMenu
+                columnsMenu
+                clearControl
+            }
+            .padding(.horizontal, UIScale.pt(10))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, UIScale.pt(10))
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

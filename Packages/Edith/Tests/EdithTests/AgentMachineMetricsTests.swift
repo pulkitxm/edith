@@ -159,6 +159,66 @@ import Testing
         #expect(roundtrip == snapshot)
     }
 
+    @Test func failedContainerSnapshotResolvesNavigationWithoutSuccessfulInventory() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        let listener = MachineMetricsTestListener(runtime: runtime)
+        defer { listener.stop() }
+        let session = MachineSession(
+            machine: .local, local: true, observesWakeRequests: false,
+            metricsClient: listener.client())
+        let token = UUID()
+        session.setForegroundObservation(token, active: true)
+        defer { session.setForegroundObservation(token, active: false) }
+        let channel = AgentMachineMetricInterest.metrics.channel(machineID: Machine.localID)
+        try await eventually { await runtime.busSubscriberCount(channel: channel) == 1 }
+
+        var snapshot = AgentMachineMetricsSnapshot(session: session)
+        snapshot.state = .connected(latencyMillis: nil)
+        snapshot.docker = DockerAvailability(
+            status: .available(serverVersion: "fixture", hasCompose: true))
+        await runtime.publishBus(
+            AgentBusMessage(channel: channel, body: try AgentPayload.encode(snapshot)), from: nil)
+        try await eventually { session.docker.isAvailable }
+        #expect(!session.containerInventoryReady)
+
+        snapshot.containersError = "Container listing failed"
+        await runtime.publishBus(
+            AgentBusMessage(channel: channel, body: try AgentPayload.encode(snapshot)), from: nil)
+        try await eventually { session.containersError != nil }
+        #expect(session.containerInventoryReady)
+        #expect(!session.containersLoaded)
+        #expect(session.containers.isEmpty)
+
+        snapshot.containersError = nil
+        snapshot.containersLoaded = true
+        await runtime.publishBus(
+            AgentBusMessage(channel: channel, body: try AgentPayload.encode(snapshot)), from: nil)
+        try await eventually { session.containersLoaded }
+        #expect(session.containersError == nil)
+        #expect(session.containerInventoryReady)
+    }
+
+    @Test func refusedContainerRefreshIsActionableWithoutSuccessfulInventory() async throws {
+        let runtime = AgentRuntime(build: "fixture", store: nil)
+        await runtime.register(operation: AgentMachineMetricsRefresh.operation) { payload in
+            let request = try AgentPayload.decode(AgentMachineMetricsRefresh.self, from: payload)
+            #expect(request.action == .docker)
+            throw AgentError(.failed, "Container listing failed")
+        }
+        let listener = MachineMetricsTestListener(runtime: runtime)
+        defer { listener.stop() }
+        let session = MachineSession(
+            machine: .local, local: true, observesWakeRequests: false,
+            metricsClient: listener.client())
+
+        session.refreshDockerNow()
+
+        try await eventually { session.containersError != nil }
+        #expect(session.containersError?.contains("Container listing failed") == true)
+        #expect(session.containerInventoryReady)
+        #expect(!session.containersLoaded)
+    }
+
     @Test func unrelatedBusTrafficDoesNotStartMachineSampling() async {
         let service = AgentMachineMetricsService(lookup: { _ in
             Issue.record("Unrelated events must not load machine configuration.")

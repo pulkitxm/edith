@@ -410,6 +410,36 @@ private actor HerdrWatchHarness {
             store.sessions.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
     }
 
+    @Test func completedEmptyInventoryResolvesNavigation() {
+        let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        #expect(!store.inventoryReady)
+
+        store.apply([])
+
+        #expect(store.inventoryReady)
+        #expect(store.hosts.isEmpty)
+        #expect(store.inventoryFailureMessage == nil)
+    }
+
+    @Test func failedHostInventoryResolvesNavigationAndKeepsItsFailure() {
+        let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        store.apply([
+            HerdrHostSnapshot(
+                id: "unreachable", name: "Build machine", isLocal: false,
+                sshTarget: "fixture.invalid", herdrPresent: false, reachable: false,
+                error: "Connection refused")
+        ])
+
+        #expect(store.inventoryReady)
+        #expect(store.agents.isEmpty)
+        #expect(store.inventoryFailureMessage == "Build machine: Connection refused")
+
+        store.apply([.local(herdrPresent: true)])
+
+        #expect(store.inventoryReady)
+        #expect(store.inventoryFailureMessage == nil)
+    }
+
     @Test func stoppedAndReplacedWatchersCannotPublish() async {
         let harness = HerdrWatchHarness()
         let store = HerdrStore { callback in await harness.watch(callback) }

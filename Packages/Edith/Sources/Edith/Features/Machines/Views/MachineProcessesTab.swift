@@ -72,11 +72,10 @@ struct MachineProcessesTab: View {
         HStack(spacing: UIScale.pt(10)) {
             SearchField(placeholder: "Filter processes", text: $query)
                 .frame(maxWidth: UIScale.pt(280))
-            Picker("", selection: $sortByMemory) {
-                Text("CPU").tag(false)
-                Text("Memory").tag(true)
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "", selection: $sortByMemory, options: [false, true],
+                label: { $0 ? "Memory" : "CPU" }
+            )
             .labelsHidden()
             .frame(width: UIScale.pt(160))
             Spacer(minLength: 0)

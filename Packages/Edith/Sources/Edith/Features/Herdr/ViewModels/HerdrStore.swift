@@ -147,6 +147,17 @@ final class HerdrStore {
     private var closedHistory: [HerdrClosedRecord] = []
     private let closedHistoryLimit = 10
     var refreshing = false
+    private(set) var inventoryReceived = false
+
+    var inventoryReady: Bool { inventoryReceived && !settling && !refreshing }
+
+    var inventoryFailureMessage: String? {
+        var failures: [String] = []
+        for host in hosts where host.herdrPresent || !host.reachable {
+            if let error = host.error { failures.append("\(host.name): \(error)") }
+        }
+        return failures.isEmpty ? nil : failures.joined(separator: "\n")
+    }
     var copiedID: String?
     var detailOpen = true {
         didSet {
@@ -600,6 +611,7 @@ final class HerdrStore {
     }
 
     private func apply(_ snapshots: [HerdrHostSnapshot], collapseSnapshotComplete: Bool) {
+        inventoryReceived = true
         if hosts != snapshots { hosts = snapshots }
         for index in sessions.indices {
             if let updated = agents.first(where: { $0.id == sessions[index].id }),

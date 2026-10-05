@@ -76,7 +76,7 @@ struct ExtensionUIAuditTests {
         try await Task.sleep(for: .milliseconds(100))
         host.layoutSubtreeIfNeeded()
         let text = try auditText(host)
-        #expect(text.contains("Connections"))
+        #expect(text.contains("Database"))
         #expect(text.contains("Add connection"))
         #expect(!text.contains("Database needs a quick repair"))
         try auditCapture(host, name: "database-ready")

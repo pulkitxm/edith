@@ -28,6 +28,7 @@ public struct AgentMachineMetricsSnapshot: Codable, Equatable, Sendable {
     public var slow: MachineSlow?
     public var docker: DockerAvailability
     public var containersLoaded: Bool
+    public var containersError: String?
     public var containers: [DockerContainer]
     public var images: [DockerImage]
     public var volumes: [DockerVolume]
@@ -49,6 +50,7 @@ public struct AgentMachineMetricsSnapshot: Codable, Equatable, Sendable {
         slow = session.slow
         docker = session.docker
         containersLoaded = session.containersLoaded
+        containersError = session.containersError
         containers = session.containers
         images = session.images
         volumes = session.volumes

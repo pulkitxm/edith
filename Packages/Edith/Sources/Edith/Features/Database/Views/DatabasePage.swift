@@ -56,13 +56,24 @@ struct DatabasePage: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            PageHeader("Database")
-            Divider().opacity(0.35)
+            if model.readiness != .ready {
+                PageHeader("Database")
+                Divider().opacity(0.35)
+            }
             pageContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.canvas)
-        .navigationRoute("connection", selection: connectionBinding, isValid: connectionIsValid)
+        .navigationRoute(
+            "connection", selection: connectionBinding, isValid: connectionIsValid,
+            isReady: {
+                if model.failureDetail != nil { return true }
+                switch connectionWorkspace.listState {
+                case .idle, .loading: return false
+                default: return true
+                }
+            }()
+        )
         .environment(\.databaseAppTheme, palette.theme)
         .task {
             guard automaticActionsEnabled else { return }
@@ -214,7 +225,7 @@ struct DatabasePage: View {
             let connection = connectionWorkspace.selectedConnection,
             connection.id == focusedConnectionID
         {
-            focusedContent(connection)
+            focusedWorkspace(connection)
         } else {
             connectionCatalog
         }
@@ -233,22 +244,6 @@ struct DatabasePage: View {
             },
             busyConnectionID: connectionManagement.activeConnectionID,
             performConnectionAction: performConnectionAction)
-    }
-
-    @ViewBuilder
-    private func focusedContent(_ connection: DatabaseConnectionSummary) -> some View {
-        if compact {
-            focusedWorkspace(connection)
-                .environment(\.compactLayout, true)
-        } else {
-            ViewThatFits(in: .horizontal) {
-                focusedWorkspace(connection)
-                    .environment(\.compactLayout, false)
-                    .frame(minWidth: UIScale.pt(680))
-                focusedWorkspace(connection)
-                    .environment(\.compactLayout, true)
-            }
-        }
     }
 
     private func focusedWorkspace(_ connection: DatabaseConnectionSummary) -> some View {

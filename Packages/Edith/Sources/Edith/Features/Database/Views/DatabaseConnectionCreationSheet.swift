@@ -37,12 +37,10 @@ struct DatabaseConnectionCreationSheet: View {
             Divider().opacity(0.35)
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(22)) {
-                    Picker("Connection setup", selection: $entryMode) {
-                        ForEach(DatabaseConnectionEntryMode.allCases, id: \.self) { mode in
-                            Text(mode.title).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    EdithSegmentedPicker(
+                        "Connection setup", selection: $entryMode,
+                        options: DatabaseConnectionEntryMode.allCases, label: { $0.title }
+                    )
                     .labelsHidden()
                     .frame(maxWidth: UIScale.pt(360))
 
@@ -72,7 +70,7 @@ struct DatabaseConnectionCreationSheet: View {
         )
         .background(palette.canvas)
         .presenterCover(.database)
-        .interactiveDismissDisabled(isWorking)
+        .transientPresentation(dismissible: false)
         .onDisappear {
             submissionTask?.cancel()
             submissionTask = nil
@@ -97,6 +95,7 @@ struct DatabaseConnectionCreationSheet: View {
             Spacer(minLength: 0)
             Button("Cancel", action: cancelSubmissionAndDismiss)
                 .buttonStyle(.edith(.borderless))
+                .keyboardShortcut(.cancelAction)
                 .disabled(isWorking)
         }
         .padding(.horizontal, UIScale.pt(22))
@@ -189,12 +188,10 @@ struct DatabaseConnectionCreationSheet: View {
             detail:
                 "Development connections allow changes after a review. Production starts locked."
         ) {
-            Picker("Environment", selection: environmentBinding) {
-                ForEach(DatabaseEnvironmentKind.allCases, id: \.self) { environment in
-                    Text(environment.title).tag(environment)
-                }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "Environment", selection: environmentBinding,
+                options: DatabaseEnvironmentKind.allCases, label: { $0.title }
+            )
             .labelsHidden()
 
             if model.environmentKind == .production {

@@ -83,11 +83,12 @@ struct DatabasePackInstallSheet: View {
                 Button(model.finished || model.failure != nil ? "Done" : "Cancel") {
                     dismiss()
                 }
-                .keyboardShortcut(.defaultAction)
+                .keyboardShortcut(.cancelAction)
             }
         }
         .padding(UIScale.pt(20))
-        .frame(width: UIScale.pt(420))
+        .frame(width: PresentationMetrics.width(420))
+        .transientPresentation(dismissible: model.finished || model.failure != nil)
         .task { await model.run() }
     }
 }

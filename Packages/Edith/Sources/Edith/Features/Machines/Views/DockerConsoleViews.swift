@@ -43,7 +43,24 @@ struct DockerContainerList: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                if !session.containersLoaded {
+                if let error = session.containersError ?? session.state.failureMessage {
+                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                        Text("Unable to refresh containers")
+                            .font(.system(size: UIScale.pt(13), weight: .semibold))
+                        Text(error)
+                            .font(.system(size: UIScale.pt(12)))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                        Button("Retry") {
+                            if session.state.failureMessage != nil {
+                                session.retry()
+                            } else {
+                                session.refreshDockerNow()
+                            }
+                        }
+                        .buttonStyle(.edith(.secondary))
+                    }
+                    .padding(UIScale.pt(20))
+                } else if !session.containersLoaded {
                     DockerContainerRowsSkeleton()
                 } else if filtered.isEmpty {
                     Text("No containers.")

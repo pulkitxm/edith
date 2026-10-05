@@ -523,12 +523,19 @@ struct DockerContainerDetail: View {
     }
 
     private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            tabBarContent
+        }
+    }
+
+    private var tabBarContent: some View {
         HStack(spacing: UIScale.pt(4)) {
             ForEach(DockerDetailTab.allCases) { item in
                 Button {
                     tab = item
                 } label: {
                     Text(item.title)
+                        .lineLimit(1)
                         .font(.system(size: UIScale.pt(12), weight: .medium))
                         .padding(.horizontal, UIScale.pt(11))
                         .padding(.vertical, UIScale.pt(5))

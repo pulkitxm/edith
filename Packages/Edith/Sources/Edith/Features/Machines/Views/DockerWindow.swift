@@ -137,7 +137,6 @@ struct DockerConsoleView: View {
     let session: MachineSession
     @Environment(\.machineViewPresented) private var presented
     @Environment(\.colorScheme) private var scheme
-    @State private var router = WindowRouter()
     @State private var screen = DockerScreen.containers
     @State private var query = ""
     @State private var selected: DockerContainer?
@@ -167,11 +166,14 @@ struct DockerConsoleView: View {
     }
 
     var body: some View {
-        NavigationRouteHost(router: router) {
+        if presented {
             console.navigationRoute(
-                "container", selection: containerBinding, isValid: containerIsValid
+                "container", selection: containerBinding, isValid: containerIsValid,
+                isReady: session.containerInventoryReady
             )
             .navigationRoute("screen", selection: $screen)
+        } else {
+            console
         }
     }
 
@@ -190,7 +192,7 @@ struct DockerConsoleView: View {
             }
         }
         .background(DashSkin.paper(dark))
-        .sheet(item: $terminalFor) { container in
+        .edithSheet(item: $terminalFor, dismissible: false, dismissOnEscape: false) { container in
             ContainerTerminalSheet(session: session, container: container)
         }
         .confirmationDialog(
@@ -519,6 +521,7 @@ struct DockerUnavailableView: View {
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
+    private var failure: String? { session.state.failureMessage ?? session.containersError }
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
@@ -533,11 +536,18 @@ struct DockerUnavailableView: View {
                 .foregroundStyle(DashSkin.inkFaint(dark))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: UIScale.pt(420))
+            if failure != nil || session.docker.status != .unknown {
+                Button("Retry") { session.retry() }
+                    .buttonStyle(.edith(.secondary))
+            } else {
+                DockerContainerRowsSkeleton()
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var title: String {
+        if failure != nil { return "Unable to load Docker" }
         switch session.docker.status {
         case .missing: return "Docker is not installed on this machine."
         case .permissionDenied: return "This user cannot reach the Docker socket."
@@ -547,6 +557,7 @@ struct DockerUnavailableView: View {
     }
 
     private var detail: String {
+        if let failure { return failure }
         switch session.docker.status {
         case .missing: return "Install Docker Engine there and this screen fills in."
         case .permissionDenied:
@@ -583,8 +594,11 @@ enum DockerWindow {
         window.contentMinSize = NSSize(width: 720, height: 460)
         window.tabbingMode = .automatic
         window.tabbingIdentifier = "EdithDocker"
+        let router = WindowRouter()
         let hosting = NSHostingController(
-            rootView: ZoomableRoot { DockerConsoleView(session: session) })
+            rootView: ZoomableRoot {
+                NavigationRouteHost(router: router) { DockerConsoleView(session: session) }
+            })
         hosting.sizingOptions = []
         window.contentViewController = hosting
         window.setContentSize(NSSize(width: 1020, height: 660))

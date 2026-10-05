@@ -80,7 +80,7 @@ struct DatabaseSafetyReviewSheet: View {
         )
         .background(palette.canvas)
         .presenterCover(.database)
-        .interactiveDismissDisabled(activePhase.blocksInteractiveDismissal)
+        .transientPresentation(dismissible: !activePhase.blocksInteractiveDismissal)
         .onAppear {
             announce("Destructive database operation requires review.")
         }

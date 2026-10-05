@@ -48,8 +48,7 @@ struct DatabaseConnectionGallery: View {
             Divider().opacity(0.35)
             ScrollView {
                 content
-                    .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
-                    .padding(.vertical, UIScale.pt(compact ? 18 : 24))
+                    .pageContent(compact)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -59,12 +58,8 @@ struct DatabaseConnectionGallery: View {
     }
 
     private var catalogHeader: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+        PageHeader("Database") {
             HStack(alignment: .center, spacing: UIScale.pt(12)) {
-                Text("Connections")
-                    .font(.system(size: UIScale.pt(compact ? 17 : 20), weight: .semibold))
-                    .foregroundStyle(palette.ink)
-                Spacer(minLength: 0)
                 Button(action: reload) {
                     Image(systemName: "arrow.clockwise")
                 }
@@ -82,6 +77,7 @@ struct DatabaseConnectionGallery: View {
                 .buttonStyle(.edith(.primary, tint: palette.accent))
                 .accessibilityLabel("Add a database connection")
             }
+        } accessory: {
             EdithTextField(
                 placeholder: "Search saved connections",
                 text: $model.searchText,
@@ -93,8 +89,6 @@ struct DatabaseConnectionGallery: View {
             .frame(maxWidth: UIScale.pt(560))
             .accessibilityLabel("Search saved database connections")
         }
-        .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
-        .padding(.vertical, UIScale.pt(compact ? 14 : 18))
         .background(palette.panel.opacity(0.64))
     }
 
@@ -653,27 +647,11 @@ struct DatabaseFocusedConnectionHeader: View {
     }
 
     var body: some View {
-        Group {
-            if compact {
-                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                    navigationRow
-                    identityRow
-                }
-            } else {
-                HStack(spacing: UIScale.pt(16)) {
-                    navigationButton
-                    Divider().frame(height: UIScale.pt(32))
-                    identityRow
-                    Spacer(minLength: 0)
-                    if performConnectionAction != nil {
-                        connectionActionSlot
-                    }
-                    sessionLabel
-                }
-            }
+        PageHeader {
+            identityRow
+        } trailing: {
+            navigationRow
         }
-        .padding(.horizontal, UIScale.pt(compact ? 12 : 18))
-        .padding(.vertical, UIScale.pt(compact ? 10 : 12))
         .background(palette.panel.opacity(0.78))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Database workspace for \(connection.name)")
@@ -682,7 +660,6 @@ struct DatabaseFocusedConnectionHeader: View {
     private var navigationRow: some View {
         HStack(spacing: UIScale.pt(10)) {
             navigationButton
-            Spacer(minLength: 0)
             if performConnectionAction != nil {
                 connectionActionSlot
             }
@@ -754,9 +731,8 @@ struct DatabaseFocusedConnectionHeader: View {
             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                 HStack(spacing: UIScale.pt(7)) {
                     Text(connection.name)
-                        .font(.system(size: UIScale.pt(13.5), weight: .semibold))
                         .foregroundStyle(palette.ink)
-                        .lineLimit(1)
+                        .lineLimit(2)
                     if connection.isFavorite {
                         Image(systemName: "star.fill")
                             .font(.system(size: UIScale.pt(8.5)))

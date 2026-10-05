@@ -17,7 +17,7 @@ struct HerdrLaunchSettingsSheet: View {
                 }
             }
         }
-        .frame(width: UIScale.pt(580), height: UIScale.pt(560))
+        .frame(width: PresentationMetrics.width(580), height: PresentationMetrics.height(560))
     }
 
     private var header: some View {

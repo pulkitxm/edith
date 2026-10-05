@@ -48,7 +48,8 @@ struct HerdrNewAgentPopup: View {
             resultsList
                 .disabled(model.launching)
         }
-        .frame(width: UIScale.pt(440), height: UIScale.pt(380))
+        .frame(width: PresentationMetrics.width(440), height: PresentationMetrics.height(380))
+        .transientPresentation(dismissible: !model.launching)
         .onAppear { fieldFocused = true }
         .onChange(of: model.step) { _, step in
             selectionIndex = 0
@@ -63,6 +64,16 @@ struct HerdrNewAgentPopup: View {
 
     private var header: some View {
         HStack(spacing: UIScale.pt(8)) {
+            if model.space == nil, model.step != .kind {
+                Button {
+                    _ = model.back()
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .disabled(model.launching)
+                .accessibilityLabel("Previous step")
+            }
             if let space = model.space {
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text("New agent in \(space.title)")
@@ -82,6 +93,15 @@ struct HerdrNewAgentPopup: View {
                     .foregroundStyle(.secondary)
             }
             if model.space == nil { layoutChoiceMenu }
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .keyboardShortcut(.cancelAction)
+            .disabled(model.launching)
+            .accessibilityLabel("Close new agent")
         }
         .padding(UIScale.pt(14))
     }
@@ -134,10 +154,6 @@ struct HerdrNewAgentPopup: View {
             .padding(UIScale.pt(12))
             .onKeyPress(keys: [.upArrow, .downArrow]) { press in
                 move(press.key == .upArrow ? -1 : 1)
-                return .handled
-            }
-            .onKeyPress(.escape) {
-                if !model.back() { dismiss() }
                 return .handled
             }
             .onKeyPress(keys: [.return, .tab]) { _ in

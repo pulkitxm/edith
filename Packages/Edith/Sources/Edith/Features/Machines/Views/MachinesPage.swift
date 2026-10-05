@@ -38,12 +38,12 @@ struct MachinesPage: View {
         .background(DashSkin.paper(dark))
         .navigationRoute("place", selection: placeBinding, isValid: placeIsValid)
         .navigationTitle("Machines")
-        .sheet(isPresented: $addSheetPresented) {
+        .edithSheet(isPresented: $addSheetPresented, dismissible: false) {
             AddMachineSheet { machine, secrets in
                 model.add(machine, secrets: changes(secrets))
             }
         }
-        .sheet(item: $editingMachine) { machine in
+        .edithSheet(item: $editingMachine, dismissible: false) { machine in
             AddMachineSheet(editing: machine) { updated, secrets in
                 model.update(updated, secrets: changes(secrets))
             }

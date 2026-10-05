@@ -213,7 +213,10 @@ struct WorkspaceView: View {
             }
         }
         .background(DashSkin.paper(dark))
-        .navigationRoute("focus", selection: focusBinding, isValid: focusIsValid)
+        .navigationRoute(
+            "focus", selection: focusBinding, isValid: focusIsValid,
+            isReady: { await model.awaitInitialLoad() }
+        )
         .alert("Rename Workspace", isPresented: renameBinding) {
             TextField("Workspace name", text: $renameText)
             Button("Cancel", role: .cancel) { renameTarget = nil }
@@ -382,6 +385,7 @@ struct WorkspaceNodeView: View {
         switch node {
         case let .pane(pane):
             WorkspacePaneView(pane: pane, model: model, machines: machines, dark: dark)
+                .environment(\.compactLayout, size.width < UIScale.pt(640))
                 .frame(width: size.width, height: size.height)
         case let .split(split):
             splitBody(split)

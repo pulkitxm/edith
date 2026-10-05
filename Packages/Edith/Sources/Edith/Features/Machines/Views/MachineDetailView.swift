@@ -30,47 +30,56 @@ struct MachineDetailView: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            let items = MachineTab.tabs(
-                isLocal: session.isLocal, hasDocker: session.docker.isInstalled)
-            ForEach(items) { item in
-                Button {
-                    if NSEvent.modifierFlags.contains(.command) {
-                        detach(item)
-                    } else {
-                        tab = item
-                    }
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: UIScale.pt(11), weight: .medium))
-                        Text(item.title)
-                            .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                    }
-                    .padding(.horizontal, UIScale.pt(11))
-                    .padding(.vertical, UIScale.pt(6))
-                    .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-                    .background(
-                        tab == item ? DashSkin.paper2(dark) : .clear,
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    )
-                    .overlay {
-                        if tab == item {
-                            RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                .strokeBorder(DashSkin.line(dark))
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UIScale.pt(4)) {
+                    let items = MachineTab.tabs(
+                        isLocal: session.isLocal, hasDocker: session.docker.isInstalled)
+                    ForEach(items) { item in
+                        Button {
+                            if NSEvent.modifierFlags.contains(.command) {
+                                detach(item)
+                            } else {
+                                tab = item
+                            }
+                        } label: {
+                            HStack(spacing: UIScale.pt(6)) {
+                                Image(systemName: item.icon)
+                                    .font(.system(size: UIScale.pt(11), weight: .medium))
+                                Text(item.title)
+                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .lineLimit(1)
+                            }
+                            .padding(.horizontal, UIScale.pt(11))
+                            .padding(.vertical, UIScale.pt(6))
+                            .foregroundStyle(
+                                tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark)
+                            )
+                            .background(
+                                tab == item ? DashSkin.paper2(dark) : .clear,
+                                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                            )
+                            .overlay {
+                                if tab == item {
+                                    RoundedRectangle(cornerRadius: UIScale.pt(8))
+                                        .strokeBorder(DashSkin.line(dark))
+                                }
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.edith(.borderless))
+                        .help("\(item.title) (⌘-click to open it in its own window)")
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.edith(.borderless))
-                .help("\(item.title) (⌘-click to open it in its own window)")
             }
-            Spacer(minLength: 0)
-            ConnectionPill(session: session, dark: dark)
-            MachineControlCenterButton(session: session, dark: dark)
-                .id(session.id)
-            if !session.isLocal {
-                MachinePowerControls(session: session, model: model, dark: dark)
+            HStack(spacing: UIScale.pt(8)) {
+                Spacer(minLength: 0)
+                ConnectionPill(session: session, dark: dark)
+                MachineControlCenterButton(session: session, dark: dark)
+                    .id(session.id)
+                if !session.isLocal {
+                    MachinePowerControls(session: session, model: model, dark: dark)
+                }
             }
         }
         .padding(.horizontal, PageMetrics.gutter(compact))
@@ -166,26 +175,29 @@ struct MachineWindowView: View {
     var body: some View {
         let session = model.session(for: machineID)
         NavigationRouteHost(router: router) {
-            VStack(spacing: UIScale.pt(0)) {
-                PageHeader(
-                    session.machine.name,
-                    trailing: {
-                        Text(model.isLocal(machineID) ? "Local" : session.machine.subtitle)
-                            .font(DashSkin.mono(11))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .presenterBlur(.fleet)
-                    }
-                )
-                .presenterBlur(.fleet)
-                MachineDetailView(session: session, model: model, tab: $tab)
-                    .presenterCover(.fleet)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DashSkin.paper(dark))
-            .navigationRoute("machine", selection: .constant(machineID.uuidString))
-            .navigationRoute("section", selection: .constant(MainDestination.machines.rawValue))
-            .onAppear {
-                if case .disconnected = session.state { session.start() }
+            GeometryReader { geometry in
+                VStack(spacing: UIScale.pt(0)) {
+                    PageHeader(
+                        session.machine.name,
+                        trailing: {
+                            Text(model.isLocal(machineID) ? "Local" : session.machine.subtitle)
+                                .font(DashSkin.mono(11))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .presenterBlur(.fleet)
+                        }
+                    )
+                    .presenterBlur(.fleet)
+                    MachineDetailView(session: session, model: model, tab: $tab)
+                        .presenterCover(.fleet)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(DashSkin.paper(dark))
+                .navigationRoute("machine", selection: .constant(machineID.uuidString))
+                .navigationRoute("section", selection: .constant(MainDestination.machines.rawValue))
+                .onAppear {
+                    if case .disconnected = session.state { session.start() }
+                }
+                .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
             }
         }
     }
