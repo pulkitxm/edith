@@ -264,6 +264,7 @@ import Testing
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
             ("studio", "StudioRows", "enabled", "ExtensionsPane.swift"),
+            ("timeLapse", "TimeLapseRows", "enabled", "ExtensionsPane.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),
             ("virtualCamera", "VirtualCameraRows", "enabled", "ExtensionsPane.swift"),

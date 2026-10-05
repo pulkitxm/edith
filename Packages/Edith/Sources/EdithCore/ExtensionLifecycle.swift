@@ -792,6 +792,39 @@ public enum ExtensionLifecycleCatalog {
                     "Confirm Studio is enabled in the Media suite.", "ed extensions list --json")
             ]),
         descriptor(
+            "timeLapse",
+            "Record screens at normal speed or as a time-lapse with native HEVC encoding.",
+            workflows: [
+                instruction(
+                    "capture", "Record your screen",
+                    "Select displays or windows, Standard or Time-lapse mode, and optional audio in Screen Recorder."
+                ),
+                instruction(
+                    "export", "Export a saved session",
+                    "Choose compact HEVC, high quality, original capture, or ProRes after recording."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "permission", "Allow Screen Recording",
+                    "Use macOS 15 or later and grant Screen Recording access.",
+                    "ed permissions request screenRecording")
+            ],
+            examples: ["ed extensions enable timeLapse", "ed extensions doctor timeLapse --json"],
+            docs: [documentation("guide", "Screen recording guide", "docs/time-lapse.md")],
+            recovery: [
+                instruction(
+                    "recover", "Export completed segments",
+                    "Interrupted recordings stay in the library with their completed segments.",
+                    "ed extensions doctor timeLapse --json")
+            ],
+            verification: [
+                instruction(
+                    "status", "Verify Screen Recorder readiness",
+                    "Confirm the extension and Screen Recording permission are ready.",
+                    "ed extensions doctor timeLapse --json")
+            ]),
+        descriptor(
             "music", "Play and organize a local music library with system media controls.",
             workflows: [
                 instruction(

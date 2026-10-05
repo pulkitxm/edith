@@ -32,6 +32,7 @@ public enum PlatformCapability: String, CaseIterable, Codable, Hashable, Sendabl
     case runningApplications
     case screenColorSampling
     case screenShareDetection
+    case screenTimeLapse
     case skillInstallation
     case siteAuditing
     case systemMetrics
@@ -110,6 +111,9 @@ public struct PlatformCapabilities: Equatable, Sendable {
                     .notifications: .permissionRequired,
                     .screenColorSampling: .permissionRequired,
                     .screenShareDetection: .permissionRequired,
+                    .screenTimeLapse: version.majorVersion >= 15
+                        ? .permissionRequired
+                        : .unsupported("Screen recording requires macOS 15 or later."),
                     .virtualCamera: .permissionRequired,
                     .windowDimming: .permissionRequired,
                 ]))

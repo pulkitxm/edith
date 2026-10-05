@@ -1089,6 +1089,7 @@ struct ExtensionDetailRows: View {
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
             case .studio: StudioRows()
+            case .timeLapse: TimeLapseRows()
             case .music:
                 MusicRows()
                 MusicBarRows()
@@ -1193,6 +1194,23 @@ private struct StudioRows: View {
             .settingsCaption()
             StudioDestinationPicker()
             Button("Open Studio") { SectionWindow.open(.studio) }
+        }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.5)
+    }
+}
+
+private struct TimeLapseRows: View {
+    @AppStorage(AppStorageKeys.Tabs.timeLapseEnabled, store: SharedDefaults.store) private
+        var enabled = false
+
+    var body: some View {
+        Section("Recorder") {
+            Button("Open Screen Recorder") { SectionWindow.open(.timeLapse) }
+            Text(
+                "Record displays or selected windows at normal speed, or choose Time-lapse. Choose export quality after stopping."
+            )
+            .settingsCaption()
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)

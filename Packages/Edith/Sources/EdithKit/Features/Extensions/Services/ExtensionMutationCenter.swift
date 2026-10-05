@@ -90,6 +90,7 @@ public enum ExtensionDetailRoute: String, CaseIterable, Sendable {
     case micMute
     case lidAwake
     case studio
+    case timeLapse
     case music
     case downloads
     case calendar

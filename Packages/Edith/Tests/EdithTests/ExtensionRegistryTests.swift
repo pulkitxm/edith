@@ -31,6 +31,7 @@ import Testing
         "presenterEnabled",
         "tabMusicEnabled",
         "tabStudioEnabled",
+        "tabTimeLapseEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
         "notchAudioMixerEnabled",
@@ -55,7 +56,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "studio", "music", "downloads", "notchShelf", "audioMixer",
+                "studio", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
                 "calendar", "virtualCamera",
                 "database", "attention", "seoAudit", "codeStats",
             ])
@@ -306,7 +307,7 @@ import Testing
         #expect(titleMatches.map(\.id) == ["audioMixer"])
         #expect(subtitleMatches.map(\.id) == ["calendar"])
         #expect(categoryMatches.allSatisfy { $0.suite == .desk })
-        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter"])
+        #expect(combinedMatches.map(\.id) == ["keystrokeHighlight", "presenter", "timeLapse"])
         #expect(attentionMatches.map(\.id) == ["attention"])
     }
 
@@ -360,6 +361,7 @@ import Testing
             "windowSweaters": [],
             "presenter": [.screenRecording],
             "studio": [],
+            "timeLapse": [.screenRecording],
             "music": [],
             "downloads": [],
             "notchShelf": [],
@@ -395,6 +397,7 @@ import Testing
             "windowSweaters": [.accessibility],
             "presenter": [],
             "studio": [],
+            "timeLapse": [],
             "music": [],
             "downloads": [],
             "notchShelf": [.bluetooth, .camera, .automation],
