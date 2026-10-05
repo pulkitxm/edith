@@ -41,15 +41,13 @@ struct TimeLapseControls: View {
         recorder: TimeLapseRecorder? = nil, recordings: [TimeLapseRecording] = [],
         loadsSources: Bool = true, enabled: Bool? = nil
     ) {
-        _recorder = State(initialValue: recorder ?? TimeLapseRecorder.shared)
-        _libraryModel = State(
-            initialValue: loadsSources
-                ? (recorder ?? TimeLapseRecorder.shared).library
-                : TimeLapseLibraryModel(recordings: recordings))
-        _selected = State(initialValue: recordings.first?.id)
-        _libraryExpanded = State(
-            initialValue: !recordings.isEmpty && recorder?.preview != nil
-                && recorder?.recording == false)
+        let recorder = recorder ?? TimeLapseRecorder.shared
+        let library =
+            loadsSources ? recorder.library : TimeLapseLibraryModel(recordings: recordings)
+        _recorder = State(initialValue: recorder)
+        _libraryModel = State(initialValue: library)
+        _selected = State(initialValue: library.recordings.first?.id)
+        _libraryExpanded = State(initialValue: !library.recordings.isEmpty)
         self.loadsSources = loadsSources
         enabledOverride = enabled
     }
@@ -126,6 +124,7 @@ struct TimeLapseControls: View {
             guard !Task.isCancelled else { return }
             if selected == nil || !recordings.contains(where: { $0.id == selected }) {
                 selected = recordings.first?.id
+                libraryExpanded = !recordings.isEmpty
             }
         }
         .pageRefresh(active: recorder.recording, interval: { .seconds(1) }) {
@@ -158,7 +157,9 @@ struct TimeLapseControls: View {
             recorder.recording
             ? UIScale.pt(narrow ? 120 : 60)
             : UIScale.pt(narrow ? 290 : 200)
-        let library = libraryExpanded ? UIScale.pt(160) : UIScale.pt(32)
+        let library =
+            libraryExpanded
+            ? UIScale.pt(120 + Double(min(recordings.count, 3)) * 68) : UIScale.pt(32)
         let options = optionsExpanded && !recorder.recording ? UIScale.pt(narrow ? 240 : 150) : 0
         let reserved = padding * 2 + UIScale.pt(160) + controls + library + options
         return max(UIScale.pt(120), min(width * ratio, size.height - reserved))
@@ -266,7 +267,7 @@ struct TimeLapseControls: View {
             DisclosureGroup(isExpanded: $optionsExpanded) {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     captureLayout {
-                        Toggle("System audio", isOn: $recorder.settings.systemAudio)
+                        Toggle(sourceAudioLabel, isOn: $recorder.settings.systemAudio)
                         Picker("Microphone", selection: $recorder.microphone) {
                             Text("None").tag("")
                             Text("System default").tag("default")
@@ -282,8 +283,8 @@ struct TimeLapseControls: View {
                     }
                     Text(
                         recorder.settings.mode == .standard
-                            ? "Audio stays synchronized and is included in your video. System audio includes apps across the desktop."
-                            : "Audio is sped up with your time-lapse and included in the video. System audio includes apps across the desktop."
+                            ? "Audio stays synchronized and is included in your video. \(audioScopeDescription)"
+                            : "Audio is sped up with your time-lapse and included in the video. \(audioScopeDescription)"
                     )
                     .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }.padding(.top, UIScale.pt(10))
@@ -319,9 +320,21 @@ struct TimeLapseControls: View {
     }
 
     private var audioSummary: String {
-        if recorder.settings.systemAudio && !recorder.microphone.isEmpty { return "System + mic" }
-        if recorder.settings.systemAudio { return "System audio" }
+        if recorder.settings.systemAudio && !recorder.microphone.isEmpty {
+            return recorder.sourceMode == "windows" ? "App audio + mic" : "System + mic"
+        }
+        if recorder.settings.systemAudio { return sourceAudioLabel }
         return recorder.microphone.isEmpty ? "No audio" : "Microphone"
+    }
+
+    private var sourceAudioLabel: String {
+        recorder.sourceMode == "windows" ? "Selected app audio" : "System audio"
+    }
+
+    private var audioScopeDescription: String {
+        recorder.sourceMode == "windows"
+            ? "Audio follows the selected apps, including their other windows."
+            : "System audio includes apps across the desktop."
     }
 
     private var recordingSummary: String {
@@ -384,30 +397,30 @@ struct TimeLapseControls: View {
                     if recordings.isEmpty {
                         Text("Your recordings will appear here.").foregroundStyle(.secondary)
                     } else {
-                        Picker("Recording", selection: $selected) {
-                            Text("Choose a recording").tag(UUID?.none)
+                        LazyVStack(spacing: UIScale.pt(8)) {
                             ForEach(recordings) { recording in
-                                Text(
-                                    "\(recording.session.settings.mode.rawValue) · \(recording.session.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration(recording.session.playbackSeconds))\(recording.session.endedAt == nil ? " · interrupted" : "")"
-                                )
-                                .tag(Optional(recording.id))
+                                TimeLapseRecordingRow(
+                                    recording: recording,
+                                    duration: duration(recording.session.playbackSeconds),
+                                    selected: selected == recording.id,
+                                    action: { selected = recording.id })
                             }
                         }
                         if let recording = recordings.first(where: { $0.id == selected }) {
-                            Picker("Export quality", selection: $quality) {
-                                ForEach(TimeLapseExportQuality.allCases) { quality in
-                                    Text(quality.rawValue).tag(quality)
+                            captureLayout {
+                                Picker("Export quality", selection: $quality) {
+                                    ForEach(TimeLapseExportQuality.allCases) { quality in
+                                        Text(quality.rawValue).tag(quality)
+                                    }
                                 }
-                            }
-                            if let failure = recording.session.failure {
-                                Text(failure).font(.edithText(.callout)).foregroundStyle(.orange)
-                            }
-                            HStack {
                                 Button(exporting ? "Exporting…" : "Export video…") {
                                     export(recording)
                                 }
+                                .buttonStyle(.edith(.primary))
                                 .disabled(exporting || recording.session.frames == 0)
-
+                            }
+                            if let failure = recording.session.failure {
+                                Text(failure).font(.edithText(.callout)).foregroundStyle(.orange)
                             }
                         }
                     }

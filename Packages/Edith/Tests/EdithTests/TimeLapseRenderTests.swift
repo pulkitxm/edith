@@ -82,6 +82,7 @@ import Testing
             .init(id: 2, application: "Demo Browser", title: "Sample dashboard"),
         ]
         recorder.selectedWindows = [1, 2]
+        recorder.settings.systemAudio = true
         recorder.recording =
             state == "standard-recording" || state == "recording" || state == "waiting"
             || state == "dark" || state == "short"
@@ -106,12 +107,29 @@ import Testing
             session: session,
             directory: FileManager.default.temporaryDirectory.appendingPathComponent(
                 "demo-recording"))
+        var libraryFixtures = [recording]
+        for index in 1..<3 {
+            var settings = recorder.settings
+            settings.mode = index == 1 ? .timeLapse : .standard
+            var saved = TimeLapseSession(settings: settings, width: 3840, height: 2160)
+            saved.segments = [
+                .init(
+                    file: "video-000000.mov", kind: "video", frames: 900,
+                    startedAt: saved.startedAt, duration: Double(index * 15))
+            ]
+            saved.endedAt = index == 1 ? saved.startedAt : nil
+            libraryFixtures.append(
+                .init(
+                    session: saved,
+                    directory: FileManager.default.temporaryDirectory.appendingPathComponent(
+                        "demo-recording-\(index)")))
+        }
         let height: Double =
             state == "finished" ? 1100 : (state == "short" ? 560 : (width > 1200 ? 1250 : 850))
         let host = NSHostingView(
             rootView: TimeLapseControls(
                 recorder: recorder,
-                recordings: [recording], loadsSources: false, enabled: true
+                recordings: libraryFixtures, loadsSources: false, enabled: true
             ).environment(\.colorScheme, state.hasSuffix("dark") ? .dark : .light)
                 .environment(\.compactLayout, width < 640)
                 .frame(width: width, height: height)
@@ -135,20 +153,19 @@ import Testing
         #expect(png.count > 10000)
         if recorder.preview != nil {
             var colored = 0
-            var sampled = 0
-            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 16) {
-                for x in stride(from: 0, to: bitmap.pixelsWide, by: 16) {
-                    sampled += 1
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
                     if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
                         color.blueComponent > 0.25,
                         color.blueComponent > color.redComponent * 1.5,
-                        color.greenComponent > color.redComponent * 1.5
+                        color.greenComponent > color.redComponent * 1.5,
+                        color.greenComponent > color.blueComponent * 0.8
                     {
                         colored += 1
                     }
                 }
             }
-            #expect(Double(colored) / Double(sampled) > 0.005)
+            #expect(colored > 20)
         }
         if let path = ProcessInfo.processInfo.environment["EDITH_TIMELAPSE_EVIDENCE_DIR"] {
             let directory = URL(fileURLWithPath: path)

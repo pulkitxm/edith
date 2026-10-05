@@ -3,7 +3,11 @@ import EdithKit
 import SwiftUI
 
 struct TimeLapseSourceSelection {
-    var mode: String
+    var mode: String {
+        didSet {
+            if mode == "windows", !windows.isEmpty { systemAudio = true }
+        }
+    }
     var displays: Set<UInt32>
     var windows: Set<UInt32>
     var systemAudio: Bool
@@ -20,6 +24,7 @@ struct TimeLapseSourceSelection {
             selected.remove(id)
         } else if selected.count < 16 {
             selected.insert(id)
+            if mode == "windows" { systemAudio = true }
         }
     }
 
@@ -62,7 +67,8 @@ struct TimeLapseSourcePicker: View {
         _selection = State(
             initialValue: TimeLapseSourceSelection(
                 mode: recorder.sourceMode, displays: recorder.selectedDisplays,
-                windows: recorder.selectedWindows, systemAudio: recorder.settings.systemAudio))
+                windows: recorder.selectedWindows,
+                systemAudio: recorder.sourceMode == "windows" || recorder.settings.systemAudio))
     }
 
     var body: some View {
@@ -128,11 +134,20 @@ struct TimeLapseSourcePicker: View {
             }
             Divider()
             HStack {
-                Label("System audio", systemImage: "speaker.wave.2")
+                Label(
+                    selection.mode == "windows" ? "Selected app audio" : "System audio",
+                    systemImage: "speaker.wave.2")
                 Spacer()
-                Toggle("System audio", isOn: $selection.systemAudio).labelsHidden()
+                Toggle(
+                    selection.mode == "windows" ? "Selected app audio" : "System audio",
+                    isOn: $selection.systemAudio
+                ).labelsHidden()
                     .toggleStyle(.switch)
             }.font(.edithText(.callout))
+            if selection.mode == "windows" {
+                Text("Audio follows the selected apps, including their other windows.")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
             PageSectionHeader(selectionSummary) {
                 HStack {
                     Button("Cancel") { dismiss() }.buttonStyle(.edith(.secondary))
