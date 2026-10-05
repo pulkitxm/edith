@@ -9,38 +9,43 @@ struct CodeStatsPage: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     init(model: CodeStatsModel? = nil) {
-        _model = State(initialValue: model ?? .shared)
+        _model = State(initialValue: model ?? CodeStatsModel())
     }
 
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
-                CodeStatsHeader(model: model)
-                Group {
-                    ForEach(model.banners) { banner in
-                        CodeStatsBannerView(banner: banner, choose: chooseFolder) {
-                            Task { await model.loadReport() }
-                        }
-                    }
-                    if let progress = model.progress {
-                        CodeStatsProgressCard(
-                            progress: progress, trigger: model.status?.state.active?.trigger,
-                            cancelling: model.isCancelling
-                        ) {
-                            Task { await model.cancel() }
-                        }
-                    }
-                    content
-                }
-                .pageGutter(compact)
+        PageScaffold {
+            CodeStatsHeader(model: model)
+        } content: {
+            if model.report != nil, let error = model.statusLoad.errorMessage {
+                PageNotice(
+                    error, tone: .error,
+                    actions: {
+                        Button("Retry") { Task { await model.refresh() } }
+                    })
             }
-            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+            ForEach(model.banners) { banner in
+                CodeStatsBannerView(banner: banner, choose: chooseFolder) {
+                    Task { await model.loadReport() }
+                }
+            }
+            if let progress = model.progress {
+                CodeStatsProgressCard(
+                    progress: progress, trigger: model.status?.state.active?.trigger,
+                    cancelling: model.isCancelling
+                ) {
+                    Task { await model.cancel() }
+                }
+            }
+            PageLoading(
+                state: model.loadingState,
+                message: model.loadingError ?? "Code Stats could not load its results.",
+                layout: .analytics, refreshing: model.isRefreshing,
+                retry: { Task { await model.refresh() } }
+            ) { content }
         }
-        .background(DashSkin.paper(dark))
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.cancelLoading) {
             await model.observe()
         }
         .alert(
@@ -58,7 +63,7 @@ struct CodeStatsPage: View {
     @ViewBuilder private var content: some View {
         switch model.phase {
         case .loading, .firstRun:
-            CodeStatsReportSkeleton(dark: dark)
+            EmptyView()
         case .setup:
             CodeStatsSetupView(model: model, choose: chooseFolder)
         case .unavailable:
@@ -72,16 +77,8 @@ struct CodeStatsPage: View {
                 }
             }
             if let report = model.report {
-                Group {
-                    if model.showsPreviousRange {
-                        SkeletonReplica("Loading \(CodeStatsRangePicker.title(model.range))") {
-                            sections(report)
-                        }
-                    } else {
-                        sections(report)
-                    }
-                }
-                .environment(\.codeStatsActions, actions)
+                sections(report)
+                    .environment(\.codeStatsActions, actions)
             }
         }
     }

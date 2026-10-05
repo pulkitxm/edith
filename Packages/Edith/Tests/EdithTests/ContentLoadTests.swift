@@ -8,6 +8,8 @@ import Testing
         let load = ContentLoad()
         let old = load.begin()
         let current = load.begin()
+        load.cancel(old)
+        #expect(load.isCurrent(current))
         load.complete(current)
         load.fail(old, message: "Old failure")
         #expect(load.state == .content)

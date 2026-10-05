@@ -21,8 +21,12 @@ struct PageLoading<Content: View>: View {
     var body: some View {
         LoadingContainer(
             state: state, title: title, message: message, retry: retry, cancel: cancel,
-            refreshing: refreshing, content: content
+            refreshing: refreshing
         ) {
+            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                content()
+            }
+        } placeholder: {
             PageSkeleton(layout: layout)
         }
     }
@@ -100,10 +104,7 @@ struct PageSkeletonCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) { content() }
-            .padding(UIScale.pt(16))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .edithSurface(cornerRadius: 14)
+        PageCard(content: content)
     }
 }
 

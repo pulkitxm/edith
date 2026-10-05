@@ -38,8 +38,9 @@ import Testing
         let attention = try source("Features/Attention/Views/AttentionPage.swift")
         let dashboard = try source("Features/Dashboard/Views/DashboardView.swift")
 
-        #expect(attention.contains("LoadingContainer("))
-        #expect(dashboard.contains(".task(id: refresh.updating)"))
+        #expect(attention.contains("PageLoading("))
+        #expect(attention.contains(".pageRefresh("))
+        #expect(dashboard.contains(".pageTask(id: refresh.updating"))
         #expect(
             dashboard.contains(
                 "AgentTopicStream.values(UsageTopicSnapshot.self, topic: .usage)"))

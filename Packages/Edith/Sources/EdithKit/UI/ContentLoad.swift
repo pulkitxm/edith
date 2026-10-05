@@ -48,7 +48,18 @@ public final class ContentLoad {
         state = hasContent ? .content : offline ? .offline : .error
     }
 
-    public func cancel() {
+    public func fail(_ request: UInt64, error: Error) {
+        if error is CancellationError || Task.isCancelled {
+            cancel(request)
+        } else {
+            fail(
+                request, message: error.localizedDescription,
+                offline: (error as? URLError)?.code == .notConnectedToInternet)
+        }
+    }
+
+    public func cancel(_ request: UInt64? = nil) {
+        if let request, request != generation { return }
         cancelOperation?()
         cancelOperation = nil
         generation &+= 1
@@ -68,7 +79,7 @@ public final class ContentLoad {
     ) async {
         guard !Task.isCancelled else { return }
         let request = begin(preservingContent: preservingContent)
-        let task = Task { try await operation() }
+        let task = Task.detached(priority: .userInitiated, operation: operation)
         cancelOperation = { task.cancel() }
         do {
             let value = try await withTaskCancellationHandler {
@@ -84,13 +95,7 @@ public final class ContentLoad {
             complete(request)
         } catch {
             guard request == generation else { return }
-            if error is CancellationError || Task.isCancelled {
-                cancel()
-            } else {
-                fail(
-                    request, message: error.localizedDescription,
-                    offline: (error as? URLError)?.code == .notConnectedToInternet)
-            }
+            fail(request, error: error)
         }
     }
 }

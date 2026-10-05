@@ -446,6 +446,8 @@ final class DashboardModel {
 
     private(set) var loaded = false
     private(set) var loadAttempted = false
+    let contentLoad = ContentLoad()
+    let computation = ContentLoad()
     private(set) var published = DashboardSnapshot()
     private(set) var homeUsage = HomeUsageSnapshot()
     private(set) var calendarDays: [DayPoint] = []
@@ -485,8 +487,7 @@ final class DashboardModel {
     private var reloadDebounce: Task<Void, Never>?
     private var observers = 0
     private var missedReload = false
-    private var ingestGeneration = 0
-    private var computeGeneration = 0
+    private let ingestion = ContentLoad()
     private var computeTask: Task<Void, Never>?
 
     private var allowsInlineComputation = false
@@ -588,51 +589,76 @@ final class DashboardModel {
         guard extensionEnabled else { return }
         await restoreCachedHomeUsage()
         let url = Repo.usageJSON
-        defer { loadAttempted = true }
+        let request = contentLoad.begin()
+        defer {
+            if Task.isCancelled {
+                contentLoad.cancel(request)
+            } else if contentLoad.isCurrent(request) {
+                loadAttempted = true
+            }
+        }
+        var failure: Error?
         for attempt in 0..<4 {
             let m = await Task.detached(priority: .utility) {
                 (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
                     as? Date
             }.value
-            guard !Task.isCancelled else { return }
-            if let m, m == mtime, data != nil { return }
-            if let parsed = try? await Task.detached(
-                priority: .utility,
-                operation: {
-                    try JSONDecoder().decode(DashUsage.self, from: Data(contentsOf: url))
-                }
-            ).value {
+            guard contentLoad.isCurrent(request) else { return }
+            if let m, m == mtime, data != nil {
+                contentLoad.complete(request)
+                loadAttempted = true
+                return
+            }
+            do {
+                let parsed = try await Task.detached(
+                    priority: .utility,
+                    operation: {
+                        try JSONDecoder().decode(DashUsage.self, from: Data(contentsOf: url))
+                    }
+                ).value
+                guard contentLoad.isCurrent(request) else { return }
                 mtime = m
                 await ingestDetached(parsed)
+                contentLoad.complete(request)
+                loadAttempted = true
                 return
+            } catch {
+                failure = error
             }
             if attempt < 3 {
                 try? await Task.sleep(nanoseconds: 400_000_000)
             }
+        }
+        guard contentLoad.isCurrent(request) else { return }
+        loadAttempted = true
+        if !loaded, (failure as? CocoaError)?.code == .fileReadNoSuchFile {
+            contentLoad.complete(request, empty: true)
+        } else {
+            contentLoad.fail(
+                request, message: failure?.localizedDescription ?? "Usage data could not be read.")
         }
     }
 
     func ingest(_ parsed: DashUsage) {
         let ingestTrace = PerformanceTrace.begin(.largeRepository, "dashboard.ingest")
         defer { PerformanceTrace.end(ingestTrace) }
-        ingestGeneration &+= 1
+        let request = ingestion.begin()
         apply(DashboardComputation.digest(parsed, calendar: cal), parsed: parsed)
         recompute()
+        contentLoad.setContent()
+        ingestion.complete(request)
     }
 
     private func ingestDetached(_ parsed: DashUsage) async {
         let ingestTrace = PerformanceTrace.begin(.largeRepository, "dashboard.ingest")
         defer { PerformanceTrace.end(ingestTrace) }
-        ingestGeneration &+= 1
-        let generation = ingestGeneration
         let calendar = cal
-        let digest = await Task.detached(
-            priority: .userInitiated,
-            operation: { DashboardComputation.digest(parsed, calendar: calendar) }
-        ).value
-        if generation != ingestGeneration { return }
-        apply(digest, parsed: parsed)
-        recompute()
+        await ingestion.perform(operation: {
+            DashboardComputation.digest(parsed, calendar: calendar)
+        }) { digest in
+            apply(digest, parsed: parsed)
+            recompute()
+        }
         await awaitPendingComputation()
     }
 
@@ -683,6 +709,14 @@ final class DashboardModel {
 
     func awaitPendingComputation() async {
         await computeTask?.value
+    }
+
+    func cancelLoading() {
+        contentLoad.cancel()
+        computation.cancel()
+        ingestion.cancel()
+        computeTask?.cancel()
+        computeTask = nil
     }
 
     static func agentName(_ entry: DashUsage.Meta?, id: String, local: Bool) -> String {
@@ -961,8 +995,6 @@ final class DashboardModel {
     private func recompute() {
         guard loaded, !loading, let data else { return }
         computeTask?.cancel()
-        computeGeneration &+= 1
-        let generation = computeGeneration
         let request = computeRequest(data)
         if allowsInlineComputation {
             if let snapshot = DashboardComputation.snapshot(request) {
@@ -972,17 +1004,12 @@ final class DashboardModel {
         }
         computeTask = Task { [weak self] in
             guard !Task.isCancelled else { return }
-            let worker = Task.detached(priority: .userInitiated) {
+            guard let self else { return }
+            await computation.perform(operation: {
                 DashboardComputation.snapshot(request)
+            }) { snapshot in
+                if let snapshot { self.publish(snapshot) }
             }
-            let snapshot = await withTaskCancellationHandler {
-                await worker.value
-            } onCancel: {
-                worker.cancel()
-            }
-            guard let self, !Task.isCancelled else { return }
-            if generation != self.computeGeneration { return }
-            if let snapshot { self.publish(snapshot) }
         }
     }
 

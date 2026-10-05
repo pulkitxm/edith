@@ -199,7 +199,7 @@ private func settledBitmap(
                     github: .signedOut)
             ),
         ]
-        #expect(renders(CodeStatsReportSkeleton(dark: true)))
+        #expect(renders(PageSkeleton(layout: .analytics)))
         for (name, status) in phases {
             for scheme in [ColorScheme.light, .dark] {
                 let agent = CodeStatsFakeAgent(

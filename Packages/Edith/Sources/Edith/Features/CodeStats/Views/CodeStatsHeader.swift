@@ -47,13 +47,6 @@ struct CodeStatsHeader: View {
             HStack(spacing: UIScale.pt(12)) {
                 if let profile = model.status?.state.profile {
                     CodeStatsProfileBadge(profile: profile, dark: dark)
-                } else if model.status == nil {
-                    SkeletonGroup {
-                        HStack(spacing: UIScale.pt(8)) {
-                            SkeletonBlock(width: 28, height: 28, corner: 14)
-                            SkeletonBlock(width: 140, height: 12)
-                        }
-                    }
                 }
                 Spacer(minLength: UIScale.pt(8))
                 if let status = model.status {
@@ -126,28 +119,16 @@ struct CodeStatsBannerView: View {
     let retry: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    private var tint: Color { banner.tone == .danger ? DashSkin.danger : DashSkin.warn }
-
     var body: some View {
         let dark = scheme == .dark
-        HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            Image(systemName: banner.symbol)
-                .font(.system(size: UIScale.pt(16), weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: UIScale.pt(22))
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                Text(banner.title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text(banner.message)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .fixedSize(horizontal: false, vertical: true)
-                if let command = banner.command {
-                    CodeStatsCommandHint(command: command, dark: dark)
-                }
+        PageNotice(
+            banner.message, title: banner.title,
+            tone: banner.tone == .danger ? .error : .warning, symbol: banner.symbol
+        ) {
+            if let command = banner.command {
+                CodeStatsCommandHint(command: command, dark: dark)
             }
-            Spacer(minLength: UIScale.pt(8))
+        } actions: {
             if banner.choosesFolder {
                 Button("Choose folder...", action: choose)
             }
@@ -155,10 +136,6 @@ struct CodeStatsBannerView: View {
                 Button("Retry", action: retry)
             }
         }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .widgetBar(cornerRadius: 14, fill: tint.opacity(0.08), stroke: tint.opacity(0.35))
-        .accessibilityElement(children: .contain)
     }
 }
 
