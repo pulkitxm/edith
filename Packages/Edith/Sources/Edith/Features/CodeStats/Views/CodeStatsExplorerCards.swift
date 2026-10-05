@@ -33,74 +33,99 @@ struct CodeStatsRepositoryStripCard: View {
             note: "Each row scaled to its own busiest month, so small repos stay visible",
             dark: dark
         ) {
-            if explorer.strip.isEmpty {
+            if explorer.stripRepositories.isEmpty {
                 Text("No repository activity in this range.")
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(DashSkin.inkSoft(dark))
             } else {
-                Chart(explorer.strip) { cell in
-                    RectangleMark(
-                        x: .value("Month", cell.date, unit: .month),
-                        y: .value("Repository", cell.repository), width: .ratio(0.92),
-                        height: .ratio(0.78)
-                    )
-                    .foregroundStyle(DashSkin.accent(dark).opacity(0.18 + 0.82 * cell.level))
-                    .cornerRadius(2)
-                }
-                .chartYScale(domain: explorer.stripRepositories)
-                .chartYAxis {
-                    AxisMarks { _ in AxisValueLabel().font(.system(size: UIScale.pt(10))) }
-                }
-                .chartOverlay { proxy in
-                    GeometryReader { geometry in
-                        Rectangle().fill(.clear).contentShape(Rectangle())
-                            .onContinuousHover { phase in
-                                switch phase {
-                                case .active(let location):
-                                    hovered = cell(at: location, proxy: proxy, geometry: geometry)
-                                case .ended:
-                                    hovered = nil
+                Grid(
+                    alignment: .leading, horizontalSpacing: UIScale.pt(3),
+                    verticalSpacing: UIScale.pt(5)
+                ) {
+                    ForEach(explorer.stripRepositories, id: \.self) { repository in
+                        GridRow {
+                            Button {
+                                actions.toggleRepository(repository)
+                            } label: {
+                                Text(repository)
+                                    .font(.system(size: UIScale.pt(11)))
+                                    .foregroundStyle(DashSkin.ink(dark))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(width: UIScale.pt(190), alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Filter the page to " + repository)
+                            .contextMenu {
+                                Button("Exclude " + repository) {
+                                    actions.excludeRepository(repository)
                                 }
                             }
-                            .onTapGesture { location in
-                                if let cell = cell(at: location, proxy: proxy, geometry: geometry) {
-                                    actions.toggleRepository(cell.repository)
-                                }
+                            ForEach(explorer.stripMonths) { month in
+                                cell(explorer.stripCells[repository + "|" + month.month])
                             }
+                        }
+                    }
+                    GridRow {
+                        Text("")
+                        ForEach(Array(explorer.stripMonths.enumerated()), id: \.element.id) {
+                            index, month in
+                            Text(
+                                labelled(index)
+                                    ? month.date.formatted(
+                                        .dateTime.month(.abbreviated).year(.twoDigits))
+                                    : ""
+                            )
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .fixedSize()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
-                .overlay(alignment: .topTrailing) {
+                HStack {
                     if let hovered {
-                        CodeStatsTooltip(
-                            title: hovered.repository,
-                            lines: [
-                                hovered.date.formatted(.dateTime.month(.wide).year()),
-                                CodeStatsNumberFormat.grouped(hovered.commits) + " commits",
-                                CodeStatsNumberFormat.compact(hovered.lines) + " lines",
-                            ], dark: dark
-                        )
-                        .allowsHitTesting(false)
+                        Text(
+                            hovered.repository + ", "
+                                + hovered.date.formatted(.dateTime.month(.wide).year()) + ": "
+                                + CodeStatsNumberFormat.grouped(hovered.commits) + " commits, "
+                                + CodeStatsNumberFormat.compact(hovered.lines) + " lines")
+                    } else {
+                        Text("Hover a cell for details, click a name to filter.")
                     }
+                    Spacer()
                 }
-                .frame(
-                    height: UIScale.pt(CGFloat(explorer.stripRepositories.count) * 22 + 30))
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .monospacedDigit()
             }
         }
     }
 
-    private func cell(
-        at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy
-    ) -> CodeStatsStripCell? {
-        guard let frame = proxy.plotFrame else { return nil }
-        let origin = geometry[frame].origin
-        guard let date: Date = proxy.value(atX: location.x - origin.x),
-            let repository: String = proxy.value(atY: location.y - origin.y)
-        else { return nil }
-        let calendar = Calendar.current
-        return explorer.strip.first {
-            $0.repository == repository
-                && calendar.isDate($0.date, equalTo: date, toGranularity: .month)
-        }
+    private func labelled(_ index: Int) -> Bool {
+        let count = explorer.stripMonths.count
+        let step = max(1, Int((Double(count) / 8).rounded(.up)))
+        return index.isMultiple(of: step)
+    }
+
+    private func cell(_ value: CodeStatsStripCell?) -> some View {
+        RoundedRectangle(cornerRadius: UIScale.pt(3))
+            .fill(
+                value.map { DashSkin.accent(dark).opacity(0.15 + 0.85 * $0.level) }
+                    ?? DashSkin.grid(dark).opacity(0.6)
+            )
+            .frame(minWidth: UIScale.pt(4), maxWidth: .infinity)
+            .frame(height: UIScale.pt(16))
+            .overlay {
+                if let value, hovered == value {
+                    RoundedRectangle(cornerRadius: UIScale.pt(3))
+                        .stroke(DashSkin.ink(dark), lineWidth: UIScale.pt(1))
+                }
+            }
+            .onHover { inside in
+                if inside { hovered = value } else if hovered == value { hovered = nil }
+            }
+            .onTapGesture { if let value { actions.toggleRepository(value.repository) } }
     }
 }
 
@@ -379,6 +404,18 @@ struct CodeStatsNewRepositoriesCard: View {
     var body: some View {
         SkinCard(title: "New repositories", note: "Month of your first commit in each", dark: dark)
         {
+            if explorer.newRepositories.isEmpty {
+                Text("You did not start any new repositories in this range.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                chart
+            }
+        }
+    }
+
+    private var chart: some View {
+        VStack {
             Chart {
                 ForEach(explorer.newRepositories) { month in
                     BarMark(

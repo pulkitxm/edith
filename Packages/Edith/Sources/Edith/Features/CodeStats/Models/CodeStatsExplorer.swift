@@ -11,6 +11,12 @@ struct CodeStatsStripCell: Identifiable, Equatable, Sendable {
     let level: Double
 }
 
+struct CodeStatsStripMonth: Identifiable, Equatable, Sendable {
+    var id: String { month }
+    let month: String
+    let date: Date
+}
+
 struct CodeStatsYearPoint: Identifiable, Equatable, Sendable {
     var id: String { year + "|" + String(month) }
     let year: String
@@ -55,6 +61,8 @@ struct CodeStatsExplorer: Equatable, Sendable {
 
     var strip: [CodeStatsStripCell] = []
     var stripRepositories: [String] = []
+    var stripMonths: [CodeStatsStripMonth] = []
+    var stripCells: [String: CodeStatsStripCell] = [:]
     var years: [CodeStatsYearPoint] = []
     var yearNames: [String] = []
     var weekdays: [CodeStatsRhythmBar] = []
@@ -135,10 +143,24 @@ struct CodeStatsExplorer: Equatable, Sendable {
             }
         }
         strip = cells
+        stripCells = Dictionary(cells.map { ($0.id, $0) }) { first, _ in first }
+        if let firstCell = cells.map(\.month).min(), let lastCell = cells.map(\.month).max(),
+            var cursor = CodeStatsDay(firstCell), let limit = CodeStatsDay(lastCell)
+        {
+            var months: [CodeStatsStripMonth] = []
+            while cursor <= limit {
+                if let date = resolver(cursor) {
+                    months.append(CodeStatsStripMonth(month: cursor.string, date: date))
+                }
+                cursor = cursor.nextMonthStart
+            }
+            stripMonths = months
+        }
         let sortedYears = perYearMonth.keys.sorted().suffix(4)
         yearNames = sortedYears.map(String.init)
+        let last = end.ordinal < Int.max / 4 ? end.components : (year: Int.max, month: 12, day: 31)
         years = sortedYears.flatMap { year in
-            (1...12).map { month in
+            (1...(year == last.year ? last.month : 12)).map { month in
                 let value = perYearMonth[year]?[month] ?? (0, 0)
                 return CodeStatsYearPoint(
                     year: String(year), month: month, commits: value.commits, lines: value.lines)
