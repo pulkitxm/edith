@@ -337,6 +337,32 @@ enum VirtualCameraFixtures {
         deferring.shutdown()
     }
 
+    @Test(arguments: [VirtualCameraPrivacy.live, .card, .freeze, .stopped])
+    func retryRestartsTheHelperWithoutChangingPrivacyOrComposition(
+        privacy: VirtualCameraPrivacy
+    ) throws {
+        let saved = SharedDefaults.store.data(forKey: AppStorageKeys.VirtualCamera.state)
+        defer { SharedDefaults.store.set(saved, forKey: AppStorageKeys.VirtualCamera.state) }
+        let hardware = Self.obsHardware(watching: true)
+        var state = VirtualCameraState(privacy: privacy)
+        state.composition.framing.zoom = 2
+        let engine = Self.engine(hardware: hardware, state: state)
+        defer { engine.shutdown() }
+        engine.refreshExtension()
+        let snapshot = try engine.perform(.retry)
+        #expect(snapshot.state.privacy == privacy)
+        #expect(snapshot.state.composition.framing.zoom == 2)
+        if privacy == .stopped {
+            #expect(hardware.started.isEmpty)
+            #expect(hardware.stopped.isEmpty)
+            #expect(!snapshot.live)
+        } else {
+            #expect(hardware.started == [42, 42])
+            #expect(hardware.stopped == [42])
+            #expect(snapshot.live)
+        }
+    }
+
     @Test func edithAppsDoNotCountAsTheViewer() {
         let edith = VirtualCameraRunningApplication(pid: 1, bundleIdentifier: "com.pulkit.edith")
         let dev = VirtualCameraRunningApplication(

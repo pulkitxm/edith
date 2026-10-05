@@ -47,6 +47,7 @@ public struct VirtualCameraBackgroundChange: Codable, Equatable, Sendable {
 
 public enum VirtualCameraRequest: Codable, Equatable, Sendable {
     case status
+    case retry
     case selectSource(String)
     case zoom(Double)
     case frame(VirtualCameraFrameChange)
@@ -129,6 +130,8 @@ public enum VirtualCameraRequestReducer {
         switch request {
         case .status:
             return "Status"
+        case .retry:
+            return "Restarting camera preview."
         case .selectSource(let query):
             let source = try resolveSource(query, in: sources)
             state.sourceID = source.id

@@ -304,9 +304,10 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func retryPreview() {
+        let retriesHelper = previewFeed == .helper
         stopPreview()
         refreshSources()
-        requestStatus()
+        requestStatus(retriesHelper ? .retry : .status)
         syncPreviewFeed()
     }
 
@@ -321,14 +322,14 @@ final class VirtualCameraPageModel: ObservableObject {
         if visible { syncPreviewFeed() }
     }
 
-    func requestStatus() {
+    func requestStatus(_ request: VirtualCameraRequest = .status) {
         statusTask?.cancel()
         statusPending = true
         let timeout: Duration = snapshot == nil ? .milliseconds(500) : .seconds(3)
         statusTask = Task { [weak self] in
             do {
                 let snapshot = try await VirtualCameraOperationExecution.request(
-                    .status, timeout: timeout)
+                    request, timeout: timeout)
                 guard !Task.isCancelled else { return }
                 self?.statusPending = false
                 self?.receive(snapshot)

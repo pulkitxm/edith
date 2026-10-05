@@ -138,6 +138,7 @@ final class VirtualCameraEngine {
 
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
         guard request.changesState else { return snapshot() }
+        if request == .retry { stopStreaming() }
         var next = state
         let message = try VirtualCameraRequestReducer.apply(
             request, to: &next, sources: VirtualCameraDevices.sources())
