@@ -26,7 +26,8 @@ import Testing
 
     @Test func aboutPreservesTheCenteredIdentityLayout() throws {
         let source = try source("Features/Settings/Views/AboutPane.swift")
-        #expect(source.contains("GeometryReader { proxy in"))
+        #expect(source.contains("PageScaffold(width: .readable, pinnedHeader: true, header: {})"))
+        #expect(!source.contains("GeometryReader"))
         #expect(source.contains("multilineTextAlignment(.center)"))
         #expect(source.contains(".background(theme.opacity(0.16), in: Capsule())"))
         #expect(source.contains(".frame(maxWidth: UIScale.pt(340))"))
