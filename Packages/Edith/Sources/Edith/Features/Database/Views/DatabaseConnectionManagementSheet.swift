@@ -79,7 +79,7 @@ struct DatabaseConnectionManagementSheet: View {
         )
         .background(palette.canvas).presenterCover(.database)
         .transientPresentation(dismissible: false)
-        .task(id: taskID) {
+        .pageTask(id: taskID) {
             await prepare()
         }
     }

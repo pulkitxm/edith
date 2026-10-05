@@ -161,7 +161,7 @@ struct OnboardingAgentPanel: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(10))
                     .strokeBorder(DashSkin.line(dark)))
         }
-        .task { await refresh() }
+        .pageTask { await refresh() }
     }
 
     private var displayedJobs: [AgentJobSnapshot] {

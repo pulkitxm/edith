@@ -6,6 +6,35 @@
 `Edith/Shared/Views` owns page composition and app-window lifecycle integration.
 Feature code supplies data, actions, and domain-specific content to these APIs.
 
+## Destination and module map
+
+| Surface | Composition and loading ownership |
+| --- | --- |
+| Home and suite landing pages | `PageScaffold`, shared headers, metrics, cards, and visibility-owned observation |
+| Attention, Usage, Code Stats | `PageScaffold`, `ContentLoad`, the `.analytics` `PageLoading` recipe, shared activity and export components |
+| Machines and fleet overview | Shared page composition and recipes, page-owned discovery, resource-owned machine sessions |
+| Finder and file preview | `ContentLoad` request tickets, shared loading motion, native selection and preview content |
+| Docker inspector | Separate inspect, process, and file load owners, retained refresh content, shared recovery feedback |
+| Quinjet | `PageWorkspace`, per-machine project load owners, per-tab worktree load owners, retained terminal holders |
+| Herdr | `PageWorkspace`, shared board loading, page-owned inventory observation, session-owned attachments |
+| Companion | Retained window session, shared page composition, list and detail load owners, shared cards, grids, forms, controls, and motion |
+| Studio | `PageWorkspace`, retained editors, separate source and render load owners, shared editor placeholders and recovery |
+| Virtual Camera | `PageWorkspace`, window-owned pipeline, shared loading presentation, asynchronous thumbnail construction |
+| Database | `PageWorkspace`, shared readiness and connection-list request ownership, resource-owned connected sessions |
+| SEO Audit | Shared page composition, `PageLoading`, component skeletons using the shared motion clock |
+| Music | Shared page composition and controls, visibility-owned metadata requests, service-owned playback |
+| Calendar | Shared page composition, window visibility-owned refresh, service-owned calendar data |
+| Downloads | Shared workspace and controls, page-owned estimates, service-owned transfers |
+| App Maintenance and Homebrew | Shared composition, `ContentLoad` inventory and discovery ownership, shared initial recipes and retained refresh feedback |
+| BlitzTree and Cleaner | Shared composition and controls, owned scans, shared discovery loading and determinate progress |
+| Plugins, Extensions, Skills | Shared composition, cards, forms, provisioning controls, shared discovery load owners |
+| Docs | Shared workspace, visibility-owned document work, shared theme and typography |
+| Settings and About | Shared forms and page composition, visibility-owned observation, shared status, loading, and recovery components |
+
+Native focus, scroll restoration, and deferred view construction use local view
+tasks. Terminal attachment, recording, playback, installation, and editor work
+use their resource owners. These lifetimes are distinct from page observation.
+
 ## Loading contract
 
 `ContentLoad` owns request identity, cancellation, initial loading, retained

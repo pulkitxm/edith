@@ -17,6 +17,7 @@ final class CompanionLibraryModel: CompanionRefreshable {
     private(set) var indexing = false
     let loading = ContentLoad()
     let detailLoad = ContentLoad()
+    let searchLoad = ContentLoad()
     var loaded: Bool { loading.hasContent }
     private(set) var selectedId: String?
     private(set) var detail: CompanionEpisodeDetail?
@@ -46,27 +47,33 @@ final class CompanionLibraryModel: CompanionRefreshable {
 
     func searchChanged() {
         searchTask?.cancel()
+        searchLoad.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             hits = []
             return
         }
+        searchLoad.reset()
+        hits = []
+        let client = client
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            do {
-                let client = client
-                let found = try await CompanionChatLibraryOperationExecution.search(
-                    query: trimmed, limit: 12
-                ) { query, limit in
-                    try await client.search(query: query, k: limit)
+            await searchLoad.perform(
+                preservingContent: false,
+                operation: {
+                    try await CompanionChatLibraryOperationExecution.search(
+                        query: trimmed, limit: 12
+                    ) { query, limit in
+                        try await client.search(query: query, k: limit)
+                    }
                 }
-                guard !Task.isCancelled else { return }
+            ) { found in
                 hits = found
                 error = nil
-            } catch {
-                if !Task.isCancelled { self.error = error.localizedDescription }
             }
+            guard !Task.isCancelled else { return }
+            if let message = searchLoad.errorMessage { error = message }
         }
     }
 
@@ -436,11 +443,22 @@ struct CompanionLibraryScreen: View {
             SearchField(placeholder: "Search your memory", text: $model.query)
             ScrollView {
                 VStack(spacing: UIScale.pt(6)) {
-                    if !model.hits.isEmpty {
-                        ForEach(model.hits, id: \.chunkId) { hit in
-                            hitRow(hit)
+                    if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        PageLoading(
+                            state: model.searchLoad.state,
+                            message: model.searchLoad.errorMessage
+                                ?? "The search could not be completed.",
+                            layout: .list, retry: model.searchChanged
+                        ) {
+                            if model.hits.isEmpty {
+                                Text("Nothing in the memory matches that.")
+                                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                            }
+                            ForEach(model.hits, id: \.chunkId) { hit in
+                                hitRow(hit)
+                            }
                         }
-                    } else if model.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    } else {
                         PageLoading(
                             state: model.loading.state,
                             message: model.loading.errorMessage ?? "Memory could not be loaded.",
@@ -457,11 +475,6 @@ struct CompanionLibraryScreen: View {
                                     .padding(.top, UIScale.pt(12))
                             }
                         }
-                    } else {
-                        Text("Nothing in the memory matches that.")
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .padding(.top, UIScale.pt(12))
                     }
                 }
             }

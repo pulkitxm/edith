@@ -80,7 +80,7 @@ struct SkillPreviewSheet: View {
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(width: PresentationMetrics.width(740), height: PresentationMetrics.height(650))
-        .task(id: refreshID) {
+        .pageTask(id: refreshID) {
             error = nil
             copied = false
             do {

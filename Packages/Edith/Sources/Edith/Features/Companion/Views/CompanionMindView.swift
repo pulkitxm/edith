@@ -481,6 +481,7 @@ private struct MindDetailSheet: View {
     private func loadRefs() async {
         var refs: [(String, String)] = []
         for id in contextIds {
+            guard !Task.isCancelled else { return }
             if let episode = try? await client.episodeDetail(id: id) {
                 let date = String(episode.occurredAt.prefix(10))
                 refs.append((id, "\(episode.title) · \(episode.kind) · \(date)"))
@@ -488,6 +489,7 @@ private struct MindDetailSheet: View {
                 refs.append((id, "episode \(String(id.prefix(8)))…"))
             }
         }
+        guard !Task.isCancelled else { return }
         episodeRefs = refs
         episodeRefsLoaded = true
     }
@@ -520,7 +522,7 @@ private struct MindDetailSheet: View {
             alignment: .topLeading
         )
         .background(DashSkin.paper(dark))
-        .task(id: generation) {
+        .pageTask(id: generation) {
             if requestsEnabled {
                 await loadRefs()
             } else {

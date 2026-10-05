@@ -213,7 +213,7 @@ struct CompanionSetupSheet: View {
         }
         .frame(width: PresentationMetrics.width(760), height: PresentationMetrics.height(560))
         .background(DashSkin.paper(dark))
-        .task {
+        .pageTask {
             async let probes: Void = model.probeHosts()
             async let reasoner: Void = model.loadReasoner(reachable: home.reachable)
             _ = await (probes, reasoner)

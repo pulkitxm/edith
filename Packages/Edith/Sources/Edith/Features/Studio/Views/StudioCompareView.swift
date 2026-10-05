@@ -20,6 +20,8 @@ final class StudioCompareModel {
     var showsVisual = false
     private var loadTask: Task<Void, Never>?
     private var visualTask: Task<Void, Never>?
+    let loading = ContentLoad()
+    let visualLoad = ContentLoad()
 
     init(original: URL, revised: URL) {
         originalURL = original
@@ -28,27 +30,27 @@ final class StudioCompareModel {
 
     func load() {
         loadTask?.cancel()
+        failure = nil
         let left = originalURL
         let right = revisedURL
         loadTask = Task { [weak self] in
-            let outcome = await Task.detached(priority: .userInitiated) {
-                StudioCompareLoader.load(left, right)
-            }.value
-            guard let self, !Task.isCancelled else { return }
-            switch outcome {
-            case let .success(loaded):
+            guard let self else { return }
+            await self.loading.perform(operation: {
+                try StudioCompareLoader.load(left, right).get()
+            }) { loaded in
                 self.original = loaded.original
                 self.revised = loaded.revised
                 self.report = loaded.report
                 StudioCompareLoader.highlight(loaded.report, in: loaded.original, loaded.revised)
-            case let .failure(error):
-                self.failure = error.localizedDescription
             }
+            guard !Task.isCancelled else { return }
+            self.failure = self.loading.errorMessage
         }
     }
 
     func renderVisual() {
         visualTask?.cancel()
+        let request = visualLoad.begin(preservingContent: false)
         let left = originalURL
         let right = revisedURL
         let page = visualPage
@@ -56,9 +58,10 @@ final class StudioCompareModel {
             let rendered = await Task.detached(priority: .userInitiated) {
                 StudioCompareLoader.visual(left, right, page: page)
             }.value
-            guard let self, !Task.isCancelled else { return }
+            guard let self, self.visualLoad.isCurrent(request) else { return }
             self.visual = rendered.map { NSImage(cgImage: $0.image, size: .zero) }
             self.visualFraction = rendered?.changedFraction ?? 0
+            self.visualLoad.complete(request, empty: rendered == nil)
         }
     }
 }
@@ -143,27 +146,26 @@ struct StudioCompareView: View {
                 .buttonStyle(.edith(.secondary))
             }
             Divider()
-            if let failure = compare.failure {
-                StudioEmptyNote(symbol: "exclamationmark.triangle", text: failure)
-                    .padding(UIScale.pt(20))
-                Spacer()
-            } else if let original = compare.original, let revised = compare.revised,
-                let report = compare.report
-            {
-                if compact {
-                    ScrollView {
+            PageLoading(
+                state: compare.loading.state,
+                message: compare.failure ?? "The PDF comparison could not be loaded.",
+                layout: .editor, retry: compare.load
+            ) {
+                if let original = compare.original, let revised = compare.revised,
+                    let report = compare.report
+                {
+                    if compact {
+                        ScrollView {
+                            comparison(original: original, revised: revised, report: report)
+                        }
+                    } else {
                         comparison(original: original, revised: revised, report: report)
                     }
-                } else {
-                    comparison(original: original, revised: revised, report: report)
                 }
-            } else {
-                LoadingIndicator("Comparing…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
-        .task { if compare.report == nil { compare.load() } }
+        .pageTask { if compare.report == nil { compare.load() } }
     }
 
     private func focusFor(_ side: PDFComparison.Side) -> PDFComparison.Change? {
@@ -275,7 +277,9 @@ struct StudioCompareView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: compare.visualPage) { compare.renderVisual() }
+        .pageTask(id: compare.visualPage, cancel: { compare.visualLoad.cancel() }) {
+            compare.renderVisual()
+        }
     }
 }
 

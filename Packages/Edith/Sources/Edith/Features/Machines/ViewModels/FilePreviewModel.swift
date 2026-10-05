@@ -444,7 +444,7 @@ struct CodePreview: View {
             HighlightedTextView(
                 attributed: highlighted, plain: text, dark: dark, scale: UIScale.current)
         }
-        .task(id: highlightKey) {
+        .pageTask(id: highlightKey) {
             highlighted = await SyntaxHighlighting.shared.highlight(
                 text: text, language: language, dark: dark)
         }

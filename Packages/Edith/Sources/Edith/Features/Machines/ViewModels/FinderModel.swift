@@ -359,7 +359,6 @@ final class FinderModel {
             entries = items
             selection = selection.filter { path in items.contains { $0.path == path } }
         case let .failure(failure):
-            entries = []
             errorMessage = failure.localizedDescription
         }
     }

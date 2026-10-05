@@ -1507,10 +1507,12 @@ private struct MusicFolderRow: View {
             folderMenu(
                 folder, onOpen: onOpen, onPlay: onPlay, onRename: onRename, onDelete: onDelete)
         }
-        .task(id: folder.relativePath) {
+        .pageTask(id: folder.relativePath) {
             let path = folder.relativePath
             trackCount = TrackMeta.cachedTrackCount(under: path)
-            trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            let count = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            guard !Task.isCancelled else { return }
+            trackCount = count
         }
     }
 }
@@ -1607,9 +1609,11 @@ private struct MusicPageRow: View {
                 onMove: onMove, onToggleFavourite: onToggleFavourite,
                 onOpenFolder: onOpenFolder)
         }
-        .task {
+        .pageTask(id: track.id) {
             duration = TrackMeta.cachedDurationLabel(for: track)
-            duration = await TrackMeta.durationLabel(for: track)
+            let value = await TrackMeta.durationLabel(for: track)
+            guard !Task.isCancelled else { return }
+            duration = value
         }
     }
 }
@@ -1781,10 +1785,12 @@ private struct MusicFolderTile: View {
             folderMenu(
                 folder, onOpen: onOpen, onPlay: onPlay, onRename: onRename, onDelete: onDelete)
         }
-        .task(id: folder.relativePath) {
+        .pageTask(id: folder.relativePath) {
             let path = folder.relativePath
             trackCount = TrackMeta.cachedTrackCount(under: path)
-            trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            let count = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            guard !Task.isCancelled else { return }
+            trackCount = count
         }
     }
 }
@@ -1875,9 +1881,11 @@ private struct MusicTrackTile: View {
                 onMove: onMove, onToggleFavourite: onToggleFavourite,
                 onOpenFolder: onOpenFolder)
         }
-        .task {
+        .pageTask(id: track.id) {
             duration = TrackMeta.cachedDurationLabel(for: track)
-            duration = await TrackMeta.durationLabel(for: track)
+            let value = await TrackMeta.durationLabel(for: track)
+            guard !Task.isCancelled else { return }
+            duration = value
         }
     }
 }
@@ -1999,7 +2007,7 @@ private struct MusicDetailSheet: View {
                 max(0, availableSize.height - UIScale.pt(48)))
         )
         .background(sheetBackground)
-        .task(id: track.id) {
+        .pageTask(id: track.id) {
             name = track.url.deletingPathExtension().lastPathComponent
             namedTrack = track.id
             sourceURL = YoutubeDownloader.shared.sourceURL(
@@ -2593,12 +2601,14 @@ private struct PageArtworkThumb: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
         .presenterCover(.music)
-        .task(id: track.id) {
+        .pageTask(id: track.id) {
             if track.isVideo, TrackMeta.artworkCached(for: track) == nil {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
             }
-            artwork = await TrackMeta.artwork(for: track)
+            let loaded = await TrackMeta.artwork(for: track)
+            guard !Task.isCancelled else { return }
+            artwork = loaded
         }
     }
 }

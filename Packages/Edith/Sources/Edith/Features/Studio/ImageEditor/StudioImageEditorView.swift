@@ -73,11 +73,12 @@ struct StudioImageEditorView: View {
                 }
             }
             Divider()
-            if let failure = editor.loadError, editor.preview == nil {
-                StudioEmptyNote(symbol: "exclamationmark.triangle", text: failure).padding(
-                    UIScale.pt(20))
-                Spacer()
-            } else {
+            PageLoading(
+                state: editor.loadingState,
+                message: editor.loadError ?? editor.rendering.errorMessage
+                    ?? "The image could not be opened.",
+                layout: .editor, retry: editor.load
+            ) {
                 HStack(spacing: 0) {
                     StudioImageToolRail(editor: editor)
                     Divider()
@@ -139,7 +140,7 @@ struct StudioImageEditorView: View {
         } message: {
             Text("Your edits to \(editor.url.lastPathComponent) have not been saved yet.")
         }
-        .task { if editor.preview == nil { editor.load() } }
+        .pageTask { if editor.preview == nil { editor.load() } }
     }
 
     private func leave() {
