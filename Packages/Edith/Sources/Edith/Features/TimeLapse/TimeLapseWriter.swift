@@ -25,7 +25,8 @@ final class TimeLapseWriter: @unchecked Sendable {
     private let progress: @Sendable (Int64, Int64) -> Void
     private var storedBytes: Int64 = 0
     private var previewEnabled = false
-    private let preview: (@Sendable (CGImage) -> Void)?
+    private var previewPending = false
+    private let preview: (@Sendable (CGImage) async -> Void)?
     private let availableBytes: @Sendable (URL) throws -> Int64
 
     private final class Chunk {
@@ -58,7 +59,7 @@ final class TimeLapseWriter: @unchecked Sendable {
         },
         failure: @escaping @Sendable (String) -> Void,
         progress: @escaping @Sendable (Int64, Int64) -> Void,
-        preview: (@Sendable (CGImage) -> Void)? = nil
+        preview: (@Sendable (CGImage) async -> Void)? = nil
     ) throws {
         try session.validate()
         guard sourceCount > 0, sourceCount <= 16 else { throw TimeLapseError.missingSource }
@@ -161,14 +162,27 @@ final class TimeLapseWriter: @unchecked Sendable {
             video.frames += 1
             video.end = CMTime(value: Int64(video.frames), timescale: TimeLapseSettings.playbackFPS)
             clock.accepted(at: uptime)
-            if previewEnabled, let preview {
+            timer?.schedule(
+                deadline: .now() + session.settings.interval,
+                repeating: session.settings.interval, leeway: .milliseconds(50))
+            if previewEnabled, !previewPending, let preview {
                 let image = CIImage(cvPixelBuffer: buffer)
                 let scale = min(1, 960 / image.extent.width, 540 / image.extent.height)
                 let thumbnail = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
                 let bounds = CGRect(
                     x: 0, y: 0, width: floor(thumbnail.extent.width),
                     height: floor(thumbnail.extent.height))
-                if let image = context.createCGImage(thumbnail, from: bounds) { preview(image) }
+                if let image = context.createCGImage(
+                    thumbnail, from: bounds, format: .RGBA8,
+                    colorSpace: CGColorSpace(name: CGColorSpace.sRGB), deferred: false)
+                {
+                    previewPending = true
+                    Task { [weak self] in
+                        await preview(image)
+                        guard let self else { return }
+                        self.queue.async { [weak self] in self?.previewPending = false }
+                    }
+                }
             }
             let activeBytes = [video] + Array(audio.values)
             let bytes = activeBytes.reduce(storedBytes) { result, chunk in

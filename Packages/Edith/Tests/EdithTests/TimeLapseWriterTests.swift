@@ -194,7 +194,10 @@ import Testing
         }
     }
 
-    @Test func previewUsesCapturedMosaicAndStopsRenderingWhenHidden() async throws {
+    @Test(arguments: [false, true])
+    func previewSkipsHiddenOrBusyConsumersAndUsesTheCapturedMosaic(delayedConsumer: Bool)
+        async throws
+    {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let previews = PreviewFrames()
@@ -202,12 +205,15 @@ import Testing
             directory: directory,
             session: TimeLapseSession(settings: TimeLapseSettings(), width: 1920, height: 1080),
             sourceCount: 2, failure: { _ in }, progress: { _, _ in },
-            preview: { previews.append($0) })
+            preview: { image in
+                if delayedConsumer { try? await Task.sleep(for: .seconds(1)) }
+                previews.append(image)
+            })
         let red = try buffer(color: .red)
         let blue = try buffer(color: .blue)
         let uptime = ProcessInfo.processInfo.systemUptime
         for index in 0..<3 {
-            writer.setPreviewEnabled(index == 1)
+            writer.setPreviewEnabled(delayedConsumer || index == 1)
             await withCheckedContinuation { continuation in
                 writer.queue.async {
                     writer.setFrame(red, source: 0)
@@ -221,6 +227,7 @@ import Testing
         let session = await writer.stop()
         #expect(session.failure == nil)
         #expect(session.frames == 3)
+        if delayedConsumer { try await Task.sleep(for: .milliseconds(1100)) }
         let images = previews.snapshot
         #expect(images.count == 1)
         let image = try #require(images.first)

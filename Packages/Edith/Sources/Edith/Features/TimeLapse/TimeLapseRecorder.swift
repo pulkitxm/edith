@@ -59,6 +59,11 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         } catch { self.error = error.localizedDescription }
     }
 
+    private func receivePreview(_ image: CGImage) {
+        guard recording, previewVisible else { return }
+        preview = image
+    }
+
     func showPreview(_ visible: Bool) {
         previewVisible = visible
         writer?.setPreviewEnabled(visible)
@@ -112,10 +117,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                     }
                 },
                 preview: { [weak self] image in
-                    Task { @MainActor in
-                        guard let self, self.recording else { return }
-                        self.preview = image
-                    }
+                    await self?.receivePreview(image)
                 })
             writer.setPreviewEnabled(previewVisible)
             self.writer = writer
