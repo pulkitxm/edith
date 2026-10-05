@@ -15,23 +15,23 @@ public struct AgentServices {
     public let scheduler: JobScheduler
     public let watchers: [FileSystemWatcher]
     private let startup: Task<Void, Never>?
-    private let stopWatchingPower: @Sendable () -> Void
+    private let stopWatching: @Sendable () -> Void
 
     public init(
         runtime: AgentRuntime, hub: AgentHub, scheduler: JobScheduler,
         watchers: [FileSystemWatcher], startup: Task<Void, Never>? = nil,
-        stopWatchingPower: @escaping @Sendable () -> Void = {}
+        stopWatching: @escaping @Sendable () -> Void = {}
     ) {
         self.runtime = runtime
         self.hub = hub
         self.scheduler = scheduler
         self.watchers = watchers
         self.startup = startup
-        self.stopWatchingPower = stopWatchingPower
+        self.stopWatching = stopWatching
     }
 
     public func stop() async {
-        stopWatchingPower()
+        stopWatching()
         startup?.cancel()
         watchers.forEach { $0.stop() }
         async let runtimeStopped: Void = runtime.shutdown()
@@ -89,6 +89,10 @@ public enum AgentBoot {
             observe: { await runtime.record($0) })
         let powerWatch = PowerWatch()
         powerWatch.start(power: power, scheduler: scheduler)
+        let volumeWatch = CodeStatsVolumeWatch()
+        volumeWatch.start {
+            Task { await scheduler.enqueue(CodeStatsWorkflow.scheduleJobID) }
+        }
         let hub = AgentHub(runtime: runtime)
         let watcher = FileSystemWatcher(paths: UsageWatchPaths.directories(), debounce: 30) {
             Task { await scheduler.enqueueFileSystemChange("usage.refresh", topic: .usage) }
@@ -165,7 +169,11 @@ public enum AgentBoot {
         }
         return AgentServices(
             runtime: runtime, hub: hub, scheduler: scheduler, watchers: [watcher],
-            startup: startup, stopWatchingPower: { powerWatch.stop() })
+            startup: startup,
+            stopWatching: {
+                powerWatch.stop()
+                volumeWatch.stop()
+            })
     }
 }
 

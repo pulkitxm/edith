@@ -127,6 +127,60 @@ private func settledBitmap(
         }
     }
 
+    @Test func codeStatsPageRendersEveryPhaseInBothAppearances() async throws {
+        var progress = CodeStatsRunProgress(startedAt: Date().addingTimeInterval(-90))
+        progress.phase = .syncing
+        progress.completed = 34
+        progress.total = 212
+        progress.synced = 30
+        progress.failed = 1
+        progress.overallFraction = 0.3
+        progress.inFlight = ["octo/app", "octo/site"]
+        let reportedAt = CodeStatsPageFixture.date("2026-10-01")
+        let phases: [(String, CodeStatsStatus)] = [
+            ("setup", CodeStatsPageFixture.status(storage: .notConfigured)),
+            (
+                "first-run",
+                CodeStatsPageFixture.status(
+                    active: CodeStatsActiveRun(trigger: .manual, startedAt: Date()),
+                    progress: progress)
+            ),
+            (
+                "disconnected",
+                CodeStatsPageFixture.status(
+                    storage: .volumeDisconnected(volumeName: "Archive"), reportedAt: reportedAt,
+                    github: .signedOut)
+            ),
+        ]
+        #expect(renders(CodeStatsReportSkeleton(dark: true)))
+        for (name, status) in phases {
+            for scheme in [ColorScheme.light, .dark] {
+                let agent = CodeStatsFakeAgent(
+                    status: status, reports: [.days(90): CodeStatsPageFixture.report()])
+                if status.state.reportedAt == nil { agent.setReport(nil, for: .days(90)) }
+                let model = CodeStatsModel(
+                    service: agent.service,
+                    defaults: UserDefaults(suiteName: "test.edith.code-stats-smoke.\(UUID())")!,
+                    calendar: CodeStatsPageFixture.calendar)
+                await model.refresh()
+                let bitmap = try #require(
+                    renderedBitmap(
+                        CodeStatsPage(model: model).environment(\.colorScheme, scheme),
+                        width: 1100, height: 1500))
+                #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+                if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"] {
+                    let output = URL(fileURLWithPath: directory, isDirectory: true)
+                    try FileManager.default.createDirectory(
+                        at: output, withIntermediateDirectories: true)
+                    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+                    try png.write(
+                        to: output.appendingPathComponent(
+                            "code-stats-\(name)-\(scheme == .dark ? "dark" : "light").png"))
+                }
+            }
+        }
+    }
+
     @Test func everyAppMaintenanceSkeletonRenders() {
         #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
         #expect(renders(HomebrewPageSkeleton()))

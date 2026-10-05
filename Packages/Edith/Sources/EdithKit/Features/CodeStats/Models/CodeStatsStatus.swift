@@ -51,11 +51,12 @@ public struct CodeStatsStatus: Codable, Equatable, Sendable {
     public var state: CodeStatsState
     public var nextRunAt: Date?
     public var progress: CodeStatsRunProgress?
+    public var revision: UInt64
 
     public init(
         settings: CodeStatsSettings, storage: CodeStatsStorageStatus, gitAvailable: Bool,
         githubAvailable: Bool, state: CodeStatsState, nextRunAt: Date?,
-        progress: CodeStatsRunProgress?
+        progress: CodeStatsRunProgress?, revision: UInt64 = 0
     ) {
         self.settings = settings
         self.storage = storage
@@ -64,6 +65,7 @@ public struct CodeStatsStatus: Codable, Equatable, Sendable {
         self.state = state
         self.nextRunAt = nextRunAt
         self.progress = progress
+        self.revision = revision
     }
 
     public var isRunning: Bool { state.active != nil }
@@ -85,7 +87,7 @@ public struct CodeStatsProfileLookup: Codable, Equatable, Sendable {
     }
 }
 
-public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Sendable {
+public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Identifiable, Sendable {
     public var name: String
     public var email: String
     public var commits: Int
@@ -97,6 +99,8 @@ public struct CodeStatsDiscoveredAuthor: Codable, Equatable, Sendable {
         self.commits = commits
         self.countedAsYou = countedAsYou
     }
+
+    public var id: String { name + "\t" + email }
 }
 
 extension CodeStatsStorageStatus {

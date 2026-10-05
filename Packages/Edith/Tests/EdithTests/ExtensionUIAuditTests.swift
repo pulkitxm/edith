@@ -114,6 +114,26 @@ struct ExtensionUIAuditTests {
     }
     @Test func seoAudit() throws { try render("seoAudit") }
     @Test func codeStats() throws { try render("codeStats") }
+    @Test func codeStatsPage() async throws {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(
+                storage: .volumeDisconnected(volumeName: "Archive"),
+                reportedAt: CodeStatsPageFixture.date("2026-10-01"), github: .signedOut),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        let model = CodeStatsModel(
+            service: agent.service,
+            defaults: UserDefaults(suiteName: "test.edith.code-stats-audit.\(UUID())")!,
+            calendar: CodeStatsPageFixture.calendar)
+        await model.refresh()
+        let host = try auditHost(
+            CodeStatsPage(model: model), size: CGSize(width: 1150, height: 1300))
+        let text = try auditText(host)
+        #expect(text.contains("Archive is disconnected"))
+        #expect(text.contains("gh auth login"))
+        #expect(text.uppercased().contains("COMMITS"))
+        #expect(text.contains("Contributions"))
+        try auditCapture(host, name: "code-stats-disconnected")
+    }
 
     private func render(_ id: String) throws {
         let entry = try #require(ExtensionRegistry.entry(id))

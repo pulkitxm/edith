@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -406,6 +407,19 @@ struct CodeStatsWorkflowHarness {
             harness.published.update { $0.last?.settings.schedule }
                 == .weekly(weekday: 2, hour: 8))
     }
+
+    @Test func everySnapshotCarriesANewerRevision() async throws {
+        let harness = try CodeStatsWorkflowHarness()
+        defer { harness.fixture.remove() }
+        let workflow = await harness.workflow()
+        let first = try await harness.status(workflow)
+        await workflow.settingsChanged()
+        let published = try #require(harness.published.update { $0.last })
+        let second = try await harness.status(workflow)
+        #expect(first.revision > 0)
+        #expect(published.revision > first.revision)
+        #expect(second.revision > published.revision)
+    }
 }
 
 @Suite struct CodeStatsScheduleJobTests {
@@ -519,5 +533,19 @@ struct CodeStatsWorkflowHarness {
         let status = try await job(await harness.workflow(constrained: true), harness)
         #expect(!status.isRunning)
         #expect(await harness.tasks.snapshots().isEmpty)
+    }
+}
+
+@Suite struct CodeStatsVolumeWatchTests {
+    @Test func mountAndUnmountWakeTheScheduleCheckUntilStopped() {
+        let center = NotificationCenter()
+        let watch = CodeStatsVolumeWatch(center: center)
+        let changes = CodeStatsLocked(0)
+        watch.start { changes.update { $0 += 1 } }
+        for name in CodeStatsVolumeWatch.names { center.post(name: name, object: nil) }
+        #expect(changes.update { $0 } == 2)
+        watch.stop()
+        center.post(name: NSWorkspace.didMountNotification, object: nil)
+        #expect(changes.update { $0 } == 2)
     }
 }

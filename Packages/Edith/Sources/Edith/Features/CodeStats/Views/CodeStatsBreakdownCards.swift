@@ -1,0 +1,162 @@
+import Charts
+import EdithKit
+import SwiftUI
+
+struct CodeStatsLanguageCards: View {
+    let projection: CodeStatsProjection
+    let dark: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                shares.frame(minWidth: UIScale.pt(320))
+                overTime.frame(minWidth: UIScale.pt(420))
+            }
+            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                shares
+                overTime
+            }
+        }
+    }
+
+    private var shares: some View {
+        SkinCard(title: "Languages", note: "Share of lines authored", dark: dark, fill: true) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                ForEach(Array(projection.languageShares.enumerated()), id: \.element.id) {
+                    index, share in
+                    CodeStatsShareRow(
+                        share: share, color: DashPalette.categorical(index, dark: dark),
+                        dark: dark)
+                }
+                if projection.languageShares.isEmpty {
+                    Text("No language data in this range.")
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                }
+            }
+        }
+    }
+
+    private var overTime: some View {
+        CodeStatsStackedCard(
+            title: "Languages over time", note: "Monthly share", points: projection.languageMonthly,
+            series: projection.languageSeries, percent: true, dark: dark)
+    }
+}
+
+private struct CodeStatsShareRow: View {
+    let share: CodeStatsShare
+    let color: Color
+    let dark: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            HStack {
+                Circle().fill(color).frame(width: UIScale.pt(8), height: UIScale.pt(8))
+                Text(share.name)
+                    .font(.system(size: UIScale.pt(12), weight: .medium))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Spacer()
+                Text(share.lines.formatted() + " lines")
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(share.share, format: .percent.precision(.fractionLength(0)))
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(width: UIScale.pt(40), alignment: .trailing)
+            }
+            .monospacedDigit()
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(DashSkin.grid(dark))
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(color)
+                            .frame(width: proxy.size.width * min(max(share.share, 0), 1))
+                    }
+            }
+            .frame(height: UIScale.pt(5))
+        }
+    }
+}
+
+struct CodeStatsHabitCards: View {
+    let projection: CodeStatsProjection
+    let dark: Bool
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                punchcard.frame(minWidth: UIScale.pt(560))
+                topDays.frame(width: UIScale.pt(300))
+            }
+            VStack(spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+                punchcard
+                topDays
+            }
+        }
+    }
+
+    private var punchcard: some View {
+        SkinCard(title: "When you commit", note: "Weekday by hour", dark: dark, fill: true) {
+            Grid(horizontalSpacing: UIScale.pt(2), verticalSpacing: UIScale.pt(2)) {
+                ForEach(Array(projection.punchcardRows.enumerated()), id: \.offset) { row, name in
+                    GridRow {
+                        Text(name)
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(width: UIScale.pt(28), alignment: .leading)
+                        ForEach(projection.punchcard[(row * 24)..<(row * 24 + 24)]) { cell in
+                            RoundedRectangle(cornerRadius: UIScale.pt(2))
+                                .fill(CodeStatsHeat.color(cell.level, dark: dark))
+                                .frame(minWidth: UIScale.pt(10), maxWidth: .infinity)
+                                .frame(height: UIScale.pt(16))
+                                .help("\(cell.weekday) \(cell.hour):00, \(cell.commits) commits")
+                        }
+                    }
+                }
+                GridRow {
+                    Text("")
+                    ForEach(0..<24, id: \.self) { hour in
+                        Text(hour.isMultiple(of: 6) ? "\(hour)" : "")
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                }
+            }
+        }
+    }
+
+    private var topDays: some View {
+        SkinCard(title: "Top days", note: "By lines authored", dark: dark, fill: true) {
+            VStack(alignment: .leading, spacing: UIScale.pt(7)) {
+                ForEach(Array(projection.topDays.enumerated()), id: \.element.id) { index, day in
+                    HStack(spacing: UIScale.pt(8)) {
+                        Text("\(index + 1)")
+                            .font(DashSkin.mono(10))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(width: UIScale.pt(16), alignment: .trailing)
+                        Text(
+                            day.date?.formatted(date: .abbreviated, time: .omitted) ?? day.day
+                        )
+                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        Spacer()
+                        Text("\(day.commits) commits")
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                        Text(day.lines.formatted())
+                            .font(.system(size: UIScale.pt(12), weight: .semibold))
+                            .foregroundStyle(DashSkin.ink(dark))
+                    }
+                    .monospacedDigit()
+                }
+                if projection.topDays.isEmpty {
+                    Text("No commits in this range.")
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                }
+            }
+        }
+    }
+}
