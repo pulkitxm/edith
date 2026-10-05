@@ -120,7 +120,7 @@ struct VideoWaveform: View {
             context.fill(bars, with: .color(.white.opacity(0.65)))
         }
         .allowsHitTesting(false)
-        .task(id: url) {
+        .pageTask(id: url) {
             let result = try? await VideoWaveformCache.shared.envelope(url)
             guard !Task.isCancelled else { return }
             envelope = result

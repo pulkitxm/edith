@@ -19,7 +19,7 @@ struct VideoFrameSamplingPicker: View {
         .help(
             "Nearest rounds post-seek video timestamps onto the output frame grid without changing trim bounds or audio timing."
         )
-        .task(id: requestedMode) {
+        .pageTask(id: requestedMode) {
             guard let requestedMode else { return }
             defer { self.requestedMode = nil }
             do {

@@ -11,8 +11,9 @@ final class QuinjetFolderPickerModel {
     var path = ""
     private(set) var directory = ""
     private(set) var entries: [RemoteFileEntry] = []
-    private(set) var loading = false
-    private(set) var errorMessage: String?
+    let contentLoad = ContentLoad()
+    var loading: Bool { contentLoad.isRunning }
+    var errorMessage: String? { contentLoad.errorMessage }
     private(set) var selectionIndex = -1
 
     private let resolveHome: ResolveHome
@@ -20,7 +21,6 @@ final class QuinjetFolderPickerModel {
     private let debounce: Duration
     private var history: [String] = []
     private var homeDirectory = ""
-    private var loadToken = 0
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(
@@ -74,22 +74,24 @@ final class QuinjetFolderPickerModel {
     }
 
     func start() async {
-        loading = true
-        errorMessage = nil
+        let request = contentLoad.begin(preservingContent: false)
         do {
             let home = try await resolveHome()
+            guard contentLoad.isCurrent(request) else {
+                if Task.isCancelled { contentLoad.cancel(request) }
+                return
+            }
             homeDirectory = home
             await navigate(to: home, recordHistory: false)
         } catch {
-            loading = false
-            errorMessage = error.localizedDescription
+            contentLoad.fail(request, error: error)
         }
     }
 
     func editPath(_ value: String) {
         path = value
         selectionIndex = -1
-        loadToken += 1
+        contentLoad.cancel()
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             guard let self else { return }
@@ -200,13 +202,13 @@ final class QuinjetFolderPickerModel {
     }
 
     private func load(_ target: String, filter: String?) async {
-        loadToken += 1
-        let token = loadToken
-        loading = true
-        errorMessage = nil
+        let token = contentLoad.begin(preservingContent: target == directory)
         do {
             let loaded = try await listDirectory(target)
-            guard token == loadToken else { return }
+            guard contentLoad.isCurrent(token) else {
+                if Task.isCancelled { contentLoad.cancel(token) }
+                return
+            }
             directory = target
             entries =
                 loaded
@@ -217,14 +219,13 @@ final class QuinjetFolderPickerModel {
                 }
                 .sorted(by: entryOrder)
             selectionIndex = -1
-            loading = false
+            contentLoad.complete(token)
         } catch {
-            guard token == loadToken else { return }
+            guard contentLoad.owns(token) else { return }
             directory = target
             entries = []
             selectionIndex = -1
-            loading = false
-            errorMessage = error.localizedDescription
+            contentLoad.fail(token, error: error)
         }
     }
 

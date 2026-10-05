@@ -37,7 +37,7 @@ struct CodeStatsHomeCard: View {
                 }
             }
         }
-        .task(id: model.table?.rows.count ?? -1) {
+        .pageTask(id: model.table?.rows.count ?? -1) {
             guard automaticActionsEnabled else { return }
             if model.table == nil { await model.refresh() }
             summary = await model.homeSummary()

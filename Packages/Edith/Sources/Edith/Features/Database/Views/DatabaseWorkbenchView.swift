@@ -69,8 +69,7 @@ struct DatabaseWorkbenchView: View {
             isReady: connections.selectedConnectionID != nil
                 && tabs.connectionID == connections.selectedConnectionID
         )
-        .task(id: connections.selectedConnection) {
-            guard automaticViewActionsEnabled else { return }
+        .pageTask(id: connections.selectedConnection) {
             tabs.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
         }
@@ -83,8 +82,7 @@ struct DatabaseWorkbenchView: View {
         case .connecting:
             SkeletonReplica("Connecting to \(connection.name)") { workspace(connection) }
         case .connected:
-            workspace(connection).task(id: connection.id) {
-                guard automaticViewActionsEnabled else { return }
+            workspace(connection).pageTask(id: connection.id) {
                 explorer.load(connection)
             }
         case .disconnecting:

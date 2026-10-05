@@ -15,7 +15,8 @@ final class FinderModel {
 
     var path: String
     var entries: [RemoteFileEntry] = [] { didSet { updateEntryProjection() } }
-    private(set) var loading = false
+    let listingLoad = ContentLoad()
+    var loading: Bool { listingLoad.isRunning }
     var errorMessage: String?
     var statusMessage: String?
     var selection: Set<String> = [] {
@@ -69,7 +70,7 @@ final class FinderModel {
     private var typeBuffer = ""
     private var typeBufferAt = Date.distantPast
     private struct LoadRequest {
-        let generation: Int
+        let generation: UInt64
         let path: String
     }
 
@@ -79,7 +80,6 @@ final class FinderModel {
         let freeSpaceKB: Int64?
     }
 
-    private var loadGeneration = 0
     private var loadWorkerGeneration = 0
     private var pendingLoad: LoadRequest?
     private var loadWorkerTask: Task<Void, Never>?
@@ -287,10 +287,9 @@ final class FinderModel {
     }
 
     private func scheduleLoad() -> Task<Void, Never> {
-        loadGeneration += 1
-        pendingLoad = LoadRequest(generation: loadGeneration, path: path)
+        pendingLoad = LoadRequest(
+            generation: listingLoad.begin(preservingContent: !entries.isEmpty), path: path)
         activeLoadTask?.cancel()
-        loading = true
         errorMessage = nil
         if let loadWorkerTask { return loadWorkerTask }
         loadWorkerGeneration += 1
@@ -313,15 +312,20 @@ final class FinderModel {
             let outcome = await operation.value
             guard workerGeneration == loadWorkerGeneration else { return }
             activeLoadTask = nil
-            guard !operation.isCancelled, request.generation == loadGeneration, let outcome else {
+            guard !operation.isCancelled, listingLoad.isCurrent(request.generation), let outcome
+            else {
                 continue
             }
             publish(outcome, requestedPath: request.path)
+            switch outcome.result {
+            case .success: listingLoad.complete(request.generation)
+            case let .failure(error): listingLoad.fail(request.generation, error: error)
+            }
         }
         guard workerGeneration == loadWorkerGeneration else { return }
         loadWorkerTask = nil
         activeLoadTask = nil
-        loading = false
+        if listingLoad.isRunning { listingLoad.cancel() }
     }
 
     private func loadDirectory(_ requestedPath: String) async -> LoadOutcome? {
@@ -349,7 +353,6 @@ final class FinderModel {
             path = outcome.path
         }
         guard path == outcome.path else { return }
-        loading = false
         freeSpaceKB = outcome.freeSpaceKB
         switch outcome.result {
         case let .success(items):
@@ -364,14 +367,13 @@ final class FinderModel {
     func stopLoading() {
         entryProjection.cancel()
         invalidateSearch()
-        loadGeneration += 1
+        listingLoad.cancel()
         loadWorkerGeneration += 1
         pendingLoad = nil
         activeLoadTask?.cancel()
         activeLoadTask = nil
         loadWorkerTask?.cancel()
         loadWorkerTask = nil
-        loading = false
     }
 
     func navigate(to newPath: String, recordHistory: Bool = true) {

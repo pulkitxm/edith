@@ -85,7 +85,7 @@ struct VideoProjectCard: View {
         }
         .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
-        .task(id: listing.previewURL) {
+        .pageTask(id: listing.previewURL) {
             guard image == nil, let url = listing.previewURL else { return }
             image = await VideoProjectThumbnails.image(for: url)
         }

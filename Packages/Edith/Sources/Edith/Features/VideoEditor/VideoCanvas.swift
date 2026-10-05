@@ -59,7 +59,7 @@ struct VideoCanvas: View {
                 }
             }
         }
-        .task(id: cameraPath) {
+        .pageTask(id: cameraPath) {
             guard let cameraPath else { return }
             let asset = AVURLAsset(url: URL(fileURLWithPath: cameraPath))
             if let track = try? await asset.loadTracks(withMediaType: .video).first,

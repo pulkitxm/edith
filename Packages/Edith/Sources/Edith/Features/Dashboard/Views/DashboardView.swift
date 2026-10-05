@@ -100,13 +100,8 @@ struct DashboardView: View {
                 syncCustomDates()
             }
         }
-        .onAppear {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.endObserving) {
             model.beginObserving()
-        }
-        .onDisappear {
-            guard automaticActionsEnabled else { return }
-            model.endObserving()
         }
         .onChange(of: model.loaded) { _, loaded in
             if automaticActionsEnabled, loaded { syncCustomDates() }

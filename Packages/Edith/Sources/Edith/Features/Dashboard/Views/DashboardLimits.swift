@@ -19,10 +19,11 @@ struct RateLimitsDialsView: View {
         LimitProvider.claude.rawValue
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.windowVisible) private var windowVisible
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     @State private var providers: [LimitProvider] = []
     @State private var reloadJob: Task<Void, Never>?
-    @State private var reloadGeneration = 0
+    @State private var reloadLoad = ContentLoad()
 
     private var selected: LimitProvider {
         get {
@@ -33,21 +34,20 @@ struct RateLimitsDialsView: View {
     }
 
     private func reload() {
-        reloadGeneration += 1
-        let generation = reloadGeneration
         reloadJob?.cancel()
         reloadJob = Task {
-            let latest = await LimitsHistory.loadLatestProviders()
-            guard !Task.isCancelled, generation == reloadGeneration else { return }
-            let found = LimitProvider.allCases.filter { latest[$0] != nil }
-            providers = found
-            let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
-            let provider = found.contains(saved) ? saved : found.first ?? saved
-            allowance = latest[provider]?.grok
-            point = latest[provider].map {
-                LimitPoint(
-                    date: $0.date, s: $0.session?.percent, w: $0.week?.percent,
-                    sessionReset: $0.session?.resetsAt, weekReset: $0.week?.resetsAt)
+            await reloadLoad.perform(operation: { await LimitsHistory.loadLatestProviders() }) {
+                latest in
+                let found = LimitProvider.allCases.filter { latest[$0] != nil }
+                providers = found
+                let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
+                let provider = found.contains(saved) ? saved : found.first ?? saved
+                allowance = latest[provider]?.grok
+                point = latest[provider].map {
+                    LimitPoint(
+                        date: $0.date, s: $0.session?.percent, w: $0.week?.percent,
+                        sessionReset: $0.session?.resetsAt, weekReset: $0.week?.resetsAt)
+                }
             }
         }
     }
@@ -120,9 +120,7 @@ struct RateLimitsDialsView: View {
             stroke: DashSkin.line(dark),
             shadow: .black.opacity(dark ? 0.32 : 0.05)
         )
-        .task { reload() }
-        .task(id: windowVisible) {
-            guard windowVisible else { return }
+        .pageTask {
             for await snapshot in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits)
             {
                 guard !Task.isCancelled else { return }
@@ -130,21 +128,20 @@ struct RateLimitsDialsView: View {
                 reload()
             }
         }
-        .onChange(of: selectedRaw) { reload() }
+        .onChange(of: selectedRaw) { if automaticActionsEnabled, windowVisible { reload() } }
         .onReceive(
             DistributedNotificationCenter.default().publisher(for: IPC.Name.limitsUpdated)
         ) { _ in
-            reload()
+            if automaticActionsEnabled, windowVisible { reload() }
         }
-        .onReceive(Timer.publish(every: 60, tolerance: 10, on: .main, in: .common).autoconnect()) {
-            _ in
-            guard windowVisible else { return }
+        .pageRefresh(
+            interval: { .seconds(60) },
+            cancel: {
+                reloadJob?.cancel()
+                reloadLoad.cancel()
+            }
+        ) {
             reload()
-        }
-        .onDisappear {
-            reloadGeneration += 1
-            reloadJob?.cancel()
-            reloadJob = nil
         }
     }
 
@@ -232,8 +229,7 @@ struct LimitsRefreshButton: View {
         .buttonStyle(.edith(.toolbar))
         .disabled(refreshing)
         .help("Refresh limits now")
-        .task(id: windowVisible) {
-            guard windowVisible else { return }
+        .pageTask {
             for await _ in AgentTopicStream.values(LimitsTopicSnapshot.self, topic: .limits) {
                 guard !Task.isCancelled else { return }
                 refreshing = false
@@ -271,7 +267,7 @@ struct LimitsCardView: View {
 
     @State private var providers: [LimitProvider] = []
     @State private var reloadJob: Task<Void, Never>?
-    @State private var reloadGeneration = 0
+    @State private var reloadLoad = ContentLoad()
 
     private var selectedProvider: LimitProvider {
         get {
@@ -338,36 +334,32 @@ struct LimitsCardView: View {
                 }
             }
         }
-        .task { reloadAll() }
+        .pageTask(cancel: {
+            reloadJob?.cancel()
+            reloadLoad.cancel()
+        }) { reloadAll() }
         .onChange(of: range) {
             selected = nil
             rebuildVisible()
         }
         .onChange(of: selectedProviderRaw) { reloadAll() }
-        .onDisappear {
-            reloadGeneration += 1
-            reloadJob?.cancel()
-            reloadJob = nil
-        }
     }
 
     private func reloadAll() {
         let preferred = LimitProvider(rawValue: selectedProviderRaw) ?? .claude
-        reloadGeneration += 1
-        let generation = reloadGeneration
         reloadJob?.cancel()
         reloadJob = Task {
-            let snapshot = await LimitsHistory.loadSnapshot(preferredProvider: preferred)
-            guard !Task.isCancelled, generation == reloadGeneration,
-                preferred == (LimitProvider(rawValue: selectedProviderRaw) ?? .claude)
-            else { return }
-            providers = snapshot.providers
-            loadedProvider = snapshot.provider
-            selected = nil
-            all = snapshot.points
-            let now = all.last?.date ?? Date()
-            downsampled = LimitsHistory.downsample(all, now: now)
-            rebuildVisible()
+            await reloadLoad.perform(operation: {
+                await LimitsHistory.loadSnapshot(preferredProvider: preferred)
+            }) { snapshot in
+                providers = snapshot.providers
+                loadedProvider = snapshot.provider
+                selected = nil
+                all = snapshot.points
+                let now = all.last?.date ?? Date()
+                downsampled = LimitsHistory.downsample(all, now: now)
+                rebuildVisible()
+            }
         }
     }
 

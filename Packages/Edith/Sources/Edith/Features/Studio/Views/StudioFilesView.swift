@@ -248,7 +248,7 @@ struct StudioFileCard: View {
         )
         .onHover { hovering = $0 }
         .contextMenu { StudioFileMenuItems(model: model, item: item) }
-        .task(id: item.url) { await model.loadFacts(for: item.url) }
+        .pageTask(id: item.url) { await model.loadFacts(for: item.url) }
     }
 
     private var badge: String? {

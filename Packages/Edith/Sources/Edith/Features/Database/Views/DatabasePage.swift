@@ -79,7 +79,7 @@ struct DatabasePage: View {
         .pageTask {
             await model.refresh()
         }
-        .task(id: connectionListTaskID) {
+        .pageTask(id: connectionListTaskID) {
             guard automaticActionsEnabled, model.readiness == .ready else { return }
             let search = connectionWorkspace.searchText.trimmingCharacters(
                 in: .whitespacesAndNewlines)

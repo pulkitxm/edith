@@ -293,7 +293,7 @@ struct SEOAuditPageAccordion: View {
             }
         }
         .clipped()
-        .task(id: snapshotFileURL) {
+        .pageTask(id: snapshotFileURL) {
             snapshotImage = nil
             guard let url = snapshotFileURL else { return }
             let loaded = await SEOSnapshotCache.image(for: url)

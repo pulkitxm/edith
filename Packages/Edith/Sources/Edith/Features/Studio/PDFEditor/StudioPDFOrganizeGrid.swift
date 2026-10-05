@@ -108,7 +108,7 @@ struct StudioPDFPageTile: View {
                 .foregroundStyle(.secondary)
         }
         .onHover { hovering = $0 }
-        .task(id: "\(index)-\(editor.revision)") {
+        .pageTask(id: "\(index)-\(editor.revision)") {
             guard let page = editor.session?.page(index) else { return }
             image = page.thumbnail(of: CGSize(width: 300, height: 380), for: .cropBox)
         }

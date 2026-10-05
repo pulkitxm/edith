@@ -18,34 +18,26 @@ struct FleetHomeView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                if !loaded {
-                    FleetHomeSkeleton(dark: dark)
-                } else {
-                    fleetBanner
-                    metricsGrid
-                    storageCard
-                    if !model.fleet.alerts.isEmpty { alertsCard }
-                    machinesCard
-                }
+        PageScaffold(pinnedHeader: true, header: {}) {
+            PageLoading(state: loaded ? .content : .loading, layout: .cards) {
+                fleetBanner
+                metricsGrid
+                storageCard
+                if !model.fleet.alerts.isEmpty { alertsCard }
+                machinesCard
             }
-            .pageContent(compact)
         }
         .machineActivity(model.allMachines.map { model.session(for: $0.id) })
-        .task(id: windowVisible) {
-            while windowVisible, !Task.isCancelled {
-                let host = await Task.detached(priority: .utility) { () -> UUID? in
-                    guard let deployment = CompanionDeploymentStore.load() else { return nil }
-                    return deployment.isLocal ? Machine.localID : deployment.machineID
-                }.value
-                guard !Task.isCancelled else { return }
-                if companionMachineID != host { companionMachineID = host }
-                let fleet = model.fleet
-                cpuHistory = MachineSession.appending(fleet.cpuPercent, to: cpuHistory)
-                memHistory = MachineSession.appending(fleet.memoryPercent, to: memHistory)
-                try? await Task.sleep(for: .seconds(MetricsCadence.sampleInterval))
-            }
+        .pageRefresh(interval: { .seconds(MetricsCadence.sampleInterval) }) {
+            let host = await Task.detached(priority: .utility) { () -> UUID? in
+                guard let deployment = CompanionDeploymentStore.load() else { return nil }
+                return deployment.isLocal ? Machine.localID : deployment.machineID
+            }.value
+            guard !Task.isCancelled else { return }
+            if companionMachineID != host { companionMachineID = host }
+            let fleet = model.fleet
+            cpuHistory = MachineSession.appending(fleet.cpuPercent, to: cpuHistory)
+            memHistory = MachineSession.appending(fleet.memoryPercent, to: memHistory)
         }
     }
 

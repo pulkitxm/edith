@@ -115,7 +115,7 @@ struct StudioProjectsView: View {
             }
             .pageContent(compact, width: .readable)
         }
-        .task { model.refreshProjects() }
+        .pageTask { model.refreshProjects() }
     }
 }
 

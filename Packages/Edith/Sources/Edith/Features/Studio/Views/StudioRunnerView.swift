@@ -93,7 +93,7 @@ struct StudioInputsPanel: View {
                                     job: job, url: url, index: index, ordered: ordered,
                                     facts: model.facts[url]
                                 )
-                                .task(id: url) { await model.loadFacts(for: url) }
+                                .pageTask(id: url) { await model.loadFacts(for: url) }
                             }
                         }
                         if ordered {

@@ -171,6 +171,17 @@ private struct SkeletonGroupActiveKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct LoadingAnimationsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    public var loadingAnimationsEnabled: Bool {
+        get { self[LoadingAnimationsEnabledKey.self] }
+        set { self[LoadingAnimationsEnabledKey.self] = newValue }
+    }
+}
+
 private struct SkeletonPhaseKey: EnvironmentKey {
     static let defaultValue = 0.0
 }
@@ -194,6 +205,7 @@ public struct SkeletonGroup<Content: View>: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.skeletonGroupActive) private var hasParentGroup
     @Environment(\.skeletonPhase) private var parentPhase
+    @Environment(\.loadingAnimationsEnabled) private var animationsEnabled
 
     public init(@ViewBuilder content: () -> Content) {
         self.content = content()
@@ -205,7 +217,9 @@ public struct SkeletonGroup<Content: View>: View {
                 .environment(\.skeletonPhase, parentPhase)
         } else {
             TimelineView(
-                .animation(minimumInterval: 1.0 / 30, paused: reduceMotion || scenePhase != .active)
+                .animation(
+                    minimumInterval: 1.0 / 30,
+                    paused: reduceMotion || !animationsEnabled || scenePhase != .active)
             ) { context in
                 content
                     .environment(\.skeletonPhase, LoadingMotion.phase(at: context.date))
@@ -224,13 +238,14 @@ public enum LoadingMotion {
 }
 
 private struct LoadingShimmer: View {
+    @Environment(\.loadingAnimationsEnabled) private var animationsEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.skeletonPhase) private var phase
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var themeName = "accent"
 
     var body: some View {
-        if !reduceMotion {
+        if !reduceMotion, animationsEnabled {
             GeometryReader { proxy in
                 LinearGradient(
                     colors: [.clear, themeColor(themeName).opacity(0.18), .clear],

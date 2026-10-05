@@ -423,7 +423,7 @@ private struct SEOAuditProjectCard: View {
                 .frame(height: UIScale.pt(3))
             }
         }
-        .task(id: snapshotFileURL) {
+        .pageTask(id: snapshotFileURL) {
             snapshotImage = nil
             guard let url = snapshotFileURL else { return }
             let loaded = await SEOSnapshotCache.image(for: url)

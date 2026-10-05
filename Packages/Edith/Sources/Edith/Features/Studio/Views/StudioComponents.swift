@@ -48,7 +48,7 @@ struct StudioThumbnail: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
-        .task(id: url) {
+        .pageTask(id: url) {
             image = StudioThumbnails.shared.cached(url, side: side)
             if image == nil {
                 image = await StudioThumbnails.shared.thumbnail(for: url, side: side)

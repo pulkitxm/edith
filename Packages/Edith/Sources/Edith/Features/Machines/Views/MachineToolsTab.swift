@@ -46,8 +46,7 @@ struct MachineToolsTab: View {
             }
             .pageContent(compact)
         }
-        .task(id: session.remotePlatform) {
-            guard connectionsEnabled else { return }
+        .pageTask(id: session.remotePlatform, active: connectionsEnabled) {
             await session.refreshServices()
             guard !Task.isCancelled else { return }
             servicesLoaded = session.isLocal || session.remotePlatform != nil

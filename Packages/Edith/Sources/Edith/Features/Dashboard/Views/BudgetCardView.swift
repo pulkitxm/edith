@@ -67,7 +67,7 @@ struct BudgetCardView: View {
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(60), alignment: .leading)
             }
         }
-        .task {
+        .pageTask {
             let history = await LimitsHistory.loadLatestProviders(providers: [.claude])
             guard !Task.isCancelled else { return }
             latest = history[.claude].map {

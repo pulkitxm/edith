@@ -355,7 +355,7 @@ struct AttentionResolvedIcon: View {
         }
         .frame(width: UIScale.pt(size), height: UIScale.pt(size))
         .accessibilityHidden(true)
-        .task(id: faviconURL) {
+        .pageTask(id: faviconURL) {
             faviconImage = nil
             guard let faviconURL,
                 let data = try? await AgentFaviconClient().data(for: faviconURL),
@@ -363,7 +363,7 @@ struct AttentionResolvedIcon: View {
             else { return }
             faviconImage = NSImage(data: data)
         }
-        .task(id: applicationBundleID) {
+        .pageTask(id: applicationBundleID) {
             applicationImage = nil
             guard let applicationBundleID,
                 AttentionApplicationIcon.cached(bundleID: applicationBundleID) == nil
