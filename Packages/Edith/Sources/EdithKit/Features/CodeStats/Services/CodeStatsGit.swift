@@ -174,7 +174,8 @@ public struct CodeStatsGit: Sendable {
         while start < candidates.count {
             let end = min(start + Self.chunkSize, candidates.count)
             commits += try await self.commits(
-                in: repository, shas: Array(candidates[start..<end]), attribution: attribution)
+                in: repository, candidates: Array(candidates[start..<end]),
+                attribution: attribution)
             start = end
         }
         return commits
@@ -185,27 +186,38 @@ public struct CodeStatsGit: Sendable {
     public func candidateCommits(
         in repository: CodeStatsRepository, attribution: CodeStatsAttribution,
         excluding previousTips: [String] = []
-    ) async throws -> [String] {
+    ) async throws -> [CodeStatsCandidate] {
         guard !attribution.identity.isEmpty else { return [] }
-        let shas = CodeStatsLocked([String]())
+        let candidates = CodeStatsLocked([CodeStatsCandidate]())
         let exclusions = previousTips.isEmpty ? [] : ["--not"] + previousTips
         try await run(
             ["rev-list", "--no-merges", "--regexp-ignore-case", "--extended-regexp"]
-                + attribution.authorPatterns.map { "--author=" + $0 } + Self.historyRefs
-                + exclusions + ["--", "."] + CodeStatsLanguage.excludedPathspecs,
+                + attribution.authorPatterns.map { "--author=" + $0 }
+                + ["--format=" + CodeStatsLogParser.prettyFormat] + Self.historyRefs
+                + exclusions,
             in: repository.path,
-            onLine: { line in if !line.isEmpty { shas.update { $0.append(line) } } })
-        return shas.update { $0 }
+            onLine: { line in
+                guard line.hasPrefix(CodeStatsLogParser.headerPrefix) else { return }
+                let sha = line.split(separator: "\t", maxSplits: 2).dropFirst().first
+                guard let sha else { return }
+                candidates.update {
+                    $0.append(CodeStatsCandidate(sha: String(sha), header: line))
+                }
+            })
+        return candidates.update { $0 }
     }
 
     public func commits(
-        in repository: CodeStatsRepository, shas: [String], attribution: CodeStatsAttribution
+        in repository: CodeStatsRepository, candidates: [CodeStatsCandidate],
+        attribution: CodeStatsAttribution
     ) async throws -> [CodeStatsCommit] {
-        guard !shas.isEmpty else { return [] }
+        guard !candidates.isEmpty else { return [] }
+        let attribute: CodeStatsLogParser.Attribute = { name, email, coAuthors in
+            attribution.flags(name: name, email: email, coAuthors: coAuthors)
+        }
         let parser = CodeStatsLocked(
-            CodeStatsLogParser(repository: repository.fullName) { name, email, coAuthors in
-                attribution.flags(name: name, email: email, coAuthors: coAuthors)
-            })
+            CodeStatsLogParser(repository: repository.fullName, attribute: attribute))
+        let shas = candidates.map(\.sha)
         try await run(
             [
                 "log", "--no-walk=unsorted", "--stdin",
@@ -215,7 +227,14 @@ public struct CodeStatsGit: Sendable {
             ] + CodeStatsLanguage.excludedPathspecs,
             in: repository.path, input: Data((shas.joined(separator: "\n") + "\n").utf8),
             onLine: { line in parser.update { $0.push(line) } })
-        return parser.update { $0.finish() }
+        var commits = parser.update { $0.finish() }
+        let parsed = Set(commits.map(\.sha))
+        var headers = CodeStatsLogParser(repository: repository.fullName, attribute: attribute)
+        for candidate in candidates where !parsed.contains(candidate.sha) {
+            headers.push(candidate.header)
+        }
+        commits += headers.finish()
+        return commits
     }
 
     public func canExtend(

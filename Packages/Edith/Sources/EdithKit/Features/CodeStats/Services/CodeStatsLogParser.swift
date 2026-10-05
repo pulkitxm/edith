@@ -8,6 +8,7 @@ public struct CodeStatsLogParser {
         "C%x09%H%x09%aI%x09%an%x09%ae%x09%at"
         + "%x09%(trailers:key=Co-authored-by,valueonly,separator=%x1f)%x09%s"
     public static let trailerSeparator: Character = "\u{1f}"
+    public static let headerPrefix = "C\t"
     static let markerLineLimit = 5
     static let formattingMinimumLines = 20
     static let formattingRatio = 0.2

@@ -1,6 +1,16 @@
 import CryptoKit
 import Foundation
 
+public struct CodeStatsCandidate: Equatable, Sendable {
+    public var sha: String
+    public var header: String
+
+    public init(sha: String, header: String) {
+        self.sha = sha
+        self.header = header
+    }
+}
+
 public struct CodeStatsRefState: Equatable, Sendable {
     public var fingerprint: String
     public var tips: [String]

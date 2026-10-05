@@ -244,7 +244,7 @@ public actor CodeStatsEngine {
         var attribution: CodeStatsAttribution
         var refs: CodeStatsRefState
         var base: [CodeStatsCommit]
-        var shas: [String]
+        var shas: [CodeStatsCandidate]
         var integrated: [String]
         var authors: [CodeStatsAuthor]
         var done: CodeStatsRepositoryCache?
@@ -252,7 +252,7 @@ public actor CodeStatsEngine {
 
     private struct Unit: Sendable {
         var plan: Int
-        var shas: [String]
+        var shas: [CodeStatsCandidate]
     }
 
     private func plan(
@@ -289,7 +289,7 @@ public actor CodeStatsEngine {
             let known = Set(base.map(\.sha))
             let shas = try await git.candidateCommits(
                 in: repository, attribution: attribution, excluding: exclusions
-            ).filter { !known.contains($0) }
+            ).filter { !known.contains($0.sha) }
             let integrated = try await git.integratedCommits(in: repository).sorted()
             var plan = Plan(
                 repository: repository, attribution: attribution, refs: refs, base: base,
@@ -367,7 +367,7 @@ public actor CodeStatsEngine {
             await self.unitStarted(unit.plan, name: plan.repository.fullName)
             do {
                 let commits = try await git.commits(
-                    in: plan.repository, shas: unit.shas, attribution: plan.attribution)
+                    in: plan.repository, candidates: unit.shas, attribution: plan.attribution)
                 await self.unitFinished(unit.plan, commits: commits, error: nil, root: root)
             } catch {
                 await self.unitFinished(unit.plan, commits: nil, error: error, root: root)
