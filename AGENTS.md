@@ -5,6 +5,30 @@ GitHub Actions runs the checks and cuts the release. Workflows live in
 request runs the checks. A push to `main` runs them again, and a product
 change on `main` publishes the next release.
 
+## Shared screen UI
+
+- Reuse `PageHeader`, `PageSectionHeader`, `pageContent`, and `PageMetrics` for
+  screen structure, gutters, and responsive headers. Read `compactLayout` from
+  the window host instead of defining another breakpoint inside a page.
+- Use `EdithSegmentedPicker` for segmented choices. Native segmented pickers
+  have intrinsic label widths that can overflow inspectors and compact windows.
+- Use `LoadingContainer` with shared skeletons for asynchronous content. Keep
+  content construction and compute-heavy startup behind the loading state, and
+  cancel page-owned tasks when the page disappears. Preserve existing content
+  during refreshes and expose actionable empty and failure states.
+- Present sheets through the shared presentation API so Escape and outside
+  clicks behave consistently. Disable dismissal while an operation owns the
+  presentation or when closing would discard unsaved edits.
+- Reuse the shared export and activity components for usage and code statistics
+  instead of creating feature-specific renderers, delivery helpers, or grids.
+- Use the selected app theme, `UIScale`, `Motion`, and shared surface and control
+  styles. Semantic status colors and exported artwork palettes may differ.
+- Verify screen layouts at compact and regular widths, increased zoom, and both
+  color schemes. Global navigation shortcuts belong to the window router and
+  must work when a terminal, web view, or text field is the first responder.
+- Keep source code comment-free. Functional tooling directives and license
+  blocks are the only exceptions. Run `make ci-comments` before submitting.
+
 ## Development builds
 
 Every worktree builds and runs its own development app, so several branches can

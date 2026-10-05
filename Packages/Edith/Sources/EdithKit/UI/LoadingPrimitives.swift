@@ -29,8 +29,8 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     public let message: String
     public let retry: (() -> Void)?
     public let cancel: (() -> Void)?
-    @ViewBuilder public let content: Content
-    @ViewBuilder public let placeholder: Placeholder
+    private let content: () -> Content
+    private let placeholder: () -> Placeholder
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showsLoading = false
@@ -41,24 +41,24 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         message: String = "There is nothing to show yet.",
         retry: (() -> Void)? = nil,
         cancel: (() -> Void)? = nil,
-        @ViewBuilder content: () -> Content,
-        @ViewBuilder placeholder: () -> Placeholder
+        @ViewBuilder content: @escaping () -> Content,
+        @ViewBuilder placeholder: @escaping () -> Placeholder
     ) {
         self.state = state
         self.title = title
         self.message = message
         self.retry = retry
         self.cancel = cancel
-        self.content = content()
-        self.placeholder = placeholder()
+        self.content = content
+        self.placeholder = placeholder
     }
 
     public var body: some View {
         ZStack {
             if state.presentsContent {
-                content
+                content()
             } else if state == .loading {
-                placeholder
+                placeholder()
                     .opacity(showsLoading ? 1 : 0)
             } else {
                 unavailable

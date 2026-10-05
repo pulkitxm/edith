@@ -62,20 +62,33 @@ struct PageSectionHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(.secondary)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+                heading.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: UIScale.pt(8))
+                trailing().fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: UIScale.pt(8))
-            trailing()
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                heading
+                ScrollView(.horizontal) {
+                    trailing()
+                }
+                .scrollIndicators(.hidden)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            Text(title)
+                .font(.system(size: UIScale.pt(15), weight: .semibold))
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -99,14 +112,19 @@ struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-                title()
-                    .font(PageMetrics.titleFont(compact))
-                    .foregroundStyle(DashSkin.ink(scheme == .dark))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Spacer(minLength: UIScale.pt(8))
-                trailing()
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+                    heading.fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: UIScale.pt(8))
+                    trailing().fixedSize(horizontal: true, vertical: false)
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    heading
+                    ScrollView(.horizontal) {
+                        trailing()
+                    }
+                    .scrollIndicators(.hidden)
+                }
             }
             accessory()
         }
@@ -114,6 +132,14 @@ struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
         .pageGutter(compact)
         .padding(.top, UIScale.pt(PageMetrics.top))
         .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
+    }
+
+    private var heading: some View {
+        title()
+            .font(PageMetrics.titleFont(compact))
+            .foregroundStyle(DashSkin.ink(scheme == .dark))
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
     }
 }
 
