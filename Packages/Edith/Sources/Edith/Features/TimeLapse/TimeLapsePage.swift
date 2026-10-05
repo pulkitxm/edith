@@ -28,6 +28,7 @@ struct TimeLapseControls: View {
     @AppStorage(AppStorageKeys.Tabs.timeLapseEnabled, store: SharedDefaults.store) private
         var enabled = false
 
+    @Environment(\.compactLayout) private var compact
     private let loadsSources: Bool
 
     init(
@@ -126,7 +127,7 @@ struct TimeLapseControls: View {
                     .font(.caption).foregroundStyle(.secondary)
                 }.padding(8)
             }
-            HStack(alignment: .top, spacing: 16) {
+            captureLayout {
                 GroupBox("Time and quality") {
                     VStack(alignment: .leading, spacing: 10) {
                         Picker("Capture one frame every", selection: $recorder.settings.interval) {
@@ -141,7 +142,7 @@ struct TimeLapseControls: View {
                             Text("Source, up to 8K").tag(7680)
                         }
                         Toggle("Include cursor", isOn: $recorder.settings.showCursor)
-                        Toggle("Keep screen awake", isOn: $recorder.settings.keepAwake)
+                        Toggle("Keep Mac and screen awake", isOn: $recorder.settings.keepAwake)
                         Text(
                             "\(Int(recorder.settings.speed))× playback at 30 fps. Export quality is chosen after recording; capture resolution limits the final detail."
                         )
@@ -174,6 +175,12 @@ struct TimeLapseControls: View {
                 }
             }
         }
+    }
+
+    private var captureLayout: AnyLayout {
+        compact
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(16)))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: UIScale.pt(16)))
     }
 
     private var estimatedStorage: String {

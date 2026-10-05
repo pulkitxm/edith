@@ -28,7 +28,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private var streams: [SCStream] = []
     private var outputs: [TimeLapseCaptureOutput] = []
     private var writer: TimeLapseWriter?
-    private var sleepAssertion: IOPMAssertionID = 0
+    private var sleepAssertions: [IOPMAssertionID] = []
 
     var canStart: Bool {
         !busy && !recording
@@ -167,14 +167,22 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                 if let error { throw TimeLapseError.encoding(error) }
             }
             if settings.keepAwake {
-                let result = IOPMAssertionCreateWithName(
-                    kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
-                    IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                    "Screen time-lapse recording" as CFString,
-                    &sleepAssertion)
-                guard result == kIOReturnSuccess else {
-                    throw TimeLapseError.encoding(
-                        "Could not keep this Mac awake. Disable Keep screen awake to continue.")
+                for type in [
+                    kIOPMAssertionTypePreventUserIdleDisplaySleep,
+                    kIOPMAssertionTypePreventUserIdleSystemSleep,
+                ] {
+                    var assertion: IOPMAssertionID = 0
+                    let result = IOPMAssertionCreateWithName(
+                        type as CFString,
+                        IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                        "Screen time-lapse recording" as CFString,
+                        &assertion)
+                    guard result == kIOReturnSuccess else {
+                        throw TimeLapseError.encoding(
+                            "Could not keep this Mac awake. Disable Keep Mac and screen awake to continue."
+                        )
+                    }
+                    sleepAssertions.append(assertion)
                 }
             }
             frames = 0
@@ -231,7 +239,8 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     private func releaseSleepAssertion() {
-        if sleepAssertion != 0 { IOPMAssertionRelease(sleepAssertion); sleepAssertion = 0 }
+        for assertion in sleepAssertions { IOPMAssertionRelease(assertion) }
+        sleepAssertions.removeAll()
     }
 }
 

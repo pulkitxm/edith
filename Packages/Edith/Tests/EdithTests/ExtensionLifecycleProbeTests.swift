@@ -111,6 +111,10 @@ import EdithDatabase
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: ["ffmpeg", "qpdf"]),
         MatrixRow(
+            id: "timeLapse", helper: false, machine: false,
+            toolRule: .all, adapter: true,
+            requiredTools: [], optionalTools: []),
+        MatrixRow(
             id: "music", helper: true, machine: false,
             toolRule: .all, adapter: true,
             requiredTools: [], optionalTools: []),

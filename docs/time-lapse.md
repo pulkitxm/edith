@@ -19,19 +19,22 @@ than storing a full-speed video first.
 
 System audio and the selected microphone are optional. They are recorded at
 normal speed into separate AAC tracks, so speech remains usable. Each enabled
-audio source adds about 58 MB per hour. System audio captures apps across the desktop, including when the video source
-is a selection of windows. Audio is exported separately and is not
+audio source adds about 58 MB per hour. System audio captures apps across the
+desktop, including when the video source is a selection of windows. Audio is
+exported separately and is not
 synchronized to the accelerated video.
 
-Keep screen awake prevents idle display sleep while recording, at the cost of
-power. Recording continues when leaving the page or closing its window. Sleeping,
-blank or unavailable sources are skipped, with no burst of catch-up frames.
-Quitting Edith finalizes the active recording before exit. A disconnected source or full drive stops recording;
+Keep Mac and screen awake prevents idle system and display sleep while recording,
+at the cost of power. Recording continues when leaving the page or closing its
+window. Sleeping, blank or unavailable sources are skipped, with no burst of
+catch-up frames. Quitting Edith finalizes the active recording before exit. A
+disconnected source or full drive stops recording;
 512 MB is reserved for finalization. No recorder can store unlimited days in a
 fixed amount of space, so watch the storage estimate for long recordings.
 
-Video is saved in HEVC segments of at most five minutes of real time. The session manifest is updated atomically
-when each segment finishes, and completed segments survive interruptions. An
+Video is saved in HEVC segments of at most five minutes of real time. The session
+manifest is updated atomically when each segment finishes, and completed segments
+survive interruptions. An
 interrupted session can export completed segments; the unfinished segment may be
 lost. The library keeps the original segments after export.
 

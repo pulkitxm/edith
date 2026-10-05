@@ -212,6 +212,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "studio": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
+        "timeLapse": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "music": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "calendar": Policy(

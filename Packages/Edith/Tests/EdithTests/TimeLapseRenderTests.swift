@@ -7,7 +7,8 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseRenderTests {
-    @Test @MainActor func rendersSyntheticCaptureControlsAndExportLibrary() async throws {
+    @Test(arguments: [1000.0, 560.0]) @MainActor
+    func rendersSyntheticCaptureControlsAndExportLibrary(width: Double) async throws {
         guard #available(macOS 15.0, *) else { return }
         _ = TestWindowHost.application
         let recorder = TimeLapseRecorder()
@@ -37,9 +38,10 @@ import Testing
                 recorder: recorder,
                 recordings: [recording], loadsSources: false
             ).environment(\.colorScheme, .light)
-                .frame(width: 1000, height: 980)
+                .environment(\.compactLayout, width < 640)
+                .frame(width: width, height: width < 640 ? 1440 : 980)
                 .background(Color.white))
-        host.frame = CGRect(x: 0, y: 0, width: 1000, height: 980)
+        host.frame = CGRect(x: 0, y: 0, width: width, height: width < 640 ? 1440 : 980)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host
         window.orderBack(nil)
@@ -58,7 +60,8 @@ import Testing
             let directory = URL(fileURLWithPath: path)
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
-            try png.write(to: directory.appendingPathComponent("time-lapse-controls.png"))
+            let name = width < 640 ? "time-lapse-controls-narrow.png" : "time-lapse-controls.png"
+            try png.write(to: directory.appendingPathComponent(name))
         }
         window.orderOut(nil)
     }
