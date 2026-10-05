@@ -73,7 +73,7 @@ struct SkillPreviewSheet: View {
                 Text(
                     "Showing cached Markdown. Reopen to retry GitHub; installation downloads the complete skill separately."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
                 .padding(.horizontal, UIScale.pt(24)).padding(.bottom, UIScale.pt(12))
             }
             Divider()
@@ -114,9 +114,10 @@ struct SkillPreviewSheet: View {
             }
         } else if let error {
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "wifi.exclamationmark").font(.title2).foregroundStyle(.secondary)
+                Image(systemName: "wifi.exclamationmark").font(.edithText(.title2)).foregroundStyle(
+                    .secondary)
                 Text(error).multilineTextAlignment(.center)
-                    .font(.callout).frame(maxWidth: UIScale.pt(380))
+                    .font(.edithText(.callout)).frame(maxWidth: UIScale.pt(380))
                 Button("Try again") { refreshID = UUID() }
             }
         } else {

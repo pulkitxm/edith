@@ -34,7 +34,7 @@ struct SkillInstallSheet: View {
                             "Available to \(targetCount) on this Mac.",
                             systemImage: "checkmark"
                         )
-                        .font(.callout)
+                        .font(.edithText(.callout))
                     } else {
                         targets
                         if !model.isDiscovering, !model.installerAvailable {
@@ -42,12 +42,12 @@ struct SkillInstallSheet: View {
                                 "Install Node.js 22.20 or later, then reopen this sheet to enable installation.",
                                 systemImage: "exclamationmark.circle"
                             )
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(.edithText(.callout)).foregroundStyle(.secondary)
                         }
                     }
                     if let error = model.installationError {
                         Label(error, systemImage: "exclamationmark.triangle")
-                            .font(.callout).foregroundStyle(.red)
+                            .font(.edithText(.callout)).foregroundStyle(.red)
                     }
                     if !model.installationLog.isEmpty {
                         DisclosureGroup("Installation output") {
@@ -59,7 +59,7 @@ struct SkillInstallSheet: View {
                             }
                             .frame(height: UIScale.pt(120))
                         }
-                        .font(.caption)
+                        .font(.edithText(.caption))
                     }
                 }
             }
@@ -69,7 +69,7 @@ struct SkillInstallSheet: View {
                 if model.isInstalling {
                     ProgressView().controlSize(.small)
                     Text("Installing for \(targetCount)…")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(model.installationSucceeded ? "Done" : "Cancel") { dismiss() }
@@ -101,7 +101,7 @@ struct SkillInstallSheet: View {
                     SkeletonGroup { SkeletonBlock(width: 84, height: 11) }
                 } else {
                     Text("\(model.selectedAgentIDs.count) of \(model.agents.count) selected")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
             if model.isDiscovering {
@@ -110,7 +110,7 @@ struct SkillInstallSheet: View {
                 Text(
                     "No supported agents found. Install and open an agent, then reopen this sheet."
                 )
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
             } else {
                 ScrollView {
                     VStack(spacing: 0) {

@@ -18,7 +18,7 @@ import Testing
         let extensions = try source("Features/Settings/Views/ExtensionsPane.swift")
         let system = try source("Features/Pages/Views/SystemPageView.swift")
 
-        #expect(extensions.contains(".adaptive(minimum:"))
+        #expect(extensions.contains("PageMetrics.cardColumns(compact,"))
         #expect(extensions.contains("EdithButtonStyle(.selection"))
         #expect(system.contains("EdithButtonStyle(.destructive)"))
         #expect(system.contains(".accessibilityLabel(\"Dismiss status\")"))

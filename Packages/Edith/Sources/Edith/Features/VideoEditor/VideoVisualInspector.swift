@@ -1,3 +1,4 @@
+import EdithKit
 import SwiftUI
 
 struct VideoSettingsInspector: View {
@@ -6,7 +7,7 @@ struct VideoSettingsInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Project video").font(.headline)
+            Text("Project video").font(.edithText(.headline))
             integer("Width", \.width)
             integer("Height", \.height)
             Menu("Canvas presets") {
@@ -112,7 +113,7 @@ struct VideoVisualInspector: View {
                     }
                 }
             }
-            Text("Framing & color").font(.headline)
+            Text("Framing & color").font(.edithText(.headline))
             Picker(
                 "Framing",
                 selection: Binding(
@@ -127,7 +128,7 @@ struct VideoVisualInspector: View {
             }
             value("Focal X", \.focalX)
             value("Focal Y", \.focalY)
-            Text("Grading mode").font(.caption).foregroundStyle(.secondary)
+            Text("Grading mode").font(.edithText(.caption)).foregroundStyle(.secondary)
             Picker(
                 "Grading mode",
                 selection: Binding(
@@ -145,7 +146,7 @@ struct VideoVisualInspector: View {
             .labelsHidden()
             .frame(maxWidth: .infinity)
             if effects.gradingMode == .ffmpeg709 {
-                Text("Grading domain").font(.caption).foregroundStyle(.secondary)
+                Text("Grading domain").font(.edithText(.caption)).foregroundStyle(.secondary)
                 Picker(
                     "Grading domain",
                     selection: Binding(
@@ -161,7 +162,7 @@ struct VideoVisualInspector: View {
                 Text(
                     "Grades the composed image before overlays in limited-range BT.709 YUV. The domain selects the encoded input and output interpretation. Saturation is 0 through 3."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             value("Exposure", \.exposure)
             value("Brightness", \.brightness)
@@ -171,11 +172,11 @@ struct VideoVisualInspector: View {
                 background: effects.background,
                 update: { background in update { $0.background = background } })
             Divider()
-            Text("Transform keyframes").font(.headline)
+            Text("Transform keyframes").font(.edithText(.headline))
             Text(
                 "Times use source seconds. Position is a fraction of the canvas; rotation uses degrees."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
             ForEach(Array(effects.keyframes.indices), id: \.self) { index in
                 VStack(alignment: .leading, spacing: 6) {
                     keyframe("Time", index, \.time)

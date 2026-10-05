@@ -66,7 +66,7 @@ struct VideoExportSheet: View {
     private var options: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label("Export", systemImage: "square.and.arrow.up")
-                .font(.title2.weight(.semibold))
+                .font(.edithText(.title2).weight(.semibold))
             EdithSegmentedPicker(
                 "Format", selection: $format, options: ["mp4", "audio", "gif"],
                 label: {
@@ -87,7 +87,7 @@ struct VideoExportSheet: View {
                     Text(
                         "Project: \(Int(size.width)) × \(Int(size.height)) at \(sourceFPS.formatted(.number.precision(.fractionLength(2)))) fps."
                     )
-                    .font(.caption)
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
                 }
                 encodingOptions
@@ -138,7 +138,7 @@ struct VideoExportSheet: View {
                         model.export(gif: format == "gif", quality: quality, delivery: delivery)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .disabled(model.pipeline == nil)
             }
         }
@@ -219,7 +219,7 @@ struct VideoExportSheet: View {
                     ? "High-precision QuickTime master with Rec. 709 color. ProRes is an intermediate codec, not a lossless copy."
                     : "Rec. 709 delivery. Hardware acceleration is preferred; requiring it fails if this Mac cannot encode these settings."
             )
-            .font(.caption)
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
         }
     }
@@ -259,7 +259,7 @@ struct VideoExportSheet: View {
             Text(
                 "Exports the complete timeline mix, including music, detached audio, gains and fades."
             )
-            .font(.caption)
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
         }
     }
@@ -269,7 +269,7 @@ struct VideoExportSheet: View {
             switch job.phase {
             case .exporting:
                 Label("Exporting", systemImage: "square.and.arrow.up")
-                    .font(.title2.weight(.semibold))
+                    .font(.edithText(.title2).weight(.semibold))
                 destination(job)
                 ProgressView(value: job.progress)
                 HStack {
@@ -279,33 +279,33 @@ struct VideoExportSheet: View {
                         Text("About \(Self.remaining(remaining)) left")
                     }
                 }
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 Text(
                     "You can close this, or even quit Edith. The export keeps running in the background."
                 )
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 HStack {
                     Spacer()
                     Button("Stop Export", role: .destructive) { exporter.cancel() }
                     Button("Hide") { dismiss() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                         .keyboardShortcut(.defaultAction)
                 }
             case .finished:
                 Label("Export finished", systemImage: "checkmark.circle.fill")
-                    .font(.title2.weight(.semibold))
+                    .font(.edithText(.title2).weight(.semibold))
                     .foregroundStyle(.green, .primary)
                 destination(job)
                 if let report = job.report {
                     Text(
                         "\(report.width) × \(report.height) · \(report.frameCount) frames · \(report.videoCodec)"
                     )
-                    .font(.callout)
+                    .font(.edithText(.callout))
                     Text("SHA-256: \(report.sha256)")
-                        .font(.caption.monospaced())
+                        .font(.edithText(.caption).monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -313,9 +313,9 @@ struct VideoExportSheet: View {
                     Text(
                         "\(Int(report.sampleRate)) Hz · \(report.channels) channels · \(report.frames) samples"
                     )
-                    .font(.callout)
+                    .font(.edithText(.callout))
                     Text("SHA-256: \(report.sha256)")
-                        .font(.caption.monospaced())
+                        .font(.edithText(.caption).monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -325,21 +325,21 @@ struct VideoExportSheet: View {
                         NSWorkspace.shared.activateFileViewerSelecting([job.destination])
                     }
                     Button("Done") { close() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                         .keyboardShortcut(.defaultAction)
                 }
             case .failed(let message):
                 Label("Export failed", systemImage: "exclamationmark.triangle.fill")
-                    .font(.title2.weight(.semibold))
+                    .font(.edithText(.title2).weight(.semibold))
                 destination(job)
                 Text(message)
-                    .font(.callout)
+                    .font(.edithText(.callout))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
                 HStack {
                     Spacer()
                     Button("Done") { close() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                         .keyboardShortcut(.defaultAction)
                 }
             }
@@ -348,7 +348,7 @@ struct VideoExportSheet: View {
 
     private func destination(_ job: VideoExporter.Job) -> some View {
         Text(job.destination.lastPathComponent)
-            .font(.callout)
+            .font(.edithText(.callout))
             .lineLimit(1)
             .truncationMode(.middle)
     }

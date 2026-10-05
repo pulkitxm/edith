@@ -35,13 +35,15 @@ struct AgentTasksSection: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(task.title).fontWeight(.medium)
                             if let activity = task.lastActivity {
-                                Text(activity).font(.caption).foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                Text(activity).font(.edithText(.caption)).foregroundStyle(
+                                    .secondary
+                                )
+                                .lineLimit(1)
                             }
                         }
                         Spacer()
                         Text(task.state.rawValue.capitalized)
-                            .font(.caption)
+                            .font(.edithText(.caption))
                             .foregroundStyle(
                                 task.state == .failed || task.state == .interrupted
                                     ? .orange : .secondary)
@@ -49,7 +51,7 @@ struct AgentTasksSection: View {
                 }
             }
             if let failure {
-                Text(failure).font(.caption).foregroundStyle(.orange)
+                Text(failure).font(.edithText(.caption)).foregroundStyle(.orange)
             }
         } header: {
             HStack {
@@ -97,7 +99,7 @@ struct AgentTasksSection: View {
             if let detail, detail.snapshot.id == task.id, !detail.output.isEmpty {
                 ScrollView {
                     Text(detail.output.map(\.text).joined(separator: "\n"))
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.edithText(.caption, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .textSelection(.enabled)
                 }
@@ -106,7 +108,7 @@ struct AgentTasksSection: View {
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
             }
         }
-        .font(.caption)
+        .font(.edithText(.caption))
         .padding(.vertical, 8)
     }
 

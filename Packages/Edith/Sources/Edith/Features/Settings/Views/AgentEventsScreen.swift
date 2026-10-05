@@ -97,14 +97,14 @@ struct AgentEventsScreen: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Event timeline").font(.system(size: UIScale.pt(20), weight: .semibold))
                     Text("Recent background activity")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 16)
                 Label(
                     model.paused ? "Paused" : "Live",
                     systemImage: model.paused ? "pause.circle" : "dot.radiowaves.left.and.right"
                 )
-                .font(.caption.weight(.medium))
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(model.paused ? .secondary : Color.accentColor)
                 Button {
                     dismiss()
@@ -170,7 +170,7 @@ struct AgentEventsScreen: View {
                     Text("Live updates paused")
                 }
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
             .padding(.horizontal, 24).padding(.vertical, 12)
         }
         .frame(

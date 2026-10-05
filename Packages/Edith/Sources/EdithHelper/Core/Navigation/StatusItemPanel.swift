@@ -85,7 +85,7 @@ struct StatusProgressRow: View {
                 if let resetsAt {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         Text(MenuCountdown.remaining(until: resetsAt, now: context.date))
-                            .font(.caption)
+                            .font(.edithText(.caption))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                             .accessibilityLabel("Time until reset")

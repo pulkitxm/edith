@@ -8,14 +8,15 @@ struct VideoCaptionStyleEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Reference-canvas pixels, top-origin Y").font(.caption).foregroundStyle(.secondary)
+            Text("Reference-canvas pixels, top-origin Y").font(.edithText(.caption))
+                .foregroundStyle(.secondary)
             TextField("Font family", text: field("fontFamily"))
             TextField("Font style", text: field("fontStyle"))
             number("Canvas width", key: "canvasWidth")
             number("Canvas height", key: "canvasHeight")
             number("Font size", key: "fontSize")
             number("Line advance", key: "lineAdvance")
-            Text("Font metrics").font(.caption).foregroundStyle(.secondary)
+            Text("Font metrics").font(.edithText(.caption)).foregroundStyle(.secondary)
             Picker("Font metrics", selection: field("metrics")) {
                 Text("Typographic").tag("typographic")
                 Text("Integer font bounds").tag("fontBounds")
@@ -38,13 +39,16 @@ struct VideoCaptionStyleEditor: View {
             Button("Apply style") { draft.apply("style") }
             DisclosureGroup("Fill, outline, shadow & gradient JSON") {
                 Text("RGBA channels use 0 through 1. Omit optional effects to remove them.")
-                    .font(.caption).foregroundStyle(.secondary)
-                TextEditor(text: field("json")).font(.system(.caption, design: .monospaced)).frame(
-                    height: UIScale.pt(240))
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                TextEditor(text: field("json")).font(.edithText(.caption, design: .monospaced))
+                    .frame(
+                        height: UIScale.pt(240))
                 Button("Apply JSON") { draft.apply("json") }
             }
             Button("Discard caption drafts") { draft.refresh(discard: true) }
-            if let failure = draft.failure { Text(failure).font(.caption).foregroundStyle(.red) }
+            if let failure = draft.failure {
+                Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+            }
         }
         .onAppear { draft.refresh() }
         .onChange(of: caption.captionStyle) { _, _ in draft.refresh() }

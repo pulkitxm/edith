@@ -25,10 +25,9 @@ struct VideoInspector: View {
                     Button {
                         tab = option
                     } label: {
-                        Text(option.rawValue).font(.caption).frame(maxWidth: .infinity)
+                        Text(option.rawValue).font(.edithText(.caption)).frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(tab == option ? .accentColor : .secondary)
+                    .buttonStyle(.edith(.secondary, selected: tab == option))
                     .accessibilityLabel("\(option.rawValue) inspector")
                 }
             }
@@ -47,7 +46,7 @@ struct VideoInspector: View {
                 .padding(.trailing, UIScale.pt(4))
             }
         }
-        .font(.callout)
+        .font(.edithText(.callout))
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))
         .onChange(of: model.selection) { _, selection in
@@ -67,7 +66,7 @@ struct VideoInspector: View {
 
     @ViewBuilder private var clipControls: some View {
         if let clip = selectedClip {
-            Text("Selected clip").font(.headline)
+            Text("Selected clip").font(.edithText(.headline))
             VideoVisualInspector(model: model, clip: clip)
             Divider()
             HStack {
@@ -100,7 +99,7 @@ struct VideoInspector: View {
                 }
             }
             Divider()
-            Text("Speed region").font(.headline)
+            Text("Speed region").font(.edithText(.headline))
             Picker(
                 "Speed",
                 selection: Binding(get: { model.regionSpeed }, set: { model.regionSpeed = $0 })
@@ -116,7 +115,7 @@ struct VideoInspector: View {
                 }
             }
             Divider()
-            Text("Crop").font(.headline)
+            Text("Crop").font(.edithText(.headline))
             let crop = clip.crop ?? ["x": 0, "y": 0, "width": 1, "height": 1]
             ForEach(["x", "y", "width", "height"], id: \.self) { axis in
                 number(
@@ -133,9 +132,9 @@ struct VideoInspector: View {
             Button("Reset crop", action: model.resetCrop)
             Button("Remove clip", role: .destructive, action: model.removeSelected)
             Divider()
-            Text("Incoming transition").font(.headline)
+            Text("Incoming transition").font(.edithText(.headline))
             let transition = model.project?.transitions.first { $0.clipID == clip.id }
-            Text("Transition").font(.caption).foregroundStyle(.secondary)
+            Text("Transition").font(.edithText(.caption)).foregroundStyle(.secondary)
             Picker(
                 "Transition",
                 selection: Binding(
@@ -168,7 +167,7 @@ struct VideoInspector: View {
         VStack(alignment: .leading, spacing: 14) {
             VideoSettingsInspector(model: model)
             Divider()
-            Text("Canvas & background").font(.headline)
+            Text("Canvas & background").font(.edithText(.headline))
             ColorPicker(
                 "Color",
                 selection: Binding(
@@ -199,7 +198,7 @@ struct VideoInspector: View {
     }
 
     @ViewBuilder private var cameraControls: some View {
-        Text("Webcam overlay").font(.headline)
+        Text("Webcam overlay").font(.edithText(.headline))
         Button("Upload / replace video…", action: model.attachCameraToSelectedClip)
             .disabled(selectedClip == nil)
         if let clip = selectedClip,
@@ -267,9 +266,9 @@ struct VideoInspector: View {
 
     private var audioControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Audio tracks").font(.headline)
+            Text("Audio tracks").font(.edithText(.headline))
             if let status = model.audioStatus {
-                ProgressView(status).font(.caption)
+                ProgressView(status).font(.edithText(.caption))
                 Button("Cancel audio processing") { model.audioTask?.cancel() }
             }
             if let clip = audioSourceClip {
@@ -291,7 +290,7 @@ struct VideoInspector: View {
                 Button("Detect silence", action: model.detectSilence).disabled(
                     model.audioTask != nil)
                 if model.silenceClipID == clip.id {
-                    Text("\(model.silentRanges.count) quiet sections").font(.caption)
+                    Text("\(model.silentRanges.count) quiet sections").font(.edithText(.caption))
                         .foregroundStyle(.secondary)
                     Button("Remove detected silence", action: model.removeSilence).disabled(
                         model.silentRanges.isEmpty)
@@ -307,7 +306,7 @@ struct VideoInspector: View {
                     Text(track.label)
                         .lineLimit(1)
                     Text("Output time · \(track.rate.formatted())× source rate")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
                     number(
                         "Start (s)", value: track.startMs / 1000, range: 0...max(1, model.duration),
                         step: 0.1
@@ -371,7 +370,7 @@ struct VideoInspector: View {
 
     private var overlayControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Annotations & cursor").font(.headline)
+            Text("Annotations & cursor").font(.edithText(.headline))
             Toggle("Render cursor", isOn: presentation(\.cursorVisible, fallback: false))
             Toggle("Smooth cursor", isOn: presentation(\.cursorSmoothing, fallback: false))
             number(
@@ -382,7 +381,7 @@ struct VideoInspector: View {
             Text(
                 "For a replaceable cursor, record with Include cursor off. Imported videos may already contain a cursor."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
             HStack {
                 Button("Image") { model.addOverlay("image") }
                 Button("Arrow") { model.addOverlay("figure") }

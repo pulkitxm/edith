@@ -20,6 +20,20 @@ enum PageMetrics {
     static func titleFont(_ compact: Bool) -> Font {
         DashSkin.heading(compact ? compactTitleSize : titleSize)
     }
+
+    static func cardColumns(
+        _ compact: Bool, minimum: Double, maximum: Double = .infinity,
+        spacing: Double? = nil, alignment: Alignment = .center
+    ) -> [GridItem] {
+        let maximum = UIScale.pt(maximum)
+        return [
+            GridItem(
+                compact
+                    ? .flexible(minimum: 0, maximum: maximum)
+                    : .adaptive(minimum: UIScale.pt(minimum), maximum: maximum),
+                spacing: spacing.map { CGFloat(UIScale.pt($0)) }, alignment: alignment)
+        ]
+    }
 }
 
 enum PageContentWidth {

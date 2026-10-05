@@ -224,20 +224,20 @@ struct VideoRecorderSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Label("Record a video", systemImage: "record.circle").font(.title2.bold())
+            Label("Record a video", systemImage: "record.circle").font(.edithText(.title2).bold())
             if recorder.recording {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     Text(
                         "Recording · \(Int(context.date.timeIntervalSince(recorder.startedAt ?? context.date)))s"
                     )
-                    .font(.title3.monospacedDigit()).foregroundStyle(.red)
+                    .font(.edithText(.title3).monospacedDigit()).foregroundStyle(.red)
                 }
                 Text("Stop recording to open the finished video in the editor.").foregroundStyle(
                     .secondary)
                 Button(recorder.busy ? "Finishing…" : "Stop recording") {
                     Task { await recorder.stop() }
                 }
-                .buttonStyle(.borderedProminent).disabled(recorder.busy)
+                .buttonStyle(.edith(.primary)).disabled(recorder.busy)
             } else {
                 Picker("Source", selection: $recorder.source) {
                     Text("Choose a source").tag("")
@@ -267,12 +267,12 @@ struct VideoRecorderSheet: View {
                                 dismiss()
                             }
                         }
-                    }.buttonStyle(.borderedProminent).disabled(recorder.source.isEmpty)
+                    }.buttonStyle(.edith(.primary)).disabled(recorder.source.isEmpty)
                 }
                 .disabled(recorder.busy)
             }
             if let error = recorder.error {
-                Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                Text(error).font(.edithText(.callout)).foregroundStyle(.red).textSelection(.enabled)
             }
         }
         .padding(24).frame(width: UIScale.pt(480))

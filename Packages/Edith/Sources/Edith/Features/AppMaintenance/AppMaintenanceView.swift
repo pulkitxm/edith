@@ -924,7 +924,7 @@ struct AppMaintenanceView: View {
                     .font(.system(size: UIScale.pt(44), weight: .light))
                     .foregroundStyle(.secondary)
                 Text("Choose an application")
-                    .font(.headline)
+                    .font(.edithText(.headline))
                 Text(
                     "Edith will show the app and exact bundle-identifier matches before anything moves."
                 )
@@ -958,7 +958,7 @@ struct AppMaintenanceView: View {
                             .frame(width: UIScale.pt(54), height: UIScale.pt(54))
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        Text(item.name).font(.title3.weight(.semibold))
+                        Text(item.name).font(.edithText(.title3).weight(.semibold))
                         Text("\(item.currentVersion) → \(item.availableVersion)")
                             .foregroundStyle(.secondary)
                     }
@@ -991,7 +991,7 @@ struct AppMaintenanceView: View {
                 }
                 GroupBox("Reviewed action") {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        Text(item.command).font(.system(.callout, design: .monospaced))
+                        Text(item.command).font(.edithText(.callout, design: .monospaced))
                             .textSelection(.enabled)
                         Text(
                             "Checked \(item.checkedAt.formatted(date: .abbreviated, time: .shortened))"
@@ -1029,7 +1029,7 @@ struct AppMaintenanceView: View {
                     ) {
                         confirmingUpdates = true
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(model.selectedUpdateIDs.isEmpty)
                 }
             }
@@ -1047,7 +1047,7 @@ struct AppMaintenanceView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: UIScale.pt(44), weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Update History").font(.headline)
+            Text("Update History").font(.edithText(.headline))
             Text("Each attempt records its source, version, retries, result, and finish time.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -1101,7 +1101,7 @@ struct AppMaintenanceView: View {
                             "\(update.latestVersion) available through \(update.source)",
                             systemImage: "arrow.down.circle.fill"
                         )
-                        .font(.caption)
+                        .font(.edithText(.caption))
                         .foregroundStyle(.green)
                     }
                 }
@@ -1145,8 +1145,7 @@ struct AppMaintenanceView: View {
                     Button("Move to Trash", role: .destructive) {
                         confirmingRemoval = true
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.edith(.destructive))
                     .disabled(model.selectedItems.isEmpty)
                 }
             }
@@ -1158,11 +1157,11 @@ struct AppMaintenanceView: View {
     private var statusMessage: some View {
         if let message = model.errorMessage {
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.red)
         } else if let message = model.resultMessage {
             Label(message, systemImage: "checkmark.circle.fill")
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.green)
         }
     }
@@ -1446,7 +1445,7 @@ private struct AppMaintenanceItemRow: View {
             }
             Spacer()
             Text(JunkScanner.format(item.sizeBytes))
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             Button {
@@ -1531,7 +1530,7 @@ private struct AppMaintenanceInstallReview: View {
                 Button(plan.replacesExisting ? "Replace App" : "Install App") {
                     onInstall(replaceExisting, moveImageToTrash)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .disabled(installing || plan.replacesExisting && !replaceExisting)
             }
             .padding(UIScale.pt(16))

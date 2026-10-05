@@ -27,7 +27,7 @@ struct BlitzTreePage: View {
                             }
                         }
                         Button("Choose folder", systemImage: "folder") { chooseFolder() }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.edith(.primary))
                             .disabled(model.removing)
                     }
                 }
@@ -139,12 +139,12 @@ struct BlitzTreePage: View {
                 "Partial scan: \(report.coverage.errors) errors, \(report.coverage.skippedCloudDirectories) cloud folders and \(report.coverage.skippedMountPoints) mount points skipped.",
                 systemImage: "exclamationmark.triangle.fill"
             )
-            .font(.callout)
+            .font(.edithText(.callout))
             .foregroundStyle(.orange)
         }
         HStack {
             Text(model.removing ? "Moving to Trash..." : "Folder overview")
-                .font(.headline)
+                .font(.edithText(.headline))
             Spacer()
             EdithSegmentedPicker(
                 "Visualization", selection: $rings, options: [false, true],
@@ -163,7 +163,7 @@ struct BlitzTreePage: View {
         .frame(height: UIScale.pt(280))
         .disabled(model.removing)
         Text("Allocated space, not guaranteed recoverable space. Click a folder to scan inside it.")
-            .font(.caption)
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
         EdithSegmentedPicker(
             "Show", selection: $list, options: BlitzTreeList.allCases, label: { $0.rawValue })
@@ -171,7 +171,7 @@ struct BlitzTreePage: View {
             Text(
                 "\(report.report.candidateCount) candidates. Review each folder in Finder before removing anything.\(report.report.truncated ? " Showing the largest 200." : "")"
             )
-            .font(.callout)
+            .font(.edithText(.callout))
             .foregroundStyle(.secondary)
         }
         let entries = list.entries(report)
@@ -194,7 +194,7 @@ struct BlitzTreePage: View {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(entry.name).fontWeight(.medium).lineLimit(1)
                             Text(entry.reason ?? entry.path)
-                                .font(.caption)
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -225,8 +225,8 @@ struct BlitzTreePage: View {
 
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title2).monospacedDigit()
+            Text(label).font(.edithText(.caption)).foregroundStyle(.secondary)
+            Text(value).font(.edithText(.title2)).monospacedDigit()
         }
     }
 

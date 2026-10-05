@@ -30,7 +30,7 @@ struct VideoEditorTransport: View {
             .disabled(model.pipeline == nil)
             .help("Loop playback")
             Text(timestamp(model.playhead))
-                .font(.system(.caption, design: .monospaced))
+                .font(.edithText(.caption, design: .monospaced))
                 .frame(width: UIScale.pt(65), alignment: .trailing)
             Slider(
                 value: Binding(
@@ -40,10 +40,10 @@ struct VideoEditorTransport: View {
             )
             .disabled(model.duration <= 0)
             Text(timestamp(model.duration))
-                .font(.system(.caption, design: .monospaced))
+                .font(.edithText(.caption, design: .monospaced))
                 .frame(width: UIScale.pt(65), alignment: .leading)
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.edith(.borderless))
         .padding(.horizontal, UIScale.pt(22))
         .frame(height: UIScale.pt(42))
     }

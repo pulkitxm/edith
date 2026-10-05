@@ -205,11 +205,7 @@ struct ExtensionsPane: View {
     }
 
     private var gridColumns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: UIScale.pt(compact ? 280 : 340)),
-                spacing: UIScale.pt(14), alignment: .top)
-        ]
+        PageMetrics.cardColumns(compact, minimum: 340, spacing: 14, alignment: .top)
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
@@ -484,7 +480,7 @@ struct ExtensionSettingsHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.headline)
+                .font(.edithText(.headline))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             Toggle(isOn: $enabled) {
@@ -793,7 +789,7 @@ private struct ExtensionLifecycleRows: View {
                 Section("Command line") {
                     ForEach(lifecycle.cliExamples, id: \.self) { example in
                         Text(example)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.edithText(.body, design: .monospaced))
                             .textSelection(.enabled)
                     }
                 }
@@ -843,7 +839,7 @@ private struct ExtensionLifecycleRows: View {
                 .settingsCaption()
             if let command = check.recoveryCommand {
                 Text(command)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.edithText(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -924,7 +920,7 @@ private struct ExtensionLifecycleRows: View {
                 .settingsCaption()
             if let command = instruction.command {
                 Text(command)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.edithText(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -1705,7 +1701,7 @@ private struct ClaudeStatusLineRow: View {
         LabeledContent("Claude Code status line") {
             HStack(spacing: 8) {
                 if let failure {
-                    Text(failure).font(.caption).foregroundStyle(.secondary)
+                    Text(failure).font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Text(connected == true ? "Connected" : "Not connected")
                     .foregroundStyle(.secondary)

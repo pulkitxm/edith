@@ -143,7 +143,8 @@ struct VideoBeatPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Label("Waveform & markers", systemImage: "waveform").font(.title2.bold())
+                Label("Waveform & markers", systemImage: "waveform").font(
+                    .edithText(.title2).bold())
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
@@ -163,7 +164,8 @@ struct VideoBeatPanel: View {
                         .frame(height: UIScale.pt(130))
                     }
                     if let error = analysis.error {
-                        Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                        Text(error).font(.edithText(.callout)).foregroundStyle(.red).textSelection(
+                            .enabled)
                     }
                     Divider()
                     markerControls
@@ -211,7 +213,7 @@ struct VideoBeatPanel: View {
                     analysis.analyze(sourceURL, settings: settings)
                 }
                 .disabled(sourceURL == nil || analysis.isAnalyzing)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 if analysis.isAnalyzing {
                     ProgressView().controlSize(.small)
                     Button("Cancel") { analysis.cancel() }
@@ -227,7 +229,7 @@ struct VideoBeatPanel: View {
                 TextField("Minimum spacing", value: $spacing, format: .number)
                     .frame(width: UIScale.pt(65)).textFieldStyle(.roundedBorder)
             }
-            .font(.caption)
+            .font(.edithText(.caption))
         }
     }
 
@@ -251,18 +253,18 @@ struct VideoBeatPanel: View {
                 Spacer()
                 Text("\(result.duration.formatted(.number.precision(.fractionLength(3))))s")
             }
-            .font(.caption.monospacedDigit())
+            .font(.edithText(.caption).monospacedDigit())
             if result.transientsTruncated {
                 Text("Detection limit reached. Only the first transients are listed.")
-                    .font(.caption).foregroundStyle(.orange)
+                    .font(.edithText(.caption)).foregroundStyle(.orange)
             } else if let estimate = result.tempoEstimate {
                 Text(
                     "Interval estimate: \(estimate.beatsPerMinute.formatted(.number.precision(.fractionLength(1)))) BPM. Transients are not confirmed musical beats."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
             } else {
                 Text("Transients mark amplitude onsets. No consistent tempo inferred.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
         }
     }
@@ -290,18 +292,18 @@ struct VideoBeatPanel: View {
                     }
                 }
                 .disabled(model.pipeline == nil)
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
             }
             Text(
                 "Output = offset + (source − in) / rate. Audio-track offsets and loops are entered explicitly; markers stay at output positions after video edits."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 
     private func numberField(_ title: String, value: Binding<Double>) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption).foregroundStyle(.secondary)
+            Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
             TextField(title, value: value, format: .number)
                 .textFieldStyle(.roundedBorder).monospacedDigit()
         }
@@ -336,8 +338,8 @@ struct VideoBeatPanel: View {
     private var markerControls: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Output markers").font(.headline)
-                Text(frameRate.label).font(.caption).foregroundStyle(.secondary)
+                Text("Output markers").font(.edithText(.headline))
+                Text(frameRate.label).font(.edithText(.caption)).foregroundStyle(.secondary)
                 Spacer()
                 Button("Import…") { importMarkers() }
                 Button("Export…") { exportMarkers() }
@@ -370,7 +372,7 @@ struct VideoBeatPanel: View {
             Text(
                 "Playhead: \(frameRate.timecode(at: (try? frameRate.frame(at: model.playhead)) ?? 0))  ·  \(model.playhead.formatted(.number.precision(.fractionLength(3)))) output seconds"
             )
-            .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            .font(.edithText(.caption).monospacedDigit()).foregroundStyle(.secondary)
         }
     }
 
@@ -388,7 +390,7 @@ struct VideoBeatPanel: View {
                 }
                 if model.project?.markers.isEmpty != false {
                     Text("Add a marker at the playhead or turn detected transients into markers.")
-                        .font(.callout).foregroundStyle(.secondary).padding()
+                        .font(.edithText(.callout)).foregroundStyle(.secondary).padding()
                 }
             }
         }
@@ -438,7 +440,7 @@ private struct VideoBeatMarkerRow: View {
                 .frame(width: UIScale.pt(80)).textFieldStyle(.roundedBorder)
                 .help("Output frame at the marker's saved frame rate")
             Button(marker.timecode, action: seek)
-                .font(.caption.monospacedDigit()).buttonStyle(.link)
+                .font(.edithText(.caption).monospacedDigit()).buttonStyle(.link)
                 .disabled(marker.seconds > duration)
                 .help("Seek to marker output time")
             Button("Save") { save(frame, label) }

@@ -23,6 +23,8 @@ change on `main` publishes the next release.
   instead of creating feature-specific renderers, delivery helpers, or grids.
 - Use the selected app theme, `UIScale`, `Motion`, and shared surface and control
   styles. Semantic status colors and exported artwork palettes may differ.
+- Use `Font.edithText` for semantic text styles so headings, captions, and
+  editor labels follow window zoom.
 - Verify screen layouts at compact and regular widths, increased zoom, and both
   color schemes. Global navigation shortcuts belong to the window router and
   must work when a terminal, web view, or text field is the first responder.

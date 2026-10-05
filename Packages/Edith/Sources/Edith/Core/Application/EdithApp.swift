@@ -95,6 +95,8 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleSettingsChange() {
+        applyAppearance(
+            SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         let usageEnabled =
             SharedDefaults.store.object(forKey: AppStorageKeys.Tabs.usageEnabled) as? Bool
         if usageEnabled != lastUsageEnabled {
