@@ -9,6 +9,7 @@ import SwiftUI
 final class MainAppDelegate: NSObject, NSApplicationDelegate {
     private var quitObserver: NSObjectProtocol?
     private var settingsObserver: NSObjectProtocol?
+    private var settingsIPCObserver: NSObjectProtocol?
     private var settingsBroadcastPending = false
     private var lastUsageEnabled: Bool?
     private var appStarted = false
@@ -67,6 +68,10 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
                 self?.handleSettingsChange()
             }
         }
+        settingsIPCObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            SharedDefaults.store.synchronize()
+            self?.refreshConfiguredSettings()
+        }
         postLaunch.start([
             StartupPhase(name: "main.launchCleanup") { [weak self] in
                 guard !AgentService.usesCustomService, let self else { return }
@@ -95,6 +100,11 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleSettingsChange() {
+        refreshConfiguredSettings()
+        scheduleSettingsChangedBroadcast()
+    }
+
+    private func refreshConfiguredSettings() {
         applyAppearance(
             SharedDefaults.store.string(forKey: AppStorageKeys.General.appearance) ?? "system")
         let usageEnabled =
@@ -103,7 +113,6 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
             lastUsageEnabled = usageEnabled
             DashboardModel.shared.syncExtensionState()
         }
-        scheduleSettingsChangedBroadcast()
     }
 
     private func applyConfiguredActivationPolicy() {
@@ -177,6 +186,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let settingsIPCObserver { IPC.stopObserving(settingsIPCObserver) }
         CalendarPermission.shutdown()
         flushSettingsChangedBroadcast()
         launchCleanupTask?.cancel()
