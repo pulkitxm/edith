@@ -30,36 +30,47 @@ public enum AgentTranscriptReader {
         var lastStamp: String?
         var skipping = false
         var finished = true
-        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
-            carry.append(chunk)
-            let used = carry.withUnsafeBytes { buffer -> Int in
-                guard let base = buffer.baseAddress else { return 0 }
-                var start = 0
-                while start < buffer.count,
-                    let found = memchr(base + start, 0x0A, buffer.count - start)
-                {
-                    let end = base.distance(to: UnsafeRawPointer(found))
-                    if skipping {
-                        skipping = false
-                    } else if end - start <= lineLimit {
-                        let line = UnsafeRawBufferPointer(rebasing: buffer[start..<end])
-                        if let stamp = consume(line, into: &digest) { lastStamp = stamp }
-                    }
-                    start = end + 1
+        var reading = true
+        while reading {
+            reading = try autoreleasepool { () throws -> Bool in
+                guard let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty else {
+                    return false
                 }
-                return start
-            }
-            consumed += UInt64(used)
-            carry.removeSubrange(0..<used)
-            if carry.count > lineLimit {
-                consumed += UInt64(carry.count)
-                carry.removeAll(keepingCapacity: true)
-                skipping = true
-            }
-            if chunk.count < chunkSize { break }
-            if Date() > deadline {
-                finished = false
-                break
+                carry.append(chunk)
+                let used = carry.withUnsafeBytes { buffer -> Int in
+                    guard let base = buffer.baseAddress else { return 0 }
+                    var start = 0
+                    while start < buffer.count,
+                        let found = memchr(base + start, 0x0A, buffer.count - start)
+                    {
+                        let end = base.distance(to: UnsafeRawPointer(found))
+                        if skipping {
+                            skipping = false
+                        } else if end - start <= lineLimit {
+                            let line = UnsafeRawBufferPointer(rebasing: buffer[start..<end])
+                            if let stamp = autoreleasepool(invoking: {
+                                consume(line, into: &digest)
+                            }) {
+                                lastStamp = stamp
+                            }
+                        }
+                        start = end + 1
+                    }
+                    return start
+                }
+                consumed += UInt64(used)
+                carry.removeSubrange(0..<used)
+                if carry.count > lineLimit {
+                    consumed += UInt64(carry.count)
+                    carry.removeAll(keepingCapacity: true)
+                    skipping = true
+                }
+                if chunk.count < chunkSize { return false }
+                if Date() > deadline {
+                    finished = false
+                    return false
+                }
+                return true
             }
         }
         digest.offset = consumed
