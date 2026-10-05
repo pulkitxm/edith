@@ -22,10 +22,7 @@ concurrency:
     ci-${{ github.ref }}-${{
       github.event_name == 'workflow_dispatch' && inputs.rebuild != '' && 'rebuild'
       || github.event_name == 'workflow_dispatch' && github.run_id
-      || (github.event_name == 'push'
-      && (startsWith(github.event.head_commit.message, 'Release v')
-      || startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
-      && github.sha)
+      || github.event_name == 'push' && github.sha
       || 'active'
     }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -103,6 +100,9 @@ jobs:
     name: checks
     needs: changes
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-checks-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -152,6 +152,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.promo == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-promo-video-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -176,6 +179,9 @@ jobs:
       && (needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true')
     runs-on: macos-26
+    concurrency:
+      group: ci-swift-build-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -227,6 +233,9 @@ jobs:
       needs.changes.outputs.swift == 'true'
       || needs.changes.outputs.workflows == 'true'
     runs-on: macos-26
+    concurrency:
+      group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -313,6 +322,9 @@ jobs:
       needs.changes.outputs.companion == 'true'
       || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
+    concurrency:
+      group: ci-companion-${{ github.ref }}-${{ github.event_name == 'push' && 'push' || github.run_id }}
+      cancel-in-progress: ${{ github.event_name == 'push' }}
     services:
       postgres:
         image: pgvector/pgvector:pg18@sha256:2ba9ca5f2e7daa0f0e7723cba1ee9167bab54efd3640516a44ac1a928dd67e7a

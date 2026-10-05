@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: hygiene-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: hygiene-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   community:
