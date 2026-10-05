@@ -3,6 +3,7 @@ import CoreImage
 import EdithCore
 import Foundation
 import ScreenCaptureKit
+import VideoToolbox
 
 final class TimeLapseWriter: @unchecked Sendable {
     let queue = DispatchQueue(label: "edith.timelapse.writer", qos: .utility)
@@ -260,6 +261,10 @@ final class TimeLapseWriter: @unchecked Sendable {
             settings = [
                 AVVideoCodecKey: AVVideoCodecType.hevc,
                 AVVideoWidthKey: session.width, AVVideoHeightKey: session.height,
+                AVVideoEncoderSpecificationKey: [
+                    kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder as String:
+                        true
+                ],
                 AVVideoCompressionPropertiesKey: [
                     AVVideoAverageBitRateKey: session.settings.videoBitRate,
                     AVVideoExpectedSourceFrameRateKey: TimeLapseSettings.playbackFPS,

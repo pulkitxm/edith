@@ -77,11 +77,14 @@ struct TimeLapseControls: View {
                 Divider()
                 library
                 if let message { Text(message).textSelection(.enabled) }
-            }.padding(24).frame(maxWidth: 960)
+            }.padding(24).frame(maxWidth: UIScale.pt(960))
         }
         .navigationTitle("Time-lapse")
         .task {
-            await recorder.loadSources(); await refreshLibrary()
+            if loadsSources {
+                await recorder.loadSources()
+                await refreshLibrary()
+            }
         }
         .onChange(of: recorder.recording) { _, recording in
             if !recording { Task { await refreshLibrary() } }
@@ -116,7 +119,7 @@ struct TimeLapseControls: View {
                                 }
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.frame(maxHeight: 180)
+                    }.frame(maxHeight: UIScale.pt(180))
                     Text(
                         "Select up to 16 sources. Multiple displays or windows appear in a grid; each selected window is captured independently."
                     )
