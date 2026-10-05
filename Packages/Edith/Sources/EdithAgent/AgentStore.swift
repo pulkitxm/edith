@@ -35,7 +35,7 @@ public enum AgentStoreLayout {
 }
 
 public enum AgentSchema {
-    public static let version = 5
+    public static let version = 6
 
     public static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
@@ -125,6 +125,18 @@ public enum AgentSchema {
             try database.create(
                 index: "attention_event_on_kind_startedAt", on: "attention_event",
                 columns: ["kind", "startedAt"])
+        }
+        migrator.registerMigration("0006-scheduled-tasks") { database in
+            try database.create(table: "scheduled_task") { table in
+                table.primaryKey("id", .text)
+                table.column("name", .text).notNull().unique()
+                table.column("definition", .blob).notNull()
+                table.column("enabled", .boolean).notNull()
+                table.column("createdAt", .datetime).notNull()
+                table.column("nextRunAt", .datetime)
+                table.column("lastRunAt", .datetime)
+                table.column("lastTaskID", .text)
+            }
         }
         return migrator
     }
