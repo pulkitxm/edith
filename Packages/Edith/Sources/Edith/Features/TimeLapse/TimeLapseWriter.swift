@@ -255,7 +255,7 @@ final class TimeLapseWriter: @unchecked Sendable {
             (kind == "system" && session.settings.systemAudio)
                 || (kind == "microphone" && session.settings.microphoneID != nil)
         else { return }
-        if session.settings.mode == .standard, recordingOrigin == nil { return }
+        if recordingOrigin == nil { return }
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
         guard timestamp.isNumeric else { return }
         try checkDisk(at: ProcessInfo.processInfo.systemUptime)
@@ -274,7 +274,7 @@ final class TimeLapseWriter: @unchecked Sendable {
         guard chunk.input.isReadyForMoreMediaData else { return }
         if chunk.origin == nil {
             chunk.origin = timestamp
-            if session.settings.mode == .standard, let recordingOrigin, let recordingDate {
+            if let recordingOrigin, let recordingDate {
                 chunk.startedAt = recordingDate.addingTimeInterval(
                     timestamp.seconds - recordingOrigin)
             }
@@ -417,12 +417,14 @@ final class TimeLapseWriter: @unchecked Sendable {
             queue.async { [self] in
                 completion = { continuation.resume(returning: $0) }
                 closing = true
+                let timedRecording = timer != nil
                 timer?.cancel()
                 timer = nil
                 latest.removeAll()
                 if let reason { session.failure = reason }
                 if let video {
-                    if session.settings.mode == .standard, let origin = video.origin {
+                    if timedRecording, session.settings.mode == .standard, let origin = video.origin
+                    {
                         let end = CMTime(
                             seconds: ProcessInfo.processInfo.systemUptime - origin.seconds,
                             preferredTimescale: 60000)

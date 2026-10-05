@@ -61,6 +61,7 @@ import Testing
                 #expect(abs(try await asset.load(.duration).seconds - expected) < 0.05)
                 #expect(
                     try await asset.loadTracks(withMediaType: .audio).count == min(1, audioCount))
+                if audioCount > 0 { #expect(try await audioHasSignal(asset)) }
                 #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
             }
         }
@@ -247,42 +248,82 @@ import Testing
         #expect(try Data(contentsOf: destination) == original)
     }
 
-    @Test func audioTracksRetainNormalSpeedAndExportSeparately() async throws {
+    @Test(arguments: [30.0, 60, 150, 300, 900, 1800], [1, 2])
+    func timeLapseExportsOneVideoWithAcceleratedAudio(speed: Double, audioCount: Int) async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        var settings = TimeLapseSettings()
-        settings.mode = .timeLapse
+        var settings = timeLapseSettings()
+        settings.speed = speed
         settings.systemAudio = true
-        settings.microphoneID = "synthetic-microphone"
+        settings.microphoneID = audioCount == 2 ? "synthetic-microphone" : nil
         let writer = try TimeLapseWriter(
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 64, height: 64),
             sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
-        for index in 0..<10 {
-            let sample = try audioSample(at: 100 + Double(index) / 10)
+        let image = try buffer(color: .green)
+        for index in 0..<31 {
+            let time = 100 + Double(index) * settings.interval
+            let sample = try audioSample(at: time)
             await withCheckedContinuation { continuation in
                 writer.queue.async {
-                    writer.ingest(sample, source: 0, kind: "system")
-                    writer.ingest(sample, source: 0, kind: "microphone")
+                    writer.setFrame(image, source: 0)
+                    writer.capture(at: time)
+                    writer.ingest(sample, source: -1, kind: "system")
+                    writer.ingest(sample, source: -1, kind: "microphone")
                     continuation.resume()
                 }
             }
-            try await Task.sleep(for: .milliseconds(20))
+            try await Task.sleep(for: .milliseconds(10))
         }
         let session = await writer.stop()
-        #expect(session.segments.filter { $0.kind == "system" }.count == 1)
-        #expect(session.segments.filter { $0.kind == "microphone" }.count == 1)
-        if #available(macOS 15.0, *) {
-            for kind in ["system", "microphone"] {
-                let destination = directory.appendingPathComponent("\(kind).m4a")
-                try await TimeLapseExporter.export(
-                    .init(session: session, directory: directory),
-                    quality: .original, to: destination, kind: kind)
-                let asset = AVURLAsset(url: destination)
-                let duration = try await asset.load(.duration)
-                #expect(abs(duration.seconds - 1) < 0.1)
-                #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(session.failure == nil)
+        #expect(session.frames == 31)
+        let audioDuration = 30 * settings.interval + 0.1
+        let audioStart = try #require(session.segments.first(where: { $0.kind == "video" }))
+            .startedAt
+        var exportedSession = session
+        exportedSession.segments.removeAll { $0.kind != "video" }
+        let fixture = directory.appendingPathComponent("system.wav")
+        try continuousAudio(at: fixture, seconds: audioDuration)
+        for kind in audioCount == 2 ? ["system", "microphone"] : ["system"] {
+            let file = "\(kind).wav"
+            if kind == "microphone" {
+                try FileManager.default.linkItem(
+                    at: fixture, to: directory.appendingPathComponent(file))
             }
+            exportedSession.segments.append(
+                .init(
+                    file: file, kind: kind, frames: 0,
+                    startedAt: audioStart, duration: audioDuration))
+        }
+        let recording = TimeLapseRecording(session: exportedSession, directory: directory)
+        let composition = try await TimeLapseExporter.composition(recording)
+        let tracks = try await composition.loadTracks(withMediaType: .audio)
+        #expect(tracks.count == audioCount)
+        for track in tracks {
+            let segments = try await track.load(.segments).filter { !$0.isEmpty }
+            let first = try #require(segments.first)
+            let mapping = first.timeMapping
+            #expect(
+                abs(mapping.source.duration.seconds / mapping.target.duration.seconds - speed) < 0.1
+            )
+            #expect(
+                try await track.load(.timeRange).duration.seconds <= session.playbackSeconds + 0.01)
+        }
+        if #available(macOS 15.0, *) {
+            for quality in TimeLapseExportQuality.allCases {
+                let destination = directory.appendingPathComponent(
+                    "time-lapse-\(quality.id.hashValue).\(quality.fileExtension)")
+                try await TimeLapseExporter.export(recording, quality: quality, to: destination)
+                let asset = AVURLAsset(url: destination)
+                #expect(
+                    abs(try await asset.load(.duration).seconds - session.playbackSeconds) < 0.05)
+                #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+                #expect(try await audioHasSignal(asset))
+                #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+            }
+            let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            #expect(!files.contains { $0.hasSuffix(".m4a") || $0.hasSuffix(".partial") })
         }
     }
 
@@ -368,7 +409,61 @@ import Testing
         var snapshot: [CGImage] { lock.withLock { images } }
     }
 
-    private func audioSample(at seconds: Double) throws -> CMSampleBuffer {
+    private func continuousAudio(at url: URL, seconds: Double) throws {
+        let file = try AVAudioFile(
+            forWriting: url,
+            settings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000,
+                AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
+            ])
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 48000))
+        let channels = try #require(buffer.floatChannelData)
+        for channel in 0..<2 {
+            for index in 0..<48000 {
+                channels[channel][index] = Float(sin(2 * .pi * 440 * Double(index) / 48000)) * 0.4
+            }
+        }
+        var remaining = Int((seconds * 48000).rounded())
+        while remaining > 0 {
+            let count = min(48000, remaining)
+            buffer.frameLength = AVAudioFrameCount(count)
+            try file.write(from: buffer)
+            remaining -= count
+        }
+    }
+
+    private func audioHasSignal(_ asset: AVAsset) async throws -> Bool {
+        let track = try #require(try await asset.loadTracks(withMediaType: .audio).first)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(
+            track: track,
+            outputSettings: [
+                AVFormatIDKey: kAudioFormatLinearPCM, AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsNonInterleaved: false,
+            ])
+        reader.add(output)
+        guard reader.startReading() else { throw reader.error ?? TimeLapseError.empty }
+        defer { reader.cancelReading() }
+        while let sample = output.copyNextSampleBuffer(),
+            let block = CMSampleBufferGetDataBuffer(sample)
+        {
+            let count = CMBlockBufferGetDataLength(block) / MemoryLayout<Int16>.stride
+            var values = [Int16](repeating: 0, count: count)
+            let status = values.withUnsafeMutableBytes {
+                CMBlockBufferCopyDataBytes(
+                    block, atOffset: 0, dataLength: $0.count,
+                    destination: $0.baseAddress!)
+            }
+            guard status == noErr else { throw TimeLapseError.empty }
+            if values.contains(where: { abs(Int($0)) > 32 }) { return true }
+        }
+        return false
+    }
+
+    private func audioSample(at seconds: Double, frequency: Double = 440) throws -> CMSampleBuffer {
         var description = AudioStreamBasicDescription(
             mSampleRate: 48000,
             mFormatID: kAudioFormatLinearPCM,
@@ -387,10 +482,17 @@ import Testing
                 allocator: nil, memoryBlock: nil,
                 blockLength: 19200, blockAllocator: nil, customBlockSource: nil,
                 offsetToData: 0, dataLength: 19200, flags: 0, blockBufferOut: &block) == noErr)
-        #expect(
-            CMBlockBufferFillDataBytes(
-                with: 0, blockBuffer: try #require(block),
-                offsetIntoDestination: 0, dataLength: 19200) == noErr)
+        var samples = (0..<4800).flatMap { index -> [Int16] in
+            let value = Int16(sin(2 * .pi * frequency * (seconds + Double(index) / 48000)) * 12000)
+            return [value, value]
+        }
+        let status = samples.withUnsafeMutableBytes { bytes in
+            CMBlockBufferReplaceDataBytes(
+                with: bytes.baseAddress!, blockBuffer: block!,
+                offsetIntoDestination: 0, dataLength: bytes.count)
+        }
+        #expect(status == noErr)
+
         var timing = CMSampleTimingInfo(
             duration: CMTime(value: 1, timescale: 48000),
             presentationTimeStamp: CMTime(seconds: seconds, preferredTimescale: 48000),

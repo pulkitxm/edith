@@ -26,7 +26,7 @@ struct TimeLapseRecording: Identifiable, Sendable {
 enum TimeLapseExportQuality: String, CaseIterable, Identifiable, Sendable {
     case compact = "Compact HEVC, up to 1080p"
     case high = "High quality HEVC, recorded resolution"
-    case original = "Original capture, no re-encoding"
+    case original = "Original video, no re-encoding"
     case editing = "ProRes 422, for editing"
     var id: String { rawValue }
     var preset: String {
@@ -42,23 +42,23 @@ enum TimeLapseExportQuality: String, CaseIterable, Identifiable, Sendable {
 }
 
 enum TimeLapseExporter {
-    static func composition(_ recording: TimeLapseRecording, kind: String = "video") async throws
+    static func composition(_ recording: TimeLapseRecording) async throws
         -> AVMutableComposition
     {
         try recording.session.validate()
         let composition = AVMutableComposition()
-        let segments = recording.session.segments.filter { $0.kind == kind }.sorted {
+        let segments = recording.session.segments.filter { $0.kind == "video" }.sorted {
             $0.file < $1.file
         }
         guard let first = segments.first else { throw TimeLapseError.empty }
-        try await append(recording, kind: kind, to: composition, origin: first.startedAt)
-        if kind == "video", recording.session.settings.mode == .standard {
+        try await append(recording, kind: "video", to: composition, origin: first.startedAt)
+        do {
             let duration = composition.duration
             for audio in ["system", "microphone"] {
                 if recording.session.segments.contains(where: { $0.kind == audio }) {
                     try await append(
                         recording, kind: audio, to: composition, origin: first.startedAt,
-                        limit: duration)
+                        limit: duration, speed: recording.session.settings.speed)
                 }
             }
         }
@@ -67,7 +67,7 @@ enum TimeLapseExporter {
 
     private static func append(
         _ recording: TimeLapseRecording, kind: String,
-        to composition: AVMutableComposition, origin: Date, limit: CMTime? = nil
+        to composition: AVMutableComposition, origin: Date, limit: CMTime? = nil, speed: Double = 1
     ) async throws {
         let segments = recording.session.segments.filter { $0.kind == kind }.sorted {
             $0.file < $1.file
@@ -106,22 +106,35 @@ enum TimeLapseExporter {
                 offset = CMTime(seconds: max(offset.seconds, start), preferredTimescale: 60000)
             }
             if let limit {
-                range.duration = CMTimeMinimum(range.duration, CMTimeSubtract(limit, offset))
+                range.duration = CMTimeMinimum(
+                    range.duration,
+                    CMTimeSubtract(CMTimeMultiplyByFloat64(limit, multiplier: speed), offset))
             }
             guard range.duration.seconds > 0 else { continue }
             try destination.insertTimeRange(range, of: track, at: offset)
             offset = CMTimeAdd(offset, range.duration)
         }
-        if destination.segments.isEmpty { composition.removeTrack(destination) }
+        if destination.segments.isEmpty {
+            composition.removeTrack(destination)
+        } else if speed != 1 {
+            let range = CMTimeRange(start: .zero, duration: destination.timeRange.end)
+            destination.scaleTimeRange(
+                range,
+                toDuration: CMTimeMultiplyByFloat64(
+                    range.duration,
+                    multiplier: 1 / speed))
+        }
     }
 
     @available(macOS 15.0, *)
-    private static func mixAudio(in composition: AVMutableComposition, directory: URL) async throws
+    private static func mixAudio(
+        in composition: AVMutableComposition, directory: URL, speed: Double
+    ) async throws
         -> URL?
     {
         let tracks = try await composition.loadTracks(withMediaType: .audio)
-        guard tracks.count > 1 else { return nil }
-        let audio = AVMutableComposition()
+        guard !tracks.isEmpty, tracks.count > 1 || speed != 1 else { return nil }
+        var audio = AVMutableComposition()
         for track in tracks {
             guard
                 let destination = audio.addMutableTrack(
@@ -130,58 +143,93 @@ enum TimeLapseExporter {
             else { throw TimeLapseError.empty }
             let range = try await track.load(.timeRange)
             try destination.insertTimeRange(range, of: track, at: range.start)
+            if speed != 1 {
+                let timeline = CMTimeRange(start: .zero, duration: destination.timeRange.end)
+                destination.scaleTimeRange(
+                    timeline,
+                    toDuration: CMTimeMultiplyByFloat64(timeline.duration, multiplier: speed))
+            }
         }
-        guard
-            let exporter = AVAssetExportSession(
-                asset: audio, presetName: AVAssetExportPresetAppleM4A)
-        else { throw TimeLapseError.encoding("Audio mixing is unavailable on this Mac.") }
-        let mix = AVMutableAudioMix()
-        mix.inputParameters = audio.tracks.map { track in
-            let parameters = AVMutableAudioMixInputParameters(track: track)
-            parameters.setVolume(0.5, at: .zero)
-            return parameters
+        var remaining = speed
+        var temporary: [URL] = []
+        var completed = false
+        defer {
+            for url in completed ? temporary.dropLast() : temporary[...] {
+                try? FileManager.default.removeItem(at: url)
+            }
         }
-        exporter.audioMix = mix
-        let url = directory.appendingPathComponent(".\(UUID().uuidString).m4a")
-        do {
+        repeat {
+            try Task.checkCancellation()
+            let factor = min(32, remaining)
+            let audioTracks = try await audio.loadTracks(withMediaType: .audio)
+            for track in audioTracks {
+                let range = CMTimeRange(start: .zero, duration: track.timeRange.end)
+                track.scaleTimeRange(
+                    range,
+                    toDuration: CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / factor))
+            }
+            guard
+                let exporter = AVAssetExportSession(
+                    asset: audio, presetName: AVAssetExportPresetAppleM4A)
+            else { throw TimeLapseError.encoding("Audio mixing is unavailable on this Mac.") }
+            let mix = AVMutableAudioMix()
+            mix.inputParameters = audioTracks.map { track in
+                let parameters = AVMutableAudioMixInputParameters(track: track)
+                parameters.setVolume(audioTracks.count > 1 ? 0.5 : 1, at: .zero)
+                parameters.audioTimePitchAlgorithm = .spectral
+                return parameters
+            }
+            exporter.audioMix = mix
+            exporter.audioTimePitchAlgorithm = .spectral
+            let url = directory.appendingPathComponent(".\(UUID().uuidString).m4a")
+            temporary.append(url)
             try await exporter.export(to: url, as: .m4a)
             let asset = AVURLAsset(url: url)
             guard let mixed = try await asset.loadTracks(withMediaType: .audio).first else {
                 throw TimeLapseError.empty
             }
-            for track in tracks { composition.removeTrack(track) }
-            guard
-                let destination = composition.addMutableTrack(
-                    withMediaType: .audio,
-                    preferredTrackID: kCMPersistentTrackID_Invalid)
-            else { throw TimeLapseError.empty }
-            var range = try await mixed.load(.timeRange)
-            range.duration = CMTimeMinimum(range.duration, composition.duration)
-            try destination.insertTimeRange(range, of: mixed, at: .zero)
-            return url
-        } catch {
-            try? FileManager.default.removeItem(at: url)
-            throw error
-        }
+            remaining /= factor
+            if remaining > 1 {
+                audio = AVMutableComposition()
+                guard
+                    let next = audio.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid)
+                else { throw TimeLapseError.empty }
+                try next.insertTimeRange(try await mixed.load(.timeRange), of: mixed, at: .zero)
+            } else {
+                for track in tracks { composition.removeTrack(track) }
+                guard
+                    let destination = composition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid)
+                else { throw TimeLapseError.empty }
+                var range = try await mixed.load(.timeRange)
+                range.duration = CMTimeMinimum(range.duration, composition.duration)
+                try destination.insertTimeRange(range, of: mixed, at: .zero)
+                completed = true
+                return url
+            }
+        } while remaining > 1
+        throw TimeLapseError.empty
     }
 
     @available(macOS 15.0, *)
     static func export(
         _ recording: TimeLapseRecording, quality: TimeLapseExportQuality,
-        to destination: URL, kind: String = "video"
+        to destination: URL
     ) async throws {
-        let composition = try await composition(recording, kind: kind)
-        let mixedAudio =
-            kind == "video"
-            ? try await mixAudio(
-                in: composition,
-                directory: destination.deletingLastPathComponent()) : nil
+        let composition = try await composition(recording)
+        let mixedAudio = try await mixAudio(
+            in: composition,
+            directory: destination.deletingLastPathComponent(),
+            speed: recording.session.settings.speed)
         defer { if let mixedAudio { try? FileManager.default.removeItem(at: mixedAudio) } }
-        let preset = kind == "video" ? quality.preset : AVAssetExportPresetAppleM4A
+        let preset = quality.preset
         guard let export = AVAssetExportSession(asset: composition, presetName: preset) else {
             throw TimeLapseError.encoding("This Mac does not support the selected export quality.")
         }
-        let fileType: AVFileType = kind == "video" ? quality.fileType : .m4a
+        let fileType = quality.fileType
         let temporary = destination.deletingLastPathComponent().appendingPathComponent(
             ".\(UUID().uuidString).partial")
         defer { try? FileManager.default.removeItem(at: temporary) }
