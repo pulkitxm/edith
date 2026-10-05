@@ -40,82 +40,68 @@ struct HomePage: View {
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
-        Group {
-            VStack(spacing: UIScale.pt(0)) {
-                HomeHeader(dark: dark)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                                WorldClocksCard(dark: dark)
-                                if systemEnabled || keepAwakeEnabled || presenterEnabled
-                                    || lidAwakeEnabled
-                                    || keystrokeHighlightEnabled
-                                {
-                                    QuickActionsCard(dark: dark)
-                                }
-                            }
-                            VStack(spacing: UIScale.pt(16)) {
-                                WorldClocksCard(dark: dark)
-                                if systemEnabled || keepAwakeEnabled || presenterEnabled
-                                    || lidAwakeEnabled
-                                    || keystrokeHighlightEnabled
-                                {
-                                    QuickActionsCard(dark: dark)
-                                }
-                            }
-                        }
-                        if usageEnabled {
-                            if model.homeUsage.hasDays {
-                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                    ActivityHeatmap(
-                                        days: model.homeUsage.calendarDays,
-                                        cuts: model.homeUsage.heatCuts,
-                                        model: model, dark: dark, blur: blurMoney)
-                                }
-                            } else if !model.loadAttempted {
-                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                    ActivityHeatmapSkeleton()
-                                }
-                            }
-                        }
-                        LazyVGrid(
-                            columns: PageMetrics.cardColumns(compact, minimum: 340, spacing: 16),
-                            alignment: .leading, spacing: UIScale.pt(16)
-                        ) {
-                            Group {
-                                if calendarEnabled { MeetingsCard(dark: dark) }
-                                if usageEnabled {
-                                    UsageSummaryCard(dark: dark)
-                                    RateLimitsDialsView(dark: dark, showsJumpLink: true)
-                                }
-                                if musicEnabled { MusicCard(dark: dark) }
-                                if codeStatsEnabled, dataSuiteEnabled {
-                                    CodeStatsHomeCard(dark: dark)
-                                }
-                            }
-                            .frame(maxHeight: .infinity, alignment: .top)
-                        }
+        PageScaffold(pinnedHeader: true) {
+            HomeHeader(dark: dark)
+        } content: {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                    WorldClocksCard(dark: dark)
+                    if systemEnabled || keepAwakeEnabled || presenterEnabled
+                        || lidAwakeEnabled
+                        || keystrokeHighlightEnabled
+                    {
+                        QuickActionsCard(dark: dark)
                     }
-                    .pageContent(compact)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                VStack(spacing: UIScale.pt(16)) {
+                    WorldClocksCard(dark: dark)
+                    if systemEnabled || keepAwakeEnabled || presenterEnabled
+                        || lidAwakeEnabled
+                        || keystrokeHighlightEnabled
+                    {
+                        QuickActionsCard(dark: dark)
+                    }
                 }
             }
-            .background(background)
+            if usageEnabled {
+                if model.homeUsage.hasDays {
+                    SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                        ActivityHeatmap(
+                            days: model.homeUsage.calendarDays,
+                            cuts: model.homeUsage.heatCuts,
+                            model: model, dark: dark, blur: blurMoney)
+                    }
+                } else if !model.loadAttempted {
+                    SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                        ActivityHeatmapSkeleton()
+                    }
+                }
+            }
+            LazyVGrid(
+                columns: PageMetrics.cardColumns(compact, minimum: 340, spacing: 16),
+                alignment: .leading, spacing: UIScale.pt(16)
+            ) {
+                Group {
+                    if calendarEnabled { MeetingsCard(dark: dark) }
+                    if usageEnabled {
+                        UsageSummaryCard(dark: dark)
+                        RateLimitsDialsView(dark: dark, showsJumpLink: true)
+                    }
+                    if musicEnabled { MusicCard(dark: dark) }
+                    if codeStatsEnabled, dataSuiteEnabled {
+                        CodeStatsHomeCard(dark: dark)
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+            }
         }
         .navigationTitle("Home")
-        .task(id: usageEnabled) {
-            guard automaticActionsEnabled, usageEnabled else { return }
+        .pageTask(id: usageEnabled, active: usageEnabled) {
             await model.restoreCachedHomeUsage()
             await model.load()
         }
-        .onAppear {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.endObserving) {
             model.beginObserving()
-        }
-        .onDisappear {
-            guard automaticActionsEnabled else { return }
-            model.endObserving()
         }
     }
 

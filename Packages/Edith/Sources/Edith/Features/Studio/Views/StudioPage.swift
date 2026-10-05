@@ -45,7 +45,7 @@ struct StudioPage: View {
         return
             content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DashSkin.paper(scheme == .dark))
+            .pageSurface()
             .navigationRoute("editor", selection: editorBinding, isValid: editorIsValid)
             .navigationRoute("tab", selection: $model.tab)
             .navigationTitle("Studio")
@@ -94,8 +94,7 @@ struct StudioPage: View {
                     StudioWorkflowEditor(model: model, draft: draft)
                 }
             }
-            .task {
-                guard automaticActionsEnabled else { return }
+            .pageTask {
                 model.start()
             }
             .onChange(of: VideoEditorOpenBridge.shared.pending?.request.requestID, initial: true) {
@@ -213,7 +212,7 @@ struct StudioHome: View {
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             PageHeader(
                 title: { Text("Studio") },
                 trailing: { StudioHeaderActions(model: model) },
@@ -231,6 +230,7 @@ struct StudioHome: View {
                             .lineLimit(1)
                     }
                 })
+        } content: {
             switch model.tab {
             case .files: StudioFilesView(model: model).presenterCover(.studio)
             case .tools: StudioToolsView(model: model)

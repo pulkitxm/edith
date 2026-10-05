@@ -65,7 +65,7 @@ struct SettingsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             PageHeader(
                 tab.wrappedValue.label,
                 trailing: {
@@ -84,6 +84,7 @@ struct SettingsPane: View {
                         .foregroundStyle(.secondary)
                 }
             )
+        } content: {
             Group {
                 switch tab.wrappedValue {
                 case .general: GeneralPane()
@@ -101,8 +102,6 @@ struct SettingsPane: View {
             .frame(maxWidth: contentMaximumWidth, maxHeight: .infinity, alignment: .topLeading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("tab", selection: tab)
         .navigationTitle(tab.wrappedValue.label)
         .onAppear {

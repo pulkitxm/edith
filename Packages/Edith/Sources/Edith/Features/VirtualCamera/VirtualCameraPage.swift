@@ -50,39 +50,31 @@ struct VirtualCameraPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageScaffold(pinnedHeader: true) {
             PageHeader(
                 "Virtual Camera",
                 trailing: { VirtualCameraHeaderControls(model: model, dark: dark) })
-            ScrollView {
-                let layout =
-                    !compact
-                    ? AnyLayout(HStackLayout(alignment: .top, spacing: UIScale.pt(16)))
-                    : AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(16)))
-                layout {
-                    VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                        VirtualCameraStage(model: model, dark: dark)
-                        VirtualCameraToolbar(model: model, dark: dark)
-                        VirtualCameraSceneStrip(model: model, dark: dark)
-                    }
-                    .frame(minWidth: UIScale.pt(0), maxWidth: .infinity, alignment: .topLeading)
-                    VirtualCameraInspector(model: model, dark: dark)
-                        .frame(width: compact ? nil : UIScale.pt(340))
-                        .frame(maxWidth: compact ? .infinity : nil, alignment: .topLeading)
+        } content: {
+            PageColumns {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    VirtualCameraStage(model: model, dark: dark)
+                    VirtualCameraToolbar(model: model, dark: dark)
+                    VirtualCameraSceneStrip(model: model, dark: dark)
                 }
-                .pageContent(compact)
+                .frame(minWidth: UIScale.pt(0), maxWidth: .infinity, alignment: .topLeading)
+                VirtualCameraInspector(model: model, dark: dark)
+                    .frame(width: compact ? nil : UIScale.pt(340))
+                    .frame(maxWidth: compact ? .infinity : nil, alignment: .topLeading)
             }
         }
-        .background(DashSkin.paper(dark))
         .navigationRoute("inspector", selection: $model.tab)
         .navigationRoute("scene", selection: sceneBinding, isValid: sceneIsValid)
-        .onAppear { attachment.begin() }
-        .task {
+        .pageTask(cancel: { attachment.release(model) }) {
+            attachment.begin()
             await Task.yield()
             guard !Task.isCancelled else { return }
             attachment.acquire(model)
         }
-        .onDisappear { attachment.release(model) }
         .alert(
             "Virtual Camera",
             isPresented: Binding(

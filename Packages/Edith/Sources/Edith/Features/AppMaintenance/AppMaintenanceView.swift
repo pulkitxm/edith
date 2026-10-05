@@ -568,24 +568,19 @@ struct AppMaintenanceView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             header
             Divider()
+        } content: {
             content
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationRoute("section", selection: sectionBinding)
-        .task { model.refresh(interval: updateRefreshInterval) }
-        .task(id: updateAutoRefresh) {
-            guard updateAutoRefresh else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(
-                    for: .seconds(max(updateRefreshInterval, 900)))
-                guard !Task.isCancelled else { return }
-                model.refresh(automatic: true, interval: updateRefreshInterval)
-            }
+        .pageTask(cancel: model.cancel) { model.refresh(interval: updateRefreshInterval) }
+        .pageRefresh(
+            active: updateAutoRefresh, interval: { .seconds(max(updateRefreshInterval, 900)) }
+        ) {
+            model.refresh(automatic: true, interval: updateRefreshInterval)
         }
-        .onDisappear { model.cancel() }
         .fileImporter(
             isPresented: $showingDiskImagePicker,
             allowedContentTypes: [UTType(filenameExtension: "dmg") ?? .data]
@@ -707,7 +702,10 @@ struct AppMaintenanceView: View {
             .scrollIndicators(.never)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.phase == .loading {
-            AppMaintenanceSectionSkeleton(section: section)
+            ScrollView {
+                PageSkeleton(layout: .list)
+                    .pageContent(compact)
+            }
         } else if compact {
             VStack(spacing: 0) {
                 sectionInventory.frame(height: UIScale.pt(180))

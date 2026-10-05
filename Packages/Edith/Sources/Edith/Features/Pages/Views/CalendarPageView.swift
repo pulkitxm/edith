@@ -17,8 +17,9 @@ struct CalendarPage: View {
     private var blurCalendar: Bool { presenterState.active && presenterBlurCalendar }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             pageHeader
+        } content: {
             if store.authStatus != .fullAccess {
                 CalendarPermissionPrompt(style: calendarStyle, accentColor: theme)
                     .frame(maxWidth: UIScale.pt(420))
@@ -27,10 +28,8 @@ struct CalendarPage: View {
                 agenda
             }
         }
-        .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationTitle("Calendar")
-        .onAppear { store.start() }
-        .onDisappear { store.shutdown() }
+        .pageTask(cancel: store.shutdown) { store.start() }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)

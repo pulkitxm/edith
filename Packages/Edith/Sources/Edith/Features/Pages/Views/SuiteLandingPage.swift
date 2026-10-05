@@ -17,7 +17,7 @@ struct SuiteLandingPage: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageScaffold(pinnedHeader: true) {
             PageHeader(
                 suite.title,
                 accessory: {
@@ -25,39 +25,32 @@ struct SuiteLandingPage: View {
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(.secondary)
                 })
-            ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                    ForEach(groups, id: \.title) { group in
-                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                            if groups.count > 1 {
-                                Text(group.title.uppercased())
-                                    .font(DashSkin.mono(10, weight: .semibold))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                            }
-                            VStack(spacing: 0) {
-                                ForEach(Array(group.abilities.enumerated()), id: \.element.id) {
-                                    index, ability in
-                                    if index > 0 { Divider().opacity(0.5) }
-                                    SuiteAbilityRow(entry: ability, dark: dark)
-                                }
-                            }
-                            .background(
-                                DashSkin.paper2(dark),
-                                in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: UIScale.pt(12))
-                                    .strokeBorder(DashSkin.line(dark)))
+        } content: {
+            ForEach(groups, id: \.title) { group in
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    if groups.count > 1 {
+                        Text(group.title.uppercased())
+                            .font(DashSkin.mono(10, weight: .semibold))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
+                    VStack(spacing: 0) {
+                        ForEach(Array(group.abilities.enumerated()), id: \.element.id) {
+                            index, ability in
+                            if index > 0 { Divider().opacity(0.5) }
+                            SuiteAbilityRow(entry: ability, dark: dark)
                         }
                     }
-                    SuiteHostNote(suite: suite, abilities: abilities, dark: dark)
+                    .background(
+                        DashSkin.paper2(dark),
+                        in: RoundedRectangle(cornerRadius: UIScale.pt(12))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: UIScale.pt(12))
+                            .strokeBorder(DashSkin.line(dark)))
                 }
-                .pageContent(compact)
             }
-            .scrollIndicators(.never)
+            SuiteHostNote(suite: suite, abilities: abilities, dark: dark)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
         .navigationTitle(suite.title)
     }
 }

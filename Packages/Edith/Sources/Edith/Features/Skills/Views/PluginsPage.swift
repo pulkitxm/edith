@@ -11,55 +11,50 @@ struct PluginsPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: UIScale.pt(20)) {
-                PageHeader {
-                    Text("Plugins")
-                } accessory: {
-                    Text("Skills built for Edith, ready for your agents.")
-                        .font(.system(size: UIScale.pt(13)))
-                        .foregroundStyle(DashSkin.inkSoft(dark))
-                }
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    HStack {
-                        Text("Edith skills")
-                            .font(.system(size: UIScale.pt(13), weight: .semibold))
-                        Spacer()
-                        if model.agentsLoaded {
-                            Text("\(model.agents.count) agents found on this Mac")
-                                .font(.system(size: UIScale.pt(11)))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            SkeletonGroup {
-                                SkeletonBlock(width: 164, height: 11)
-                            }
-                            .accessibilityElement(children: .ignore)
-                            .accessibilityLabel("Discovering installed agents")
-                        }
-                    }
-                    ForEach(model.skills) { skill in
-                        SkillCatalogRow(
-                            skill: skill, agents: model.agents,
-                            installed: model.installedAgents[skill.id]?.isEmpty == false,
-                            disabled: model.isInstalling || !model.agentsLoaded,
-                            preview: { previewSkill = skill },
-                            install: { agent in
-                                Task { await model.present(skill, agentID: agent) }
-                            })
-                    }
-                    Text(
-                        "Install once for all your projects. Choose your agents at each install, with your preferences remembered."
-                    )
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(.secondary)
-                }
-                .pageGutter(compact)
+        PageScaffold {
+            PageHeader {
+                Text("Plugins")
+            } accessory: {
+                Text("Skills built for Edith, ready for your agents.")
+                    .font(.system(size: UIScale.pt(13)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
             }
-            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+        } content: {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                HStack {
+                    Text("Edith skills")
+                        .font(.system(size: UIScale.pt(13), weight: .semibold))
+                    Spacer()
+                    if model.agentsLoaded {
+                        Text("\(model.agents.count) agents found on this Mac")
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        SkeletonGroup {
+                            SkeletonBlock(width: 164, height: 11)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("Discovering installed agents")
+                    }
+                }
+                ForEach(model.skills) { skill in
+                    SkillCatalogRow(
+                        skill: skill, agents: model.agents,
+                        installed: model.installedAgents[skill.id]?.isEmpty == false,
+                        disabled: model.isInstalling || !model.agentsLoaded,
+                        preview: { previewSkill = skill },
+                        install: { agent in
+                            Task { await model.present(skill, agentID: agent) }
+                        })
+                }
+                Text(
+                    "Install once for all your projects. Choose your agents at each install, with your preferences remembered."
+                )
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(.secondary)
+            }
         }
-        .background(DashSkin.paper(dark))
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await model.discoverAgents()
         }
         .edithSheet(item: $previewSkill) { skill in

@@ -55,11 +55,12 @@ struct DatabasePage: View {
     private var theme: Color { palette.accent }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             if model.readiness != .ready {
                 PageHeader("Database")
                 Divider().opacity(0.35)
             }
+        } content: {
             pageContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -75,8 +76,7 @@ struct DatabasePage: View {
             }()
         )
         .environment(\.databaseAppTheme, palette.theme)
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await model.refresh()
         }
         .task(id: connectionListTaskID) {

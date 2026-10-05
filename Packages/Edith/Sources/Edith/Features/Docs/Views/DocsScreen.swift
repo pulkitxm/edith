@@ -49,11 +49,12 @@ struct DocsScreen: View {
 
     var body: some View {
         @Bindable var browser = browser
-        VStack(spacing: 0) {
+        PageWorkspace {
             PageHeader(
                 "Docs", trailing: { history },
                 accessory: { askField(question: $browser.question) })
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
+        } content: {
             ZStack(alignment: .top) {
                 content
                 if browser.resultsVisible, let answer = browser.answer {
@@ -63,8 +64,6 @@ struct DocsScreen: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
         .background(shortcuts)
         .navigationRoute(
             "page", selection: pageBinding,
@@ -74,8 +73,7 @@ struct DocsScreen: View {
             }
         )
         .navigationTitle("Docs")
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await browser.load()
         }
     }

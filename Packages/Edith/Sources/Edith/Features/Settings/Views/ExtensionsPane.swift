@@ -59,13 +59,14 @@ struct ExtensionsPane: View {
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             PageHeader(
                 "Extensions",
                 accessory: {
                     searchField
                     categoryRow
                 })
+        } content: {
             ScrollViewReader { proxy in
                 ScrollView {
                     extensionGrid

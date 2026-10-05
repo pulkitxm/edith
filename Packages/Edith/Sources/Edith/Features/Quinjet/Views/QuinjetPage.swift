@@ -18,9 +18,10 @@ struct QuinjetPage: View {
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             tabBar
             Divider().opacity(0.45)
+        } content: {
             ZStack {
                 ForEach(model.tabs) { tab in
                     tabContent(tab, presented: tab.id == model.selected)
@@ -30,15 +31,13 @@ struct QuinjetPage: View {
             }
         }
         .presenterCover(.review)
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
             model.setSessionLaunchEnabled(launchEnabled)
             QuinjetSessionBridge.shared.attach(model, token: bridgeToken, router: router)
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.cancelDiscovery) {
             await model.refreshThemes()
             guard !Task.isCancelled else { return }
             await model.refreshProjects()
@@ -51,7 +50,6 @@ struct QuinjetPage: View {
         }
         .onDisappear {
             QuinjetSessionBridge.shared.detach(token: bridgeToken)
-            model.cancelDiscovery()
         }
     }
 

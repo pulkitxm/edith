@@ -30,12 +30,11 @@ struct MachinesPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             header
+        } content: {
             content
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
         .navigationRoute("place", selection: placeBinding, isValid: placeIsValid)
         .navigationTitle("Machines")
         .edithSheet(isPresented: $addSheetPresented, dismissible: false) {

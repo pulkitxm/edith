@@ -12,43 +12,39 @@ struct BlitzTreePage: View {
     @Environment(\.windowRouter) private var router
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                PageHeader {
-                    Text("BlitzTree")
-                } accessory: {
-                    HStack {
-                        if model.scanning {
-                            ProgressView().controlSize(.small)
-                            Button("Cancel", action: model.cancel)
-                        } else if let root = model.root {
-                            Button("Rescan", systemImage: "arrow.clockwise") {
-                                model.scan(root, remember: false)
-                            }
+        PageScaffold {
+            PageHeader {
+                Text("BlitzTree")
+            } accessory: {
+                HStack {
+                    if model.scanning {
+                        ProgressView().controlSize(.small)
+                        Button("Cancel", action: model.cancel)
+                    } else if let root = model.root {
+                        Button("Rescan", systemImage: "arrow.clockwise") {
+                            model.scan(root, remember: false)
                         }
-                        Button("Choose folder", systemImage: "folder") { chooseFolder() }
-                            .buttonStyle(.edith(.primary))
-                            .disabled(model.removing)
                     }
+                    Button("Choose folder", systemImage: "folder") { chooseFolder() }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.removing)
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    navigation
-                    if let error = model.error {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
-                            .textSelection(.enabled)
-                    }
-                    if let report = model.report {
-                        results(report)
-                    } else {
-                        emptyState
-                    }
-                }
-                .pageGutter(compact)
             }
-            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+        } content: {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                navigation
+                if let error = model.error {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
+                if let report = model.report {
+                    results(report)
+                } else {
+                    emptyState
+                }
+            }
         }
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("list", selection: $list)
         .navigationRoute("folder", selection: folderBinding, isValid: folderIsValid)
         .onDisappear { model.cancel() }

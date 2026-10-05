@@ -44,8 +44,7 @@ struct SEOAuditPage: View {
             "project", selection: projectBinding, isValid: projectIsValid,
             isReady: model.projectsLoaded
         )
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await model.refreshProjects()
         }
         .edithSheet(isPresented: $model.newProjectPresented, dismissible: false) {
@@ -77,26 +76,30 @@ private struct SEOAuditProjectsView: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: UIScale.pt(20)) {
-                PageHeader {
-                    Text("Site Audit")
-                } accessory: {
-                    HStack(spacing: UIScale.pt(14)) {
-                        Text("Crawl every page, inspect every share card, and keep each run local.")
-                            .font(.system(size: UIScale.pt(13)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                        Button(action: model.presentNewProject) {
-                            Label("New project", systemImage: "plus")
-                        }
-                        .buttonStyle(.edith(.primary))
-                        .disabled(model.isRunning)
+        PageScaffold {
+            PageHeader {
+                Text("Site Audit")
+            } accessory: {
+                HStack(spacing: UIScale.pt(14)) {
+                    Text("Crawl every page, inspect every share card, and keep each run local.")
+                        .font(.system(size: UIScale.pt(13)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    Button(action: model.presentNewProject) {
+                        Label("New project", systemImage: "plus")
                     }
+                    .buttonStyle(.edith(.primary))
+                    .disabled(model.isRunning)
                 }
-                projects
-                    .pageGutter(compact)
             }
-            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+        } content: {
+            if model.projectsLoaded, let error = model.projectsLoadError {
+                PageNotice(
+                    error, tone: .error,
+                    actions: {
+                        Button("Retry") { Task { await model.refreshProjects() } }
+                    })
+            }
+            projects
         }
         .edithSheet(item: $projectBeingRenamed, dismissible: false) { project in
             SEOAuditRenameProjectSheet(project: project) { name in
@@ -123,22 +126,13 @@ private struct SEOAuditProjectsView: View {
     }
 
     private var projects: some View {
-        LoadingContainer(
-            state: !model.projectsLoaded
-                ? .loading
-                : model.projectsLoadError != nil && model.projects.isEmpty ? .error : .content,
+        PageLoading(
+            state: model.projectsLoad.state,
             message: model.projectsLoadError ?? "",
+            layout: .cards, refreshing: model.projectsLoad.isRefreshing,
             retry: { Task { await model.refreshProjects() } }
         ) {
             projectContent
-        } placeholder: {
-            SkeletonGroup {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    SkeletonBlock(height: 20)
-                    SkeletonBlock(height: 120, corner: 12)
-                    SkeletonBlock(height: 120, corner: 12)
-                }
-            }
         }
     }
 

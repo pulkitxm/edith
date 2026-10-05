@@ -92,14 +92,13 @@ struct CompanionPage: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             header
             tabBar
             Divider().opacity(0.35)
+        } content: {
             screens.presenterCover(.memory)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(pageBackground)
         .navigationRoute("tab", selection: tabBinding)
         .edithSheet(
             item: Binding(
@@ -129,22 +128,18 @@ struct CompanionPage: View {
             capture.setCaptureActive(tab == .capture && visible)
         }
         .onDisappear { capture.setCaptureActive(false) }
-        .task(id: windowVisible) {
-            guard requestsEnabled, windowVisible else { return }
-            while !Task.isCancelled {
-                await home.refresh()
-                guard !Task.isCancelled else { return }
-                if !checkedSetup {
-                    checkedSetup = true
-                    if CompanionDeploymentStore.load() == nil, !home.reachable,
-                        !setupDeclined
-                    {
-                        openSetup()
-                    } else if !home.reachable {
-                        select(.setup)
-                    }
+        .pageRefresh(active: requestsEnabled, interval: { .seconds(20) }) {
+            await home.refresh()
+            guard !Task.isCancelled else { return }
+            if !checkedSetup {
+                checkedSetup = true
+                if CompanionDeploymentStore.load() == nil, !home.reachable,
+                    !setupDeclined
+                {
+                    openSetup()
+                } else if !home.reachable {
+                    select(.setup)
                 }
-                try? await Task.sleep(for: .seconds(20), tolerance: .seconds(2))
             }
         }
     }

@@ -62,9 +62,10 @@ struct HerdrPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             header
             tabBar
+        } content: {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
                     if store.railOpen, !compact {

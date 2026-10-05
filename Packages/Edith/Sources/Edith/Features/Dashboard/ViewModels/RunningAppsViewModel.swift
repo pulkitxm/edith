@@ -75,8 +75,9 @@ final class RunningAppsModel {
     private(set) var sortKey: AppSortKey = .cpu
     private(set) var ascending = false
     private(set) var actionStatus: RunningAppActionStatus?
-    private(set) var loaded = false
-    private(set) var refreshing = false
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
+    var refreshing: Bool { loading.isRunning }
     private(set) var scrolling = false
 
     private var resourceBaseline: RunningAppResourceBaseline?
@@ -135,22 +136,18 @@ final class RunningAppsModel {
     }
 
     func refresh() async {
-        refreshing = true
-        defer {
-            refreshing = false
-            loaded = true
-        }
         let operations = self.operations
         let previous = resourceBaseline
         let now = Date()
-        let measured = await Task.detached(priority: .utility) {
+        await loading.perform(operation: {
             let snapshots = operations.list()
             let baseline = previous ?? operations.resourceBaseline(for: snapshots, at: now)
             let sample = operations.measureResources(for: snapshots, from: baseline, at: now)
             return (sample, Self.icons(for: sample.apps))
-        }.value
-        resourceBaseline = measured.0.baseline
-        publish(measured.0.apps, icons: measured.1)
+        }) { measured in
+            resourceBaseline = measured.0.baseline
+            publish(measured.0.apps, icons: measured.1)
+        }
     }
 
     private func publish(_ snapshots: [RunningAppSnapshot], icons: [pid_t: NSImage]) {

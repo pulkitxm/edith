@@ -30,32 +30,24 @@ struct HomebrewMaintenanceView: View {
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageScaffold(pinnedHeader: true) {
             filterBar
                 .pageGutter(compact)
                 .padding(.vertical, 12)
             Divider()
-            if showsLoadingSkeleton {
-                HomebrewPageSkeleton()
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 16) {
-                        if model.status?.available == false {
-                            unavailableCard
-                        } else {
-                            summary
-                            operationCard
-                            packageCard
-                        }
-                    }
-                    .pageContent(compact)
+        } content: {
+            PageLoading(state: showsLoadingSkeleton ? .loading : .content, layout: .list) {
+                if model.status?.available == false {
+                    unavailableCard
+                } else {
+                    summary
+                    operationCard
+                    packageCard
                 }
             }
         }
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("view", selection: $model.mode)
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: { model.cancel() }) {
             model.activate(kind: kind)
         }
         .onChange(of: kindRaw) { _, _ in
@@ -73,7 +65,6 @@ struct HomebrewMaintenanceView: View {
                 model.loaded = true
             }
         }
-        .onDisappear { model.cancel() }
         .confirmationDialog(
             "Uninstall \(pendingUninstall?.displayName ?? "package")?",
             isPresented: Binding(

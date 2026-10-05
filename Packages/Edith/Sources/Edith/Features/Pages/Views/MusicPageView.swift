@@ -917,11 +917,11 @@ struct MusicPage: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             pageHeader
+        } content: {
             trackList
         }
-        .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationRoute("place", selection: musicPlaceBinding, isValid: musicPlaceIsValid)
         .navigationTitle("Music")
         .edithSheet(isPresented: $showDownloader) {

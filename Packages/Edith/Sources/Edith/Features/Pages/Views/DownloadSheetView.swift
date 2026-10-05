@@ -60,9 +60,10 @@ struct DownloadSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             header
             Divider().overlay(DashSkin.line(dark))
+        } content: {
             if let reason = downloader.unavailableReason {
                 unavailableView(reason)
             } else {
@@ -74,8 +75,7 @@ struct DownloadSheet: View {
             height: isPage ? nil : PresentationMetrics.height(760)
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
-        .onAppear { downloader.checkAvailability() }
+        .pageTask { downloader.checkAvailability() }
         .alert(
             "Download request failed",
             isPresented: Binding(
