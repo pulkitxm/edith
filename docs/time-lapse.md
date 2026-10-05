@@ -6,7 +6,9 @@ is requested only when a microphone is selected.
 
 Open Source to choose displays or windows from a visual thumbnail grid. Select
 multiple cards, search by app or window name, and confirm with Use selection.
-Cancel keeps the previous selection. Thumbnails are small, one-shot previews
+Choosing a window enables audio from its app automatically. You can turn off
+Selected app audio in the picker or Audio & options. Cancel keeps the previous
+selection. Thumbnails are small, one-shot previews
 loaded while browsing, and sources with unavailable previews remain selectable.
 Expand Audio & options to select audio, the cursor,
 and whether to keep the Mac awake. Up to sixteen sources form a grid in a stable order. Windows are
@@ -39,7 +41,10 @@ System audio and the selected microphone are optional. Every export produces one
 video containing the selected audio. Standard keeps audio synchronized at normal
 speed. Time-lapse accelerates the audio by the chosen speed while preserving its pitch.
 When both sources are selected, they are mixed into one soundtrack. System audio
-captures apps across the desktop, including when recording selected windows.
+captures apps across the desktop when recording displays. Window recordings capture
+only audio from the selected apps. macOS captures audio per app, so other windows
+from the same app contribute audio too. Selecting multiple windows from one app
+captures that app's audio once. Microphone selection stays independent.
 Audio is stored internally at normal speed for export, adding about 58 MB per
 hour for each selected source. There is no separate audio export.
 
@@ -57,7 +62,9 @@ survive interruptions. An
 interrupted session can export completed segments; the unfinished segment may be
 lost. The library keeps the original segments after export.
 
-After stopping, select a session and an export quality:
+Recordings appear in a visible list with their mode, date, playback duration, and
+interruption status. Select a row, choose an export quality below the list, and
+click Export video:
 
 - Compact HEVC exports up to 1080p.
 - High quality HEVC exports at the recorded resolution.

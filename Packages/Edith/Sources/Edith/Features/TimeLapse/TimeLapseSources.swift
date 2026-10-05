@@ -38,18 +38,35 @@ struct TimeLapseSources {
     ) async throws -> Plan {
         try await Task.detached(priority: .utility) {
             let filters: [SCContentFilter]
+            let audioFilter: SCContentFilter
             if mode == "displays" {
                 let sources = displays.filter { selectedDisplays.contains($0.displayID) }
                 guard sources.count == selectedDisplays.count else {
                     throw TimeLapseError.missingSource
                 }
                 filters = sources.map { SCContentFilter(display: $0, excludingWindows: []) }
+                guard let filter = filters.first else { throw TimeLapseError.missingSource }
+                audioFilter = filter
             } else {
                 let sources = windows.filter { selectedWindows.contains($0.windowID) }
                 guard sources.count == selectedWindows.count else {
                     throw TimeLapseError.missingSource
                 }
                 filters = sources.map { SCContentFilter(desktopIndependentWindow: $0) }
+                guard let display = displays.first else { throw TimeLapseError.missingSource }
+                var applications: [SCRunningApplication] = []
+                var processIDs: Set<pid_t> = []
+                for window in sources {
+                    guard let application = window.owningApplication else {
+                        throw TimeLapseError.encoding(
+                            "The selected window's app is unavailable. Refresh sources.")
+                    }
+                    if processIDs.insert(application.processID).inserted {
+                        applications.append(application)
+                    }
+                }
+                audioFilter = SCContentFilter(
+                    display: display, including: applications, exceptingWindows: [])
             }
             guard !filters.isEmpty, filters.count <= 16 else {
                 throw TimeLapseError.encoding("Choose between one and sixteen displays or windows.")
@@ -64,11 +81,10 @@ struct TimeLapseSources {
                 ?? 1080
             let size = settings.dimensions(
                 width: width * Double(columns), height: height * Double(rows))
-            guard let display = displays.first else { throw TimeLapseError.missingSource }
             return Plan(
                 filters: filters, columns: columns, rows: rows, width: size.width,
                 height: size.height,
-                audioFilter: SCContentFilter(display: display, excludingWindows: []))
+                audioFilter: audioFilter)
         }.value
     }
 
@@ -116,6 +132,7 @@ actor TimeLapseThumbnailLoader {
     private var tail: Task<CGImage?, Never>?
 
     func load(_ operation: @escaping @Sendable () async -> CGImage?) async -> CGImage? {
+        guard !Task.isCancelled else { return nil }
         let previous = tail
         let task = Task {
             _ = await previous?.value

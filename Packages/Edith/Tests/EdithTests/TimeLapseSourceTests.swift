@@ -1,4 +1,6 @@
 import AppKit
+import EdithCore
+import ScreenCaptureKit
 import Testing
 
 @testable import Edith
@@ -38,7 +40,8 @@ import Testing
         #expect(await probe.maximumActive == 1)
     }
 
-    @Test func canceledThumbnailRequestsDoNotCaptureAndQueueCanResume() async {
+    @Test(arguments: 0..<20)
+    func canceledThumbnailRequestsDoNotCaptureAndQueueCanResume(attempt: Int) async {
         let loader = TimeLapseThumbnailLoader()
         let probe = ThumbnailProbe()
         let started = AsyncStream<Void>.makeStream()
@@ -96,6 +99,78 @@ import Testing
         #expect(selection.windows == [4])
         selection.reconcile(displays: [], windows: [])
         #expect(selection.selected.isEmpty)
+    }
+
+    @Test @MainActor func choosingWindowsAutomaticallyEnablesAppAudioAndCanBeMuted() {
+        guard #available(macOS 15.0, *) else { return }
+        let recorder = TimeLapseRecorder()
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [], windows: [], systemAudio: false)
+        selection.toggle(7)
+        #expect(selection.systemAudio)
+        #expect(!recorder.settings.systemAudio)
+        selection.apply(to: recorder)
+        #expect(recorder.settings.systemAudio)
+        #expect(recorder.microphone.isEmpty)
+        selection.systemAudio = false
+        selection.apply(to: recorder)
+        #expect(!recorder.settings.systemAudio)
+        selection.toggle(8)
+        #expect(selection.systemAudio)
+        selection.apply(to: recorder)
+        #expect(recorder.selectedWindows == [7, 8])
+        #expect(recorder.settings.systemAudio)
+    }
+
+    @Test func removingWindowsOrRejectedSelectionsDoNotEnableAudio() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [], windows: Set(UInt32(1)...16), systemAudio: false)
+        selection.toggle(17)
+        #expect(!selection.systemAudio)
+        #expect(selection.windows.count == 16)
+        selection.toggle(1)
+        #expect(!selection.systemAudio)
+        selection.mode = "displays"
+        selection.toggle(99)
+        #expect(!selection.systemAudio)
+    }
+
+    @Test func returningToWindowSelectionAutomaticallyRestoresAppAudio() {
+        var selection = TimeLapseSourceSelection(
+            mode: "displays", displays: [1], windows: [7], systemAudio: false)
+        selection.mode = "windows"
+        #expect(selection.systemAudio)
+        selection.systemAudio = false
+        selection.reconcile(displays: [1], windows: [7])
+        #expect(!selection.systemAudio)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_TEST_NATIVE_CAPTURE"] == "1"))
+    @MainActor func nativeWindowAudioIncludesOnlySelectedAppsOnce() async throws {
+        guard #available(macOS 15.2, *) else { return }
+        _ = TestWindowHost.application
+        let windows = (0..<2).map { index in
+            let window = TestWindowHost.window(
+                contentRect: CGRect(x: 100 + index * 340, y: 100, width: 320, height: 180))
+            window.title = "Synthetic audio source \(index + 1)"
+            window.orderFrontRegardless()
+            return window
+        }
+        defer { windows.forEach { $0.orderOut(nil) } }
+        try await Task.sleep(for: .milliseconds(350))
+        let sources = try await TimeLapseSources.load()
+        let ids = Set(windows.map { CGWindowID($0.windowNumber) })
+        var settings = TimeLapseSettings()
+        settings.systemAudio = true
+        for chosen in [Set([try #require(ids.first)]), ids] {
+            let plan = try await sources.plan(
+                mode: "windows", displays: [], windows: chosen, settings: settings)
+            #expect(plan.filters.count == chosen.count)
+            #expect(plan.audioFilter.includedApplications.map(\.processID) == [getpid()])
+        }
+        await #expect(throws: TimeLapseError.self) {
+            try await sources.plan(mode: "windows", displays: [], windows: [0], settings: settings)
+        }
     }
 
     @Test @MainActor func draftChangesAreAppliedOnlyWhenConfirmed() {
