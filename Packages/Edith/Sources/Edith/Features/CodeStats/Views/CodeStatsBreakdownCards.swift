@@ -5,6 +5,7 @@ import SwiftUI
 struct CodeStatsLanguageCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
+    @Environment(\.codeStatsActions) private var actions
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -24,9 +25,21 @@ struct CodeStatsLanguageCards: View {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 ForEach(Array(projection.languageShares.enumerated()), id: \.element.id) {
                     index, share in
-                    CodeStatsShareRow(
-                        share: share, color: DashPalette.categorical(index, dark: dark),
-                        dark: dark)
+                    Button {
+                        actions.toggleLanguage(share.name)
+                    } label: {
+                        CodeStatsShareRow(
+                            share: share, color: DashPalette.categorical(index, dark: dark),
+                            dark: dark
+                        )
+                        .opacity(
+                            actions.selectedLanguages.isEmpty
+                                || actions.selectedLanguages.contains(share.name) ? 1 : 0.45
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .help("Filter the page to " + share.name)
                 }
                 if projection.languageShares.isEmpty {
                     Text("No language data in this range.")
@@ -57,10 +70,10 @@ private struct CodeStatsShareRow: View {
                     .font(.system(size: UIScale.pt(12), weight: .medium))
                     .foregroundStyle(DashSkin.ink(dark))
                 Spacer()
-                Text(share.lines.formatted() + " lines")
+                Text(CodeStatsNumberFormat.compact(share.lines) + " lines")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
-                Text(share.share, format: .percent.precision(.fractionLength(0)))
+                Text(CodeStatsNumberFormat.percent(share.share * 100))
                     .font(.system(size: UIScale.pt(12), weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
                     .frame(width: UIScale.pt(40), alignment: .trailing)
@@ -111,7 +124,9 @@ struct CodeStatsHabitCards: View {
                                 .fill(CodeStatsHeat.color(cell.level, dark: dark))
                                 .frame(minWidth: UIScale.pt(10), maxWidth: .infinity)
                                 .frame(height: UIScale.pt(16))
-                                .help("\(cell.weekday) \(cell.hour):00, \(cell.commits) commits")
+                                .help(
+                                    "\(cell.weekday) \(cell.hour):00, \(CodeStatsNumberFormat.grouped(cell.commits)) commits"
+                                )
                         }
                     }
                 }
@@ -142,10 +157,10 @@ struct CodeStatsHabitCards: View {
                         .font(.system(size: UIScale.pt(12), weight: .medium))
                         .foregroundStyle(DashSkin.ink(dark))
                         Spacer()
-                        Text("\(day.commits) commits")
+                        Text(CodeStatsNumberFormat.grouped(day.commits) + " commits")
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
-                        Text(day.lines.formatted())
+                        Text(CodeStatsNumberFormat.compact(day.lines))
                             .font(.system(size: UIScale.pt(12), weight: .semibold))
                             .foregroundStyle(DashSkin.ink(dark))
                     }

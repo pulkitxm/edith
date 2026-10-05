@@ -127,6 +127,53 @@ private func settledBitmap(
         }
     }
 
+    @Test func codeStatsChartsSurviveEmptyFilteredAndTinyRanges() {
+        let calendar = CodeStatsPageFixture.calendar
+        let today = CodeStatsPageFixture.date("2026-10-05")
+        let tables = [
+            CodeStatsFactBuilder.build(commits: CodeStatsPageFixture.commits),
+            CodeStatsFactBuilder.build(commits: []),
+        ]
+        let filters = [
+            CodeStatsFilter.default, CodeStatsFilter(categories: []),
+            CodeStatsFilter(repositories: ["nobody/nothing"]),
+            CodeStatsFilter(excludedRepositories: ["octo/app", "octo/site", "octo/tools"]),
+        ]
+        let ranges: [CodeStatsRange] = [.days(30), .all, .between("2026-09-28", "2026-09-28")]
+        for table in tables {
+            for filter in filters {
+                for range in ranges {
+                    let report = CodeStatsReportBuilder.build(
+                        table: table, filter: filter, range: range, today: today,
+                        calendar: calendar)
+                    let projection = CodeStatsProjection(report: report, calendar: calendar)
+                    let explorer = CodeStatsExplorer(
+                        table: table, filter: filter, startDay: report.startDay,
+                        endDay: report.endDay, calendar: calendar)
+                    for logScale in [true, false] {
+                        #expect(
+                            renders(
+                                VStack {
+                                    CodeStatsKPIGrid(report: report, dark: true)
+                                    CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: true)
+                                    CodeStatsTrendCard(projection: projection, dark: true)
+                                    CodeStatsRepositoryCards(
+                                        projection: projection, dark: true, logScale: logScale)
+                                    CodeStatsLanguageCards(projection: projection, dark: true)
+                                    CodeStatsHabitCards(projection: projection, dark: true)
+                                    CodeStatsRepositoryStripCard(explorer: explorer, dark: true)
+                                    CodeStatsShareCard(explorer: explorer, dark: true)
+                                    CodeStatsYearOverYearCard(explorer: explorer, dark: true)
+                                    CodeStatsRhythmCard(explorer: explorer, dark: true)
+                                    CodeStatsNewRepositoriesCard(explorer: explorer, dark: true)
+                                    CodeStatsLargestCommitsCard(commits: table.largest, dark: true)
+                                }, width: 1100, height: 5200))
+                    }
+                }
+            }
+        }
+    }
+
     @Test func codeStatsPageRendersEveryPhaseInBothAppearances() async throws {
         var progress = CodeStatsRunProgress(startedAt: Date().addingTimeInterval(-90))
         progress.phase = .syncing

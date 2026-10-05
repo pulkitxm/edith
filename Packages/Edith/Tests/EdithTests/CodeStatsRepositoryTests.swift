@@ -137,8 +137,9 @@ import Testing
         let commits = try await fixture.tool.commits(in: found[0], identity: CodeStatsGitFixture.me)
             .sorted { $0.day < $1.day }
 
-        #expect(commits.map(\.day) == ["2026-06-01", "2026-06-02", "2026-06-04"])
-        #expect(commits.map(\.hour) == [9, 22, 7])
+        #expect(commits.map(\.day) == ["2026-06-01", "2026-06-02", "2026-06-04", "2026-06-05"])
+        #expect(commits.map(\.hour) == [9, 22, 7, 7])
+        #expect(commits[3].languages.isEmpty)
         #expect(commits[0].languages == ["TypeScript": CodeStatsLanguageCounts(added: 3)])
         #expect(
             commits[1].languages == ["TypeScript": CodeStatsLanguageCounts(added: 1, updated: 1)])

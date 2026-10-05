@@ -120,16 +120,18 @@ public struct CodeStatsGit: Sendable {
     @discardableResult
     private func run(
         _ arguments: [String], in directory: String? = nil, network: Bool = false,
-        timeout: TimeInterval? = nil, onLine: (@Sendable (String) -> Void)? = nil
+        timeout: TimeInterval? = nil, extraEnvironment: [String: String] = [:],
+        input: Data? = nil, onLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> CLICommandResult {
         let prefix = network ? await networkArguments(in: directory) : []
         let request = CLICommandRequest(
             executableURL: executable,
             arguments: baseArguments + prefix + arguments,
-            environment: environment,
+            environment: environment.merging(extraEnvironment) { _, extra in extra },
             currentDirectoryURL: directory.map { URL(fileURLWithPath: $0) },
             timeout: network ? networkTimeout : timeout,
-            maximumOutputBytes: 1_048_576, terminatesProcessGroup: true)
+            maximumOutputBytes: 1_048_576, standardInputData: input,
+            terminatesProcessGroup: true)
         let result = try await CLICommandRunner.runLocalSeparated(
             request, retainsStandardOutput: onLine == nil,
             onStandardOutputLine: onLine ?? { _ in }, onStandardErrorLine: { _ in })
@@ -142,33 +144,171 @@ public struct CodeStatsGit: Sendable {
     }
 
     public func refsFingerprint(_ repository: CodeStatsRepository) async throws -> String {
-        let hasher = CodeStatsLocked(SHA256())
+        try await refState(repository).fingerprint
+    }
+
+    public func refState(_ repository: CodeStatsRepository) async throws -> CodeStatsRefState {
+        let lines = CodeStatsLocked([String]())
         try await run(
             ["for-each-ref", "--format=%(objectname) %(refname)"] + Self.historyRefPrefixes,
             in: repository.path,
-            onLine: { line in hasher.update { $0.update(data: Data((line + "\n").utf8)) } })
-        return hasher.update { $0.finalize() }.map { String(format: "%02x", $0) }.joined()
+            onLine: { line in lines.update { $0.append(line) } })
+        return CodeStatsRefState(lines: lines.update { $0 })
     }
 
     public func commits(
         in repository: CodeStatsRepository, identity: CodeStatsIdentity
     ) async throws -> [CodeStatsCommit] {
-        guard !identity.isEmpty else { return [] }
+        try await commits(
+            in: repository, attribution: CodeStatsAttribution(identity: identity, owned: false))
+    }
+
+    public func commits(
+        in repository: CodeStatsRepository, attribution: CodeStatsAttribution,
+        excluding previousTips: [String] = []
+    ) async throws -> [CodeStatsCommit] {
+        let candidates = try await candidateCommits(
+            in: repository, attribution: attribution, excluding: previousTips)
+        var commits: [CodeStatsCommit] = []
+        var start = 0
+        while start < candidates.count {
+            let end = min(start + Self.chunkSize, candidates.count)
+            commits += try await self.commits(
+                in: repository, candidates: Array(candidates[start..<end]),
+                attribution: attribution)
+            start = end
+        }
+        return commits
+    }
+
+    public static let chunkSize = 250
+
+    public func candidateCommits(
+        in repository: CodeStatsRepository, attribution: CodeStatsAttribution,
+        excluding previousTips: [String] = []
+    ) async throws -> [CodeStatsCandidate] {
+        guard !attribution.identity.isEmpty else { return [] }
+        let candidates = CodeStatsLocked([CodeStatsCandidate]())
+        let exclusions = previousTips.isEmpty ? [] : ["--not"] + previousTips
+        try await run(
+            ["rev-list", "--no-merges", "--regexp-ignore-case", "--extended-regexp"]
+                + attribution.authorPatterns.map { "--author=" + $0 }
+                + ["--format=" + CodeStatsLogParser.prettyFormat] + Self.historyRefs
+                + exclusions,
+            in: repository.path,
+            onLine: { line in
+                guard line.hasPrefix(CodeStatsLogParser.headerPrefix) else { return }
+                let sha = line.split(separator: "\t", maxSplits: 2).dropFirst().first
+                guard let sha else { return }
+                candidates.update {
+                    $0.append(CodeStatsCandidate(sha: String(sha), header: line))
+                }
+            })
+        return candidates.update { $0 }
+    }
+
+    public func commits(
+        in repository: CodeStatsRepository, candidates: [CodeStatsCandidate],
+        attribution: CodeStatsAttribution
+    ) async throws -> [CodeStatsCommit] {
+        guard !candidates.isEmpty else { return [] }
+        let attribute: CodeStatsLogParser.Attribute = { name, email, coAuthors in
+            attribution.flags(name: name, email: email, coAuthors: coAuthors)
+        }
         let parser = CodeStatsLocked(
-            CodeStatsLogParser(repository: repository.fullName, isMine: identity.matcher()))
-        let arguments =
-            ["log"] + Self.historyRefs
-            + ["--no-merges", "--regexp-ignore-case", "--extended-regexp"]
-            + identity.authorPatterns.map { "--author=" + $0 }
-            + [
-                "--pretty=format:" + CodeStatsLogParser.prettyFormat, "-p", "-U0", "-M", "-C",
+            CodeStatsLogParser(repository: repository.fullName, attribute: attribute))
+        let shas = candidates.map(\.sha)
+        try await run(
+            [
+                "log", "--no-walk=unsorted", "--stdin",
+                "--pretty=format:" + CodeStatsLogParser.prettyFormat, "-p", "-U0", "-M",
                 "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/",
                 "--dst-prefix=b/", "--", ".",
-            ] + CodeStatsLanguage.excludedPathspecs
-        try await run(
-            arguments, in: repository.path,
+            ] + CodeStatsLanguage.excludedPathspecs,
+            in: repository.path, input: Data((shas.joined(separator: "\n") + "\n").utf8),
             onLine: { line in parser.update { $0.push(line) } })
-        return parser.update { $0.finish() }
+        var commits = parser.update { $0.finish() }
+        let parsed = Set(commits.map(\.sha))
+        var headers = CodeStatsLogParser(repository: repository.fullName, attribute: attribute)
+        for candidate in candidates where !parsed.contains(candidate.sha) {
+            headers.push(candidate.header)
+        }
+        commits += headers.finish()
+        return commits
+    }
+
+    public func canExtend(
+        _ repository: CodeStatsRepository, from previousTips: [String]
+    ) async -> Bool {
+        guard !previousTips.isEmpty else { return false }
+        let output = CodeStatsLocked("")
+        do {
+            try await run(
+                ["rev-list", "--count"] + previousTips + ["--not"] + Self.historyRefs,
+                in: repository.path,
+                onLine: { line in output.update { $0 += line } })
+        } catch {
+            return false
+        }
+        return output.update { $0.trimmingCharacters(in: .whitespaces) } == "0"
+    }
+
+    public func integratedCommits(in repository: CodeStatsRepository) async throws -> Set<String> {
+        let head = CodeStatsLocked([String]())
+        do {
+            try await run(
+                ["rev-parse", "HEAD", "HEAD^{tree}"], in: repository.path,
+                onLine: { line in head.update { $0.append(line) } })
+        } catch {
+            return []
+        }
+        let resolved = head.update { $0 }
+        guard resolved.count == 2 else { return [] }
+        let tree = resolved[1]
+        let branches = CodeStatsLocked([String]())
+        try await run(
+            [
+                "for-each-ref", "--no-merged=HEAD", "--format=%(refname)", "refs/heads",
+                "refs/remotes",
+            ],
+            in: repository.path,
+            onLine: { line in
+                if !line.hasSuffix("/HEAD") { branches.update { $0.append(line) } }
+            })
+        let candidates = branches.update { $0 }
+        guard !candidates.isEmpty else { return [] }
+        let objects = CodeStatsLocked("")
+        try await run(
+            ["rev-parse", "--path-format=absolute", "--git-path", "objects"],
+            in: repository.path, onLine: { line in objects.update { $0 = line } })
+        let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "code-stats-merge-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let isolated = [
+            "GIT_OBJECT_DIRECTORY": scratch.path,
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects.update { $0 },
+        ]
+        var integrated = Set<String>()
+        for branch in candidates {
+            if Task.isCancelled { break }
+            let merged = CodeStatsLocked("")
+            do {
+                try await run(
+                    ["merge-tree", "--write-tree", "HEAD", branch], in: repository.path,
+                    extraEnvironment: isolated,
+                    onLine: { line in merged.update { if $0.isEmpty { $0 = line } } })
+            } catch {
+                continue
+            }
+            guard merged.update({ $0 }) == tree else { continue }
+            let unique = CodeStatsLocked([String]())
+            try await run(
+                ["rev-list", "--no-merges", branch, "^HEAD"], in: repository.path,
+                onLine: { line in unique.update { $0.append(line) } })
+            integrated.formUnion(unique.update { $0 })
+        }
+        return integrated
     }
 
     public func authors(in repository: CodeStatsRepository) async throws -> [CodeStatsAuthor] {

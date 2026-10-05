@@ -4,6 +4,7 @@ import Foundation
 struct CodeStatsPageService: Sendable {
     var status: @Sendable () async throws -> CodeStatsStatus
     var report: @Sendable (CodeStatsRange) async throws -> CodeStatsReport?
+    var facts: @Sendable () async throws -> CodeStatsFactTable? = { nil }
     var start: @Sendable () async throws -> CodeStatsActiveRun
     var cancel: @Sendable () async throws -> CodeStatsStatus
     var profile: @Sendable () async throws -> CodeStatsProfileLookup
@@ -15,6 +16,7 @@ struct CodeStatsPageService: Sendable {
         return CodeStatsPageService(
             status: { try await client.status() },
             report: { try await client.report($0) },
+            facts: { try await client.facts() },
             start: { try await client.start() },
             cancel: { try await client.cancel() },
             profile: { try await client.profile() },

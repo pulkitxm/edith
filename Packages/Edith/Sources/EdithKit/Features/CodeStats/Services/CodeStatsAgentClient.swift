@@ -8,8 +8,12 @@ public enum CodeStatsAgentOperation {
     public static let start = "codestats.start"
     public static let cancel = "codestats.cancel"
     public static let profile = "codestats.profile"
+    public static let facts = "codestats.facts"
+    public static let audit = "codestats.audit"
     public static let scheduleJob = "codestats.schedule"
-    public static let internalOperations = [status, report, authors, start, cancel, profile]
+    public static let internalOperations = [
+        status, report, authors, start, cancel, profile, facts, audit,
+    ]
 }
 
 public struct CodeStatsAgentClient: Sendable {
@@ -36,6 +40,18 @@ public struct CodeStatsAgentClient: Sendable {
     public func report(_ range: CodeStatsRange) async throws -> CodeStatsReport? {
         try await request(
             CodeStatsReport?.self, CodeStatsAgentOperation.report, AgentPayload.encode(range),
+            timeout: Self.reportTimeout)
+    }
+
+    public func facts() async throws -> CodeStatsFactTable? {
+        try await request(
+            CodeStatsFactTable?.self, CodeStatsAgentOperation.facts,
+            timeout: Self.reportTimeout)
+    }
+
+    public func audit(_ filter: CodeStatsFilter = .default) async throws -> CodeStatsAudit? {
+        try await request(
+            CodeStatsAudit?.self, CodeStatsAgentOperation.audit, AgentPayload.encode(filter),
             timeout: Self.reportTimeout)
     }
 
