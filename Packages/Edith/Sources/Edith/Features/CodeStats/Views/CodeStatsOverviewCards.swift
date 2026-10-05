@@ -24,6 +24,7 @@ struct CodeStatsRangePicker: View {
         case .days(let count): "\(count) days"
         case .year: "1 year"
         case .all: "All"
+        case .between(let start, let end): start + " to " + end
         }
     }
 }
@@ -46,14 +47,15 @@ struct CodeStatsKPIGrid: View {
                 label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
                 symbol: "text.line.first.and.arrowtriangle.forward",
                 change: report.momentum?.lineChange,
-                detail:
-                    "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
+                detail: "+" + CodeStatsNumberFormat.grouped(totals.added) + " / -"
+                    + CodeStatsNumberFormat.grouped(totals.deleted),
                 dark: dark)
             CodeStatsTile(
                 label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
                 symbol: "calendar",
                 detail:
-                    "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
+                    CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)
+                    + " lines per active day",
                 dark: dark)
             CodeStatsTile(
                 label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",

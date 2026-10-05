@@ -27,6 +27,8 @@ final class CodeStatsModel {
     private(set) var isComputing = false
     private(set) var facets = CodeStatsFacets()
     private(set) var identityPendingRecount = false
+    private(set) var explorer = CodeStatsExplorer()
+    private(set) var lastPreset = CodeStatsRange.days(90)
 
     @ObservationIgnored private let service: CodeStatsPageService
     @ObservationIgnored private let defaults: UserDefaults
@@ -159,6 +161,7 @@ final class CodeStatsModel {
 
     func select(_ next: CodeStatsRange) async {
         guard next != range else { return }
+        if CodeStatsRange.presets.contains(next) { lastPreset = next }
         range = next
         if table != nil {
             await recompute()
@@ -179,6 +182,28 @@ final class CodeStatsModel {
 
     func toggleRepository(_ name: String) async {
         await updateFilter { $0.repositories.formSymmetricDifference([name]) }
+    }
+
+    func toggleExcludedRepository(_ name: String) async {
+        await updateFilter {
+            $0.excludedRepositories.formSymmetricDifference([name])
+            $0.repositories.remove(name)
+        }
+    }
+
+    func zoom(from start: Date, to end: Date) async {
+        let lower = CodeStatsDay(date: min(start, end), calendar: calendar)
+        let upper = CodeStatsDay(date: max(start, end), calendar: calendar)
+        await select(.between(lower.string, upper.string))
+    }
+
+    func clearCustomRange() async {
+        await select(lastPreset)
+    }
+
+    var isCustomRange: Bool {
+        if case .between = range { return true }
+        return false
     }
 
     func toggleLanguage(_ name: String) async {
@@ -212,13 +237,17 @@ final class CodeStatsModel {
                 table: table, filter: filter, range: range, today: now, calendar: calendar)
             return (
                 report, CodeStatsProjection(report: report, calendar: calendar),
-                CodeStatsAuditBuilder.build(table: table, filter: filter).matching(identity)
+                CodeStatsAuditBuilder.build(table: table, filter: filter).matching(identity),
+                CodeStatsExplorer(
+                    table: table, filter: filter, startDay: report.startDay,
+                    endDay: report.endDay, calendar: calendar)
             )
         }.value
         guard generation == computeGeneration else { return }
         report = result.0
         projection = result.1
         audit = result.2
+        explorer = result.3
         isComputing = false
     }
 

@@ -15,6 +15,8 @@ struct CodeStatsTrendCard: View {
     @State private var metric = CodeStatsTrendMetric.lines
     @State private var cumulative = false
     @State private var hovered: Date?
+    @State private var brushed: ClosedRange<Date>?
+    @Environment(\.codeStatsActions) private var actions
 
     private var unit: Calendar.Component {
         projection.trendGranularity == .monthly ? .month : .weekOfYear
@@ -23,7 +25,7 @@ struct CodeStatsTrendCard: View {
     private var note: String {
         if cumulative { return "Running total since the start of the range" }
         let period = projection.trendGranularity == .monthly ? "Monthly" : "Weekly"
-        return period + " bars with a rolling average"
+        return period + " bars, drag to zoom, click a bar to open it"
     }
 
     private var selected: CodeStatsTrendPoint? {
@@ -45,6 +47,20 @@ struct CodeStatsTrendCard: View {
                 Toggle("Cumulative", isOn: $cumulative)
                     .toggleStyle(.switch)
                     .controlSize(.small)
+                Spacer()
+                if let brushed {
+                    Button(
+                        "Zoom to "
+                            + brushed.lowerBound.formatted(date: .abbreviated, time: .omitted)
+                            + " to "
+                            + brushed.upperBound.formatted(date: .abbreviated, time: .omitted)
+                    ) {
+                        actions.zoom(brushed.lowerBound, brushed.upperBound)
+                        self.brushed = nil
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
             }
             Chart {
                 ForEach(projection.trend) { point in
@@ -92,6 +108,22 @@ struct CodeStatsTrendCard: View {
                 }
             }
             .chartXSelection(value: $hovered)
+            .chartXSelection(range: $brushed)
+            .chartGesture { proxy in
+                SpatialTapGesture().onEnded { tap in
+                    guard let date: Date = proxy.value(atX: tap.location.x),
+                        let period = Calendar.current.dateInterval(of: unit, for: date)
+                    else { return }
+                    actions.zoom(period.start, period.end.addingTimeInterval(-1))
+                }
+                .simultaneously(
+                    with: DragGesture(minimumDistance: 4).onChanged { drag in
+                        guard let first: Date = proxy.value(atX: drag.startLocation.x),
+                            let last: Date = proxy.value(atX: drag.location.x)
+                        else { return }
+                        brushed = min(first, last)...max(first, last)
+                    })
+            }
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine().foregroundStyle(.primary.opacity(0.06))
@@ -149,12 +181,17 @@ struct CodeStatsRepositoryCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
     @Environment(\.codeStatsActions) private var actions
+    @State private var logScale = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             SkinCard(
-                title: "Commits per repository", note: "Top 10, click a bar to filter", dark: dark
+                title: "Commits per repository",
+                note: "Top 10, click to filter, right-click a row below to exclude", dark: dark
             ) {
+                Toggle("Log scale", isOn: $logScale)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
                 Chart(projection.repositoryBars, id: \.repository) { summary in
                     BarMark(
                         x: .value("Commits", summary.commits),
@@ -168,9 +205,12 @@ struct CodeStatsRepositoryCards: View {
                     )
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
-                        Text(CodeStatsNumberFormat.grouped(summary.commits))
-                            .font(.system(size: UIScale.pt(10)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
+                        Text(
+                            CodeStatsNumberFormat.grouped(summary.commits) + " commits, "
+                                + CodeStatsNumberFormat.compact(summary.counts.authored) + " lines"
+                        )
+                        .font(.system(size: UIScale.pt(10)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
                     }
                 }
                 .chartYAxis {
@@ -178,6 +218,7 @@ struct CodeStatsRepositoryCards: View {
                         AxisValueLabel().font(.system(size: UIScale.pt(10.5)))
                     }
                 }
+                .chartXScale(type: logScale ? .log : .linear)
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle().fill(.clear).contentShape(Rectangle())
@@ -209,6 +250,15 @@ struct CodeStatsStackedCard: View {
     let series: [String]
     let percent: Bool
     let dark: Bool
+    @State private var hovered: Date?
+
+    private var month: [CodeStatsStackPoint] {
+        guard let hovered else { return [] }
+        return points.filter {
+            Calendar.current.isDate($0.date, equalTo: hovered, toGranularity: .month)
+                && $0.value > 0
+        }
+    }
 
     private var colors: [Color] {
         series.indices.map { DashPalette.categorical($0, dark: dark) }
@@ -234,6 +284,26 @@ struct CodeStatsStackedCard: View {
             }
             .chartForegroundStyleScale(domain: series, range: colors)
             .chartLegend(.hidden)
+            .chartXSelection(value: $hovered)
+            .chartOverlay { _ in
+                if let first = month.first {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            CodeStatsTooltip(
+                                title: first.date.formatted(.dateTime.month(.wide).year()),
+                                lines: month.sorted { $0.value > $1.value }.map {
+                                    $0.series + ": "
+                                        + (percent
+                                            ? CodeStatsNumberFormat.percent($0.value * 100)
+                                            : CodeStatsNumberFormat.grouped(Int($0.value)))
+                                }, dark: dark)
+                        }
+                        Spacer()
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine().foregroundStyle(.primary.opacity(0.06))
@@ -308,6 +378,14 @@ private struct CodeStatsRepositoryTable: View {
                         }
                         .buttonStyle(.plain)
                         .help("Filter the page to this repository")
+                        .contextMenu {
+                            Button("Show only " + row.repository) {
+                                actions.toggleRepository(row.repository)
+                            }
+                            Button("Exclude " + row.repository) {
+                                actions.excludeRepository(row.repository)
+                            }
+                        }
                         Text(CodeStatsNumberFormat.grouped(row.commits)).gridColumnAlignment(
                             .trailing)
                         Text(CodeStatsNumberFormat.compact(row.counts.authored))

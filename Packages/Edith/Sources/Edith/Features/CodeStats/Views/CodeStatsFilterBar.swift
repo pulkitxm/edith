@@ -3,7 +3,10 @@ import SwiftUI
 
 struct CodeStatsActions {
     var toggleRepository: (String) -> Void = { _ in }
+    var excludeRepository: (String) -> Void = { _ in }
     var toggleLanguage: (String) -> Void = { _ in }
+    var toggleOwner: (String) -> Void = { _ in }
+    var zoom: (Date, Date) -> Void = { _, _ in }
     var selectedRepositories: Set<String> = []
     var selectedLanguages: Set<String> = []
 }
@@ -48,6 +51,23 @@ struct CodeStatsFilterBar: View {
                 }
                 if model.isComputing {
                     ProgressView().controlSize(.small)
+                }
+                if let dominant = model.explorer.dominant,
+                    !model.filter.excludedRepositories.contains(dominant.repository),
+                    model.filter.repositories.isEmpty
+                {
+                    Button {
+                        Task { await model.toggleExcludedRepository(dominant.repository) }
+                    } label: {
+                        AttentionChip(
+                            title: "Exclude " + dominant.repository + " ("
+                                + CodeStatsNumberFormat.percent(dominant.share * 100)
+                                + " of lines)",
+                            color: DashSkin.warn, active: false)
+                    }
+                    .buttonStyle(.plain)
+                    .help(
+                        "One repository dominates this range. Exclude it to see the rest clearly.")
                 }
                 Spacer()
                 if model.hasActiveFilter {
@@ -117,9 +137,19 @@ struct CodeStatsFilterBar: View {
 
     @ViewBuilder private var selectedTokens: some View {
         let filter = model.filter
-        if !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty {
+        if !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
+            || !filter.excludedRepositories.isEmpty || model.isCustomRange
+        {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: UIScale.pt(6)) {
+                    if model.isCustomRange {
+                        token(CodeStatsRangePicker.title(model.range)) {
+                            await model.clearCustomRange()
+                        }
+                    }
+                    ForEach(filter.excludedRepositories.sorted(), id: \.self) { name in
+                        token("Excluding " + name) { await model.toggleExcludedRepository(name) }
+                    }
                     ForEach(filter.owners.sorted(), id: \.self) { name in
                         token(name) { await model.toggleOwner(name) }
                     }

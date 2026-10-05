@@ -4,10 +4,19 @@ public enum CodeStatsRange: Codable, Hashable, Sendable {
     case days(Int)
     case year
     case all
+    case between(String, String)
 
     public static let presets: [CodeStatsRange] = [.days(30), .days(90), .year, .all]
 
     public init?(argument: String) {
+        let bounds = argument.components(separatedBy: "..")
+        if bounds.count == 2, let start = CodeStatsDay(bounds[0]), let end = CodeStatsDay(bounds[1])
+        {
+            self =
+                start <= end
+                ? .between(start.string, end.string) : .between(end.string, start.string)
+            return
+        }
         switch argument.lowercased() {
         case "1y", "year": self = .year
         case "all": self = .all
@@ -24,6 +33,7 @@ public enum CodeStatsRange: Codable, Hashable, Sendable {
         case .days(let count): "\(count)d"
         case .year: "1y"
         case .all: "all"
+        case .between(let start, let end): start + ".." + end
         }
     }
 

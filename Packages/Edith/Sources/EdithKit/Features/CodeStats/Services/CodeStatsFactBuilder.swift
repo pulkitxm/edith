@@ -174,6 +174,7 @@ public enum CodeStatsAuditBuilder {
         var counted = CodeStatsTally()
         let scoped =
             !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
+            || !filter.excludedRepositories.isEmpty
         var raw =
             scoped
             ? CodeStatsTally()
@@ -181,7 +182,8 @@ public enum CodeStatsAuditBuilder {
                 commits: table.duplicates.commits + table.integrated.commits,
                 lines: table.duplicates.lines + table.integrated.lines)
         let repositoryAllowed = table.repositories.map { name in
-            (filter.repositories.isEmpty || filter.repositories.contains(name))
+            !filter.excludedRepositories.contains(name)
+                && (filter.repositories.isEmpty || filter.repositories.contains(name))
                 && (filter.owners.isEmpty
                     || filter.owners.contains(
                         name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))

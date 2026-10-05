@@ -89,7 +89,10 @@ struct CodeStatsPage: View {
     private var actions: CodeStatsActions {
         CodeStatsActions(
             toggleRepository: { name in Task { await model.toggleRepository(name) } },
+            excludeRepository: { name in Task { await model.toggleExcludedRepository(name) } },
             toggleLanguage: { name in Task { await model.toggleLanguage(name) } },
+            toggleOwner: { name in Task { await model.toggleOwner(name) } },
+            zoom: { start, end in Task { await model.zoom(from: start, to: end) } },
             selectedRepositories: model.filter.repositories,
             selectedLanguages: model.filter.languages)
     }
@@ -97,6 +100,13 @@ struct CodeStatsPage: View {
     private func sections(_ report: CodeStatsReport) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsReportSections(report: report, projection: model.projection, dark: dark)
+            if model.table != nil {
+                CodeStatsRepositoryStripCard(explorer: model.explorer, dark: dark)
+                CodeStatsShareCard(explorer: model.explorer, dark: dark)
+                CodeStatsYearOverYearCard(explorer: model.explorer, dark: dark)
+                CodeStatsRhythmCard(explorer: model.explorer, dark: dark)
+                CodeStatsNewRepositoriesCard(explorer: model.explorer, dark: dark)
+            }
             if let audit = model.audit {
                 CodeStatsAuditCard(audit: audit, model: model, dark: dark)
                 CodeStatsHygieneCard(audit: audit, model: model, dark: dark)
