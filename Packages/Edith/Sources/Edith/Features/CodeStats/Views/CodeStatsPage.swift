@@ -93,6 +93,7 @@ struct CodeStatsPage: View {
             toggleLanguage: { name in Task { await model.toggleLanguage(name) } },
             toggleOwner: { name in Task { await model.toggleOwner(name) } },
             zoom: { start, end in Task { await model.zoom(from: start, to: end) } },
+            dayDetails: model.explorer.days,
             selectedRepositories: model.filter.repositories,
             selectedLanguages: model.filter.languages)
     }

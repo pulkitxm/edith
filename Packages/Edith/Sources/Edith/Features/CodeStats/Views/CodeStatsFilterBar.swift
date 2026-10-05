@@ -7,6 +7,7 @@ struct CodeStatsActions {
     var toggleLanguage: (String) -> Void = { _ in }
     var toggleOwner: (String) -> Void = { _ in }
     var zoom: (Date, Date) -> Void = { _, _ in }
+    var dayDetails: [String: CodeStatsDayDetail] = [:]
     var selectedRepositories: Set<String> = []
     var selectedLanguages: Set<String> = []
 }
@@ -60,9 +61,8 @@ struct CodeStatsFilterBar: View {
                         Task { await model.toggleExcludedRepository(dominant.repository) }
                     } label: {
                         AttentionChip(
-                            title: "Exclude " + dominant.repository + " ("
-                                + CodeStatsNumberFormat.percent(dominant.share * 100)
-                                + " of lines)",
+                            title:
+                                "Exclude \(dominant.repository) (\(CodeStatsNumberFormat.percent(dominant.share * 100)) of lines)",
                             color: DashSkin.warn, active: false)
                     }
                     .buttonStyle(.plain)

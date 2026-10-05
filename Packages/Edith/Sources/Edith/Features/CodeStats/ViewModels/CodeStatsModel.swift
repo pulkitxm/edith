@@ -222,6 +222,27 @@ final class CodeStatsModel {
         await updateFilter { $0 = .default }
     }
 
+    func homeSummary() async -> CodeStatsHomeSummary? {
+        guard let table else { return nil }
+        let calendar = calendar
+        let now = today()
+        return await Task.detached(priority: .utility) {
+            let month = CodeStatsReportBuilder.build(
+                table: table, filter: .default, range: .days(30), today: now, calendar: calendar)
+            let history = CodeStatsReportBuilder.build(
+                table: table, filter: .default, range: .days(CodeStatsHomeSummary.heatDays),
+                today: now, calendar: calendar)
+            let explorer = CodeStatsExplorer(
+                table: table, filter: .default, startDay: history.startDay,
+                endDay: history.endDay, calendar: calendar)
+            return CodeStatsHomeSummary(
+                totals: month.totals, momentum: month.momentum,
+                topRepositories: Array(month.repositories.prefix(3)),
+                weeks: CodeStatsProjection(report: history, calendar: calendar).heatWeeks,
+                days: explorer.days)
+        }.value
+    }
+
     func recompute() async {
         guard let table else { return }
         computeGeneration += 1

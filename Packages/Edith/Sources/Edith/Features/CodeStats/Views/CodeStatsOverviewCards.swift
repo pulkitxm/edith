@@ -47,15 +47,14 @@ struct CodeStatsKPIGrid: View {
                 label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
                 symbol: "text.line.first.and.arrowtriangle.forward",
                 change: report.momentum?.lineChange,
-                detail: "+" + CodeStatsNumberFormat.grouped(totals.added) + " / -"
-                    + CodeStatsNumberFormat.grouped(totals.deleted),
+                detail:
+                    "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
                 dark: dark)
             CodeStatsTile(
                 label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
                 symbol: "calendar",
                 detail:
-                    CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)
-                    + " lines per active day",
+                    "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
                 dark: dark)
             CodeStatsTile(
                 label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",
@@ -123,51 +122,128 @@ struct CodeStatsHeatmapCard: View {
     let dark: Bool
 
     var body: some View {
-        SkinCard(title: "Contributions", note: "Commits per day", dark: dark) {
-            GeometryReader { geometry in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: UIScale.pt(3)) {
-                        ForEach(weeks) { week in
-                            VStack(spacing: UIScale.pt(3)) {
-                                Text(week.monthLabel)
-                                    .font(.system(size: UIScale.pt(9)))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .frame(height: UIScale.pt(12))
-                                    .fixedSize()
-                                ForEach(week.cells) { cell in
-                                    CodeStatsHeatCellView(cell: cell, dark: dark)
-                                }
-                            }
-                            .frame(width: UIScale.pt(14), alignment: .top)
-                        }
-                    }
-                    .frame(minWidth: geometry.size.width, alignment: .leading)
-                }
-                .defaultScrollAnchor(weeks.count > 30 ? .trailing : .leading)
-            }
-            .frame(height: UIScale.pt(134))
+        SkinCard(
+            title: "Contributions", note: "Commits per day, hover a day for details", dark: dark
+        ) {
+            CodeStatsHeatGrid(weeks: weeks, dark: dark)
             CodeStatsHeatLegend(dark: dark)
         }
     }
 }
 
-private struct CodeStatsHeatCellView: View {
+struct CodeStatsHeatGrid: View {
+    let weeks: [CodeStatsHeatWeek]
+    let dark: Bool
+    var cellSize: CGFloat = 14
+    @Environment(\.codeStatsActions) private var actions
+    @State private var hovered: String?
+
+    var body: some View {
+        GeometryReader { geometry in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                    ForEach(weeks) { week in
+                        VStack(spacing: UIScale.pt(3)) {
+                            Text(week.monthLabel)
+                                .font(.system(size: UIScale.pt(9)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .frame(height: UIScale.pt(12))
+                                .fixedSize()
+                            ForEach(week.cells) { cell in
+                                cellView(cell)
+                            }
+                        }
+                        .frame(width: UIScale.pt(cellSize), alignment: .top)
+                    }
+                }
+                .frame(minWidth: geometry.size.width, alignment: .leading)
+            }
+            .defaultScrollAnchor(weeks.count > 30 ? .trailing : .leading)
+        }
+        .frame(height: UIScale.pt(cellSize * 7 + 3 * 6 + 18))
+    }
+
+    private func cellView(_ cell: CodeStatsHeatCell) -> some View {
+        RoundedRectangle(cornerRadius: UIScale.pt(3))
+            .fill(CodeStatsHeat.color(cell.level, dark: dark))
+            .frame(width: UIScale.pt(cellSize), height: UIScale.pt(cellSize))
+            .overlay {
+                RoundedRectangle(cornerRadius: UIScale.pt(3))
+                    .stroke(DashSkin.ink(dark).opacity(hovered == cell.id ? 0.6 : 0))
+            }
+            .onHover { inside in
+                guard cell.date != nil else { return }
+                if inside { hovered = cell.id } else if hovered == cell.id { hovered = nil }
+            }
+            .popover(
+                isPresented: Binding(
+                    get: { hovered == cell.id },
+                    set: { shown in if !shown, hovered == cell.id { hovered = nil } }),
+                arrowEdge: .trailing
+            ) {
+                CodeStatsDayPopover(cell: cell, detail: actions.dayDetails[cell.id], dark: dark)
+            }
+    }
+}
+
+struct CodeStatsDayPopover: View {
     let cell: CodeStatsHeatCell
+    let detail: CodeStatsDayDetail?
     let dark: Bool
 
     var body: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(3))
-            .fill(CodeStatsHeat.color(cell.level, dark: dark))
-            .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-            .help(help)
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text(cell.date?.formatted(date: .complete, time: .omitted) ?? cell.id)
+                .font(.system(size: UIScale.pt(12), weight: .semibold))
+            HStack(spacing: UIScale.pt(14)) {
+                metric("Commits", CodeStatsNumberFormat.grouped(detail?.commits ?? cell.commits))
+                metric("Lines", CodeStatsNumberFormat.compact(detail?.lines ?? cell.lines))
+            }
+            if let detail, !detail.repositories.isEmpty {
+                section("Repositories", detail.repositories)
+            }
+            if let detail, !detail.languages.isEmpty {
+                section("Languages", detail.languages)
+            }
+            if (detail?.commits ?? cell.commits) == 0 {
+                Text("No commits on this day.")
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+            }
+        }
+        .padding(UIScale.pt(12))
+        .frame(width: UIScale.pt(280), alignment: .leading)
     }
 
-    private var help: String {
-        guard let date = cell.date else { return "" }
-        let day = date.formatted(date: .abbreviated, time: .omitted)
-        let commits = CodeStatsNumberFormat.grouped(cell.commits)
-        let lines = CodeStatsNumberFormat.grouped(cell.lines)
-        return "\(day): \(commits) commits, \(lines) lines"
+    private func metric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+            Text(title.uppercased())
+                .font(DashSkin.mono(9))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Text(value)
+                .font(.system(size: UIScale.pt(16), weight: .semibold))
+                .monospacedDigit()
+        }
+    }
+
+    private func section(_ title: String, _ shares: [CodeStatsDayShare]) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            Text(title.uppercased())
+                .font(DashSkin.mono(9))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            ForEach(shares, id: \.name) { share in
+                HStack {
+                    Text(share.name).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    Text(
+                        "\(CodeStatsNumberFormat.grouped(share.commits)) c, \(CodeStatsNumberFormat.compact(share.lines))"
+                    )
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .monospacedDigit()
+                }
+                .font(.system(size: UIScale.pt(11)))
+            }
+        }
     }
 }
 

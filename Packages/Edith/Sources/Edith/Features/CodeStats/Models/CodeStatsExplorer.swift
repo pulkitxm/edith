@@ -49,6 +49,19 @@ struct CodeStatsMonthCount: Identifiable, Equatable, Sendable {
     let names: [String]
 }
 
+struct CodeStatsDayShare: Equatable, Sendable {
+    let name: String
+    let commits: Int
+    let lines: Int
+}
+
+struct CodeStatsDayDetail: Equatable, Sendable {
+    let commits: Int
+    let lines: Int
+    let repositories: [CodeStatsDayShare]
+    let languages: [CodeStatsDayShare]
+}
+
 struct CodeStatsDominance: Equatable, Sendable {
     let repository: String
     let share: Double
@@ -71,6 +84,9 @@ struct CodeStatsExplorer: Equatable, Sendable {
     var repositories: [CodeStatsSlice] = []
     var newRepositories: [CodeStatsMonthCount] = []
     var dominant: CodeStatsDominance?
+    var days: [String: CodeStatsDayDetail] = [:]
+
+    static let dayShares = 4
 
     init() {}
 
@@ -89,6 +105,8 @@ struct CodeStatsExplorer: Equatable, Sendable {
         var hourTotals = [(commits: Int, lines: Int)](repeating: (0, 0), count: 24)
         var firstMonth = [Int: CodeStatsDay]()
         var total = 0
+        var dayRepositories: [Int: [Int: (commits: Int, lines: Int)]] = [:]
+        var dayLanguages: [Int: [Int: (commits: Int, lines: Int)]] = [:]
         for entry in all {
             let lines = entry.counts.added + entry.counts.updated
             if entry.commits > 0, names.indices.contains(entry.repository) {
@@ -105,6 +123,14 @@ struct CodeStatsExplorer: Equatable, Sendable {
             perYearMonth[parts.year, default: [:]][parts.month, default: (0, 0)].lines += lines
             guard entry.day >= start, entry.day <= end else { continue }
             total += lines
+            dayRepositories[entry.day.ordinal, default: [:]][entry.repository, default: (0, 0)]
+                .commits += entry.commits
+            dayRepositories[entry.day.ordinal, default: [:]][entry.repository, default: (0, 0)]
+                .lines += lines
+            dayLanguages[entry.day.ordinal, default: [:]][entry.language, default: (0, 0)]
+                .commits += entry.commits
+            dayLanguages[entry.day.ordinal, default: [:]][entry.language, default: (0, 0)]
+                .lines += lines
             if names.indices.contains(entry.repository) {
                 perRepository[entry.repository].commits += entry.commits
                 perRepository[entry.repository].lines += lines
@@ -122,6 +148,16 @@ struct CodeStatsExplorer: Equatable, Sendable {
                 hourTotals[entry.hour].lines += lines
             }
         }
+        var details: [String: CodeStatsDayDetail] = [:]
+        for (ordinal, repositories) in dayRepositories {
+            let languages = dayLanguages[ordinal] ?? [:]
+            details[CodeStatsDay(ordinal: ordinal).string] = CodeStatsDayDetail(
+                commits: repositories.values.reduce(0) { $0 + $1.commits },
+                lines: repositories.values.reduce(0) { $0 + $1.lines },
+                repositories: Self.shares(repositories, names: names),
+                languages: Self.shares(languages, names: table.languages))
+        }
+        days = details
         let resolver = Self.dateResolver(calendar)
         let ranked = names.indices.filter { perRepository[$0].commits > 0 }.sorted {
             (perRepository[$0].commits, names[$1]) > (perRepository[$1].commits, names[$0])
@@ -207,6 +243,19 @@ struct CodeStatsExplorer: Equatable, Sendable {
             let list = (started[ordinal] ?? []).sorted()
             return CodeStatsMonthCount(date: date, count: list.count, names: list)
         }
+    }
+
+    static func shares(
+        _ values: [Int: (commits: Int, lines: Int)], names: [String]
+    ) -> [CodeStatsDayShare] {
+        values.compactMap { index, value -> CodeStatsDayShare? in
+            guard names.indices.contains(index), value.commits > 0 || value.lines > 0 else {
+                return nil
+            }
+            return CodeStatsDayShare(name: names[index], commits: value.commits, lines: value.lines)
+        }
+        .sorted { ($0.lines, $0.commits, $1.name) > ($1.lines, $1.commits, $0.name) }
+        .prefix(dayShares).map { $0 }
     }
 
     static func owner(_ repository: String) -> String {

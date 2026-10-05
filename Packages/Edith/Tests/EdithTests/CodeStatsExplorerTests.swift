@@ -114,4 +114,12 @@ import Testing
         #expect(model.filter.excludedRepositories == ["me/big"])
         #expect(model.explorer.dominant?.repository != "me/big")
     }
+
+    @Test func dayDetailsBreakDownEachDayByRepositoryAndLanguage() {
+        let days = explorer().days
+        #expect(days["2026-03-10"]?.commits == 1)
+        #expect(days["2026-03-10"]?.repositories.map(\.name) == ["me/big"])
+        #expect(days["2026-03-10"]?.languages.map(\.name) == ["Swift"])
+        #expect(days["2025-03-04"] == nil)
+    }
 }
