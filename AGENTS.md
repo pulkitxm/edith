@@ -7,15 +7,21 @@ change on `main` publishes the next release.
 
 ## Shared screen UI
 
-- Reuse `PageHeader`, `PageSectionHeader`, `pageContent`, and `PageMetrics` for
-  screen structure, gutters, and responsive headers. Read `compactLayout` from
-  the window host instead of defining another breakpoint inside a page.
+- Compose scrolling pages with `PageScaffold` and pane-based tools with
+  `PageWorkspace`. Reuse `PageHeader`, `PageSectionHeader`, and `PageMetrics` for
+  structure and responsive headers. Read `compactLayout` from the window host
+  instead of defining another breakpoint inside a page.
 - Use `EdithSegmentedPicker` for segmented choices. Native segmented pickers
   have intrinsic label widths that can overflow inspectors and compact windows.
-- Use `LoadingContainer` with shared skeletons for asynchronous content. Keep
-  content construction and compute-heavy startup behind the loading state, and
-  cancel page-owned tasks when the page disappears. Preserve existing content
-  during refreshes and expose actionable empty and failure states.
+- Use `ContentLoad` for request ownership and loading state, `PageLoading` for
+  page-level presentation, and `LoadingContainer` for component-level content.
+  Choose a shared `PageSkeleton` recipe instead of writing feature-specific
+  full-page placeholders. `LoadingIndicator`, `SkeletonBlock`, and
+  `SkeletonReplica` share the same animation. Keep compute-heavy construction
+  behind loading, retain content during refresh, and expose recovery actions.
+- Use `pageTask` and `pageRefresh` for page work and observation. They share
+  window visibility, automatic-action, and cancellation rules. Retained editors,
+  recordings, terminals, and app services belong to their resource owners.
 - Present sheets through the shared presentation API so Escape and outside
   clicks behave consistently. Disable dismissal while an operation owns the
   presentation or when closing would discard unsaved edits.
@@ -30,6 +36,8 @@ change on `main` publishes the next release.
   must work when a terminal, web view, or text field is the first responder.
 - Keep source code comment-free. Functional tooling directives and license
   blocks are the only exceptions. Run `make ci-comments` before submitting.
+
+See `docs/shared-screen-architecture.md` for the loading and ownership contract.
 
 ## Development builds
 

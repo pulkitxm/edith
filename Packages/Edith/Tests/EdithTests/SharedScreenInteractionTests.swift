@@ -87,6 +87,45 @@ import Testing
         #expect(text.contains("Install extension"))
     }
 
+    @Test func pageWorkStopsOnceAndOnlyRestartsWhenVisibleAndEnabled() async throws {
+        let probe = SharedPageWorkProbe()
+        let host = NSHostingView(rootView: pageWork(probe, id: 1, visible: true, enabled: true))
+        host.frame = NSRect(x: 0, y: 0, width: 320, height: 220)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(probe.starts == 1)
+
+        host.rootView = pageWork(probe, id: 1, visible: false, enabled: true)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(probe.stops == 1)
+        host.rootView = pageWork(probe, id: 2, visible: false, enabled: true)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(probe.starts == 1)
+
+        host.rootView = pageWork(probe, id: 2, visible: true, enabled: true)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(probe.starts == 2)
+        host.rootView = pageWork(probe, id: 2, visible: true, enabled: false)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(probe.stops == 2)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
+    private func pageWork(
+        _ probe: SharedPageWorkProbe, id: Int, visible: Bool, enabled: Bool
+    ) -> some View {
+        Text("Page work")
+            .pageTask(id: id, cancel: { probe.stops += 1 }) {
+                probe.starts += 1
+                try? await Task.sleep(for: .seconds(30))
+            }
+            .environment(\.windowVisible, visible)
+            .environment(\.automaticViewActionsEnabled, enabled)
+    }
+
     private func loadingView(_ state: ContentLoadingState, probe: SharedLoadingProbe)
         -> some View
     {
@@ -109,4 +148,10 @@ private final class SharedSelectionProbe {
 private final class SharedLoadingProbe {
     var contentBuilds = 0
     var placeholderBuilds = 0
+}
+
+@MainActor
+private final class SharedPageWorkProbe {
+    var starts = 0
+    var stops = 0
 }

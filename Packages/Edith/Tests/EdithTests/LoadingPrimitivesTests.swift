@@ -18,6 +18,12 @@ import Testing
         #expect(!ContentLoadingState.content.permitsRetry)
     }
 
+    @Test func loadingMotionUsesTheSameClockAcrossMounts() {
+        let date = Date(timeIntervalSinceReferenceDate: 0.35)
+        #expect(abs(LoadingMotion.phase(at: date) - 0.25) < 0.00001)
+        #expect(abs(LoadingMotion.phase(at: date.addingTimeInterval(1.4)) - 0.25) < 0.00001)
+    }
+
     @Test func skeletonAnimationHasOneOwner() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -30,8 +36,9 @@ import Testing
         let group = String(source[groupStart.lowerBound..<blockStart.lowerBound])
         let block = String(source[blockStart.lowerBound...])
 
-        #expect(group.contains("repeatForever"))
-        #expect(group.contains("guard !reduceMotion"))
+        #expect(group.contains("TimelineView"))
+        #expect(group.contains("paused: reduceMotion"))
+        #expect(group.contains("LoadingMotion.phase"))
         #expect(!block.contains("repeatForever"))
         #expect(!block.contains("@State"))
     }
@@ -54,8 +61,8 @@ import Testing
         #expect(replica.contains(".allowsHitTesting(false)"))
         #expect(replica.contains(".accessibilityHidden(true)"))
         #expect(replica.contains(".accessibilityLabel(label)"))
-        #expect(!replica.contains("SkeletonGroup"))
-        #expect(!replica.contains(".overlay"))
+        #expect(replica.contains("SkeletonGroup"))
+        #expect(replica.contains("LoadingShimmer().mask"))
         #expect(!replica.contains("repeatForever"))
     }
 }
