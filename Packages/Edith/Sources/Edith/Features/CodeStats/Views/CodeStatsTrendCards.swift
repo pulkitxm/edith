@@ -13,39 +13,85 @@ struct CodeStatsTrendCard: View {
     let projection: CodeStatsProjection
     let dark: Bool
     @State private var metric = CodeStatsTrendMetric.lines
+    @State private var cumulative = false
+    @State private var hovered: Date?
 
     private var unit: Calendar.Component {
         projection.trendGranularity == .monthly ? .month : .weekOfYear
     }
 
     private var note: String {
+        if cumulative { return "Running total since the start of the range" }
         let period = projection.trendGranularity == .monthly ? "Monthly" : "Weekly"
         return period + " bars with a rolling average"
     }
 
+    private var selected: CodeStatsTrendPoint? {
+        guard let hovered else { return nil }
+        return projection.trend.min {
+            abs($0.date.timeIntervalSince(hovered)) < abs($1.date.timeIntervalSince(hovered))
+        }
+    }
+
     var body: some View {
         SkinCard(title: "Output over time", note: note, dark: dark) {
-            Picker("Metric", selection: $metric) {
-                ForEach(CodeStatsTrendMetric.allCases) { Text($0.rawValue).tag($0) }
+            HStack(spacing: UIScale.pt(10)) {
+                Picker("Metric", selection: $metric) {
+                    ForEach(CodeStatsTrendMetric.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                Toggle("Cumulative", isOn: $cumulative)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
-            Chart(projection.trend) { point in
-                BarMark(
-                    x: .value("Period", point.date, unit: unit),
-                    y: .value(metric.rawValue, value(point))
-                )
-                .foregroundStyle(DashSkin.accent(dark).opacity(0.55))
-                .cornerRadius(2)
-                LineMark(
-                    x: .value("Period", point.date, unit: unit),
-                    y: .value("Average", average(point))
-                )
-                .foregroundStyle(DashPalette.slate(dark))
-                .interpolationMethod(.monotone)
-                .lineStyle(StrokeStyle(lineWidth: UIScale.pt(2)))
+            Chart {
+                ForEach(projection.trend) { point in
+                    if cumulative {
+                        AreaMark(
+                            x: .value("Period", point.date, unit: unit),
+                            y: .value(metric.rawValue, total(point))
+                        )
+                        .foregroundStyle(DashSkin.accent(dark).opacity(0.25))
+                        .interpolationMethod(.monotone)
+                        LineMark(
+                            x: .value("Period", point.date, unit: unit),
+                            y: .value(metric.rawValue, total(point))
+                        )
+                        .foregroundStyle(DashSkin.accent(dark))
+                        .interpolationMethod(.monotone)
+                    } else {
+                        BarMark(
+                            x: .value("Period", point.date, unit: unit),
+                            y: .value(metric.rawValue, value(point))
+                        )
+                        .foregroundStyle(
+                            DashSkin.accent(dark).opacity(
+                                selected?.date == point.date ? 0.95 : 0.55)
+                        )
+                        .cornerRadius(2)
+                        LineMark(
+                            x: .value("Period", point.date, unit: unit),
+                            y: .value("Average", average(point))
+                        )
+                        .foregroundStyle(DashPalette.slate(dark))
+                        .interpolationMethod(.monotone)
+                        .lineStyle(StrokeStyle(lineWidth: UIScale.pt(2)))
+                    }
+                }
+                if let selected {
+                    RuleMark(x: .value("Period", selected.date, unit: unit))
+                        .foregroundStyle(DashSkin.inkFaint(dark).opacity(0.5))
+                        .annotation(
+                            position: .top, spacing: 0,
+                            overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                        ) {
+                            tooltip(selected)
+                        }
+                }
             }
+            .chartXSelection(value: $hovered)
             .chartYAxis {
                 AxisMarks(position: .leading) { value in
                     AxisGridLine().foregroundStyle(.primary.opacity(0.06))
@@ -57,12 +103,41 @@ struct CodeStatsTrendCard: View {
                     }
                 }
             }
-            .frame(height: UIScale.pt(220))
+            .frame(height: UIScale.pt(240))
         }
+    }
+
+    private func tooltip(_ point: CodeStatsTrendPoint) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+            Text(
+                projection.trendGranularity == .monthly
+                    ? point.date.formatted(.dateTime.month(.wide).year())
+                    : "Week of " + point.date.formatted(date: .abbreviated, time: .omitted)
+            )
+            .font(.system(size: UIScale.pt(11), weight: .semibold))
+            Text(CodeStatsNumberFormat.grouped(point.commits) + " commits")
+            Text(CodeStatsNumberFormat.grouped(point.lines) + " lines")
+            Text(
+                "Running total " + CodeStatsNumberFormat.compact(point.totalLines) + " lines, "
+                    + CodeStatsNumberFormat.grouped(point.totalCommits) + " commits"
+            )
+            .foregroundStyle(DashSkin.inkFaint(dark))
+        }
+        .font(.system(size: UIScale.pt(10.5)))
+        .monospacedDigit()
+        .foregroundStyle(DashSkin.ink(dark))
+        .padding(UIScale.pt(8))
+        .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(8)).stroke(DashSkin.lineStrong(dark)))
     }
 
     private func value(_ point: CodeStatsTrendPoint) -> Int {
         metric == .lines ? point.lines : point.commits
+    }
+
+    private func total(_ point: CodeStatsTrendPoint) -> Int {
+        metric == .lines ? point.totalLines : point.totalCommits
     }
 
     private func average(_ point: CodeStatsTrendPoint) -> Double {
@@ -73,16 +148,24 @@ struct CodeStatsTrendCard: View {
 struct CodeStatsRepositoryCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
+    @Environment(\.codeStatsActions) private var actions
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            SkinCard(title: "Commits per repository", note: "Top 10", dark: dark) {
+            SkinCard(
+                title: "Commits per repository", note: "Top 10, click a bar to filter", dark: dark
+            ) {
                 Chart(projection.repositoryBars, id: \.repository) { summary in
                     BarMark(
                         x: .value("Commits", summary.commits),
                         y: .value("Repository", summary.repository)
                     )
-                    .foregroundStyle(DashSkin.accent(dark).opacity(0.8))
+                    .foregroundStyle(
+                        DashSkin.accent(dark).opacity(
+                            actions.selectedRepositories.isEmpty
+                                || actions.selectedRepositories.contains(summary.repository)
+                                ? 0.85 : 0.3)
+                    )
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
                         Text(CodeStatsNumberFormat.grouped(summary.commits))
@@ -93,6 +176,18 @@ struct CodeStatsRepositoryCards: View {
                 .chartYAxis {
                     AxisMarks { _ in
                         AxisValueLabel().font(.system(size: UIScale.pt(10.5)))
+                    }
+                }
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle().fill(.clear).contentShape(Rectangle())
+                            .onTapGesture { location in
+                                guard let frame = proxy.plotFrame else { return }
+                                let y = location.y - geometry[frame].origin.y
+                                if let name: String = proxy.value(atY: y) {
+                                    actions.toggleRepository(name)
+                                }
+                            }
                     }
                 }
                 .frame(
@@ -166,6 +261,7 @@ struct CodeStatsStackedCard: View {
 private struct CodeStatsRepositoryTable: View {
     let rows: [CodeStatsRepositorySort: [CodeStatsRepositorySummary]]
     let dark: Bool
+    @Environment(\.codeStatsActions) private var actions
     @State private var sort = CodeStatsRepositorySort.commits
     @State private var expanded = false
 
@@ -195,11 +291,23 @@ private struct CodeStatsRepositoryTable: View {
                     sorted.prefix(expanded ? sorted.count : Self.collapsedCount), id: \.repository
                 ) { row in
                     GridRow {
-                        Text(row.repository)
+                        Button {
+                            actions.toggleRepository(row.repository)
+                        } label: {
+                            HStack(spacing: UIScale.pt(4)) {
+                                if actions.selectedRepositories.contains(row.repository) {
+                                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
+                                        .foregroundStyle(DashSkin.accent(dark))
+                                }
+                                Text(row.repository)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
                             .font(.system(size: UIScale.pt(12), weight: .medium))
                             .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Filter the page to this repository")
                         Text(CodeStatsNumberFormat.grouped(row.commits)).gridColumnAlignment(
                             .trailing)
                         Text(CodeStatsNumberFormat.compact(row.counts.authored))

@@ -21,20 +21,29 @@ final class CodeStatsModel {
     private(set) var isCancelling = false
     var errorMessage: String?
     var range = CodeStatsRange.days(90)
+    private(set) var table: CodeStatsFactTable?
+    private(set) var audit: CodeStatsAudit?
+    private(set) var filter = CodeStatsFilter.default
+    private(set) var isComputing = false
+    private(set) var facets = CodeStatsFacets()
+    private(set) var identityPendingRecount = false
 
     @ObservationIgnored private let service: CodeStatsPageService
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let calendar: Calendar
+    @ObservationIgnored private let today: @Sendable () -> Date
     @ObservationIgnored private var reportGeneration = 0
     @ObservationIgnored private var statusGeneration = 0
+    @ObservationIgnored private var computeGeneration = 0
 
     init(
         service: CodeStatsPageService = .live, defaults: UserDefaults = SharedDefaults.store,
-        calendar: Calendar = .current
+        calendar: Calendar = .current, today: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.service = service
         self.defaults = defaults
         self.calendar = calendar
+        self.today = today
         identity = CodeStatsPreferences.identity(in: defaults)
     }
 
@@ -120,6 +129,19 @@ final class CodeStatsModel {
         let requested = range
         let calendar = calendar
         do {
+            if let facts = try await service.facts() {
+                let options = await Task.detached(priority: .userInitiated) {
+                    CodeStatsFacets(table: facts)
+                }.value
+                guard generation == reportGeneration else { return }
+                table = facts
+                facets = options
+                await recompute()
+                guard generation == reportGeneration else { return }
+                reportLoaded = true
+                reportError = nil
+                return
+            }
             let next = try await service.report(requested)
             let projected = await Task.detached(priority: .userInitiated) {
                 next.map { CodeStatsProjection(report: $0, calendar: calendar) }
@@ -138,7 +160,66 @@ final class CodeStatsModel {
     func select(_ next: CodeStatsRange) async {
         guard next != range else { return }
         range = next
-        await loadReport()
+        if table != nil {
+            await recompute()
+        } else {
+            await loadReport()
+        }
+    }
+
+    var hasActiveFilter: Bool { filter != .default }
+
+    func updateFilter(_ change: (inout CodeStatsFilter) -> Void) async {
+        var next = filter
+        change(&next)
+        guard next != filter else { return }
+        filter = next
+        await recompute()
+    }
+
+    func toggleRepository(_ name: String) async {
+        await updateFilter { $0.repositories.formSymmetricDifference([name]) }
+    }
+
+    func toggleLanguage(_ name: String) async {
+        await updateFilter { $0.languages.formSymmetricDifference([name]) }
+    }
+
+    func toggleOwner(_ name: String) async {
+        await updateFilter { $0.owners.formSymmetricDifference([name]) }
+    }
+
+    func toggleCategory(_ category: CodeStatsCategory) async {
+        await updateFilter { $0.categories.formSymmetricDifference([category]) }
+    }
+
+    func resetFilter() async {
+        await updateFilter { $0 = .default }
+    }
+
+    func recompute() async {
+        guard let table else { return }
+        computeGeneration += 1
+        let generation = computeGeneration
+        let filter = filter
+        let range = range
+        let calendar = calendar
+        let identity = identity
+        let now = today()
+        isComputing = true
+        let result = await Task.detached(priority: .userInitiated) {
+            let report = CodeStatsReportBuilder.build(
+                table: table, filter: filter, range: range, today: now, calendar: calendar)
+            return (
+                report, CodeStatsProjection(report: report, calendar: calendar),
+                CodeStatsAuditBuilder.build(table: table, filter: filter).matching(identity)
+            )
+        }.value
+        guard generation == computeGeneration else { return }
+        report = result.0
+        projection = result.1
+        audit = result.2
+        isComputing = false
     }
 
     func apply(_ next: CodeStatsStatus) async {
@@ -147,6 +228,7 @@ final class CodeStatsModel {
         status = next
         identity = next.settings.identity
         let finished = previous?.isRunning == true && !next.isRunning
+        if finished { identityPendingRecount = false }
         let reported = previous?.state.reportedAt != next.state.reportedAt
         if finished || (previous != nil && reported) {
             await loadReport()
@@ -222,6 +304,7 @@ final class CodeStatsModel {
     func addIdentity(_ value: String) {
         CodeStatsPreferences.addIdentity(value, in: defaults)
         identity = CodeStatsPreferences.identity(in: defaults)
+        identityPendingRecount = true
         authors = CodeStatsAuthorMarking.marked(authors, identity: identity)
     }
 

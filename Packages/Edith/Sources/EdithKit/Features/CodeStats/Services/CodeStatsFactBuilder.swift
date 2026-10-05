@@ -172,9 +172,23 @@ public enum CodeStatsAuditBuilder {
         table: CodeStatsFactTable, filter: CodeStatsFilter = .default
     ) -> CodeStatsAudit {
         var counted = CodeStatsTally()
-        var raw = CodeStatsTally(
-            commits: table.duplicates.commits + table.integrated.commits,
-            lines: table.duplicates.lines + table.integrated.lines)
+        let scoped =
+            !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
+        var raw =
+            scoped
+            ? CodeStatsTally()
+            : CodeStatsTally(
+                commits: table.duplicates.commits + table.integrated.commits,
+                lines: table.duplicates.lines + table.integrated.lines)
+        let repositoryAllowed = table.repositories.map { name in
+            (filter.repositories.isEmpty || filter.repositories.contains(name))
+                && (filter.owners.isEmpty
+                    || filter.owners.contains(
+                        name.split(separator: "/", maxSplits: 1).first.map(String.init) ?? name))
+        }
+        let languageAllowed = table.languages.map {
+            filter.languages.isEmpty || filter.languages.contains($0)
+        }
         var flagged: [CodeStatsAuditReason: CodeStatsTally] = [:]
         var categories: [CodeStatsCategory: Int] = [:]
         var whitespace = 0
@@ -183,6 +197,11 @@ public enum CodeStatsAuditBuilder {
             (.coAuthored, .coAuthored),
         ]
         for row in table.rows {
+            guard repositoryAllowed.indices.contains(row.repository),
+                repositoryAllowed[row.repository],
+                languageAllowed.indices.contains(row.language)
+                    ? languageAllowed[row.language] : filter.languages.isEmpty
+            else { continue }
             raw.add(commits: row.commits, lines: row.raw)
             categories[row.category, default: 0] += row.counts.authored
             if row.category != .generated { whitespace += max(row.raw - row.counts.authored, 0) }

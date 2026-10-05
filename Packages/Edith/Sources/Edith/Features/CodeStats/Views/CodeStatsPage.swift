@@ -64,19 +64,45 @@ struct CodeStatsPage: View {
         case .unavailable:
             EmptyView()
         case .content:
-            CodeStatsRangePicker(range: model.range) { range in
-                Task { await model.select(range) }
+            if model.table != nil {
+                CodeStatsFilterBar(model: model, dark: dark)
+            } else {
+                CodeStatsRangePicker(range: model.range) { range in
+                    Task { await model.select(range) }
+                }
             }
             if let report = model.report {
-                if model.showsPreviousRange {
-                    SkeletonReplica("Loading \(CodeStatsRangePicker.title(model.range))") {
-                        CodeStatsReportSections(
-                            report: report, projection: model.projection, dark: dark)
+                Group {
+                    if model.showsPreviousRange {
+                        SkeletonReplica("Loading \(CodeStatsRangePicker.title(model.range))") {
+                            sections(report)
+                        }
+                    } else {
+                        sections(report)
                     }
-                } else {
-                    CodeStatsReportSections(
-                        report: report, projection: model.projection, dark: dark)
                 }
+                .environment(\.codeStatsActions, actions)
+            }
+        }
+    }
+
+    private var actions: CodeStatsActions {
+        CodeStatsActions(
+            toggleRepository: { name in Task { await model.toggleRepository(name) } },
+            toggleLanguage: { name in Task { await model.toggleLanguage(name) } },
+            selectedRepositories: model.filter.repositories,
+            selectedLanguages: model.filter.languages)
+    }
+
+    private func sections(_ report: CodeStatsReport) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            CodeStatsReportSections(report: report, projection: model.projection, dark: dark)
+            if let audit = model.audit {
+                CodeStatsAuditCard(audit: audit, model: model, dark: dark)
+                CodeStatsHygieneCard(audit: audit, model: model, dark: dark)
+            }
+            if let table = model.table {
+                CodeStatsLargestCommitsCard(commits: table.largest, dark: dark)
             }
         }
     }

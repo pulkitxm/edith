@@ -5,6 +5,7 @@ import SwiftUI
 struct CodeStatsLanguageCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
+    @Environment(\.codeStatsActions) private var actions
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -24,9 +25,21 @@ struct CodeStatsLanguageCards: View {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 ForEach(Array(projection.languageShares.enumerated()), id: \.element.id) {
                     index, share in
-                    CodeStatsShareRow(
-                        share: share, color: DashPalette.categorical(index, dark: dark),
-                        dark: dark)
+                    Button {
+                        actions.toggleLanguage(share.name)
+                    } label: {
+                        CodeStatsShareRow(
+                            share: share, color: DashPalette.categorical(index, dark: dark),
+                            dark: dark
+                        )
+                        .opacity(
+                            actions.selectedLanguages.isEmpty
+                                || actions.selectedLanguages.contains(share.name) ? 1 : 0.45
+                        )
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Filter the page to " + share.name)
                 }
                 if projection.languageShares.isEmpty {
                     Text("No language data in this range.")

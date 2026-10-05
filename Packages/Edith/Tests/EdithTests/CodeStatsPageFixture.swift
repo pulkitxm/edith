@@ -71,6 +71,7 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
     private var reports: [CodeStatsRange: CodeStatsReport]
     private var calls: [String] = []
     private var failing: Set<CodeStatsRange> = []
+    private var table: CodeStatsFactTable?
     private var lookup = CodeStatsProfileLookup(
         profile: CodeStatsProfile(id: 7, login: "octo"), emails: ["octo@example.com"])
     private var discovered = [
@@ -110,6 +111,11 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
         set { lock.withLock { failing = newValue } }
     }
 
+    var facts: CodeStatsFactTable? {
+        get { lock.withLock { table } }
+        set { lock.withLock { table = newValue } }
+    }
+
     var recorded: [String] { lock.withLock { calls } }
 
     private func record(_ call: String) {
@@ -128,6 +134,10 @@ final class CodeStatsFakeAgent: @unchecked Sendable {
                     throw AgentError(.unavailable, "The agent is restarting.")
                 }
                 return self.lock.withLock { self.reports[range] }
+            },
+            facts: {
+                self.record("facts")
+                return self.facts
             },
             start: {
                 self.record("start")
