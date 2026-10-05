@@ -1475,6 +1475,18 @@ enum JSONContract {
         JSONCase("ed agent tasks cancel", ["agent", "tasks", "cancel", "invalid", "--json"]),
         JSONCase(
             "ed agent tasks exec", ["agent", "tasks", "exec", "--json", "--", "/usr/bin/true"]),
+        JSONCase("ed agent schedule ls", ["agent", "schedule", "ls", "--json"]),
+        JSONCase(
+            "ed agent schedule add",
+            [
+                "agent", "schedule", "add", "nightly", "--every", "15m", "--json", "--",
+                "/usr/bin/true",
+            ]),
+        JSONCase("ed agent schedule rm", ["agent", "schedule", "rm", "nightly", "--json"]),
+        JSONCase("ed agent schedule enable", ["agent", "schedule", "enable", "nightly", "--json"]),
+        JSONCase(
+            "ed agent schedule disable", ["agent", "schedule", "disable", "nightly", "--json"]),
+        JSONCase("ed agent schedule run", ["agent", "schedule", "run", "nightly", "--json"]),
     ]
 
     static func run(_ probe: JSONCase) async throws -> CLIRun {

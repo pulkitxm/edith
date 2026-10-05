@@ -213,6 +213,9 @@ public enum UserOperationCatalog {
         AgentControlOperation.allCases.map {
             RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
         }
+        + AgentScheduleControlOperation.allCases.map {
+            RegisteredUserOperation(descriptor: $0.descriptor, exposure: $0.interfaceExposure)
+        }
 
     private static let remoteFileRegistrations: [RegisteredUserOperation] =
         UsageCollectionOperation.allCases.map {

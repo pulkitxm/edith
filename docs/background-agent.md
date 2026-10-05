@@ -143,6 +143,16 @@ The app and CLI submit task specifications and inspect task receipts. They do no
 the process that performs the work. A daemon restart marks interrupted active tasks and
 keeps completed history available for diagnosis.
 
+### Scheduled tasks
+
+`ScheduleService` runs user-defined commands on an interval or a cron schedule. A
+schedule is a row in the `scheduled_task` table, so it survives restarts. The service
+keeps one timer for the earliest next run and sleeps until then, so an idle agent with
+no schedules wakes once a day. When a run is due it submits an ordinary `command.run`
+task, which makes every run bounded, cancellable and inspectable like any other task. A
+run missed while the daemon was down is skipped, and a run is skipped while the previous
+one is still going. `ed agent schedule` manages the table.
+
 ### Daemon operations
 
 Short shared operations use typed XPC requests. Current services include clipboard

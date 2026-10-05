@@ -31,6 +31,7 @@ runbook are in `docs/background-agent.md`.
 | [`ed agent run`](./jobs.md) | Queue a registered recurring job immediately |
 | [`ed agent cancel`](./jobs.md) | Request cancellation of a recurring job |
 | [`ed agent tasks`](./tasks.md) | Submit, inspect and cancel durable background tasks |
+| [`ed agent schedule`](./schedule.md) | Run commands on an interval or a cron schedule, kept across restarts |
 
 ## Where to go next
 
