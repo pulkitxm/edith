@@ -125,8 +125,8 @@ import Testing
         agent.updatesContinuation.yield(
             CodeStatsPageFixture.status(
                 active: CodeStatsActiveRun(trigger: .scheduled, startedAt: Date()),
-                progress: progress))
-        for _ in 0..<200 where model.progress?.phase != .analyzing {
+                progress: progress, revision: 1))
+        for _ in 0..<1_000 where model.progress?.phase != .analyzing {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(model.progress?.phase == .analyzing)

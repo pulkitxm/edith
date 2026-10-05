@@ -22,6 +22,8 @@ struct CodeStatsTrendPoint: Identifiable, Equatable, Sendable {
     let lines: Int
     let rollingCommits: Double
     let rollingLines: Double
+    var totalCommits = 0
+    var totalLines = 0
 }
 
 struct CodeStatsStackPoint: Identifiable, Equatable, Sendable {
@@ -101,13 +103,21 @@ struct CodeStatsProjection: Equatable, Sendable {
         heatWeeks = Self.heatWeeks(report.daily, calendar: calendar, dates: dates)
         let useMonthly = report.weekly.count > Self.monthlyTrendThreshold
         trendGranularity = useMonthly ? .monthly : .weekly
-        trend = (useMonthly ? report.monthly : report.weekly).compactMap { point in
-            dates.date(point.start).map {
-                CodeStatsTrendPoint(
-                    date: $0, commits: point.commits, lines: point.lines,
-                    rollingCommits: point.rollingCommits, rollingLines: point.rollingLines)
-            }
+        var runningCommits = 0
+        var runningLines = 0
+        var points: [CodeStatsTrendPoint] = []
+        for point in useMonthly ? report.monthly : report.weekly {
+            runningCommits += point.commits
+            runningLines += point.lines
+            guard let date = dates.date(point.start) else { continue }
+            var trendPoint = CodeStatsTrendPoint(
+                date: date, commits: point.commits, lines: point.lines,
+                rollingCommits: point.rollingCommits, rollingLines: point.rollingLines)
+            trendPoint.totalCommits = runningCommits
+            trendPoint.totalLines = runningLines
+            points.append(trendPoint)
         }
+        trend = points
         repositoryBars = Array(report.repositories.prefix(Self.repositoryBarCount))
         repositoryRows = Dictionary(
             uniqueKeysWithValues: CodeStatsRepositorySort.allCases.map {

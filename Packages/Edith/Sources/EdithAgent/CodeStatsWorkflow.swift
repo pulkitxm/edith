@@ -127,6 +127,21 @@ public actor CodeStatsWorkflow {
                 store.loadReports().first { $0.range == range }
             }
             return try AgentPayload.encode(report)
+        case CodeStatsAgentOperation.facts:
+            let store = environment.store
+            return try AgentPayload.encode(await BlockingWork.value { store.loadFacts() })
+        case CodeStatsAgentOperation.audit:
+            let filter =
+                payload.isEmpty
+                ? .default : try AgentPayload.decode(CodeStatsFilter.self, from: payload)
+            let store = environment.store
+            let identity = environment.settings().identity
+            let audit = await BlockingWork.value {
+                store.loadFacts().map {
+                    CodeStatsAuditBuilder.build(table: $0, filter: filter).matching(identity)
+                }
+            }
+            return try AgentPayload.encode(audit)
         case CodeStatsAgentOperation.authors:
             return try AgentPayload.encode(await authors())
         case CodeStatsAgentOperation.profile:

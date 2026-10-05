@@ -78,6 +78,7 @@ enum JSONContract {
             "ed code-stats identity remove",
             ["code-stats", "identity", "remove", "you@example.com", "--json"]),
         JSONCase("ed code-stats authors", ["code-stats", "authors", "--json"]),
+        JSONCase("ed code-stats audit", ["code-stats", "audit", "--json"]),
         JSONCase(
             "ed seo create",
             ["seo", "create", "https://example.com", "--name", "Example", "--json"],

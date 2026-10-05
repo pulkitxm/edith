@@ -12,6 +12,7 @@ public enum CodeStatsOperation: String, CaseIterable, Sendable {
     case identityRemove
     case identityList
     case authors
+    case audit
 
     public var descriptor: UserOperationDescriptor {
         UserOperationDescriptor(
@@ -40,12 +41,13 @@ public enum CodeStatsOperation: String, CaseIterable, Sendable {
         case .identityRemove: "Stop counting commits with this email or name fragment."
         case .identityList: "List the emails and name fragments counted as you."
         case .authors: "List the commit authors found in the mirror."
+        case .audit: "Explain what was counted and what was excluded, and why."
         }
     }
 
     private var effect: UserOperationEffect {
         switch self {
-        case .status, .report, .identityList, .authors: .read
+        case .status, .report, .identityList, .authors, .audit: .read
         case .run, .cancel, .folder, .schedule, .identityAdd, .identityRemove: .write
         }
     }

@@ -909,6 +909,7 @@ private extension CodeStatsOperation {
         case .identityRemove: both("remove an identity", ["you@example.com"])
         case .identityList: userInterface(settings, "list the identities")
         case .authors: userInterface(page, "list authors found in the mirror")
+        case .audit: userInterface(page, "show what was counted and excluded")
         }
     }
 }

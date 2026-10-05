@@ -137,7 +137,8 @@ struct CodeStatsSetupView: View {
             ForEach(model.authors.prefix(8)) { author in
                 HStack {
                     Text("\(author.name) <\(author.email)>").lineLimit(1)
-                    Text("\(author.commits) commits").foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(CodeStatsNumberFormat.grouped(author.commits) + " commits")
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                     Spacer()
                     if author.countedAsYou {
                         Label("Counted as you", systemImage: "checkmark.circle.fill")

@@ -161,7 +161,8 @@ enum CodeStatsProgressMath {
         guard [.syncing, .analyzing].contains(progress.phase), progress.total > 0 else {
             return nil
         }
-        return "\(progress.completed) of \(progress.total) repositories"
+        return CodeStatsNumberFormat.grouped(progress.completed) + " of "
+            + CodeStatsNumberFormat.grouped(progress.total) + " repositories"
     }
 
     static func duration(_ interval: TimeInterval) -> String {
