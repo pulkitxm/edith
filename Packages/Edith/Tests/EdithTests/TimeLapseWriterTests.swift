@@ -6,16 +6,107 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseWriterTests {
+    @Test(arguments: [Int32(30), 60], [0, 1, 2])
+    func standardRecordingKeepsWallTimeAndIncludesSelectedAudio(frameRate: Int32, audioCount: Int)
+        async throws
+    {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var settings = TimeLapseSettings()
+        settings.frameRate = frameRate
+        settings.systemAudio = audioCount > 0
+        settings.microphoneID = audioCount == 2 ? "synthetic-microphone" : nil
+        let writer = try TimeLapseWriter(
+            directory: directory,
+            session: TimeLapseSession(settings: settings, width: 64, height: 64), sourceCount: 1,
+            failure: { _ in }, progress: { _, _, _ in })
+        let image = try buffer(color: .green)
+        let origin = ProcessInfo.processInfo.systemUptime
+        for time in [0.0, 0.15, 0.4, 0.8] {
+            let sample = try audioSample(at: origin + time + 0.1)
+            await withCheckedContinuation { continuation in
+                writer.queue.async {
+                    writer.setFrame(image, source: 0)
+                    writer.capture(at: origin + time)
+                    writer.ingest(sample, source: -1, kind: "system")
+                    writer.ingest(sample, source: -1, kind: "microphone")
+                    continuation.resume()
+                }
+            }
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        let session = await writer.stop()
+        #expect(session.failure == nil)
+        #expect(session.frames == 4)
+        let expected = 0.8 + 1 / Double(frameRate)
+        #expect(abs(session.playbackSeconds - expected) < 0.002)
+        let recording = TimeLapseRecording(session: session, directory: directory)
+        let composition = try await TimeLapseExporter.composition(recording)
+        #expect(abs(composition.duration.seconds - expected) < 0.002)
+        let audio = try await composition.loadTracks(withMediaType: .audio)
+        #expect(audio.count == audioCount)
+        for track in audio {
+            let range = try await track.load(.timeRange)
+            let segments = try await track.load(.segments).filter { !$0.isEmpty }
+            let first = try #require(segments.first)
+            #expect(abs(first.timeMapping.target.start.seconds - 0.1) < 0.003)
+            #expect(range.end.seconds <= expected + 0.003)
+        }
+        if #available(macOS 15.0, *) {
+            for quality in TimeLapseExportQuality.allCases {
+                let destination = directory.appendingPathComponent(
+                    "standard-\(quality.id.hashValue).\(quality.fileExtension)")
+                try await TimeLapseExporter.export(recording, quality: quality, to: destination)
+                let asset = AVURLAsset(url: destination)
+                #expect(abs(try await asset.load(.duration).seconds - expected) < 0.05)
+                #expect(
+                    try await asset.loadTracks(withMediaType: .audio).count == min(1, audioCount))
+                #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+            }
+        }
+    }
+
+    @Test func standardSegmentsPreserveGapsAndRecoverWithinFiveMinutes() async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let writer = try TimeLapseWriter(
+            directory: directory,
+            session: TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64),
+            sourceCount: 1,
+            failure: { _ in }, progress: { _, _, _ in })
+        let image = try buffer(color: .blue)
+        let origin = ProcessInfo.processInfo.systemUptime
+        for time in [0.0, 299.9, 300.5] {
+            await withCheckedContinuation { continuation in
+                writer.queue.async {
+                    writer.setFrame(image, source: 0)
+                    writer.capture(at: origin + time)
+                    continuation.resume()
+                }
+            }
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        let session = await writer.stop()
+        #expect(session.failure == nil)
+        #expect(session.segments.count == 2)
+        #expect(session.segments.allSatisfy { $0.duration <= 300 })
+        #expect(abs(session.playbackSeconds - (300.5 + 1.0 / 30)) < 0.003)
+        let composition = try await TimeLapseExporter.composition(
+            .init(session: session, directory: directory))
+        #expect(abs(composition.duration.seconds - session.playbackSeconds) < 0.003)
+    }
+
     @Test func segmentsRollOverAndOriginalExportPreservesTiming() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         var settings = TimeLapseSettings()
+        settings.mode = .timeLapse
         settings.interval = 1
         settings.maximumDimension = 1920
         let writer = try TimeLapseWriter(
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 128, height: 64), sourceCount: 2,
-            failure: { _ in }, progress: { _, _ in })
+            failure: { _ in }, progress: { _, _, _ in })
         let red = try buffer(color: .red)
         let blue = try buffer(color: .blue)
         let uptime = ProcessInfo.processInfo.systemUptime
@@ -74,8 +165,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: directory) }
         let writer = try TimeLapseWriter(
             directory: directory,
-            session: TimeLapseSession(settings: TimeLapseSettings(), width: 128, height: 64),
-            sourceCount: 2, failure: { _ in }, progress: { _, _ in })
+            session: TimeLapseSession(settings: timeLapseSettings(), width: 128, height: 64),
+            sourceCount: 2, failure: { _ in }, progress: { _, _, _ in })
         let image = try buffer(color: .green)
         let uptime = ProcessInfo.processInfo.systemUptime
         await withCheckedContinuation { continuation in
@@ -100,15 +191,15 @@ import Testing
     @Test func emptyAndLowDiskSessionsStopCleanly() async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
-        let session = TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64)
+        let session = TimeLapseSession(settings: timeLapseSettings(), width: 64, height: 64)
         #expect(throws: TimeLapseError.self) {
             try TimeLapseWriter(
                 directory: directory, session: session, sourceCount: 1,
-                availableBytes: { _ in 100 }, failure: { _ in }, progress: { _, _ in })
+                availableBytes: { _ in 100 }, failure: { _ in }, progress: { _, _, _ in })
         }
         let writer = try TimeLapseWriter(
             directory: directory, session: session, sourceCount: 1,
-            failure: { _ in }, progress: { _, _ in })
+            failure: { _ in }, progress: { _, _, _ in })
         let stopped = await writer.stop()
         #expect(stopped.failure == TimeLapseError.empty.localizedDescription)
         #expect(stopped.segments.isEmpty)
@@ -119,7 +210,7 @@ import Testing
         let directory = root.appendingPathComponent("session")
         defer { try? FileManager.default.removeItem(at: root) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        var session = TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64)
+        var session = TimeLapseSession(settings: timeLapseSettings(), width: 64, height: 64)
         session.segments = [
             .init(
                 file: "video-000000.mov", kind: "video", frames: 300,
@@ -137,7 +228,7 @@ import Testing
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        var session = TimeLapseSession(settings: TimeLapseSettings(), width: 64, height: 64)
+        var session = TimeLapseSession(settings: timeLapseSettings(), width: 64, height: 64)
         session.segments = [
             .init(
                 file: "missing.mov", kind: "video", frames: 1,
@@ -160,12 +251,13 @@ import Testing
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         var settings = TimeLapseSettings()
+        settings.mode = .timeLapse
         settings.systemAudio = true
         settings.microphoneID = "synthetic-microphone"
         let writer = try TimeLapseWriter(
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 64, height: 64),
-            sourceCount: 1, failure: { _ in }, progress: { _, _ in })
+            sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
         for index in 0..<10 {
             let sample = try audioSample(at: 100 + Double(index) / 10)
             await withCheckedContinuation { continuation in
@@ -203,8 +295,8 @@ import Testing
         let previews = PreviewFrames()
         let writer = try TimeLapseWriter(
             directory: directory,
-            session: TimeLapseSession(settings: TimeLapseSettings(), width: 1920, height: 1080),
-            sourceCount: 2, failure: { _ in }, progress: { _, _ in },
+            session: TimeLapseSession(settings: timeLapseSettings(), width: 1920, height: 1080),
+            sourceCount: 2, failure: { _ in }, progress: { _, _, _ in },
             preview: { image in
                 if delayedConsumer { try? await Task.sleep(for: .seconds(1)) }
                 previews.append(image)
@@ -250,11 +342,12 @@ import Testing
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         var settings = TimeLapseSettings()
+        settings.mode = .timeLapse
         settings.interval = 60
         let writer = try TimeLapseWriter(
             directory: directory,
             session: TimeLapseSession(settings: settings, width: 64, height: 64),
-            sourceCount: 1, failure: { _ in }, progress: { _, _ in })
+            sourceCount: 1, failure: { _ in }, progress: { _, _, _ in })
         writer.startTimer()
         let image = try buffer(color: .green)
         await withCheckedContinuation { continuation in
@@ -311,6 +404,12 @@ import Testing
                 sampleTimingArray: &timing, sampleSizeEntryCount: 1, sampleSizeArray: &size,
                 sampleBufferOut: &sample) == noErr)
         return try #require(sample)
+    }
+
+    private func timeLapseSettings() -> TimeLapseSettings {
+        var settings = TimeLapseSettings()
+        settings.mode = .timeLapse
+        return settings
     }
 
     private func temporaryDirectory() -> URL {

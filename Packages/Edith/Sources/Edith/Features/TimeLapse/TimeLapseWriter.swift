@@ -22,7 +22,11 @@ final class TimeLapseWriter: @unchecked Sendable {
     private var timer: DispatchSourceTimer?
     private var lastDiskCheck = -Double.infinity
     private let failure: @Sendable (String) -> Void
-    private let progress: @Sendable (Int64, Int64) -> Void
+    private let progress: @Sendable (Int64, Int64, Double) -> Void
+    private var recordingOrigin: Double?
+    private var recordingDate: Date?
+    private var lastPreview = -Double.infinity
+    private var lastProgress = -Double.infinity
     private var storedBytes: Int64 = 0
     private var previewEnabled = false
     private var previewPending = false
@@ -35,7 +39,7 @@ final class TimeLapseWriter: @unchecked Sendable {
         let adaptor: AVAssetWriterInputPixelBufferAdaptor?
         let file: String
         let kind: String
-        let startedAt = Date()
+        var startedAt = Date()
         var frames = 0
         var origin: CMTime?
         var end = CMTime.zero
@@ -58,7 +62,7 @@ final class TimeLapseWriter: @unchecked Sendable {
             try TimeLapseWriter.freeBytes($0)
         },
         failure: @escaping @Sendable (String) -> Void,
-        progress: @escaping @Sendable (Int64, Int64) -> Void,
+        progress: @escaping @Sendable (Int64, Int64, Double) -> Void,
         preview: (@Sendable (CGImage) async -> Void)? = nil
     ) throws {
         try session.validate()
@@ -70,7 +74,7 @@ final class TimeLapseWriter: @unchecked Sendable {
         self.failure = failure
         self.progress = progress
         self.preview = preview
-        clock = TimeLapseClock(interval: session.settings.interval)
+        clock = TimeLapseClock(interval: session.settings.captureInterval)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try checkDisk(at: ProcessInfo.processInfo.systemUptime)
         try save()
@@ -90,8 +94,8 @@ final class TimeLapseWriter: @unchecked Sendable {
         queue.async { [self] in
             let timer = DispatchSource.makeTimerSource(queue: queue)
             timer.schedule(
-                deadline: .now(), repeating: session.settings.interval,
-                leeway: .milliseconds(50))
+                deadline: .now(), repeating: session.settings.captureInterval,
+                leeway: .milliseconds(session.settings.mode == .standard ? 1 : 50))
             timer.setEventHandler { [weak self] in
                 self?.capture(at: ProcessInfo.processInfo.systemUptime)
             }
@@ -131,7 +135,7 @@ final class TimeLapseWriter: @unchecked Sendable {
     func setFrame(_ buffer: CVPixelBuffer, source: Int) {
         guard !closing else { return }
         latest[source] = buffer
-        if timer != nil, clock.frames == 0 {
+        if timer != nil, clock.frames == 0 || session.settings.mode == .standard {
             capture(at: ProcessInfo.processInfo.systemUptime)
         }
     }
@@ -140,6 +144,13 @@ final class TimeLapseWriter: @unchecked Sendable {
         guard !closing, latest.count == sourceCount, clock.isDue(at: uptime) else { return }
         do {
             try checkDisk(at: uptime)
+            if session.settings.mode == .standard, let video, let origin = video.origin,
+                uptime - origin.seconds >= 300
+            {
+                video.end = CMTime(seconds: 300, preferredTimescale: 60000)
+                self.video = nil
+                finish(video)
+            }
             if video == nil { video = try makeChunk(kind: "video") }
             guard let video else { return }
             guard video.writer.status == .writing else {
@@ -154,18 +165,28 @@ final class TimeLapseWriter: @unchecked Sendable {
                 let buffer = raw
             else { throw TimeLapseError.encoding("Could not allocate a video frame.") }
             render(to: buffer)
-            let time = CMTime(value: Int64(video.frames), timescale: TimeLapseSettings.playbackFPS)
+            if recordingOrigin == nil { recordingOrigin = uptime; recordingDate = Date() }
+            if video.origin == nil {
+                video.origin = CMTime(seconds: uptime, preferredTimescale: 60000)
+                video.startedAt = recordingDate!.addingTimeInterval(uptime - recordingOrigin!)
+            }
+            let time =
+                session.settings.mode == .standard
+                ? CMTimeSubtract(CMTime(seconds: uptime, preferredTimescale: 60000), video.origin!)
+                : CMTime(value: Int64(video.frames), timescale: session.settings.outputFPS)
             guard adaptor.append(buffer, withPresentationTime: time) else {
                 throw video.writer.error
                     ?? TimeLapseError.encoding("The video encoder rejected a frame.")
             }
             video.frames += 1
-            video.end = CMTime(value: Int64(video.frames), timescale: TimeLapseSettings.playbackFPS)
+            video.end = CMTimeAdd(time, CMTime(value: 1, timescale: session.settings.outputFPS))
             clock.accepted(at: uptime)
-            timer?.schedule(
-                deadline: .now() + session.settings.interval,
-                repeating: session.settings.interval, leeway: .milliseconds(50))
-            if previewEnabled, !previewPending, let preview {
+            if session.settings.mode == .timeLapse {
+                timer?.schedule(
+                    deadline: .now() + session.settings.interval,
+                    repeating: session.settings.interval, leeway: .milliseconds(50))
+            }
+            if previewEnabled, !previewPending, uptime - lastPreview >= 0.1, let preview {
                 let image = CIImage(cvPixelBuffer: buffer)
                 let scale = min(1, 960 / image.extent.width, 540 / image.extent.height)
                 let thumbnail = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
@@ -176,6 +197,7 @@ final class TimeLapseWriter: @unchecked Sendable {
                     thumbnail, from: bounds, format: .RGBA8,
                     colorSpace: CGColorSpace(name: CGColorSpace.sRGB), deferred: false)
                 {
+                    lastPreview = uptime
                     previewPending = true
                     Task { [weak self] in
                         await preview(image)
@@ -184,11 +206,18 @@ final class TimeLapseWriter: @unchecked Sendable {
                     }
                 }
             }
-            let activeBytes = [video] + Array(audio.values)
-            let bytes = activeBytes.reduce(storedBytes) { result, chunk in
-                result + fileBytes(chunk.file)
+            if uptime - lastProgress >= 0.25 || clock.frames == 1 {
+                let activeBytes = [video] + Array(audio.values)
+                let bytes = activeBytes.reduce(storedBytes) { result, chunk in
+                    result + fileBytes(chunk.file)
+                }
+                lastProgress = uptime
+                let seconds =
+                    session.settings.mode == .standard
+                    ? uptime - recordingOrigin! + 1 / Double(session.settings.outputFPS)
+                    : clock.playbackSeconds
+                progress(clock.frames, bytes, seconds)
             }
-            progress(clock.frames, bytes)
             if video.frames >= session.settings.segmentFrameLimit {
                 self.video = nil
                 finish(video)
@@ -226,6 +255,7 @@ final class TimeLapseWriter: @unchecked Sendable {
             (kind == "system" && session.settings.systemAudio)
                 || (kind == "microphone" && session.settings.microphoneID != nil)
         else { return }
+        if session.settings.mode == .standard, recordingOrigin == nil { return }
         let timestamp = CMSampleBufferGetPresentationTimeStamp(sample)
         guard timestamp.isNumeric else { return }
         try checkDisk(at: ProcessInfo.processInfo.systemUptime)
@@ -242,7 +272,13 @@ final class TimeLapseWriter: @unchecked Sendable {
                 ?? TimeLapseError.encoding("Audio recording stopped unexpectedly.")
         }
         guard chunk.input.isReadyForMoreMediaData else { return }
-        if chunk.origin == nil { chunk.origin = timestamp }
+        if chunk.origin == nil {
+            chunk.origin = timestamp
+            if session.settings.mode == .standard, let recordingOrigin, let recordingDate {
+                chunk.startedAt = recordingDate.addingTimeInterval(
+                    timestamp.seconds - recordingOrigin)
+            }
+        }
         let time = CMTimeSubtract(timestamp, chunk.origin!)
         var count = 0
         guard
@@ -301,7 +337,7 @@ final class TimeLapseWriter: @unchecked Sendable {
                 ],
                 AVVideoCompressionPropertiesKey: [
                     AVVideoAverageBitRateKey: session.settings.videoBitRate,
-                    AVVideoExpectedSourceFrameRateKey: TimeLapseSettings.playbackFPS,
+                    AVVideoExpectedSourceFrameRateKey: session.settings.outputFPS,
                     AVVideoMaxKeyFrameIntervalKey: 30,
                     AVVideoAllowFrameReorderingKey: false,
                 ],
@@ -385,7 +421,16 @@ final class TimeLapseWriter: @unchecked Sendable {
                 timer = nil
                 latest.removeAll()
                 if let reason { session.failure = reason }
-                if let video { self.video = nil; finish(video) }
+                if let video {
+                    if session.settings.mode == .standard, let origin = video.origin {
+                        let end = CMTime(
+                            seconds: ProcessInfo.processInfo.systemUptime - origin.seconds,
+                            preferredTimescale: 60000)
+                        if CMTimeCompare(end, video.end) > 0 { video.end = end }
+                    }
+                    self.video = nil
+                    finish(video)
+                }
                 let chunks = Array(audio.values)
                 audio.removeAll()
                 for chunk in chunks { finish(chunk) }

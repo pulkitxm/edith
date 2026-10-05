@@ -24,6 +24,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var startedAt: Date?
     var frames: Int64 = 0
     var bytes: Int64 = 0
+    var playbackSeconds: Double = 0
     var lastDirectory: URL?
     var preview: CGImage?
     var sourceRevision = 0
@@ -123,9 +124,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                         await self.stop(reason: message)
                     }
                 },
-                progress: { [weak self] frames, bytes in
+                progress: { [weak self] frames, bytes, seconds in
                     Task { @MainActor in
-                        self?.frames = frames; self?.bytes = bytes
+                        self?.frames = frames; self?.bytes = bytes; self?.playbackSeconds = seconds
                     }
                 },
                 preview: { [weak self] image in
@@ -145,7 +146,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                 configuration.width = max(2, Int(Double(sourceSize.width) * scale) / 2 * 2)
                 configuration.height = max(2, Int(Double(sourceSize.height) * scale) / 2 * 2)
                 configuration.minimumFrameInterval = CMTime(
-                    seconds: settings.interval, preferredTimescale: 600)
+                    seconds: settings.captureInterval, preferredTimescale: 60000)
                 configuration.queueDepth = 3
                 configuration.pixelFormat = kCVPixelFormatType_32BGRA
                 configuration.colorSpaceName = CGColorSpace.sRGB
@@ -204,7 +205,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
                     let result = IOPMAssertionCreateWithName(
                         type as CFString,
                         IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                        "Screen time-lapse recording" as CFString,
+                        "Screen recording" as CFString,
                         &assertion)
                     guard result == kIOReturnSuccess else {
                         throw TimeLapseError.encoding(
@@ -216,6 +217,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             }
             frames = 0
             bytes = 0
+            playbackSeconds = 0
             startedAt = Date()
             recording = true
             error = nil
@@ -243,6 +245,8 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         outputs.removeAll()
         let session = await writer.stop(reason: reason ?? error)
         error = session.failure
+        frames = Int64(session.frames)
+        playbackSeconds = session.playbackSeconds
         self.writer = nil
         releaseSleepAssertion()
         recording = false

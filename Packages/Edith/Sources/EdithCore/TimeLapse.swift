@@ -1,5 +1,11 @@
 import Foundation
 
+public enum ScreenRecordingMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case standard = "Standard"
+    case timeLapse = "Time-lapse"
+    public var id: String { rawValue }
+}
+
 public struct TimeLapseSettings: Codable, Equatable, Sendable {
     public static let playbackFPS: Int32 = 30
     public static let framesPerSegment = 300
@@ -7,6 +13,8 @@ public struct TimeLapseSettings: Codable, Equatable, Sendable {
     public static let intervals: [Double] = [1, 2, 5, 10, 30, 60]
     public static var speeds: [Double] { intervals.map { $0 * Double(playbackFPS) } }
 
+    public var mode = ScreenRecordingMode.standard
+    public var frameRate: Int32 = 30
     public var interval: Double = 5
     public var maximumDimension = 3840
     public var systemAudio = false
@@ -17,18 +25,27 @@ public struct TimeLapseSettings: Codable, Equatable, Sendable {
     public init() {}
 
     public func validate() throws {
-        guard Self.intervals.contains(interval), [1920, 3840, 7680].contains(maximumDimension)
+        guard Self.intervals.contains(interval), [30, 60].contains(frameRate),
+            [1920, 3840, 7680].contains(maximumDimension)
         else { throw TimeLapseError.invalidSettings }
     }
 
-    public var segmentFrameLimit: Int { min(Self.framesPerSegment, max(1, Int(300 / interval))) }
+    public var outputFPS: Int32 { mode == .standard ? frameRate : Self.playbackFPS }
+    public var captureInterval: Double { mode == .standard ? 1 / Double(frameRate) : interval }
+    public var segmentFrameLimit: Int {
+        mode == .standard
+            ? Int(frameRate) * 300 : min(Self.framesPerSegment, max(1, Int(300 / interval)))
+    }
 
     public var speed: Double {
-        get { interval * Double(Self.playbackFPS) }
+        get { mode == .standard ? 1 : interval * Double(Self.playbackFPS) }
         set { interval = newValue / Double(Self.playbackFPS) }
     }
     public var videoBitRate: Int {
-        maximumDimension <= 1920 ? 6_000_000 : (maximumDimension <= 3840 ? 12_000_000 : 48_000_000)
+        let rate =
+            maximumDimension <= 1920
+            ? 6_000_000 : (maximumDimension <= 3840 ? 12_000_000 : 48_000_000)
+        return rate * (mode == .standard ? Int(frameRate) / 30 : 1)
     }
     public var audioBitRate: Int {
         (systemAudio ? 128_000 : 0) + (microphoneID == nil ? 0 : 128_000)
@@ -76,7 +93,8 @@ public enum TimeLapseError: LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidSettings: "Choose a supported time-lapse speed and capture quality."
+        case .invalidSettings:
+            "Choose a supported recording mode, frame rate, speed and capture quality."
         case .missingSource: "The selected display or windows are unavailable. Refresh sources."
         case .diskFull: "Recording stopped to leave 512 MB free on the recording drive."
         case .encoding(let message): message
@@ -121,7 +139,13 @@ public struct TimeLapseSession: Codable, Identifiable, Sendable {
     }
 
     public var frames: Int { segments.filter { $0.kind == "video" }.reduce(0) { $0 + $1.frames } }
-    public var playbackSeconds: Double { Double(frames) / Double(TimeLapseSettings.playbackFPS) }
+    public var playbackSeconds: Double {
+        let video = segments.filter { $0.kind == "video" }
+        guard settings.mode == .standard, let first = video.map(\.startedAt).min() else {
+            return Double(frames) / Double(TimeLapseSettings.playbackFPS)
+        }
+        return video.map { $0.startedAt.timeIntervalSince(first) + $0.duration }.max() ?? 0
+    }
 
     public func validate() throws {
         try settings.validate()
