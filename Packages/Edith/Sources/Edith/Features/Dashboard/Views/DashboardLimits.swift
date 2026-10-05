@@ -384,31 +384,10 @@ struct LimitsCardView: View {
     }
 
     private var segmented: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            ForEach(ranges, id: \.0) { name, _ in
-                Button {
-                    range = name
-                } label: {
-                    Text(name)
-                        .font(
-                            .system(
-                                size: UIScale.pt(11),
-                                weight: range == name ? .semibold : .regular)
-                        )
-                        .padding(.horizontal, UIScale.pt(10))
-                        .padding(.vertical, UIScale.pt(4))
-                        .background(
-                            range == name
-                                ? AnyShapeStyle(theme.opacity(0.9))
-                                : AnyShapeStyle(.primary.opacity(0.06)),
-                            in: Capsule()
-                        )
-                        .foregroundStyle(
-                            range == name ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-                }
-                .buttonStyle(.edith(.borderless))
-            }
-        }
+        EdithSegmentedPicker(
+            "Range", selection: $range, options: ranges.map { $0.0 }, label: { $0 }
+        )
+        .fixedSize()
     }
 
     private var readout: some View {

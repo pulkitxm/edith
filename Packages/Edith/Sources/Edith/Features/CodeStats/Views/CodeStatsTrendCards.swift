@@ -38,10 +38,10 @@ struct CodeStatsTrendCard: View {
     var body: some View {
         SkinCard(title: "Output over time", note: note, dark: dark) {
             HStack(spacing: UIScale.pt(10)) {
-                Picker("Metric", selection: $metric) {
-                    ForEach(CodeStatsTrendMetric.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Metric", selection: $metric, options: CodeStatsTrendMetric.allCases,
+                    label: { $0.rawValue }
+                )
                 .labelsHidden()
                 .fixedSize()
                 Toggle("Cumulative", isOn: $cumulative)

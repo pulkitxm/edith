@@ -61,9 +61,7 @@ enum DashboardComputation {
     static let chartMarkBudget = 90
 
     static func heatCuts(for days: [DayPoint]) -> [Double] {
-        let costs = days.map(\.cost).filter { $0 > 0 }.sorted()
-        guard !costs.isEmpty else { return [0, 0, 0] }
-        return [costs[costs.count / 4], costs[costs.count / 2], costs[costs.count * 3 / 4]]
+        ActivityCalendar.cuts(days.map(\.cost))
     }
 
     static let ymd: DateFormatter = {
@@ -448,10 +446,8 @@ extension DashboardComputation {
     ) -> [DayPoint] {
         let first = calendar.startOfDay(for: min(from, to))
         let last = calendar.startOfDay(for: max(from, to))
-        let firstWeekday = (calendar.component(.weekday, from: first) + 5) % 7
-        let lastWeekday = (calendar.component(.weekday, from: last) + 5) % 7
-        var day = calendar.date(byAdding: .day, value: -firstWeekday, to: first) ?? first
-        let end = calendar.date(byAdding: .day, value: 6 - lastWeekday, to: last) ?? last
+        var day = first
+        let end = last
         var points: [DayPoint] = []
         while day <= end {
             let key = ymd.string(from: day)

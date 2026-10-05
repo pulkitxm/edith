@@ -6,15 +6,11 @@ struct CodeStatsRangePicker: View {
     let select: (CodeStatsRange) -> Void
 
     var body: some View {
-        Picker(
+        EdithSegmentedPicker(
             "Range",
-            selection: Binding(get: { range }, set: { select($0) })
-        ) {
-            ForEach(CodeStatsRange.presets, id: \.self) { preset in
-                Text(Self.title(preset)).tag(preset)
-            }
-        }
-        .pickerStyle(.segmented)
+            selection: Binding(get: { range }, set: { select($0) }),
+            options: CodeStatsRange.presets, label: { Self.title($0) }
+        )
         .labelsHidden()
         .fixedSize()
     }
@@ -126,7 +122,6 @@ struct CodeStatsHeatmapCard: View {
             title: "Contributions", note: "Commits per day, hover a day for details", dark: dark
         ) {
             CodeStatsHeatGrid(weeks: weeks, dark: dark)
-            CodeStatsHeatLegend(dark: dark)
         }
     }
 }
@@ -136,53 +131,21 @@ struct CodeStatsHeatGrid: View {
     let dark: Bool
     var cellSize: CGFloat = 14
     @Environment(\.codeStatsActions) private var actions
-    @State private var hovered: String?
-
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: UIScale.pt(3)) {
-                    ForEach(weeks) { week in
-                        VStack(spacing: UIScale.pt(3)) {
-                            Text(week.monthLabel)
-                                .font(.system(size: UIScale.pt(9)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                                .frame(height: UIScale.pt(12))
-                                .fixedSize()
-                            ForEach(week.cells) { cell in
-                                cellView(cell)
-                            }
-                        }
-                        .frame(width: UIScale.pt(cellSize), alignment: .top)
-                    }
-                }
-                .frame(minWidth: geometry.size.width, alignment: .leading)
-            }
-            .defaultScrollAnchor(weeks.count > 30 ? .trailing : .leading)
+        let cells = Dictionary(uniqueKeysWithValues: weeks.flatMap(\.cells).map { ($0.id, $0) })
+        let calendarWeeks = weeks.map { week in
+            ActivityCalendarWeek(
+                id: week.id, monthLabel: week.monthLabel,
+                cells: week.cells.map {
+                    ActivityCalendarDay(
+                        id: $0.id, date: $0.date, value: Double($0.commits), level: $0.level)
+                })
         }
-        .frame(height: UIScale.pt(cellSize * 7 + 3 * 6 + 18))
-    }
-
-    private func cellView(_ cell: CodeStatsHeatCell) -> some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(3))
-            .fill(CodeStatsHeat.color(cell.level, dark: dark))
-            .frame(width: UIScale.pt(cellSize), height: UIScale.pt(cellSize))
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(3))
-                    .stroke(DashSkin.ink(dark).opacity(hovered == cell.id ? 0.6 : 0))
-            }
-            .onHover { inside in
-                guard cell.date != nil else { return }
-                if inside { hovered = cell.id } else if hovered == cell.id { hovered = nil }
-            }
-            .popover(
-                isPresented: Binding(
-                    get: { hovered == cell.id },
-                    set: { shown in if !shown, hovered == cell.id { hovered = nil } }),
-                arrowEdge: .trailing
-            ) {
+        ActivityCalendarGrid(weeks: calendarWeeks, dark: dark, cellSize: cellSize) { day in
+            if let cell = cells[day.id] {
                 CodeStatsDayPopover(cell: cell, detail: actions.dayDetails[cell.id], dark: dark)
             }
+        }
     }
 }
 
@@ -247,31 +210,8 @@ struct CodeStatsDayPopover: View {
     }
 }
 
-private struct CodeStatsHeatLegend: View {
-    let dark: Bool
-
-    var body: some View {
-        HStack(spacing: UIScale.pt(3)) {
-            Spacer()
-            Text("Less")
-            ForEach(0..<5, id: \.self) { level in
-                RoundedRectangle(cornerRadius: UIScale.pt(2))
-                    .fill(CodeStatsHeat.color(level, dark: dark))
-                    .frame(width: UIScale.pt(10), height: UIScale.pt(10))
-            }
-            Text("More")
-        }
-        .font(.system(size: UIScale.pt(9)))
-        .foregroundStyle(DashSkin.inkFaint(dark))
-    }
-}
-
 enum CodeStatsHeat {
     static func color(_ level: Int, dark: Bool) -> Color {
-        switch level {
-        case ..<0: .clear
-        case 0: DashSkin.grid(dark)
-        default: DashSkin.heat(level - 1, dark)
-        }
+        ActivityCalendarStyle.color(level, dark: dark)
     }
 }

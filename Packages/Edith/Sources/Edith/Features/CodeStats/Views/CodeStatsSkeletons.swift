@@ -17,17 +17,7 @@ struct CodeStatsReportSkeleton: View {
                     ForEach(0..<5, id: \.self) { _ in CodeStatsTileSkeleton(dark: dark) }
                 }
                 CodeStatsCardSkeleton(title: "Contributions", dark: dark) {
-                    HStack(spacing: UIScale.pt(3)) {
-                        ForEach(0..<40, id: \.self) { _ in
-                            VStack(spacing: UIScale.pt(3)) {
-                                ForEach(0..<7, id: \.self) { _ in
-                                    SkeletonBlock(width: 14, height: 14, corner: 3)
-                                }
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .clipped()
+                    ActivityCalendarSkeleton()
                 }
                 ForEach(["Output over time", "Commits per repository", "Languages"], id: \.self) {
                     title in

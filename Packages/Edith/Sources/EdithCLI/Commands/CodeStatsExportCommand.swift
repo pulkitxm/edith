@@ -75,13 +75,6 @@ struct CodeStatsExportResult: Codable, Equatable {
     let metrics: CodeStatsExportSnapshot
 }
 
-struct CodeStatsExportPlan: Equatable {
-    let cards: [CodeStatsExportCard]
-    let explicitFile: URL?
-    let directory: URL
-    let stamp: String
-}
-
 enum CodeStatsExportFiles {
     static func cards(_ requested: [String]) throws -> [CodeStatsExportCard] {
         guard !requested.isEmpty, !requested.contains("all") else {
@@ -104,26 +97,12 @@ enum CodeStatsExportFiles {
 
     static func plan(
         cards: [CodeStatsExportCard], output: String?, workingDirectory: URL, now: Date = Date()
-    ) throws -> CodeStatsExportPlan {
-        let resolved = output.map { NSString(string: $0).expandingTildeInPath }
-        let target =
-            resolved.map { path in
-                URL(fileURLWithPath: path, relativeTo: workingDirectory).standardizedFileURL
-            } ?? workingDirectory
-        let explicitFile = target.pathExtension.lowercased() == "png" ? target : nil
-        if explicitFile != nil, cards.count != 1 {
-            throw CLIFailure.usage(
-                "a PNG output path can only be used when exporting one card",
-                hint: "pass one --card value or use a directory with --output")
-        }
-        return CodeStatsExportPlan(
-            cards: cards, explicitFile: explicitFile,
-            directory: explicitFile?.deletingLastPathComponent() ?? target,
-            stamp: timestamp(now))
+    ) throws -> ExportPlan<CodeStatsExportCard> {
+        try ExportPlan(cards: cards, output: output, workingDirectory: workingDirectory, now: now)
     }
 
     static func write(
-        snapshot: CodeStatsExportSnapshot, plan: CodeStatsExportPlan
+        snapshot: CodeStatsExportSnapshot, plan: ExportPlan<CodeStatsExportCard>
     ) async throws -> [URL] {
         do {
             try FileManager.default.createDirectory(
@@ -140,7 +119,7 @@ enum CodeStatsExportFiles {
                 plan.explicitFile
                 ?? plan.directory.appendingPathComponent("\(card.filenameStem)-\(plan.stamp).png")
             do {
-                try data.write(to: file, options: .atomic)
+                try ExportDelivery.write(data, to: file)
             } catch {
                 throw CLIFailure("could not write \(file.path): \(error.localizedDescription)")
             }
@@ -152,18 +131,10 @@ enum CodeStatsExportFiles {
     static func copyToClipboard(_ files: [URL]) throws {
         guard let file = files.first else { throw CLIFailure("there is no card to copy") }
         let data = try Data(contentsOf: file)
-        let board = CLIEnvironment.clipboardPasteboard
-        board.clearContents()
-        guard board.setData(data, forType: .png) else {
+        do {
+            try ExportDelivery.copyPNG(data, to: CLIEnvironment.clipboardPasteboard)
+        } catch ExportDeliveryError.copyFailed {
             throw CLIFailure("could not copy the card to the clipboard")
         }
-    }
-
-    private static func timestamp(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        return formatter.string(from: date)
     }
 }

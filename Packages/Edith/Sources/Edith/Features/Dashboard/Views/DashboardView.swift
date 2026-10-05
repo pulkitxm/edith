@@ -25,7 +25,7 @@ struct DashboardView: View {
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
     @State private var customRangeOpen = false
-    @State private var showShare = false
+    @State private var sharePresentation: ExportCardPresentation<UsageExportDeck>?
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -101,12 +101,8 @@ struct DashboardView: View {
                 .background(background)
                 .environment(\.compactLayout, compact)
             }
-            if showShare {
-                shareOverlay
-                    .zIndex(10)
-            }
         }
-        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShare)
+        .exportCardPresentation(item: $sharePresentation)
         .navigationTitle("Agent Usage")
         .task(id: refresh.updating) {
             guard automaticActionsEnabled else { return }
@@ -145,30 +141,6 @@ struct DashboardView: View {
         }
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)
-        }
-    }
-
-    private var shareOverlay: some View {
-        ZStack {
-            Button(action: closeShare) {
-                Color.black.opacity(dark ? 0.66 : 0.3)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            .transition(.opacity)
-            UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)
-                .shadow(color: .black.opacity(0.34), radius: 40, y: 18)
-                .transition(
-                    Motion.transition(
-                        .move(edge: .top).combined(with: .opacity), reduceMotion: reduceMotion,
-                        preferCrossFade: false))
-        }
-    }
-
-    private func closeShare() {
-        withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
-            showShare = false
         }
     }
 
@@ -217,17 +189,9 @@ struct DashboardView: View {
                 helperText: "Show collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
-            if model.loaded {
-                MastheadButton(
-                    action: {
-                        withAnimation(
-                            Motion.animation(Motion.feedback, reduceMotion: reduceMotion)
-                        ) {
-                            showShare = true
-                        }
-                    },
-                    systemImage: "square.and.arrow.up",
-                    helperText: "Share usage cards")
+            ExportCardButton(isEnabled: model.loaded, help: "Share usage cards") {
+                sharePresentation = ExportCardPresentation(
+                    deck: UsageExportDeck(snapshot: shareSnapshot), title: "Share usage cards")
             }
         }
     }
@@ -1032,11 +996,6 @@ private struct FilterChip: ViewModifier {
     }
 }
 
-private struct HeatHover: Identifiable {
-    let id: String
-    let detail: HeatDay
-}
-
 struct ActivityHeatmap: View {
     let days: [DayPoint]
     let cuts: [Double]
@@ -1044,107 +1003,21 @@ struct ActivityHeatmap: View {
     let dark: Bool
     var blur = false
     var blurTokens = false
-    @State private var hovered: HeatHover?
-
     var body: some View {
-        let weeks = stride(from: 0, to: days.count, by: 7).map {
-            Array(days[$0..<min($0 + 7, days.count)])
-        }
-        return HStack(alignment: .top, spacing: UIScale.pt(4)) {
-            VStack(spacing: UIScale.pt(3)) {
-                ForEach(Array(["M", "", "W", "", "F", "", "S"].enumerated()), id: \.offset) {
-                    _, label in
-                    Text(label)
-                        .font(.system(size: UIScale.pt(9)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(12), height: UIScale.pt(14))
-                }
-            }
-            .padding(.top, UIScale.pt(15))
-            GeometryReader { geometry in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: UIScale.pt(3)) {
-                        ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
-                            VStack(spacing: UIScale.pt(3)) {
-                                Text(monthLabel(for: weeks, at: index))
-                                    .font(.system(size: UIScale.pt(9)))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .frame(height: UIScale.pt(12))
-                                ForEach(week) { day in
-                                    HeatCellView(
-                                        fill: cellColor(day.cost, cuts: cuts),
-                                        stroke: DashSkin.ink(dark).opacity(
-                                            hovered?.id == day.id ? 0.5 : 0)
-                                    )
-                                    .onHover { inside in
-                                        if inside {
-                                            if let detail = model.heatDetail[day.id] {
-                                                hovered = HeatHover(id: day.id, detail: detail)
-                                            } else {
-                                                hovered = nil
-                                            }
-                                        } else if hovered?.id == day.id {
-                                            hovered = nil
-                                        }
-                                    }
-                                    .popover(
-                                        isPresented: Binding(
-                                            get: { hovered?.id == day.id },
-                                            set: { shown in
-                                                if !shown, hovered?.id == day.id { hovered = nil }
-                                            }),
-                                        arrowEdge: .trailing
-                                    ) {
-                                        if let hovered, hovered.id == day.id {
-                                            HeatCard(
-                                                detail: hovered.detail, model: model, dark: dark,
-                                                blur: blur, blurTokens: blurTokens)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .frame(minWidth: geometry.size.width, alignment: .leading)
-                }
-                .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
+        let weeks = ActivityCalendar.weeks(
+            days: days.map {
+                ActivityCalendarDay(id: $0.id, date: $0.date, value: $0.cost)
+            }, cuts: cuts)
+        ActivityCalendarGrid(weeks: weeks, dark: dark) { day in
+            if let detail = model.heatDetail[day.id] {
+                HeatCard(
+                    detail: detail, model: model, dark: dark, blur: blur, blurTokens: blurTokens)
+            } else {
+                Text("No usage on this day.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .padding(UIScale.pt(12))
             }
         }
-        .frame(height: UIScale.pt(137))
-    }
-
-    private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {
-        guard let first = weeks[index].first?.date else { return "" }
-        let month = Calendar.current.component(.month, from: first)
-        if index > 0, let prev = weeks[index - 1].first?.date,
-            Calendar.current.component(.month, from: prev) == month
-        {
-            return ""
-        }
-        return first.formatted(.dateTime.month(.abbreviated))
-    }
-
-    private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
-        if cost <= 0 { return DashSkin.grid(dark) }
-        if cost <= cuts[0] { return DashSkin.heat(0, dark) }
-        if cost <= cuts[1] { return DashSkin.heat(1, dark) }
-        if cost <= cuts[2] { return DashSkin.heat(2, dark) }
-        return DashSkin.heat(3, dark)
-    }
-}
-
-private struct HeatCellView: View {
-    let fill: Color
-    let stroke: Color
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(3))
-            .fill(fill)
-            .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(3))
-                    .strokeBorder(stroke, lineWidth: UIScale.pt(1))
-            )
     }
 }
 
@@ -1292,22 +1165,7 @@ private struct DashboardPanelSkeleton: View {
     @ViewBuilder private var panelContent: some View {
         switch kind {
         case .heatmap:
-            HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                VStack(spacing: UIScale.pt(7)) {
-                    ForEach(0..<7, id: \.self) { _ in SkeletonBlock(width: 24, height: 7) }
-                }
-                HStack(spacing: UIScale.pt(3)) {
-                    ForEach(0..<18, id: \.self) { column in
-                        VStack(spacing: UIScale.pt(3)) {
-                            ForEach(0..<7, id: \.self) { row in
-                                SkeletonBlock(
-                                    width: 8, height: 8,
-                                    corner: (column + row).isMultiple(of: 4) ? 3 : 2)
-                            }
-                        }
-                    }
-                }
-            }
+            ActivityCalendarSkeleton()
         case .dials:
             HStack(spacing: UIScale.pt(24)) {
                 ForEach(0..<2, id: \.self) { _ in

@@ -336,7 +336,7 @@ struct CleanerCard: View {
                 content
             }
         }
-        .sheet(isPresented: $showDrivePicker) {
+        .edithSheet(isPresented: $showDrivePicker) {
             DrivePickerSheet(
                 model: model, dark: dark, confirmTitle: pickerScans ? "Scan" : "Done"
             ) {

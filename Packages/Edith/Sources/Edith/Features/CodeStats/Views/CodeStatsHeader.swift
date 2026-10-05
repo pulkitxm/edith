@@ -5,7 +5,7 @@ import SwiftUI
 struct CodeStatsHeader: View {
     let model: CodeStatsModel
     @Environment(\.colorScheme) private var scheme
-    @State private var sharing = false
+    @State private var sharePresentation: ExportCardPresentation<CodeStatsExportDeck>?
 
     private var dark: Bool { scheme == .dark }
 
@@ -18,13 +18,14 @@ struct CodeStatsHeader: View {
     var body: some View {
         PageHeader("Code Stats") {
             HStack(spacing: UIScale.pt(8)) {
-                Button {
-                    sharing = true
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                ExportCardButton(
+                    isEnabled: shareSnapshot != nil, help: "Share code stats as images"
+                ) {
+                    guard let shareSnapshot else { return }
+                    sharePresentation = ExportCardPresentation(
+                        deck: CodeStatsExportDeck(snapshot: shareSnapshot),
+                        title: "Share code stats")
                 }
-                .disabled(shareSnapshot == nil)
-                .help("Share code stats as images")
                 if model.isRunning {
                     Button {
                         Task { await model.cancel() }
@@ -60,11 +61,7 @@ struct CodeStatsHeader: View {
                 }
             }
         }
-        .sheet(isPresented: $sharing) {
-            if let shareSnapshot {
-                CodeStatsExportSheet(snapshot: shareSnapshot) { sharing = false }
-            }
-        }
+        .exportCardPresentation(item: $sharePresentation)
     }
 }
 

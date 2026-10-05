@@ -156,13 +156,8 @@ struct CodeStatsProjection: Equatable, Sendable {
     }
 
     static func levels(_ values: [Int]) -> (Int) -> Int {
-        let positive = values.filter { $0 > 0 }.sorted()
-        guard !positive.isEmpty else { return { _ in 0 } }
-        let cuts = [0.25, 0.5, 0.75].map { positive[Int(Double(positive.count - 1) * $0)] }
-        return { value in
-            guard value > 0 else { return 0 }
-            return 1 + cuts.filter { value > $0 }.count
-        }
+        let cuts = ActivityCalendar.cuts(values.map(Double.init))
+        return { ActivityCalendar.level(Double($0), cuts: cuts) }
     }
 
     static func weekdayOrder(calendar: Calendar) -> [Int] {
@@ -173,30 +168,18 @@ struct CodeStatsProjection: Equatable, Sendable {
         _ daily: [CodeStatsDayPoint], calendar: Calendar, dates: DateResolver
     ) -> [CodeStatsHeatWeek] {
         let recent = daily.suffix(heatmapDays)
-        guard let first = recent.first.flatMap({ CodeStatsDay($0.day) }) else { return [] }
-        let level = levels(recent.map(\.commits))
-        let padding = (first.weekdayIndex - (calendar.firstWeekday - 1) + 7) % 7
-        let blanks = (0..<padding).map {
-            CodeStatsHeatCell(id: "pad-\($0)", date: nil, commits: 0, lines: 0, level: -1)
+        let points = Dictionary(uniqueKeysWithValues: recent.map { ($0.day, $0) })
+        let days = recent.map {
+            ActivityCalendarDay(id: $0.day, date: dates.date($0.day), value: Double($0.commits))
         }
-        let cells =
-            blanks
-            + recent.map {
-                CodeStatsHeatCell(
-                    id: $0.day, date: dates.date($0.day), commits: $0.commits,
-                    lines: $0.counts.authored, level: level($0.commits))
-            }
-        var previousMonth: Int?
-        return stride(from: 0, to: cells.count, by: 7).map { start in
-            let week = Array(cells[start..<min(start + 7, cells.count)])
-            let month = week.first { $0.date != nil }.flatMap(\.date).map {
-                calendar.component(.month, from: $0)
-            }
-            let label =
-                month.flatMap { $0 == previousMonth ? nil : calendar.shortMonthSymbols[$0 - 1] }
-                ?? ""
-            previousMonth = month ?? previousMonth
-            return CodeStatsHeatWeek(id: start / 7, monthLabel: label, cells: week)
+        return ActivityCalendar.weeks(days: days, calendar: calendar).map { week in
+            CodeStatsHeatWeek(
+                id: week.id, monthLabel: week.monthLabel,
+                cells: week.cells.map { cell in
+                    CodeStatsHeatCell(
+                        id: cell.id, date: cell.date, commits: points[cell.id]?.commits ?? 0,
+                        lines: points[cell.id]?.counts.authored ?? 0, level: cell.level)
+                })
         }
     }
 

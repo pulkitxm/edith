@@ -160,11 +160,10 @@ struct CodeStatsYearOverYearCard: View {
 
     var body: some View {
         SkinCard(title: "Year over year", note: "Same month, different years", dark: dark) {
-            Picker("Metric", selection: $commits) {
-                Text("Lines").tag(false)
-                Text("Commits").tag(true)
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "Metric", selection: $commits, options: [false, true],
+                label: { $0 ? "Commits" : "Lines" }
+            )
             .labelsHidden()
             .fixedSize()
             Chart {

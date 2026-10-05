@@ -64,13 +64,6 @@ struct UsageExportCommand: AsyncParsableCommand {
     }
 }
 
-struct UsageShareExportPlan: Equatable {
-    let cards: [UsageShareCard]
-    let explicitFile: URL?
-    let directory: URL
-    let stamp: String
-}
-
 enum UsageShareExport {
     static func cards(_ requested: [String]) throws -> [UsageShareCard] {
         guard !requested.isEmpty, !requested.contains("all") else {
@@ -112,25 +105,11 @@ enum UsageShareExport {
     static func plan(
         cards: [UsageShareCard], output: String?, workingDirectory: URL,
         now: Date = Date()
-    ) throws -> UsageShareExportPlan {
-        let resolved = output.map { NSString(string: $0).expandingTildeInPath }
-        let target =
-            resolved.map { path in
-                URL(fileURLWithPath: path, relativeTo: workingDirectory).standardizedFileURL
-            } ?? workingDirectory
-        let explicitFile = target.pathExtension.lowercased() == "png" ? target : nil
-        if explicitFile != nil, cards.count != 1 {
-            throw CLIFailure.usage(
-                "a PNG output path can only be used when exporting one card",
-                hint: "pass one --card value or use a directory with --output")
-        }
-        return UsageShareExportPlan(
-            cards: cards, explicitFile: explicitFile,
-            directory: explicitFile?.deletingLastPathComponent() ?? target,
-            stamp: timestamp(now))
+    ) throws -> ExportPlan<UsageShareCard> {
+        try ExportPlan(cards: cards, output: output, workingDirectory: workingDirectory, now: now)
     }
 
-    static func write(snapshot: UsageShareSnapshot, plan: UsageShareExportPlan) async throws
+    static func write(snapshot: UsageShareSnapshot, plan: ExportPlan<UsageShareCard>) async throws
         -> [URL]
     {
         do {
@@ -149,7 +128,7 @@ enum UsageShareExport {
                 ?? plan.directory.appendingPathComponent(
                     "\(card.filenameStem)-\(plan.stamp).png")
             do {
-                try data.write(to: file, options: .atomic)
+                try ExportDelivery.write(data, to: file)
             } catch {
                 throw CLIFailure("could not write \(file.path): \(error.localizedDescription)")
             }
@@ -163,18 +142,10 @@ enum UsageShareExport {
             throw CLIFailure("there is no card to copy")
         }
         let data = try Data(contentsOf: file)
-        let board = CLIEnvironment.clipboardPasteboard
-        board.clearContents()
-        guard board.setData(data, forType: .png) else {
+        do {
+            try ExportDelivery.copyPNG(data, to: CLIEnvironment.clipboardPasteboard)
+        } catch ExportDeliveryError.copyFailed {
             throw CLIFailure("could not copy the card to the clipboard")
         }
-    }
-
-    private static func timestamp(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
-        return formatter.string(from: date)
     }
 }
