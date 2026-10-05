@@ -40,6 +40,10 @@ import Testing
         let recording = TimeLapseRecording(session: session, directory: directory)
         let composition = try await TimeLapseExporter.composition(recording)
         #expect(abs(composition.duration.seconds - 301.0 / 30) < 0.002)
+        let unmarkedDirectory = URL(fileURLWithPath: directory.path, isDirectory: false)
+        let unmarked = try await TimeLapseExporter.composition(
+            .init(session: session, directory: unmarkedDirectory))
+        #expect(abs(unmarked.duration.seconds - composition.duration.seconds) < 0.002)
         let asset = AVURLAsset(url: directory.appendingPathComponent(session.segments[0].file))
         let image = try await AVAssetImageGenerator(asset: asset).image(at: .zero).image
         let pixels = CIImage(cgImage: image)

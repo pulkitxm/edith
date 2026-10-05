@@ -62,7 +62,9 @@ enum TimeLapseExporter {
             try Task.checkCancellation()
             let url = recording.directory.appendingPathComponent(segment.file)
                 .resolvingSymlinksInPath()
-            guard url.deletingLastPathComponent() == recording.directory.resolvingSymlinksInPath()
+            guard
+                url.deletingLastPathComponent().path
+                    == recording.directory.resolvingSymlinksInPath().path
             else {
                 throw TimeLapseError.invalidSession
             }
