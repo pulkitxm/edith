@@ -30,7 +30,8 @@ final class HomebrewPageModel {
     var mode = HomebrewPageMode.installed
     var packages: [HomebrewPackage] = []
     var status: HomebrewStatus?
-    var loaded = false
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
     var isBusy = false
     var isCancelling = false
     var operationTitle: String?
@@ -41,7 +42,6 @@ final class HomebrewPageModel {
     private let client: HomebrewClient
     private let store: HomebrewListingStore
     private var task: Task<Void, Never>?
-    private var generation = UUID()
     private var cachedPackages: [HomebrewPackageKind: [HomebrewPackage]] = [:]
     private var didRestoreSnapshot = false
 
@@ -79,10 +79,10 @@ final class HomebrewPageModel {
         mode = .installed
         if let cached = cachedPackages[kind], !cached.isEmpty {
             packages = cached
-            loaded = true
+            loading.retainContent()
         } else if !cachedPackages.isEmpty {
             packages = []
-            loaded = false
+            loading.reset()
         }
         begin(title: "Reading installed \(kind.pluralTitle.lowercased())") { generation in
             let token = await self.store.claim()
@@ -152,7 +152,7 @@ final class HomebrewPageModel {
     }
 
     private func fetchInstalled(
-        kind: HomebrewPackageKind, generation: UUID, token: UUID
+        kind: HomebrewPackageKind, generation: UInt64, token: UUID
     ) async {
         do {
             let packages = try await client.installed(kind: kind) { inventory in
@@ -161,7 +161,7 @@ final class HomebrewPageModel {
             guard isCurrent(generation) else { return }
             self.packages = packages
             cachedPackages[kind] = packages
-            loaded = true
+            loading.retainContent()
             if let status {
                 let snapshot = HomebrewListingSnapshot(status: status, packages: cachedPackages)
                 try? await store.save(snapshot, replacing: token)
@@ -174,16 +174,16 @@ final class HomebrewPageModel {
     }
 
     private func publishInventory(
-        _ inventory: [HomebrewPackage], kind: HomebrewPackageKind, generation: UUID
+        _ inventory: [HomebrewPackage], kind: HomebrewPackageKind, generation: UInt64
     ) {
         guard isCurrent(generation) else { return }
         let visible = HomebrewPackageListing.preservingOutdatedFlags(inventory, from: packages)
         packages = visible
         cachedPackages[kind] = visible
-        loaded = true
+        loading.retainContent()
     }
 
-    private func restoreSnapshot(kind: HomebrewPackageKind, generation: UUID) async {
+    private func restoreSnapshot(kind: HomebrewPackageKind, generation: UInt64) async {
         if !didRestoreSnapshot {
             let loadedSnapshot = await store.load()
             guard isCurrent(generation) else { return }
@@ -199,37 +199,45 @@ final class HomebrewPageModel {
             !cached.isEmpty
         else { return }
         packages = cached
-        loaded = true
+        loading.retainContent()
     }
 
     private func begin(
-        title: String, operation: @escaping @MainActor (UUID) async -> Void
+        title: String, operation: @escaping @MainActor (UInt64) async -> Void
     ) {
         task?.cancel()
-        let generation = UUID()
-        self.generation = generation
+        let generation = loading.begin()
         isBusy = true
         isCancelling = false
-        if packages.isEmpty { loaded = false }
         operationTitle = title
         errorMessage = nil
         resultMessage = nil
         output = ""
-        task = Task { await operation(generation) }
+        task = Task {
+            await operation(generation)
+            if loading.owns(generation), Task.isCancelled {
+                loading.cancel(generation)
+                isBusy = false
+                isCancelling = false
+                operationTitle = nil
+                task = nil
+                resultMessage = "Homebrew operation cancelled."
+            }
+        }
     }
 
-    private func finish(_ generation: UUID) {
+    private func finish(_ generation: UInt64) {
         guard isCurrent(generation) else { return }
-        loaded = true
+        loading.complete(generation)
         isBusy = false
         isCancelling = false
         operationTitle = nil
         task = nil
     }
 
-    private func fail(_ error: Error, generation: UUID) {
-        guard isCurrent(generation) else { return }
-        loaded = true
+    private func fail(_ error: Error, generation: UInt64) {
+        guard loading.owns(generation) else { return }
+        loading.fail(generation, error: error)
         isBusy = false
         isCancelling = false
         operationTitle = nil
@@ -241,8 +249,8 @@ final class HomebrewPageModel {
         }
     }
 
-    private func isCurrent(_ generation: UUID) -> Bool {
-        self.generation == generation
+    private func isCurrent(_ generation: UInt64) -> Bool {
+        loading.isCurrent(generation)
     }
 
     private func operationTitle(

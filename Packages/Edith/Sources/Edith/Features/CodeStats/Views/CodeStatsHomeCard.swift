@@ -19,7 +19,7 @@ struct CodeStatsHomeCard: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     var body: some View {
-        SkinCard(title: "Code Stats", note: "Last 30 days", dark: dark) {
+        PageCard(title: "Code Stats", note: "Last 30 days") {
             if let summary {
                 content(summary)
             } else if loaded {

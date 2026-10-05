@@ -271,7 +271,7 @@ struct VideoExportSheet: View {
                 Label("Exporting", systemImage: "square.and.arrow.up")
                     .font(.edithText(.title2).weight(.semibold))
                 destination(job)
-                ProgressView(value: job.progress)
+                LoadingProgress(value: job.progress)
                 HStack {
                     Text(job.progress.formatted(.percent.precision(.fractionLength(0))))
                     Spacer()

@@ -74,42 +74,11 @@ struct CodeStatsTile: View {
     let dark: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-            HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(DashSkin.accent(dark))
-                Text(label.uppercased())
-                    .font(DashSkin.mono(10)).tracking(UIScale.pt(1.2))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
-            }
-            Text(value)
-                .font(DashSkin.heading(24))
-                .foregroundStyle(DashSkin.ink(dark))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            HStack(spacing: UIScale.pt(6)) {
-                if let change {
-                    Label(
-                        CodeStatsNumberFormat.percent(change),
-                        systemImage: change >= 0 ? "arrow.up.right" : "arrow.down.right"
-                    )
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(change >= 0 ? DashSkin.ok : DashSkin.danger)
-                    .help("Compared with the previous period of the same length")
-                }
-                Text(detail ?? (change == nil ? " " : "vs previous period"))
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .lineLimit(1)
-            }
-        }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .edithSurface(cornerRadius: 14)
-        .accessibilityElement(children: .combine)
+        PageMetric(
+            title: label, value: value,
+            detail: detail ?? (change == nil ? " " : "vs previous period"), symbol: symbol,
+            tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
+            trendPositive: (change ?? 0) >= 0)
     }
 }
 
@@ -118,8 +87,8 @@ struct CodeStatsHeatmapCard: View {
     let dark: Bool
 
     var body: some View {
-        SkinCard(
-            title: "Contributions", note: "Commits per day, hover a day for details", dark: dark
+        PageCard(
+            title: "Contributions", note: "Commits per day, hover a day for details"
         ) {
             CodeStatsHeatGrid(weeks: weeks, dark: dark)
         }

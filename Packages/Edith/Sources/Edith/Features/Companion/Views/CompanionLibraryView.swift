@@ -533,7 +533,7 @@ struct CompanionLibraryScreen: View {
     }
 
     private var detailColumn: some View {
-        SkinCard(title: model.detail?.title ?? "Episode", dark: dark) {
+        PageCard(title: model.detail?.title ?? "Episode") {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 HStack {
                     if let detail = model.detail {

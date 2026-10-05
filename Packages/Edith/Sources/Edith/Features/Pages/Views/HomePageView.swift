@@ -65,14 +65,14 @@ struct HomePage: View {
             }
             if usageEnabled {
                 if model.homeUsage.hasDays {
-                    SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                    PageCard(title: "Activity", note: "daily cost") {
                         ActivityHeatmap(
                             days: model.homeUsage.calendarDays,
                             cuts: model.homeUsage.heatCuts,
                             model: model, dark: dark, blur: blurMoney)
                     }
                 } else if !model.loadAttempted {
-                    SkinCard(title: "Activity", note: "daily cost", dark: dark) {
+                    PageCard(title: "Activity", note: "daily cost") {
                         ActivityHeatmapSkeleton()
                     }
                 }
@@ -271,7 +271,7 @@ private struct WorldClocksCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "World clocks", note: "hover a clock to remove", dark: dark) {
+        PageCard(title: "World clocks", note: "hover a clock to remove") {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 WrapHStack(spacing: UIScale.pt(20), lineSpacing: 16) {
                     ClockTile(
@@ -553,7 +553,7 @@ private struct QuickActionsCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Quick actions", dark: dark) {
+        PageCard(title: "Quick actions") {
             LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
                 if systemEnabled {
                     tile(
@@ -697,7 +697,7 @@ private struct MeetingsCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Today's meetings", note: note, dark: dark) {
+        PageCard(title: "Today's meetings", note: note) {
             VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                 if store.authStatus != .fullAccess {
                     accessPrompt
@@ -856,7 +856,7 @@ private struct UsageSummaryCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Agent usage", note: "last 14 days", dark: dark) {
+        PageCard(title: "Agent usage", note: "last 14 days") {
             if model.homeUsage.hasDays {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     HStack(spacing: UIScale.pt(24)) {
@@ -1031,9 +1031,8 @@ private struct MusicCard: View {
     }
 
     var body: some View {
-        SkinCard(
-            title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks",
-            dark: dark
+        PageCard(
+            title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if let track = remote.current {

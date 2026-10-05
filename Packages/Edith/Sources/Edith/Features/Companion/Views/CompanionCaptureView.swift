@@ -387,7 +387,7 @@ struct CompanionCaptureScreen: View {
     }
 
     private var speakCard: some View {
-        SkinCard(title: "Speak", note: speakNote, dark: dark, fill: true) {
+        PageCard(title: "Speak", note: speakNote, fill: true) {
             VStack(spacing: UIScale.pt(14)) {
                 Spacer(minLength: 0)
                 recordButton
@@ -533,7 +533,7 @@ struct CompanionCaptureScreen: View {
     }
 
     private var writeCard: some View {
-        SkinCard(title: "Write", note: "a quick note straight to memory", dark: dark, fill: true) {
+        PageCard(title: "Write", note: "a quick note straight to memory", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 TextEditor(text: $model.note)
                     .font(.system(size: UIScale.pt(12.5)))

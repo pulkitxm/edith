@@ -322,9 +322,9 @@ private struct QuinjetRemoteProjectPicker: View {
             }
             .overlay {
                 if picker.entries.isEmpty, !picker.loading, !picker.canOpenCurrentDirectory {
-                    ContentUnavailableView(
-                        "No matching folders", systemImage: "folder",
-                        description: Text("Check the path or keep typing.")
+                    ContentStatusView(
+                        "No matching folders", message: "Check the path or keep typing.",
+                        symbol: "folder"
                     )
                     .allowsHitTesting(false)
                 }

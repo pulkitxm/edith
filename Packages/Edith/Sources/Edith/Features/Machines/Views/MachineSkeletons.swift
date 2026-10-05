@@ -71,7 +71,7 @@ struct MeterRowsSkeleton: View {
     let dark: Bool
 
     var body: some View {
-        SkinCard(title: title, dark: dark) {
+        PageCard(title: title) {
             VStack(spacing: UIScale.pt(10)) {
                 ForEach(0..<rows, id: \.self) { index in
                     VStack(alignment: .leading, spacing: UIScale.pt(5)) {
@@ -101,7 +101,7 @@ struct MachineOverviewSkeleton: View {
                     NetworkMetricCardSkeleton(dark: dark)
                 }
                 MeterRowsSkeleton(title: "Storage", rows: 2, dark: dark)
-                SkinCard(title: "Host", dark: dark) {
+                PageCard(title: "Host") {
                     VStack(alignment: .leading, spacing: UIScale.pt(7)) {
                         SkeletonBlock(width: 168, height: 10)
                         SkeletonBlock(width: 244, height: 10)
@@ -129,7 +129,7 @@ struct FleetHomeSkeleton: View {
                     MetricCardSkeleton(dark: dark)
                 }
                 MeterRowsSkeleton(title: "Storage", rows: 2, dark: dark)
-                SkinCard(title: "Machines", dark: dark) {
+                PageCard(title: "Machines") {
                     VStack(spacing: UIScale.pt(0)) {
                         ForEach(0..<2, id: \.self) { index in
                             HStack(spacing: UIScale.pt(12)) {

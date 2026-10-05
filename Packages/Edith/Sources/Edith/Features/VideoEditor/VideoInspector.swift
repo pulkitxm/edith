@@ -268,7 +268,7 @@ struct VideoInspector: View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Audio tracks").font(.edithText(.headline))
             if let status = model.audioStatus {
-                ProgressView(status).font(.edithText(.caption))
+                LoadingIndicator(status)
                 Button("Cancel audio processing") { model.audioTask?.cancel() }
             }
             if let clip = audioSourceClip {

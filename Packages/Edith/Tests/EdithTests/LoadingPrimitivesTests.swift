@@ -18,6 +18,15 @@ import Testing
         #expect(!ContentLoadingState.content.permitsRetry)
     }
 
+    @Test func progressPreservesMeasuredValuesAndBoundsInvalidSamples() {
+        #expect(LoadingProgress(value: 3, total: 4).fraction == 0.75)
+        #expect(LoadingProgress(value: 9, total: 4).fraction == 1)
+        #expect(LoadingProgress(value: -1).fraction == 0)
+        #expect(LoadingProgress(value: .nan).fraction == 0)
+        #expect(LoadingProgress(value: .infinity).fraction == 0)
+        #expect(LoadingProgress(value: 1, total: 0).fraction == 0)
+    }
+
     @Test func loadingMotionUsesTheSameClockAcrossMounts() {
         let date = Date(timeIntervalSinceReferenceDate: 0.35)
         #expect(abs(LoadingMotion.phase(at: date) - 0.25) < 0.00001)

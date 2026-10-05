@@ -21,7 +21,7 @@ struct CodeStatsLanguageCards: View {
     }
 
     private var shares: some View {
-        SkinCard(title: "Languages", note: "Share of lines authored", dark: dark, fill: true) {
+        PageCard(title: "Languages", note: "Share of lines authored", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 ForEach(Array(projection.languageShares.enumerated()), id: \.element.id) {
                     index, share in
@@ -111,7 +111,7 @@ struct CodeStatsHabitCards: View {
     }
 
     private var punchcard: some View {
-        SkinCard(title: "When you commit", note: "Weekday by hour", dark: dark, fill: true) {
+        PageCard(title: "When you commit", note: "Weekday by hour", fill: true) {
             ViewThatFits(in: .horizontal) {
                 punchcardGrid
                 ScrollView(.horizontal) {
@@ -153,7 +153,7 @@ struct CodeStatsHabitCards: View {
     }
 
     private var topDays: some View {
-        SkinCard(title: "Top days", note: "By lines authored", dark: dark, fill: true) {
+        PageCard(title: "Top days", note: "By lines authored", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(7)) {
                 ForEach(Array(projection.topDays.enumerated()), id: \.element.id) { index, day in
                     HStack(spacing: UIScale.pt(8)) {

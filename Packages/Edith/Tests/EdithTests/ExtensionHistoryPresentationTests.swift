@@ -36,7 +36,7 @@ struct ExtensionHistoryPresentationTests {
         SharedDefaults.store.set(10, forKey: AppStorageKeys.Emoji.frequentCount)
         SharedDefaults.store.removeObject(forKey: AppStorageKeys.Emoji.usage)
         let host = try auditHost(
-            Form { EmojiRows() }.formStyle(.grouped), size: CGSize(width: 900, height: 1000))
+            Form { EmojiRows() }.edithForm(), size: CGSize(width: 900, height: 1000))
         #expect(try auditText(host).contains("No frequently used emoji yet"))
         let store = EmojiStore(
             catalog: .shared, insertionDelay: .zero, typeCharacter: { _ in true })
@@ -58,7 +58,7 @@ struct ExtensionHistoryPresentationTests {
         SharedDefaults.store.set(true, forKey: AppStorageKeys.ColorPicker.enabled)
         ColorHistoryStore.clear()
         let host = try auditHost(
-            Form { ColorPickerRows() }.formStyle(.grouped), size: CGSize(width: 900, height: 1000))
+            Form { ColorPickerRows() }.edithForm(), size: CGSize(width: 900, height: 1000))
         #expect(try auditText(host).contains("No colors picked yet"))
         ColorHistoryStore.add(ColorSwatch(red: 1, green: 0, blue: 0, profile: .sRGB), limit: 10)
         IPC.post(IPC.Name.settingsChanged)

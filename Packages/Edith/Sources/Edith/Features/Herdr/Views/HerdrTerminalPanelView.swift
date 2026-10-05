@@ -308,7 +308,7 @@ struct HerdrTerminalSettingsView: View {
                 Toggle("Ask before closing a running terminal", isOn: $confirmClose)
             }
         }
-        .formStyle(.grouped)
+        .edithForm()
         .frame(width: UIScale.pt(380))
         .fixedSize(horizontal: false, vertical: true)
     }

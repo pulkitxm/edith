@@ -186,7 +186,7 @@ private struct UpdatesPane: View {
                         Text("Updates")
                     }
                 }
-                .formStyle(.grouped)
+                .edithForm()
             } else {
                 Text("Updates are unavailable in this build")
                     .foregroundStyle(.secondary)
@@ -308,7 +308,7 @@ struct GeneralPane: View {
             }
 
         }
-        .formStyle(.grouped)
+        .edithForm()
         .navigationTitle("General")
         .onAppear {
             if automaticActionsEnabled { refreshPermissionState() }

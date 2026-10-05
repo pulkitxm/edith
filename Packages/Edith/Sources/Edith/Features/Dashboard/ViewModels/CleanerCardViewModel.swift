@@ -331,7 +331,7 @@ struct CleanerCard: View {
     var body: some View {
         Group {
             if framed {
-                SkinCard(title: "Reclaim developer space", dark: dark) { content }
+                PageCard(title: "Reclaim developer space") { content }
             } else {
                 content
             }

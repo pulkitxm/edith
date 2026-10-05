@@ -71,7 +71,7 @@ struct DataBackupPane: View {
                 }
             }
         }
-        .formStyle(.grouped)
+        .edithForm()
         .task(id: refreshRevision) {
             guard automaticActionsEnabled else { return }
             await model.refresh(force: refreshRevision > 0)

@@ -220,7 +220,7 @@ struct StudioEngineBanner: View {
                     } label: {
                         if model.installing == engine {
                             HStack(spacing: UIScale.pt(6)) {
-                                ProgressView().controlSize(.small)
+                                LoadingIndicator()
                                 Text("Installing…")
                             }
                         } else {

@@ -68,7 +68,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var whereItRunsCard: some View {
-        SkinCard(title: "Where it runs", note: headline, dark: dark) {
+        PageCard(title: "Where it runs", note: headline) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if model.hosts.isEmpty {
                     if model.probing {
@@ -161,9 +161,9 @@ struct CompanionBackendScreen: View {
     }
 
     private var servicesCard: some View {
-        SkinCard(
+        PageCard(
             title: "Services",
-            note: "\(model.runningCount) of \(model.services.count) up", dark: dark
+            note: "\(model.runningCount) of \(model.services.count) up"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 if model.services.isEmpty {
@@ -225,7 +225,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var configurationCard: some View {
-        SkinCard(title: "Configuration", note: "what the stack is given", dark: dark) {
+        PageCard(title: "Configuration", note: "what the stack is given") {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 HStack(alignment: .top, spacing: UIScale.pt(12)) {
                     portField("API port", value: $model.config.apiPort)
@@ -267,7 +267,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var secretsCard: some View {
-        SkinCard(title: "Keys and tokens", note: "kept in your Keychain", dark: dark) {
+        PageCard(title: "Keys and tokens", note: "kept in your Keychain") {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 secretField(
                     "Anthropic API key", kind: .anthropicKey, text: $model.secrets.anthropicKey)
@@ -304,7 +304,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var teardownCard: some View {
-        SkinCard(title: "Danger zone", note: "the stack, not just the app", dark: dark) {
+        PageCard(title: "Danger zone", note: "the stack, not just the app") {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 CompanionDangerRow(
                     title: "Destroy the stack and its data",
@@ -335,7 +335,7 @@ struct CompanionBackendScreen: View {
     }
 
     private var logCard: some View {
-        SkinCard(title: "Last output", note: "from its host", dark: dark) {
+        PageCard(title: "Last output", note: "from its host") {
             ScrollView {
                 Text(model.lastLog)
                     .font(.system(size: UIScale.pt(11), design: .monospaced))

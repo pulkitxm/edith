@@ -76,7 +76,7 @@ struct DatabasePackInstallSheet: View {
                 .font(.system(size: UIScale.pt(13)))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            ProgressView(value: min(max(model.fraction, 0), 1))
+            LoadingProgress(value: model.fraction)
                 .accessibilityLabel("Database pack download")
             HStack {
                 Spacer()

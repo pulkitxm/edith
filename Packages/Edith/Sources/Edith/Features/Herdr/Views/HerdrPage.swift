@@ -159,10 +159,10 @@ struct HerdrPage: View {
         .edithSheet(isPresented: $launchSettingsPresented) {
             HerdrLaunchSettingsSheet()
         }
-        .sheet(isPresented: $newAgentPopupPresented) {
+        .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)
         }
-        .sheet(item: $newAgentSpace) { space in
+        .edithSheet(item: $newAgentSpace, dismissible: nil) { space in
             HerdrNewAgentPopup(store: store, space: space)
         }
         .edithSheet(isPresented: $store.searchPresented) {

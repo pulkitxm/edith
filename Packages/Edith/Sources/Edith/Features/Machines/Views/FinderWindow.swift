@@ -382,7 +382,7 @@ struct FinderBody: View {
     private var statusBar: some View {
         HStack(spacing: UIScale.pt(8)) {
             if let progress = model.progress {
-                ProgressView(value: progress.fraction)
+                LoadingProgress(value: progress.fraction)
                     .frame(width: UIScale.pt(90))
                 Text(progress.description)
                     .font(.system(size: UIScale.pt(10.5)))

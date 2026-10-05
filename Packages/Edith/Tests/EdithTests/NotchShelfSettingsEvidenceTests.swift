@@ -34,7 +34,7 @@ import Testing
             ExtensionSettingsHeader(title: "Notch Shelf", enabled: .constant(true))
             Divider()
             Form { NotchShelfRows() }
-                .formStyle(.grouped)
+                .edithForm()
         }
         .frame(width: 560, height: 760)
         .background(Color(nsColor: .windowBackgroundColor))

@@ -99,14 +99,14 @@ struct DatabasePage: View {
             guard let focusedConnectionID, focusedConnectionID != connectionID else { return }
             self.focusedConnectionID = nil
         }
-        .sheet(
+        .edithSheet(
             item: Binding(
                 get: { workspace.safetyReview },
                 set: { review in
                     if review == nil {
                         workspace.dismissSafetyReview()
                     }
-                })
+                }), dismissible: nil
         ) { session in
             let current = workspace.safetyReview ?? session
             DatabaseSafetyReviewSheet(
@@ -118,7 +118,7 @@ struct DatabasePage: View {
                 cancelOperation: { workspace.cancelSafetyOperation() },
                 dismiss: { workspace.dismissSafetyReview() })
         }
-        .sheet(item: $connectionCreation) { connectionCreation in
+        .edithSheet(item: $connectionCreation, dismissible: nil) { connectionCreation in
             DatabaseConnectionCreationSheet(
                 model: connectionCreation,
                 saved: { connection in
@@ -133,7 +133,7 @@ struct DatabasePage: View {
                 },
                 cancel: { self.connectionCreation = nil })
         }
-        .sheet(item: $connectionManagementRoute) { route in
+        .edithSheet(item: $connectionManagementRoute, dismissible: nil) { route in
             DatabaseConnectionManagementSheet(
                 connection: route.connection,
                 model: connectionManagement,

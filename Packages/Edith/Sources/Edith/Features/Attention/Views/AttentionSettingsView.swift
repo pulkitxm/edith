@@ -8,7 +8,7 @@ struct AttentionSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            AttentionCard {
+            PageCard {
                 Toggle(
                     isOn: Binding(
                         get: { model.settings.isEnabled },
@@ -23,7 +23,7 @@ struct AttentionSettingsView: View {
                 .toggleStyle(.switch)
             }
 
-            AttentionCard {
+            PageCard {
                 SettingsTitle(
                     "Sources", subtitle: "Everything stays on this Mac unless iCloud backup is on.")
                 Toggle("Track foreground applications", isOn: $model.settings.trackingEnabled)
@@ -64,7 +64,7 @@ struct AttentionSettingsView: View {
             }
             .disabled(!model.settings.isEnabled)
 
-            AttentionCard {
+            PageCard {
                 SettingsTitle(
                     "Jev categorization",
                     subtitle:
@@ -105,7 +105,7 @@ struct AttentionSettingsView: View {
 
             BrowserInstallCard(model: model, showToken: true)
 
-            AttentionCard {
+            PageCard {
                 SettingsTitle(
                     "Ignored apps",
                     subtitle:
@@ -137,7 +137,7 @@ struct AttentionSettingsView: View {
                 }
             }
 
-            AttentionCard {
+            PageCard {
                 SettingsTitle(
                     "iCloud backup",
                     subtitle: "Snapshots stay in your own iCloud Drive under Edith/Attention.")
@@ -180,7 +180,7 @@ private struct AttentionCategoriesEditor: View {
     @Bindable var model: AttentionPageModel
 
     var body: some View {
-        AttentionCard {
+        PageCard {
             HStack {
                 SettingsTitle(
                     "Categories",
@@ -236,7 +236,7 @@ private struct AttentionRulesEditor: View {
                 ([rule.name] + rule.bundleIDs + rule.domains + rule.urls + rule.keywords
                 + rule.contexts + rule.browserProfiles).contains { $0.lowercased().contains(query) }
         }
-        AttentionCard {
+        PageCard {
             HStack {
                 SettingsTitle(
                     "Rules",

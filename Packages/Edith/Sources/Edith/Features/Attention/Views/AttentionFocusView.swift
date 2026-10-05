@@ -32,7 +32,7 @@ struct AttentionFocusView: View {
                                 .system(size: UIScale.pt(30), weight: .semibold, design: .rounded)
                             )
                             .monospacedDigit()
-                            ProgressView(value: min(1, elapsed / focus.plannedDuration))
+                            LoadingProgress(value: elapsed, total: focus.plannedDuration)
                                 .tint(AttentionPalette.accent(dark))
                                 .frame(maxWidth: UIScale.pt(420))
                             Button("Finish focus session") { model.stopFocus() }

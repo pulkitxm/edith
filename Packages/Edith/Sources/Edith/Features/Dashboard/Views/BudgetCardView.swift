@@ -36,7 +36,7 @@ struct BudgetCardView: View {
     }
 
     var body: some View {
-        SkinCard(title: "Personal budget", dark: dark) {
+        PageCard(title: "Personal budget") {
             if !loaded {
                 SkeletonGroup {
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {

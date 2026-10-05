@@ -9,7 +9,8 @@ final class AgentEventsModel {
     private(set) var events: [AgentEvent] = []
     private(set) var matches: [AgentEvent] = []
     private(set) var visibleCount = pageSize
-    private(set) var loading = true
+    let contentLoad = ContentLoad()
+    var loading: Bool { contentLoad.state == .loading }
     var failure: String?
     var paused = false
     private var search = ""
@@ -20,7 +21,7 @@ final class AgentEventsModel {
 
     func receive(_ events: [AgentEvent]) {
         self.events = Array(events.suffix(AgentDiagnostics.capacity))
-        loading = false
+        contentLoad.setContent()
         failure = nil
         rebuildMatches()
     }
@@ -47,16 +48,18 @@ final class AgentEventsModel {
 
     func observe() async {
         guard !paused else { return }
-        if events.isEmpty { loading = true }
+        let request = contentLoad.begin()
+        defer { if Task.isCancelled { contentLoad.cancel(request) } }
         do {
             let value = try await AgentClient.shared.snapshotAsync(
                 [AgentEvent].self, topic: .events)
             try Task.checkCancellation()
+            guard contentLoad.isCurrent(request) else { return }
             receive(value)
         } catch is CancellationError {
             return
         } catch {
-            loading = false
+            contentLoad.fail(request, error: error)
             failure = error.localizedDescription
         }
         for await events in AgentTopicStream.values([AgentEvent].self, topic: .events) {
@@ -210,13 +213,12 @@ struct AgentEventsScreen: View {
             }
             .frame(maxHeight: .infinity)
         } else if model.matches.isEmpty {
-            ContentUnavailableView(
+            ContentStatusView(
                 model.events.isEmpty ? "Waiting for events" : "No matching events",
-                systemImage: "waveform.path.ecg",
-                description: Text(
-                    model.events.isEmpty
-                        ? "Run a background job to follow its activity here."
-                        : "Change the search or turn off the failures filter.")
+                message: model.events.isEmpty
+                    ? "Run a background job to follow its activity here."
+                    : "Change the search or turn off the failures filter.",
+                symbol: "waveform.path.ecg"
             )
             .frame(maxHeight: .infinity)
         } else {

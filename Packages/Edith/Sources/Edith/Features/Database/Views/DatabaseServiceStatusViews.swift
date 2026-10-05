@@ -25,7 +25,7 @@ struct DatabaseServiceProgressView: View {
                 Text(detail)
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
-                ProgressView(value: min(max(fraction, 0), 1))
+                LoadingProgress(value: fraction)
                     .accessibilityLabel(title)
             }
             .pageGutter(compact)

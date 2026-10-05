@@ -264,6 +264,30 @@ public struct LoadingIndicator: View {
     }
 }
 
+public struct LoadingProgress: View {
+    public let value: Double
+    public var total: Double = 1
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var themeName = "accent"
+
+    public init(value: Double, total: Double = 1) {
+        self.value = value
+        self.total = total
+    }
+
+    public var body: some View {
+        ProgressView(value: fraction)
+            .tint(themeColor(themeName))
+            .accessibilityLabel("Progress")
+            .accessibilityValue("\(Int(fraction * 100)) percent")
+    }
+
+    public var fraction: Double {
+        guard value.isFinite, total.isFinite, total > 0 else { return 0 }
+        return min(max(value / total, 0), 1)
+    }
+}
+
 public struct SkeletonReplica<Content: View>: View {
     public let label: String
     @ViewBuilder public let content: Content

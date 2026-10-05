@@ -743,9 +743,9 @@ struct AppMaintenanceView: View {
                 .padding(UIScale.pt(12))
             Divider()
             if filteredApplications.isEmpty {
-                ContentUnavailableView(
-                    "No applications", systemImage: "app.dashed",
-                    description: Text("No installed app matches this search."))
+                ContentStatusView(
+                    "No applications", message: "No installed app matches this search.",
+                    symbol: "app.dashed")
             } else {
                 List(filteredApplications) { application in
                     Button {
@@ -783,9 +783,9 @@ struct AppMaintenanceView: View {
                 .padding(UIScale.pt(12))
             Divider()
             if filteredUpdates.isEmpty {
-                ContentUnavailableView(
-                    "No updates", systemImage: "checkmark.circle",
-                    description: Text("Everything visible is current, ignored, or snoozed."))
+                ContentStatusView(
+                    "No updates", message: "Everything visible is current, ignored, or snoozed.",
+                    symbol: "checkmark.circle")
             } else {
                 List(filteredUpdates) { item in
                     HStack(spacing: UIScale.pt(9)) {
@@ -846,9 +846,9 @@ struct AppMaintenanceView: View {
     private var historyInventory: some View {
         Group {
             if model.updateHistory.isEmpty {
-                ContentUnavailableView(
-                    "No Update History", systemImage: "clock",
-                    description: Text("Completed update attempts will appear here."))
+                ContentStatusView(
+                    "No Update History", message: "Completed update attempts will appear here.",
+                    symbol: "clock")
             } else {
                 List(model.updateHistory, id: \.finishedAt) { result in
                     VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -1033,10 +1033,10 @@ struct AppMaintenanceView: View {
             }
             .padding(UIScale.pt(22))
         } else {
-            ContentUnavailableView(
-                "Select an update", systemImage: "arrow.down.app",
-                description: Text(
-                    "Choose updates to review their source, command, and release information."))
+            ContentStatusView(
+                "Select an update",
+                message: "Choose updates to review their source, command, and release information.",
+                symbol: "arrow.down.app")
         }
     }
 
@@ -1072,7 +1072,7 @@ struct AppMaintenanceView: View {
             Text("Automatic refresh only checks. Updates always require an explicit action.")
                 .settingsCaption()
         }
-        .formStyle(.grouped)
+        .edithForm()
         .frame(width: UIScale.pt(360), height: UIScale.pt(300))
     }
 
@@ -1511,7 +1511,7 @@ private struct AppMaintenanceInstallReview: View {
                     .settingsCaption()
                 }
             }
-            .formStyle(.grouped)
+            .edithForm()
             Divider()
             HStack {
                 if installing {

@@ -333,7 +333,7 @@ struct StudioProgressCard: View {
                         .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(.secondary)
                 }
-                ProgressView(value: job.progress)
+                LoadingProgress(value: job.progress)
                     .frame(width: UIScale.pt(260))
                 Text("\(Int((job.progress * 100).rounded()))%")
                     .font(DashSkin.mono(11))

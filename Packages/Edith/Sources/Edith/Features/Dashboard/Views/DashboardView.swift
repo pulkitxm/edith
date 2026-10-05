@@ -261,12 +261,12 @@ struct DashboardView: View {
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
             VStack(spacing: UIScale.pt(16)) {
-                SkinCard(title: "Activity", dark: dark) { activityHeatmap }
+                PageCard(title: "Activity") { activityHeatmap }
                 RateLimitsDialsView(dark: dark)
             }
         } else {
             HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                SkinCard(title: "Activity", dark: dark, fill: true) { activityHeatmap }
+                PageCard(title: "Activity", fill: true) { activityHeatmap }
                 RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -722,8 +722,8 @@ struct DashboardView: View {
                     }
                 }
             }
-            SkinCard(
-                title: "Models", note: "\(model.modelTotals.count) total", dark: dark
+            PageCard(
+                title: "Models", note: "\(model.modelTotals.count) total"
             ) {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     if model.modelUnfilterableCost > 0.000_001 {

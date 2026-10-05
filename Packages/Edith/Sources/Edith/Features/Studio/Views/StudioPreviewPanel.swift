@@ -84,7 +84,7 @@ struct StudioPreviewPanel: View {
                             .lineLimit(1)
                         Spacer()
                         if preview.isRendering {
-                            ProgressView().controlSize(.small)
+                            LoadingIndicator()
                         }
                     }
                     HStack(spacing: UIScale.pt(12)) {

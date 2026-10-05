@@ -177,7 +177,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var questionCard: some View {
-        SkinCard(title: "Today", note: "what it wants to know", dark: dark) {
+        PageCard(title: "Today", note: "what it wants to know") {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 if let question = model.question {
                     Text(question.question)
@@ -232,7 +232,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var beliefsCard: some View {
-        SkinCard(title: "Overnight", note: "what it concluded", dark: dark, fill: true) {
+        PageCard(title: "Overnight", note: "what it concluded", fill: true) {
             if model.beliefs.isEmpty {
                 emptyText("Nothing formed yet.")
             } else {
@@ -266,7 +266,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var predictionsCard: some View {
-        SkinCard(title: "Resolved", note: "what it got right and wrong", dark: dark, fill: true) {
+        PageCard(title: "Resolved", note: "what it got right and wrong", fill: true) {
             if model.resolvedPredictions.isEmpty {
                 emptyText("No prediction has come due yet.")
             } else {
@@ -289,7 +289,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var discrepanciesCard: some View {
-        SkinCard(title: "Waiting on you", note: "where the record disagreed", dark: dark) {
+        PageCard(title: "Waiting on you", note: "where the record disagreed") {
             if model.openDiscrepancies.isEmpty {
                 emptyText("Nothing has diverged from the record.")
             } else {

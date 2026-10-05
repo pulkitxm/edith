@@ -294,7 +294,7 @@ private struct AttentionSetupView: View {
             }
             .padding(.bottom, 4)
 
-            AttentionCard {
+            PageCard {
                 SetupStep(
                     number: "1", title: "Choose your sources",
                     subtitle:
@@ -314,7 +314,7 @@ private struct AttentionSetupView: View {
                 }
             }
 
-            AttentionCard {
+            PageCard {
                 SetupStep(
                     number: "2", title: "Set the detail level",
                     subtitle:
@@ -387,7 +387,7 @@ private struct AttentionCollectingView: View {
     @Bindable var model: AttentionPageModel
 
     var body: some View {
-        AttentionCard {
+        PageCard {
             VStack(spacing: 18) {
                 ZStack {
                     Circle().fill(Color.accentColor.opacity(0.12)).frame(
@@ -429,22 +429,6 @@ private struct AttentionCollectingView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 42)
         }
-    }
-}
-
-struct AttentionCard<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 13) { content }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                .regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(.primary.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -536,7 +520,7 @@ struct BrowserInstallCard: View {
     let showToken: Bool
 
     var body: some View {
-        AttentionCard {
+        PageCard {
             HStack(alignment: .top) {
                 SetupStep(
                     number: "3", title: "Connect each browser profile",

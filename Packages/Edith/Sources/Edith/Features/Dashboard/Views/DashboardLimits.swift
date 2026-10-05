@@ -306,11 +306,10 @@ struct LimitsCardView: View {
     }
 
     var body: some View {
-        SkinCard(
+        PageCard(
             title: selectedProvider == .cursor
                 ? "Cursor models & other models"
-                : selectedProvider == .grok ? "Grok allowance" : "Rate limits - session & weekly",
-            dark: dark
+                : selectedProvider == .grok ? "Grok allowance" : "Rate limits - session & weekly"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ProviderSwitchButton(

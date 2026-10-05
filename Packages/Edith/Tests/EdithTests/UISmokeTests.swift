@@ -287,7 +287,7 @@ private func settledBitmap(
         let model = HomebrewPageModel()
         model.status = HomebrewStatus(
             available: true, executable: "/opt/homebrew/bin/brew", version: "Homebrew 5.0.0")
-        model.loaded = true
+        model.loading.setContent()
         model.packages = [
             HomebrewPackage(
                 kind: .formula, name: "ripgrep", displayName: "ripgrep",

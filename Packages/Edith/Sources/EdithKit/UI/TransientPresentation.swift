@@ -92,22 +92,30 @@ extension View {
     }
 
     public func edithSheet<Content: View>(
-        isPresented: Binding<Bool>, dismissible: Bool = true, dismissOnEscape: Bool = true,
+        isPresented: Binding<Bool>, dismissible: Bool? = true, dismissOnEscape: Bool = true,
         onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         sheet(isPresented: isPresented, onDismiss: onDismiss) {
-            content().transientPresentation(
-                dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+            if let dismissible {
+                content().transientPresentation(
+                    dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+            } else {
+                content()
+            }
         }
     }
 
     public func edithSheet<Item: Identifiable, Content: View>(
-        item: Binding<Item?>, dismissible: Bool = true, dismissOnEscape: Bool = true,
+        item: Binding<Item?>, dismissible: Bool? = true, dismissOnEscape: Bool = true,
         onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (Item) -> Content
     ) -> some View {
         sheet(item: item, onDismiss: onDismiss) { item in
-            content(item).transientPresentation(
-                dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+            if let dismissible {
+                content(item).transientPresentation(
+                    dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+            } else {
+                content(item)
+            }
         }
     }
 }

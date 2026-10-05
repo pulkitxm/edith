@@ -36,7 +36,12 @@ struct HomebrewMaintenanceView: View {
                 .padding(.vertical, 12)
             Divider()
         } content: {
-            PageLoading(state: showsLoadingSkeleton ? .loading : .content, layout: .list) {
+            PageLoading(
+                state: model.loading.state,
+                message: model.errorMessage ?? "Homebrew could not load its packages.",
+                layout: .list, refreshing: model.loading.isRefreshing,
+                retry: refreshCurrentMode
+            ) {
                 if model.status?.available == false {
                     unavailableCard
                 } else {
@@ -62,7 +67,7 @@ struct HomebrewMaintenanceView: View {
                 model.search(query, kind: kind)
             } else {
                 model.packages = []
-                model.loaded = true
+                model.loading.setContent()
             }
         }
         .confirmationDialog(
@@ -82,10 +87,6 @@ struct HomebrewMaintenanceView: View {
                 "Homebrew will remove this \(pendingUninstall?.kind.rawValue ?? "package") and its managed files."
             )
         }
-    }
-
-    private var showsLoadingSkeleton: Bool {
-        !model.loaded && model.packages.isEmpty && model.errorMessage == nil
     }
 
     @ViewBuilder
@@ -355,7 +356,7 @@ struct HomebrewMaintenanceView: View {
             runSearch()
         } else {
             model.packages = []
-            model.loaded = true
+            model.loading.setContent()
         }
     }
 }

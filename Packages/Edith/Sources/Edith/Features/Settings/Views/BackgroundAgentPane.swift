@@ -11,8 +11,10 @@ final class BackgroundAgentModel {
     var jobs: [AgentJobSnapshot] = []
     var tasks: [AgentTaskSnapshot] = []
     var failure: String?
-    var loading = true
-    var tasksLoading = true
+    let contentLoad = ContentLoad()
+    let tasksLoad = ContentLoad()
+    var loading: Bool { contentLoad.state == .loading }
+    var tasksLoading: Bool { tasksLoad.state == .loading }
 
     func observe() async {
         await withTaskGroup(of: Void.self) { group in
@@ -27,7 +29,7 @@ final class BackgroundAgentModel {
                 {
                     guard !Task.isCancelled else { return }
                     self.tasks = tasks
-                    self.tasksLoading = false
+                    self.tasksLoad.setContent()
                 }
             }
             group.addTask { @MainActor in
@@ -50,20 +52,23 @@ final class BackgroundAgentModel {
     }
 
     func refresh() async {
-        defer { loading = false }
+        let request = contentLoad.begin()
+        defer { if Task.isCancelled { contentLoad.cancel(request) } }
         registration = .current
         let result = await AgentQuery.value {
             (try AgentClient.shared.runtimeSnapshot(), try AgentClient.shared.jobSnapshots())
         }
+        guard contentLoad.isCurrent(request) else { return }
         switch result {
         case let .success(value):
             runtime = value.0
             jobs = value.1
             failure = nil
+            contentLoad.complete(request)
         case let .failure(error):
-            runtime = nil
-            jobs = []
             failure = error.localizedDescription
+            contentLoad.fail(request, error: error)
+            if !tasksLoad.hasContent { tasksLoad.fail(tasksLoad.begin(), error: error) }
         }
     }
 
@@ -118,7 +123,7 @@ struct BackgroundAgentPane: View {
                 tasks: model.tasks, loading: model.tasksLoading && model.failure == nil)
             eventsSection
         }
-        .formStyle(.grouped)
+        .edithForm()
         .disclosureGroupStyle(EdithDisclosureGroupStyle())
         .edithSheet(isPresented: $showingEvents) {
             AgentEventsScreen()

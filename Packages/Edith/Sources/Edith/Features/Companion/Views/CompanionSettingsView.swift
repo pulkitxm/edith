@@ -336,7 +336,7 @@ struct CompanionSettingsScreen: View {
 
     @ViewBuilder
     private func unreachableCard(_ error: String) -> some View {
-        SkinCard(title: "Settings", note: "companion unreachable", dark: dark) {
+        PageCard(title: "Settings", note: "companion unreachable") {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Text(error)
                     .font(.system(size: UIScale.pt(12)))
@@ -351,10 +351,9 @@ struct CompanionSettingsScreen: View {
     }
 
     private var reasonerCard: some View {
-        SkinCard(
+        PageCard(
             title: "Reasoner",
-            note: model.current?.configured == true ? nil : "not configured",
-            dark: dark
+            note: model.current?.configured == true ? nil : "not configured"
         ) {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
@@ -427,7 +426,7 @@ struct CompanionSettingsScreen: View {
     }
 
     private var healthCard: some View {
-        SkinCard(title: "Health", note: healthNote, dark: dark) {
+        PageCard(title: "Health", note: healthNote) {
             if !home.hasAttemptedRefresh {
                 SkeletonGroup {
                     CompanionHealthRowsSkeleton()
@@ -469,10 +468,9 @@ struct CompanionSettingsScreen: View {
     }
 
     private var connectorsCard: some View {
-        SkinCard(
+        PageCard(
             title: "Connectors",
-            note: "traces of what you actually did",
-            dark: dark
+            note: "traces of what you actually did"
         ) {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 CompanionSecureField(
@@ -555,7 +553,7 @@ struct CompanionSettingsScreen: View {
     }
 
     private var connectionCard: some View {
-        SkinCard(title: "Connection", dark: dark) {
+        PageCard(title: "Connection") {
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                 CompanionFieldLabel(text: "Companion endpoint")
                 EdithTextField(
@@ -604,7 +602,7 @@ struct CompanionSettingsScreen: View {
     }
 
     private var dataCard: some View {
-        SkinCard(title: "Your data", note: "it leaves whenever you say", dark: dark) {
+        PageCard(title: "Your data", note: "it leaves whenever you say") {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 HStack(alignment: .center, spacing: UIScale.pt(12)) {
                     VStack(alignment: .leading, spacing: UIScale.pt(2)) {
@@ -655,7 +653,7 @@ struct CompanionSettingsScreen: View {
     }
 
     private var dangerCard: some View {
-        SkinCard(title: "Danger zone", note: "none of this can be undone", dark: dark) {
+        PageCard(title: "Danger zone", note: "none of this can be undone") {
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 CompanionDangerRow(
                     title: "Re-embed everything",

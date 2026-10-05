@@ -89,10 +89,9 @@ struct MachineToolsTab: View {
     }
 
     private var diskCard: some View {
-        SkinCard(
+        PageCard(
             title: "Disk",
-            note: "Mount this machine's whole file system on your Mac and open it in Finder",
-            dark: dark
+            note: "Mount this machine's whole file system on your Mac and open it in Finder"
         ) {
             HStack(spacing: UIScale.pt(10)) {
                 if let mount = session.mount {
@@ -217,9 +216,9 @@ struct MachineToolsTab: View {
     }
 
     private var forwardsCard: some View {
-        SkinCard(
+        PageCard(
             title: "Port forwards",
-            note: "Reach a service on this machine at localhost on your Mac", dark: dark
+            note: "Reach a service on this machine at localhost on your Mac"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ForEach(model.store.forwards(machineID: session.machine.id)) { forward in
@@ -292,7 +291,7 @@ struct MachineToolsTab: View {
     }
 
     private var snippetsCard: some View {
-        SkinCard(title: "Snippets", note: "Saved commands you run often", dark: dark) {
+        PageCard(title: "Snippets", note: "Saved commands you run often") {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 ForEach(model.store.snippets(machineID: session.machine.id)) { snippet in
                     HStack(spacing: UIScale.pt(10)) {
@@ -346,10 +345,9 @@ struct MachineToolsTab: View {
     }
 
     private var servicesCard: some View {
-        SkinCard(
+        PageCard(
             title: "Services",
-            note: servicesLoaded && session.services.isEmpty ? "no services reported" : nil,
-            dark: dark
+            note: servicesLoaded && session.services.isEmpty ? "no services reported" : nil
         ) {
             LoadingContainer(
                 state: connectionsEnabled && !servicesLoaded && session.services.isEmpty

@@ -78,7 +78,7 @@ struct StudioPDFEditorView: View {
                 LoadingContainer(state: .loading) {
                     EmptyView()
                 } placeholder: {
-                    ProgressView("Opening PDF")
+                    LoadingIndicator("Opening PDF")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -88,7 +88,7 @@ struct StudioPDFEditorView: View {
             if editor.isSaving {
                 ZStack {
                     Color.black.opacity(0.15)
-                    ProgressView("Saving…")
+                    LoadingIndicator("Saving…")
                         .padding(UIScale.pt(22))
                         .background(
                             .regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(14)))

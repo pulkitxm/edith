@@ -8,7 +8,7 @@ struct PageCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+        PagePanel(fill: fill) {
             if let title {
                 PageSectionHeader(title) {
                     if let note {
@@ -16,6 +16,20 @@ struct PageCard<Content: View>: View {
                     }
                 }
             }
+        } content: {
+            content()
+        }
+    }
+}
+
+struct PagePanel<Header: View, Content: View>: View {
+    var fill = false
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+            header()
             content()
         }
         .padding(UIScale.pt(16))
@@ -29,14 +43,23 @@ struct PageMetric: View {
     let value: String
     var detail: String?
     var symbol: String?
+    var tint: Color?
+    var trend: String?
+    var trendPositive = true
 
     var body: some View {
         PageCard {
             HStack(spacing: UIScale.pt(6)) {
-                if let symbol { Image(systemName: symbol) }
+                if let symbol { Image(systemName: symbol).foregroundStyle(tint ?? .secondary) }
                 Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             Text(value).font(.edithText(.title2)).fontWeight(.semibold).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6).contentTransition(.numericText())
+            if let trend {
+                Label(trend, systemImage: trendPositive ? "arrow.up.right" : "arrow.down.right")
+                    .font(.edithText(.caption)).foregroundStyle(trendPositive ? .green : .red)
+                    .help("Compared with the previous period of the same length")
+            }
             if let detail {
                 Text(detail).font(.edithText(.caption)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

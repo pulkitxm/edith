@@ -36,7 +36,7 @@ struct CodeStatsTrendCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Output over time", note: note, dark: dark) {
+        PageCard(title: "Output over time", note: note) {
             HStack(spacing: UIScale.pt(10)) {
                 EdithSegmentedPicker(
                     "Metric", selection: $metric, options: CodeStatsTrendMetric.allCases,
@@ -199,9 +199,9 @@ struct CodeStatsRepositoryCards: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            SkinCard(
+            PageCard(
                 title: "Commits per repository",
-                note: "Top 10, click to filter, right-click a row below to exclude", dark: dark
+                note: "Top 10, click to filter, right-click a row below to exclude"
             ) {
                 Toggle("Log scale", isOn: $logScale)
                     .toggleStyle(.switch)
@@ -289,7 +289,7 @@ struct CodeStatsStackedCard: View {
     }
 
     var body: some View {
-        SkinCard(title: title, note: note, dark: dark) {
+        PageCard(title: title, note: note) {
             Chart(points) { point in
                 if percent {
                     AreaMark(
@@ -358,9 +358,9 @@ private struct CodeStatsRepositoryTable: View {
 
     var body: some View {
         let sorted = rows[sort] ?? []
-        SkinCard(
+        PageCard(
             title: "Repositories",
-            note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits", dark: dark
+            note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits"
         ) {
             Grid(
                 alignment: .leading, horizontalSpacing: UIScale.pt(14),

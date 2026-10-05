@@ -41,6 +41,32 @@ import Testing
         #expect(load.state == .empty)
     }
 
+    @Test func emptyResultsRemainStableDuringRefreshFailureAndCancellation() {
+        let load = ContentLoad()
+        load.setContent(empty: true)
+        let request = load.begin()
+        #expect(load.state == .empty)
+        #expect(load.isRefreshing)
+        load.fail(request, message: "Try again")
+        #expect(load.state == .empty)
+        load.cancel()
+        #expect(load.state == .empty)
+        load.reset()
+        #expect(!load.hasContent)
+        #expect(load.state == .loading)
+    }
+
+    @Test func partialContentKeepsItsRequestActiveUntilCompletion() {
+        let load = ContentLoad()
+        let request = load.begin()
+        load.retainContent()
+        #expect(load.isCurrent(request))
+        #expect(load.state == .content)
+        #expect(load.isRefreshing)
+        load.complete(request)
+        #expect(!load.isRunning)
+    }
+
     @Test func cancellationInvalidatesOutstandingPublication() {
         let load = ContentLoad()
         let request = load.begin()

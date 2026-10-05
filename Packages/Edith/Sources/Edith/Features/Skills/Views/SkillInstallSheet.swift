@@ -67,7 +67,7 @@ struct SkillInstallSheet: View {
             Divider()
             HStack {
                 if model.isInstalling {
-                    ProgressView().controlSize(.small)
+                    LoadingIndicator()
                     Text("Installing for \(targetCount)…")
                         .font(.edithText(.callout)).foregroundStyle(.secondary)
                 }

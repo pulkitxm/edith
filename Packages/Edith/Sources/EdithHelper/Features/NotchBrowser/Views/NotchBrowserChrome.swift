@@ -264,7 +264,7 @@ struct NotchBrowserToolbar: View {
 
     @ViewBuilder private var progress: some View {
         if let tab, tab.isLoading {
-            ProgressView(value: max(0.08, tab.progress))
+            LoadingProgress(value: max(0.08, tab.progress))
                 .progressViewStyle(.linear)
                 .tint(.white.opacity(0.75))
                 .frame(height: 2)

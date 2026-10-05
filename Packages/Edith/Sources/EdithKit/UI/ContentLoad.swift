@@ -10,6 +10,7 @@ public final class ContentLoad {
     public private(set) var errorMessage: String?
     @ObservationIgnored private var generation: UInt64 = 0
     @ObservationIgnored private var cancelOperation: (() -> Void)?
+    @ObservationIgnored private var retainedState = ContentLoadingState.content
 
     public init() {}
 
@@ -23,20 +24,23 @@ public final class ContentLoad {
         isRunning = true
         errorMessage = nil
         hasContent = preservingContent && hasContent
-        state = hasContent ? .content : .loading
+        state = hasContent ? retainedState : .loading
         return generation
     }
 
     public func isCurrent(_ request: UInt64) -> Bool {
-        request == generation && isRunning && !Task.isCancelled
+        owns(request) && isRunning && !Task.isCancelled
+    }
+
+    public func owns(_ request: UInt64) -> Bool {
+        request == generation
     }
 
     public func complete(_ request: UInt64, empty: Bool = false) {
         guard isCurrent(request) else { return }
         isRunning = false
         cancelOperation = nil
-        hasContent = !empty
-        state = empty ? .empty : .content
+        retainContent(empty: empty)
         errorMessage = nil
     }
 
@@ -45,7 +49,7 @@ public final class ContentLoad {
         isRunning = false
         cancelOperation = nil
         errorMessage = message
-        state = hasContent ? .content : offline ? .offline : .error
+        state = hasContent ? retainedState : offline ? .offline : .error
     }
 
     public func fail(_ request: UInt64, error: Error) {
@@ -64,7 +68,21 @@ public final class ContentLoad {
         cancelOperation = nil
         generation &+= 1
         isRunning = false
-        state = hasContent ? .content : .cancelled
+        state = hasContent ? retainedState : .cancelled
+    }
+
+    public func retainContent(empty: Bool = false) {
+        hasContent = true
+        retainedState = empty ? .empty : .content
+        state = retainedState
+    }
+
+    public func reset() {
+        cancel()
+        hasContent = false
+        errorMessage = nil
+        retainedState = .content
+        state = .loading
     }
 
     public func setContent(empty: Bool = false) {

@@ -108,7 +108,7 @@ struct ShortcutsSettingsPane: View {
                     .font(.system(size: UIScale.pt(10)))
             }
         }
-        .formStyle(.grouped)
+        .edithForm()
         .navigationTitle("Shortcuts")
     }
 

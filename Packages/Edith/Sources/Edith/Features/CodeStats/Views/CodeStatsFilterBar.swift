@@ -51,7 +51,7 @@ struct CodeStatsFilterBar: View {
                     Task { await model.select(range) }
                 }
                 if model.isComputing {
-                    ProgressView().controlSize(.small)
+                    LoadingIndicator()
                 }
                 if let dominant = model.explorer.dominant,
                     !model.filter.excludedRepositories.contains(dominant.repository),

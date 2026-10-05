@@ -100,7 +100,7 @@ struct VideoEditorPage: View {
                 LoadingContainer(state: .loading) {
                     EmptyView()
                 } placeholder: {
-                    ProgressView("Opening video project")
+                    LoadingIndicator("Opening video project")
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.project == nil {
@@ -135,7 +135,7 @@ struct VideoEditorPage: View {
         .edithSheet(isPresented: $showingBeats) {
             VideoBeatPanel(model: model)
         }
-        .sheet(isPresented: $showingRecorder) {
+        .edithSheet(isPresented: $showingRecorder, dismissible: nil) {
             if #available(macOS 15.0, *) {
                 VideoRecorderSheet { model.startProject(with: [$0]) }
             }
@@ -293,7 +293,7 @@ struct VideoEditorPage: View {
                 )
                 .monospacedDigit()
             } icon: {
-                ProgressView(value: VideoExporter.shared.job?.progress ?? 0)
+                LoadingProgress(value: VideoExporter.shared.job?.progress ?? 0)
                     .progressViewStyle(.circular)
                     .controlSize(.small)
             }
@@ -364,7 +364,7 @@ struct VideoEditorPage: View {
                         LoadingContainer(state: .loading) {
                             EmptyView()
                         } placeholder: {
-                            ProgressView("Preparing zoom frame")
+                            LoadingIndicator("Preparing zoom frame")
                                 .tint(.white).foregroundStyle(.white.opacity(0.7))
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -387,7 +387,7 @@ struct VideoEditorPage: View {
                     LoadingContainer(state: .loading) {
                         EmptyView()
                     } placeholder: {
-                        ProgressView("Preparing video preview")
+                        LoadingIndicator("Preparing video preview")
                             .tint(.white).foregroundStyle(.white.opacity(0.7))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

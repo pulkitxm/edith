@@ -151,7 +151,7 @@ struct CompanionMindScreen: View {
     }
 
     private var coreCard: some View {
-        SkinCard(title: "Who you are", note: "always in context", dark: dark) {
+        PageCard(title: "Who you are", note: "always in context") {
             if model.core.isEmpty {
                 emptyText("Empty until the nightly run writes it, or until you write it yourself.")
             } else {
@@ -203,7 +203,7 @@ struct CompanionMindScreen: View {
     }
 
     private var calibrationCard: some View {
-        SkinCard(title: "Calibration", note: "in both directions", dark: dark) {
+        PageCard(title: "Calibration", note: "in both directions") {
             if model.calibration.isEmpty {
                 emptyText("Nothing scored yet; this needs claims and records to compare.")
             } else {
@@ -228,7 +228,7 @@ struct CompanionMindScreen: View {
     }
 
     private var beliefsCard: some View {
-        SkinCard(title: "Beliefs", note: "what it concluded", dark: dark, fill: true) {
+        PageCard(title: "Beliefs", note: "what it concluded", fill: true) {
             if model.beliefs.isEmpty {
                 emptyText("Nothing concluded yet. The nightly run forms beliefs from episodes.")
             } else {
@@ -281,7 +281,7 @@ struct CompanionMindScreen: View {
     }
 
     private var claimsCard: some View {
-        SkinCard(title: "Claims", note: "checked against reality", dark: dark) {
+        PageCard(title: "Claims", note: "checked against reality") {
             if model.claims.isEmpty {
                 emptyText("No claims extracted yet.")
             } else {
@@ -320,8 +320,8 @@ struct CompanionMindScreen: View {
     }
 
     private var observationsCard: some View {
-        SkinCard(
-            title: "Observed activity", note: "what the connectors saw", dark: dark
+        PageCard(
+            title: "Observed activity", note: "what the connectors saw"
         ) {
             if model.observations.isEmpty {
                 emptyText("No observations yet. Sync GitHub from Settings.")
@@ -357,10 +357,9 @@ struct CompanionMindScreen: View {
     }
 
     private var nightlyCard: some View {
-        SkinCard(
+        PageCard(
             title: "Nightly run",
-            note: "02:00 on the companion",
-            dark: dark
+            note: "02:00 on the companion"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 CompanionButton(

@@ -138,39 +138,6 @@ extension EnvironmentValues {
     }
 }
 
-struct SkinCard<Content: View>: View {
-    let title: String
-    var note: String? = nil
-    let dark: Bool
-    var fill = false
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(title)
-                    .font(DashSkin.heading(18))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Spacer()
-                if let note {
-                    Text(note)
-                        .font(.system(size: UIScale.pt(11.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-            content()
-        }
-        .padding(
-            EdgeInsets(
-                top: UIScale.pt(16), leading: UIScale.pt(16),
-                bottom: UIScale.pt(14), trailing: UIScale.pt(16))
-        )
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .edithSurface(cornerRadius: 16)
-    }
-}
-
 struct LazyChartCard<Content: View>: View {
     let title: String
     var note: String? = nil
@@ -180,7 +147,7 @@ struct LazyChartCard<Content: View>: View {
     @State private var loaded = false
 
     var body: some View {
-        SkinCard(title: title, note: note, dark: dark) {
+        PageCard(title: title, note: note) {
             Group {
                 if loaded {
                     content()

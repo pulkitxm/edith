@@ -108,7 +108,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 }
                 .buttonStyle(.edith(.secondary))
                 .keyboardShortcut("s", modifiers: .command)
-                if busy { ProgressView().controlSize(.small) }
+                if busy { LoadingIndicator() }
             }
             .disabled(busy || previews[card] == nil)
             Group {

@@ -13,9 +13,8 @@ struct CodeStatsSetupView: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        SkinCard(
-            title: "Set up Code Stats", note: "Mirror your GitHub and count your commits",
-            dark: dark
+        PageCard(
+            title: "Set up Code Stats", note: "Mirror your GitHub and count your commits"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 folderStep

@@ -41,12 +41,12 @@ struct MachineProcessesTab: View {
                                 DashSkin.warn.opacity(0.12),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
                     }
-                    SkinCard(
+                    PageCard(
                         title: "Top processes",
                         note: session.sample.map {
                             "\($0.tasks.total > 0 ? "\($0.tasks.total) tasks · " : "")"
                                 + "sampled every 2s"
-                        }, dark: dark
+                        }
                     ) {
                         table
                     }

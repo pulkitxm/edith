@@ -108,7 +108,7 @@ struct FleetHomeView: View {
     private var storageCard: some View {
         let rows = model.snapshots.filter { $0.diskTotalKB > 0 }
         if !rows.isEmpty {
-            SkinCard(title: "Storage", dark: dark) {
+            PageCard(title: "Storage") {
                 VStack(spacing: UIScale.pt(10)) {
                     ForEach(rows, id: \.id) { row in
                         VStack(alignment: .leading, spacing: UIScale.pt(5)) {
@@ -140,7 +140,7 @@ struct FleetHomeView: View {
     }
 
     private var alertsCard: some View {
-        SkinCard(title: "Needs attention", dark: dark) {
+        PageCard(title: "Needs attention") {
             VStack(alignment: .leading, spacing: UIScale.pt(7)) {
                 ForEach(model.fleet.alerts) { alert in
                     HStack(spacing: UIScale.pt(8)) {
@@ -165,7 +165,7 @@ struct FleetHomeView: View {
 
     private var machinesCard: some View {
         let snapshots = FleetMath.sortedByPressure(model.snapshots)
-        return SkinCard(title: "Machines", dark: dark) {
+        return PageCard(title: "Machines") {
             VStack(spacing: UIScale.pt(0)) {
                 ForEach(snapshots, id: \.id) { snapshot in
                     FleetMachineRow(

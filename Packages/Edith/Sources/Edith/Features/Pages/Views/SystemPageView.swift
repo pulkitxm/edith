@@ -20,7 +20,7 @@ struct SystemPage: View {
             }
             PageLoading(state: model.loading.state, layout: .list) {
                 summary
-                SkinCard(title: "Running apps", dark: dark) {
+                PageCard(title: "Running apps") {
                     appList
                 }
             }

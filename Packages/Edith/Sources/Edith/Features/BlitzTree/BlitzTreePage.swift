@@ -18,7 +18,7 @@ struct BlitzTreePage: View {
             } accessory: {
                 HStack {
                     if model.scanning {
-                        ProgressView().controlSize(.small)
+                        LoadingIndicator()
                         Button("Cancel", action: model.cancel)
                     } else if let root = model.root {
                         Button("Rescan", systemImage: "arrow.clockwise") {

@@ -114,7 +114,7 @@ struct StudioImageEditorView: View {
         )
         .overlay(alignment: .topTrailing) {
             if editor.isRendering, editor.preview != nil {
-                ProgressView()
+                LoadingIndicator()
                     .controlSize(.small)
                     .padding(.top, UIScale.pt(66))
                     .padding(.trailing, UIScale.pt(compact ? 20 : 300))
@@ -124,7 +124,7 @@ struct StudioImageEditorView: View {
             if editor.isSaving {
                 ZStack {
                     Color.black.opacity(0.15)
-                    ProgressView("Saving full resolution…")
+                    LoadingIndicator("Saving full resolution…")
                         .padding(UIScale.pt(22))
                         .background(
                             .regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
@@ -231,7 +231,7 @@ struct StudioImageCanvas: View {
                 .contentShape(Rectangle())
                 .gesture(gesture(in: rect))
             } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                LoadingIndicator().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }

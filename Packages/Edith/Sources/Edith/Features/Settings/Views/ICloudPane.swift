@@ -132,7 +132,7 @@ struct ICloudPane: View {
                 Text("On disk")
             }
         }
-        .formStyle(.grouped)
+        .edithForm()
         .navigationTitle("iCloud")
     }
 

@@ -71,7 +71,7 @@ struct JevSettingsPane: View {
             featuresSection
             activitySection
         }
-        .formStyle(.grouped)
+        .edithForm()
         .navigationTitle("Jev")
         .task {
             if automaticActionsEnabled { await model.load(probe: false) }

@@ -158,7 +158,7 @@ struct StudioCompareView: View {
                     comparison(original: original, revised: revised, report: report)
                 }
             } else {
-                ProgressView("Comparing…")
+                LoadingIndicator("Comparing…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -271,7 +271,7 @@ struct StudioCompareView: View {
                     .aspectRatio(contentMode: .fit)
                     .padding(UIScale.pt(12))
             } else {
-                ProgressView().frame(maxHeight: .infinity)
+                LoadingIndicator().frame(maxHeight: .infinity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

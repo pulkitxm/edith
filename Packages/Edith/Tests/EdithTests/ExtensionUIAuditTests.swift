@@ -142,7 +142,7 @@ struct ExtensionUIAuditTests {
         defaults.set(true, forKey: entry.defaultsKey)
         defer { defaults.set(previous, forKey: entry.defaultsKey) }
         let host = try auditHost(
-            Form { ExtensionDetailRows(entry: entry) }.formStyle(.grouped),
+            Form { ExtensionDetailRows(entry: entry) }.edithForm(),
             size: CGSize(width: 900, height: 1000))
         let text = try auditText(host)
         #expect(!text.isEmpty, "Controls must render for \(id)")

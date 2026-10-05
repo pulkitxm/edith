@@ -214,7 +214,7 @@ struct VirtualCameraStage: View {
                 LoadingContainer(state: .loading) {
                     EmptyView()
                 } placeholder: {
-                    ProgressView(title).tint(.white).foregroundStyle(.white.opacity(0.7))
+                    LoadingIndicator(title).foregroundStyle(.white.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if model.cameraAccess != .authorized && !model.hasPreviewFrame {

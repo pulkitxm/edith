@@ -155,11 +155,11 @@ struct VideoBeatPanel: View {
                         waveform(result)
                         mappingControls(result)
                     } else {
-                        ContentUnavailableView(
+                        ContentStatusView(
                             analysis.isAnalyzing
                                 ? "Reading audio samples" : "Analyze an audio source",
-                            systemImage: "waveform",
-                            description: Text("Measured peaks and detected transients appear here.")
+                            message: "Measured peaks and detected transients appear here.",
+                            symbol: "waveform"
                         )
                         .frame(height: UIScale.pt(130))
                     }
@@ -215,7 +215,7 @@ struct VideoBeatPanel: View {
                 .disabled(sourceURL == nil || analysis.isAnalyzing)
                 .buttonStyle(.edith(.primary))
                 if analysis.isAnalyzing {
-                    ProgressView().controlSize(.small)
+                    LoadingIndicator()
                     Button("Cancel") { analysis.cancel() }
                 }
             }

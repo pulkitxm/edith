@@ -67,7 +67,7 @@ struct HerdrSearchPopup: View {
                 }
             if model.machineProgress.done < model.machineProgress.total {
                 let progress = model.machineProgress
-                ProgressView(value: Double(progress.done), total: Double(progress.total))
+                LoadingProgress(value: Double(progress.done), total: Double(progress.total))
                     .progressViewStyle(.linear)
                     .frame(width: UIScale.pt(56))
                     .help("\(progress.done) of \(progress.total) machines answered")

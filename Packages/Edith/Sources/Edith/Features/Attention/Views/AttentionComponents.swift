@@ -77,28 +77,11 @@ struct AttentionPanel<Content: View, Trailing: View>: View {
     }
 
     var body: some View {
-        let dark = scheme == .dark
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    Text(title)
-                        .font(DashSkin.heading(16))
-                        .foregroundStyle(DashSkin.ink(dark))
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.system(size: UIScale.pt(11.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Spacer(minLength: UIScale.pt(8))
-                trailing
-            }
+        PagePanel {
+            PageSectionHeader(title, subtitle: subtitle) { trailing }
+        } content: {
             content
         }
-        .padding(UIScale.pt(16))
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .edithSurface(cornerRadius: 16)
     }
 }
 
@@ -111,33 +94,7 @@ struct AttentionTile: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        let dark = scheme == .dark
-        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-            HStack(spacing: UIScale.pt(6)) {
-                Image(systemName: symbol)
-                    .font(.system(size: UIScale.pt(11), weight: .semibold))
-                    .foregroundStyle(tint)
-                Text(label.uppercased())
-                    .font(DashSkin.mono(10)).tracking(UIScale.pt(1.2))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .lineLimit(1)
-            }
-            Text(value)
-                .font(DashSkin.heading(24))
-                .foregroundStyle(DashSkin.ink(dark))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .contentTransition(.numericText())
-            Text(detail ?? " ")
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .lineLimit(1)
-        }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .edithSurface(cornerRadius: 14)
-        .accessibilityElement(children: .combine)
+        PageMetric(title: label, value: value, detail: detail ?? " ", symbol: symbol, tint: tint)
     }
 }
 
@@ -283,24 +240,6 @@ struct AttentionEmpty: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, UIScale.pt(22))
-    }
-}
-
-struct AttentionNotice: View {
-    let text: String
-    let error: Bool
-
-    var body: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            Image(systemName: error ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
-            Text(text).font(.system(size: UIScale.pt(11), weight: .medium))
-            Spacer()
-        }
-        .foregroundStyle(error ? Color.red : Color.green)
-        .padding(UIScale.pt(10))
-        .background(
-            (error ? Color.red : Color.green).opacity(0.1),
-            in: RoundedRectangle(cornerRadius: 9))
     }
 }
 

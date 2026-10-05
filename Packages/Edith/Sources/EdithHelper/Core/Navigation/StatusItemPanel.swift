@@ -96,7 +96,7 @@ struct StatusProgressRow: View {
                 }
             }
             HStack(spacing: 10) {
-                ProgressView(value: percent.map { max(0, min(100, $0)) } ?? 0, total: 100)
+                LoadingProgress(value: percent ?? 0, total: 100)
                     .accessibilityLabel(title)
                 Text(percent.map { "\(Int(max(0, min(100, $0))))%" } ?? "N/A")
                     .monospacedDigit()

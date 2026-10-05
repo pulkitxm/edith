@@ -110,7 +110,7 @@ struct ExtensionsPane: View {
         .edithSheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry)
         }
-        .sheet(isPresented: $installsDatabasePack) {
+        .edithSheet(isPresented: $installsDatabasePack, dismissible: nil) {
             DatabasePackInstallSheet()
         }
         .alert(
@@ -550,7 +550,7 @@ struct ExtensionSettingsSheet: View {
                     invalidateReadiness()
                 }
             }
-            .formStyle(.grouped)
+            .edithForm()
         }
         .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
             VStack(spacing: UIScale.pt(0)) {
@@ -603,7 +603,7 @@ struct ExtensionSettingsSheet: View {
                 invalidateReadiness()
             }
         }
-        .sheet(isPresented: $installsDatabasePack) {
+        .edithSheet(isPresented: $installsDatabasePack, dismissible: nil) {
             DatabasePackInstallSheet()
         }
         .alert(

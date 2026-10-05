@@ -98,7 +98,7 @@ struct DocsScreen: View {
                 }
             } else {
                 VStack(spacing: UIScale.pt(10)) {
-                    ProgressView().controlSize(.small)
+                    LoadingIndicator()
                     Text("Loading the reference")
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -206,7 +206,7 @@ struct DocsScreen: View {
                 if !browser.clearQuestion() { askFocused = false }
             }
             if browser.asking {
-                ProgressView().controlSize(.small)
+                LoadingIndicator()
             }
             Text("\u{2318}K")
                 .font(DashSkin.mono(10.5, weight: .medium))

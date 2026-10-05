@@ -369,9 +369,8 @@ private struct QuinjetTerminalWorkspace: View {
         if tab.loadingWorktrees {
             QuinjetWorktreePickerSkeleton(dark: dark)
         } else if let error = tab.errorMessage, tab.worktrees.isEmpty {
-            ContentUnavailableView(
-                "Worktrees unavailable", systemImage: "exclamationmark.triangle",
-                description: Text(error)
+            ContentStatusView(
+                "Worktrees unavailable", message: error, symbol: "exclamationmark.triangle"
             )
             .padding(UIScale.pt(16))
             .frame(width: UIScale.pt(360), height: UIScale.pt(220))
