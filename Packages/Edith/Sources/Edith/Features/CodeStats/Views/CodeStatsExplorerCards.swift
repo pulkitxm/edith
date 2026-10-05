@@ -85,11 +85,7 @@ struct CodeStatsRepositoryStripCard: View {
                 }
                 HStack {
                     if let hovered {
-                        Text(
-                            hovered.repository + ", "
-                                + hovered.date.formatted(.dateTime.month(.wide).year()) + ": "
-                                + CodeStatsNumberFormat.grouped(hovered.commits) + " commits, "
-                                + CodeStatsNumberFormat.compact(hovered.lines) + " lines")
+                        Text(Self.describe(hovered))
                     } else {
                         Text("Hover a cell for details, click a name to filter.")
                     }
@@ -100,6 +96,13 @@ struct CodeStatsRepositoryStripCard: View {
                 .monospacedDigit()
             }
         }
+    }
+
+    private static func describe(_ cell: CodeStatsStripCell) -> String {
+        let month = cell.date.formatted(.dateTime.month(.wide).year())
+        let commits = CodeStatsNumberFormat.grouped(cell.commits)
+        let lines = CodeStatsNumberFormat.compact(cell.lines)
+        return "\(cell.repository), \(month): \(commits) commits, \(lines) lines"
     }
 
     private func labelled(_ index: Int) -> Bool {
@@ -139,6 +142,16 @@ struct CodeStatsYearOverYearCard: View {
         explorer.yearNames.indices.map { DashPalette.categorical($0, dark: dark) }
     }
 
+    private func yearLines(_ month: Int) -> [String] {
+        explorer.years.filter { $0.month == month }.map { point in
+            let value =
+                commits
+                ? "\(CodeStatsNumberFormat.grouped(point.commits)) commits"
+                : "\(CodeStatsNumberFormat.compact(point.lines)) lines"
+            return "\(point.year): \(value)"
+        }
+    }
+
     var body: some View {
         SkinCard(title: "Year over year", note: "Same month, different years", dark: dark) {
             Picker("Metric", selection: $commits) {
@@ -167,12 +180,7 @@ struct CodeStatsYearOverYearCard: View {
                         ) {
                             CodeStatsTooltip(
                                 title: Calendar.current.monthSymbols[hovered - 1],
-                                lines: explorer.years.filter { $0.month == hovered }.map {
-                                    $0.year + ": "
-                                        + (commits
-                                            ? CodeStatsNumberFormat.grouped($0.commits) + " commits"
-                                            : CodeStatsNumberFormat.compact($0.lines) + " lines")
-                                }, dark: dark)
+                                lines: yearLines(hovered), dark: dark)
                         }
                 }
             }
@@ -413,6 +421,12 @@ struct CodeStatsNewRepositoriesCard: View {
         }
     }
 
+    private static func names(_ month: CodeStatsMonthCount) -> [String] {
+        let shown = Array(month.names.prefix(6))
+        let hidden = month.names.count - shown.count
+        return hidden > 0 ? shown + ["and \(hidden) more"] : shown
+    }
+
     var body: some View {
         SkinCard(title: "New repositories", note: "Month of your first commit in each", dark: dark)
         {
@@ -446,10 +460,7 @@ struct CodeStatsNewRepositoriesCard: View {
                         ) {
                             CodeStatsTooltip(
                                 title: selected.date.formatted(.dateTime.month(.wide).year()),
-                                lines: Array(selected.names.prefix(6))
-                                    + (selected.names.count > 6
-                                        ? ["and \(selected.names.count - 6) more"] : []),
-                                dark: dark)
+                                lines: Self.names(selected), dark: dark)
                         }
                 }
             }

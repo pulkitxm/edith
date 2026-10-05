@@ -123,8 +123,8 @@ struct CodeStatsLargestCommitsCard: View {
                                 Text(commit.day)
                                 Text(String(commit.sha.prefix(8))).font(DashSkin.mono(10))
                                 Text(
-                                    CodeStatsNumberFormat.compact(commit.lines) + " counted, "
-                                        + CodeStatsNumberFormat.grouped(commit.files) + " files")
+                                    "\(CodeStatsNumberFormat.compact(commit.lines)) counted, \(CodeStatsNumberFormat.grouped(commit.files)) files"
+                                )
                             }
                             .font(.system(size: UIScale.pt(10.5)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
@@ -183,8 +183,7 @@ struct CodeStatsHygieneCard: View {
                                     .foregroundStyle(DashSkin.ink(dark))
                                     .lineLimit(1)
                                 Text(
-                                    CodeStatsNumberFormat.grouped(suggestion.commits) + " commits, "
-                                        + suggestion.reason.summary
+                                    "\(CodeStatsNumberFormat.grouped(suggestion.commits)) commits, \(suggestion.reason.summary)"
                                 )
                                 .font(.system(size: UIScale.pt(10.5)))
                                 .foregroundStyle(DashSkin.inkFaint(dark))
@@ -218,9 +217,7 @@ struct CodeStatsHygieneCard: View {
                                 .truncationMode(.middle)
                             Spacer()
                             Text(
-                                CodeStatsNumberFormat.grouped(duplicate.shared)
-                                    + " shared commits, "
-                                    + CodeStatsNumberFormat.percent(duplicate.fraction * 100)
+                                "\(CodeStatsNumberFormat.grouped(duplicate.shared)) shared commits, \(CodeStatsNumberFormat.percent(duplicate.fraction * 100))"
                             )
                             .font(.system(size: UIScale.pt(11)))
                             .foregroundStyle(DashSkin.inkFaint(dark))

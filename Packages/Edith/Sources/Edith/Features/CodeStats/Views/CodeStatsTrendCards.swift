@@ -49,12 +49,7 @@ struct CodeStatsTrendCard: View {
                     .controlSize(.small)
                 Spacer()
                 if let brushed {
-                    Button(
-                        "Zoom to "
-                            + brushed.lowerBound.formatted(date: .abbreviated, time: .omitted)
-                            + " to "
-                            + brushed.upperBound.formatted(date: .abbreviated, time: .omitted)
-                    ) {
+                    Button(Self.zoomTitle(brushed)) {
                         actions.zoom(brushed.lowerBound, brushed.upperBound)
                         self.brushed = nil
                     }
@@ -150,8 +145,7 @@ struct CodeStatsTrendCard: View {
             Text(CodeStatsNumberFormat.grouped(point.commits) + " commits")
             Text(CodeStatsNumberFormat.grouped(point.lines) + " lines")
             Text(
-                "Running total " + CodeStatsNumberFormat.compact(point.totalLines) + " lines, "
-                    + CodeStatsNumberFormat.grouped(point.totalCommits) + " commits"
+                "Running total \(CodeStatsNumberFormat.compact(point.totalLines)) lines, \(CodeStatsNumberFormat.grouped(point.totalCommits)) commits"
             )
             .foregroundStyle(DashSkin.inkFaint(dark))
         }
@@ -162,6 +156,12 @@ struct CodeStatsTrendCard: View {
         .background(DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(8)).stroke(DashSkin.lineStrong(dark)))
+    }
+
+    private static func zoomTitle(_ range: ClosedRange<Date>) -> String {
+        let start = range.lowerBound.formatted(date: .abbreviated, time: .omitted)
+        let end = range.upperBound.formatted(date: .abbreviated, time: .omitted)
+        return "Zoom to \(start) to \(end)"
     }
 
     private func value(_ point: CodeStatsTrendPoint) -> Int {
@@ -221,8 +221,7 @@ struct CodeStatsRepositoryCards: View {
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
                         Text(
-                            CodeStatsNumberFormat.grouped(summary.commits) + " commits, "
-                                + CodeStatsNumberFormat.compact(summary.counts.authored) + " lines"
+                            "\(CodeStatsNumberFormat.grouped(summary.commits)) commits, \(CodeStatsNumberFormat.compact(summary.counts.authored)) lines"
                         )
                         .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
@@ -267,6 +266,16 @@ struct CodeStatsStackedCard: View {
     let dark: Bool
     @State private var hovered: Date?
 
+    private var monthLines: [String] {
+        month.sorted { $0.value > $1.value }.map { point in
+            let value =
+                percent
+                ? CodeStatsNumberFormat.percent(point.value * 100)
+                : CodeStatsNumberFormat.grouped(Int(point.value))
+            return "\(point.series): \(value)"
+        }
+    }
+
     private var month: [CodeStatsStackPoint] {
         guard let hovered else { return [] }
         return points.filter {
@@ -307,12 +316,7 @@ struct CodeStatsStackedCard: View {
                             Spacer()
                             CodeStatsTooltip(
                                 title: first.date.formatted(.dateTime.month(.wide).year()),
-                                lines: month.sorted { $0.value > $1.value }.map {
-                                    $0.series + ": "
-                                        + (percent
-                                            ? CodeStatsNumberFormat.percent($0.value * 100)
-                                            : CodeStatsNumberFormat.grouped(Int($0.value)))
-                                }, dark: dark)
+                                lines: monthLines, dark: dark)
                         }
                         Spacer()
                     }
