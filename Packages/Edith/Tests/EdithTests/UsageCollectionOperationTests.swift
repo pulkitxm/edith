@@ -12,7 +12,7 @@ import Testing
         return store
     }
 
-    @Test func catalogCarriesAllSixExactUIInvocations() {
+    @Test func catalogCarriesEveryExactUIInvocation() {
         let expected: [UsageCollectionOperation: (String, String, [String])] = [
             .limitsRefresh: (
                 "Rate limit cards", "refresh the limits now",
@@ -34,6 +34,14 @@ import Testing
             .machineForget: (
                 "Dashboard machines menu", "drop what a machine already gave",
                 ["usage", "machines", "forget", "box"]
+            ),
+            .statusLineConnect: (
+                "Usage settings", "connect Claude Code's status line",
+                ["usage", "statusline", "install"]
+            ),
+            .statusLineDisconnect: (
+                "Usage settings", "disconnect Claude Code's status line",
+                ["usage", "statusline", "remove"]
             ),
         ]
         #expect(expected.count == UsageCollectionOperation.allCases.count)
