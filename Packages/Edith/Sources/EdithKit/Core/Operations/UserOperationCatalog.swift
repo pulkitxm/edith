@@ -910,6 +910,7 @@ private extension CodeStatsOperation {
         case .identityList: userInterface(settings, "list the identities")
         case .authors: userInterface(page, "list authors found in the mirror")
         case .audit: userInterface(page, "show what was counted and excluded")
+        case .export: userInterface(page, "share the stats as images", ["--card", "highlights"])
         }
     }
 }

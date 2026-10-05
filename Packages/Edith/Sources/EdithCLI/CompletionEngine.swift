@@ -258,6 +258,7 @@ public enum CompletionEngine {
             return EmojiCatalogSummary.frequent(store: CLIEnvironment.sharedDefaults)
         case .downloadKind: return DownloadKind.allCases.map(\.rawValue)
         case .codeStatsRange: return CodeStatsRange.presets.map(\.argument)
+        case .codeStatsExportCard: return CodeStatsExportCard.allCases.map(\.rawValue) + ["all"]
         case .codeStatsSchedule: return CodeStatsScheduleKind.allCases.map(\.rawValue)
         case .musicPlayer: return MusicPlayer.allCases.map(\.rawValue)
         case .quinjetAppearance: return QuinjetAppearance.allCases.map(\.rawValue)

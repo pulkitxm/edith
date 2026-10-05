@@ -1,6 +1,6 @@
 # `ed code-stats`
 
-`ed code-stats` drives the Code Stats ability, the same one the Code Stats settings and page use. Edith mirrors every GitHub repository you can reach into a folder you choose, counts the commits that are yours across all of them, and keeps a report of commits, lines, streaks, languages and habits. The background agent owns the mirror and the report, so the status, run, cancel, report, authors and audit commands need Edith or `edithd` running. The folder, schedule and identity commands write the shared settings directly.
+`ed code-stats` drives the Code Stats ability, the same one the Code Stats settings and page use. Edith mirrors every GitHub repository you can reach into a folder you choose, counts the commits that are yours across all of them, and keeps a report of commits, lines, streaks, languages and habits. The background agent owns the mirror and the report, so the status, run, cancel, report, export, authors and audit commands need Edith or `edithd` running. The folder, schedule and identity commands write the shared settings directly.
 
 [The `ed` command line](../README.md)
 
@@ -15,6 +15,7 @@
 | [`ed code-stats identity`](./identity.md) | Lists, adds and removes the identities counted as you. |
 | [`ed code-stats authors`](./authors.md) | Lists the commit authors found in the mirror. |
 | [`ed code-stats audit`](./audit.md) | Explains what was counted and what was excluded, and why. |
+| [`ed code-stats export`](./export.md) | Renders the totals as PNG cards you can share, with no repository names. |
 
 `status` is the default, so a bare `ed code-stats` shows the status. `identity` defaults to `identity list`.
 
