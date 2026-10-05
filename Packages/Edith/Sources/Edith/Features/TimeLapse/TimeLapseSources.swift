@@ -80,6 +80,56 @@ struct TimeLapseSources {
         let height: Int
         let audioFilter: SCContentFilter
     }
+
+    func thumbnail(mode: String, id: UInt32) async -> CGImage? {
+        let filter: SCContentFilter
+        if mode == "displays", let display = displays.first(where: { $0.displayID == id }) {
+            filter = SCContentFilter(display: display, excludingWindows: [])
+        } else if mode == "windows", let window = windows.first(where: { $0.windowID == id }) {
+            filter = SCContentFilter(desktopIndependentWindow: window)
+        } else {
+            return nil
+        }
+        let size = Self.thumbnailSize(filter.contentRect.size)
+        let configuration = SCStreamConfiguration()
+        configuration.width = size.width
+        configuration.height = size.height
+        configuration.showsCursor = false
+        configuration.capturesAudio = false
+        configuration.ignoreShadowsSingleWindow = true
+        configuration.ignoreShadowsDisplay = true
+        let image = try? await SCScreenshotManager.captureImage(
+            contentFilter: filter, configuration: configuration)
+        return Task.isCancelled ? nil : image
+    }
+
+    static func thumbnailSize(_ size: CGSize) -> (width: Int, height: Int) {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else {
+            return (2, 2)
+        }
+        let scale = min(320 / size.width, 180 / size.height, 1)
+        return (max(2, Int(size.width * scale)), max(2, Int(size.height * scale)))
+    }
+}
+
+actor TimeLapseThumbnailLoader {
+    private var tail: Task<CGImage?, Never>?
+
+    func load(_ operation: @escaping @Sendable () async -> CGImage?) async -> CGImage? {
+        let previous = tail
+        let task = Task {
+            _ = await previous?.value
+            guard !Task.isCancelled else { return CGImage?.none }
+            let image = await operation()
+            return Task.isCancelled ? nil : image
+        }
+        tail = task
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
 }
 
 struct TimeLapseDisplayChoice: Identifiable {

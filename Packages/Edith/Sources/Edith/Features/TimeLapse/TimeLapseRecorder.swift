@@ -26,6 +26,9 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var bytes: Int64 = 0
     var lastDirectory: URL?
     var preview: CGImage?
+    var sourceRevision = 0
+    @ObservationIgnored private var sourceSnapshot: TimeLapseSources?
+    private let thumbnailLoader = TimeLapseThumbnailLoader()
     private var previewVisible = false
     private var streams: [SCStream] = []
     private var outputs: [TimeLapseCaptureOutput] = []
@@ -47,6 +50,8 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         defer { busy = false }
         do {
             let sources = try await TimeLapseSources.load()
+            sourceSnapshot = sources
+            sourceRevision += 1
             displays = sources.displayChoices
             windows = sources.windowChoices
             selectedDisplays.formIntersection(sources.displayIDs)
@@ -57,6 +62,13 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             microphones = await TimeLapseMicrophoneChoice.load()
             error = nil
         } catch { self.error = error.localizedDescription }
+    }
+
+    func sourceThumbnail(mode: String, id: UInt32) async -> CGImage? {
+        guard !recording, let sources = sourceSnapshot else { return nil }
+        return await thumbnailLoader.load {
+            await sources.thumbnail(mode: mode, id: id)
+        }
     }
 
     private func receivePreview(_ image: CGImage) {
