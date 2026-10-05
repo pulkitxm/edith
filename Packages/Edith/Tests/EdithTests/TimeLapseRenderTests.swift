@@ -7,7 +7,8 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseRenderTests {
-    @Test(arguments: [1000.0, 560.0], ["ready", "recording", "finished", "waiting", "dark"])
+    @Test(
+        arguments: [1000.0, 560.0], ["ready", "recording", "finished", "waiting", "dark", "short"])
     @MainActor
     func rendersSyntheticCaptureControlsAndExportLibrary(width: Double, state: String) async throws
     {
@@ -20,11 +21,12 @@ import Testing
             .init(id: 2, application: "Demo Browser", title: "Sample dashboard"),
         ]
         recorder.selectedWindows = [1, 2]
-        recorder.recording = state == "recording" || state == "waiting" || state == "dark"
+        recorder.recording =
+            state == "recording" || state == "waiting" || state == "dark" || state == "short"
         recorder.startedAt = Date().addingTimeInterval(-5400)
         recorder.frames = 1080
         recorder.bytes = 24_000_000
-        if state == "recording" || state == "finished" || state == "dark" {
+        if state == "recording" || state == "finished" || state == "dark" || state == "short" {
             recorder.preview = try preview()
         }
         recorder.displays = [.init(id: 1, width: 3840, height: 2160)]
@@ -42,15 +44,16 @@ import Testing
                 "demo-recording"))
         SharedDefaults.store.set(true, forKey: AppStorageKeys.Tabs.timeLapseEnabled)
         defer { SharedDefaults.store.removeObject(forKey: AppStorageKeys.Tabs.timeLapseEnabled) }
+        let height: Double = state == "finished" ? 1100 : (state == "short" ? 560 : 850)
         let host = NSHostingView(
             rootView: TimeLapseControls(
                 recorder: recorder,
                 recordings: [recording], loadsSources: false
             ).environment(\.colorScheme, state == "dark" ? .dark : .light)
                 .environment(\.compactLayout, width < 640)
-                .frame(width: width, height: state == "finished" ? 1100 : 850)
+                .frame(width: width, height: height)
                 .background(state == "dark" ? Color(white: 0.1) : Color.white))
-        host.frame = CGRect(x: 0, y: 0, width: width, height: state == "finished" ? 1100 : 850)
+        host.frame = CGRect(x: 0, y: 0, width: width, height: height)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.appearance = NSAppearance(named: state == "dark" ? .darkAqua : .aqua)
         host.appearance = window.appearance

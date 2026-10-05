@@ -47,33 +47,41 @@ struct TimeLapseControls: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(20)) {
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Label("Time-lapse", systemImage: "timelapse").font(.title2.weight(.semibold))
-                    Text(recorder.recording ? recordingSummary : "Capture hours in minutes.")
-                        .font(.callout).foregroundStyle(.secondary)
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        Label("Time-lapse", systemImage: "timelapse").font(
+                            .title2.weight(.semibold))
+                        Text(recorder.recording ? recordingSummary : "Capture hours in minutes.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    if recorder.recording || recorder.preview != nil {
+                        capturePreview(
+                            height: min(
+                                UIScale.pt(compact ? 260 : 400),
+                                max(UIScale.pt(180), geometry.size.height - UIScale.pt(280))))
+                    }
+                    if recorder.recording {
+                        recordingStatus
+                    } else {
+                        captureControls.disabled(recorder.busy || !enabled)
+                    }
+                    if !enabled {
+                        Text("Enable Time-lapse in Extensions to record.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    if let error = recorder.error {
+                        Label(error, systemImage: "exclamationmark.circle")
+                            .font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                    }
+                    Divider()
+                    library
+                    if let message { Text(message).font(.callout).textSelection(.enabled) }
                 }
-                if recorder.recording || recorder.preview != nil { capturePreview }
-                if recorder.recording {
-                    recordingStatus
-                } else {
-                    captureControls.disabled(recorder.busy || !enabled)
-                }
-                if !enabled {
-                    Text("Enable Time-lapse in Extensions to record.")
-                        .font(.callout).foregroundStyle(.secondary)
-                }
-                if let error = recorder.error {
-                    Label(error, systemImage: "exclamationmark.circle")
-                        .font(.callout).foregroundStyle(.red).textSelection(.enabled)
-                }
-                Divider()
-                library
-                if let message { Text(message).font(.callout).textSelection(.enabled) }
+                .padding(UIScale.pt(24)).frame(maxWidth: UIScale.pt(960))
+                .frame(maxWidth: .infinity)
             }
-            .padding(UIScale.pt(24)).frame(maxWidth: UIScale.pt(960))
-            .frame(maxWidth: .infinity)
         }
         .navigationTitle("Time-lapse")
         .onAppear { recorder.showPreview(true) }
@@ -92,9 +100,9 @@ struct TimeLapseControls: View {
         }
     }
 
-    private var capturePreview: some View {
+    private func capturePreview(height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Color.black.frame(height: UIScale.pt(compact ? 260 : 400))
+            Color.black.frame(height: height)
                 .overlay {
                     if let image = recorder.preview {
                         Image(image, scale: 1, label: Text("Last captured recording frame"))
