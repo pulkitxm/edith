@@ -132,6 +132,7 @@ actor TimeLapseThumbnailLoader {
     private var tail: Task<CGImage?, Never>?
 
     func load(_ operation: @escaping @Sendable () async -> CGImage?) async -> CGImage? {
+        guard !Task.isCancelled else { return nil }
         let previous = tail
         let task = Task {
             _ = await previous?.value

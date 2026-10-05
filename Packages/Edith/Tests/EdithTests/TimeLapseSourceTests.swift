@@ -40,7 +40,8 @@ import Testing
         #expect(await probe.maximumActive == 1)
     }
 
-    @Test func canceledThumbnailRequestsDoNotCaptureAndQueueCanResume() async {
+    @Test(arguments: 0..<20)
+    func canceledThumbnailRequestsDoNotCaptureAndQueueCanResume(attempt: Int) async {
         let loader = TimeLapseThumbnailLoader()
         let probe = ThumbnailProbe()
         let started = AsyncStream<Void>.makeStream()
