@@ -39,25 +39,26 @@ struct CodeStatsKPIGrid: View {
             spacing: UIScale.pt(10)
         ) {
             CodeStatsTile(
-                label: "Commits", value: totals.commits.formatted(),
+                label: "Commits", value: CodeStatsNumberFormat.compact(totals.commits),
                 symbol: "point.3.connected.trianglepath.dotted",
                 change: report.momentum?.commitChange, dark: dark)
             CodeStatsTile(
-                label: "Lines authored", value: totals.authored.formatted(),
+                label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
                 symbol: "text.line.first.and.arrowtriangle.forward",
                 change: report.momentum?.lineChange,
-                detail: "+\(totals.added.formatted()) / -\(totals.deleted.formatted())", dark: dark)
-            CodeStatsTile(
-                label: "Active days", value: totals.activeDays.formatted(), symbol: "calendar",
-                detail:
-                    "\(totals.averagePerActiveDay.formatted(.number.precision(.fractionLength(1)))) lines per active day",
+                detail: "+" + CodeStatsNumberFormat.grouped(totals.added) + " / -" + CodeStatsNumberFormat.grouped(totals.deleted),
                 dark: dark)
             CodeStatsTile(
-                label: "Streak", value: "\(totals.currentStreak)d", symbol: "flame",
-                detail: "Longest \(totals.longestStreak) days", dark: dark)
+                label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays), symbol: "calendar",
+                detail:
+                    CodeStatsNumberFormat.decimal(totals.averagePerActiveDay) + " lines per active day",
+                dark: dark)
             CodeStatsTile(
-                label: "Repositories", value: totals.repositories.formatted(),
-                symbol: "shippingbox", detail: "Net \(totals.net.formatted()) lines", dark: dark)
+                label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d", symbol: "flame",
+                detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days", dark: dark)
+            CodeStatsTile(
+                label: "Repositories", value: CodeStatsNumberFormat.grouped(totals.repositories),
+                symbol: "shippingbox", detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
         }
     }
 }
@@ -90,7 +91,7 @@ struct CodeStatsTile: View {
             HStack(spacing: UIScale.pt(6)) {
                 if let change {
                     Label(
-                        change.formatted(.number.precision(.fractionLength(0))) + "%",
+                        CodeStatsNumberFormat.percent(change),
                         systemImage: change >= 0 ? "arrow.up.right" : "arrow.down.right"
                     )
                     .font(.system(size: UIScale.pt(11), weight: .semibold))
@@ -157,7 +158,8 @@ private struct CodeStatsHeatCellView: View {
     private var help: String {
         guard let date = cell.date else { return "" }
         let day = date.formatted(date: .abbreviated, time: .omitted)
-        return "\(day): \(cell.commits) commits, \(cell.lines.formatted()) lines"
+        return day + ": " + CodeStatsNumberFormat.grouped(cell.commits) + " commits, "
+            + CodeStatsNumberFormat.grouped(cell.lines) + " lines"
     }
 }
 

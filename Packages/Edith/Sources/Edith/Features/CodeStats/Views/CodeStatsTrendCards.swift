@@ -47,9 +47,14 @@ struct CodeStatsTrendCard: View {
                 .lineStyle(StrokeStyle(lineWidth: UIScale.pt(2)))
             }
             .chartYAxis {
-                AxisMarks(position: .leading) { _ in
+                AxisMarks(position: .leading) { value in
                     AxisGridLine().foregroundStyle(.primary.opacity(0.06))
-                    AxisValueLabel().font(.system(size: UIScale.pt(9)))
+                    AxisValueLabel {
+                        if let number = value.as(Double.self) {
+                            Text(CodeStatsNumberFormat.compact(Int(number.rounded())))
+                                .font(.system(size: UIScale.pt(9)))
+                        }
+                    }
                 }
             }
             .frame(height: UIScale.pt(220))
@@ -80,7 +85,7 @@ struct CodeStatsRepositoryCards: View {
                     .foregroundStyle(DashSkin.accent(dark).opacity(0.8))
                     .cornerRadius(3)
                     .annotation(position: .trailing) {
-                        Text(summary.commits.formatted())
+                        Text(CodeStatsNumberFormat.grouped(summary.commits))
                             .font(.system(size: UIScale.pt(10)))
                             .foregroundStyle(DashSkin.inkSoft(dark))
                     }
@@ -139,7 +144,10 @@ struct CodeStatsStackedCard: View {
                     AxisGridLine().foregroundStyle(.primary.opacity(0.06))
                     AxisValueLabel {
                         if let number = value.as(Double.self) {
-                            Text(percent ? number.formatted(.percent) : number.formatted())
+                            Text(
+                                percent
+                                    ? CodeStatsNumberFormat.percent(number * 100)
+                                    : CodeStatsNumberFormat.compact(Int(number.rounded())))
                                 .font(.system(size: UIScale.pt(9)))
                         }
                     }
@@ -164,7 +172,7 @@ private struct CodeStatsRepositoryTable: View {
 
     var body: some View {
         let sorted = rows[sort] ?? []
-        SkinCard(title: "Repositories", note: "\(sorted.count) with your commits", dark: dark) {
+        SkinCard(title: "Repositories", note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits", dark: dark) {
             Grid(
                 alignment: .leading, horizontalSpacing: UIScale.pt(14),
                 verticalSpacing: UIScale.pt(7)
@@ -188,8 +196,9 @@ private struct CodeStatsRepositoryTable: View {
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text(row.commits.formatted()).gridColumnAlignment(.trailing)
-                        Text(row.counts.authored.formatted()).gridColumnAlignment(.trailing)
+                        Text(CodeStatsNumberFormat.grouped(row.commits)).gridColumnAlignment(.trailing)
+                        Text(CodeStatsNumberFormat.compact(row.counts.authored))
+                            .gridColumnAlignment(.trailing)
                         Text(row.topLanguage ?? "-")
                         Text(row.lastDay)
                     }

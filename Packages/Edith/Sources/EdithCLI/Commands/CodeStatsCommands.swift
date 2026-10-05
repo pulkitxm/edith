@@ -239,8 +239,9 @@ enum CodeStatsCLI {
             lines.append(
                 CodeStatsCLI.line(
                     "running",
-                    "\(progress.phase.rawValue) \(progress.completed) of \(progress.total), "
-                        + "\(Int(progress.overallFraction * 100))% overall"))
+                    progress.phase.rawValue + " " + CodeStatsNumberFormat.grouped(progress.completed) + " of "
+                        + CodeStatsNumberFormat.grouped(progress.total) + ", "
+                        + CodeStatsNumberFormat.percent(progress.overallFraction * 100) + " overall"))
         }
         if let waiting = status.state.waitingFor {
             lines.append(CodeStatsCLI.line("waiting for", waiting))
@@ -319,8 +320,10 @@ struct CodeStatsRunCommand: AsyncParsableCommand {
                 CLIOut.json(CodeStatsCLI.lastRun(result))
             } else {
                 CLIOut.out(
-                    "refresh \(result.outcome.summary): \(result.repositories) repositories, "
-                        + "\(result.synced) synced, \(result.failed) failed")
+                    "refresh \(result.outcome.summary): "
+                        + CodeStatsNumberFormat.grouped(result.repositories) + " repositories, "
+                        + CodeStatsNumberFormat.grouped(result.synced) + " synced, "
+                        + CodeStatsNumberFormat.grouped(result.failed) + " failed")
                 if let issue = result.github { CLIOut.note(issue.summary) }
             }
             guard result.outcome == .completed else { throw ExitCode(ExitCodes.failure) }
@@ -395,17 +398,21 @@ struct CodeStatsReportCommand: AsyncParsableCommand {
             let totals = report.totals
             var lines = [
                 CodeStatsCLI.line("range", "\(report.startDay) to \(report.endDay)"),
-                CodeStatsCLI.line("commits", "\(totals.commits)"),
+                CodeStatsCLI.line("commits", CodeStatsNumberFormat.grouped(totals.commits)),
                 CodeStatsCLI.line(
-                    "lines", "\(totals.authored) authored, \(totals.deleted) deleted"),
-                CodeStatsCLI.line("active days", "\(totals.activeDays)"),
+                    "lines",
+                    CodeStatsNumberFormat.grouped(totals.authored) + " authored, "
+                        + CodeStatsNumberFormat.grouped(totals.deleted) + " deleted"),
+                CodeStatsCLI.line("active days", CodeStatsNumberFormat.grouped(totals.activeDays)),
                 CodeStatsCLI.line(
-                    "streak", "\(totals.currentStreak) current, \(totals.longestStreak) longest"),
-                CodeStatsCLI.line("repositories", "\(totals.repositories)"),
+                    "streak",
+                    CodeStatsNumberFormat.grouped(totals.currentStreak) + " current, "
+                        + CodeStatsNumberFormat.grouped(totals.longestStreak) + " longest"),
+                CodeStatsCLI.line("repositories", CodeStatsNumberFormat.grouped(totals.repositories)),
             ]
             if let change = report.momentum?.commitChange {
                 lines.append(
-                    CodeStatsCLI.line("momentum", String(format: "%+.0f%% commits", change)))
+                    CodeStatsCLI.line("momentum", CodeStatsNumberFormat.signedPercent(change) + " commits"))
             }
             lines.append(
                 CodeStatsCLI.line(
@@ -688,7 +695,7 @@ struct CodeStatsAuthorsCommand: AsyncParsableCommand {
                 TextTable.render(
                     headers: ["COMMITS", "YOU", "NAME", "EMAIL"],
                     rows: authors.map {
-                        ["\($0.commits)", $0.countedAsYou ? "yes" : "", $0.name, $0.email]
+                        [CodeStatsNumberFormat.grouped($0.commits), $0.countedAsYou ? "yes" : "", $0.name, $0.email]
                     }))
         }
     }
