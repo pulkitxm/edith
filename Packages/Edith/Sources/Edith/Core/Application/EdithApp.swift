@@ -153,6 +153,9 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if VideoExportBackground.defersQuit(sender) { return .terminateCancel }
+        if #available(macOS 15.0, *), TimeLapseRecorder.shared.defersQuit(sender) {
+            return .terminateCancel
+        }
         guard appStarted, AppBuildIdentity.isDevelopment, !AgentService.usesCustomService else {
             return .terminateNow
         }
@@ -180,7 +183,12 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        !VideoExportBackground.keepsAppOpenAfterLastWindowClosed()
+        if #available(macOS 15.0, *),
+            TimeLapseRecorder.shared.recording || TimeLapseRecorder.shared.busy
+        {
+            return false
+        }
+        return !VideoExportBackground.keepsAppOpenAfterLastWindowClosed()
     }
 }
 

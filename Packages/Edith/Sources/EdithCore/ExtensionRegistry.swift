@@ -250,6 +250,11 @@ public enum ExtensionRegistry {
             defaultsKey: "tabStudioEnabled", requiredCapabilities: [.localMediaEditing],
             optionalToolIDs: ["ffmpeg", "qpdf"]),
         ExtensionRegistryEntry(
+            id: "timeLapse", title: "Time-lapse",
+            subtitle: "Record days of displays or selected windows in a small video.",
+            symbolName: "timelapse", suite: .media, host: .window, featured: false,
+            defaultsKey: "tabTimeLapseEnabled", requiredCapabilities: [.screenTimeLapse]),
+        ExtensionRegistryEntry(
             id: "music", title: "Music",
             subtitle: "Plays your local music folder, with media keys and a player bar.",
             symbolName: "music.note", suite: .media, host: .bar, featured: false,

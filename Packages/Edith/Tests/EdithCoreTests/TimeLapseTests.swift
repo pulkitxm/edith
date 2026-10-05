@@ -19,6 +19,15 @@ import Testing
         #expect(settings.audioBitRate == 256_000)
     }
 
+    @Test func segmentRecoveryWindowIsAtMostFiveMinutes() {
+        for interval in TimeLapseSettings.intervals {
+            var settings = TimeLapseSettings()
+            settings.interval = interval
+            #expect(Double(settings.segmentFrameLimit) * interval <= 300)
+            #expect(settings.segmentFrameLimit > 0)
+        }
+    }
+
     @Test func invalidAndNonFiniteIntervalsAreRejected() {
         for interval in [0.0, -1, .nan, .infinity, 3] {
             var settings = TimeLapseSettings()

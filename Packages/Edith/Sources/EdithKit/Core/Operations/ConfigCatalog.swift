@@ -755,6 +755,10 @@ public enum ConfigCatalog {
 
     private static let studio: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Tabs.timeLapseEnabled, .bool, group: "studio",
+            summary: "Time-lapse extension: record sampled displays or windows for long sessions.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.Tabs.studioEnabled, .bool, group: "studio",
             summary: "Studio extension: edit, convert and compress images, PDFs, video and audio.",
             fallback: .bool(false)),

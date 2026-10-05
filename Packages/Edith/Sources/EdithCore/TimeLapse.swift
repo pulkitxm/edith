@@ -20,8 +20,12 @@ public struct TimeLapseSettings: Codable, Equatable, Sendable {
         else { throw TimeLapseError.invalidSettings }
     }
 
+    public var segmentFrameLimit: Int { min(Self.framesPerSegment, max(1, Int(300 / interval))) }
+
     public var speed: Double { interval * Double(Self.playbackFPS) }
-    public var videoBitRate: Int { maximumDimension <= 1920 ? 6_000_000 : 12_000_000 }
+    public var videoBitRate: Int {
+        maximumDimension <= 1920 ? 6_000_000 : (maximumDimension <= 3840 ? 12_000_000 : 48_000_000)
+    }
     public var audioBitRate: Int {
         (systemAudio ? 128_000 : 0) + (microphoneID == nil ? 0 : 128_000)
     }

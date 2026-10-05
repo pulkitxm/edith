@@ -1089,6 +1089,14 @@ struct ExtensionDetailRows: View {
             case .micMute: MicMuteRows()
             case .lidAwake: LidAwakeRows()
             case .studio: StudioRows()
+            case .timeLapse:
+                Section("Recorder") {
+                    Button("Open Time-lapse") { SectionWindow.open(.timeLapse) }
+                    Text(
+                        "Sample displays or selected windows into a compact video. Choose export quality after stopping."
+                    )
+                    .settingsCaption()
+                }
             case .music:
                 MusicRows()
                 MusicBarRows()
