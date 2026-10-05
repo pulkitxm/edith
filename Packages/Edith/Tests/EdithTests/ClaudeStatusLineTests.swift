@@ -241,6 +241,23 @@ import Testing
         #expect(found?.hasSuffix("/MacOS/ed") == true)
     }
 
+    @Test func theLauncherPathHasNoDotDotComponents() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let macOS = root.appendingPathComponent("MacOS", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Resources"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        let tool = macOS.appendingPathComponent("ed")
+        try Data("#!/bin/sh\n".utf8).write(to: tool)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+
+        let indirect = root.appendingPathComponent("Resources/../MacOS/Edith")
+        let found = try #require(ClaudeStatusLine.launcher(beside: indirect))
+        #expect(!found.contains(".."))
+        #expect(found == tool.standardizedFileURL.path)
+    }
+
     @Test func noLauncherIsReportedWhenTheEdSiblingIsMissing() throws {
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }

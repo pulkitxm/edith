@@ -144,6 +144,7 @@ public enum ClaudeStatusLine {
 
     static func launcher(beside executable: URL, fileManager: FileManager = .default) -> String? {
         let launcher = executable.deletingLastPathComponent().appendingPathComponent("ed")
+            .standardizedFileURL
         return fileManager.isExecutableFile(atPath: launcher.path) ? launcher.path : nil
     }
 
