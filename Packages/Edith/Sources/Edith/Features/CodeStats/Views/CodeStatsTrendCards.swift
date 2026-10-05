@@ -147,8 +147,9 @@ struct CodeStatsStackedCard: View {
                             Text(
                                 percent
                                     ? CodeStatsNumberFormat.percent(number * 100)
-                                    : CodeStatsNumberFormat.compact(Int(number.rounded())))
-                                .font(.system(size: UIScale.pt(9)))
+                                    : CodeStatsNumberFormat.compact(Int(number.rounded()))
+                            )
+                            .font(.system(size: UIScale.pt(9)))
                         }
                     }
                 }
@@ -172,7 +173,10 @@ private struct CodeStatsRepositoryTable: View {
 
     var body: some View {
         let sorted = rows[sort] ?? []
-        SkinCard(title: "Repositories", note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits", dark: dark) {
+        SkinCard(
+            title: "Repositories",
+            note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits", dark: dark
+        ) {
             Grid(
                 alignment: .leading, horizontalSpacing: UIScale.pt(14),
                 verticalSpacing: UIScale.pt(7)
@@ -196,7 +200,8 @@ private struct CodeStatsRepositoryTable: View {
                             .foregroundStyle(DashSkin.ink(dark))
                             .lineLimit(1)
                             .truncationMode(.middle)
-                        Text(CodeStatsNumberFormat.grouped(row.commits)).gridColumnAlignment(.trailing)
+                        Text(CodeStatsNumberFormat.grouped(row.commits)).gridColumnAlignment(
+                            .trailing)
                         Text(CodeStatsNumberFormat.compact(row.counts.authored))
                             .gridColumnAlignment(.trailing)
                         Text(row.topLanguage ?? "-")

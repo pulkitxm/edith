@@ -112,8 +112,8 @@ struct CodeStatsHabitCards: View {
                                 .frame(minWidth: UIScale.pt(10), maxWidth: .infinity)
                                 .frame(height: UIScale.pt(16))
                                 .help(
-                                    "\(cell.weekday) \(cell.hour):00, "
-                                        + CodeStatsNumberFormat.grouped(cell.commits) + " commits")
+                                    "\(cell.weekday) \(cell.hour):00, \(CodeStatsNumberFormat.grouped(cell.commits)) commits"
+                                )
                         }
                     }
                 }

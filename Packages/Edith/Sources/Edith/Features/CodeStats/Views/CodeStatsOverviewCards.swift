@@ -46,19 +46,24 @@ struct CodeStatsKPIGrid: View {
                 label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
                 symbol: "text.line.first.and.arrowtriangle.forward",
                 change: report.momentum?.lineChange,
-                detail: "+" + CodeStatsNumberFormat.grouped(totals.added) + " / -" + CodeStatsNumberFormat.grouped(totals.deleted),
-                dark: dark)
-            CodeStatsTile(
-                label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays), symbol: "calendar",
                 detail:
-                    CodeStatsNumberFormat.decimal(totals.averagePerActiveDay) + " lines per active day",
+                    "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
                 dark: dark)
             CodeStatsTile(
-                label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d", symbol: "flame",
-                detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days", dark: dark)
+                label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
+                symbol: "calendar",
+                detail:
+                    "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
+                dark: dark)
+            CodeStatsTile(
+                label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",
+                symbol: "flame",
+                detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days",
+                dark: dark)
             CodeStatsTile(
                 label: "Repositories", value: CodeStatsNumberFormat.grouped(totals.repositories),
-                symbol: "shippingbox", detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
+                symbol: "shippingbox",
+                detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
         }
     }
 }
@@ -158,8 +163,9 @@ private struct CodeStatsHeatCellView: View {
     private var help: String {
         guard let date = cell.date else { return "" }
         let day = date.formatted(date: .abbreviated, time: .omitted)
-        return day + ": " + CodeStatsNumberFormat.grouped(cell.commits) + " commits, "
-            + CodeStatsNumberFormat.grouped(cell.lines) + " lines"
+        let commits = CodeStatsNumberFormat.grouped(cell.commits)
+        let lines = CodeStatsNumberFormat.grouped(cell.lines)
+        return "\(day): \(commits) commits, \(lines) lines"
     }
 }
 
