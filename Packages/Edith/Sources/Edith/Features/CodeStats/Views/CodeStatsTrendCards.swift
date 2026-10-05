@@ -395,7 +395,7 @@ private struct CodeStatsRepositoryTable: View {
                             .font(.system(size: UIScale.pt(12), weight: .medium))
                             .foregroundStyle(DashSkin.ink(dark))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .help("Filter the page to this repository")
                         .contextMenu {
                             Button("Show only " + row.repository) {

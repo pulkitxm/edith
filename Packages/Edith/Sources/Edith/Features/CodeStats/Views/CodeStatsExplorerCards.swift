@@ -54,7 +54,7 @@ struct CodeStatsRepositoryStripCard: View {
                                     .truncationMode(.middle)
                                     .frame(width: UIScale.pt(190), alignment: .leading)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.edith(.borderless))
                             .help("Filter the page to " + repository)
                             .contextMenu {
                                 Button("Exclude " + repository) {
@@ -112,24 +112,30 @@ struct CodeStatsRepositoryStripCard: View {
     }
 
     private func cell(_ value: CodeStatsStripCell?) -> some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(3))
-            .fill(
-                value.map { DashSkin.accent(dark).opacity(0.15 + 0.85 * $0.level) }
-                    ?? DashSkin.grid(dark).opacity(0.6)
-            )
-            .frame(minWidth: UIScale.pt(4), maxWidth: .infinity)
-            .frame(height: UIScale.pt(16))
-            .overlay {
-                if let value, hovered == value {
-                    RoundedRectangle(cornerRadius: UIScale.pt(3))
-                        .stroke(DashSkin.ink(dark), lineWidth: UIScale.pt(1))
+        Button {
+            if let value { actions.toggleRepository(value.repository) }
+        } label: {
+            RoundedRectangle(cornerRadius: UIScale.pt(3))
+                .fill(
+                    value.map { DashSkin.accent(dark).opacity(0.15 + 0.85 * $0.level) }
+                        ?? DashSkin.grid(dark).opacity(0.6)
+                )
+                .frame(minWidth: UIScale.pt(4), maxWidth: .infinity)
+                .frame(height: UIScale.pt(16))
+                .overlay {
+                    if let value, hovered == value {
+                        RoundedRectangle(cornerRadius: UIScale.pt(3))
+                            .stroke(DashSkin.ink(dark), lineWidth: UIScale.pt(1))
+                    }
                 }
-            }
-            .onHover { inside in
-                if inside { hovered = value } else if hovered == value { hovered = nil }
-            }
-            .onTapGesture { if let value { actions.toggleRepository(value.repository) } }
+        }
+        .buttonStyle(.edith(.borderless))
+        .disabled(value == nil)
+        .onHover { inside in
+            if inside { hovered = value } else if hovered == value { hovered = nil }
+        }
     }
+
 }
 
 struct CodeStatsYearOverYearCard: View {
@@ -400,7 +406,7 @@ private struct CodeStatsDonut: View {
                             .foregroundStyle(DashSkin.ink(dark))
                             .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .disabled(slice.isOther)
                     }
                 }

@@ -118,7 +118,7 @@ struct CodeStatsLargestCommitsCard: View {
                                 Button(commit.repository) {
                                     actions.toggleRepository(commit.repository)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.edith(.borderless))
                                 .foregroundStyle(DashSkin.accent(dark))
                                 Text(commit.day)
                                 Text(String(commit.sha.prefix(8))).font(DashSkin.mono(10))

@@ -65,7 +65,7 @@ struct CodeStatsFilterBar: View {
                                 "Exclude \(dominant.repository) (\(CodeStatsNumberFormat.percent(dominant.share * 100)) of lines)",
                             color: DashSkin.warn, active: false)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .help(
                         "One repository dominates this range. Exclude it to see the rest clearly.")
                 }
@@ -89,7 +89,7 @@ struct CodeStatsFilterBar: View {
                             AttentionChip(
                                 title: category.title, color: DashSkin.accent(dark), active: active)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .accessibilityAddTraits(active ? .isSelected : [])
                     }
                     separator
@@ -101,7 +101,7 @@ struct CodeStatsFilterBar: View {
                             AttentionChip(
                                 title: flag.1, color: DashPalette.slate(dark), active: active)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.edith(.borderless))
                         .help(active ? "Counted. Click to exclude." : "Excluded. Click to count.")
                     }
                 }
@@ -126,7 +126,7 @@ struct CodeStatsFilterBar: View {
                     ? "All " + kind.rawValue.lowercased() : "\(kind.rawValue) (\(selected))",
                 color: DashSkin.accent(dark), active: selected > 0)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .popover(
             isPresented: Binding(get: { open == kind }, set: { if !$0 { open = nil } }),
             arrowEdge: .bottom
@@ -178,7 +178,7 @@ struct CodeStatsFilterBar: View {
             .background(DashSkin.accent(dark).opacity(0.16), in: Capsule())
             .foregroundStyle(DashSkin.ink(dark))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .accessibilityLabel("Remove filter \(name)")
     }
 }
@@ -267,6 +267,6 @@ private struct CodeStatsFacetPicker: View {
             .padding(.vertical, UIScale.pt(4))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
     }
 }

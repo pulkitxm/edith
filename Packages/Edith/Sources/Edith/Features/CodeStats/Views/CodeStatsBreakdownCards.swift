@@ -38,7 +38,7 @@ struct CodeStatsLanguageCards: View {
                         )
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.edith(.borderless))
                     .help("Filter the page to " + share.name)
                 }
                 if projection.languageShares.isEmpty {
