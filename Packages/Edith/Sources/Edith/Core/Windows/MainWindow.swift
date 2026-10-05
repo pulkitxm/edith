@@ -30,7 +30,7 @@ enum WindowZoomCommit {
 @MainActor
 enum MainWindow {
     private static var window: NSWindow?
-    private static let updater = UpdaterModel(startingUpdater: !AgentService.usesCustomService)
+    static let updater = UpdaterModel(startingUpdater: !AgentService.usesCustomService)
 
     #if DEBUG
     private static var snapshotObserver: NSObjectProtocol?

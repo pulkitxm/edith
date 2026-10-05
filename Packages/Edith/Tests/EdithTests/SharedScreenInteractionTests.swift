@@ -21,7 +21,7 @@ import Testing
                 options: options, label: { $0 }
             )
             .padding(.horizontal, 16)
-                .frame(width: width, height: 100))
+            .frame(width: width, height: 100))
         host.frame = NSRect(x: 0, y: 0, width: width, height: 100)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host

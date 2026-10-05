@@ -205,13 +205,13 @@ struct CompanionSetupSheet: View {
             rail
             Divider().opacity(0.4)
             VStack(spacing: 0) {
-                content
+                ScrollView { content }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 Divider().opacity(0.4)
                 footer
             }
         }
-        .frame(width: UIScale.pt(760), height: UIScale.pt(560))
+        .frame(width: PresentationMetrics.width(760), height: PresentationMetrics.height(560))
         .background(DashSkin.paper(dark))
         .task {
             async let probes: Void = model.probeHosts()
@@ -229,6 +229,16 @@ struct CompanionSetupSheet: View {
                 Text("Companion")
                     .font(DashSkin.heading(19, weight: .semibold))
                     .foregroundStyle(DashSkin.ink(dark))
+                Spacer(minLength: 0)
+                Button {
+                    model.onFinish(false)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .keyboardShortcut(.cancelAction)
+                .disabled(model.deploying)
+                .accessibilityLabel("Close companion setup")
             }
             .padding(.bottom, UIScale.pt(24))
             ForEach(CompanionSetupStep.allCases) { step in
@@ -592,11 +602,10 @@ struct CompanionSetupSheet: View {
             .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                 CompanionFieldLabel(text: "Provider")
-                Picker("", selection: $model.provider) {
-                    Text("Local (Ollama)").tag("openai")
-                    Text("Anthropic").tag("anthropic")
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "", selection: $model.provider, options: ["openai", "anthropic"],
+                    label: { $0 == "openai" ? "Local (Ollama)" : "Anthropic" }
+                )
                 .labelsHidden()
                 .frame(maxWidth: UIScale.pt(280))
             }
@@ -684,6 +693,7 @@ struct CompanionSetupSheet: View {
                 CompanionLinkButton(title: "Not now") {
                     model.onFinish(false)
                 }
+                .disabled(model.deploying)
             }
             Spacer()
             if model.step != .welcome, model.step != .done, !model.deploying {

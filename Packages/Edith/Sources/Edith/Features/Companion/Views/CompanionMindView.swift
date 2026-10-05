@@ -143,11 +143,10 @@ struct CompanionMindScreen: View {
                 barsFilled = true
             }
         }
-        .sheet(item: $detail) { detail in
+        .edithSheet(item: $detail) { detail in
             MindDetailSheet(detail: detail, dark: dark, openEpisode: openEpisode) {
                 self.detail = nil
             }
-            .transientPresentation()
         }
     }
 
@@ -643,11 +642,15 @@ private struct MindDetailSheet: View {
                 .buttonStyle(.edith(.borderless))
                 .help("Close")
             }
-            content
-            Spacer(minLength: 0)
+            ScrollView {
+                content.frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(UIScale.pt(20))
-        .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
+        .frame(
+            width: PresentationMetrics.width(460), height: PresentationMetrics.height(360),
+            alignment: .topLeading
+        )
         .background(DashSkin.paper(dark))
         .task(id: generation) {
             if requestsEnabled {

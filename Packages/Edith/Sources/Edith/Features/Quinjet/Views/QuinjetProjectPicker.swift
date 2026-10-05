@@ -61,7 +61,6 @@ struct QuinjetLocalProjectPicker: View {
             }
 
             content
-                .pageContent(compact)
         }
     }
 
@@ -113,6 +112,7 @@ struct QuinjetLocalProjectPicker: View {
                     }
                 }
                 .padding(.top, UIScale.pt(2))
+                .pageContent(compact)
             }
         }
     }

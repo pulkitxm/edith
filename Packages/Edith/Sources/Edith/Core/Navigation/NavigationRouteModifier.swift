@@ -14,11 +14,6 @@ enum NavigationTextRole: Equatable {
 }
 
 enum NavigationShortcutGate {
-    static let blockedClassFragments = [
-        "GhosttyTerminalView", "EdithTerminalView", "LocalProcessTerminalView", "WKWebView",
-        "NotchWebView", "SourceEditor", "CodeEditor",
-    ]
-
     static func direction(keyCharacter: String?, modifiers: NSEvent.ModifierFlags)
         -> NavigationDirection?
     {
@@ -53,28 +48,18 @@ enum NavigationShortcutGate {
         }
     }
 
-    static func allowsHistory(classNames: [String], textRole: NavigationTextRole) -> Bool {
-        if textRole == .editor { return false }
-        for name in classNames where blockedClassFragments.contains(where: { name.contains($0) }) {
-            return false
-        }
-        return true
-    }
-
     static func textRole(of responder: NSResponder) -> NavigationTextRole {
         guard let text = responder as? NSTextView, text.isEditable else { return .none }
         return text.isFieldEditor ? .fieldEditor : .editor
     }
 
     static func allowsHistory(responder: NSResponder?) -> Bool {
-        var names: [String] = []
         var role = NavigationTextRole.none
         var current = responder
         var seen: Set<ObjectIdentifier> = []
         while let view = current {
             let identity = ObjectIdentifier(view)
             if !seen.insert(identity).inserted { break }
-            names.append(NSStringFromClass(type(of: view)))
             let nextRole = textRole(of: view)
             if nextRole == .editor { role = .editor }
             if let nested = view as? NSView, let superview = nested.superview {
@@ -83,7 +68,7 @@ enum NavigationShortcutGate {
                 current = view.nextResponder
             }
         }
-        return allowsHistory(classNames: names, textRole: role)
+        return role != .editor
     }
 
     static func allowsMouseHistory(_ event: NSEvent) -> Bool {
@@ -106,6 +91,10 @@ private struct NavigationRouteDepthKey: EnvironmentKey {
     static let defaultValue = 0
 }
 
+private struct NavigationRouteScopeKey: EnvironmentKey {
+    static let defaultValue: [String] = []
+}
+
 extension EnvironmentValues {
     var windowRouter: WindowRouter? {
         get { self[WindowRouterKey.self] }
@@ -116,26 +105,54 @@ extension EnvironmentValues {
         get { self[NavigationRouteDepthKey.self] }
         set { self[NavigationRouteDepthKey.self] = newValue }
     }
+
+    var navigationRouteScope: [String] {
+        get { self[NavigationRouteScopeKey.self] }
+        set { self[NavigationRouteScopeKey.self] = newValue }
+    }
 }
 
 struct NavigationRouteHost<Content: View>: View {
     let router: WindowRouter
     var role: WindowRouter.Role = .auxiliary
     @ViewBuilder var content: Content
+    @StateObject private var sessionOwner: WindowSessionOwner
+
+    init(
+        router: WindowRouter, role: WindowRouter.Role = .auxiliary,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.router = router
+        self.role = role
+        self.content = content()
+        _sessionOwner = StateObject(
+            wrappedValue: WindowSessionOwner(acceptsCommandVideo: role == .main))
+    }
 
     var body: some View {
         content
             .environment(\.windowRouter, router)
+            .environment(\.windowSessionOwner, sessionOwner)
             .background { WindowRouterAnchor(router: router, role: role) }
     }
 }
 
 extension View {
     func navigationRoute<S: LosslessStringConvertible & Equatable>(
-        _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil
+        _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil,
+        isReady: @escaping @MainActor () async -> Void
+    ) -> some View {
+        NavigationRouteReadiness(load: isReady) { ready in
+            navigationRoute(name, selection: selection, isValid: isValid, isReady: ready)
+        }
+    }
+
+    func navigationRoute<S: LosslessStringConvertible & Equatable>(
+        _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil, isReady: Bool = true
     ) -> some View {
         NavigationRouteSlot(
             name: name,
+            ready: isReady,
             text: Binding(
                 get: { selection.wrappedValue.description },
                 set: { proposed in
@@ -151,10 +168,11 @@ extension View {
     }
 
     func navigationRoute<S: RawRepresentable & Equatable>(
-        _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil
+        _ name: String, selection: Binding<S>, isValid: ((S) -> Bool)? = nil, isReady: Bool = true
     ) -> some View where S.RawValue: LosslessStringConvertible {
         NavigationRouteSlot(
             name: name,
+            ready: isReady,
             text: Binding(
                 get: { selection.wrappedValue.rawValue.description },
                 set: { proposed in
@@ -174,7 +192,8 @@ extension View {
     }
 
     func navigationRoute(
-        _ name: String, selection: Binding<String?>, isValid: ((String) -> Bool)? = nil
+        _ name: String, selection: Binding<String?>, isValid: ((String) -> Bool)? = nil,
+        isReady: Bool = true
     ) -> some View {
         navigationRoute(
             name,
@@ -184,11 +203,12 @@ extension View {
             isValid: { value in
                 if value.isEmpty { return true }
                 return isValid?(value) ?? true
-            })
+            }, isReady: isReady)
     }
 
     func navigationRoute(
-        _ name: String, selection: Binding<UUID?>, isValid: ((UUID) -> Bool)? = nil
+        _ name: String, selection: Binding<UUID?>, isValid: ((UUID) -> Bool)? = nil,
+        isReady: Bool = true
     ) -> some View {
         navigationRoute(
             name,
@@ -205,34 +225,47 @@ extension View {
                 if raw.isEmpty { return true }
                 guard let id = UUID(uuidString: raw) else { return false }
                 return isValid?(id) ?? true
-            })
+            }, isReady: isReady)
+    }
+}
+
+private struct NavigationRouteReadiness<Content: View>: View {
+    let load: @MainActor () async -> Void
+    @ViewBuilder var content: (Bool) -> Content
+    @State private var ready = false
+
+    var body: some View {
+        content(ready)
+            .task {
+                await load()
+                guard !Task.isCancelled else { return }
+                ready = true
+            }
     }
 }
 
 private struct NavigationRouteSlot<Content: View>: View {
     let name: String
+    let ready: Bool
+    @State private var owner = UUID()
     @Binding var text: String
     let accept: (String) -> Bool
     let content: Content
     @Environment(\.windowRouter) private var router
     @Environment(\.navigationRouteDepth) private var depth
+    @Environment(\.navigationRouteScope) private var scope
 
     var body: some View {
         content
             .background {
                 RouteSlotAnchor(
-                    depth: depth, name: name, value: text, accept: accept,
+                    depth: depth, name: name, value: text, owner: owner, ready: ready,
+                    scope: scope,
+                    accept: accept,
                     apply: applyProposed, installedRouter: router)
             }
             .environment(\.navigationRouteDepth, depth + 1)
-            .onAppear {
-                NavigationRouteMount.sync(
-                    router: router, depth: depth, name: name, value: text, accept: accept,
-                    apply: applyProposed)
-            }
-            .onDisappear {
-                NavigationRouteMount.unregister(router: router, depth: depth, name: name)
-            }
+            .environment(\.navigationRouteScope, scope + [text])
     }
 
     private func applyProposed(_ proposed: String) {
@@ -244,6 +277,9 @@ struct RouteSlotAnchor: View {
     let depth: Int
     let name: String
     let value: String
+    var owner: UUID? = nil
+    var ready = true
+    var scope: [String] = []
     let accept: (String) -> Bool
     let apply: (String) -> Void
     var installedRouter: WindowRouter?
@@ -252,35 +288,37 @@ struct RouteSlotAnchor: View {
     private var router: WindowRouter? { installedRouter ?? environmentRouter }
 
     var body: some View {
-        let _ = NavigationRouteMount.sync(
-            router: router, depth: depth, name: name, value: value, accept: accept, apply: apply)
         Color.clear
             .frame(width: UIScale.pt(0), height: UIScale.pt(0))
             .accessibilityHidden(true)
             .background {
                 RouteSlotRepresentable(
-                    router: router, depth: depth, name: name, value: value, accept: accept,
+                    router: router, depth: depth, name: name, value: value, owner: owner,
+                    ready: ready, scope: scope, accept: accept,
                     apply: apply)
             }
     }
 
     func unmount() {
-        NavigationRouteMount.unregister(router: router, depth: depth, name: name)
+        NavigationRouteMount.unregister(router: router, depth: depth, name: name, owner: owner)
     }
 }
 
 enum NavigationRouteMount {
     @MainActor
     static func sync(
-        router: WindowRouter?, depth: Int, name: String, value: String,
+        router: WindowRouter?, depth: Int, name: String, value: String, owner: UUID? = nil,
+        ready: Bool = true,
         accept: @escaping (String) -> Bool, apply: @escaping (String) -> Void
     ) {
-        router?.sync(depth: depth, name: name, value: value, accept: accept, apply: apply)
+        router?.sync(
+            depth: depth, name: name, value: value, owner: owner, ready: ready, accept: accept,
+            apply: apply)
     }
 
     @MainActor
-    static func unregister(router: WindowRouter?, depth: Int, name: String) {
-        router?.unregister(depth: depth, name: name)
+    static func unregister(router: WindowRouter?, depth: Int, name: String, owner: UUID? = nil) {
+        router?.unregister(depth: depth, name: name, owner: owner)
     }
 }
 
@@ -289,6 +327,9 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
     let depth: Int
     let name: String
     let value: String
+    let owner: UUID?
+    let ready: Bool
+    let scope: [String]
     let accept: (String) -> Bool
     let apply: (String) -> Void
 
@@ -299,7 +340,7 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
         view.isHidden = true
         view.onMove = { [weak view] in
             guard let view else { return }
-            context.coordinator.publish(in: view)
+            context.coordinator.schedulePublish(in: view)
         }
         return view
     }
@@ -309,10 +350,13 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
         context.coordinator.depth = depth
         context.coordinator.name = name
         context.coordinator.value = value
+        context.coordinator.owner = owner
+        context.coordinator.slotReady = ready
+        context.coordinator.scope = scope
         context.coordinator.accept = accept
         context.coordinator.apply = apply
         context.coordinator.ready = true
-        context.coordinator.publish(in: view)
+        context.coordinator.schedulePublish(in: view)
     }
 
     static func dismantleNSView(_ view: SlotView, coordinator: Coordinator) {
@@ -320,7 +364,7 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
         coordinator.cancel()
         NavigationRouteMount.unregister(
             router: coordinator.resolved ?? coordinator.router, depth: coordinator.depth,
-            name: coordinator.name)
+            name: coordinator.name, owner: coordinator.owner)
     }
 
     final class Coordinator {
@@ -328,6 +372,9 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
         var depth = 0
         var name = ""
         var value = ""
+        var owner: UUID?
+        var slotReady = true
+        var scope: [String] = []
         var accept: (String) -> Bool = { _ in true }
         var apply: (String) -> Void = { _ in }
         var resolved: WindowRouter?
@@ -338,6 +385,17 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
         func cancel() {
             retry?.cancel()
             retry = nil
+        }
+
+        func schedulePublish(in view: NSView) {
+            cancel()
+            let work = DispatchWorkItem { [weak self, weak view] in
+                guard let self, let view else { return }
+                self.retry = nil
+                self.publish(in: view)
+            }
+            retry = work
+            DispatchQueue.main.async(execute: work)
         }
 
         func publish(in view: NSView) {
@@ -365,11 +423,15 @@ private struct RouteSlotRepresentable: NSViewRepresentable {
             let slotDepth = depth
             let slotName = name
             let slotValue = value
+            let slotOwner = owner
+            let isSlotReady = slotReady
+            let slotScope = scope
             let slotAccept = accept
             let slotApply = apply
             MainActor.assumeIsolated {
                 found.sync(
-                    depth: slotDepth, name: slotName, value: slotValue, accept: slotAccept,
+                    depth: slotDepth, name: slotName, value: slotValue, owner: slotOwner,
+                    ready: isSlotReady, scope: slotScope, accept: slotAccept,
                     apply: slotApply)
             }
         }
@@ -446,7 +508,9 @@ enum NavigationHistoryInput {
         } else {
             guard NavigationShortcutGate.allowsMouseHistory(event) else { return false }
         }
-        guard let router = WindowRouter.forKeyWindow() else { return false }
+        guard let router = WindowRouter.router(for: event.window ?? NSApp.keyWindow),
+            (direction == .back ? router.canGoBack : router.canGoForward)
+        else { return false }
         switch direction {
         case .back: router.goBack()
         case .forward: router.goForward()
@@ -486,7 +550,7 @@ enum NavigationHistoryInput {
 
 private final class NavigationMenu: NSMenu {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.type == .keyDown, NavigationShortcutGate.direction(for: event) != nil {
+        if !NavigationShortcutGate.allowsHistory(responder: NSApp.keyWindow?.firstResponder) {
             return false
         }
         return super.performKeyEquivalent(with: event)
@@ -494,7 +558,7 @@ private final class NavigationMenu: NSMenu {
 }
 
 @MainActor
-private final class NavigationMenuTarget: NSObject, NSMenuDelegate {
+private final class NavigationMenuTarget: NSObject, NSMenuDelegate, NSMenuItemValidation {
     static let shared = NavigationMenuTarget()
 
     @objc func goBack(_ sender: Any?) {
@@ -506,12 +570,15 @@ private final class NavigationMenuTarget: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
-        let router = WindowRouter.forKeyWindow()
         for item in menu.items {
-            if item.action == #selector(goBack(_:)) { item.isEnabled = router?.canGoBack == true }
-            if item.action == #selector(goForward(_:)) {
-                item.isEnabled = router?.canGoForward == true
-            }
+            item.isEnabled = validateMenuItem(item)
         }
+    }
+
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        guard NavigationShortcutGate.allowsHistory(responder: NSApp.keyWindow?.firstResponder),
+            let router = WindowRouter.forKeyWindow()
+        else { return false }
+        return item.action == #selector(goBack(_:)) ? router.canGoBack : router.canGoForward
     }
 }

@@ -125,6 +125,13 @@ final class StudioImageEditorModel {
         }
     }
 
+    func close() {
+        loadTask?.cancel()
+        renderTask?.cancel()
+        thumbnailTask?.cancel()
+        faceTask?.cancel()
+    }
+
     func edit(_ change: (inout ImageEditDocument) -> Void) {
         var next = document
         change(&next)

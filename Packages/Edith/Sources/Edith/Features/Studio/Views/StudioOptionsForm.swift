@@ -168,12 +168,10 @@ struct StudioChoiceField: View {
 
     var body: some View {
         if segmented {
-            Picker("", selection: $selection) {
-                ForEach(choices, id: \.value) { choice in
-                    Text(choice.label).tag(choice.value)
-                }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "", selection: $selection, options: choices.map(\.value),
+                label: { value in choices.first { $0.value == value }?.label ?? value }
+            )
             .labelsHidden()
         } else {
             Picker("", selection: $selection) {

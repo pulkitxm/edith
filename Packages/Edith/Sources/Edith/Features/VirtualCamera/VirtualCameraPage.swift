@@ -2,13 +2,34 @@ import AVFoundation
 import EdithKit
 import SwiftUI
 
+struct VirtualCameraPageAttachment {
+    private(set) var acquired = false
+    private var visible = false
+
+    mutating func begin() { visible = true }
+
+    @MainActor mutating func acquire(_ model: VirtualCameraPageModel) {
+        guard visible, !acquired else { return }
+        acquired = true
+        model.appear()
+    }
+
+    @MainActor mutating func release(_ model: VirtualCameraPageModel) {
+        visible = false
+        guard acquired else { return }
+        acquired = false
+        model.disappear()
+    }
+}
+
 struct VirtualCameraPage: View {
     @StateObject private var model: VirtualCameraPageModel
+    @State private var attachment = VirtualCameraPageAttachment()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
     init(model: VirtualCameraPageModel? = nil) {
-        _model = StateObject(wrappedValue: model ?? VirtualCameraPageModel())
+        _model = StateObject(wrappedValue: model ?? VirtualCameraPageModel.shared)
     }
 
     private var dark: Bool { scheme == .dark }
@@ -34,15 +55,20 @@ struct VirtualCameraPage: View {
                 "Virtual Camera",
                 trailing: { VirtualCameraHeaderControls(model: model, dark: dark) })
             ScrollView {
-                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                let layout =
+                    !compact
+                    ? AnyLayout(HStackLayout(alignment: .top, spacing: UIScale.pt(16)))
+                    : AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(16)))
+                layout {
                     VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                         VirtualCameraStage(model: model, dark: dark)
                         VirtualCameraToolbar(model: model, dark: dark)
                         VirtualCameraSceneStrip(model: model, dark: dark)
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    .frame(minWidth: UIScale.pt(0), maxWidth: .infinity, alignment: .topLeading)
                     VirtualCameraInspector(model: model, dark: dark)
-                        .frame(width: UIScale.pt(compact ? 300 : 340))
+                        .frame(width: compact ? nil : UIScale.pt(340))
+                        .frame(maxWidth: compact ? .infinity : nil, alignment: .topLeading)
                 }
                 .pageContent(compact)
             }
@@ -50,8 +76,13 @@ struct VirtualCameraPage: View {
         .background(DashSkin.paper(dark))
         .navigationRoute("inspector", selection: $model.tab)
         .navigationRoute("scene", selection: sceneBinding, isValid: sceneIsValid)
-        .onAppear { model.appear() }
-        .onDisappear { model.disappear() }
+        .onAppear { attachment.begin() }
+        .task {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            attachment.acquire(model)
+        }
+        .onDisappear { attachment.release(model) }
         .alert(
             "Virtual Camera",
             isPresented: Binding(
@@ -121,7 +152,8 @@ struct VirtualCameraStatusPill: View {
         .padding(.vertical, UIScale.pt(5))
         .background(Capsule().fill(DashSkin.paper2(dark)))
         .overlay(Capsule().stroke(DashSkin.line(dark)))
-        .fixedSize()
+        .frame(maxWidth: UIScale.pt(220))
+        .help(model.statusHeadline)
         .accessibilityElement(children: .combine)
     }
 }
@@ -134,6 +166,18 @@ struct VirtualCameraStage: View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous)
                 .fill(Color.black)
+            if model.state.privacy != .stopped,
+                model.cameraAccess == .authorized || model.hasPreviewFrame
+            {
+                VirtualCameraPreview(
+                    display: model.display, mirrored: model.state.mirrorPreview,
+                    covered: PresenterState.shared.hides(.camera),
+                    onPan: { model.pan(by: $0, in: $1) },
+                    onZoom: { model.zoom(by: $0, anchor: $1) },
+                    onReset: { model.resetFraming() }
+                )
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous))
+            }
             if model.state.privacy == .stopped {
                 VStack(spacing: UIScale.pt(12)) {
                     Image(systemName: "video.slash")
@@ -144,6 +188,8 @@ struct VirtualCameraStage: View {
                         .font(.system(size: UIScale.pt(12)))
                 }
                 .foregroundStyle(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, UIScale.pt(16))
             } else if model.hasNoCameraSource {
                 VStack(spacing: UIScale.pt(12)) {
                     Image(systemName: "video.slash")
@@ -153,26 +199,34 @@ struct VirtualCameraStage: View {
                     Text("Connect a camera, then refresh the camera list.")
                         .font(.system(size: UIScale.pt(12)))
                     Button("Refresh cameras") { model.refreshSources() }
+                        .buttonStyle(.edith(.secondary))
                 }
                 .foregroundStyle(.white.opacity(0.7))
-            } else if model.cameraAccess == .authorized || model.display.current != nil {
-                VirtualCameraPreview(
-                    display: model.display, mirrored: model.state.mirrorPreview,
-                    covered: PresenterState.shared.hides(.camera),
-                    onPan: { model.pan(by: $0, in: $1) },
-                    onZoom: { model.zoom(by: $0, anchor: $1) },
-                    onReset: { model.resetFraming() }
-                )
-                .presenterCover(.camera)
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous))
-            } else {
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, UIScale.pt(16))
+            } else if let title = model.previewLoadingTitle {
+                LoadingContainer(state: .loading) {
+                    EmptyView()
+                } placeholder: {
+                    ProgressView(title).tint(.white).foregroundStyle(.white.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.cameraAccess != .authorized && !model.hasPreviewFrame {
                 VirtualCameraAccessPrompt(model: model)
+            }
+            if PresenterState.shared.hides(.camera), model.state.privacy != .stopped {
+                Color.black
+                    .overlay {
+                        Label("Hidden in Presenter Mode", systemImage: "lock.fill")
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .allowsHitTesting(false)
             }
             if model.showsGrid, model.state.privacy != .stopped {
                 VirtualCameraThirdsGrid()
                     .allowsHitTesting(false)
             }
-            if model.state.privacy != .stopped {
+            if model.state.privacy != .stopped && model.hasPreviewFrame {
                 VStack {
                     HStack(spacing: UIScale.pt(6)) {
                         VirtualCameraBadge(
@@ -204,7 +258,8 @@ struct VirtualCameraStage: View {
         }
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
         .frame(maxWidth: .infinity)
-        .help("Drag to move the picture. Scroll or pinch to zoom. Double-click to reset.")
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous))
+        .help("Drag to move the picture. Command-scroll or pinch to zoom. Double-click to reset.")
     }
 }
 
@@ -261,6 +316,7 @@ struct VirtualCameraAccessPrompt: View {
             }
             .buttonStyle(.edith(.primary))
         }
+        .multilineTextAlignment(.center)
         .padding()
     }
 }
@@ -270,53 +326,61 @@ struct VirtualCameraToolbar: View {
     let dark: Bool
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Menu {
-                ForEach(model.sources) { source in
-                    Button {
-                        model.selectSource(source)
-                    } label: {
-                        Label(source.name, systemImage: source.symbolName)
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(10)) {
+                Menu {
+                    ForEach(model.sources) { source in
+                        Button {
+                            model.selectSource(source)
+                        } label: {
+                            Label(source.name, systemImage: source.symbolName)
+                        }
                     }
+                    Divider()
+                    Button("Refresh cameras") { model.refreshSources() }
+                } label: {
+                    Label(
+                        model.selectedSource?.name
+                            ?? (model.sourcesLoaded ? "No camera" : "Finding cameras"),
+                        systemImage: model.selectedSource?.symbolName ?? "video.slash")
                 }
-                Divider()
-                Button("Refresh cameras") { model.refreshSources() }
-            } label: {
-                Label(
-                    model.selectedSource?.name ?? "No camera",
-                    systemImage: model.selectedSource?.symbolName ?? "video.slash")
+                .menuStyle(.borderlessButton)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: UIScale.pt(180), alignment: .leading)
+                .help("Choose the camera Edith frames")
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .help("Choose the camera Edith frames")
-            Divider().frame(height: UIScale.pt(18))
-            Image(systemName: "minus.magnifyingglass")
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Slider(
-                value: Binding(
-                    get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
-                in: VirtualCameraFraming.zoomRange
-            )
-            .frame(minWidth: UIScale.pt(120))
-            .accessibilityLabel("Zoom")
-            Image(systemName: "plus.magnifyingglass")
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(String(format: "%.1fx", model.composition.framing.zoom))
-                .font(DashSkin.mono(12))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(width: UIScale.pt(40), alignment: .trailing)
-            Divider().frame(height: UIScale.pt(18))
-            toolButton("rotate.left", "Rotate left") { model.rotate(clockwise: false) }
-            toolButton("rotate.right", "Rotate right") { model.rotate(clockwise: true) }
-            toolButton(
-                "arrow.left.and.right.righttriangle.left.righttriangle.right", "Flip horizontally"
-            ) {
-                model.updateComposition { $0.framing.flipHorizontal.toggle() }
+            HStack(spacing: UIScale.pt(10)) {
+                Image(systemName: "minus.magnifyingglass")
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Slider(
+                    value: Binding(
+                        get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
+                    in: VirtualCameraFraming.zoomRange
+                )
+                .frame(minWidth: UIScale.pt(60))
+                .accessibilityLabel("Zoom")
+                Image(systemName: "plus.magnifyingglass")
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(String(format: "%.1fx", model.composition.framing.zoom))
+                    .font(DashSkin.mono(12))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .frame(width: UIScale.pt(40), alignment: .trailing)
             }
-            toolButton(model.showsGrid ? "grid.circle.fill" : "grid", "Show the thirds grid") {
-                model.showsGrid.toggle()
+            HStack(spacing: UIScale.pt(10)) {
+                toolButton("rotate.left", "Rotate left") { model.rotate(clockwise: false) }
+                toolButton("rotate.right", "Rotate right") { model.rotate(clockwise: true) }
+                toolButton(
+                    "arrow.left.and.right.righttriangle.left.righttriangle.right",
+                    "Flip horizontally"
+                ) {
+                    model.updateComposition { $0.framing.flipHorizontal.toggle() }
+                }
+                toolButton(model.showsGrid ? "grid.circle.fill" : "grid", "Show the thirds grid") {
+                    model.showsGrid.toggle()
+                }
+                toolButton("arrow.counterclockwise", "Reset the framing") { model.resetFraming() }
             }
-            toolButton("arrow.counterclockwise", "Reset the framing") { model.resetFraming() }
         }
         .padding(.horizontal, UIScale.pt(12))
         .padding(.vertical, UIScale.pt(8))
@@ -352,6 +416,7 @@ struct VirtualCameraSceneStrip: View {
                 Text("Switch with ⌘1 to ⌘9 or ed camera scene apply")
                     .font(.system(size: UIScale.pt(11)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
+                    .lineLimit(1)
                 Spacer()
                 if let active = model.state.activeScene, model.state.activeSceneIsModified {
                     Button(

@@ -158,8 +158,8 @@ import Testing
         #expect(!router.canGoBack)
     }
 
-    @Test func anUnmountedChildFinishesTheRestore() {
-        let router = WindowRouter()
+    @Test func anUnmountedChildSettlesAfterTheRestoreDeadline() async throws {
+        let router = WindowRouter(restoreTimeout: 0.02)
         router.register(depth: 0, name: "section", value: "companion", accept: { _ in true }) {
             _ in
         }
@@ -168,22 +168,20 @@ import Testing
         #expect(router.restoring)
         #expect(router.location == "companion/chat/detail")
         router.unregister(depth: 1, name: "tab")
+        #expect(router.restoring)
+        try await Task.sleep(for: .milliseconds(50))
         #expect(!router.restoring)
         #expect(router.location == "companion")
         #expect(router.history.entries == ["companion"])
     }
 
-    @Test func aRestoreWithoutItsChildSettlesOnTheMountedRoute() async {
-        let router = WindowRouter()
+    @Test func aRestoreWithoutItsChildSettlesOnTheMountedRoute() async throws {
+        let router = WindowRouter(restoreTimeout: 0.02)
         router.register(depth: 0, name: "section", value: "home", accept: { _ in true }) { _ in }
         router.navigate(to: "companion/chat")
         #expect(router.restoring)
         #expect(router.location == "companion/chat")
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                DispatchQueue.main.async { continuation.resume() }
-            }
-        }
+        try await Task.sleep(for: .milliseconds(50))
         #expect(!router.restoring)
         #expect(router.location == "companion")
         #expect(router.history.entries == ["home", "companion"])
@@ -193,7 +191,7 @@ import Testing
         #expect(router.location == "companion")
     }
 
-    @Test func modifierRegistersWhileTheViewIsMounted() {
+    @Test func evaluatingAnAnchorDoesNotMutateHistory() {
         let router = WindowRouter()
         let section = RouteSlotAnchor(
             depth: 0, name: "section", value: "companion", accept: { _ in true }, apply: { _ in },
@@ -203,11 +201,309 @@ import Testing
             installedRouter: router)
         _ = section.body
         _ = tab.body
-        #expect(router.location == "companion/chat")
+        #expect(router.history.entries.isEmpty)
+        NavigationRouteMount.sync(
+            router: router, depth: 0, name: "section", value: "companion", accept: { _ in true },
+            apply: { _ in })
+        NavigationRouteMount.sync(
+            router: router, depth: 1, name: "tab", value: "chat", accept: { _ in true },
+            apply: { _ in })
         tab.unmount()
         section.unmount()
         #expect(router.location.isEmpty)
         #expect(router.history.current == "")
+    }
+
+    @Test func backAndForwardAcrossPagesIgnoresOutgoingChildSlots() {
+        let router = WindowRouter()
+        var outgoingWrites: [String] = []
+        let companionOwner = UUID()
+        let attentionOwner = UUID()
+        router.register(depth: 0, name: "section", value: "companion", accept: { _ in true }) { _ in
+        }
+        router.register(
+            depth: 1, name: "tab", value: "chat", owner: companionOwner, accept: { $0 == "chat" }
+        ) { _ in }
+        router.userChanged(depth: 0, name: "section", value: "attention", accept: { _ in true }) {
+            _ in
+        }
+        router.unregister(depth: 1, name: "tab", owner: companionOwner)
+        router.register(
+            depth: 1, name: "tab", value: "overview", owner: attentionOwner,
+            accept: { $0 == "overview" }
+        ) { outgoingWrites.append($0) }
+        let entries = router.history.entries
+        router.goBack()
+        #expect(router.location == "companion/chat")
+        #expect(router.restoring)
+        #expect(outgoingWrites.isEmpty)
+        router.sync(
+            depth: 1, name: "tab", value: "overview", owner: attentionOwner,
+            accept: { $0 == "overview" }
+        ) { outgoingWrites.append($0) }
+        router.register(
+            depth: 1, name: "tab", value: "chat", owner: companionOwner, accept: { $0 == "chat" }
+        ) { _ in }
+        router.unregister(depth: 1, name: "tab", owner: attentionOwner)
+        #expect(!router.restoring)
+        #expect(router.history.entries == entries)
+        router.goForward()
+        router.register(
+            depth: 1, name: "tab", value: "overview", owner: attentionOwner,
+            accept: { $0 == "overview" }
+        ) { _ in }
+        router.unregister(depth: 1, name: "tab", owner: companionOwner)
+        #expect(router.location == "attention/overview")
+        #expect(router.history.entries == entries)
+        #expect(!router.lastRestoreRejected)
+    }
+
+    @Test func leavingAChildRouteDoesNotClearOrApplyForeignValues() {
+        let router = WindowRouter()
+        var writes: [String] = []
+        router.register(depth: 0, name: "section", value: "dashboard", accept: { _ in true }) { _ in
+        }
+        router.userChanged(depth: 0, name: "section", value: "music", accept: { _ in true }) { _ in
+        }
+        router.register(depth: 1, name: "place", value: "library", accept: { _ in true }) {
+            writes.append($0)
+        }
+        router.goBack()
+        #expect(router.location == "dashboard")
+        #expect(writes.isEmpty)
+        #expect(router.history.entries == ["dashboard", "music/library"])
+    }
+
+    @Test func aPersistentChildRejoinsWhenItsParentScopeChanges() {
+        let router = WindowRouter()
+        let owner = UUID()
+        router.register(depth: 0, name: "editor", value: "image", accept: { _ in true }) { _ in }
+        router.register(
+            depth: 1, name: "tab", value: "adjust", owner: owner, scope: ["image"],
+            accept: { _ in true }
+        ) { _ in }
+        router.navigate(to: "video/timeline")
+        #expect(router.restoring)
+        router.sync(
+            depth: 1, name: "tab", value: "default", owner: owner, scope: ["video"],
+            accept: { _ in true }
+        ) { _ in }
+        #expect(!router.restoring)
+        #expect(router.location == "video/timeline")
+    }
+
+    @Test(arguments: ["look", "background"])
+    func aPersistentInspectorRejoinsUserSelectedSceneWithoutAddingHistory(inspectorValue: String) {
+        let router = WindowRouter()
+        let owner = UUID()
+        let firstScene = UUID().uuidString
+        let secondScene = UUID().uuidString
+        var scene = firstScene
+        var inspector = "look"
+        let acceptsInspector: (String) -> Bool = {
+            VirtualCameraInspectorTab(rawValue: $0) != nil
+        }
+        router.register(depth: 0, name: "section", value: "camera", accept: { $0 == "camera" }) {
+            _ in
+        }
+        router.register(
+            depth: 1, name: "scene", value: scene, scope: ["camera"],
+            accept: { $0 == firstScene || $0 == secondScene }
+        ) { scene = $0 }
+        router.register(
+            depth: 2, name: "inspector", value: inspector, owner: owner,
+            scope: ["camera", firstScene], accept: acceptsInspector
+        ) { inspector = $0 }
+        scene = secondScene
+        router.sync(
+            depth: 1, name: "scene", value: scene, scope: ["camera"],
+            accept: { $0 == firstScene || $0 == secondScene }
+        ) { scene = $0 }
+        #expect(!router.restoring)
+        #expect(router.history.current == "camera/\(secondScene)")
+        inspector = inspectorValue
+        router.sync(
+            depth: 2, name: "inspector", value: inspector, owner: owner,
+            scope: ["camera", secondScene], accept: acceptsInspector
+        ) { inspector = $0 }
+        let sceneEntries = ["camera/\(firstScene)/look", "camera/\(secondScene)/\(inspectorValue)"]
+        #expect(router.history.entries == sceneEntries)
+        #expect(router.history.current == router.location)
+        inspector = "output"
+        router.sync(
+            depth: 2, name: "inspector", value: inspector, owner: owner,
+            scope: ["camera", secondScene], accept: acceptsInspector
+        ) { inspector = $0 }
+        let entries = sceneEntries + ["camera/\(secondScene)/output"]
+        router.goBack()
+        #expect(!router.restoring)
+        #expect(scene == secondScene)
+        #expect(inspector == inspectorValue)
+        #expect(router.location == sceneEntries.last)
+        #expect(router.history.entries == entries)
+        #expect(router.canGoForward)
+        router.goForward()
+        #expect(!router.restoring)
+        #expect(inspector == "output")
+        #expect(router.history.current == router.location)
+        #expect(router.history.entries == entries)
+    }
+
+    @Test func anAlreadyUpdatedChildIsNotInvalidatedByItsParentSync() {
+        let router = WindowRouter()
+        router.register(depth: 0, name: "section", value: "companion", accept: { _ in true }) { _ in
+        }
+        router.register(
+            depth: 1, name: "tab", value: "overview", scope: ["attention"], accept: { _ in true }
+        ) { _ in }
+        router.sync(depth: 0, name: "section", value: "attention", accept: { _ in true }) { _ in }
+        #expect(router.location == "attention/overview")
+    }
+
+    @Test func aDelayedChildCanCompleteRestoreAfterSeveralRunLoopTurns() async throws {
+        let router = WindowRouter()
+        router.register(depth: 0, name: "section", value: "home", accept: { _ in true }) { _ in }
+        router.navigate(to: "companion/chat")
+        try await Task.sleep(for: .milliseconds(30))
+        router.register(depth: 1, name: "tab", value: "chat", accept: { _ in true }) { _ in }
+        #expect(!router.restoring)
+        #expect(router.history.current == "companion/chat")
+    }
+
+    @Test func anUnreadySlotWaitsWithoutRejectingOrWriting() {
+        let router = WindowRouter()
+        var tab = ""
+        router.register(depth: 0, name: "section", value: "database", accept: { _ in true }) { _ in
+        }
+        router.register(
+            depth: 1, name: "connection", value: tab, ready: false, accept: { _ in false }
+        ) { tab = $0 }
+        router.navigate(to: "database/loaded")
+        #expect(router.restoring)
+        #expect(!router.lastRestoreRejected)
+        #expect(tab.isEmpty)
+        router.sync(
+            depth: 1, name: "connection", value: tab, ready: true, accept: { $0 == "loaded" }
+        ) { tab = $0 }
+        #expect(tab == "loaded")
+        #expect(!router.restoring)
+        #expect(router.history.current == "database/loaded")
+    }
+
+    @Test func explicitReadinessOutlastsTheMissingChildDeadline() async throws {
+        let router = WindowRouter(restoreTimeout: 0.02)
+        router.register(depth: 0, name: "section", value: "database", accept: { _ in true }) { _ in
+        }
+        router.register(
+            depth: 1, name: "connection", value: "", ready: false, accept: { _ in true }
+        ) { _ in }
+        router.navigate(to: "database/loaded/query")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(router.restoring)
+        #expect(router.history.current == "database/loaded/query")
+        router.sync(depth: 1, name: "connection", value: "", ready: true, accept: { _ in true }) {
+            _ in
+        }
+        #expect(router.restoring)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(!router.restoring)
+        #expect(router.history.current == "database/loaded")
+    }
+
+    @Test func returningToHerdrBoardWaitsForTheSelectedTabToBecomeReady() async throws {
+        let router = WindowRouter(restoreTimeout: 0.02)
+        let owner = UUID()
+        var tab = "fixture-tab"
+        var writes: [String] = []
+        router.register(depth: 0, name: "section", value: "herdr", accept: { $0 == "herdr" }) {
+            _ in
+        }
+        router.register(
+            depth: 1, name: "tab", value: tab, owner: owner, ready: false, scope: ["herdr"],
+            accept: { $0.isEmpty || $0 == "fixture-tab" }
+        ) {
+            tab = $0
+            writes.append($0)
+        }
+        router.navigate(to: "herdr")
+        #expect(router.restoring)
+        #expect(tab == "fixture-tab")
+        #expect(writes.isEmpty)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(router.restoring)
+        #expect(router.history.current == "herdr")
+        #expect(tab == "fixture-tab")
+        #expect(writes.isEmpty)
+        router.sync(
+            depth: 1, name: "tab", value: tab, owner: owner, ready: true, scope: ["herdr"],
+            accept: { $0.isEmpty || $0 == "fixture-tab" }
+        ) {
+            tab = $0
+            writes.append($0)
+        }
+        #expect(!router.restoring)
+        #expect(!router.lastRestoreRejected)
+        #expect(tab.isEmpty)
+        #expect(writes == [""])
+        #expect(router.location == "herdr")
+        #expect(router.history.entries == ["herdr/fixture-tab", "herdr"])
+        router.goBack()
+        #expect(tab == "fixture-tab")
+        #expect(router.location == "herdr/fixture-tab")
+        router.goForward()
+        #expect(tab.isEmpty)
+        #expect(router.location == "herdr")
+        #expect(router.history.entries == ["herdr/fixture-tab", "herdr"])
+    }
+
+    @Test func aParentOnlyRestoreSkipsAnEmptyUnreadyDescendantBeforeClearingASelection() {
+        let router = WindowRouter()
+        var inspector = "look"
+        var emptyWrites: [String] = []
+        router.register(depth: 0, name: "section", value: "camera", accept: { $0 == "camera" }) {
+            _ in
+        }
+        router.register(
+            depth: 1, name: "scene", value: "", ready: false, scope: ["camera"],
+            accept: { _ in false }
+        ) { emptyWrites.append($0) }
+        router.register(
+            depth: 2, name: "inspector", value: inspector, scope: ["camera", ""],
+            accept: { $0.isEmpty || VirtualCameraInspectorTab(rawValue: $0) != nil }
+        ) { inspector = $0 }
+        router.navigate(to: "camera")
+        #expect(!router.restoring)
+        #expect(inspector.isEmpty)
+        #expect(emptyWrites.isEmpty)
+        #expect(router.location == "camera")
+        #expect(router.history.current == "camera")
+    }
+
+    @Test func aRejectedHistoryEntryDoesNotDestroyTheStack() {
+        let router = WindowRouter()
+        router.register(depth: 0, name: "section", value: "docs", accept: { _ in true }) { _ in }
+        router.userChanged(depth: 0, name: "section", value: "home", accept: { $0 == "home" }) {
+            _ in
+        }
+        router.goBack()
+        #expect(router.lastRestoreRejected)
+        #expect(router.location == "home")
+        #expect(router.history.entries == ["docs", "home"])
+        #expect(router.history.index == 1)
+    }
+
+    @Test func routersStayScopedToTheirOwnWindows() {
+        let first = TestWindowHost.window(contentRect: .zero)
+        let second = TestWindowHost.window(contentRect: .zero)
+        let unrouted = TestWindowHost.window(contentRect: .zero)
+        let main = WindowRouter()
+        let auxiliary = WindowRouter()
+        defer { main.detach(); auxiliary.detach() }
+        main.attach(first, role: .main)
+        auxiliary.attach(second, role: .auxiliary)
+        #expect(WindowRouter.router(for: first) === main)
+        #expect(WindowRouter.router(for: second) === auxiliary)
+        #expect(WindowRouter.router(for: unrouted) == nil)
     }
 
     @Test func commandsMoveHistoryWithoutAKeyWindow() {
@@ -307,7 +603,8 @@ private struct HiddenRouteProbe: View {
             VStack {
                 Text(section)
                 if section == "companion" {
-                    Text(tab).navigationRoute("tab", selection: $tab)
+                    Text(tab).navigationRoute(
+                        "tab", selection: $tab, isReady: { await Task.yield() })
                 }
             }
             .navigationRoute(
@@ -350,19 +647,17 @@ private struct RouteProbe: View {
         #expect(NavigationShortcutGate.direction(buttonNumber: 2) == nil)
     }
 
-    @Test func terminalsEditorsAndWebViewsKeepTheirOwnShortcuts() {
+    @Test func terminalsAndWebViewsAllowHistoryWhileEditorsKeepTheirShortcuts() {
         #expect(
-            !NavigationShortcutGate.allowsHistory(
-                classNames: ["GhosttyTerminalView"], textRole: .none))
+            NavigationShortcutGate.allowsHistory(
+                responder: NavigationGhosttyTerminalView(frame: .zero)))
         #expect(
-            !NavigationShortcutGate.allowsHistory(
-                classNames: ["EdithTerminalView"], textRole: .none))
-        #expect(
-            !NavigationShortcutGate.allowsHistory(classNames: ["WKWebView"], textRole: .none))
-        #expect(!NavigationShortcutGate.allowsHistory(classNames: ["NSView"], textRole: .editor))
-        #expect(
-            NavigationShortcutGate.allowsHistory(classNames: ["NSView"], textRole: .fieldEditor))
-        #expect(NavigationShortcutGate.allowsHistory(classNames: ["NSView"], textRole: .none))
+            NavigationShortcutGate.allowsHistory(
+                responder: NavigationWKWebView(frame: .zero)))
+        let field = NSTextView(frame: .zero)
+        field.isEditable = true
+        field.isFieldEditor = true
+        #expect(NavigationShortcutGate.allowsHistory(responder: field))
     }
 
     @Test func anEditableTextViewBlocksHistoryAndAPlainViewDoesNot() {
@@ -373,3 +668,6 @@ private struct RouteProbe: View {
         #expect(NavigationShortcutGate.allowsHistory(responder: label))
     }
 }
+
+private final class NavigationGhosttyTerminalView: NSView {}
+private final class NavigationWKWebView: NSView {}

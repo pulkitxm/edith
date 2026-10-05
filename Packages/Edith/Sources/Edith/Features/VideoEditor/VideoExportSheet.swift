@@ -67,12 +67,15 @@ struct VideoExportSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             Label("Export", systemImage: "square.and.arrow.up")
                 .font(.title2.weight(.semibold))
-            Picker("Format", selection: $format) {
-                Text("Video / master").tag("mp4")
-                Text("Audio mix").tag("audio")
-                Text("Animated GIF").tag("gif")
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "Format", selection: $format, options: ["mp4", "audio", "gif"],
+                label: {
+                    switch $0 {
+                    case "mp4": "Video / master"
+                    case "audio": "Audio mix"
+                    default: "Animated GIF"
+                    }
+                })
             if format == "mp4" {
                 Picker("Resolution", selection: $quality) {
                     ForEach(VideoExportQuality.available(for: model.pipeline?.canvas ?? .zero)) {

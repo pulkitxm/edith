@@ -7,10 +7,12 @@ struct StudioImageEditorView: View {
     let model: StudioModel
     @State private var editor: StudioImageEditorModel
     @State private var confirmingLeave = false
+    @State private var showsInspector = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     @MainActor init(model: StudioModel, url: URL) {
-        self.init(model: model, editor: StudioImageEditorModel(url: url))
+        self.init(model: model, editor: model.imageEditor(for: url))
     }
 
     init(model: StudioModel, editor: StudioImageEditorModel) {
@@ -25,6 +27,17 @@ struct StudioImageEditorView: View {
                 back: leave
             ) {
                 HStack(spacing: UIScale.pt(6)) {
+                    if compact {
+                        Button("Inspector", systemImage: "sidebar.right") {
+                            showsInspector.toggle()
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.edith(.iconOnly))
+                        .popover(isPresented: $showsInspector) {
+                            StudioImageInspector(editor: editor)
+                                .frame(width: UIScale.pt(280), height: UIScale.pt(320))
+                        }
+                    }
                     Button {
                         editor.undo()
                     } label: {
@@ -71,9 +84,11 @@ struct StudioImageEditorView: View {
                     StudioImageCanvas(editor: editor)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.black.opacity(scheme == .dark ? 0.35 : 0.06))
-                    Divider()
-                    StudioImageInspector(editor: editor)
-                        .frame(width: UIScale.pt(280))
+                    if !compact {
+                        Divider()
+                        StudioImageInspector(editor: editor)
+                            .frame(width: UIScale.pt(280))
+                    }
                 }
             }
             if let status = editor.status {
@@ -102,7 +117,7 @@ struct StudioImageEditorView: View {
                 ProgressView()
                     .controlSize(.small)
                     .padding(.top, UIScale.pt(66))
-                    .padding(.trailing, UIScale.pt(300))
+                    .padding(.trailing, UIScale.pt(compact ? 20 : 300))
             }
         }
         .overlay {
@@ -146,37 +161,39 @@ struct StudioImageToolRail: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: UIScale.pt(4)) {
-            ForEach(StudioImagePanel.allCases) { panel in
-                Button {
-                    editor.switchPanel(panel)
-                } label: {
-                    VStack(spacing: UIScale.pt(3)) {
-                        Image(systemName: panel.symbol)
-                            .font(.system(size: UIScale.pt(15)))
-                        Text(panel.title.components(separatedBy: " ").first ?? panel.title)
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                            .lineLimit(1)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: UIScale.pt(4)) {
+                ForEach(StudioImagePanel.allCases) { panel in
+                    Button {
+                        editor.switchPanel(panel)
+                    } label: {
+                        VStack(spacing: UIScale.pt(3)) {
+                            Image(systemName: panel.symbol)
+                                .font(.system(size: UIScale.pt(15)))
+                            Text(panel.title.components(separatedBy: " ").first ?? panel.title)
+                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .frame(width: UIScale.pt(60), height: UIScale.pt(46))
+                        .foregroundStyle(
+                            editor.panel == panel ? DashSkin.accent(scheme == .dark) : Color.primary
+                        )
+                        .background(
+                            editor.panel == panel
+                                ? DashSkin.accent(scheme == .dark).opacity(0.14) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        )
+                        .edithButtonTarget(.borderless)
                     }
-                    .frame(width: UIScale.pt(60), height: UIScale.pt(46))
-                    .foregroundStyle(
-                        editor.panel == panel ? DashSkin.accent(scheme == .dark) : Color.primary
-                    )
-                    .background(
-                        editor.panel == panel
-                            ? DashSkin.accent(scheme == .dark).opacity(0.14) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    )
-                    .edithButtonTarget(.borderless)
+                    .buttonStyle(.edith(.borderless))
+                    .help(panel.title)
+                    .accessibilityLabel(panel.title)
+                    .accessibilityAddTraits(editor.panel == panel ? .isSelected : [])
                 }
-                .buttonStyle(.edith(.borderless))
-                .help(panel.title)
-                .accessibilityLabel(panel.title)
-                .accessibilityAddTraits(editor.panel == panel ? .isSelected : [])
             }
-            Spacer()
+            .padding(UIScale.pt(6))
         }
-        .padding(UIScale.pt(6))
+        .frame(width: UIScale.pt(72))
     }
 }
 

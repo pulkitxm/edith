@@ -155,10 +155,9 @@ struct StudioSignaturePad: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             Text("New signature").font(.system(size: UIScale.pt(16), weight: .semibold))
-            Picker("", selection: $mode) {
-                ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "", selection: $mode, options: Mode.allCases, label: { $0.rawValue }
+            )
             .labelsHidden()
             ZStack {
                 RoundedRectangle(cornerRadius: 10).fill(Color.white)

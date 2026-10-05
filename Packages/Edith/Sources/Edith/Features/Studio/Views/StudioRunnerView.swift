@@ -7,6 +7,7 @@ struct StudioRunnerView: View {
     let model: StudioModel
     let job: StudioJob
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +21,10 @@ struct StudioRunnerView: View {
                 }
             }
             Divider()
-            HStack(spacing: 0) {
+            let layout =
+                compact
+                ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+            layout {
                 Group {
                     if job.phase == .finished, let result = job.result {
                         StudioResultView(model: model, job: job, result: result)
@@ -31,7 +35,7 @@ struct StudioRunnerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 StudioOptionsPanel(model: model, job: job)
-                    .frame(width: UIScale.pt(330))
+                    .frame(width: compact ? nil : UIScale.pt(330))
             }
         }
         .background(DashSkin.paper(scheme == .dark))

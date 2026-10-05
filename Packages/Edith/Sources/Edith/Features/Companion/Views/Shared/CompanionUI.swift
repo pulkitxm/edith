@@ -397,7 +397,7 @@ struct CompanionConfirmSheet: View {
             }
         }
         .padding(UIScale.pt(20))
-        .frame(width: UIScale.pt(400))
+        .frame(width: PresentationMetrics.width(400))
         .background(DashSkin.paper(dark))
     }
 }

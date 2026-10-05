@@ -45,7 +45,7 @@ struct CompanionBackendScreen: View {
             contentType: .json,
             defaultFilename: "companion-configuration"
         ) { _ in }
-        .sheet(isPresented: $confirmingDestroy) {
+        .edithSheet(isPresented: $confirmingDestroy) {
             CompanionConfirmSheet(
                 title: "Destroy the companion stack?",
                 message:

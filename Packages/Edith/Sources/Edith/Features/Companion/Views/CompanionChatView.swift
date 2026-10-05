@@ -1028,6 +1028,9 @@ private struct CitationChip: View {
                 )
                 .font(.system(size: UIScale.pt(10.5)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: UIScale.pt(220))
             }
             .padding(.horizontal, UIScale.pt(9))
             .padding(.vertical, UIScale.pt(3))

@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import Foundation
 
@@ -5,7 +6,19 @@ import Foundation
 final class QuinjetSessionBridge {
     static let shared = QuinjetSessionBridge()
 
-    private weak var model: QuinjetPageModel?
+    private final class Attachment {
+        let token: UUID
+        weak var model: QuinjetPageModel?
+        weak var router: WindowRouter?
+
+        init(token: UUID, model: QuinjetPageModel, router: WindowRouter?) {
+            self.token = token
+            self.model = model
+            self.router = router
+        }
+    }
+
+    private var attachments: [Attachment] = []
     private var observer: NSObjectProtocol?
 
     func install() {
@@ -17,12 +30,25 @@ final class QuinjetSessionBridge {
             })
     }
 
-    func attach(_ model: QuinjetPageModel) {
-        self.model = model
+    func attach(_ model: QuinjetPageModel, token: UUID, router: WindowRouter? = nil) {
+        detach(token: token)
+        attachments.append(Attachment(token: token, model: model, router: router))
     }
 
-    func detach(_ model: QuinjetPageModel) {
-        if self.model === model { self.model = nil }
+    func detach(token: UUID) {
+        attachments.removeAll { $0.token == token || $0.model == nil }
+    }
+
+    func model(for router: WindowRouter?) -> QuinjetPageModel? {
+        attachment(for: router)?.model
+    }
+
+    private func attachment(for router: WindowRouter?) -> Attachment? {
+        attachments.removeAll { $0.model == nil }
+        if let router, let attachment = attachments.last(where: { $0.router === router }) {
+            return attachment
+        }
+        return attachments.last
     }
 
     private func receive(_ info: [AnyHashable: Any]) {
@@ -33,7 +59,9 @@ final class QuinjetSessionBridge {
             fail(.operationFailed("The Quinjet session operation is invalid."), requestID)
             return
         }
-        guard let model else {
+        guard let attachment = attachment(for: WindowRouter.forKeyWindow()),
+            let model = attachment.model
+        else {
             fail(.pageUnavailable, requestID)
             return
         }
@@ -41,7 +69,16 @@ final class QuinjetSessionBridge {
             operation: operation,
             session: info[QuinjetSessionIPC.sessionKey] as? String,
             worktreePath: info[QuinjetSessionIPC.worktreePathKey] as? String)
-        if operation == .focus || operation == .create { MainWindow.open() }
+        if operation == .focus || operation == .create {
+            if let router = attachment.router,
+                let window = NSApp.windows.first(where: { WindowRouter.router(for: $0) === router })
+            {
+                window.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+            } else {
+                MainWindow.open()
+            }
+        }
         Task {
             do {
                 let result = try await model.performSessionOperation(request)

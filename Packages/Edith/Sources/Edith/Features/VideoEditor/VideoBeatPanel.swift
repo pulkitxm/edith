@@ -147,27 +147,38 @@ struct VideoBeatPanel: View {
                 Spacer()
                 Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
             }
-            analysisControls
-            if let result = analysis.result {
-                waveform(result)
-                mappingControls(result)
-            } else {
-                ContentUnavailableView(
-                    analysis.isAnalyzing ? "Reading audio samples" : "Analyze an audio source",
-                    systemImage: "waveform",
-                    description: Text("Measured peaks and detected transients appear here.")
-                )
-                .frame(height: UIScale.pt(130))
+            ScrollView([.horizontal, .vertical]) {
+                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    analysisControls
+                    if let result = analysis.result {
+                        waveform(result)
+                        mappingControls(result)
+                    } else {
+                        ContentUnavailableView(
+                            analysis.isAnalyzing
+                                ? "Reading audio samples" : "Analyze an audio source",
+                            systemImage: "waveform",
+                            description: Text("Measured peaks and detected transients appear here.")
+                        )
+                        .frame(height: UIScale.pt(130))
+                    }
+                    if let error = analysis.error {
+                        Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
+                    }
+                    Divider()
+                    markerControls
+                    markerList
+                        .frame(minHeight: UIScale.pt(180))
+                }
+                .frame(minWidth: UIScale.pt(640), alignment: .leading)
+                .padding(UIScale.pt(4))
             }
-            if let error = analysis.error {
-                Text(error).font(.callout).foregroundStyle(.red).textSelection(.enabled)
-            }
-            Divider()
-            markerControls
-            markerList
         }
-        .padding(24)
-        .frame(width: UIScale.pt(820), height: UIScale.pt(720))
+        .padding(UIScale.pt(24))
+        .frame(
+            minWidth: UIScale.pt(320), idealWidth: UIScale.pt(820),
+            minHeight: UIScale.pt(240), idealHeight: UIScale.pt(720)
+        )
         .onAppear {
             selectedAssetID = assets.first?.id ?? ""
             mapping.outputStart = model.playhead

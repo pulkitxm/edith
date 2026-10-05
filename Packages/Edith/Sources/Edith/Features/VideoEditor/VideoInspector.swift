@@ -43,11 +43,12 @@ struct VideoInspector: View {
                     case .captions: VideoCaptionEditor(model: model)
                     }
                 }
-                .padding(.trailing, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, UIScale.pt(4))
             }
         }
         .font(.callout)
-        .padding(14)
+        .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(250))
         .onChange(of: model.selection) { _, selection in
             switch selection {
@@ -73,7 +74,7 @@ struct VideoInspector: View {
                 Button("Split", action: model.splitAtPlayhead)
                 Button("Duplicate", action: model.duplicateSelected)
             }
-            HStack {
+            VStack(alignment: .leading) {
                 Button("Move earlier") { model.moveSelected(by: -1) }
                 Button("Move later") { model.moveSelected(by: 1) }
             }
@@ -134,6 +135,7 @@ struct VideoInspector: View {
             Divider()
             Text("Incoming transition").font(.headline)
             let transition = model.project?.transitions.first { $0.clipID == clip.id }
+            Text("Transition").font(.caption).foregroundStyle(.secondary)
             Picker(
                 "Transition",
                 selection: Binding(
@@ -149,6 +151,8 @@ struct VideoInspector: View {
                 Text("Blur fade").tag("blur")
                 Text("Zoom fade").tag("zoom")
             }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
             if let transition {
                 number("Transition length", value: transition.duration, range: 0.2...2) {
                     model.setTransition(before: clip.id, kind: transition.kind, duration: $0)
@@ -179,7 +183,7 @@ struct VideoInspector: View {
                         set: { model.setPresentation(\.gradientEnd, hex($0)) }),
                     supportsOpacity: false)
             }
-            HStack {
+            VStack(alignment: .leading) {
                 Button("Ocean") { preset("#123B6D", "#27C5B8") }
                 Button("Sunset") { preset("#C44569", "#F8B65A") }
                 Button("Dusk") { preset("#23234D", "#9C76DB") }

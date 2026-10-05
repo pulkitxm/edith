@@ -2,7 +2,11 @@ import EdithKit
 import SwiftUI
 
 struct QuinjetPage: View {
-    @State private var model = QuinjetPageModel()
+    @StateObject private var fallbackOwner = WindowSessionOwner()
+    @Environment(\.windowSessionOwner) private var sessionOwner
+    @Environment(\.windowRouter) private var router
+    @State private var bridgeToken = UUID()
+    private var model: QuinjetPageModel { sessionOwner?.quinjet ?? fallbackOwner.quinjet }
     @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
     private var terminalName = QuinjetTerminal.embedded.rawValue
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
@@ -31,11 +35,12 @@ struct QuinjetPage: View {
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
             model.setSessionLaunchEnabled(launchEnabled)
-            QuinjetSessionBridge.shared.attach(model)
+            QuinjetSessionBridge.shared.attach(model, token: bridgeToken, router: router)
         }
         .task {
             guard automaticActionsEnabled else { return }
             await model.refreshThemes()
+            guard !Task.isCancelled else { return }
             await model.refreshProjects()
         }
         .onChange(of: configuration) { _, configuration in
@@ -45,8 +50,8 @@ struct QuinjetPage: View {
             model.setSessionLaunchEnabled(enabled)
         }
         .onDisappear {
-            QuinjetSessionBridge.shared.detach(model)
-            model.stopAll()
+            QuinjetSessionBridge.shared.detach(token: bridgeToken)
+            model.cancelDiscovery()
         }
     }
 

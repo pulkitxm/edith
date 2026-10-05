@@ -4,6 +4,24 @@ import Combine
 import EdithKit
 import SwiftUI
 
+@MainActor
+private final class VideoEditorPageStorage: ObservableObject {
+    let model: VideoEditorModel
+    private let closesModel: Bool
+
+    init(model: VideoEditorModel? = nil, retained: Bool = false) {
+        self.model = model ?? VideoEditorModel()
+        closesModel = !retained
+    }
+
+    deinit {
+        if closesModel {
+            let model = model
+            Task { @MainActor in model.close() }
+        }
+    }
+}
+
 private struct EditorPlayerView: NSViewRepresentable {
     let player: AVPlayer
 
@@ -28,24 +46,34 @@ struct VideoEditorPage: View {
 
     var media: [URL] = []
     var project: URL?
-    @State private var model: VideoEditorModel
+    @StateObject private var storage: VideoEditorPageStorage
+    private var model: VideoEditorModel { storage.model }
+    @State private var opening = true
     private var commandMounted: (() -> Void)?
     @State private var editorTool: EditorTool = .zoom
     @State private var showingExport = false
     @State private var showingInspector = true
+    @State private var showingInspectorPopover = false
     @State private var showingMedia = false
     @State private var showingRecorder = false
     @State private var showingBeats = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     init(media: [URL] = [], project: URL? = nil) {
         self.media = media
         self.project = project
-        _model = State(initialValue: VideoEditorModel())
+        _storage = StateObject(wrappedValue: VideoEditorPageStorage())
     }
 
-    init(model: VideoEditorModel, mounted: @escaping () -> Void) {
-        _model = State(initialValue: model)
+    init(
+        model: VideoEditorModel, media: [URL] = [], project: URL? = nil,
+        retained: Bool = false, mounted: (() -> Void)? = nil
+    ) {
+        self.media = media
+        self.project = project
+        _storage = StateObject(
+            wrappedValue: VideoEditorPageStorage(model: model, retained: retained))
         commandMounted = mounted
     }
 
@@ -66,12 +94,20 @@ struct VideoEditorPage: View {
                 .background(DashSkin.paper2(scheme == .dark))
                 Divider()
             }
-            if model.project == nil {
+            if model.project == nil
+                && (model.isPreparingPreview || opening && (project != nil || !media.isEmpty))
+            {
+                LoadingContainer(state: .loading) {
+                    EmptyView()
+                } placeholder: {
+                    ProgressView("Opening video project")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if model.project == nil {
                 emptyState
             } else {
                 VSplitView {
                     HStack(spacing: 0) {
-                        if showingMedia { mediaRail; Divider() }
                         VStack(spacing: 0) {
                             preview
                             transport
@@ -79,12 +115,12 @@ struct VideoEditorPage: View {
                             toolStrip
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        if showingInspector {
+                        if showingInspector && !compact {
                             Divider()
                             VideoInspector(model: model)
                         }
                     }
-                    .frame(minHeight: UIScale.pt(400))
+                    .frame(minHeight: UIScale.pt(180))
                     .layoutPriority(1)
                     VideoTimeline(model: model)
                 }
@@ -93,10 +129,10 @@ struct VideoEditorPage: View {
         }
         .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("Video editor")
-        .sheet(isPresented: $showingExport) {
+        .edithSheet(isPresented: $showingExport) {
             VideoExportSheet(model: model)
         }
-        .sheet(isPresented: $showingBeats) {
+        .edithSheet(isPresented: $showingBeats) {
             VideoBeatPanel(model: model)
         }
         .sheet(isPresented: $showingRecorder) {
@@ -105,11 +141,15 @@ struct VideoEditorPage: View {
             }
         }
         .task {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            defer { opening = false }
             VideoEditorOpenBridge.shared.activeEditor = model
             if let commandMounted {
                 commandMounted()
                 return
             }
+            guard model.project == nil, !model.isPreparingPreview else { return }
             if let project {
                 model.openProject(at: project)
             } else if !media.isEmpty {
@@ -170,7 +210,8 @@ struct VideoEditorPage: View {
             )
             .font(.system(size: UIScale.pt(15), weight: .semibold))
             .lineLimit(1)
-            .frame(maxWidth: UIScale.pt(260))
+            .frame(minWidth: UIScale.pt(100), maxWidth: UIScale.pt(260))
+            .layoutPriority(1)
             .disabled(model.project == nil)
             .onSubmit {
                 model.renameProject(model.titleDraft ?? model.project?.title ?? "")
@@ -179,19 +220,38 @@ struct VideoEditorPage: View {
             .help("Rename project")
             Spacer()
             Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
-            Button("Markers", systemImage: "waveform") { showingBeats = true }
-                .disabled(model.project == nil)
-            Toggle("Canvas", isOn: $model.canvasEditing).toggleStyle(.button)
-            Toggle("Guides", isOn: $model.safeAreas).toggleStyle(.button)
-            if #available(macOS 15.0, *) {
-                Button("Record", systemImage: "record.circle") { showingRecorder = true }
+                .labelStyle(.iconOnly)
+                .help("Media")
+                .popover(isPresented: $showingMedia) {
+                    mediaRail.frame(height: UIScale.pt(320))
+                }
+            Menu {
+                Button("Markers", systemImage: "waveform") { showingBeats = true }
+                    .disabled(model.project == nil)
+                Toggle(
+                    "Canvas",
+                    isOn: Binding(get: { model.canvasEditing }, set: { model.canvasEditing = $0 }))
+                Toggle(
+                    "Guides", isOn: Binding(get: { model.safeAreas }, set: { model.safeAreas = $0 })
+                )
+                if #available(macOS 15.0, *) {
+                    Button("Record", systemImage: "record.circle") { showingRecorder = true }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
+            .help("Editor actions")
             Button {
-                showingInspector.toggle()
+                if compact { showingInspectorPopover.toggle() } else { showingInspector.toggle() }
             } label: {
                 Label("Inspector", systemImage: "sidebar.right")
             }
             .disabled(model.project == nil)
+            .labelStyle(.iconOnly)
+            .help("Inspector")
+            .popover(isPresented: $showingInspectorPopover) {
+                VideoInspector(model: model).frame(height: UIScale.pt(360))
+            }
             Menu {
                 Button("New project", action: model.newProject)
                 Button("Open project…", action: model.openProject)
@@ -201,11 +261,14 @@ struct VideoEditorPage: View {
             } label: {
                 Label("Projects", systemImage: "folder")
             }
+            .labelStyle(.iconOnly)
+            .help("Projects")
             Button(
                 model.project?.clips.isEmpty == false ? "Add media" : "Import video",
                 systemImage: "square.and.arrow.down", action: model.importMedia
             )
             .buttonStyle(.borderedProminent)
+            .labelStyle(.iconOnly)
             .help("Add video, audio, or images")
             Button {
                 showingExport = true
@@ -213,6 +276,8 @@ struct VideoEditorPage: View {
                 exportLabel
             }
             .disabled(model.pipeline == nil && VideoExporter.shared.job == nil)
+            .labelStyle(.iconOnly)
+            .help("Export")
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, UIScale.pt(18))
@@ -299,8 +364,13 @@ struct VideoEditorPage: View {
                         editorTool == .zoom && model.editingZoomID != nil
                         && model.player.rate == 0
                     if placing && !model.focusPreviewReady {
-                        ProgressView("Preparing zoom frame")
-                            .foregroundStyle(.white)
+                        LoadingContainer(state: .loading) {
+                            EmptyView()
+                        } placeholder: {
+                            ProgressView("Preparing zoom frame")
+                                .tint(.white).foregroundStyle(.white.opacity(0.7))
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         EditorPlayerView(player: placing ? model.focusPlayer : model.player)
                         if placing {
@@ -316,6 +386,14 @@ struct VideoEditorPage: View {
                             VideoCanvas(model: model, display: display)
                         }
                     }
+                } else if model.isPreparingPreview {
+                    LoadingContainer(state: .loading) {
+                        EmptyView()
+                    } placeholder: {
+                        ProgressView("Preparing video preview")
+                            .tint(.white).foregroundStyle(.white.opacity(0.7))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     Text("Import a video to begin")
                         .foregroundStyle(.secondary)
@@ -418,35 +496,37 @@ struct VideoEditorPage: View {
     }
 
     private var toolStrip: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(spacing: UIScale.pt(8)) {
-                ForEach(EditorTool.allCases, id: \.self) { tool in
-                    Button {
-                        editorTool = tool
-                    } label: {
-                        Label(
-                            tool.rawValue,
-                            systemImage: tool == .zoom
-                                ? "plus.magnifyingglass" : "textformat")
+        ScrollView(.horizontal, showsIndicators: false) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                HStack(spacing: UIScale.pt(8)) {
+                    ForEach(EditorTool.allCases, id: \.self) { tool in
+                        Button {
+                            editorTool = tool
+                        } label: {
+                            Label(
+                                tool.rawValue,
+                                systemImage: tool == .zoom
+                                    ? "plus.magnifyingglass" : "textformat")
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(editorTool == tool ? .accentColor : .secondary)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(editorTool == tool ? .accentColor : .secondary)
+                    Spacer(minLength: 0)
+                    Button("Undo", systemImage: "arrow.uturn.backward", action: model.undo)
+                        .disabled(!model.canUndo)
+                        .keyboardShortcut("z", modifiers: .command)
+                    Button("Redo", systemImage: "arrow.uturn.forward", action: model.redo)
+                        .disabled(!model.canRedo)
+                        .keyboardShortcut("z", modifiers: [.command, .shift])
                 }
-                Spacer(minLength: 0)
-                Button("Undo", systemImage: "arrow.uturn.backward", action: model.undo)
-                    .disabled(!model.canUndo)
-                    .keyboardShortcut("z", modifiers: .command)
-                Button("Redo", systemImage: "arrow.uturn.forward", action: model.redo)
-                    .disabled(!model.canRedo)
-                    .keyboardShortcut("z", modifiers: [.command, .shift])
+                switch editorTool {
+                case .zoom: zoomControls
+                case .text: textControls
+                }
             }
-            switch editorTool {
-            case .zoom: zoomControls
-            case .text: textControls
-            }
+            .padding(.horizontal, UIScale.pt(18))
+            .padding(.vertical, UIScale.pt(12))
         }
-        .padding(.horizontal, UIScale.pt(18))
-        .padding(.vertical, UIScale.pt(12))
     }
 
     private var zoomControls: some View {
@@ -509,24 +589,26 @@ struct VideoEditorPage: View {
     }
 
     private var textControls: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            TextField("Type a title or callout", text: $model.captionText)
-                .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: UIScale.pt(320))
-                .onSubmit(model.addCaption)
-            HStack(spacing: UIScale.pt(5)) {
-                Text("Show for")
-                Slider(value: $model.captionDuration, in: 1...8, step: 0.5)
-                    .frame(width: UIScale.pt(95))
-                Text(String(format: "%.1fs", model.captionDuration))
-                    .monospacedDigit()
+        @Bindable var model = model
+        return
+            HStack(spacing: UIScale.pt(12)) {
+                TextField("Type a title or callout", text: $model.captionText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: UIScale.pt(320))
+                    .onSubmit(model.addCaption)
+                HStack(spacing: UIScale.pt(5)) {
+                    Text("Show for")
+                    Slider(value: $model.captionDuration, in: 1...8, step: 0.5)
+                        .frame(width: UIScale.pt(95))
+                    Text(String(format: "%.1fs", model.captionDuration))
+                        .monospacedDigit()
+                }
+                .font(.caption)
+                .fixedSize(horizontal: true, vertical: false)
+                Button("Add text", systemImage: "plus", action: model.addCaption)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.pipeline == nil || model.captionText.isEmpty)
             }
-            .font(.caption)
-            .fixedSize(horizontal: true, vertical: false)
-            Button("Add text", systemImage: "plus", action: model.addCaption)
-                .buttonStyle(.borderedProminent)
-                .disabled(model.pipeline == nil || model.captionText.isEmpty)
-        }
     }
 
     private func timestamp(_ seconds: Double) -> String {

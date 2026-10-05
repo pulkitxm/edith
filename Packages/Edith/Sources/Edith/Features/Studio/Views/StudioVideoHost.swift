@@ -32,11 +32,13 @@ struct StudioVideoHost: View {
             }
             Divider()
             if let command {
-                VideoEditorPage(model: command.model) {
+                VideoEditorPage(model: command.model, retained: true) {
                     VideoEditorOpenBridge.shared.mounted(command)
                 }
             } else {
-                VideoEditorPage(media: media, project: project)
+                VideoEditorPage(
+                    model: model.videoEditor(media: media, project: project),
+                    media: media, project: project, retained: true)
             }
         }
         .background(DashSkin.paper(scheme == .dark))

@@ -4,18 +4,46 @@ import EdithStudio
 import SwiftUI
 import UniformTypeIdentifiers
 
+@MainActor
+private final class StudioPageStorage: ObservableObject {
+    private let suppliedModel: StudioModel?
+    private var createdModel: StudioModel?
+
+    init(model: StudioModel? = nil) {
+        suppliedModel = model
+    }
+
+    var model: StudioModel {
+        if let suppliedModel { return suppliedModel }
+        if let createdModel { return createdModel }
+        let model = StudioModel()
+        createdModel = model
+        return model
+    }
+
+    deinit {
+        if let model = createdModel { Task { @MainActor in model.closeEditors() } }
+    }
+}
+
 struct StudioPage: View {
-    @State private var model: StudioModel
+    private let suppliedModel: StudioModel?
+    @StateObject private var storage: StudioPageStorage
+    @Environment(\.windowSessionOwner) private var sessionOwner
+    private var model: StudioModel { suppliedModel ?? sessionOwner?.studio ?? storage.model }
     @State private var dropTargeted = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     @MainActor init(model: StudioModel? = nil) {
-        _model = State(initialValue: model ?? StudioModel())
+        suppliedModel = model
+        _storage = StateObject(wrappedValue: StudioPageStorage(model: model))
     }
 
     var body: some View {
-        content
+        @Bindable var model = model
+        return
+            content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DashSkin.paper(scheme == .dark))
             .navigationRoute("editor", selection: editorBinding, isValid: editorIsValid)
@@ -56,10 +84,11 @@ struct StudioPage: View {
             } message: {
                 Text(model.message ?? "")
             }
-            .sheet(
+            .edithSheet(
                 isPresented: Binding(
                     get: { model.editingWorkflow != nil },
-                    set: { if !$0 { model.editingWorkflow = nil } })
+                    set: { if !$0 { model.editingWorkflow = nil } }),
+                dismissible: false
             ) {
                 if let draft = model.editingWorkflow {
                     StudioWorkflowEditor(model: model, draft: draft)
@@ -71,6 +100,7 @@ struct StudioPage: View {
             }
             .onChange(of: VideoEditorOpenBridge.shared.pending?.request.requestID, initial: true) {
                 _, _ in
+                guard sessionOwner?.acceptsCommandVideo != false else { return }
                 if let presentation = VideoEditorOpenBridge.shared.pending {
                     model.openCommandProject(presentation)
                 }
@@ -115,10 +145,13 @@ struct StudioPage: View {
             }
         case let .imageEditor(url):
             StudioImageEditorView(model: model, url: url).presenterCover(.studio)
+                .id(url)
         case let .pdfEditor(url, mode):
             StudioPDFEditorView(model: model, url: url, mode: mode).presenterCover(.studio)
+                .id(url)
         case let .videoEditor(media, project):
             StudioVideoHost(model: model, media: media, project: project).presenterCover(.studio)
+                .id(model.route.navigationToken)
         case let .commandVideoEditor(requestID):
             if let presentation = model.commandEditor, presentation.request.requestID == requestID {
                 StudioVideoHost(
@@ -185,8 +218,13 @@ struct StudioHome: View {
                 title: { Text("Studio") },
                 trailing: { StudioHeaderActions(model: model) },
                 accessory: {
-                    HStack(spacing: UIScale.pt(12)) {
+                    let layout =
+                        compact
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(8)))
+                        : AnyLayout(HStackLayout(spacing: UIScale.pt(12)))
+                    layout {
                         StudioTabBar(model: model)
+                            .frame(maxWidth: UIScale.pt(250))
                         Text(subtitle)
                             .font(.system(size: UIScale.pt(12)))
                             .foregroundStyle(.secondary)
@@ -213,41 +251,18 @@ struct StudioHome: View {
 
 struct StudioTabBar: View {
     let model: StudioModel
-    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        HStack(spacing: UIScale.pt(2)) {
-            ForEach(StudioTab.allCases) { tab in
-                Button {
-                    model.tab = tab
-                } label: {
-                    Text(tab.title)
-                        .font(
-                            .system(
-                                size: UIScale.pt(12.5),
-                                weight: model.tab == tab ? .semibold : .regular)
-                        )
-                        .padding(.horizontal, UIScale.pt(12))
-                        .padding(.vertical, UIScale.pt(5))
-                        .background(
-                            model.tab == tab ? DashSkin.paper2(scheme == .dark) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(7))
-                        )
-                        .shadow(color: .black.opacity(model.tab == tab ? 0.08 : 0), radius: 1, y: 1)
-                        .edithButtonTarget(.borderless)
-                }
-                .buttonStyle(.edith(.borderless))
-                .keyboardShortcut(
+        EdithSegmentedPicker(
+            "Studio tab",
+            selection: Binding(get: { model.tab }, set: { model.tab = $0 }),
+            options: StudioTab.allCases, label: { $0.title },
+            shortcut: { tab in
+                KeyboardShortcut(
                     KeyEquivalent(
                         Character(String((StudioTab.allCases.firstIndex(of: tab) ?? 0) + 1))),
-                    modifiers: .command
-                )
-                .accessibilityAddTraits(model.tab == tab ? .isSelected : [])
-            }
-        }
-        .padding(UIScale.pt(3))
-        .background(
-            DashSkin.grid(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
+                    modifiers: .command)
+            })
     }
 }
 

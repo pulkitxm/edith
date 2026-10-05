@@ -289,10 +289,18 @@ struct CompanionLibraryScreen: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             stats
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                listColumn
+            if compact {
                 if model.selectedId != nil {
                     detailColumn
+                } else {
+                    listColumn
+                }
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                    listColumn
+                    if model.selectedId != nil {
+                        detailColumn
+                    }
                 }
             }
             if let error = model.error {

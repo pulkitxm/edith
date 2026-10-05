@@ -259,6 +259,7 @@ struct VideoRecorderSheet: View {
                     Button("Refresh sources") { Task { await recorder.loadSources() } }
                     Spacer()
                     Button("Cancel") { dismiss() }
+                        .keyboardShortcut(.cancelAction)
                     Button("Start recording") {
                         Task {
                             await recorder.start { url in
@@ -275,7 +276,7 @@ struct VideoRecorderSheet: View {
             }
         }
         .padding(24).frame(width: UIScale.pt(480))
-        .interactiveDismissDisabled(recorder.recording || recorder.busy)
+        .transientPresentation(dismissible: !recorder.recording && !recorder.busy)
         .task { await recorder.loadSources() }
     }
 }

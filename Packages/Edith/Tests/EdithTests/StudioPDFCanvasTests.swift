@@ -14,7 +14,7 @@ final class StudioCanvasRig {
 
     init(url: URL) throws {
         editor = StudioPDFEditorModel(url: url, mode: .redact)
-        editor.load()
+        editor.session = try PDFEditSession(url: url)
         canvas = StudioPDFCanvasView(frame: NSRect(x: 0, y: 0, width: 760, height: 980))
         coordinator = StudioPDFCanvas.Coordinator(editor: editor)
         canvas.coordinator = coordinator

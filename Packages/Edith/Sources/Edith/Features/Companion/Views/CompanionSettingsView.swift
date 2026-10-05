@@ -329,7 +329,7 @@ struct CompanionSettingsScreen: View {
             endpointDraft = endpoint
             endpointLoaded = true
         }
-        .sheet(item: $destructiveOperation) { operation in
+        .edithSheet(item: $destructiveOperation) { operation in
             destructiveConfirmation(operation)
         }
     }
@@ -359,11 +359,10 @@ struct CompanionSettingsScreen: View {
             VStack(alignment: .leading, spacing: CompanionMetrics.rowSpacing) {
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     CompanionFieldLabel(text: "Provider")
-                    Picker("", selection: $model.provider) {
-                        Text("Anthropic").tag("anthropic")
-                        Text("Local (Ollama)").tag("openai")
-                    }
-                    .pickerStyle(.segmented)
+                    EdithSegmentedPicker(
+                        "", selection: $model.provider, options: ["anthropic", "openai"],
+                        label: { $0 == "anthropic" ? "Anthropic" : "Local (Ollama)" }
+                    )
                     .labelsHidden()
                     .frame(maxWidth: UIScale.pt(280))
                 }
@@ -739,7 +738,13 @@ struct CompanionSettingsScreen: View {
                 Task { await model.wipeEverything() }
             }
         default:
-            EmptyView()
+            VStack(spacing: UIScale.pt(16)) {
+                Text("Operation unavailable")
+                    .font(DashSkin.heading(17))
+                Button("Done") { destructiveOperation = nil }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(UIScale.pt(24))
         }
     }
 

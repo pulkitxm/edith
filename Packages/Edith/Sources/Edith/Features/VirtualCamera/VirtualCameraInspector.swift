@@ -200,13 +200,10 @@ struct VirtualCameraFramePanel: View {
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
                     Spacer()
-                    Picker("Rotate", selection: model.binding(\.framing.quarterTurns)) {
-                        Text("0°").tag(0)
-                        Text("90°").tag(1)
-                        Text("180°").tag(2)
-                        Text("270°").tag(3)
-                    }
-                    .pickerStyle(.segmented)
+                    EdithSegmentedPicker(
+                        "Rotate", selection: model.binding(\.framing.quarterTurns),
+                        options: [0, 1, 2, 3], label: { "\($0 * 90)°" }
+                    )
                     .labelsHidden()
                     .frame(width: UIScale.pt(180))
                 }
@@ -222,12 +219,10 @@ struct VirtualCameraFramePanel: View {
                 detail: "Follows faces and keeps everyone in the shot, like Center Stage.",
                 dark: dark
             ) {
-                Picker("Auto framing", selection: model.binding(\.framing.autoFrame)) {
-                    ForEach(VirtualCameraAutoFrame.allCases, id: \.self) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Auto framing", selection: model.binding(\.framing.autoFrame),
+                    options: VirtualCameraAutoFrame.allCases, label: { $0.title }
+                )
                 .labelsHidden()
                 .frame(maxWidth: .infinity)
             }
@@ -376,12 +371,10 @@ struct VirtualCameraBackgroundPanel: View {
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
-            Picker("Background", selection: model.binding(\.background.mode)) {
-                ForEach(VirtualCameraBackgroundMode.allCases, id: \.self) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "Background", selection: model.binding(\.background.mode),
+                options: VirtualCameraBackgroundMode.allCases, label: { $0.title }
+            )
             .labelsHidden()
             .disabled(model.systemBackgroundActive)
             switch model.systemBackgroundActive ? .none : model.composition.background.mode {
@@ -417,10 +410,8 @@ struct VirtualCameraImageRow: View {
     var body: some View {
         HStack(spacing: UIScale.pt(10)) {
             Group {
-                if let path, let image = NSImage(contentsOfFile: path) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+                if let path {
+                    StudioThumbnail(url: URL(fileURLWithPath: path), side: 56, corner: 6)
                 } else {
                     Image(systemName: "photo")
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -433,6 +424,8 @@ struct VirtualCameraImageRow: View {
             Text(path == nil ? "No image" : title)
                 .font(.system(size: UIScale.pt(12)))
                 .foregroundStyle(DashSkin.inkSoft(dark))
+                .lineLimit(1)
+                .truncationMode(.middle)
             Spacer()
             Button(path == nil ? "Choose…" : "Replace…", action: choose)
                 .buttonStyle(.edith(.secondary))
@@ -476,12 +469,9 @@ struct VirtualCameraOverlayPanel: View {
                         .textFieldStyle(.roundedBorder)
                     TextField("Title or pronouns", text: model.binding(\.overlays.nameTag.subtitle))
                         .textFieldStyle(.roundedBorder)
-                    Picker("Style", selection: model.binding(\.overlays.nameTag.style)) {
-                        ForEach(VirtualCameraNameTagStyle.allCases, id: \.self) { style in
-                            Text(style.title).tag(style)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    EdithSegmentedPicker(
+                        "Style", selection: model.binding(\.overlays.nameTag.style),
+                        options: VirtualCameraNameTagStyle.allCases, label: { $0.title })
                     VirtualCameraCornerPicker(
                         title: "Corner", selection: model.binding(\.overlays.nameTag.corner))
                     ColorPicker(
@@ -597,12 +587,10 @@ struct VirtualCameraOutputPanel: View {
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
             VirtualCameraPanelSection(title: routeTitle, detail: routeDetail, dark: dark) {
-                Picker("Output", selection: model.stateBinding(\.output)) {
-                    ForEach(VirtualCameraOutput.allCases, id: \.self) { output in
-                        Text(output.title).tag(output)
-                    }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Output", selection: model.stateBinding(\.output),
+                    options: VirtualCameraOutput.allCases, label: { $0.title }
+                )
                 .labelsHidden()
             }
             VirtualCameraPanelSection(
@@ -679,12 +667,9 @@ struct VirtualCameraOutputPanel: View {
                 }
             }
             VirtualCameraPanelSection(title: "Preferences", dark: dark) {
-                Picker("Scene changes", selection: model.stateBinding(\.transition)) {
-                    ForEach(VirtualCameraTransition.allCases, id: \.self) { transition in
-                        Text(transition.title).tag(transition)
-                    }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Scene changes", selection: model.stateBinding(\.transition),
+                    options: VirtualCameraTransition.allCases, label: { $0.title })
                 VirtualCameraToggleRow(
                     title: "Mirror the preview", isOn: model.stateBinding(\.mirrorPreview),
                     dark: dark)

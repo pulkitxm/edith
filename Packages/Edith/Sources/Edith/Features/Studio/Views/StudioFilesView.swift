@@ -139,23 +139,29 @@ struct StudioFileFilters: View {
     let model: StudioModel
 
     var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            StudioChip(title: "All", count: model.files.count, selected: model.kindFilter == nil) {
-                model.kindFilter = nil
-            }
-            ForEach(model.kindsPresent, id: \.self) { kind in
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: UIScale.pt(6)) {
                 StudioChip(
-                    title: kind.pluralTitle, count: StudioLibraryQuery.kindCount(model.files, kind),
-                    selected: model.kindFilter == kind
+                    title: "All", count: model.files.count, selected: model.kindFilter == nil
                 ) {
-                    model.kindFilter = model.kindFilter == kind ? nil : kind
+                    model.kindFilter = nil
                 }
+                ForEach(model.kindsPresent, id: \.self) { kind in
+                    StudioChip(
+                        title: kind.pluralTitle,
+                        count: StudioLibraryQuery.kindCount(model.files, kind),
+                        selected: model.kindFilter == kind
+                    ) {
+                        model.kindFilter = model.kindFilter == kind ? nil : kind
+                    }
+                }
+                Spacer(minLength: UIScale.pt(8))
+                Button("Select all") { model.selectAll() }
+                    .buttonStyle(.edith(.toolbar))
+                    .keyboardShortcut("a", modifiers: .command)
+                    .foregroundStyle(.secondary)
             }
-            Spacer(minLength: UIScale.pt(8))
-            Button("Select all") { model.selectAll() }
-                .buttonStyle(.edith(.toolbar))
-                .keyboardShortcut("a", modifiers: .command)
-                .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 }

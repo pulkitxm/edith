@@ -171,7 +171,7 @@ struct CompanionDeskScreen: View {
             await model.refresh()
             if !Task.isCancelled { refreshedGeneration = generation }
         }
-        .sheet(item: $overrideTarget) { discrepancy in
+        .edithSheet(item: $overrideTarget, dismissible: false) { discrepancy in
             overrideSheet(discrepancy)
         }
     }
@@ -189,7 +189,7 @@ struct CompanionDeskScreen: View {
                     AnswerField(placeholder: "your answer", text: $model.draft) {
                         Task { await model.answer() }
                     }
-                    HStack(spacing: UIScale.pt(8)) {
+                    WrapHStack(spacing: UIScale.pt(8)) {
                         CompanionButton(
                             title: "Answer", role: .primary, busy: model.busy
                         ) {
@@ -199,10 +199,11 @@ struct CompanionDeskScreen: View {
                             Task { await model.skip() }
                         }
                         CompanionButton(
-                            title: "Never ask about \(question.topic)", disabled: model.busy
+                            title: "Never ask about this", disabled: model.busy
                         ) {
                             Task { await model.mute() }
                         }
+                        .help("Never ask about \(question.topic)")
                     }
                 } else if let resolution = model.lastResolution {
                     Text(resolution)
@@ -334,17 +335,19 @@ struct CompanionDeskScreen: View {
                 }
             }
             HStack(spacing: UIScale.pt(8)) {
+                Spacer()
+                CompanionButton(title: "Cancel", disabled: model.busy) { overrideTarget = nil }
+                    .keyboardShortcut(.cancelAction)
                 CompanionButton(title: "Save", role: .primary, busy: model.busy) {
                     Task {
                         await model.markReal(discrepancy, note: overrideNote)
                         overrideTarget = nil
                     }
                 }
-                CompanionButton(title: "Cancel") { overrideTarget = nil }
             }
         }
         .padding(UIScale.pt(18))
-        .frame(width: UIScale.pt(420))
+        .frame(width: PresentationMetrics.width(420))
         .background(DashSkin.paper(dark))
     }
 

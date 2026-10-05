@@ -87,7 +87,16 @@ enum StudioRoute: Equatable {
 @Observable
 final class StudioModel {
     var tab: StudioTab = .files
-    var route: StudioRoute = .home
+    var route: StudioRoute = .home {
+        didSet {
+            guard route != oldValue else { return }
+            if case let .pdfEditor(url, mode) = route, let editor = pdfEditors[url],
+                editor.mode != mode
+            {
+                editor.switchMode(mode)
+            }
+        }
+    }
     var files: [StudioFileItem] = []
     var selection: Set<URL> = []
     var kindFilter: StudioKind?
@@ -106,6 +115,9 @@ final class StudioModel {
     var workflows: [StudioWorkflow] = []
     var editingWorkflow: StudioWorkflowDraft?
     private var workflowsTask: Task<Void, Never>?
+    @ObservationIgnored private var imageEditors: [URL: StudioImageEditorModel] = [:]
+    @ObservationIgnored private var pdfEditors: [URL: StudioPDFEditorModel] = [:]
+    @ObservationIgnored private var videoEditors: [String: VideoEditorModel] = [:]
 
     private let defaults: UserDefaults
     private var engineTask: Task<Void, Never>?
@@ -437,7 +449,49 @@ final class StudioModel {
     }
 
     func goHome() {
+        switch route {
+        case let .imageEditor(url): imageEditors.removeValue(forKey: url)?.close()
+        case let .pdfEditor(url, _): pdfEditors.removeValue(forKey: url)?.cancelLoading()
+        case .videoEditor: videoEditors.removeValue(forKey: route.navigationToken)?.close()
+        case .commandVideoEditor:
+            commandEditor?.close(for: self)
+            commandEditor = nil
+        default: break
+        }
         route = .home
+    }
+
+    func imageEditor(for url: URL) -> StudioImageEditorModel {
+        if let editor = imageEditors[url] { return editor }
+        let editor = StudioImageEditorModel(url: url)
+        imageEditors[url] = editor
+        return editor
+    }
+
+    func pdfEditor(for url: URL, mode: StudioPDFEditorMode) -> StudioPDFEditorModel {
+        if let editor = pdfEditors[url] { return editor }
+        let editor = StudioPDFEditorModel(url: url, mode: mode)
+        pdfEditors[url] = editor
+        return editor
+    }
+
+    func videoEditor(media: [URL], project: URL?) -> VideoEditorModel {
+        let key = StudioRoute.videoEditor(media, project: project).navigationToken
+        if let editor = videoEditors[key] { return editor }
+        let editor = VideoEditorModel()
+        videoEditors[key] = editor
+        return editor
+    }
+
+    func closeEditors() {
+        for editor in imageEditors.values { editor.close() }
+        for editor in pdfEditors.values { editor.cancelLoading() }
+        for editor in videoEditors.values { editor.close() }
+        commandEditor?.close(for: self)
+        imageEditors.removeAll()
+        pdfEditors.removeAll()
+        videoEditors.removeAll()
+        commandEditor = nil
     }
 
     func openVideoProject(_ url: URL) {
@@ -445,6 +499,8 @@ final class StudioModel {
     }
 
     func openCommandProject(_ presentation: VideoEditorOpenBridge.Presentation) {
+        guard presentation.claim(for: self) else { return }
+        if commandEditor !== presentation { commandEditor?.close(for: self) }
         commandEditor = presentation
         route = .commandVideoEditor(presentation.request.requestID)
     }

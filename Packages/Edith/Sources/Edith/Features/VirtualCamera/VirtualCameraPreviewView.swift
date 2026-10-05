@@ -8,7 +8,8 @@ final class VirtualCameraPreviewDisplay: @unchecked Sendable {
     private var pending: CVPixelBuffer?
     private var scheduled = false
     @MainActor private(set) var current: CVPixelBuffer?
-    @MainActor weak var view: VirtualCameraPreviewNSView?
+    @MainActor private let views = NSHashTable<VirtualCameraPreviewNSView>.weakObjects()
+    @MainActor var onAvailabilityChanged: ((Bool) -> Void)?
 
     func push(_ buffer: CVPixelBuffer) {
         let shouldSchedule = lock.withLock { () -> Bool in
@@ -31,18 +32,38 @@ final class VirtualCameraPreviewDisplay: @unchecked Sendable {
             return next
         }
         guard let next else { return }
+        let firstFrame = current == nil
         current = next
-        view?.show(next)
+        for view in views.allObjects { view.show(next) }
+        if firstFrame { onAvailabilityChanged?(true) }
     }
 
     @MainActor func clear() {
         lock.withLock { pending = nil }
+        let hadFrame = current != nil
         current = nil
-        view?.show(nil)
+        for view in views.allObjects { view.show(nil) }
+        if hadFrame { onAvailabilityChanged?(false) }
+    }
+
+    @MainActor func attach(_ view: VirtualCameraPreviewNSView) {
+        guard view.display !== self else { return }
+        view.display?.detach(view)
+        view.display = self
+        views.add(view)
+        view.show(current)
+    }
+
+    @MainActor func detach(_ view: VirtualCameraPreviewNSView) {
+        views.remove(view)
+        guard view.display === self else { return }
+        view.display = nil
+        view.show(nil)
     }
 }
 
 final class VirtualCameraPreviewNSView: NSView {
+    weak var display: VirtualCameraPreviewDisplay?
     var onPan: ((CGSize, CGSize) -> Void)?
     var onZoom: ((Double, CGPoint) -> Void)?
     var onReset: (() -> Void)?
@@ -96,6 +117,11 @@ final class VirtualCameraPreviewNSView: NSView {
         CATransaction.setDisableActions(true)
         content.frame = pictureRect
         CATransaction.commit()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        needsLayout = true
     }
 
     func show(_ buffer: CVPixelBuffer?) {
@@ -165,6 +191,11 @@ final class VirtualCameraPreviewNSView: NSView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        guard event.modifierFlags.contains(.command) || event.modifierFlags.contains(.option)
+        else {
+            super.scrollWheel(with: event)
+            return
+        }
         let delta = event.scrollingDeltaY
         guard delta != 0 else { return }
         onZoom?(
@@ -187,8 +218,7 @@ struct VirtualCameraPreview: NSViewRepresentable {
 
     func makeNSView(context: Context) -> VirtualCameraPreviewNSView {
         let view = VirtualCameraPreviewNSView(frame: .zero)
-        display.view = view
-        view.show(display.current)
+        display.attach(view)
         return view
     }
 
@@ -198,9 +228,13 @@ struct VirtualCameraPreview: NSViewRepresentable {
         view.onReset = onReset
         view.mirrored = mirrored
         view.covered = covered
-        if display.view !== view {
-            display.view = view
-            view.show(display.current)
-        }
+        display.attach(view)
+    }
+
+    static func dismantleNSView(_ view: VirtualCameraPreviewNSView, coordinator: ()) {
+        view.display?.detach(view)
+        view.onPan = nil
+        view.onZoom = nil
+        view.onReset = nil
     }
 }

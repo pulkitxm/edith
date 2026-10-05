@@ -15,10 +15,13 @@ struct VideoCaptionStyleEditor: View {
             number("Canvas height", key: "canvasHeight")
             number("Font size", key: "fontSize")
             number("Line advance", key: "lineAdvance")
+            Text("Font metrics").font(.caption).foregroundStyle(.secondary)
             Picker("Font metrics", selection: field("metrics")) {
                 Text("Typographic").tag("typographic")
                 Text("Integer font bounds").tag("fontBounds")
             }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
             Picker("Alignment", selection: field("alignment")) {
                 Text("Left").tag("left")
                 Text("Center").tag("center")

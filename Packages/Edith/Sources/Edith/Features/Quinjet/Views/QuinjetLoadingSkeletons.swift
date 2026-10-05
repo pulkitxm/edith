@@ -4,6 +4,7 @@ import SwiftUI
 struct QuinjetProjectGridSkeleton: View {
     let dark: Bool
     var rows = 6
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         SkeletonGroup {
@@ -19,10 +20,14 @@ struct QuinjetProjectGridSkeleton: View {
                             HStack(spacing: UIScale.pt(11)) {
                                 SkeletonBlock(width: 18, height: 18, corner: 4)
                                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                    SkeletonBlock(
-                                        width: index.isMultiple(of: 2) ? 112 : 148, height: 12)
-                                    SkeletonBlock(
-                                        width: index.isMultiple(of: 3) ? 178 : 224, height: 9)
+                                    SkeletonBlock(height: 12)
+                                        .frame(
+                                            maxWidth: UIScale.pt(
+                                                index.isMultiple(of: 2) ? 112 : 148))
+                                    SkeletonBlock(height: 9)
+                                        .frame(
+                                            maxWidth: UIScale.pt(
+                                                index.isMultiple(of: 3) ? 178 : 224))
                                 }
                                 Spacer(minLength: 0)
                             }
@@ -30,7 +35,7 @@ struct QuinjetProjectGridSkeleton: View {
                                 SkeletonBlock(width: 78, height: 10)
                                 SkeletonBlock(width: 72, height: 8)
                             }
-                            .frame(minWidth: UIScale.pt(118), alignment: .trailing)
+                            .frame(width: UIScale.pt(78), alignment: .trailing)
                             .padding(.horizontal, UIScale.pt(12))
                             .padding(.vertical, UIScale.pt(10))
                             .overlay {
@@ -50,6 +55,7 @@ struct QuinjetProjectGridSkeleton: View {
                     }
                 }
                 .padding(.top, UIScale.pt(2))
+                .pageContent(compact)
             }
         }
         .accessibilityElement(children: .ignore)
@@ -99,6 +105,7 @@ struct QuinjetWorktreePickerSkeleton: View {
 
 struct QuinjetFolderBrowserSkeleton: View {
     let dark: Bool
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         SkeletonGroup {
@@ -131,6 +138,7 @@ struct QuinjetFolderBrowserSkeleton: View {
                     }
                 }
                 .padding(.top, UIScale.pt(2))
+                .pageContent(compact)
             }
         }
         .accessibilityElement(children: .ignore)

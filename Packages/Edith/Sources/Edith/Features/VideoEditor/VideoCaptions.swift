@@ -264,7 +264,7 @@ private struct VideoCaptionRow: View {
                     };
                     model.rebuild()
                 }
-                Button("Merge next in same clock") {
+                Button("Merge next") {
                     model.mutate { $0.mergeCaption(caption.id) }; model.rebuild()
                 }
             }

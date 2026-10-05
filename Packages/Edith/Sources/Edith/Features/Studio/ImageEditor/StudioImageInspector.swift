@@ -278,12 +278,9 @@ struct StudioImageTextStyleEditor: View {
                 Toggle("Italic", isOn: bind(\.italic)).toggleStyle(.checkbox)
                 Toggle("Shadow", isOn: bind(\.shadow)).toggleStyle(.checkbox)
             }
-            Picker("Align", selection: bind(\.alignment)) {
-                ForEach(ImageTextAlignment.allCases, id: \.self) {
-                    Text($0.rawValue.capitalized).tag($0)
-                }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "Align", selection: bind(\.alignment), options: ImageTextAlignment.allCases,
+                label: { $0.rawValue.capitalized })
             Toggle(
                 "Outline",
                 isOn: Binding(
@@ -359,12 +356,9 @@ struct StudioImageShapePanel: View {
     let editor: StudioImageEditorModel
 
     var body: some View {
-        Picker(
-            "Shape", selection: Binding(get: { editor.shapeKind }, set: { editor.shapeKind = $0 })
-        ) {
-            ForEach(ImageShapeKind.allCases, id: \.self) { Text($0.rawValue.capitalized).tag($0) }
-        }
-        .pickerStyle(.segmented)
+        EdithSegmentedPicker(
+            "Shape", selection: Binding(get: { editor.shapeKind }, set: { editor.shapeKind = $0 }),
+            options: ImageShapeKind.allCases, label: { $0.rawValue.capitalized })
         Text("Drag on the picture to add the shape.")
             .font(.system(size: UIScale.pt(11)))
             .foregroundStyle(.secondary)
@@ -407,13 +401,10 @@ struct StudioImageBlurPanel: View {
     let editor: StudioImageEditorModel
 
     var body: some View {
-        Picker(
+        EdithSegmentedPicker(
             "Style",
-            selection: Binding(get: { editor.redactStyle }, set: { editor.redactStyle = $0 })
-        ) {
-            ForEach(ImageRedactionStyle.allCases, id: \.self) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.segmented)
+            selection: Binding(get: { editor.redactStyle }, set: { editor.redactStyle = $0 }),
+            options: ImageRedactionStyle.allCases, label: { $0.title })
         HStack {
             Text("Strength").font(.system(size: UIScale.pt(11)))
             StudioImageSlider(

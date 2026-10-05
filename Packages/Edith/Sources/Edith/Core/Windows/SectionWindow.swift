@@ -40,7 +40,7 @@ struct DetachedSectionView: View {
     }
 
     private var detail: some View {
-        PageContent(controller.destination, updater: UpdaterModel())
+        PageContent(controller.destination, updater: MainWindow.updater)
     }
 }
 

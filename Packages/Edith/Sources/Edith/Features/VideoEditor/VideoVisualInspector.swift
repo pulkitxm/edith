@@ -127,6 +127,7 @@ struct VideoVisualInspector: View {
             }
             value("Focal X", \.focalX)
             value("Focal Y", \.focalY)
+            Text("Grading mode").font(.caption).foregroundStyle(.secondary)
             Picker(
                 "Grading mode",
                 selection: Binding(
@@ -141,7 +142,10 @@ struct VideoVisualInspector: View {
                 Text("Native linear RGB").tag(VideoVisualEffects.GradingMode.native)
                 Text("FFmpeg EQ, sRGB / 709").tag(VideoVisualEffects.GradingMode.ffmpeg709)
             }
+            .labelsHidden()
+            .frame(maxWidth: .infinity)
             if effects.gradingMode == .ffmpeg709 {
+                Text("Grading domain").font(.caption).foregroundStyle(.secondary)
                 Picker(
                     "Grading domain",
                     selection: Binding(
@@ -152,6 +156,8 @@ struct VideoVisualInspector: View {
                     Text("BT.709 video").tag(VideoVisualEffects.GradingDomain.bt709)
                     Text("BT.709 codes to sRGB").tag(VideoVisualEffects.GradingDomain.bt709ToSRGB)
                 }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
                 Text(
                     "Grades the composed image before overlays in limited-range BT.709 YUV. The domain selects the encoded input and output interpretation. Saturation is 0 through 3."
                 )

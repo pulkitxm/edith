@@ -51,6 +51,8 @@ final class QuinjetPageModel {
     private var projectRefreshGeneration = 0
     private var remoteProjectRefreshGenerations: [UUID: Int] = [:]
     private var sessionLaunchEnabled = false
+    @ObservationIgnored private var discoveryTasks: [UUID: Task<[QuinjetProject], Error>] = [:]
+    @ObservationIgnored private var worktreeTasks: [UUID: Task<[QuinjetWorktree], Error>] = [:]
 
     init(
         client: QuinjetClient = .live,
@@ -139,7 +141,12 @@ final class QuinjetPageModel {
             if generation == projectRefreshGeneration { loadingProjects = false }
         }
         do {
-            let refreshed = try await QuinjetOperationExecution.projects(using: client)
+            let id = UUID()
+            let client = client
+            let task = Task { try await QuinjetOperationExecution.projects(using: client) }
+            discoveryTasks[id] = task
+            defer { discoveryTasks[id] = nil }
+            let refreshed = try await task.value
             try Task.checkCancellation()
             guard generation == projectRefreshGeneration else { return }
             projects = refreshed
@@ -152,7 +159,9 @@ final class QuinjetPageModel {
 
     func refreshThemes() async {
         do {
-            themes = try await client.themes()
+            let refreshed = try await client.themes()
+            try Task.checkCancellation()
+            themes = refreshed
         } catch is CancellationError {
         } catch {
             themes = QuinjetTheme.allCases
@@ -171,8 +180,14 @@ final class QuinjetPageModel {
             }
         }
         do {
-            let refreshed = try await QuinjetOperationExecution.projects(
-                remote: remote, using: client)
+            let id = UUID()
+            let client = client
+            let task = Task {
+                try await QuinjetOperationExecution.projects(remote: remote, using: client)
+            }
+            discoveryTasks[id] = task
+            defer { discoveryTasks[id] = nil }
+            let refreshed = try await task.value
             try Task.checkCancellation()
             guard generation == remoteProjectRefreshGenerations[machineID] else { return }
             remoteProjects[machineID] = refreshed
@@ -304,12 +319,27 @@ final class QuinjetPageModel {
         tab.showsWorktrees = true
         tab.loadingWorktrees = true
         tab.errorMessage = nil
-        defer { tab.loadingWorktrees = false }
+        worktreeTasks[tab.id]?.cancel()
+        let client = client
+        let remote = tab.remote
+        let task = Task {
+            try await QuinjetOperationExecution.worktrees(at: path, remote: remote, using: client)
+        }
+        worktreeTasks[tab.id] = task
+        defer {
+            if !task.isCancelled {
+                worktreeTasks[tab.id] = nil
+                tab.loadingWorktrees = false
+            }
+        }
         do {
-            tab.worktrees = try await QuinjetOperationExecution.worktrees(
-                at: path, remote: tab.remote, using: client
-            ).filter(\.canOpen)
+            let worktrees = try await task.value
+            try Task.checkCancellation()
+            guard !task.isCancelled else { return }
+            tab.worktrees = worktrees.filter(\.canOpen)
+        } catch is CancellationError {
         } catch {
+            guard !task.isCancelled else { return }
             tab.errorMessage = error.localizedDescription
         }
     }
@@ -394,6 +424,23 @@ final class QuinjetPageModel {
         for tab in tabs { tab.holder.stop() }
     }
 
+    func cancelDiscovery() {
+        projectRefreshGeneration += 1
+        for machineID in remoteProjectRefreshGenerations.keys {
+            remoteProjectRefreshGenerations[machineID, default: 0] += 1
+        }
+        for task in discoveryTasks.values { task.cancel() }
+        discoveryTasks.removeAll()
+        for task in worktreeTasks.values { task.cancel() }
+        worktreeTasks.removeAll()
+        for tab in tabs {
+            tab.loadingWorktrees = false
+            tab.showsWorktrees = false
+        }
+        loadingProjects = false
+        loadingRemoteProjects.removeAll()
+    }
+
     private func session(matching selector: String?) throws -> QuinjetTab {
         let query = selector?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if query.isEmpty {
@@ -429,6 +476,7 @@ final class QuinjetPageModel {
             }
         }
         tab.holder.stop()
+        worktreeTasks.removeValue(forKey: tab.id)?.cancel()
         tabs.remove(at: index)
         if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }
     }

@@ -506,7 +506,7 @@ struct MainWindowView: View {
     }
 
     private var windowContent: some View {
-        GeometryReader { geo in
+        Group {
             let bandHeight = UIScale.pt(Self.chromeHeight + 10)
             VStack(spacing: 0) {
                 mainArea(bandHeight)
@@ -727,7 +727,10 @@ struct MainWindowView: View {
                 band(detailBackground, height: bandHeight)
                 detail
                     .tint(theme)
-                    .onAppear { PageTrace.end(destination) }
+                    .task(id: destination) {
+                        await Task.yield()
+                        PageTrace.end(destination)
+                    }
             }
             .environment(\.compactLayout, geo.size.width < UIScale.pt(640))
         }

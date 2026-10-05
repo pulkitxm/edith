@@ -5,6 +5,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
     @Binding private var selection: Selection
     private let options: [Selection]
     private let label: (Selection) -> String
+    private let shortcut: (Selection) -> KeyboardShortcut?
 
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var themeName = "accent"
@@ -15,12 +16,14 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
         _ title: String,
         selection: Binding<Selection>,
         options: [Selection],
-        label: @escaping (Selection) -> String
+        label: @escaping (Selection) -> String,
+        shortcut: @escaping (Selection) -> KeyboardShortcut? = { _ in nil }
     ) {
         self.title = title
         self._selection = selection
         self.options = options
         self.label = label
+        self.shortcut = shortcut
     }
 
     public var body: some View {
@@ -46,6 +49,7 @@ public struct EdithSegmentedPicker<Selection: Hashable>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(shortcut(option))
                 .accessibilityLabel(label(option))
                 .accessibilityAddTraits(selection == option ? .isSelected : [])
                 .help(label(option))
