@@ -216,4 +216,149 @@ import Testing
             await UsageStatusLineRecordCommand.output(of: "printf previous", input: input)
                 == Data("previous".utf8))
     }
+
+    private func defaults() throws -> UserDefaults {
+        try #require(UserDefaults(suiteName: "test.statusline.\(UUID().uuidString)"))
+    }
+
+    @Test func theLauncherIsTheEdSiblingAndIsNotResolvedThroughItsSymlink() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let macOS = root.appendingPathComponent("MacOS", isDirectory: true)
+        let resources = root.appendingPathComponent("Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        let launcher = resources.appendingPathComponent("ed-launcher")
+        try Data("#!/bin/sh\n".utf8).write(to: launcher)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+        let link = macOS.appendingPathComponent("ed")
+        try FileManager.default.createSymbolicLink(
+            atPath: link.path, withDestinationPath: "../Resources/ed-launcher")
+
+        let found = ClaudeStatusLine.launcher(beside: macOS.appendingPathComponent("Edith"))
+        #expect(found == link.path)
+        #expect(found?.hasSuffix("/MacOS/ed") == true)
+    }
+
+    @Test func theLauncherPathHasNoDotDotComponents() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let macOS = root.appendingPathComponent("MacOS", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Resources"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+        let tool = macOS.appendingPathComponent("ed")
+        try Data("#!/bin/sh\n".utf8).write(to: tool)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+
+        let indirect = root.appendingPathComponent("Resources/../MacOS/Edith")
+        let found = try #require(ClaudeStatusLine.launcher(beside: indirect))
+        #expect(!found.contains(".."))
+        #expect(found == tool.standardizedFileURL.path)
+    }
+
+    @Test func noLauncherIsReportedWhenTheEdSiblingIsMissing() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(ClaudeStatusLine.launcher(beside: root.appendingPathComponent("Edith")) == nil)
+    }
+
+    @Test func ensureConnectedInstallsOnceWhenClaudeCodeIsPresent() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        let store = try defaults()
+
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: store) == .installed)
+        #expect(ClaudeStatusLine.isInstalled(settings: settings))
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: store) == .unchanged)
+    }
+
+    @Test func ensureConnectedLeavesUsersWithoutClaudeCodeAlone() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("missing/settings.json")
+
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: try defaults()) == nil)
+        #expect(!FileManager.default.fileExists(atPath: settings.deletingLastPathComponent().path))
+    }
+
+    @Test func ensureConnectedNeedsAnExecutable() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: nil, settings: settings, defaults: try defaults()) == nil)
+        #expect(!FileManager.default.fileExists(atPath: settings.path))
+    }
+
+    @Test func ensureConnectedRepairsARecorderThatPointsAtTheWrongExecutable() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        let wrong = "/Applications/Edith.app/Contents/MacOS/Edith"
+        try ClaudeStatusLine.install(executable: wrong, settings: settings)
+
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: try defaults()) == .installed)
+        let saved = try document(at: settings)
+        let command = try #require((saved["statusLine"] as? [String: Any])?["command"] as? String)
+        #expect(command == "'\(executable)' usage statusline record")
+    }
+
+    @Test func ensureConnectedWrapsAStatusLineTheUserAlreadyHas() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        try Data(#"{"statusLine":{"type":"command","command":"my-line"}}"#.utf8).write(to: settings)
+
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: try defaults()) == .wrapped)
+        #expect(try ClaudeStatusLine.remove(settings: settings) == .restored)
+    }
+
+    @Test func ensureConnectedNeverOverwritesUnreadableSettings() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        try Data("not json".utf8).write(to: settings)
+
+        #expect(throws: ClaudeStatusLine.Failure.self) {
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: try defaults())
+        }
+        #expect(try String(contentsOf: settings, encoding: .utf8) == "not json")
+    }
+
+    @Test func disconnectingStopsTheAutomaticReconnectUntilTheUserConnectsAgain() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let settings = root.appendingPathComponent("settings.json")
+        let store = try defaults()
+
+        try ClaudeStatusLine.connect(executable: executable, settings: settings, defaults: store)
+        #expect(!ClaudeStatusLine.isOptedOut(defaults: store))
+        #expect(try ClaudeStatusLine.disconnect(settings: settings, defaults: store) == .removed)
+        #expect(ClaudeStatusLine.isOptedOut(defaults: store))
+        #expect(!ClaudeStatusLine.isInstalled(settings: settings))
+
+        #expect(
+            try ClaudeStatusLine.ensureConnected(
+                executable: executable, settings: settings, defaults: store) == nil)
+        #expect(!ClaudeStatusLine.isInstalled(settings: settings))
+
+        try ClaudeStatusLine.connect(executable: executable, settings: settings, defaults: store)
+        #expect(!ClaudeStatusLine.isOptedOut(defaults: store))
+        #expect(ClaudeStatusLine.isInstalled(settings: settings))
+    }
 }

@@ -1576,6 +1576,10 @@ private extension UsageCollectionOperation {
         case .machineForget:
             userInterface(
                 "Dashboard machines menu", "drop what a machine already gave", ["box"])
+        case .statusLineConnect:
+            userInterface("Usage settings", "connect Claude Code's status line")
+        case .statusLineDisconnect:
+            userInterface("Usage settings", "disconnect Claude Code's status line")
         }
     }
 }

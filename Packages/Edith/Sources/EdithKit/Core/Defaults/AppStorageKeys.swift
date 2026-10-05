@@ -216,6 +216,7 @@ public enum AppStorageKeys {
 
     public enum Limits {
         public static let claudeEnabled = "claudeLimitsEnabled"
+        public static let claudeStatusLineOptOut = "claudeStatusLineOptOut"
         public static let codexEnabled = "codexLimitsEnabled"
         public static let cursorEnabled = "cursorLimitsEnabled"
         public static let grokEnabled = "grokLimitsEnabled"

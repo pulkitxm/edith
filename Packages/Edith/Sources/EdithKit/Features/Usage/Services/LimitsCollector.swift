@@ -1,4 +1,5 @@
 import Darwin
+import EdithCore
 import Foundation
 import os
 
@@ -73,6 +74,7 @@ public enum LimitsCollector {
     public static func refresh(
         force: Bool = false, defaults: UserDefaults = SharedDefaults.store,
         refreshSession: LimitsRefreshSession = .shared,
+        connectClaude: @Sendable () -> Void = { LimitsCollector.connectClaudeStatusLine() },
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
         await collect(
@@ -81,6 +83,7 @@ public enum LimitsCollector {
         ) { provider in
             switch provider {
             case .claude:
+                connectClaude()
                 return (ClaudeStatusLine.snapshot(), nil)
             case .codex:
                 return (await fetchCodex(), nil)
@@ -89,6 +92,16 @@ public enum LimitsCollector {
             case .grok:
                 return await fetchGrok()
             }
+        }
+    }
+
+    public static func connectClaudeStatusLine() {
+        guard !AppBuildIdentity.isDevelopment else { return }
+        do {
+            try ClaudeStatusLine.ensureConnected()
+        } catch {
+            logger.error(
+                "claude status line not connected: \(error.localizedDescription, privacy: .public)")
         }
     }
 

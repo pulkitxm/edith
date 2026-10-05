@@ -99,11 +99,10 @@ struct UsageStatusLineInstallCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let url = settings.map { URL(fileURLWithPath: $0) } ?? ClaudeStatusLine.settingsURL()
-            guard let executable = Bundle.main.executableURL?.resolvingSymlinksInPath().path
-            else {
+            guard let executable = ClaudeStatusLine.defaultExecutable() else {
                 throw CLIFailure.unavailable("could not locate the ed executable")
             }
-            let change = try ClaudeStatusLine.install(executable: executable, settings: url)
+            let change = try ClaudeStatusLine.connect(executable: executable, settings: url)
             guard !json else {
                 CLIOut.json(
                     .object(["settings": .string(url.path), "change": .string(change.rawValue)]))
@@ -147,7 +146,7 @@ struct UsageStatusLineRemoveCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let url = settings.map { URL(fileURLWithPath: $0) } ?? ClaudeStatusLine.settingsURL()
-            let change = try ClaudeStatusLine.remove(settings: url)
+            let change = try ClaudeStatusLine.disconnect(settings: url)
             guard !json else {
                 CLIOut.json(
                     .object(["settings": .string(url.path), "change": .string(change.rawValue)]))

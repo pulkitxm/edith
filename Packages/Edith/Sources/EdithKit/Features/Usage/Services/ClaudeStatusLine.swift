@@ -22,11 +22,14 @@ public enum ClaudeStatusLine {
 
     public enum Failure: LocalizedError, Equatable {
         case unreadable(String)
+        case missingExecutable
 
         public var errorDescription: String? {
             switch self {
             case .unreadable(let path):
                 "\(path) is not a JSON object, so Edith left it untouched"
+            case .missingExecutable:
+                "Edith could not find its ed command"
             }
         }
     }
@@ -131,6 +134,63 @@ public enum ClaudeStatusLine {
         document["statusLine"] = statusLine
         try writeSettings(document, to: url)
         return previous == nil ? .installed : .wrapped
+    }
+
+    public static func defaultExecutable(
+        bundle: Bundle = .main, fileManager: FileManager = .default
+    ) -> String? {
+        bundle.executableURL.flatMap { launcher(beside: $0, fileManager: fileManager) }
+    }
+
+    static func launcher(beside executable: URL, fileManager: FileManager = .default) -> String? {
+        let launcher = executable.deletingLastPathComponent().appendingPathComponent("ed")
+            .standardizedFileURL
+        return fileManager.isExecutableFile(atPath: launcher.path) ? launcher.path : nil
+    }
+
+    public static func isOptedOut(defaults: UserDefaults = SharedDefaults.store) -> Bool {
+        defaults.bool(forKey: AppStorageKeys.Limits.claudeStatusLineOptOut)
+    }
+
+    @discardableResult
+    public static func connect(
+        executable: String, settings url: URL = settingsURL(),
+        defaults: UserDefaults = SharedDefaults.store
+    ) throws -> Change {
+        defaults.removeObject(forKey: AppStorageKeys.Limits.claudeStatusLineOptOut)
+        return try install(executable: executable, settings: url)
+    }
+
+    @discardableResult
+    public static func disconnect(
+        settings url: URL = settingsURL(), defaults: UserDefaults = SharedDefaults.store
+    ) throws -> Change {
+        defaults.set(true, forKey: AppStorageKeys.Limits.claudeStatusLineOptOut)
+        return try remove(settings: url)
+    }
+
+    @discardableResult
+    public static func ensureConnected(
+        executable: String? = defaultExecutable(), settings url: URL = settingsURL(),
+        defaults: UserDefaults = SharedDefaults.store, fileManager: FileManager = .default
+    ) throws -> Change? {
+        guard !isOptedOut(defaults: defaults), let executable,
+            fileManager.fileExists(atPath: url.deletingLastPathComponent().path)
+        else { return nil }
+        return try install(executable: executable, settings: url)
+    }
+
+    @discardableResult
+    public static func setConnected(
+        _ connected: Bool, settings url: URL = settingsURL()
+    ) async throws -> Change {
+        guard connected else { return try disconnect(settings: url) }
+        guard let executable = defaultExecutable() else { throw Failure.missingExecutable }
+        return try connect(executable: executable, settings: url)
+    }
+
+    public static func isConnected(settings url: URL = settingsURL()) async -> Bool {
+        isInstalled(settings: url)
     }
 
     @discardableResult
