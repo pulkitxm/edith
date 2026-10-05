@@ -56,9 +56,10 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var previewStatistics = VirtualCameraPipeline.Statistics()
     @Published private(set) var cameraAccess: AVAuthorizationStatus
     @Published private(set) var previewRunning = false
+    @Published private(set) var previewFailure: String?
     @Published var tab: VirtualCameraInspectorTab = .frame {
         didSet {
-            guard tab == .look, let reference = pipeline?.reference, reference !== thumbnailSource
+            guard tab == .look, let reference = previewReference, reference !== thumbnailSource
             else { return }
             updateLookThumbnails(from: reference)
         }
@@ -75,6 +76,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private var pipelineGeneration = 0
     private var sourceTask: Task<Void, Never>?
     private let accessProvider: () -> AVAuthorizationStatus
+    private let clock: () -> TimeInterval
     private let sourceProvider: (() -> [VirtualCameraSource])?
     private let previewBus: VirtualCameraPreviewBus
     private let previewBusQueue = DispatchQueue(
@@ -90,6 +92,8 @@ final class VirtualCameraPageModel: ObservableObject {
     private var ticks = 0
     private var previewFeed: PreviewFeed = .idle
     private var thumbnailSource: CGImage?
+    private var helperReference: CGImage?
+    private var previewStartedAt: TimeInterval?
     private var thumbnailTask: Task<Void, Never>?
     nonisolated private static let thumbnailRenderer = VirtualCameraRenderer()
 
@@ -101,7 +105,8 @@ final class VirtualCameraPageModel: ObservableObject {
             VirtualCameraDevices.authorization
         },
         sourceProvider: (() -> [VirtualCameraSource])? = nil,
-        previewBus: VirtualCameraPreviewBus = VirtualCameraPreviewBus()
+        previewBus: VirtualCameraPreviewBus = VirtualCameraPreviewBus(),
+        clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
         self.defaults = defaults
@@ -109,11 +114,16 @@ final class VirtualCameraPageModel: ObservableObject {
         self.pipeline = pipeline
         self.extensionManager = extensionManager ?? VirtualCameraExtensionManager()
         self.accessProvider = accessProvider
+        self.clock = clock
         self.sourceProvider = sourceProvider
         self.previewBus = previewBus
         self.cameraAccess = accessProvider()
         display.onAvailabilityChanged = { [weak self] available in
             self?.hasPreviewFrame = available
+            if available {
+                self?.previewFailure = nil
+                self?.previewStartedAt = nil
+            }
         }
     }
 
@@ -132,7 +142,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     var previewLoadingTitle: String? {
-        guard state.privacy != .stopped, !hasNoCameraSource,
+        guard state.privacy != .stopped, !hasNoCameraSource, previewFailure == nil,
             cameraAccess == .authorized || snapshot?.live == true, !hasPreviewFrame
         else { return nil }
         if !sourcesLoaded { return "Finding cameras" }
@@ -246,10 +256,12 @@ final class VirtualCameraPageModel: ObservableObject {
             || statistics.sourceHeight != previewStatistics.sourceHeight
             || statistics.source != previewStatistics.source
             || statistics.systemBackgroundActive != previewStatistics.systemBackgroundActive
+            || statistics.failureMessage != previewStatistics.failureMessage
         {
             previewStatistics = statistics
         }
-        if tab == .look, let reference = pipeline?.reference, reference !== thumbnailSource {
+        refreshPreviewHealth()
+        if tab == .look, let reference = previewReference, reference !== thumbnailSource {
             updateLookThumbnails(from: reference)
         }
         let access = accessProvider()
@@ -276,10 +288,33 @@ final class VirtualCameraPageModel: ObservableObject {
         await thumbnailTask?.value
     }
 
-    var previewReference: CGImage? { pipeline?.reference }
+    var previewReference: CGImage? {
+        previewFeed == .helper ? helperReference : pipeline?.reference
+    }
+
+    func refreshPreviewHealth() {
+        if previewFeed == .local, let failure = pipeline?.statistics.failureMessage {
+            previewFailure = failure
+        } else if hasPreviewFrame {
+            previewFailure = nil
+        } else if !hasPreviewFrame, let started = previewStartedAt, clock() - started >= 8 {
+            previewFailure =
+                "No video arrived from the camera. Try reconnecting it or choosing another camera."
+        }
+    }
+
+    func retryPreview() {
+        stopPreview()
+        refreshSources()
+        requestStatus()
+        syncPreviewFeed()
+    }
 
     func receive(_ decoded: VirtualCameraSnapshot?) {
         guard let decoded else { return }
+        statusTask?.cancel()
+        statusTask = nil
+        statusPending = false
         if snapshot != decoded { snapshot = decoded }
         helperReachable = true
         if saveTimer == nil { reloadState() }
@@ -356,16 +391,26 @@ final class VirtualCameraPageModel: ObservableObject {
 
     private func showHelperPreview() {
         if previewFeed == .local { pipeline?.stop() }
+        if previewFeed != .helper { previewStartedAt = clock() }
         previewFeed = .helper
         previewRunning = true
         guard helperPreviewTimer == nil else { return }
         let bus = previewBus
         let display = display
+        let generation = pipelineGeneration
         let timer = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
         timer.schedule(deadline: .now(), repeating: .milliseconds(33), leeway: .milliseconds(4))
-        timer.setEventHandler {
-            guard let buffer = bus.latest() else { return }
-            display.push(buffer)
+        timer.setEventHandler { [weak self] in
+            if let buffer = bus.latest() { display.push(buffer) }
+            if let reference = bus.latestReference() {
+                Task { @MainActor [weak self] in
+                    guard let self, self.visible, self.previewFeed == .helper,
+                        self.pipelineGeneration == generation
+                    else { return }
+                    self.helperReference = reference
+                    if self.tab == .look { self.updateLookThumbnails(from: reference) }
+                }
+            }
         }
         timer.resume()
         helperPreviewTimer = timer
@@ -376,6 +421,7 @@ final class VirtualCameraPageModel: ObservableObject {
         helperPreviewTimer = nil
         guard previewFeed == .helper else { return }
         previewFeed = .idle
+        helperReference = nil
         previewRunning = false
     }
 
@@ -390,6 +436,7 @@ final class VirtualCameraPageModel: ObservableObject {
         let display = display
         pipeline.update(state: state)
         pipeline.start { buffer in display.push(buffer) }
+        previewStartedAt = clock()
         previewFeed = .local
         previewRunning = true
     }
@@ -421,6 +468,9 @@ final class VirtualCameraPageModel: ObservableObject {
         if previewFeed == .local { pipeline?.stop() }
         previewFeed = .idle
         previewRunning = false
+        previewStartedAt = nil
+        previewFailure = nil
+        helperReference = nil
         display.clear()
     }
 

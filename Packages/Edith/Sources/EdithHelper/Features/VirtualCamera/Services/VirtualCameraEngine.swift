@@ -323,9 +323,10 @@ final class VirtualCameraEngine {
             : VirtualCameraFormat.standard.frameRate
         pipeline.update(state: effectiveState())
         let previewBus = previewBus
-        pipeline.start { buffer in
+        let pipeline = pipeline
+        pipeline.start { [weak pipeline] buffer in
             sink.send(buffer, frameRate: frameRate)
-            previewBus.publish(buffer)
+            previewBus.publish(buffer, reference: pipeline?.reference)
         }
         streamingRoute = target
         triggerQuit = false

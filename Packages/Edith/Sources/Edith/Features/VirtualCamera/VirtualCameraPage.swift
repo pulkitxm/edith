@@ -204,6 +204,20 @@ struct VirtualCameraStage: View {
                 .foregroundStyle(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, UIScale.pt(16))
+            } else if let failure = model.previewFailure {
+                VStack(spacing: UIScale.pt(12)) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: UIScale.pt(28)))
+                    Text("Camera preview unavailable")
+                        .font(.system(size: UIScale.pt(16), weight: .semibold))
+                    Text(failure)
+                        .font(.system(size: UIScale.pt(12)))
+                    Button("Retry camera") { model.retryPreview() }
+                        .buttonStyle(.edith(.secondary))
+                }
+                .foregroundStyle(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(UIScale.pt(16))
             } else if let title = model.previewLoadingTitle {
                 LoadingContainer(state: .loading) {
                     EmptyView()

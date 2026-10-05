@@ -195,17 +195,16 @@ struct VirtualCameraFramePanel: View {
                     title: "Tilt", value: model.binding(\.framing.tilt),
                     range: VirtualCameraFraming.tiltRange, neutral: 0,
                     format: { String(format: "%.1f°", $0) }, dark: dark)
-                HStack {
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text("Rotate")
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkSoft(dark))
-                    Spacer()
                     EdithSegmentedPicker(
                         "Rotate", selection: model.binding(\.framing.quarterTurns),
                         options: [0, 1, 2, 3], label: { "\($0 * 90)°" }
                     )
                     .labelsHidden()
-                    .frame(width: UIScale.pt(180))
+                    .frame(maxWidth: .infinity)
                 }
                 VirtualCameraToggleRow(
                     title: "Flip horizontally", isOn: model.binding(\.framing.flipHorizontal),

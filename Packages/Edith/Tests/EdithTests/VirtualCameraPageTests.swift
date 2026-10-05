@@ -20,7 +20,8 @@ import Testing
 
     static func model(
         access: AVAuthorizationStatus = .denied,
-        sourceProvider: (() -> [VirtualCameraSource])? = nil
+        sourceProvider: (() -> [VirtualCameraSource])? = nil,
+        clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) -> (VirtualCameraPageModel, UserDefaults, String) {
         let name = "test.edith.virtual-camera-page.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -36,7 +37,7 @@ import Testing
             previewBus: VirtualCameraPreviewBus(
                 file: FileManager.default.temporaryDirectory.appendingPathComponent(
                     "camera-preview-\(UUID().uuidString).bin"),
-                unlinkOnClose: true))
+                unlinkOnClose: true), clock: clock)
         return (model, defaults, name)
     }
 
@@ -374,6 +375,78 @@ import Testing
         model.display.clear()
         #expect(model.display.current == nil)
         #expect(!model.hasPreviewFrame)
+    }
+
+    @Test func coldHelperPreviewProvidesLookThumbnailsWithoutLocalCapture() async throws {
+        let name = "test.edith.camera-helper-looks.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "camera-helper-looks-\(UUID().uuidString).bin")
+        let reader = VirtualCameraPreviewBus(file: file, unlinkOnClose: true)
+        let writer = VirtualCameraPreviewBus(file: file)
+        let model = VirtualCameraPageModel(
+            defaults: defaults, accessProvider: { .denied }, sourceProvider: { [] },
+            previewBus: reader)
+        defer {
+            model.disappear()
+            reader.close()
+            writer.close()
+            defaults.removePersistentDomain(forName: name)
+        }
+        model.tab = .look
+        model.appear()
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false,
+                obsAvailable: true, route: .obs, live: true, state: model.state))
+        let frame = try #require(VirtualCameraFixtures.quadrants())
+        let image = CIImage(cvPixelBuffer: frame)
+        let reference = try #require(CIContext().createCGImage(image, from: image.extent))
+        writer.setWanted(true)
+        writer.publish(frame, reference: reference)
+        for _ in 0..<50 {
+            if model.previewReference != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        await model.waitForLookThumbnails()
+        #expect(model.showsHelperPreview)
+        #expect(model.previewReference?.width == VirtualCameraPreviewBus.referenceWidth)
+        #expect(model.lookThumbnails.count == VirtualCameraLookPreset.allCases.count)
+        #expect(!model.previewStatistics.usingCamera)
+    }
+
+    @Test func stalledPreviewShowsActionableFailureAndRetryRestartsIt() throws {
+        var time = 0.0
+        let (model, defaults, name) = Self.model(clock: { time })
+        defer {
+            model.disappear()
+            defaults.removePersistentDomain(forName: name)
+        }
+        model.appear()
+        model.receive(
+            VirtualCameraSnapshot(
+                enabled: true, helperRunning: true, extensionInstalled: false,
+                obsAvailable: true, route: .obs, live: true, state: model.state))
+        time = 7
+        model.refreshPreviewHealth()
+        #expect(model.previewFailure == nil)
+        time = 9
+        model.refreshPreviewHealth()
+        #expect(model.previewFailure != nil)
+        #expect(model.previewLoadingTitle == nil)
+        let host = try auditHost(
+            VirtualCameraStage(model: model, dark: true), size: CGSize(width: 800, height: 450))
+        #expect(try auditText(host).contains("Camera preview unavailable"))
+        #expect(try auditText(host).contains("Retry camera"))
+        model.retryPreview()
+        #expect(model.previewFailure == nil)
+        #expect(model.showsHelperPreview)
+        #expect(model.previewLoadingTitle != nil)
+        model.showPreviewFrame(try #require(VirtualCameraFixtures.quadrants()))
+        time = 30
+        model.refreshPreviewHealth()
+        #expect(model.previewFailure == nil)
+        #expect(model.previewLoadingTitle == nil)
     }
 
     @Test func previewFramesArriveDuringEventTracking() throws {
