@@ -5,12 +5,26 @@ import SwiftUI
 struct CodeStatsHeader: View {
     let model: CodeStatsModel
     @Environment(\.colorScheme) private var scheme
+    @State private var sharing = false
 
     private var dark: Bool { scheme == .dark }
+
+    private var shareSnapshot: CodeStatsExportSnapshot? {
+        guard let report = model.report else { return nil }
+        let snapshot = CodeStatsExportSnapshot(report: report)
+        return snapshot.hasActivity ? snapshot : nil
+    }
 
     var body: some View {
         PageHeader("Code Stats") {
             HStack(spacing: UIScale.pt(8)) {
+                Button {
+                    sharing = true
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                }
+                .disabled(shareSnapshot == nil)
+                .help("Share code stats as images")
                 if model.isRunning {
                     Button {
                         Task { await model.cancel() }
@@ -44,6 +58,11 @@ struct CodeStatsHeader: View {
                 if let status = model.status {
                     CodeStatsRunTimes(status: status, dark: dark)
                 }
+            }
+        }
+        .sheet(isPresented: $sharing) {
+            if let shareSnapshot {
+                CodeStatsExportSheet(snapshot: shareSnapshot) { sharing = false }
             }
         }
     }
