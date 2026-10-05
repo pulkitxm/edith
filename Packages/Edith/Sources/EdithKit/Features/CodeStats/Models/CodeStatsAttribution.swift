@@ -29,6 +29,31 @@ public struct CodeStatsAttribution: Sendable {
         isMine = identity.matcher()
     }
 
+    public var authorPatterns: [String] {
+        identity.authorPatterns
+            + (owned ? agents.map(CodeStatsIdentity.escapeRegex) : [])
+    }
+
+    public static func isPrimary(
+        _ authors: [CodeStatsAuthor], identity: CodeStatsIdentity
+    ) -> Bool {
+        let attribution = CodeStatsAttribution(identity: identity, owned: false)
+        let matcher = identity.matcher()
+        var mine = 0
+        var others: [String: Int] = [:]
+        for author in authors
+        where !attribution.isAgent(name: author.name, email: author.email)
+            && !attribution.isAutomation(name: author.name, email: author.email)
+        {
+            if matcher(author.name, author.email) {
+                mine += author.commits
+            } else {
+                others[author.email.lowercased(), default: 0] += author.commits
+            }
+        }
+        return mine > 0 && mine >= (others.values.max() ?? 0)
+    }
+
     public static func isOwned(
         _ repository: String, logins: Set<String>
     ) -> Bool {

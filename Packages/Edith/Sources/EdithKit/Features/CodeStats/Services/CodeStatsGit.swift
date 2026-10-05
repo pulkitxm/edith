@@ -121,7 +121,7 @@ public struct CodeStatsGit: Sendable {
     private func run(
         _ arguments: [String], in directory: String? = nil, network: Bool = false,
         timeout: TimeInterval? = nil, extraEnvironment: [String: String] = [:],
-        onLine: (@Sendable (String) -> Void)? = nil
+        input: Data? = nil, onLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> CLICommandResult {
         let prefix = network ? await networkArguments(in: directory) : []
         let request = CLICommandRequest(
@@ -130,7 +130,8 @@ public struct CodeStatsGit: Sendable {
             environment: environment.merging(extraEnvironment) { _, extra in extra },
             currentDirectoryURL: directory.map { URL(fileURLWithPath: $0) },
             timeout: network ? networkTimeout : timeout,
-            maximumOutputBytes: 1_048_576, terminatesProcessGroup: true)
+            maximumOutputBytes: 1_048_576, standardInputData: input,
+            terminatesProcessGroup: true)
         let result = try await CLICommandRunner.runLocalSeparated(
             request, retainsStandardOutput: onLine == nil,
             onStandardOutputLine: onLine ?? { _ in }, onStandardErrorLine: { _ in })
@@ -166,27 +167,53 @@ public struct CodeStatsGit: Sendable {
         in repository: CodeStatsRepository, attribution: CodeStatsAttribution,
         excluding previousTips: [String] = []
     ) async throws -> [CodeStatsCommit] {
+        let candidates = try await candidateCommits(
+            in: repository, attribution: attribution, excluding: previousTips)
+        var commits: [CodeStatsCommit] = []
+        var start = 0
+        while start < candidates.count {
+            let end = min(start + Self.chunkSize, candidates.count)
+            commits += try await self.commits(
+                in: repository, shas: Array(candidates[start..<end]), attribution: attribution)
+            start = end
+        }
+        return commits
+    }
+
+    public static let chunkSize = 250
+
+    public func candidateCommits(
+        in repository: CodeStatsRepository, attribution: CodeStatsAttribution,
+        excluding previousTips: [String] = []
+    ) async throws -> [String] {
         guard !attribution.identity.isEmpty else { return [] }
+        let shas = CodeStatsLocked([String]())
+        let exclusions = previousTips.isEmpty ? [] : ["--not"] + previousTips
+        try await run(
+            ["rev-list", "--no-merges", "--regexp-ignore-case", "--extended-regexp"]
+                + attribution.authorPatterns.map { "--author=" + $0 } + Self.historyRefs
+                + exclusions + ["--", "."] + CodeStatsLanguage.excludedPathspecs,
+            in: repository.path,
+            onLine: { line in if !line.isEmpty { shas.update { $0.append(line) } } })
+        return shas.update { $0 }
+    }
+
+    public func commits(
+        in repository: CodeStatsRepository, shas: [String], attribution: CodeStatsAttribution
+    ) async throws -> [CodeStatsCommit] {
+        guard !shas.isEmpty else { return [] }
         let parser = CodeStatsLocked(
             CodeStatsLogParser(repository: repository.fullName) { name, email, coAuthors in
                 attribution.flags(name: name, email: email, coAuthors: coAuthors)
             })
-        let authorFilter =
-            attribution.owned
-            ? []
-            : ["--regexp-ignore-case", "--extended-regexp"]
-                + attribution.identity.authorPatterns.map { "--author=" + $0 }
-        let exclusions = previousTips.isEmpty ? [] : ["--not"] + previousTips
-        let arguments =
-            ["log", "--no-merges"] + authorFilter
-            + [
-                "--pretty=format:" + CodeStatsLogParser.prettyFormat, "-p", "-U0", "-M", "-C",
-                "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/",
-                "--dst-prefix=b/",
-            ] + Self.historyRefs + exclusions + ["--", "."]
-            + CodeStatsLanguage.excludedPathspecs
         try await run(
-            arguments, in: repository.path,
+            [
+                "log", "--no-walk=unsorted", "--stdin",
+                "--pretty=format:" + CodeStatsLogParser.prettyFormat, "-p", "-U0", "-M",
+                "--no-color", "--no-ext-diff", "--no-textconv", "--src-prefix=a/",
+                "--dst-prefix=b/", "--", ".",
+            ] + CodeStatsLanguage.excludedPathspecs,
+            in: repository.path, input: Data((shas.joined(separator: "\n") + "\n").utf8),
             onLine: { line in parser.update { $0.push(line) } })
         return parser.update { $0.finish() }
     }

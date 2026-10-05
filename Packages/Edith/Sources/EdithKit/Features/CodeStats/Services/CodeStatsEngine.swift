@@ -73,6 +73,7 @@ public actor CodeStatsEngine {
         var issue: CodeStatsGitHubError?
         var remote: [CodeStatsRemoteRepository] = []
         var excluded = Set<String>()
+        var forks = Set<String>()
         if let github {
             do {
                 profile = try await github.profile()
@@ -83,6 +84,7 @@ public actor CodeStatsEngine {
             if issue == nil, !Task.isCancelled {
                 do {
                     let listed = try await github.repositories()
+                    forks = Set(listed.lazy.filter(\.isFork).map { $0.fullName.lowercased() })
                     remote = listed.filter(settings.includes)
                     excluded = Set(
                         listed.lazy.filter { !settings.includes($0) }.map {
@@ -127,20 +129,19 @@ public actor CodeStatsEngine {
         let identity = settings.identity
         let logins = Set(
             ([profile?.login].compactMap { $0 } + identity.substrings).map { $0.lowercased() })
-        let analyzed = await BoundedTaskRunner.map(repositories, limit: analysisLimit) {
+        let plans = await BoundedTaskRunner.map(repositories, limit: analysisLimit) {
             _, repository in
-            await self.analyze(
-                repository, root: root, cache: caches[repository.fullName],
-                attribution: CodeStatsAttribution(
-                    identity: identity,
-                    owned: CodeStatsAttribution.isOwned(repository.fullName, logins: logins)))
+            await self.plan(
+                repository, root: root, cache: caches[repository.fullName], identity: identity,
+                logins: logins, forks: forks)
         }
+        let analyzed = await extract(plans, root: root)
         if let interrupted = interruption() {
             return result(interrupted, startedAt, profile, issue)
         }
 
         enter(.reporting)
-        let entries = analyzed.compactMap { $0 }
+        let entries = analyzed
         let today = now()
         let calendar = calendar
         let login = profile?.login
@@ -238,43 +239,179 @@ public actor CodeStatsEngine {
         }
     }
 
-    private func analyze(
+    private struct Plan: Sendable {
+        var repository: CodeStatsRepository
+        var attribution: CodeStatsAttribution
+        var refs: CodeStatsRefState
+        var base: [CodeStatsCommit]
+        var shas: [String]
+        var integrated: [String]
+        var authors: [CodeStatsAuthor]
+        var done: CodeStatsRepositoryCache?
+    }
+
+    private struct Unit: Sendable {
+        var plan: Int
+        var shas: [String]
+    }
+
+    private func plan(
         _ repository: CodeStatsRepository, root: URL, cache: CodeStatsRepositoryCache?,
-        attribution: CodeStatsAttribution
-    ) async -> CodeStatsRepositoryCache? {
-        guard !Task.isCancelled, storageReady(root) else { return cache }
-        begin(repository.fullName)
+        identity: CodeStatsIdentity, logins: Set<String>, forks: Set<String>
+    ) async -> Plan? {
+        guard !Task.isCancelled, storageReady(root) else { return finished(cache) }
         do {
             let refs = try await git.refState(repository)
-            let identity = attribution.fingerprint
-            if let cache, cache.freshCommits(refs: refs.fingerprint, identity: identity) != nil {
-                end(repository.fullName, error: nil, root: root)
-                return cache
+            let unchanged = cache?.refsFingerprint == refs.fingerprint
+            let authors: [CodeStatsAuthor]
+            if unchanged, let cached = cache?.authors, !cached.isEmpty {
+                authors = cached
+            } else {
+                authors = try await git.authors(in: repository)
             }
-            var commits: [CodeStatsCommit]
-            if let cache, cache.extendable(identity: identity),
+            let owned =
+                CodeStatsAttribution.isOwned(repository.fullName, logins: logins)
+                && !forks.contains(repository.fullName.lowercased())
+                && CodeStatsAttribution.isPrimary(authors, identity: identity)
+            let attribution = CodeStatsAttribution(identity: identity, owned: owned)
+            let fingerprint = attribution.fingerprint
+            if let cache, cache.freshCommits(refs: refs.fingerprint, identity: fingerprint) != nil {
+                return finished(cache)
+            }
+            var base: [CodeStatsCommit] = []
+            var exclusions: [String] = []
+            if let cache, cache.extendable(identity: fingerprint),
                 await git.canExtend(repository, from: cache.tips)
             {
-                let added = try await git.commits(
-                    in: repository, attribution: attribution, excluding: cache.tips)
-                let known = Set(cache.commits.map(\.sha))
-                commits = cache.commits + added.filter { !known.contains($0.sha) }
-            } else {
-                commits = try await git.commits(in: repository, attribution: attribution)
+                base = cache.commits
+                exclusions = cache.tips
             }
-            let integrated = try await git.integratedCommits(in: repository)
-            let authors = try await git.authors(in: repository)
-            let entry = CodeStatsRepositoryCache(
-                repository: repository.fullName, refsFingerprint: refs.fingerprint,
-                identityFingerprint: identity, tips: refs.tips,
-                integrated: integrated.sorted(), authors: authors, commits: commits)
-            let store = store
-            try await BlockingWork.perform { try store.save(entry) }
-            end(repository.fullName, error: nil, root: root)
-            return entry
+            let known = Set(base.map(\.sha))
+            let shas = try await git.candidateCommits(
+                in: repository, attribution: attribution, excluding: exclusions
+            ).filter { !known.contains($0) }
+            let integrated = try await git.integratedCommits(in: repository).sorted()
+            var plan = Plan(
+                repository: repository, attribution: attribution, refs: refs, base: base,
+                shas: shas, integrated: integrated, authors: authors, done: nil)
+            if shas.isEmpty {
+                let entry = Self.entry(plan, commits: base)
+                let store = store
+                try await BlockingWork.perform { try store.save(entry) }
+                plan.done = entry
+                end(repository.fullName, error: nil, root: root)
+            }
+            return plan
         } catch {
             end(repository.fullName, error: error, root: root)
-            return cache
+            return finished(cache)
+        }
+    }
+
+    private func finished(_ cache: CodeStatsRepositoryCache?) -> Plan? {
+        guard let cache else { return nil }
+        progress.completed += 1
+        emit()
+        return Plan(
+            repository: CodeStatsRepository(fullName: cache.repository, path: "", isBare: true),
+            attribution: CodeStatsAttribution(identity: CodeStatsIdentity(), owned: false),
+            refs: CodeStatsRefState(lines: []), base: [], shas: [], integrated: [], authors: [],
+            done: cache)
+    }
+
+    private static func entry(_ plan: Plan, commits: [CodeStatsCommit]) -> CodeStatsRepositoryCache
+    {
+        CodeStatsRepositoryCache(
+            repository: plan.repository.fullName, refsFingerprint: plan.refs.fingerprint,
+            identityFingerprint: plan.attribution.fingerprint, tips: plan.refs.tips,
+            integrated: plan.integrated, authors: plan.authors, commits: commits)
+    }
+
+    private var pendingUnits: [Int: Int] = [:]
+    private var unitErrors: [Int: Error] = [:]
+    private var unitCommits: [Int: [CodeStatsCommit]] = [:]
+    private var activePlans: [Plan] = []
+    private var completedEntries: [Int: CodeStatsRepositoryCache] = [:]
+
+    private func extract(_ plans: [Plan?], root: URL) async -> [CodeStatsRepositoryCache] {
+        let plans = plans.compactMap { $0 }
+        activePlans = plans
+        pendingUnits = [:]
+        unitErrors = [:]
+        unitCommits = [:]
+        completedEntries = [:]
+        var units: [Unit] = []
+        for (index, plan) in plans.enumerated() {
+            if let done = plan.done {
+                completedEntries[index] = done
+                continue
+            }
+            var start = 0
+            while start < plan.shas.count {
+                let end = min(start + CodeStatsGit.chunkSize, plan.shas.count)
+                units.append(Unit(plan: index, shas: Array(plan.shas[start..<end])))
+                start = end
+            }
+            pendingUnits[index] =
+                (plan.shas.count + CodeStatsGit.chunkSize - 1) / CodeStatsGit.chunkSize
+        }
+        units.sort { plans[$0.plan].shas.count > plans[$1.plan].shas.count }
+        let git = git
+        _ = await BoundedTaskRunner.map(units, limit: analysisLimit) { _, unit in
+            let plan = plans[unit.plan]
+            guard !Task.isCancelled, await self.storageReady(root) else {
+                await self.unitFinished(
+                    unit.plan, commits: nil, error: CancellationError(), root: root)
+                return
+            }
+            await self.unitStarted(unit.plan, name: plan.repository.fullName)
+            do {
+                let commits = try await git.commits(
+                    in: plan.repository, shas: unit.shas, attribution: plan.attribution)
+                await self.unitFinished(unit.plan, commits: commits, error: nil, root: root)
+            } catch {
+                await self.unitFinished(unit.plan, commits: nil, error: error, root: root)
+            }
+        }
+        let entries = completedEntries.sorted { $0.key < $1.key }.map(\.value)
+        activePlans = []
+        completedEntries = [:]
+        unitCommits = [:]
+        return entries
+    }
+
+    private func unitStarted(_ index: Int, name: String) {
+        if !progress.inFlight.contains(name) { begin(name) }
+    }
+
+    private func unitFinished(
+        _ index: Int, commits: [CodeStatsCommit]?, error: Error?, root: URL
+    ) async {
+        if let commits { unitCommits[index, default: []] += commits }
+        if let error, unitErrors[index] == nil { unitErrors[index] = error }
+        pendingUnits[index, default: 1] -= 1
+        guard pendingUnits[index, default: 0] <= 0, activePlans.indices.contains(index) else {
+            return
+        }
+        let plan = activePlans[index]
+        let failure = unitErrors[index]
+        if failure == nil {
+            let known = Set(plan.base.map(\.sha))
+            let entry = Self.entry(
+                plan,
+                commits: plan.base + (unitCommits[index] ?? []).filter { !known.contains($0.sha) })
+            let store = store
+            do {
+                try await BlockingWork.perform { try store.save(entry) }
+                completedEntries[index] = entry
+            } catch {
+                unitErrors[index] = error
+            }
+        }
+        unitCommits[index] = nil
+        let reported = unitErrors[index].flatMap { $0 is CancellationError ? nil : $0 }
+        if progress.inFlight.contains(plan.repository.fullName) || reported != nil {
+            end(plan.repository.fullName, error: reported, root: root)
         }
     }
 
