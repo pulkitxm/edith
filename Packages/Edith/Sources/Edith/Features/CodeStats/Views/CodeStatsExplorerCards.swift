@@ -335,6 +335,18 @@ private struct CodeStatsDonut: View {
         SkinCard(
             title: title, note: "Share of lines, click a slice to filter", dark: dark, fill: true
         ) {
+            if slices.reduce(0, { $0 + $1.lines }) == 0 {
+                Text("No counted lines in this range.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+            } else {
+                donut
+            }
+        }
+    }
+
+    private var donut: some View {
+        VStack {
             HStack(alignment: .center, spacing: UIScale.pt(16)) {
                 Chart(slices) { slice in
                     SectorMark(

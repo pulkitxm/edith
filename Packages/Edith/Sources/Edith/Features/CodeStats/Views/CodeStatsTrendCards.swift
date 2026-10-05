@@ -181,7 +181,21 @@ struct CodeStatsRepositoryCards: View {
     let projection: CodeStatsProjection
     let dark: Bool
     @Environment(\.codeStatsActions) private var actions
-    @State private var logScale = false
+    @State private var logScale: Bool
+
+    init(projection: CodeStatsProjection, dark: Bool, logScale: Bool = false) {
+        self.projection = projection
+        self.dark = dark
+        _logScale = State(initialValue: logScale)
+    }
+
+    private var maximum: Double {
+        Double(max(projection.repositoryBars.map(\.commits).max() ?? 1, 1))
+    }
+
+    private var domain: ClosedRange<Double> {
+        logScale ? 1...(maximum * 3) : 0...(maximum * 1.3)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
@@ -194,7 +208,8 @@ struct CodeStatsRepositoryCards: View {
                     .controlSize(.small)
                 Chart(projection.repositoryBars, id: \.repository) { summary in
                     BarMark(
-                        x: .value("Commits", summary.commits),
+                        xStart: .value("Base", logScale ? 1 : 0),
+                        xEnd: .value("Commits", max(summary.commits, 1)),
                         y: .value("Repository", summary.repository)
                     )
                     .foregroundStyle(
@@ -218,7 +233,7 @@ struct CodeStatsRepositoryCards: View {
                         AxisValueLabel().font(.system(size: UIScale.pt(10.5)))
                     }
                 }
-                .chartXScale(type: logScale ? .log : .linear)
+                .chartXScale(domain: domain, type: logScale ? .log : .linear)
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle().fill(.clear).contentShape(Rectangle())
