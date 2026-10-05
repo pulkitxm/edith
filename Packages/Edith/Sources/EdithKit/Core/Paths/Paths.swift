@@ -96,6 +96,30 @@ public enum Repo {
         validateStoredPath(
             forKey: musicFolderPathKey, confirmationKey: musicFolderConfirmationKey,
             marksMusicStale: true, defaults: defaults, homeDirectory: homeDirectory)
+        validateStoredPath(
+            forKey: AppStorageKeys.CodeStats.folder,
+            confirmationKey: AppStorageKeys.CodeStats.folderConfirmation,
+            marksMusicStale: false, defaults: defaults, homeDirectory: homeDirectory)
+    }
+
+    public static func selectedCodeStatsFolder(
+        defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String? {
+        confirmedPath(
+            forKey: AppStorageKeys.CodeStats.folder,
+            confirmationKey: AppStorageKeys.CodeStats.folderConfirmation, defaults: defaults,
+            homeDirectory: homeDirectory)?.path
+    }
+
+    public static func setCodeStatsFolder(
+        _ path: String?, defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) {
+        setConfirmedPath(
+            path, forKey: AppStorageKeys.CodeStats.folder,
+            confirmationKey: AppStorageKeys.CodeStats.folderConfirmation, defaults: defaults,
+            homeDirectory: homeDirectory)
     }
 
     public static func setMusicDirectory(

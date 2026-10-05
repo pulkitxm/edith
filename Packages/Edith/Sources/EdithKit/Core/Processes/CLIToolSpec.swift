@@ -145,6 +145,22 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
             arguments: ["install", "pulkitxm/tap/quinjet"],
             instruction: "Install with `brew install pulkitxm/tap/quinjet`."))
 
+    public static let git = CLIToolSpec(
+        id: "git", displayName: "Git",
+        why: "Mirrors your GitHub repositories and reads their history for Code Stats.",
+        presenceStrategy: .executable(name: "git", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "git"],
+            instruction: "Install with `xcode-select --install` or `brew install git`."))
+
+    public static let githubCLI = CLIToolSpec(
+        id: "gh", displayName: "GitHub CLI",
+        why: "Lists the GitHub repositories you can reach and signs Code Stats clones in.",
+        presenceStrategy: .executable(name: "gh", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "gh"],
+            instruction: "Install with `brew install gh`, then run `gh auth login`."))
+
     public static let homebrew = CLIToolSpec(
         id: "homebrew", displayName: "Homebrew",
         why: "Provides the formula and cask catalog managed by this extension.",
@@ -187,9 +203,41 @@ public enum CLIToolEnvironment {
         for directory in environment["PATH"]?.split(separator: ":").map(String.init) ?? [] {
             guard RestoredPathValidation.verdict(for: directory) == .keep else { continue }
             let candidate = URL(fileURLWithPath: directory).appendingPathComponent(name)
-            if fileManager.isExecutableFile(atPath: candidate.path) { return candidate }
+            if fileManager.isExecutableFile(atPath: candidate.path),
+                developerToolIsBacked(
+                    candidate, processEnvironment: processEnvironment, fileManager: fileManager)
+            {
+                return candidate
+            }
         }
         return nil
+    }
+
+    static let developerToolShims: Set<String> = ["git"]
+    static let developerSelectionLink = "/var/db/xcode_select_link"
+    static let defaultDeveloperDirectories = [
+        "/Applications/Xcode.app/Contents/Developer", "/Library/Developer/CommandLineTools",
+    ]
+
+    static func developerToolIsBacked(
+        _ candidate: URL, processEnvironment: [String: String], fileManager: FileManager,
+        selectionLink: String = developerSelectionLink
+    ) -> Bool {
+        let name = candidate.lastPathComponent
+        guard developerToolShims.contains(name),
+            candidate.deletingLastPathComponent().standardizedFileURL.path == "/usr/bin"
+        else { return true }
+        let directories: [String]
+        if let configured = processEnvironment["DEVELOPER_DIR"], !configured.isEmpty {
+            directories = [configured]
+        } else if let selected = try? fileManager.destinationOfSymbolicLink(atPath: selectionLink) {
+            directories = [selected]
+        } else {
+            directories = defaultDeveloperDirectories
+        }
+        return directories.contains {
+            fileManager.isExecutableFile(atPath: $0 + "/usr/bin/" + name)
+        }
     }
 
     private static func commonDirectories(

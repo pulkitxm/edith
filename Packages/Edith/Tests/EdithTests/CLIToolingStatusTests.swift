@@ -112,6 +112,38 @@ import Testing
         #expect(environment["PRESERVED"] == "value")
     }
 
+    @Test func theGitShimCountsOnlyWhenADeveloperDirectoryProvidesGit() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "developer-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let developer = root.appendingPathComponent("Developer")
+        let tools = developer.appendingPathComponent("usr/bin")
+        try FileManager.default.createDirectory(at: tools, withIntermediateDirectories: true)
+        let link = root.appendingPathComponent("xcode_select_link").path
+        try FileManager.default.createSymbolicLink(
+            atPath: link, withDestinationPath: developer.path)
+        let shim = URL(fileURLWithPath: "/usr/bin/git")
+        let backed = { (environment: [String: String]) in
+            CLIToolEnvironment.developerToolIsBacked(
+                shim, processEnvironment: environment, fileManager: .default, selectionLink: link)
+        }
+        #expect(!backed([:]))
+        #expect(!backed(["DEVELOPER_DIR": developer.path]))
+        let git = tools.appendingPathComponent("git")
+        try "#!/bin/sh\n".write(to: git, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: git.path)
+        #expect(backed([:]))
+        #expect(!backed(["DEVELOPER_DIR": root.path]))
+        #expect(
+            CLIToolEnvironment.developerToolIsBacked(
+                URL(fileURLWithPath: "/opt/homebrew/bin/git"), processEnvironment: [:],
+                fileManager: .default, selectionLink: root.appendingPathComponent("none").path))
+        #expect(
+            CLIToolEnvironment.developerToolIsBacked(
+                URL(fileURLWithPath: "/usr/bin/true"), processEnvironment: [:],
+                fileManager: .default, selectionLink: root.appendingPathComponent("none").path))
+    }
+
     @Test func terminalToolingDescriptorsAreRegisteredAndExact() {
         let descriptors = TerminalToolingOperation.allCases.map(\.descriptor)
         #expect(
