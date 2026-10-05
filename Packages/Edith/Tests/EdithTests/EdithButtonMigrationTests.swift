@@ -48,6 +48,7 @@ import Testing
             "Edith/Features/Settings/Views/GeneralPane.swift": 1,
             "Edith/Features/VideoEditor/VideoBeatPanel.swift": 1,
             "EdithHelper/Features/NotchShelf/Views/NotchShelfView.swift": 1,
+            "EdithHelper/Features/NotchBrowser/Views/NotchBrowserPane.swift": 1,
         ]
         var actual: [String: Int] = [:]
 

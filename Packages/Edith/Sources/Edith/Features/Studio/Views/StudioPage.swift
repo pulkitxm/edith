@@ -287,12 +287,13 @@ struct StudioHeaderActions: View {
                 .fixedSize()
             }
             StudioScanButton { urls in model.add(urls) }
-                .frame(width: UIScale.pt(30), height: UIScale.pt(28))
                 .help("Import a scan or photo from your iPhone or iPad")
             Button {
                 model.paste()
             } label: {
                 Image(systemName: "doc.on.clipboard")
+                    .font(.system(size: UIScale.pt(14), weight: .medium))
+                    .frame(width: UIScale.pt(16), height: UIScale.pt(16))
             }
             .buttonStyle(.edith(.secondary))
             .keyboardShortcut("v", modifiers: [.command, .shift])

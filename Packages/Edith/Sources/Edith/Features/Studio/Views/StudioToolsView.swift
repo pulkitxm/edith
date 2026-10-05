@@ -50,7 +50,11 @@ struct StudioToolsView: View {
         let groups = StudioToolGrouping.byGroup(tools)
         ScrollView {
             VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                HStack(spacing: UIScale.pt(10)) {
+                let controls =
+                    compact
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(10)))
+                    : AnyLayout(HStackLayout(spacing: UIScale.pt(10)))
+                controls {
                     HStack(spacing: UIScale.pt(6)) {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                         TextField(
@@ -61,7 +65,7 @@ struct StudioToolsView: View {
                     }
                     .padding(.horizontal, UIScale.pt(10))
                     .padding(.vertical, UIScale.pt(6))
-                    .frame(maxWidth: UIScale.pt(260))
+                    .frame(maxWidth: compact ? .infinity : UIScale.pt(260))
                     .background(
                         DashSkin.paper2(scheme == .dark),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(8))
@@ -95,10 +99,13 @@ struct StudioToolsView: View {
                             .font(DashSkin.mono(10, weight: .semibold))
                             .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                         LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12))
-                            ],
+                            columns: compact
+                                ? [GridItem(.flexible(minimum: 0))]
+                                : [
+                                    GridItem(
+                                        .adaptive(minimum: UIScale.pt(240)), spacing: UIScale.pt(12)
+                                    )
+                                ],
                             alignment: .leading, spacing: UIScale.pt(12)
                         ) {
                             ForEach(entry.tools) { tool in

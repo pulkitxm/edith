@@ -64,6 +64,7 @@ struct StudioFilesView: View {
 struct StudioDropHero: View {
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     private let popular = [
         "pdf.merge", "pdf.compress", "pdf.edit", "pdf.sign", "image.compress",
@@ -79,6 +80,7 @@ struct StudioDropHero: View {
                     .foregroundStyle(DashSkin.accent(scheme == .dark))
                 Text("Drop files here to start")
                     .font(.system(size: UIScale.pt(20), weight: .semibold))
+                    .multilineTextAlignment(.center)
                 Text(
                     "Images, PDFs, videos, audio and documents. Edit, compress, convert, merge, split and more, all on this Mac."
                 )
@@ -86,7 +88,11 @@ struct StudioDropHero: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: UIScale.pt(440))
-                HStack(spacing: UIScale.pt(8)) {
+                let actions =
+                    compact
+                    ? AnyLayout(VStackLayout(spacing: UIScale.pt(8)))
+                    : AnyLayout(HStackLayout(spacing: UIScale.pt(8)))
+                actions {
                     Button {
                         model.chooseFiles()
                     } label: {
@@ -102,6 +108,7 @@ struct StudioDropHero: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(40))
             .background(
                 DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(18))
@@ -116,9 +123,9 @@ struct StudioDropHero: View {
                     .font(DashSkin.mono(10, weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                 LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(10))
-                    ],
+                    columns: compact
+                        ? [GridItem(.flexible(minimum: 0))]
+                        : [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(10))],
                     spacing: UIScale.pt(10)
                 ) {
                     ForEach(popular, id: \.self) { id in

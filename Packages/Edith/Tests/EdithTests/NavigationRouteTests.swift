@@ -559,25 +559,34 @@ import Testing
         #expect(router.location == "home")
     }
 
-    @Test func hiddenHostPublishesAndMovesTheRoute() {
+    @Test func hiddenHostPublishesAndMovesTheRoute() async throws {
+        let router = WindowRouter()
+        var readinessCompletions = 0
         let host = NSHostingView(
-            rootView: HiddenRouteProbe().environment(\.automaticViewActionsEnabled, false))
+            rootView: HiddenRouteProbe(router: router, onReady: { readinessCompletions += 1 })
+                .environment(\.automaticViewActionsEnabled, false))
         host.frame = NSRect(x: 0, y: 0, width: 320, height: 180)
         let window = TestWindowHost.window(contentRect: host.frame)
         defer {
-            WindowRouter.commandTarget?.detach()
+            router.detach()
             window.orderOut(nil)
         }
         window.contentView = host
         window.layoutIfNeeded()
         host.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
-        host.layoutSubtreeIfNeeded()
+        try await settleHiddenRoute(router, location: "home", host: host)
+        #expect(WindowRouter.router(for: window) === router)
+        #expect(!window.isVisible)
+        #expect(!router.restoring)
+        #expect(router.history.entries == ["home"])
         let current = NavigationCommands.perform(action: "route", route: nil)
         #expect(current["route"] as? String == "home")
         #expect(current["canGoBack"] as? Bool == false)
         let moved = NavigationCommands.perform(action: "navigate", route: "companion/chat")
-        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.3))
+        try await settleHiddenRoute(router, location: "companion/chat", host: host)
+        #expect(!router.restoring)
+        #expect(readinessCompletions == 1)
+        #expect(router.history.entries == ["home", "companion/chat"])
         let settled = NavigationCommands.perform(action: "route", route: nil)
         #expect(moved["ok"] as? Bool == true)
         #expect(settled["route"] as? String == "companion/chat")
@@ -585,16 +594,36 @@ import Testing
         let back = NavigationCommands.perform(action: "back", route: nil)
         #expect(back["ok"] as? Bool == true)
         #expect(back["route"] as? String == "home")
+        try await settleHiddenRoute(router, location: "home", host: host)
         let forward = NavigationCommands.perform(action: "forward", route: nil)
         #expect(forward["ok"] as? Bool == true)
         #expect(forward["route"] as? String == "companion/chat")
+        try await settleHiddenRoute(router, location: "companion/chat", host: host)
+        #expect(!router.restoring)
+        #expect(readinessCompletions == 2)
+        #expect(router.history.entries == ["home", "companion/chat"])
+        #expect(router.history.current == "companion/chat")
+        #expect(!window.isVisible)
         #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
+    private func settleHiddenRoute(_ router: WindowRouter, location: String, host: NSView)
+        async throws
+    {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(2))
+        repeat {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(20))
+            if !router.restoring && router.location == location { return }
+        } while clock.now < deadline
     }
 }
 
 @MainActor
 private struct HiddenRouteProbe: View {
-    @State private var router = WindowRouter()
+    let router: WindowRouter
+    let onReady: () -> Void
     @State private var section = "home"
     @State private var tab = "chat"
 
@@ -604,7 +633,11 @@ private struct HiddenRouteProbe: View {
                 Text(section)
                 if section == "companion" {
                     Text(tab).navigationRoute(
-                        "tab", selection: $tab, isReady: { await Task.yield() })
+                        "tab", selection: $tab,
+                        isReady: {
+                            await Task.yield()
+                            onReady()
+                        })
                 }
             }
             .navigationRoute(
