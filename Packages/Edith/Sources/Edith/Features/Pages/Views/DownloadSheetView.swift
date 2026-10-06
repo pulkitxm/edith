@@ -17,7 +17,8 @@ struct DownloadSheet: View {
         var downloadKindRaw =
         DownloadKind.post.rawValue
     @State private var estimate: DownloadEstimate?
-    @State private var estimating = false
+    @State private var estimateLoad = ContentLoad()
+    private var estimating: Bool { estimateLoad.isRunning }
     @State private var outputDirectory: URL?
     @State private var browser = ""
 
@@ -60,19 +61,22 @@ struct DownloadSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             header
             Divider().overlay(DashSkin.line(dark))
+        } content: {
             if let reason = downloader.unavailableReason {
                 unavailableView(reason)
             } else {
                 content
             }
         }
-        .frame(width: isPage ? nil : UIScale.pt(680), height: isPage ? nil : UIScale.pt(760))
+        .frame(
+            width: isPage ? nil : PresentationMetrics.width(680),
+            height: isPage ? nil : PresentationMetrics.height(760)
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
-        .onAppear { downloader.checkAvailability() }
+        .pageTask { downloader.checkAvailability() }
         .alert(
             "Download request failed",
             isPresented: Binding(
@@ -222,8 +226,8 @@ struct DownloadSheet: View {
             .padding(UIScale.pt(22))
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .sheet(item: $logItem) { item in
-            logSheet(item).transientPresentation()
+        .edithSheet(item: $logItem) { item in
+            logSheet(item)
         }
     }
 
@@ -332,7 +336,9 @@ struct DownloadSheet: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: urlText + downloadKindRaw) { await refreshEstimate() }
+        .pageTask(id: urlText + downloadKindRaw, cancel: { estimateLoad.cancel() }) {
+            await refreshEstimate()
+        }
     }
 
     private var formatDescription: String {
@@ -383,21 +389,28 @@ struct DownloadSheet: View {
     private func refreshEstimate() async {
         guard downloadKind == .audio || downloadKind == .video else {
             estimate = nil
-            estimating = false
+            estimateLoad.reset()
             return
         }
         let urls = YoutubeDownloader.parseURLs(from: urlText)
         guard !urls.isEmpty, downloader.unavailableReason == nil else {
             estimate = nil
+            estimateLoad.reset()
             return
         }
-        estimating = true
-        defer { if !Task.isCancelled { estimating = false } }
+        let request = estimateLoad.begin(preservingContent: false)
+        defer {
+            if Task.isCancelled {
+                estimateLoad.cancel(request)
+            } else {
+                estimateLoad.complete(request)
+            }
+        }
         var total: DownloadEstimate?
         for url in urls.prefix(5) {
-            guard !Task.isCancelled else { return }
+            guard estimateLoad.isCurrent(request) else { return }
             guard let one = await downloader.estimate(for: url) else { continue }
-            guard !Task.isCancelled else { return }
+            guard estimateLoad.isCurrent(request) else { return }
             total = total.map { $0 + one } ?? one
             estimate = total
         }
@@ -844,7 +857,7 @@ struct DownloadSheet: View {
                 .onAppear { proxy.scrollTo("logBottom", anchor: .bottom) }
             }
         }
-        .frame(width: UIScale.pt(480), height: UIScale.pt(360))
+        .frame(width: PresentationMetrics.width(480), height: PresentationMetrics.height(360))
         .background(DashSkin.paper(dark))
     }
 

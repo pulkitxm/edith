@@ -88,7 +88,7 @@ struct NotchCameraTab: View {
                 .padding(.horizontal, 24)
             HStack(spacing: 8) {
                 Button("Allow Camera", action: action)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .controlSize(.small)
                 Button("All Permissions") {
                     PermissionOperationCenter.application.openPermissionOverview()

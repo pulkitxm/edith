@@ -6,6 +6,10 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class VideoEditorModel {
+    private struct LoadedProject: @unchecked Sendable {
+        var document: VideoProject
+        let missingAssetIDs: Set<String>
+    }
     private struct SessionMedia: Sendable {
         let cameraPath: String?
         let cameraOffset: Int
@@ -51,6 +55,8 @@ final class VideoEditorModel {
     var titleDraft: String?
     private(set) var pendingViewEditIDs: Set<String> = []
     private var pendingLoads = 0
+    private(set) var isRebuildingPreview = false
+    var isPreparingPreview: Bool { pendingLoads > 0 || isRebuildingPreview }
     var blocksCommandOpen: Bool {
         hasUnsavedEdits || isTranscribing || audioStatus != nil || pendingLoads > 0
             || titleDraft.map { $0 != (project?.title ?? "") } == true
@@ -82,6 +88,8 @@ final class VideoEditorModel {
     private var generation = 0
     private var focusPreviewGeneration = 0
     private var rebuildTask: Task<Void, Never>?
+    private var openTask: Task<Void, Never>?
+    private var relinkPanel: NSOpenPanel?
     private var focusPreviewTask: Task<Void, Never>?
     private let previewBuilder: (VideoProject) async throws -> VideoRenderPipeline
     private var playerSeeker: VideoPreviewSeeker?
@@ -136,9 +144,12 @@ final class VideoEditorModel {
 
     func close() {
         isClosed = true
+        isRebuildingPreview = false
         generation += 1
         focusPreviewGeneration += 1
         rebuildTask?.cancel()
+        openTask?.cancel()
+        relinkPanel?.cancel(nil)
         focusPreviewTask?.cancel()
         resetPreviewSeeks()
         liveSync?.stop()
@@ -152,6 +163,8 @@ final class VideoEditorModel {
     }
 
     func newProject() {
+        openTask?.cancel()
+        relinkPanel?.cancel(nil)
         isClosed = false
         audioTask?.cancel()
         selection = nil
@@ -185,50 +198,80 @@ final class VideoEditorModel {
     }
 
     func openProject(at url: URL) {
-        do {
-            var document = try VideoProject.open(url)
-            document.relinkMediaNextToProject()
-            for asset in document.assets
-            where !FileManager.default.fileExists(atPath: asset.url.path) {
-                let panel = NSOpenPanel()
-                panel.message = "Locate \(asset.label) to open this project"
-                panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
-                if panel.runModal() == .OK, let replacement = panel.url {
-                    document.relinkMedia(assetID: asset.id, to: replacement)
+        openTask?.cancel()
+        relinkPanel?.cancel(nil)
+        rebuildTask?.cancel()
+        isRebuildingPreview = false
+        generation += 1
+        let version = generation
+        pendingLoads += 1
+        openTask = Task { [weak self] in
+            guard let self else { return }
+            defer { pendingLoads -= 1 }
+            do {
+                let loaded = try await Task.detached(priority: .userInitiated) {
+                    var document = try VideoProject.open(url)
+                    document.relinkMediaNextToProject()
+                    let missingAssetIDs = Set(
+                        document.assets.filter {
+                            !FileManager.default.fileExists(atPath: $0.url.path)
+                        }.map(\.id))
+                    let registered = try VideoProjectRegistry().records().contains {
+                        $0.projectID == document.id
+                            && VideoProjectFileAccess.identity(URL(fileURLWithPath: $0.path))
+                                == VideoProjectFileAccess.identity(url)
+                    }
+                    if !registered, url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/")
+                    {
+                        document.fileURL = nil
+                    }
+                    return LoadedProject(document: document, missingAssetIDs: missingAssetIDs)
+                }.value
+                guard !Task.isCancelled, version == generation else { return }
+                var document = loaded.document
+                for asset in document.assets
+                where loaded.missingAssetIDs.contains(asset.id) {
+                    let panel = NSOpenPanel()
+                    panel.message = "Locate \(asset.label) to open this project"
+                    panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+                    relinkPanel = panel
+                    let replacement: URL? = await withCheckedContinuation { continuation in
+                        panel.begin { response in
+                            MainActor.assumeIsolated {
+                                continuation.resume(returning: response == .OK ? panel.url : nil)
+                            }
+                        }
+                    }
+                    if relinkPanel === panel { relinkPanel = nil }
+                    guard !Task.isCancelled, version == generation else { return }
+                    if let replacement {
+                        document.relinkMedia(assetID: asset.id, to: replacement)
+                    }
                 }
-            }
-            let registered = try VideoProjectRegistry().records().contains {
-                $0.projectID == document.id
-                    && VideoProjectFileAccess.identity(URL(fileURLWithPath: $0.path))
-                        == VideoProjectFileAccess.identity(url)
-            }
-            if !registered, url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/") {
-                document.fileURL = nil
-            }
-            isClosed = false
-            replaceProject(document)
-            hasUnsavedEdits = false
-            selectedClipID = project?.clips.first?.id
-            editingZoomID = nil
-            undoHistory.removeAll()
-            redoHistory.removeAll()
-            generation += 1
-            rebuildTask?.cancel()
-            let version = generation
-            player.pause()
-            resetPreviewSeeks()
-            player.replaceCurrentItem(with: nil)
-            pipeline = nil
-            pendingLoads += 1
-            Task {
-                defer { pendingLoads -= 1 }
+                isClosed = false
+                replaceProject(document)
+                hasUnsavedEdits = false
+                selectedClipID = project?.clips.first?.id
+                editingZoomID = nil
+                undoHistory.removeAll()
+                redoHistory.removeAll()
+                rebuildTask?.cancel()
+                player.pause()
+                resetPreviewSeeks()
+                player.replaceCurrentItem(with: nil)
+                pipeline = nil
                 let prepared = await document.probingMissingMedia()
-                guard version == generation, project?.id == prepared.id else { return }
+                guard !Task.isCancelled, version == generation, project?.id == prepared.id else {
+                    return
+                }
                 project = prepared
                 if prepared.fileURL == nil { saveInLibrary() }
                 rebuild()
+            } catch {
+                guard !Task.isCancelled, version == generation else { return }
+                errorMessage = error.localizedDescription
             }
-        } catch { errorMessage = error.localizedDescription }
+        }
     }
 
     func refreshRecentProjects() {
@@ -239,6 +282,7 @@ final class VideoEditorModel {
         _ next: VideoProject, prepared: VideoRenderPipeline?, playbackPlayer: AVPlayer?
     ) {
         let time = playhead
+        isRebuildingPreview = false
         let rate = player.rate
         generation += 1
         rebuildTask?.cancel()
@@ -1232,6 +1276,7 @@ final class VideoEditorModel {
 
     func rebuild(refreshFocusPreview: Bool = true) {
         rebuildTask?.cancel()
+        isRebuildingPreview = false
         generation += 1
         let version = generation
         player.pause()
@@ -1248,7 +1293,11 @@ final class VideoEditorModel {
             playhead = 0
             return
         }
+        isRebuildingPreview = true
         rebuildTask = Task {
+            defer {
+                if version == generation { isRebuildingPreview = false }
+            }
             do {
                 try await Task.sleep(for: .milliseconds(40))
                 let next = try await previewBuilder(project)

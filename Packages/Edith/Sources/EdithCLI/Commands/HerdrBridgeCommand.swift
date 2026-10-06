@@ -19,11 +19,15 @@ struct HerdrBridgeCommand: ParsableCommand {
 
     func run() throws {
         let specification = try HerdrTerminalBridgeSpecification(encoded: specification)
-        try HerdrTerminalBridgeRuntime(specification: specification).run()
+        if specification.transport == .terminal {
+            try HerdrNativeTerminalBridge.run(specification: specification)
+        } else {
+            try HerdrTerminalBridgeRuntime(specification: specification).run()
+        }
     }
 }
 
-private struct HerdrTerminalDimensions: Equatable {
+struct HerdrTerminalDimensions: Equatable {
     let columns: UInt16
     let rows: UInt16
     let cellWidth: UInt32
@@ -98,10 +102,15 @@ struct HerdrTerminalInputRouter {
     }
 
     private let mouse: HerdrTerminalMouse
+    private let transport: HerdrTerminalBridgeSpecification.Transport
     private var pending = Data()
 
-    init(mouse: HerdrTerminalMouse = .buttons) {
+    init(
+        mouse: HerdrTerminalMouse = .buttons,
+        transport: HerdrTerminalBridgeSpecification.Transport = .records
+    ) {
         self.mouse = mouse
+        self.transport = transport
     }
 
     var hasPendingEscapePrefix: Bool { !pending.isEmpty && pending.count < 3 }
@@ -120,15 +129,15 @@ struct HerdrTerminalInputRouter {
             {
                 if inputStart < offset {
                     commands.append(
-                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                        try input(Data(bytes[inputStart..<offset])))
                 }
                 pending = Data(bytes[offset...])
                 return commands
             }
-            if isFocusReport(bytes, at: offset) {
+            if transport == .records, isFocusReport(bytes, at: offset) {
                 if inputStart < offset {
                     commands.append(
-                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                        try input(Data(bytes[inputStart..<offset])))
                 }
                 offset += 3
                 inputStart = offset
@@ -142,7 +151,7 @@ struct HerdrTerminalInputRouter {
             case .incomplete:
                 if inputStart < offset {
                     commands.append(
-                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                        try input(Data(bytes[inputStart..<offset])))
                 }
                 pending = Data(bytes[offset...])
                 return commands
@@ -155,14 +164,18 @@ struct HerdrTerminalInputRouter {
                 }
                 if inputStart < offset {
                     commands.append(
-                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                        try input(Data(bytes[inputStart..<offset])))
                 }
                 offset += length
                 inputStart = offset
             case let .scroll(direction, column, row, modifiers, length):
+                if transport == .terminal {
+                    offset += length
+                    continue
+                }
                 if inputStart < offset {
                     commands.append(
-                        try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart..<offset])))
+                        try input(Data(bytes[inputStart..<offset])))
                 }
                 commands.append(
                     try HerdrTerminalBridge.scrollCommand(
@@ -174,7 +187,7 @@ struct HerdrTerminalInputRouter {
         }
 
         if inputStart < bytes.count {
-            commands.append(try HerdrTerminalBridge.inputCommand(Data(bytes[inputStart...])))
+            commands.append(try input(Data(bytes[inputStart...])))
         }
         pending.removeAll(keepingCapacity: true)
         return commands
@@ -185,7 +198,11 @@ struct HerdrTerminalInputRouter {
         let bytes = pending
         pending.removeAll(keepingCapacity: true)
         guard !bytes.starts(with: [0x1B, 0x5B, 0x3C]) else { return [] }
-        return [try HerdrTerminalBridge.inputCommand(bytes)]
+        return [try input(bytes)]
+    }
+
+    private func input(_ bytes: Data) throws -> Data {
+        transport == .terminal ? bytes : try HerdrTerminalBridge.inputCommand(bytes)
     }
 
     mutating func flushEscapePrefix() throws -> [Data] {
@@ -242,11 +259,12 @@ struct HerdrTerminalInputRouter {
     }
 }
 
-private final class HerdrRawTerminal {
+final class HerdrRawTerminal {
     private var original = termios()
     private var configured = false
+    private var managesPresentation = true
 
-    func configure(mouse: HerdrTerminalMouse) throws {
+    func configure(mouse: HerdrTerminalMouse, managesPresentation: Bool = true) throws {
         guard isatty(STDIN_FILENO) == 1 else { return }
         guard tcgetattr(STDIN_FILENO, &original) == 0 else {
             throw POSIXError(.EIO)
@@ -257,13 +275,18 @@ private final class HerdrRawTerminal {
             throw POSIXError(.EIO)
         }
         configured = true
-        try FileHandle.standardOutput.write(
-            contentsOf: HerdrTerminalBridge.startSequence(for: mouse))
+        self.managesPresentation = managesPresentation
+        if managesPresentation {
+            try FileHandle.standardOutput.write(
+                contentsOf: HerdrTerminalBridge.startSequence(for: mouse))
+        }
     }
 
     func restore() {
         if configured {
-            try? FileHandle.standardOutput.write(contentsOf: HerdrTerminalBridge.stopSequence)
+            if managesPresentation {
+                try? FileHandle.standardOutput.write(contentsOf: HerdrTerminalBridge.stopSequence)
+            }
             _ = tcsetattr(STDIN_FILENO, TCSAFLUSH, &original)
             configured = false
         }

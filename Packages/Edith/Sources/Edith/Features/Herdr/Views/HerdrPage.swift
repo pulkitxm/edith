@@ -20,6 +20,8 @@ struct HerdrPage: View {
     @State private var newAgentPopupPresented = false
     @State private var newAgentSpace: HerdrAgentSpace?
     @State private var filterMenu = false
+    @State private var compactRailPresented = false
+    @State private var compactDetailsPresented = false
     @State private var filterDismissedAt: Date?
 
     @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
@@ -60,14 +62,15 @@ struct HerdrPage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             header
             tabBar
+        } content: {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
-                    if store.railOpen {
+                    if store.railOpen, !compact {
                         agentList
-                            .frame(width: railDisplayWidth)
+                            .frame(width: min(railDisplayWidth, proxy.size.width * 0.28))
                         HerdrResizeHandle(
                             label: "Resize the agent list",
                             onChanged: resizeRail,
@@ -86,14 +89,15 @@ struct HerdrPage: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .herdrDropFrame(HerdrDropGeometry.canvasKey)
-                    .overlay(alignment: .bottom) {
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
                         HerdrTerminalPanelView(
                             store: store, owner: store.selectedTab, launchEnabled: launchEnabled,
                             maximumHeight: proxy.size.height, hideAgents: hideAgents)
                     }
-                    if !onBoard, store.detailOpen, let focused = store.focusedSession {
+                    if !onBoard, store.detailOpen, !compact, let focused = store.focusedSession {
                         HerdrDetailColumn(
-                            store: store, tab: shown(focused), hideAgents: hideAgents)
+                            store: store, tab: shown(focused), hideAgents: hideAgents,
+                            maximumWidth: proxy.size.width * 0.3)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -104,9 +108,20 @@ struct HerdrPage: View {
         .coordinateSpace(name: HerdrDragCoordinator.space)
         .onPreferenceChange(HerdrDropFrames.self) { drag.frames = $0 }
         .environment(drag)
-        .navigationRoute("view", selection: viewBinding, isValid: herdrViewIsValid)
-        .navigationRoute("tab", selection: tabBinding, isValid: herdrTabIsValid)
+        .navigationRoute(
+            "view", selection: viewBinding, isValid: herdrViewIsValid,
+            isReady: store.inventoryReady
+        )
+        .navigationRoute(
+            "tab", selection: tabBinding, isValid: herdrTabIsValid,
+            isReady: store.inventoryReady
+        )
         .onDisappear { drag.cancel() }
+        .onChange(of: compact) {
+            compactRailPresented = false
+            compactDetailsPresented = false
+        }
+        .onChange(of: store.selectedTab) { compactRailPresented = false }
         .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .background(tabShortcuts)
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
@@ -138,19 +153,19 @@ struct HerdrPage: View {
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: automaticActions) { snapshot in
             store.messaging.adopt(snapshot)
         }
-        .sheet(item: messageDraft) { draft in
+        .edithSheet(item: messageDraft, dismissible: false) { draft in
             HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
         }
-        .sheet(isPresented: $launchSettingsPresented) {
+        .edithSheet(isPresented: $launchSettingsPresented) {
             HerdrLaunchSettingsSheet()
         }
-        .sheet(isPresented: $newAgentPopupPresented) {
+        .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)
         }
-        .sheet(item: $newAgentSpace) { space in
+        .edithSheet(item: $newAgentSpace, dismissible: nil) { space in
             HerdrNewAgentPopup(store: store, space: space)
         }
-        .sheet(isPresented: $store.searchPresented) {
+        .edithSheet(isPresented: $store.searchPresented) {
             HerdrSearchPopup(store: store) { agent in openAgent(agent) }
         }
         .alert(
@@ -272,8 +287,12 @@ struct HerdrPage: View {
 
     private var detailToggle: some View {
         Button {
-            withAnimation(store.layoutAnimation) {
-                store.detailOpen.toggle()
+            if compact {
+                compactDetailsPresented.toggle()
+            } else {
+                withAnimation(store.layoutAnimation) {
+                    store.detailOpen.toggle()
+                }
             }
         } label: {
             Image(systemName: "sidebar.right")
@@ -288,8 +307,14 @@ struct HerdrPage: View {
                 )
         }
         .buttonStyle(.edith(.borderless))
+        .popover(isPresented: $compactDetailsPresented) {
+            if let focused = store.focusedSession {
+                HerdrAgentDetails(store: store, tab: shown(focused), hideAgents: hideAgents)
+                    .frame(width: UIScale.pt(260), height: UIScale.pt(360))
+            }
+        }
         .help(HerdrAgentDetailCommand.help(open: store.detailOpen))
-        .accessibilityLabel(store.detailOpen ? "Hide details" : "Show details")
+        .accessibilityLabel(!compact && store.detailOpen ? "Hide details" : "Show details")
     }
 
     private var terminalToggle: some View {
@@ -339,8 +364,12 @@ struct HerdrPage: View {
 
     private var railToggle: some View {
         Button {
-            withAnimation(store.layoutAnimation) {
-                store.setRailOpen(!store.railOpen)
+            if compact {
+                compactRailPresented.toggle()
+            } else {
+                withAnimation(store.layoutAnimation) {
+                    store.setRailOpen(!store.railOpen)
+                }
             }
         } label: {
             Image(systemName: "sidebar.left")
@@ -355,8 +384,11 @@ struct HerdrPage: View {
                 )
         }
         .buttonStyle(.edith(.borderless))
+        .popover(isPresented: $compactRailPresented) {
+            agentList.frame(width: UIScale.pt(260), height: UIScale.pt(420))
+        }
         .help(store.railOpen ? "Hide the list" : "Show the list")
-        .accessibilityLabel(store.railOpen ? "Hide the list" : "Show the list")
+        .accessibilityLabel(!compact && store.railOpen ? "Hide the list" : "Show the list")
     }
 
     private func viewModes(for tab: HerdrOpenTab) -> some View {
@@ -617,8 +649,17 @@ struct HerdrPage: View {
 
     private var board: some View {
         Group {
-            if store.hosts.isEmpty, store.refreshing {
-                HerdrBoardSkeleton(dark: dark, compact: compact)
+            if store.hosts.isEmpty,
+                !store.inventoryReceived || store.refreshing || store.settling
+            {
+                PageLoading(state: .loading, layout: .cards) { EmptyView() }
+                    .pageContent(compact)
+            } else if store.agents.isEmpty, let failure = store.inventoryFailureMessage {
+                emptyState(title: "Unable to load Herdr sessions", detail: failure)
+            } else if store.hosts.isEmpty {
+                emptyState(
+                    title: "No Herdr hosts found",
+                    detail: "Refresh to look for Herdr on this Mac and your configured machines.")
             } else if store.hosts.allSatisfy({ !$0.herdrPresent }) && store.agents.isEmpty {
                 emptyState(
                     title: "Herdr is not installed",
@@ -1131,6 +1172,9 @@ struct HerdrPage: View {
                 .foregroundStyle(DashSkin.inkSoft(dark))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: UIScale.pt(420))
+            Button("Refresh") { Task { await store.refresh() } }
+                .buttonStyle(.edith(.secondary))
+                .disabled(store.refreshing)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .pageContent(compact)

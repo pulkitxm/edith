@@ -60,10 +60,16 @@ struct DatabaseWorkbenchView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.canvas)
-        .navigationRoute("mode", selection: modeBinding, isValid: modeIsValid)
-        .navigationRoute("table", selection: tableBinding, isValid: tableIsValid)
-        .task(id: connections.selectedConnection) {
-            guard automaticViewActionsEnabled else { return }
+        .navigationRoute(
+            "mode", selection: modeBinding, isValid: modeIsValid,
+            isReady: tabs.selected != nil && !tabs.data.isLoading
+        )
+        .navigationRoute(
+            "table", selection: tableBinding, isValid: tableIsValid,
+            isReady: connections.selectedConnectionID != nil
+                && tabs.connectionID == connections.selectedConnectionID
+        )
+        .pageTask(id: connections.selectedConnection) {
             tabs.prepare(for: connections.selectedConnection)
             explorer.prepare(for: connections.selectedConnection)
         }
@@ -76,8 +82,7 @@ struct DatabaseWorkbenchView: View {
         case .connecting:
             SkeletonReplica("Connecting to \(connection.name)") { workspace(connection) }
         case .connected:
-            workspace(connection).task(id: connection.id) {
-                guard automaticViewActionsEnabled else { return }
+            workspace(connection).pageTask(id: connection.id) {
                 explorer.load(connection)
             }
         case .disconnecting:
@@ -86,10 +91,12 @@ struct DatabaseWorkbenchView: View {
             VStack(spacing: UIScale.pt(12)) {
                 DatabaseWorkbenchEmptyState(
                     symbol: "exclamationmark.triangle", title: "Connection unavailable",
-                    detail: message)
+                    detail: message, fillsHeight: false)
                 Button("Try again") { Task { await connections.connectSelected() } }
                     .buttonStyle(.edith(.primary, tint: palette.accent))
-            }.padding(UIScale.pt(24))
+            }
+            .padding(UIScale.pt(24))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -212,6 +219,8 @@ struct DatabaseWorkbenchView: View {
                     systemImage: "tablecells"
                 )
                 .font(.system(size: UIScale.pt(11), weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
             }
             .popover(isPresented: $objectListPresented, arrowEdge: .bottom) {
                 List {
@@ -246,8 +255,7 @@ struct DatabaseWorkbenchView: View {
                 }
                 .frame(width: UIScale.pt(280), height: UIScale.pt(360))
             }
-            .buttonStyle(.borderless)
-            .fixedSize()
+            .buttonStyle(.edith(.toolbar))
             .disabled(explorer.groups.isEmpty)
             Spacer()
             Button {
@@ -271,6 +279,7 @@ struct DatabaseWorkbenchEmptyState: View {
     let symbol: String
     let title: String
     let detail: String
+    var fillsHeight = true
 
     var body: some View {
         VStack(spacing: UIScale.pt(11)) {
@@ -280,6 +289,7 @@ struct DatabaseWorkbenchEmptyState: View {
             Text(detail).font(.system(size: UIScale.pt(12))).foregroundStyle(.secondary)
                 .multilineTextAlignment(.center).frame(maxWidth: UIScale.pt(410))
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity).padding(UIScale.pt(26))
+        .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil)
+        .padding(UIScale.pt(26))
     }
 }

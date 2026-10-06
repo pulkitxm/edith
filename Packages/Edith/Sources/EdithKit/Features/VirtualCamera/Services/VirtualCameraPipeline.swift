@@ -15,6 +15,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         public var usingCamera = false
         public var running = false
         public var systemBackgroundActive = false
+        public var failureMessage: String?
 
         public init() {}
     }
@@ -83,6 +84,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             guard let self else { return }
             self.output = output
             self.running = true
+            self.updateStats { $0.failureMessage = nil }
             self.applyRunMode()
         }
     }
@@ -181,7 +183,12 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             if capture.isRunning {
                 capture.update(captureConfiguration())
             } else {
-                capture.start(captureConfiguration()) { [weak self] buffer, _, systemBackground in
+                capture.start(
+                    captureConfiguration(),
+                    failed: { [weak self] message in
+                        self?.updateStats { $0.failureMessage = message }
+                    }
+                ) { [weak self] buffer, _, systemBackground in
                     self?.handleCapture(buffer, systemBackgroundActive: systemBackground)
                 }
             }
@@ -262,6 +269,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         let fps = Double(frameTimes.count)
         updateStats {
             $0.framesRendered += 1
+            $0.failureMessage = nil
             $0.framesPerSecond = fps
             $0.running = true
         }

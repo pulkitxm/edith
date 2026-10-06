@@ -30,20 +30,19 @@ struct MachinesPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             header
+        } content: {
             content
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
         .navigationRoute("place", selection: placeBinding, isValid: placeIsValid)
         .navigationTitle("Machines")
-        .sheet(isPresented: $addSheetPresented) {
+        .edithSheet(isPresented: $addSheetPresented, dismissible: false) {
             AddMachineSheet { machine, secrets in
                 model.add(machine, secrets: changes(secrets))
             }
         }
-        .sheet(item: $editingMachine) { machine in
+        .edithSheet(item: $editingMachine, dismissible: false) { machine in
             AddMachineSheet(editing: machine) { updated, secrets in
                 model.update(updated, secrets: changes(secrets))
             }

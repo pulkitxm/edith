@@ -2,43 +2,33 @@ import AppKit
 import EdithCore
 import SwiftUI
 
-public enum UsageShareRenderingError: LocalizedError {
-    case unavailable
-    case encodingFailed
-
-    public var errorDescription: String? {
-        switch self {
-        case .unavailable: return "the usage image could not be rendered"
-        case .encodingFailed: return "the usage image could not be encoded as PNG"
-        }
+public struct UsageExportDeck: ExportCardDeck {
+    public let snapshot: UsageShareSnapshot
+    public init(snapshot: UsageShareSnapshot) { self.snapshot = snapshot }
+    public var cards: [UsageShareCard] { UsageShareCard.allCases }
+    public func title(for card: UsageShareCard) -> String { card.title }
+    public func filename(for card: UsageShareCard) -> String { card.filenameStem + ".png" }
+    public func content(for card: UsageShareCard) -> some View {
+        UsageShareCardView(snapshot: snapshot, card: card)
     }
 }
 
 @MainActor
 public enum UsageShareRenderer {
-    public static let size = CGSize(width: 1_200, height: 800)
+    public static let size = ExportCardRenderer.size
 
     public static func image(
         snapshot: UsageShareSnapshot, card: UsageShareCard, scale: CGFloat = 2
     ) throws -> NSImage {
-        let renderer = ImageRenderer(
-            content: UsageShareCardView(snapshot: snapshot, card: card)
-                .frame(width: size.width, height: size.height)
-        )
-        renderer.scale = scale
-        guard let image = renderer.nsImage else { throw UsageShareRenderingError.unavailable }
-        return image
+        try ExportCardRenderer.image(
+            UsageShareCardView(snapshot: snapshot, card: card), scale: scale)
     }
 
     public static func pngData(
         snapshot: UsageShareSnapshot, card: UsageShareCard, scale: CGFloat = 2
     ) throws -> Data {
-        let image = try image(snapshot: snapshot, card: card, scale: scale)
-        guard let tiff = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiff),
-            let data = bitmap.representation(using: .png, properties: [:])
-        else { throw UsageShareRenderingError.encodingFailed }
-        return data
+        try ExportCardRenderer.pngData(
+            UsageShareCardView(snapshot: snapshot, card: card), scale: scale)
     }
 }
 

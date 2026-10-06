@@ -20,6 +20,33 @@ import Testing
         #expect(ready())
     }
 
+    @Test func commandPresentationHasOneOwnerAndOnlyThatOwnerClosesIt() throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let model = VideoEditorModel { _ in throw CancellationError() }
+        defer { model.close() }
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic/pending.mov"), duration: 1, width: 64, height: 64)
+        model.project = project
+        model.rebuild()
+        let presentation = VideoEditorOpenBridge.Presentation(
+            request: try VideoEditorService.prepareOpen(url), model: model)
+        let first = StudioModel(loadsState: false)
+        let second = StudioModel(loadsState: false)
+        first.openCommandProject(presentation)
+        second.openCommandProject(presentation)
+        #expect(first.commandEditor === presentation)
+        #expect(second.commandEditor == nil)
+        #expect(second.route == .home)
+        presentation.close(for: second)
+        second.closeEditors()
+        #expect(model.isRebuildingPreview)
+        first.closeEditors()
+        #expect(!model.isRebuildingPreview)
+        #expect(!presentation.claim(for: second))
+    }
+
     @Test func successRequiresExactMountedModelAndRoutesRepeatedOpens() async throws {
         let url = try fixture()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -217,6 +244,7 @@ import Testing
             _ = try VideoEditorService.create(at: next, title: title)
             files.append(next)
             active.openProject(at: next)
+            try await waitUntil { !active.blocksCommandOpen }
         }
         #expect(active.project?.id != originalID)
         #expect(active.project?.title == title)

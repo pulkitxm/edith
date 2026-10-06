@@ -67,15 +67,15 @@ final class AttentionPageModel {
     var searchText = "" {
         didSet { if searchText != oldValue { scheduleSearch() } }
     }
-    private(set) var loaded = false
-    private(set) var pending = false
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
+    var pending: Bool { loading.isRunning }
     private(set) var hasStoredEvents = false
     private(set) var transferringBackup = false
     private(set) var categorizing = false
 
     private let repository: AttentionRepository
     private var reloadTask: Task<Void, Never>?
-    private var reloadGeneration = 0
     private var loadedParts: Set<AttentionSummaryPart> = []
     private var timelineTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
@@ -157,22 +157,19 @@ final class AttentionPageModel {
 
     private func startLoading() {
         loadedParts = []
-        pending = true
         reload()
     }
 
     private func ensurePart() {
         guard loaded, !loadedParts.contains(section.part) else { return }
         let retained = pending ? [] : loadedParts
-        pending = true
         reload(retaining: retained)
     }
 
     func reload(preserveSettings: Bool = false, retaining retained: Set<AttentionSummaryPart> = [])
     {
         reloadTask?.cancel()
-        reloadGeneration &+= 1
-        let generation = reloadGeneration
+        let generation = loading.begin()
         let repository = repository
         let period = period
         let window = window
@@ -206,11 +203,21 @@ final class AttentionPageModel {
         await timelineTask?.value
     }
 
+    func cancelLoading() {
+        reloadTask?.cancel()
+        reloadTask = nil
+        timelineTask?.cancel()
+        timelineTask = nil
+        searchTask?.cancel()
+        searchTask = nil
+        loading.cancel()
+    }
+
     private func publish(
         _ state: AttentionPageState, parts: Set<AttentionSummaryPart>, preserveSettings: Bool,
-        generation: Int
+        generation: UInt64
     ) {
-        guard !Task.isCancelled, reloadGeneration == generation else { return }
+        guard loading.isCurrent(generation) else { return }
         reloadTask = nil
         if !preserveSettings, settings != state.settings { settings = state.settings }
         if let derived = state.derived {
@@ -226,17 +233,15 @@ final class AttentionPageModel {
         hasStoredEvents = state.hasStoredEvents
         extensionInstalled = state.extensionInstalled
         loadedParts = parts
-        loaded = true
-        pending = false
+        loading.complete(generation)
         errorMessage = nil
     }
 
-    private func publishFailure(_ message: String, generation: Int) {
-        guard !Task.isCancelled, reloadGeneration == generation else { return }
+    private func publishFailure(_ message: String, generation: UInt64) {
+        guard loading.isCurrent(generation) else { return }
         reloadTask = nil
         errorMessage = message
-        loaded = true
-        pending = false
+        loading.fail(generation, message: message)
     }
 
     nonisolated private static func loadState(

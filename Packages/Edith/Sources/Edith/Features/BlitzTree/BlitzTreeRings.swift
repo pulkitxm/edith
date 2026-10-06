@@ -41,13 +41,13 @@ struct BlitzTreeRings: View {
         .chartAngleSelection(value: $selection)
         .overlay {
             VStack(spacing: 4) {
-                Text("Allocated").font(.caption).foregroundStyle(.secondary)
+                Text("Allocated").font(.edithText(.caption)).foregroundStyle(.secondary)
                 Text(
                     ByteCountFormatter.string(
                         fromByteCount: Int64(clamping: report.summary.allocatedBytes),
                         countStyle: .file)
                 )
-                .font(.title3).fontWeight(.semibold)
+                .font(.edithText(.title3)).fontWeight(.semibold)
             }
             .allowsHitTesting(false)
         }

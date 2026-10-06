@@ -18,14 +18,13 @@ struct DashboardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compactLayout
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
-    @Environment(\.windowVisible) private var windowVisible
     @State private var showLog = false
     @State private var folderPickerOpen = false
     @State private var sourcePickerOpen = false
     @State private var modelPickerOpen = false
     @State private var machinePickerOpen = false
     @State private var customRangeOpen = false
-    @State private var showShare = false
+    @State private var sharePresentation: ExportCardPresentation<UsageExportDeck>?
     @State private var customFrom = Date()
     @State private var customTo = Date()
 
@@ -59,79 +58,50 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        ZStack {
-            GeometryReader { geo in
-                let compact = geo.size.width < UIScale.pt(640)
-                VStack(spacing: UIScale.pt(0)) {
-                    masthead
-                    if model.loaded {
-                        controlsBar
-                    } else if !model.loadAttempted {
-                        DashboardControlsSkeleton()
-                    }
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                            if showLog {
-                                logView.pageGutter(compact)
-                            }
-                            if model.loaded {
-                                kpiGrid(compact: compact).pageGutter(compact)
-                                VStack(spacing: UIScale.pt(16)) {
-                                    activityRow(compact: compact)
-                                    LimitsCardView(theme: acc, dark: dark)
-                                    BudgetCardView(theme: acc, dark: dark)
-                                    charts(compact: compact)
-                                }
-                                .pageContent(compact)
-                            } else if !model.loadAttempted {
-                                DashboardPageSkeleton(dark: dark)
-                                    .pageContent(compact)
-                            } else {
-                                ContentUnavailableView(
-                                    "No usage data yet", systemImage: "chart.bar",
-                                    description: Text("Hit reload to run the bundled collector.")
-                                )
-                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(240))
-                            }
-                        }
-                        .padding(.top, UIScale.pt(16))
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .background(background)
-                .environment(\.compactLayout, compact)
+        PageScaffold {
+            masthead
+        } content: {
+            if showLog { logView }
+            if model.loaded, let error = model.contentLoad.errorMessage {
+                PageNotice(
+                    error, tone: .error,
+                    actions: {
+                        Button("Retry", action: refresh.requestRefresh)
+                    })
             }
-            if showShare {
-                shareOverlay
-                    .zIndex(10)
+            PageLoading(
+                state: model.contentLoad.state, title: "No usage data yet",
+                message: model.contentLoad.errorMessage ?? "Reload to run the bundled collector.",
+                layout: .analytics,
+                refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
+                retry: refresh.requestRefresh
+            ) {
+                controlsBar
+                kpiGrid(compact: compactLayout)
+                activityRow(compact: compactLayout)
+                LimitsCardView(theme: acc, dark: dark)
+                BudgetCardView(theme: acc, dark: dark)
+                charts(compact: compactLayout)
             }
         }
-        .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: showShare)
+        .exportCardPresentation(item: $sharePresentation)
         .navigationTitle("Agent Usage")
-        .task(id: refresh.updating) {
-            guard automaticActionsEnabled else { return }
-            guard !refresh.updating else { return }
+        .pageTask(id: refresh.updating, active: !refresh.updating) {
             await model.load()
             syncCustomDates()
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             refresh.requestRefresh()
         }
-        .task(id: windowVisible) {
-            guard automaticActionsEnabled, windowVisible else { return }
+        .pageTask {
             for await _ in AgentTopicStream.values(UsageTopicSnapshot.self, topic: .usage) {
+                guard !Task.isCancelled else { return }
                 await model.load()
                 syncCustomDates()
             }
         }
-        .onAppear {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.endObserving) {
             model.beginObserving()
-        }
-        .onDisappear {
-            guard automaticActionsEnabled else { return }
-            model.endObserving()
         }
         .onChange(of: model.loaded) { _, loaded in
             if automaticActionsEnabled, loaded { syncCustomDates() }
@@ -148,34 +118,6 @@ struct DashboardView: View {
         }
     }
 
-    private var shareOverlay: some View {
-        ZStack {
-            Button(action: closeShare) {
-                Color.black.opacity(dark ? 0.66 : 0.3)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.edith(.borderless))
-            .transition(.opacity)
-            UsageShareSheet(snapshot: shareSnapshot, onDismiss: closeShare)
-                .shadow(color: .black.opacity(0.34), radius: 40, y: 18)
-                .transition(
-                    Motion.transition(
-                        .move(edge: .top).combined(with: .opacity), reduceMotion: reduceMotion,
-                        preferCrossFade: false))
-        }
-    }
-
-    private func closeShare() {
-        withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
-            showShare = false
-        }
-    }
-
-    private var background: some View {
-        DashSkin.paper(dark).ignoresSafeArea(edges: .vertical)
-    }
-
     private var masthead: some View {
         PageHeader {
             Text("Agent usage")
@@ -190,44 +132,27 @@ struct DashboardView: View {
                     }
                 }
                 .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
-            } else {
-                SkeletonGroup {
-                    HStack(spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: 112, height: 9)
-                        SkeletonBlock(width: 64, height: 9)
-                        SkeletonBlock(width: 86, height: 9)
-                    }
-                }
-                .accessibilityLabel("Loading usage summary")
             }
         }
     }
 
     private var mastheadButtons: some View {
         HStack(spacing: UIScale.pt(6)) {
-            MastheadButton(
+            PageToolbarButton(
                 action: refresh.requestRefresh,
                 systemImage: "arrow.clockwise",
                 helperText: "Refresh usage data",
                 isLoading: refresh.updating
             )
-            MastheadButton(
+            PageToolbarButton(
                 action: { withAnimation(.easeOut(duration: 0.15)) { showLog.toggle() } },
                 systemImage: "terminal",
                 helperText: "Show collector log",
                 tint: showLog ? appTheme : DashSkin.inkFaint(dark)
             )
-            if model.loaded {
-                MastheadButton(
-                    action: {
-                        withAnimation(
-                            Motion.animation(Motion.feedback, reduceMotion: reduceMotion)
-                        ) {
-                            showShare = true
-                        }
-                    },
-                    systemImage: "square.and.arrow.up",
-                    helperText: "Share usage cards")
+            ExportCardButton(isEnabled: model.loaded, help: "Share usage cards") {
+                sharePresentation = ExportCardPresentation(
+                    deck: UsageExportDeck(snapshot: shareSnapshot), title: "Share usage cards")
             }
         }
     }
@@ -243,39 +168,6 @@ struct DashboardView: View {
             },
             agentCount: agents.count, repositoryCount: repositories.count,
             generatedAt: model.meta.updated)
-    }
-
-    private struct MastheadButton: View {
-        let action: () -> Void
-        let systemImage: String
-        let helperText: String
-        var isLoading = false
-        var tint: Color?
-        @Environment(\.colorScheme) private var scheme
-
-        var body: some View {
-            Button(action: action) {
-                Group {
-                    if isLoading {
-                        SkeletonGroup {
-                            SkeletonBlock(width: 18, height: 18, corner: 9)
-                        }
-                    } else if let tint {
-                        Image(systemName: systemImage).foregroundStyle(tint)
-                    } else {
-                        Image(systemName: systemImage).foregroundStyle(
-                            DashSkin.ink(scheme == .dark))
-                    }
-                }
-                .frame(width: UIScale.pt(30), height: UIScale.pt(30))
-                .contentShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.edith(.borderless))
-            .edithGlass(interactive: true, in: RoundedRectangle(cornerRadius: 8))
-            .disabled(isLoading)
-            .help(helperText)
-            .accessibilityLabel(helperText)
-        }
     }
 
     private struct MetaSegment: Identifiable {
@@ -364,12 +256,12 @@ struct DashboardView: View {
     @ViewBuilder private func activityRow(compact: Bool) -> some View {
         if compact {
             VStack(spacing: UIScale.pt(16)) {
-                SkinCard(title: "Activity", dark: dark) { activityHeatmap }
+                PageCard(title: "Activity") { activityHeatmap }
                 RateLimitsDialsView(dark: dark)
             }
         } else {
             HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                SkinCard(title: "Activity", dark: dark, fill: true) { activityHeatmap }
+                PageCard(title: "Activity", fill: true) { activityHeatmap }
                 RateLimitsDialsView(dark: dark, fill: true).frame(width: UIScale.pt(340))
             }
             .fixedSize(horizontal: false, vertical: true)
@@ -408,7 +300,6 @@ struct DashboardView: View {
             compactControlsBar
         }
         .foregroundStyle(DashSkin.inkSoft(dark))
-        .pageGutter(compactLayout)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical)
     }
@@ -826,8 +717,8 @@ struct DashboardView: View {
                     }
                 }
             }
-            SkinCard(
-                title: "Models", note: "\(model.modelTotals.count) total", dark: dark
+            PageCard(
+                title: "Models", note: "\(model.modelTotals.count) total"
             ) {
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                     if model.modelUnfilterableCost > 0.000_001 {
@@ -1032,11 +923,6 @@ private struct FilterChip: ViewModifier {
     }
 }
 
-private struct HeatHover: Identifiable {
-    let id: String
-    let detail: HeatDay
-}
-
 struct ActivityHeatmap: View {
     let days: [DayPoint]
     let cuts: [Double]
@@ -1044,334 +930,20 @@ struct ActivityHeatmap: View {
     let dark: Bool
     var blur = false
     var blurTokens = false
-    @State private var hovered: HeatHover?
-
     var body: some View {
-        let weeks = stride(from: 0, to: days.count, by: 7).map {
-            Array(days[$0..<min($0 + 7, days.count)])
-        }
-        return HStack(alignment: .top, spacing: UIScale.pt(4)) {
-            VStack(spacing: UIScale.pt(3)) {
-                ForEach(Array(["M", "", "W", "", "F", "", "S"].enumerated()), id: \.offset) {
-                    _, label in
-                    Text(label)
-                        .font(.system(size: UIScale.pt(9)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(12), height: UIScale.pt(14))
-                }
-            }
-            .padding(.top, UIScale.pt(15))
-            GeometryReader { geometry in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: UIScale.pt(3)) {
-                        ForEach(Array(weeks.enumerated()), id: \.offset) { index, week in
-                            VStack(spacing: UIScale.pt(3)) {
-                                Text(monthLabel(for: weeks, at: index))
-                                    .font(.system(size: UIScale.pt(9)))
-                                    .foregroundStyle(DashSkin.inkFaint(dark))
-                                    .frame(height: UIScale.pt(12))
-                                ForEach(week) { day in
-                                    HeatCellView(
-                                        fill: cellColor(day.cost, cuts: cuts),
-                                        stroke: DashSkin.ink(dark).opacity(
-                                            hovered?.id == day.id ? 0.5 : 0)
-                                    )
-                                    .onHover { inside in
-                                        if inside {
-                                            if let detail = model.heatDetail[day.id] {
-                                                hovered = HeatHover(id: day.id, detail: detail)
-                                            } else {
-                                                hovered = nil
-                                            }
-                                        } else if hovered?.id == day.id {
-                                            hovered = nil
-                                        }
-                                    }
-                                    .popover(
-                                        isPresented: Binding(
-                                            get: { hovered?.id == day.id },
-                                            set: { shown in
-                                                if !shown, hovered?.id == day.id { hovered = nil }
-                                            }),
-                                        arrowEdge: .trailing
-                                    ) {
-                                        if let hovered, hovered.id == day.id {
-                                            HeatCard(
-                                                detail: hovered.detail, model: model, dark: dark,
-                                                blur: blur, blurTokens: blurTokens)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .frame(minWidth: geometry.size.width, alignment: .leading)
-                }
-                .defaultScrollAnchor(weeks.count > 18 ? .trailing : .leading)
+        let weeks = ActivityCalendar.weeks(
+            days: days.map {
+                ActivityCalendarDay(id: $0.id, date: $0.date, value: $0.cost)
+            }, cuts: cuts)
+        ActivityCalendarGrid(weeks: weeks, dark: dark) { day in
+            if let detail = model.heatDetail[day.id] {
+                HeatCard(
+                    detail: detail, model: model, dark: dark, blur: blur, blurTokens: blurTokens)
+            } else {
+                Text("No usage on this day.")
+                    .font(.system(size: UIScale.pt(12)))
+                    .padding(UIScale.pt(12))
             }
         }
-        .frame(height: UIScale.pt(137))
-    }
-
-    private func monthLabel(for weeks: [[DayPoint]], at index: Int) -> String {
-        guard let first = weeks[index].first?.date else { return "" }
-        let month = Calendar.current.component(.month, from: first)
-        if index > 0, let prev = weeks[index - 1].first?.date,
-            Calendar.current.component(.month, from: prev) == month
-        {
-            return ""
-        }
-        return first.formatted(.dateTime.month(.abbreviated))
-    }
-
-    private func cellColor(_ cost: Double, cuts: [Double]) -> Color {
-        if cost <= 0 { return DashSkin.grid(dark) }
-        if cost <= cuts[0] { return DashSkin.heat(0, dark) }
-        if cost <= cuts[1] { return DashSkin.heat(1, dark) }
-        if cost <= cuts[2] { return DashSkin.heat(2, dark) }
-        return DashSkin.heat(3, dark)
-    }
-}
-
-private struct HeatCellView: View {
-    let fill: Color
-    let stroke: Color
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: UIScale.pt(3))
-            .fill(fill)
-            .frame(width: UIScale.pt(14), height: UIScale.pt(14))
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(3))
-                    .strokeBorder(stroke, lineWidth: UIScale.pt(1))
-            )
-    }
-}
-
-private struct DashboardControlsSkeleton: View {
-    @Environment(\.compactLayout) private var compact
-    private let rangeWidths = [48.0, 74, 92, 34, 62, 100, 98, 44]
-    private let scopeWidths = [88.0, 104, 92, 90]
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                controlRow(widths: rangeWidths, split: 5)
-                controlRow(widths: scopeWidths, split: 1)
-            }
-            .pageGutter(compact)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical)
-        }
-        .accessibilityLabel("Loading usage controls")
-    }
-
-    @ViewBuilder private func controlRow(widths: [Double], split: Int) -> some View {
-        if compact {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                SkeletonBlock(width: 42, height: 7)
-                WrapHStack(spacing: UIScale.pt(8), lineSpacing: 8) {
-                    ForEach(Array(widths.enumerated()), id: \.offset) { _, width in
-                        SkeletonBlock(width: width, height: 25, corner: 8)
-                    }
-                }
-            }
-        } else {
-            HStack(spacing: UIScale.pt(8)) {
-                SkeletonBlock(width: 42, height: 7)
-                    .frame(width: UIScale.pt(42), alignment: .leading)
-                ForEach(Array(widths.prefix(split).enumerated()), id: \.offset) { _, width in
-                    SkeletonBlock(width: width, height: 25, corner: 8)
-                }
-                Spacer(minLength: UIScale.pt(8))
-                ForEach(Array(widths.dropFirst(split).enumerated()), id: \.offset) { _, width in
-                    SkeletonBlock(width: width, height: 25, corner: 8)
-                }
-            }
-        }
-    }
-}
-
-private struct DashboardPageSkeleton: View {
-    let dark: Bool
-    @Environment(\.compactLayout) private var compact
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(spacing: UIScale.pt(16)) {
-                LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(minimum: UIScale.pt(compact ? 145 : 190)),
-                            spacing: UIScale.pt(12))
-                    ],
-                    spacing: UIScale.pt(12)
-                ) {
-                    ForEach(0..<8, id: \.self) { index in
-                        HStack(spacing: UIScale.pt(0)) {
-                            SkeletonBlock(width: 3, height: 78, corner: 0)
-                            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                                SkeletonBlock(
-                                    width: index.isMultiple(of: 3) ? 82 : 68, height: 8)
-                                SkeletonBlock(
-                                    width: index.isMultiple(of: 2) ? 96 : 72, height: 22)
-                                SkeletonBlock(
-                                    width: index.isMultiple(of: 3) ? 116 : 92, height: 9)
-                            }
-                            .padding(UIScale.pt(14))
-                            Spacer(minLength: 0)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            DashSkin.paper2(dark),
-                            in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
-                    }
-                }
-                if compact {
-                    VStack(spacing: UIScale.pt(16)) {
-                        DashboardPanelSkeleton(kind: .heatmap, dark: dark)
-                        DashboardPanelSkeleton(kind: .dials, dark: dark)
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                        DashboardPanelSkeleton(kind: .heatmap, dark: dark)
-                        DashboardPanelSkeleton(kind: .dials, dark: dark)
-                            .frame(width: UIScale.pt(340))
-                    }
-                }
-                DashboardPanelSkeleton(kind: .history, dark: dark)
-                DashboardPanelSkeleton(kind: .budget, dark: dark)
-                ForEach(0..<3, id: \.self) { _ in
-                    DashboardPanelSkeleton(kind: .chart, dark: dark)
-                }
-                if compact {
-                    VStack(spacing: UIScale.pt(16)) {
-                        DashboardPanelSkeleton(kind: .chart, dark: dark)
-                        DashboardPanelSkeleton(kind: .chart, dark: dark)
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                        DashboardPanelSkeleton(kind: .chart, dark: dark)
-                        DashboardPanelSkeleton(kind: .chart, dark: dark)
-                    }
-                }
-                DashboardPanelSkeleton(kind: .table, dark: dark)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .top)
-        .accessibilityLabel("Loading usage data")
-    }
-}
-
-private enum DashboardPanelSkeletonKind: Equatable {
-    case heatmap, dials, history, budget, chart, table
-}
-
-private struct DashboardPanelSkeleton: View {
-    let kind: DashboardPanelSkeletonKind
-    let dark: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack {
-                SkeletonBlock(width: titleWidth, height: 16)
-                Spacer()
-                if kind == .dials || kind == .table {
-                    SkeletonBlock(width: 72, height: 8)
-                }
-            }
-            panelContent
-        }
-        .padding(UIScale.pt(16))
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(
-            DashSkin.paper2(dark),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(16)))
-    }
-
-    @ViewBuilder private var panelContent: some View {
-        switch kind {
-        case .heatmap:
-            HStack(alignment: .top, spacing: UIScale.pt(8)) {
-                VStack(spacing: UIScale.pt(7)) {
-                    ForEach(0..<7, id: \.self) { _ in SkeletonBlock(width: 24, height: 7) }
-                }
-                HStack(spacing: UIScale.pt(3)) {
-                    ForEach(0..<18, id: \.self) { column in
-                        VStack(spacing: UIScale.pt(3)) {
-                            ForEach(0..<7, id: \.self) { row in
-                                SkeletonBlock(
-                                    width: 8, height: 8,
-                                    corner: (column + row).isMultiple(of: 4) ? 3 : 2)
-                            }
-                        }
-                    }
-                }
-            }
-        case .dials:
-            HStack(spacing: UIScale.pt(24)) {
-                ForEach(0..<2, id: \.self) { _ in
-                    VStack(spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: 104, height: 104, corner: 52)
-                        SkeletonBlock(width: 72, height: 7)
-                        SkeletonBlock(width: 84, height: 8)
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity)
-        case .history:
-            SkeletonBlock(width: 88, height: 18, corner: 9)
-            HStack {
-                ForEach(0..<4, id: \.self) { _ in
-                    SkeletonBlock(width: 38, height: 22, corner: 11)
-                }
-                Spacer()
-                SkeletonBlock(width: 126, height: 8)
-            }
-            chartPlot(height: 150)
-        case .budget:
-            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
-                SkeletonBlock(width: 54, height: 24)
-                SkeletonBlock(width: 74, height: 22, corner: 11)
-                Spacer()
-                SkeletonBlock(width: 108, height: 8)
-            }
-            SkeletonBlock(height: 8, corner: 4)
-            HStack(spacing: UIScale.pt(16)) {
-                ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 78, height: 22) }
-            }
-        case .chart:
-            chartPlot(height: 166)
-        case .table:
-            ForEach(0..<5, id: \.self) { index in
-                HStack(spacing: UIScale.pt(8)) {
-                    SkeletonBlock(width: 8, height: 8, corner: 4)
-                    SkeletonBlock(width: index.isMultiple(of: 2) ? 142 : 112, height: 9)
-                    Spacer()
-                    ForEach(0..<3, id: \.self) { _ in SkeletonBlock(width: 54, height: 9) }
-                }
-                Divider()
-            }
-        }
-    }
-
-    private var titleWidth: Double {
-        switch kind {
-        case .heatmap: 66
-        case .dials: 86
-        case .history: 216
-        case .budget: 126
-        case .chart: 118
-        case .table: 58
-        }
-    }
-
-    private func chartPlot(height: Double) -> some View {
-        HStack(alignment: .bottom, spacing: UIScale.pt(6)) {
-            ForEach(0..<12, id: \.self) { index in
-                SkeletonBlock(height: Double(28 + index % 5 * 18), corner: 3)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .bottom)
     }
 }

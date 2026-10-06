@@ -109,7 +109,7 @@ import EdithKit
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         #expect(source.contains("LazyVGrid(columns: columns"))
-        #expect(source.contains(".adaptive(minimum:"))
+        #expect(source.contains("PageMetrics.cardColumns(compact,"))
         #expect(source.contains("maxWidth: .infinity"))
     }
 

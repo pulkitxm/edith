@@ -12,43 +12,47 @@ struct BlitzTreePage: View {
     @Environment(\.windowRouter) private var router
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                PageHeader {
-                    Text("BlitzTree")
-                } accessory: {
-                    HStack {
-                        if model.scanning {
-                            ProgressView().controlSize(.small)
-                            Button("Cancel", action: model.cancel)
-                        } else if let root = model.root {
-                            Button("Rescan", systemImage: "arrow.clockwise") {
-                                model.scan(root, remember: false)
-                            }
+        PageScaffold {
+            PageHeader {
+                Text("BlitzTree")
+            } accessory: {
+                HStack {
+                    if model.scanning {
+                        LoadingIndicator()
+                        Button("Cancel", action: model.cancel)
+                    } else if let root = model.root {
+                        Button("Rescan", systemImage: "arrow.clockwise") {
+                            model.scan(root, remember: false)
                         }
-                        Button("Choose folder", systemImage: "folder") { chooseFolder() }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.removing)
                     }
+                    Button("Choose folder", systemImage: "folder") { chooseFolder() }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.removing)
                 }
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    navigation
-                    if let error = model.error {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.orange)
-                            .textSelection(.enabled)
-                    }
-                    if let report = model.report {
-                        results(report)
-                    } else {
-                        emptyState
-                    }
-                }
-                .pageGutter(compact)
             }
-            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+        } content: {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                navigation
+                if let error = model.error {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
+                if model.root == nil {
+                    emptyState
+                } else {
+                    PageLoading(
+                        state: model.loading.state,
+                        message: model.loading.errorMessage ?? "The folder scan was interrupted.",
+                        layout: .analytics, refreshing: model.loading.isRefreshing,
+                        retry: { if let root = model.root { model.scan(root, remember: false) } },
+                        cancel: model.cancel
+                    ) {
+                        if let report = model.report { results(report) }
+                    }
+                }
+            }
         }
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("list", selection: $list)
         .navigationRoute("folder", selection: folderBinding, isValid: folderIsValid)
         .onDisappear { model.cancel() }
@@ -125,7 +129,10 @@ struct BlitzTreePage: View {
     }
 
     @ViewBuilder private func results(_ report: BlitzTreeReport) -> some View {
-        HStack(spacing: UIScale.pt(24)) {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(130)), spacing: UIScale.pt(24))],
+            alignment: .leading
+        ) {
             metric("Allocated", bytes(report.summary.allocatedBytes))
             metric("Files", report.summary.fileCount.formatted())
             metric("Folders", report.summary.directoryCount.formatted())
@@ -136,19 +143,18 @@ struct BlitzTreePage: View {
                 "Partial scan: \(report.coverage.errors) errors, \(report.coverage.skippedCloudDirectories) cloud folders and \(report.coverage.skippedMountPoints) mount points skipped.",
                 systemImage: "exclamationmark.triangle.fill"
             )
-            .font(.callout)
+            .font(.edithText(.callout))
             .foregroundStyle(.orange)
         }
         HStack {
             Text(model.removing ? "Moving to Trash..." : "Folder overview")
-                .font(.headline)
+                .font(.edithText(.headline))
             Spacer()
-            Picker("Visualization", selection: $rings) {
-                Text("Treemap").tag(false)
-                Text("Rings").tag(true)
-            }
+            EdithSegmentedPicker(
+                "Visualization", selection: $rings, options: [false, true],
+                label: { $0 ? "Rings" : "Treemap" }
+            )
             .labelsHidden()
-            .pickerStyle(.segmented)
             .frame(width: UIScale.pt(180))
         }
         Group {
@@ -161,17 +167,15 @@ struct BlitzTreePage: View {
         .frame(height: UIScale.pt(280))
         .disabled(model.removing)
         Text("Allocated space, not guaranteed recoverable space. Click a folder to scan inside it.")
-            .font(.caption)
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
-        Picker("Show", selection: $list) {
-            ForEach(BlitzTreeList.allCases) { item in Text(item.rawValue).tag(item) }
-        }
-        .pickerStyle(.segmented)
+        EdithSegmentedPicker(
+            "Show", selection: $list, options: BlitzTreeList.allCases, label: { $0.rawValue })
         if list == .candidates {
             Text(
                 "\(report.report.candidateCount) candidates. Review each folder in Finder before removing anything.\(report.report.truncated ? " Showing the largest 200." : "")"
             )
-            .font(.callout)
+            .font(.edithText(.callout))
             .foregroundStyle(.secondary)
         }
         let entries = list.entries(report)
@@ -192,9 +196,9 @@ struct BlitzTreePage: View {
                         activate(entry)
                     } label: {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            Text(entry.name).fontWeight(.medium)
+                            Text(entry.name).fontWeight(.medium).lineLimit(1)
                             Text(entry.reason ?? entry.path)
-                                .font(.caption)
+                                .font(.edithText(.caption))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
@@ -225,8 +229,8 @@ struct BlitzTreePage: View {
 
     private func metric(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title2).monospacedDigit()
+            Text(label).font(.edithText(.caption)).foregroundStyle(.secondary)
+            Text(value).font(.edithText(.title2)).monospacedDigit()
         }
     }
 

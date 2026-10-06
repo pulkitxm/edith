@@ -156,7 +156,7 @@ ci-swift-build: approve-package-plugins
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
 
 ci-swift-test: ci-studio
-	cd $(PKG) && ./test.sh
+	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
 
 ci-swift-test-batch:
 	@test -n "$(BATCH)" || { echo "set BATCH to a swift test batch" >&2; exit 1; }
@@ -327,8 +327,8 @@ ci-links:
 ci-workflows:
 	@command -v actionlint >/dev/null || { echo "actionlint missing: run make ci-tools" >&2; exit 1; }
 	@command -v zizmor >/dev/null || { echo "zizmor missing: run make ci-tools" >&2; exit 1; }
-	actionlint .github/workflows-disabled/*.yml
-	zizmor --persona=pedantic --min-severity=high --format=plain .github/workflows-disabled/*.yml
+	actionlint .github/workflows/*.yml
+	zizmor --persona=pedantic --min-severity=high --format=plain .github/workflows/*.yml
 
 ci-security:
 	$(MAKE) ci-secrets ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy

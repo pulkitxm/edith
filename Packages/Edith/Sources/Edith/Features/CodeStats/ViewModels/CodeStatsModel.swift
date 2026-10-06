@@ -11,7 +11,7 @@ final class CodeStatsModel {
     private(set) var report: CodeStatsReport?
     private(set) var projection = CodeStatsProjection()
     private(set) var reportLoaded = false
-    private(set) var reportError: String?
+    var reportError: String? { reportLoad.errorMessage }
     private(set) var profileLookup: CodeStatsProfileLookup?
     private(set) var profileLoading = false
     private(set) var authors: [CodeStatsDiscoveredAuthor] = []
@@ -24,7 +24,7 @@ final class CodeStatsModel {
     private(set) var table: CodeStatsFactTable?
     private(set) var audit: CodeStatsAudit?
     private(set) var filter = CodeStatsFilter.default
-    private(set) var isComputing = false
+    var isComputing: Bool { computation.isRunning }
     private(set) var facets = CodeStatsFacets()
     private(set) var identityPendingRecount = false
     private(set) var explorer = CodeStatsExplorer()
@@ -34,9 +34,9 @@ final class CodeStatsModel {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private let today: @Sendable () -> Date
-    @ObservationIgnored private var reportGeneration = 0
-    @ObservationIgnored private var statusGeneration = 0
-    @ObservationIgnored private var computeGeneration = 0
+    let statusLoad = ContentLoad()
+    let reportLoad = ContentLoad()
+    let computation = ContentLoad()
 
     init(
         service: CodeStatsPageService = .live, defaults: UserDefaults = SharedDefaults.store,
@@ -53,6 +53,30 @@ final class CodeStatsModel {
         CodeStatsPagePhase.resolve(
             status: status, hasReport: report != nil, reportLoaded: reportLoaded,
             reportFailed: reportError != nil)
+    }
+
+    var loadingState: ContentLoadingState {
+        if report != nil { return .content }
+        if status == nil { return statusLoad.state }
+        if !reportLoaded { return reportLoad.state }
+        switch phase {
+        case .loading: return reportLoad.state == .content ? .loading : reportLoad.state
+        case .firstRun: return .loading
+        case .setup, .content: return .content
+        case .unavailable: return .error
+        }
+    }
+
+    var loadingError: String? { statusLoad.errorMessage ?? reportLoad.errorMessage }
+
+    var isRefreshing: Bool {
+        report != nil && (statusLoad.isRunning || reportLoad.isRunning || computation.isRunning)
+    }
+
+    func cancelLoading() {
+        statusLoad.cancel()
+        reportLoad.cancel()
+        computation.cancel()
     }
 
     var showsPreviousRange: Bool {
@@ -109,25 +133,26 @@ final class CodeStatsModel {
 
     func refresh() async {
         await loadStatus()
+        guard !Task.isCancelled else { return }
         await loadReport()
     }
 
     func loadStatus() async {
-        statusGeneration += 1
-        let generation = statusGeneration
+        let request = statusLoad.begin()
+        defer { if Task.isCancelled { statusLoad.cancel(request) } }
         do {
             let next = try await service.status()
-            guard generation == statusGeneration else { return }
+            guard statusLoad.isCurrent(request) else { return }
             await apply(next)
+            statusLoad.complete(request)
         } catch {
-            guard generation == statusGeneration else { return }
-            errorMessage = error.localizedDescription
+            statusLoad.fail(request, error: error)
         }
     }
 
     func loadReport() async {
-        reportGeneration += 1
-        let generation = reportGeneration
+        let request = reportLoad.begin()
+        defer { if Task.isCancelled { reportLoad.cancel(request) } }
         let requested = range
         let calendar = calendar
         do {
@@ -135,27 +160,26 @@ final class CodeStatsModel {
                 let options = await Task.detached(priority: .userInitiated) {
                     CodeStatsFacets(table: facts)
                 }.value
-                guard generation == reportGeneration else { return }
+                guard reportLoad.isCurrent(request) else { return }
                 table = facts
                 facets = options
                 await recompute()
-                guard generation == reportGeneration else { return }
+                guard reportLoad.isCurrent(request) else { return }
                 reportLoaded = true
-                reportError = nil
+                reportLoad.complete(request)
                 return
             }
             let next = try await service.report(requested)
             let projected = await Task.detached(priority: .userInitiated) {
                 next.map { CodeStatsProjection(report: $0, calendar: calendar) }
             }.value
-            guard generation == reportGeneration else { return }
+            guard reportLoad.isCurrent(request) else { return }
             report = next
             projection = projected ?? CodeStatsProjection()
             reportLoaded = true
-            reportError = nil
+            reportLoad.complete(request)
         } catch {
-            guard generation == reportGeneration else { return }
-            reportError = error.localizedDescription
+            reportLoad.fail(request, error: error)
         }
     }
 
@@ -245,15 +269,12 @@ final class CodeStatsModel {
 
     func recompute() async {
         guard let table else { return }
-        computeGeneration += 1
-        let generation = computeGeneration
         let filter = filter
         let range = range
         let calendar = calendar
         let identity = identity
         let now = today()
-        isComputing = true
-        let result = await Task.detached(priority: .userInitiated) {
+        await computation.perform(operation: {
             let report = CodeStatsReportBuilder.build(
                 table: table, filter: filter, range: range, today: now, calendar: calendar)
             return (
@@ -263,19 +284,19 @@ final class CodeStatsModel {
                     table: table, filter: filter, startDay: report.startDay,
                     endDay: report.endDay, calendar: calendar)
             )
-        }.value
-        guard generation == computeGeneration else { return }
-        report = result.0
-        projection = result.1
-        audit = result.2
-        explorer = result.3
-        isComputing = false
+        }) { result in
+            report = result.0
+            projection = result.1
+            audit = result.2
+            explorer = result.3
+        }
     }
 
     func apply(_ next: CodeStatsStatus) async {
         let previous = status
         guard next.revision >= previous?.revision ?? 0 else { return }
         status = next
+        if !statusLoad.isRunning, !statusLoad.hasContent { statusLoad.setContent() }
         identity = next.settings.identity
         let finished = previous?.isRunning == true && !next.isRunning
         if finished { identityPendingRecount = false }

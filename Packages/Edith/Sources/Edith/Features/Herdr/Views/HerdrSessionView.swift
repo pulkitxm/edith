@@ -156,13 +156,15 @@ struct HerdrSessionView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if showsDetails, store.detailOpen {
-                HerdrDetailColumn(
-                    store: store, tab: tab, hideAgents: hideAgents, onSetView: onSetView,
-                    presenterID: tab.id)
+        GeometryReader { geometry in
+            HStack(spacing: 0) {
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                if showsDetails, store.detailOpen {
+                    HerdrDetailColumn(
+                        store: store, tab: tab, hideAgents: hideAgents, onSetView: onSetView,
+                        presenterID: tab.id, maximumWidth: geometry.size.width * 0.4)
+                }
             }
         }
         .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
@@ -170,7 +172,7 @@ struct HerdrSessionView: View {
         .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
             store.messaging.adopt($0)
         }
-        .sheet(item: messageDraft) { draft in
+        .edithSheet(item: messageDraft, dismissible: false) { draft in
             HerdrMessageSheet(messaging: store.messaging, draft: draft, hideAgents: hideAgents)
         }
     }

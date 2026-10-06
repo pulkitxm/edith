@@ -62,7 +62,9 @@ enum CompanionTab: String, CaseIterable, Identifiable {
 struct CompanionPage: View {
     @State private var home = CompanionHomeModel()
     @State private var chat = CompanionChatModel()
-    @State private var capture = CompanionCaptureModel()
+    @StateObject private var fallbackOwner = WindowSessionOwner()
+    @Environment(\.windowSessionOwner) private var sessionOwner
+    private var capture: CompanionCaptureModel { sessionOwner?.capture ?? fallbackOwner.capture }
     @State private var library = CompanionLibraryModel()
     @State private var mind = CompanionMindModel()
     @State private var desk = CompanionDeskModel()
@@ -90,16 +92,22 @@ struct CompanionPage: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             header
             tabBar
             Divider().opacity(0.35)
+        } content: {
             screens.presenterCover(.memory)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(pageBackground)
         .navigationRoute("tab", selection: tabBinding)
-        .sheet(item: $setupModel) { model in
+        .edithSheet(
+            item: Binding(
+                get: { setupModel },
+                set: { model in
+                    if model == nil { setupModel?.onFinish(false) } else { setupModel = model }
+                }),
+            dismissible: setupModel?.deploying != true
+        ) { model in
             CompanionSetupSheet(model: model, home: home)
         }
         .onDrop(of: [.fileURL], isTargeted: $library.dropTargeted) { providers in
@@ -112,22 +120,26 @@ struct CompanionPage: View {
             }
             return true
         }
-        .task(id: windowVisible) {
-            guard requestsEnabled, windowVisible else { return }
-            while !Task.isCancelled {
-                await home.refresh()
-                guard !Task.isCancelled else { return }
-                if !checkedSetup {
-                    checkedSetup = true
-                    if CompanionDeploymentStore.load() == nil, !home.reachable,
-                        !setupDeclined
-                    {
-                        openSetup()
-                    } else if !home.reachable {
-                        select(.setup)
-                    }
+        .onAppear { capture.setCaptureActive(tab == .capture && windowVisible) }
+        .onChange(of: tab) { _, tab in
+            capture.setCaptureActive(tab == .capture && windowVisible)
+        }
+        .onChange(of: windowVisible) { _, visible in
+            capture.setCaptureActive(tab == .capture && visible)
+        }
+        .onDisappear { capture.setCaptureActive(false) }
+        .pageRefresh(active: requestsEnabled, interval: { .seconds(20) }) {
+            await home.refresh()
+            guard !Task.isCancelled else { return }
+            if !checkedSetup {
+                checkedSetup = true
+                if CompanionDeploymentStore.load() == nil, !home.reachable,
+                    !setupDeclined
+                {
+                    openSetup()
+                } else if !home.reachable {
+                    select(.setup)
                 }
-                try? await Task.sleep(for: .seconds(20), tolerance: .seconds(2))
             }
         }
     }
@@ -188,7 +200,6 @@ struct CompanionPage: View {
                 }
             }
         )
-        .pageGutter(compact)
     }
 
     private var healthTint: Color {
@@ -213,40 +224,43 @@ struct CompanionPage: View {
     }
 
     private var tabBar: some View {
-        HStack(spacing: UIScale.pt(4)) {
-            ForEach(CompanionTab.allCases) { item in
-                Button {
-                    select(item)
-                } label: {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: UIScale.pt(11), weight: .medium))
-                        Text(item.title)
-                            .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                    }
-                    .padding(.horizontal, UIScale.pt(11))
-                    .padding(.vertical, UIScale.pt(6))
-                    .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-                    .background {
-                        if tab == item {
-                            RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                .fill(DashSkin.paper2(dark))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                        .strokeBorder(DashSkin.line(dark))
-                                }
-                                .matchedGeometryEffect(id: "companionTab", in: tabGlow)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: UIScale.pt(4)) {
+                ForEach(CompanionTab.allCases) { item in
+                    Button {
+                        select(item)
+                    } label: {
+                        HStack(spacing: UIScale.pt(6)) {
+                            Image(systemName: item.icon)
+                                .font(.system(size: UIScale.pt(11), weight: .medium))
+                            Text(item.title)
+                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                .lineLimit(1)
                         }
+                        .padding(.horizontal, UIScale.pt(11))
+                        .padding(.vertical, UIScale.pt(6))
+                        .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
+                        .background {
+                            if tab == item {
+                                RoundedRectangle(cornerRadius: UIScale.pt(8))
+                                    .fill(DashSkin.paper2(dark))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: UIScale.pt(8))
+                                            .strokeBorder(DashSkin.line(dark))
+                                    }
+                                    .matchedGeometryEffect(id: "companionTab", in: tabGlow)
+                            }
+                        }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.edith(.borderless))
+                    .help(item.title)
                 }
-                .buttonStyle(.edith(.borderless))
-                .help(item.title)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            .padding(.horizontal, PageMetrics.gutter(compact))
+            .padding(.bottom, UIScale.pt(12))
         }
-        .padding(.horizontal, PageMetrics.gutter(compact))
-        .padding(.bottom, UIScale.pt(12))
     }
 
     private var screens: some View {

@@ -267,7 +267,7 @@ struct MachineControlCenterButton: View {
             batteryStatus
             controlButton
         }
-        .task(id: connectionPhase) {
+        .pageTask(id: connectionPhase) {
             await model.prepare(for: connectionPhase)
         }
     }

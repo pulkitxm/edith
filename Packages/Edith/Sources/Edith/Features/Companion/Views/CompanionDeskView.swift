@@ -13,7 +13,8 @@ final class CompanionDeskModel: CompanionRefreshable {
     private(set) var hypotheses: [CompanionHypothesis] = []
     private(set) var lastResolution: String?
     private(set) var busy = false
-    private(set) var loaded = false
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
     private(set) var error: String?
     var draft = ""
 
@@ -30,24 +31,23 @@ final class CompanionDeskModel: CompanionRefreshable {
     }
 
     func refresh() async {
-        do {
-            let client = client
+        let client = client
+        await loading.perform(operation: {
             async let beliefs = client.beliefs(limit: 12)
             async let predictions = client.predictions(limit: 12)
             async let discrepancies = client.discrepancies(limit: 12)
             async let hypotheses = client.hypotheses(limit: 8)
             async let queued = client.questions(limit: 5)
-            self.beliefs = try await beliefs
-            self.predictions = try await predictions
-            self.discrepancies = try await discrepancies
-            self.hypotheses = try await hypotheses
-            let answered = try await queued
-            budget = (answered.askedToday, answered.dailyBudget)
-            loaded = true
+            return try await (beliefs, predictions, discrepancies, hypotheses, queued)
+        }) { result in
+            self.beliefs = result.0
+            self.predictions = result.1
+            self.discrepancies = result.2
+            self.hypotheses = result.3
+            budget = (result.4.askedToday, result.4.dailyBudget)
             error = nil
-        } catch {
-            self.error = error.localizedDescription
         }
+        if let message = loading.errorMessage { error = message }
     }
 
     func askNext() async {
@@ -142,42 +142,41 @@ struct CompanionDeskScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                    if let error = model.error {
-                        Text(error)
-                            .font(.system(size: UIScale.pt(11.5)))
-                            .foregroundStyle(DashSkin.warn)
-                    }
-                    if !model.loaded, model.error == nil {
-                        CompanionDeskLoadingSkeleton(width: proxy.size.width, dark: dark)
-                    } else {
-                        questionCard
-                        CompanionGrid(width: proxy.size.width) {
-                            beliefsCard
-                        } secondary: {
-                            predictionsCard
-                        } full: {
-                            discrepanciesCard
-                        }
-                    }
+        PageScaffold(pinnedHeader: true, header: {}) {
+            if model.loaded, let error = model.error {
+                PageNotice(error, tone: .error)
+            }
+            PageLoading(
+                state: model.loading.state,
+                message: model.loading.errorMessage
+                    ?? "The companion desk could not be loaded.",
+                layout: .cards, refreshing: model.loading.isRefreshing,
+                retry: { Task { await model.refresh() } }
+            ) {
+                questionCard
+                PageGrid {
+                    beliefsCard
+                } secondary: {
+                    predictionsCard
+                } full: {
+                    discrepanciesCard
                 }
-                .pageContent(compact)
             }
         }
-        .task(id: isActive ? generation : -1) {
+        .pageTask(
+            id: generation, active: isActive && requestsEnabled, cancel: { model.loading.cancel() }
+        ) {
             guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
             await model.refresh()
             if !Task.isCancelled { refreshedGeneration = generation }
         }
-        .sheet(item: $overrideTarget) { discrepancy in
+        .edithSheet(item: $overrideTarget, dismissible: false) { discrepancy in
             overrideSheet(discrepancy)
         }
     }
 
     private var questionCard: some View {
-        SkinCard(title: "Today", note: "what it wants to know", dark: dark) {
+        PageCard(title: "Today", note: "what it wants to know") {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 if let question = model.question {
                     Text(question.question)
@@ -189,7 +188,7 @@ struct CompanionDeskScreen: View {
                     AnswerField(placeholder: "your answer", text: $model.draft) {
                         Task { await model.answer() }
                     }
-                    HStack(spacing: UIScale.pt(8)) {
+                    WrapHStack(spacing: UIScale.pt(8)) {
                         CompanionButton(
                             title: "Answer", role: .primary, busy: model.busy
                         ) {
@@ -199,10 +198,11 @@ struct CompanionDeskScreen: View {
                             Task { await model.skip() }
                         }
                         CompanionButton(
-                            title: "Never ask about \(question.topic)", disabled: model.busy
+                            title: "Never ask about this", disabled: model.busy
                         ) {
                             Task { await model.mute() }
                         }
+                        .help("Never ask about \(question.topic)")
                     }
                 } else if let resolution = model.lastResolution {
                     Text(resolution)
@@ -231,7 +231,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var beliefsCard: some View {
-        SkinCard(title: "Overnight", note: "what it concluded", dark: dark, fill: true) {
+        PageCard(title: "Overnight", note: "what it concluded", fill: true) {
             if model.beliefs.isEmpty {
                 emptyText("Nothing formed yet.")
             } else {
@@ -265,7 +265,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var predictionsCard: some View {
-        SkinCard(title: "Resolved", note: "what it got right and wrong", dark: dark, fill: true) {
+        PageCard(title: "Resolved", note: "what it got right and wrong", fill: true) {
             if model.resolvedPredictions.isEmpty {
                 emptyText("No prediction has come due yet.")
             } else {
@@ -288,7 +288,7 @@ struct CompanionDeskScreen: View {
     }
 
     private var discrepanciesCard: some View {
-        SkinCard(title: "Waiting on you", note: "where the record disagreed", dark: dark) {
+        PageCard(title: "Waiting on you", note: "where the record disagreed") {
             if model.openDiscrepancies.isEmpty {
                 emptyText("Nothing has diverged from the record.")
             } else {
@@ -334,17 +334,19 @@ struct CompanionDeskScreen: View {
                 }
             }
             HStack(spacing: UIScale.pt(8)) {
+                Spacer()
+                CompanionButton(title: "Cancel", disabled: model.busy) { overrideTarget = nil }
+                    .keyboardShortcut(.cancelAction)
                 CompanionButton(title: "Save", role: .primary, busy: model.busy) {
                     Task {
                         await model.markReal(discrepancy, note: overrideNote)
                         overrideTarget = nil
                     }
                 }
-                CompanionButton(title: "Cancel") { overrideTarget = nil }
             }
         }
         .padding(UIScale.pt(18))
-        .frame(width: UIScale.pt(420))
+        .frame(width: PresentationMetrics.width(420))
         .background(DashSkin.paper(dark))
     }
 
@@ -352,96 +354,5 @@ struct CompanionDeskScreen: View {
         Text(text)
             .font(.system(size: UIScale.pt(12)))
             .foregroundStyle(DashSkin.inkFaint(dark))
-    }
-}
-
-private struct CompanionDeskLoadingSkeleton: View {
-    let width: CGFloat
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                todayCard
-                CompanionGrid(width: width) {
-                    overnightCard
-                } secondary: {
-                    resolvedCard
-                } full: {
-                    discrepanciesCard
-                }
-            }
-        }
-        .accessibilityLabel("Loading the companion desk")
-    }
-
-    private var todayCard: some View {
-        CompanionSkeletonCard(titleWidth: 48, noteWidth: 116, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                SkeletonBlock(width: 286, height: 14, corner: 5)
-                SkeletonBlock(width: 224, height: 9, corner: 4)
-                SkeletonBlock(height: 48, corner: 9)
-                HStack(spacing: UIScale.pt(8)) {
-                    SkeletonBlock(width: 62, height: 26, corner: 8)
-                    SkeletonBlock(width: 58, height: 26, corner: 8)
-                    SkeletonBlock(width: 148, height: 26, corner: 8)
-                }
-                SkeletonBlock(width: 112, height: 9, corner: 4)
-            }
-        }
-    }
-
-    private var overnightCard: some View {
-        CompanionSkeletonCard(titleWidth: 76, noteWidth: 102, dark: dark, fill: true) {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                ForEach(0..<5, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? nil : 238,
-                            height: 10,
-                            corner: 4)
-                        SkeletonBlock(width: 86, height: 8, corner: 4)
-                    }
-                }
-            }
-        }
-    }
-
-    private var resolvedCard: some View {
-        CompanionSkeletonCard(titleWidth: 68, noteWidth: 146, dark: dark, fill: true) {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                ForEach(0..<5, id: \.self) { index in
-                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? nil : 204,
-                            height: 10,
-                            corner: 4)
-                        Spacer(minLength: 0)
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? 58 : 46, height: 16, corner: 8)
-                    }
-                }
-            }
-        }
-    }
-
-    private var discrepanciesCard: some View {
-        CompanionSkeletonCard(titleWidth: 106, noteWidth: 144, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                ForEach(0..<3, id: \.self) { index in
-                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(8)) {
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? 286 : 222,
-                                height: 10,
-                                corner: 4)
-                            SkeletonBlock(width: 74, height: 8, corner: 4)
-                        }
-                        Spacer(minLength: 0)
-                        SkeletonBlock(width: 72, height: 9, corner: 4)
-                    }
-                }
-            }
-        }
     }
 }

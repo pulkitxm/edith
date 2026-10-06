@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreVideo
 import Darwin
 import Foundation
@@ -5,9 +6,12 @@ import Foundation
 public final class VirtualCameraPreviewBus: @unchecked Sendable {
     public static let previewWidth = 640
     public static let previewHeight = 360
+    public static let referenceWidth = 224
+    public static let referenceHeight = 126
 
     private static let pixelBytes = previewWidth * previewHeight * 4
-    private static let regionSize = Slot.pixels + pixelBytes
+    private static let referenceBytes = referenceWidth * referenceHeight * 4
+    private static let regionSize = Slot.referencePixels + referenceBytes
 
     private enum Slot {
         static let wanted = 0
@@ -15,6 +19,8 @@ public final class VirtualCameraPreviewBus: @unchecked Sendable {
         static let width = 16
         static let height = 20
         static let pixels = 128
+        static let referenceGeneration = pixels + pixelBytes
+        static let referencePixels = referenceGeneration + 128
     }
 
     private let file: URL
@@ -23,6 +29,8 @@ public final class VirtualCameraPreviewBus: @unchecked Sendable {
     private var fd: Int32 = -1
     private var base: UnsafeMutableRawPointer?
     private var seen: UInt64 = 0
+    private var seenReference: UInt64 = 0
+    private var publishedReference: CGImage?
     private var pool: CVPixelBufferPool?
     private var closed = false
 
@@ -60,7 +68,7 @@ public final class VirtualCameraPreviewBus: @unchecked Sendable {
         return base.load(fromByteOffset: Slot.wanted, as: Int32.self) != 0
     }
 
-    public func publish(_ buffer: CVPixelBuffer) {
+    public func publish(_ buffer: CVPixelBuffer, reference: CGImage? = nil) {
         guard let base = region(), base.load(fromByteOffset: Slot.wanted, as: Int32.self) != 0
         else { return }
         guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA else { return }
@@ -81,6 +89,62 @@ public final class VirtualCameraPreviewBus: @unchecked Sendable {
         base.storeBytes(of: Int32(Self.previewHeight), toByteOffset: Slot.height, as: Int32.self)
         OSMemoryBarrier()
         base.storeBytes(of: (generation | 1) &+ 1, toByteOffset: Slot.generation, as: UInt64.self)
+        if let reference, reference !== publishedReference {
+            publishReference(reference, in: base)
+        }
+    }
+
+    private func publishReference(_ image: CGImage, in base: UnsafeMutableRawPointer) {
+        guard
+            let context = CGContext(
+                data: base.advanced(by: Slot.referencePixels),
+                width: Self.referenceWidth, height: Self.referenceHeight,
+                bitsPerComponent: 8, bytesPerRow: Self.referenceWidth * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue
+                    | CGImageAlphaInfo.premultipliedFirst.rawValue)
+        else { return }
+        let generation = base.load(fromByteOffset: Slot.referenceGeneration, as: UInt64.self) &+ 1
+        base.storeBytes(of: generation | 1, toByteOffset: Slot.referenceGeneration, as: UInt64.self)
+        OSMemoryBarrier()
+        context.setBlendMode(.copy)
+        context.draw(
+            image, in: CGRect(x: 0, y: 0, width: Self.referenceWidth, height: Self.referenceHeight))
+        OSMemoryBarrier()
+        base.storeBytes(
+            of: (generation | 1) &+ 1, toByteOffset: Slot.referenceGeneration, as: UInt64.self)
+        publishedReference = image
+    }
+
+    public func latestReference() -> CGImage? {
+        guard let base = region() else { return nil }
+        for _ in 0..<2 {
+            let generation = base.load(fromByteOffset: Slot.referenceGeneration, as: UInt64.self)
+            guard generation != 0, generation & 1 == 0, generation != seenReference else {
+                return nil
+            }
+            OSMemoryBarrier()
+            let data = Data(
+                bytes: base.advanced(by: Slot.referencePixels), count: Self.referenceBytes)
+            OSMemoryBarrier()
+            guard base.load(fromByteOffset: Slot.referenceGeneration, as: UInt64.self) == generation
+            else { continue }
+            guard let provider = CGDataProvider(data: data as CFData),
+                let image = CGImage(
+                    width: Self.referenceWidth, height: Self.referenceHeight,
+                    bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: Self.referenceWidth * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: [
+                        .byteOrder32Little,
+                        CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue),
+                    ],
+                    provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
+                )
+            else { return nil }
+            seenReference = generation
+            return image
+        }
+        return nil
     }
 
     public func latest() -> CVPixelBuffer? {

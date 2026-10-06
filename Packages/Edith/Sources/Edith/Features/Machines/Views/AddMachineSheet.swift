@@ -77,10 +77,9 @@ struct AddMachineSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                     if editing == nil {
-                        Picker("", selection: $mode) {
-                            ForEach(Mode.allCases) { Text($0.title).tag($0) }
-                        }
-                        .pickerStyle(.segmented)
+                        EdithSegmentedPicker(
+                            "", selection: $mode, options: Mode.allCases, label: { $0.title }
+                        )
                         .labelsHidden()
                     }
                     if mode == .sshConfig, editing == nil {
@@ -99,7 +98,7 @@ struct AddMachineSheet: View {
             Divider()
             footerBar
         }
-        .frame(width: UIScale.pt(560), height: UIScale.pt(690))
+        .frame(width: PresentationMetrics.width(560), height: PresentationMetrics.height(690))
         .background(DashSkin.paper(dark))
         .onAppear(perform: load)
         .onDisappear { testTask?.cancel() }

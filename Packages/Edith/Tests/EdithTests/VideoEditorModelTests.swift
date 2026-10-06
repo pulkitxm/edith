@@ -4,6 +4,29 @@ import Testing
 @testable import Edith
 
 @Suite @MainActor struct VideoEditorModelTests {
+    @Test func failedOpenDoesNotLeaveThePreviousRebuildLoading() async throws {
+        let directory = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic/pending.mov"), duration: 1, width: 64, height: 64)
+        let model = VideoEditorModel { _ in throw CancellationError() }
+        defer { model.close() }
+        model.project = project
+        model.rebuild()
+        #expect(model.isRebuildingPreview)
+        model.openProject(at: directory.appendingPathComponent("missing.openscreen"))
+        let deadline = ContinuousClock.now + .seconds(2)
+        while model.errorMessage == nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(model.errorMessage != nil)
+        #expect(model.project?.id == project.id)
+        #expect(!model.isRebuildingPreview)
+        #expect(!model.isPreparingPreview)
+        #expect(!model.blocksCommandOpen)
+    }
+
     @Test func rapidSeeksAndRebuildKeepLatestPlayheadOnTheNativePlayer() async throws {
         let directory = try VideoEditorServiceTests.folder()
         defer { try? FileManager.default.removeItem(at: directory) }

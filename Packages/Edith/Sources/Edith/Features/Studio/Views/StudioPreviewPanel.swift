@@ -84,7 +84,7 @@ struct StudioPreviewPanel: View {
                             .lineLimit(1)
                         Spacer()
                         if preview.isRendering {
-                            ProgressView().controlSize(.small)
+                            LoadingIndicator()
                         }
                     }
                     HStack(spacing: UIScale.pt(12)) {
@@ -101,7 +101,7 @@ struct StudioPreviewPanel: View {
                     }
                 }
             }
-            .task(id: StudioPreviewKey(input: input, settings: job.settings)) {
+            .pageTask(id: StudioPreviewKey(input: input, settings: job.settings)) {
                 preview.refresh(
                     tool: job.tool, input: input, settings: job.settings, environment: environment)
             }

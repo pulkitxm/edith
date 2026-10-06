@@ -96,7 +96,7 @@ struct AttentionDayRibbon: View {
         }
         .chartXSelection(value: $selected)
         .frame(height: UIScale.pt(height))
-        .padding(.top, UIScale.pt(hovered == nil ? 0 : 42))
+        .padding(.top, UIScale.pt(42))
         .accessibilityLabel("Timeline of the day by category")
     }
 }
@@ -136,11 +136,12 @@ struct AttentionLevelLegend: View {
     let levels: [String: TimeInterval]
     let total: TimeInterval
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         let dark = scheme == .dark
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(220)), alignment: .leading)],
+            columns: PageMetrics.cardColumns(compact, minimum: 220, alignment: .leading),
             alignment: .leading, spacing: UIScale.pt(8)
         ) {
             ForEach(AttentionPalette.levels, id: \.self) { level in
@@ -302,7 +303,7 @@ struct AttentionHourBars: View {
             ForEach(values) { value in
                 BarMark(
                     x: .value("Hour", value.hour), y: .value("Minutes", value.minutes),
-                    width: .fixed(UIScale.pt(14))
+                    width: .ratio(0.7)
                 )
                 .foregroundStyle(AttentionPalette.level(value.level, dark: dark))
                 .cornerRadius(2)

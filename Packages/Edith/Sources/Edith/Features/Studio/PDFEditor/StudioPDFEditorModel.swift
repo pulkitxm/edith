@@ -130,6 +130,9 @@ extension StudioPDFEditorMode {
 @MainActor
 @Observable
 final class StudioPDFEditorModel {
+    private struct LoadedSession: @unchecked Sendable {
+        let session: PDFEditSession
+    }
     let url: URL
     var mode: StudioPDFEditorMode
     var tool: StudioPDFTool
@@ -161,6 +164,8 @@ final class StudioPDFEditorModel {
     private var redoStack: [PDFEditSession.Snapshot] = []
     private var saveTask: Task<Void, Never>?
     private var signaturesTask: Task<Void, Never>?
+    private var loadTask: Task<Void, Never>?
+    let loading = ContentLoad()
 
     init(url: URL, mode: StudioPDFEditorMode) {
         self.url = url
@@ -189,21 +194,44 @@ final class StudioPDFEditorModel {
     var pageCount: Int { session?.pageCount ?? 0 }
 
     func load() {
-        do {
-            session = try PDFEditSession(url: url, password: password.isEmpty ? nil : password)
-            needsPassword = false
-            loadError = nil
-            revision += 1
-        } catch let error as StudioError {
-            switch error {
-            case .needsPassword, .wrongPassword: needsPassword = true
-            default: loadError = error.localizedDescription
+        loadTask?.cancel()
+        let generation = loading.begin(preservingContent: session != nil)
+        let url = url
+        let password = password.isEmpty ? nil : password
+        loadTask = Task { [weak self] in
+            do {
+                let loaded = try await Task.detached(priority: .userInitiated) {
+                    LoadedSession(session: try PDFEditSession(url: url, password: password))
+                }.value
+                guard let self, self.loading.isCurrent(generation) else { return }
+                self.session = loaded.session
+                self.needsPassword = false
+                self.loadError = nil
+                self.revision += 1
+                self.loading.complete(generation)
+            } catch {
+                guard let self, self.loading.owns(generation) else { return }
+                self.loading.fail(generation, error: error)
+                if let error = error as? StudioError {
+                    switch error {
+                    case .needsPassword, .wrongPassword: self.needsPassword = true
+                    default: self.loadError = error.localizedDescription
+                    }
+                    if case .wrongPassword = error { self.status = "That password did not work." }
+                } else {
+                    self.loadError = error.localizedDescription
+                }
             }
-            if case .wrongPassword = error { status = "That password did not work." }
-        } catch {
-            loadError = error.localizedDescription
         }
         loadSignatures()
+    }
+
+    func cancelLoading() {
+        loading.cancel()
+        loadTask?.cancel()
+        loadTask = nil
+        signaturesTask?.cancel()
+        signaturesTask = nil
     }
 
     func switchMode(_ next: StudioPDFEditorMode) {

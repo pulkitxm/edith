@@ -20,6 +20,19 @@ import Testing
         #expect(model.banners.isEmpty)
         await model.refresh()
         #expect(model.phase == .setup)
+        #expect(model.loadingState == .content)
+    }
+
+    @Test func failedStatusUsesRecoverableLoadingStateInsteadOfPermanentSkeleton() async {
+        let agent = CodeStatsFakeAgent(status: CodeStatsPageFixture.status())
+        var service = agent.service
+        service.status = { throw URLError(.notConnectedToInternet) }
+        let model = CodeStatsModel(
+            service: service, defaults: UserDefaults(suiteName: defaultsName)!)
+        await model.refresh()
+        #expect(model.loadingState == .offline)
+        #expect(model.loadingError != nil)
+        #expect(!model.statusLoad.isRunning)
     }
 
     @Test func keepsTheSkeletonWhileACachedReportLoads() {
@@ -30,6 +43,38 @@ import Testing
         #expect(
             CodeStatsPagePhase.resolve(status: status, hasReport: true, reportLoaded: true)
                 == .content)
+    }
+
+    @Test func initialReportLoadingCannotPresentSetupEvenWithoutReportedAt() async {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        let model = model(agent)
+        await model.loadStatus()
+        #expect(model.report == nil)
+        #expect(model.loadingState == .loading)
+        let request = model.reportLoad.begin()
+        #expect(model.loadingState == .loading)
+        model.reportLoad.fail(request, message: "Synthetic report unavailable")
+        #expect(model.loadingState == .error)
+        await model.loadReport()
+        #expect(model.loadingState == .content)
+        #expect(model.phase == .content)
+    }
+
+    @Test func retainedReportsRemainVisibleDuringRefresh() async {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        let model = model(agent)
+        await model.refresh()
+        let request = model.reportLoad.begin()
+        #expect(model.loadingState == .content)
+        #expect(model.isRefreshing)
+        model.reportLoad.fail(request, message: "Synthetic refresh unavailable")
+        #expect(model.loadingState == .content)
+        #expect(model.report != nil)
+        #expect(!model.isRefreshing)
     }
 
     @Test func emptyMirrorShowsTheSetupChecklist() async {
@@ -238,6 +283,7 @@ import Testing
         let model = model(agent)
         await model.refresh()
         #expect(model.phase == .unavailable)
+        #expect(model.loadingState == .error)
         #expect(model.errorMessage == nil)
         let banner = try #require(model.banners.first)
         #expect(banner.id == "report")
@@ -245,6 +291,8 @@ import Testing
         agent.failingReports = []
         await model.loadReport()
         #expect(model.phase == .content)
+        #expect(model.loadingState == .content)
+        #expect(!model.isRefreshing)
         #expect(model.banners.isEmpty)
     }
 

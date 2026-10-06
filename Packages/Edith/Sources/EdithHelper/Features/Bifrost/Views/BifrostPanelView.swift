@@ -540,31 +540,14 @@ struct BifrostResultIcon: View {
 }
 
 struct BifrostSkeletonSquare: View {
-    @State private var shimmer = false
-
     var body: some View {
-        RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(.white.opacity(shimmer ? 0.16 : 0.08))
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    shimmer = true
-                }
-            }
+        SkeletonGroup { SkeletonBlock(height: 28, corner: 5) }
     }
 }
 
 struct BifrostSkeletonPill: View {
-    @State private var shimmer = false
-
     var body: some View {
-        Capsule()
-            .fill(.white.opacity(shimmer ? 0.22 : 0.10))
-            .frame(width: 48, height: 8)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true)) {
-                    shimmer = true
-                }
-            }
+        SkeletonGroup { SkeletonBlock(width: 48, height: 8, corner: 4) }
     }
 }
 

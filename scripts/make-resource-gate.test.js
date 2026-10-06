@@ -82,9 +82,16 @@ function decide(goals, host, jobs, now = 0, ramp = 20) {
   return JSON.parse(result.stdout.toString());
 }
 
+function makeEnv() {
+  const env = { ...process.env };
+  for (const key of ["EDITH_MAKE_GATE", "MAKEFLAGS", "MFLAGS", "MAKEOVERRIDES"])
+    delete env[key];
+  return env;
+}
+
 function gateEnv(root, overrides = {}) {
-  const env = {
-    ...process.env,
+  return {
+    ...makeEnv(),
     EDITH_MAKE_GATE_DIR: root,
     EDITH_MAKE_GATE_CPUS: "14",
     EDITH_MAKE_GATE_LOAD: "1",
@@ -96,8 +103,6 @@ function gateEnv(root, overrides = {}) {
     EDITH_MAKE_GATE_RAMP: "60",
     ...overrides,
   };
-  delete env.EDITH_MAKE_GATE;
-  return env;
 }
 
 test("light targets skip the budget", () => {
@@ -372,8 +377,7 @@ test("a stale slot is dropped and a full budget gives up", async () => {
 }, 20000);
 
 test("make runs light targets through the gate without waiting", async () => {
-  const env = { ...process.env };
-  delete env.EDITH_MAKE_GATE;
+  const env = makeEnv();
   const printed = Bun.spawnSync(["make", "-n", "ci-community"], {
     env,
     stdout: "pipe",

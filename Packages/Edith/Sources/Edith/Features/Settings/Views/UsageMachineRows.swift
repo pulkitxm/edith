@@ -76,7 +76,7 @@ struct UsageMachineRows: View {
                 } label: {
                     Image(systemName: "trash")
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.edith(.borderless))
                 .help("Drop what \(machine.name) gave and stop counting it")
             }
         }

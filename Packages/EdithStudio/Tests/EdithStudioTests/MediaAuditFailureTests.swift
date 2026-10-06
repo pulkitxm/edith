@@ -180,18 +180,71 @@ import Testing
 
     @Test func cancellingALongReverseStopsFFmpegQuickly() async throws {
         let space = try Workspace()
+        defer { try? FileManager.default.removeItem(at: space.root) }
         let clip = space.url("long-\(UUID().uuidString).mp4")
         try await MediaAudit.video(
             at: clip, source: "testsrc2=size=320x240:rate=30:duration=40", seconds: 40)
-        let task = Task { try await space.audit("video.reverse", [clip]) }
-        try await Task.sleep(nanoseconds: 800_000_000)
-        task.cancel()
-        let started = Date()
-        await #expect(throws: StudioError.cancelled) { try await task.value }
-        #expect(Date().timeIntervalSince(started) < 3)
-        try await Task.sleep(nanoseconds: 2_500_000_000)
+        var environment = space.environment
+        let ffmpeg = try environment.require(.ffmpeg)
+        let throttledFFmpeg = space.url("throttled-ffmpeg")
+        let quotedPath = ffmpeg.path.replacingOccurrences(of: "'", with: "'\\''")
+        try "#!/bin/sh\nexec '\(quotedPath)' -readrate 1 \"$@\"\n".write(
+            to: throttledFFmpeg, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: throttledFFmpeg.path)
+        environment.ffmpeg = throttledFFmpeg
+
+        let (results, completion) = AsyncStream<Result<StudioRunResult, Error>>.makeStream()
+        let task = Task {
+            do {
+                completion.yield(
+                    .success(
+                        try await space.audit(
+                            "video.reverse", [clip], environment: environment)))
+            } catch {
+                completion.yield(.failure(error))
+            }
+            completion.finish()
+        }
+        defer { task.cancel() }
         let pgrep = URL(fileURLWithPath: "/usr/bin/pgrep")
-        let running = try await StudioProcess.run(pgrep, ["-f", clip.lastPathComponent])
+        let launchDeadline = ContinuousClock.now.advanced(by: .seconds(10))
+        var pid: Int32?
+        repeat {
+            let processes = try await StudioProcess.run(
+                pgrep, ["-fl", clip.lastPathComponent], timeout: 2)
+            pid = processes.output.split(separator: "\n").first {
+                $0.contains("\(ffmpeg.path) -readrate 1 -hide_banner")
+                    && $0.contains("-progress pipe:1")
+            }.flatMap { Int32($0.split(separator: " ").first ?? "") }
+            if pid == nil { try await Task.sleep(for: .milliseconds(10)) }
+        } while pid == nil && ContinuousClock.now < launchDeadline
+        let runningPID = try #require(
+            pid, "The real reverse FFmpeg process must start before cancellation")
+        defer {
+            if kill(runningPID, 0) == 0 { kill(runningPID, SIGKILL) }
+        }
+        #expect(kill(runningPID, 0) == 0)
+        let started = ContinuousClock.now
+        task.cancel()
+        let deadline = Task {
+            do {
+                try await Task.sleep(for: .seconds(5))
+                completion.yield(
+                    .failure(
+                        StudioError.failed(
+                            "Cancellation did not finish before the deadline.")))
+                completion.finish()
+            } catch {}
+        }
+        defer { deadline.cancel() }
+        var iterator = results.makeAsyncIterator()
+        let result = try #require(await iterator.next())
+        #expect(throws: StudioError.cancelled) { try result.get() }
+        #expect(started.duration(to: .now) < .seconds(3))
+        try await Task.sleep(nanoseconds: 2_500_000_000)
+        let running = try await StudioProcess.run(
+            pgrep, ["-f", clip.lastPathComponent], timeout: 2)
         #expect(running.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         #expect(MediaAudit.outputs(space).isEmpty)
     }

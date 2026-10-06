@@ -1,42 +1,33 @@
 import AppKit
 import SwiftUI
 
-public enum CodeStatsExportRenderingError: LocalizedError {
-    case unavailable
-    case encodingFailed
-
-    public var errorDescription: String? {
-        switch self {
-        case .unavailable: "the code stats image could not be rendered"
-        case .encodingFailed: "the code stats image could not be encoded as PNG"
-        }
+public struct CodeStatsExportDeck: ExportCardDeck {
+    public let snapshot: CodeStatsExportSnapshot
+    public init(snapshot: CodeStatsExportSnapshot) { self.snapshot = snapshot }
+    public var cards: [CodeStatsExportCard] { CodeStatsExportCard.allCases }
+    public func title(for card: CodeStatsExportCard) -> String { card.title }
+    public func filename(for card: CodeStatsExportCard) -> String { card.filenameStem + ".png" }
+    public func content(for card: CodeStatsExportCard) -> some View {
+        CodeStatsExportCardView(snapshot: snapshot, card: card)
     }
 }
 
 @MainActor
 public enum CodeStatsExportRenderer {
-    public static let size = CGSize(width: 1_200, height: 800)
+    public static let size = ExportCardRenderer.size
 
     public static func image(
         snapshot: CodeStatsExportSnapshot, card: CodeStatsExportCard, scale: CGFloat = 2
     ) throws -> NSImage {
-        let renderer = ImageRenderer(
-            content: CodeStatsExportCardView(snapshot: snapshot, card: card)
-                .frame(width: size.width, height: size.height))
-        renderer.scale = scale
-        guard let image = renderer.nsImage else { throw CodeStatsExportRenderingError.unavailable }
-        return image
+        try ExportCardRenderer.image(
+            CodeStatsExportCardView(snapshot: snapshot, card: card), scale: scale)
     }
 
     public static func pngData(
         snapshot: CodeStatsExportSnapshot, card: CodeStatsExportCard, scale: CGFloat = 2
     ) throws -> Data {
-        let image = try image(snapshot: snapshot, card: card, scale: scale)
-        guard let tiff = image.tiffRepresentation,
-            let bitmap = NSBitmapImageRep(data: tiff),
-            let data = bitmap.representation(using: .png, properties: [:])
-        else { throw CodeStatsExportRenderingError.encodingFailed }
-        return data
+        try ExportCardRenderer.pngData(
+            CodeStatsExportCardView(snapshot: snapshot, card: card), scale: scale)
     }
 }
 

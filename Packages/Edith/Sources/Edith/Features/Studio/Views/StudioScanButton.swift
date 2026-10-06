@@ -1,56 +1,62 @@
 import AppKit
+import EdithKit
 import EdithStudio
 import SwiftUI
 
-struct StudioScanButton: NSViewRepresentable {
+struct StudioScanButton: View {
     let onImport: ([URL]) -> Void
+    @StateObject private var control = StudioScanControl()
+
+    var body: some View {
+        Button {
+            control.host?.showMenu()
+        } label: {
+            Image(systemName: "iphone.gen3")
+                .font(.system(size: UIScale.pt(14), weight: .medium))
+                .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+        }
+        .buttonStyle(.edith(.secondary))
+        .accessibilityLabel("Import from iPhone or iPad")
+        .background {
+            StudioScanAnchor(onImport: onImport, control: control)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+@MainActor
+private final class StudioScanControl: ObservableObject {
+    weak var host: StudioScanHostView?
+}
+
+private struct StudioScanAnchor: NSViewRepresentable {
+    let onImport: ([URL]) -> Void
+    let control: StudioScanControl
 
     func makeNSView(context: Context) -> StudioScanHostView {
         let view = StudioScanHostView()
         view.onImport = onImport
+        control.host = view
         return view
     }
 
     func updateNSView(_ view: StudioScanHostView, context: Context) {
         view.onImport = onImport
+        control.host = view
     }
 }
 
 final class StudioScanHostView: NSView, NSServicesMenuRequestor {
     var onImport: (([URL]) -> Void)?
-    private let button: NSButton
 
     static let returnTypes: [NSPasteboard.PasteboardType] = [
         .pdf, .tiff, .png, NSPasteboard.PasteboardType("public.jpeg"),
         NSPasteboard.PasteboardType("public.heic"),
     ]
 
-    override init(frame: NSRect) {
-        button = NSButton(
-            image: NSImage(
-                systemSymbolName: "iphone.gen3", accessibilityDescription: "Import from iPhone")
-                ?? NSImage(), target: nil, action: nil)
-        super.init(frame: frame)
-        button.bezelStyle = .accessoryBarAction
-        button.isBordered = true
-        button.target = self
-        button.action = #selector(showMenu)
-        button.setAccessibilityLabel("Import from iPhone or iPad")
-        button.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(button)
-        NSLayoutConstraint.activate([
-            button.leadingAnchor.constraint(equalTo: leadingAnchor),
-            button.trailingAnchor.constraint(equalTo: trailingAnchor),
-            button.topAnchor.constraint(equalTo: topAnchor),
-            button.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) { nil }
-
     override var acceptsFirstResponder: Bool { true }
 
-    @objc func showMenu() {
+    func showMenu() {
         window?.makeFirstResponder(self)
         let menu = NSMenu()
         let item = NSMenuItem(title: "Import from iPhone or iPad", action: nil, keyEquivalent: "")

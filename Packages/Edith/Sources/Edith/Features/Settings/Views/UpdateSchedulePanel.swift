@@ -78,7 +78,7 @@ struct UpdateSchedulePanel: View {
             Divider()
             footer
         }
-        .frame(width: UIScale.pt(540), height: UIScale.pt(620))
+        .frame(width: PresentationMetrics.width(540), height: PresentationMetrics.height(620))
     }
 
     private var header: some View {

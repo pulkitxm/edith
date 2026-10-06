@@ -6,6 +6,9 @@ import Testing
         for source in try swiftSources() {
             let text = try String(contentsOf: source, encoding: .utf8)
             #expect(!text.contains(".buttonStyle(.plain)"))
+            #expect(!text.contains(".buttonStyle(.bordered)"))
+            #expect(!text.contains(".buttonStyle(.borderedProminent)"))
+            #expect(!text.contains(".buttonStyle(.borderless)"))
             #expect(!text.contains("HoverButtonStyle"))
             #expect(!text.contains(".hoverButton()"))
             #expect(!text.contains(".shelfPointer()"))
@@ -48,6 +51,7 @@ import Testing
             "Edith/Features/Settings/Views/GeneralPane.swift": 1,
             "Edith/Features/VideoEditor/VideoBeatPanel.swift": 1,
             "EdithHelper/Features/NotchShelf/Views/NotchShelfView.swift": 1,
+            "EdithHelper/Features/NotchBrowser/Views/NotchBrowserPane.swift": 1,
         ]
         var actual: [String: Int] = [:]
 

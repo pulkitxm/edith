@@ -35,7 +35,7 @@ struct HerdrSearchPopup: View {
             Divider()
             footer
         }
-        .frame(width: UIScale.pt(620), height: UIScale.pt(480))
+        .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(480))
         .onAppear {
             fieldFocused = true
             model.search(agents: openAgents, hosts: store.hosts)
@@ -59,14 +59,6 @@ struct HerdrSearchPopup: View {
                     model.move(press.key == .upArrow ? -1 : 1)
                     return .handled
                 }
-                .onKeyPress(.escape) {
-                    if model.query.isEmpty {
-                        dismiss()
-                    } else {
-                        model.query = ""
-                    }
-                    return .handled
-                }
                 .onKeyPress(.return) {
                     if let agent = model.submit(agents: openAgents, hosts: store.hosts) {
                         openAgent(agent)
@@ -75,11 +67,19 @@ struct HerdrSearchPopup: View {
                 }
             if model.machineProgress.done < model.machineProgress.total {
                 let progress = model.machineProgress
-                ProgressView(value: Double(progress.done), total: Double(progress.total))
+                LoadingProgress(value: Double(progress.done), total: Double(progress.total))
                     .progressViewStyle(.linear)
                     .frame(width: UIScale.pt(56))
                     .help("\(progress.done) of \(progress.total) machines answered")
             }
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.edith(.iconOnly))
+            .keyboardShortcut(.cancelAction)
+            .accessibilityLabel("Close agent search")
         }
         .padding(.horizontal, UIScale.pt(14))
         .padding(.vertical, UIScale.pt(12))

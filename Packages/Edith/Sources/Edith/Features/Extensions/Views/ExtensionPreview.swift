@@ -16,6 +16,7 @@ struct ExtensionPreview: View {
                 hovering: hovering, reduceMotion: reduceMotion),
             animating: animates
         )
+        .clipped()
         .animation(reduceMotion ? nil : .easeOut(duration: 0.28), value: hovering)
         .onHover { hovering = $0 }
         .accessibilityHidden(true)

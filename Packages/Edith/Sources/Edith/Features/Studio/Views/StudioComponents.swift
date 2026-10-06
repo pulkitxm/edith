@@ -48,7 +48,7 @@ struct StudioThumbnail: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
-        .task(id: url) {
+        .pageTask(id: url) {
             image = StudioThumbnails.shared.cached(url, side: side)
             if image == nil {
                 image = await StudioThumbnails.shared.thumbnail(for: url, side: side)
@@ -148,35 +148,43 @@ struct StudioBackBar<Trailing: View>: View {
     let back: () -> Void
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            Button(action: back) {
-                Label("Studio", systemImage: "chevron.left")
-                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
-            }
-            .buttonStyle(.edith(.secondary))
-            .help("Back to Studio")
-            if let symbol {
-                Image(systemName: symbol)
-                    .foregroundStyle(DashSkin.accent(scheme == .dark))
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
-                    .lineLimit(1)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+        VStack(spacing: UIScale.pt(8)) {
+            HStack(spacing: UIScale.pt(10)) {
+                Button(action: back) {
+                    Label("Studio", systemImage: "chevron.left")
+                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
                 }
+                .buttonStyle(.edith(.secondary))
+                .help("Back to Studio")
+                if let symbol {
+                    Image(systemName: symbol)
+                        .foregroundStyle(DashSkin.accent(scheme == .dark))
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title)
+                        .font(.system(size: UIScale.pt(15), weight: .semibold))
+                        .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.system(size: UIScale.pt(11)))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: UIScale.pt(8))
+                if !compact { trailing() }
             }
-            Spacer(minLength: UIScale.pt(8))
-            trailing()
+            if compact {
+                ScrollView(.horizontal, showsIndicators: false) { trailing() }
+                    .frame(height: UIScale.pt(36))
+            }
         }
         .padding(.horizontal, UIScale.pt(16))
-        .frame(height: UIScale.pt(54))
+        .padding(.vertical, UIScale.pt(compact ? 8 : 0))
+        .frame(minHeight: UIScale.pt(54))
     }
 }
 
@@ -212,7 +220,7 @@ struct StudioEngineBanner: View {
                     } label: {
                         if model.installing == engine {
                             HStack(spacing: UIScale.pt(6)) {
-                                ProgressView().controlSize(.small)
+                                LoadingIndicator()
                                 Text("Installing…")
                             }
                         } else {

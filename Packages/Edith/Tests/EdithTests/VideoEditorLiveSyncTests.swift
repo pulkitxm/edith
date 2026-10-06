@@ -139,7 +139,7 @@ import Testing
             .init(operations: [.rename(title: "Headless edit after closing")]),
             to: url, overwrite: true)
         try await Task.sleep(for: .milliseconds(500))
-        #expect(model.project?.title == "Closed during preparation")
+        #expect(model.project == nil)
         #expect(model.player.currentItem == nil)
         #expect(model.pipeline == nil)
         #expect(model.externalSyncMessage == nil)

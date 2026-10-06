@@ -60,10 +60,10 @@ struct EdithButtonMetrics: Equatable, Sendable {
 public struct EdithButtonStyle: ButtonStyle {
     public let role: EdithButtonRole
     public let selected: Bool
-    public let tint: Color
+    public let tint: Color?
 
     public init(
-        _ role: EdithButtonRole, selected: Bool = false, tint: Color = brandAccent
+        _ role: EdithButtonRole, selected: Bool = false, tint: Color? = nil
     ) {
         self.role = role
         self.selected = selected
@@ -104,7 +104,7 @@ public struct EdithButtonTarget: ViewModifier {
 
 extension ButtonStyle where Self == EdithButtonStyle {
     public static func edith(
-        _ role: EdithButtonRole, selected: Bool = false, tint: Color = brandAccent
+        _ role: EdithButtonRole, selected: Bool = false, tint: Color? = nil
     ) -> EdithButtonStyle {
         EdithButtonStyle(role, selected: selected, tint: tint)
     }
@@ -115,7 +115,10 @@ private struct EdithButtonBody<Label: View>: View {
     let role: EdithButtonRole
     let selected: Bool
     let pressed: Bool
-    let tint: Color
+    let tint: Color?
+
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
+    private var themeName = "accent"
 
     @Environment(\.accessibilityDifferentiateWithoutColor) private var differentiateWithoutColor
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -132,6 +135,7 @@ private struct EdithButtonBody<Label: View>: View {
     private var fillsWidth: Bool { role == .row || role == .selection }
     private var inactive: Bool { activeState == .inactive }
     private var emphasized: Bool { selected || pressed || hovering }
+    private var resolvedTint: Color { tint ?? themeColor(themeName) }
 
     @ViewBuilder var body: some View {
         if role.usesFeatureAppearance {
@@ -179,13 +183,13 @@ private struct EdithButtonBody<Label: View>: View {
         let boost = contrast == .increased ? 0.05 : 0
         switch role {
         case .primary:
-            return tint.opacity(pressed ? 0.74 : 0.9)
+            return resolvedTint.opacity(pressed ? 0.74 : 0.9)
         case .destructive:
             return Color.red.opacity(pressed ? 0.72 : 0.88)
         case .secondary:
             return Color.primary.opacity((emphasized ? 0.11 : 0.07) + boost)
         case .row, .selection:
-            if selected { return tint.opacity(0.2 + boost) }
+            if selected { return resolvedTint.opacity(0.2 + boost) }
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
         case .toolbar, .iconOnly:
             return Color.primary.opacity((emphasized ? 0.08 : 0) + boost)
@@ -196,7 +200,7 @@ private struct EdithButtonBody<Label: View>: View {
 
     private var border: Color {
         guard !role.usesFeatureAppearance else { return .clear }
-        if focused { return tint.opacity(0.95) }
+        if focused { return resolvedTint.opacity(0.95) }
         if selected, differentiateWithoutColor { return Color.primary.opacity(0.75) }
         switch role {
         case .secondary:

@@ -27,44 +27,49 @@ struct SkillInstallSheet: View {
                     .foregroundStyle(.secondary)
                 }
             }
-            if model.installationSucceeded {
-                Label(
-                    "Available to \(targetCount) on this Mac.",
-                    systemImage: "checkmark"
-                )
-                .font(.callout)
-            } else {
-                targets
-                if !model.isDiscovering, !model.installerAvailable {
-                    Label(
-                        "Install Node.js 22.20 or later, then reopen this sheet to enable installation.",
-                        systemImage: "exclamationmark.circle"
-                    )
-                    .font(.callout).foregroundStyle(.secondary)
-                }
-            }
-            if let error = model.installationError {
-                Label(error, systemImage: "exclamationmark.triangle")
-                    .font(.callout).foregroundStyle(.red)
-            }
-            if !model.installationLog.isEmpty {
-                DisclosureGroup("Installation output") {
-                    ScrollView {
-                        Text(model.installationLog)
-                            .font(.system(size: UIScale.pt(10), design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView {
+                VStack(alignment: .leading, spacing: UIScale.pt(20)) {
+                    if model.installationSucceeded {
+                        Label(
+                            "Available to \(targetCount) on this Mac.",
+                            systemImage: "checkmark"
+                        )
+                        .font(.edithText(.callout))
+                    } else {
+                        targets
+                        if !model.isDiscovering, !model.installerAvailable {
+                            Label(
+                                "Install Node.js 22.20 or later, then reopen this sheet to enable installation.",
+                                systemImage: "exclamationmark.circle"
+                            )
+                            .font(.edithText(.callout)).foregroundStyle(.secondary)
+                        }
                     }
-                    .frame(height: UIScale.pt(120))
+                    if let error = model.installationError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.edithText(.callout)).foregroundStyle(.red)
+                    }
+                    if !model.installationLog.isEmpty {
+                        DisclosureGroup("Installation output") {
+                            ScrollView {
+                                Text(model.installationLog)
+                                    .font(.system(size: UIScale.pt(10), design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(height: UIScale.pt(120))
+                        }
+                        .font(.edithText(.caption))
+                    }
                 }
-                .font(.caption)
             }
+            .frame(maxHeight: UIScale.pt(360))
             Divider()
             HStack {
                 if model.isInstalling {
-                    ProgressView().controlSize(.small)
+                    LoadingIndicator()
                     Text("Installing for \(targetCount)…")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button(model.installationSucceeded ? "Done" : "Cancel") { dismiss() }
@@ -74,7 +79,7 @@ struct SkillInstallSheet: View {
                     Button("Install for \(targetCount)") {
                         Task { await model.install() }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .keyboardShortcut(.defaultAction)
                     .disabled(
                         model.isInstalling || model.isDiscovering || model.selectedAgentIDs.isEmpty
@@ -83,7 +88,7 @@ struct SkillInstallSheet: View {
             }
         }
         .padding(UIScale.pt(28))
-        .frame(width: UIScale.pt(600))
+        .frame(width: PresentationMetrics.width(600), height: PresentationMetrics.height(560))
         .interactiveDismissDisabled(model.isInstalling)
     }
 
@@ -96,7 +101,7 @@ struct SkillInstallSheet: View {
                     SkeletonGroup { SkeletonBlock(width: 84, height: 11) }
                 } else {
                     Text("\(model.selectedAgentIDs.count) of \(model.agents.count) selected")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
             if model.isDiscovering {
@@ -105,7 +110,7 @@ struct SkillInstallSheet: View {
                 Text(
                     "No supported agents found. Install and open an agent, then reopen this sheet."
                 )
-                .font(.callout).foregroundStyle(.secondary)
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
             } else {
                 ScrollView {
                     VStack(spacing: 0) {

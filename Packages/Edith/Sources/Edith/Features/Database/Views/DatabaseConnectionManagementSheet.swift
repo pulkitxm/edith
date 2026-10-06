@@ -19,7 +19,6 @@ struct DatabaseConnectionManagementSheet: View {
     let duplicated: (DatabaseConnectionDuplicateResult) -> Void
     let uncertain: (DatabaseConnectionManagementUncertainOutcome) -> Void
     let cancel: () -> Void
-
     @State private var draft: DatabaseConnectionEditDraft?
     @State private var name: String
     @State private var submitting = false
@@ -79,8 +78,8 @@ struct DatabaseConnectionManagementSheet: View {
             idealHeight: UIScale.pt(presentation == .edit ? 680 : 360)
         )
         .background(palette.canvas).presenterCover(.database)
-        .interactiveDismissDisabled(preventsDismissal)
-        .task(id: taskID) {
+        .transientPresentation(dismissible: false)
+        .pageTask(id: taskID) {
             await prepare()
         }
     }
@@ -111,6 +110,7 @@ struct DatabaseConnectionManagementSheet: View {
             Spacer(minLength: 0)
             Button("Cancel", action: cancel)
                 .buttonStyle(.edith(.borderless))
+                .keyboardShortcut(.cancelAction)
                 .disabled(preventsDismissal)
         }
         .padding(.horizontal, UIScale.pt(22))

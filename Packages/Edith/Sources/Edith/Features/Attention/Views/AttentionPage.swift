@@ -6,7 +6,6 @@ struct AttentionPage: View {
     @State private var model: AttentionPageModel
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.windowVisible) private var windowVisible
 
     @MainActor
     init(model: AttentionPageModel? = nil) {
@@ -14,82 +13,74 @@ struct AttentionPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                PageHeader(
-                    title: { Text("Attention") },
-                    trailing: {
-                        if !model.needsSetup, model.section.usesPeriod {
-                            AttentionPeriodControl(model: model)
-                        }
-                    },
-                    accessory: {
-                        if !model.needsSetup {
-                            AttentionSectionBar(model: model)
-                        }
-                    })
-
-                if let message = model.message {
-                    AttentionNotice(text: message, error: false)
-                        .pageGutter(compact)
-                        .padding(.bottom, 10)
-                }
-                if let error = model.errorMessage {
-                    AttentionNotice(text: error, error: true)
-                        .pageGutter(compact)
-                        .padding(.bottom, 10)
-                }
-
-                LoadingContainer(
-                    state: model.loaded ? .content : .loading,
-                    title: "No attention activity",
-                    message: "Enable a tracking source to begin collecting activity."
-                ) {
-                    Group {
-                        if model.needsSetup {
-                            AttentionSetupView(model: model)
-                        } else if model.section == .settings {
-                            AttentionSettingsView(model: model)
-                        } else {
-                            Group {
-                                switch model.section {
-                                case .overview:
-                                    if model.hasActivity {
-                                        AttentionOverview(model: model)
-                                    } else {
-                                        AttentionCollectingView(model: model)
-                                    }
-                                case .timeline: AttentionTimelineView(model: model)
-                                case .breakdown: AttentionBreakdownView(model: model)
-                                case .agents: AttentionAgentsView(model: model)
-                                case .focus: AttentionFocusView(model: model)
-                                case .settings: EmptyView()
-                                }
+        PageScaffold {
+            PageHeader(
+                title: { Text("Attention") },
+                trailing: {
+                    EmptyView()
+                },
+                accessory: {
+                    if !model.needsSetup {
+                        AttentionSectionBar(model: model)
+                        if model.section.usesPeriod {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                AttentionPeriodControl(model: model)
                             }
-                            .presenterCover(.attention)
                         }
                     }
-                    .opacity(model.pending && model.section.usesPeriod ? 0.45 : 1)
-                    .allowsHitTesting(!(model.pending && model.section.usesPeriod))
-                    .animation(.easeOut(duration: 0.15), value: model.pending)
-                } placeholder: {
-                    AttentionPageSkeleton(model: model)
+                })
+        } content: {
+            if let message = model.message {
+                PageNotice(message, tone: .success)
+            }
+            if model.loaded, let error = model.errorMessage {
+                PageNotice(
+                    error, tone: .error,
+                    actions: {
+                        Button("Retry") { model.reload() }
+                    })
+            }
+
+            PageLoading(
+                state: model.loading.state,
+                title: "No attention activity",
+                message: model.loading.errorMessage
+                    ?? "Enable a tracking source to begin collecting activity.",
+                layout: .analytics, refreshing: model.loading.isRefreshing,
+                retry: { model.reload() }
+            ) {
+                Group {
+                    if model.needsSetup {
+                        AttentionSetupView(model: model)
+                    } else if model.section == .settings {
+                        AttentionSettingsView(model: model)
+                    } else {
+                        Group {
+                            switch model.section {
+                            case .overview:
+                                if model.hasActivity {
+                                    AttentionOverview(model: model)
+                                } else {
+                                    AttentionCollectingView(model: model)
+                                }
+                            case .timeline: AttentionTimelineView(model: model)
+                            case .breakdown: AttentionBreakdownView(model: model)
+                            case .agents: AttentionAgentsView(model: model)
+                            case .focus: AttentionFocusView(model: model)
+                            case .settings: EmptyView()
+                            }
+                        }
+                        .presenterCover(.attention)
+                    }
                 }
-                .pageContent(compact)
             }
         }
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("section", selection: $model.section)
-        .task(id: windowVisible) {
-            guard windowVisible else { return }
-            model.reload()
+        .pageRefresh(interval: { model.refreshInterval }, cancel: model.cancelLoading) {
+            model.reload(
+                preserveSettings: model.loaded && (model.needsSetup || model.section == .settings))
+            await model.waitForReload()
             await model.checkBrowser()
-            while !Task.isCancelled {
-                try? await Task.sleep(for: model.refreshInterval, tolerance: .seconds(2))
-                guard !Task.isCancelled else { return }
-                model.reload(preserveSettings: model.needsSetup || model.section == .settings)
-                await model.checkBrowser()
-            }
         }
     }
 }
@@ -273,210 +264,15 @@ private struct AttentionSectionBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Picker("Section", selection: $model.section) {
-                ForEach(AttentionPageSection.allCases) { section in
-                    Text(section.title).tag(section)
-                }
-            }
+            EdithSegmentedPicker(
+                "Section", selection: $model.section, options: AttentionPageSection.allCases,
+                label: { $0.title }
+            )
             .labelsHidden()
-            .pickerStyle(.segmented)
             .frame(maxWidth: compact ? .infinity : UIScale.pt(620), alignment: .leading)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private struct AttentionPageSkeleton: View {
-    let model: AttentionPageModel
-    @Environment(\.compactLayout) private var compact
-
-    var body: some View {
-        SkeletonGroup {
-            Group {
-                if model.needsSetup {
-                    AttentionSetupSkeleton()
-                } else if model.hasActivity {
-                    AttentionOverviewSkeleton(compact: compact)
-                } else {
-                    AttentionCollectingSkeleton()
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(240), alignment: .topLeading)
-        .accessibilityLabel("Loading attention activity")
-    }
-}
-
-private struct AttentionSetupSkeleton: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            VStack(alignment: .leading, spacing: UIScale.pt(9)) {
-                SkeletonBlock(width: 312, height: 27)
-                SkeletonBlock(height: 9)
-                SkeletonBlock(width: 464, height: 9)
-            }
-            .padding(.bottom, UIScale.pt(4))
-
-            AttentionSetupCardSkeleton(rows: 2)
-            AttentionSetupCardSkeleton(rows: 1, includesSegmentedControl: true)
-            AttentionSetupCardSkeleton(rows: 2)
-
-            HStack {
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    SkeletonBlock(width: 174, height: 10)
-                    SkeletonBlock(width: 286, height: 8)
-                }
-                Spacer()
-                SkeletonBlock(width: 112, height: 30, corner: 7)
-            }
-            .padding(.top, UIScale.pt(4))
-        }
-    }
-}
-
-private struct AttentionSetupCardSkeleton: View {
-    let rows: Int
-    var includesSegmentedControl = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(13)) {
-            HStack(alignment: .top, spacing: UIScale.pt(11)) {
-                SkeletonBlock(width: 26, height: 26, corner: 13)
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    SkeletonBlock(width: 156, height: 12)
-                    SkeletonBlock(width: 348, height: 8)
-                }
-            }
-            Divider()
-            if includesSegmentedControl {
-                SkeletonBlock(height: 28, corner: 7)
-                SkeletonBlock(width: 382, height: 8)
-            } else {
-                ForEach(0..<rows, id: \.self) { index in
-                    HStack(spacing: UIScale.pt(10)) {
-                        SkeletonBlock(width: 24, height: 24, corner: 6)
-                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 112 : 138, height: 10)
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 310 : 354, height: 8)
-                        }
-                        Spacer()
-                        SkeletonBlock(width: 30, height: 18, corner: 9)
-                    }
-                }
-            }
-        }
-        .padding(UIScale.pt(18))
-        .background(
-            Color.secondary.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(15)))
-    }
-}
-
-private struct AttentionCollectingSkeleton: View {
-    var body: some View {
-        VStack(spacing: UIScale.pt(18)) {
-            SkeletonBlock(width: 76, height: 76, corner: 38)
-            SkeletonBlock(width: 324, height: 23)
-            VStack(spacing: UIScale.pt(5)) {
-                SkeletonBlock(width: 494, height: 9)
-                SkeletonBlock(width: 362, height: 9)
-            }
-            HStack(spacing: UIScale.pt(12)) {
-                SkeletonBlock(width: 126, height: 25, corner: 13)
-                SkeletonBlock(width: 112, height: 25, corner: 13)
-            }
-            SkeletonBlock(width: 96, height: 27, corner: 7)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, UIScale.pt(60))
-        .padding(.horizontal, UIScale.pt(18))
-        .background(
-            Color.secondary.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(15)))
-    }
-}
-
-private struct AttentionOverviewSkeleton: View {
-    let compact: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            LazyVGrid(
-                columns: [
-                    GridItem(
-                        .adaptive(minimum: UIScale.pt(compact ? 145 : 180)),
-                        spacing: UIScale.pt(12))
-                ],
-                spacing: UIScale.pt(12)
-            ) {
-                ForEach(0..<4, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                        HStack {
-                            SkeletonBlock(width: 16, height: 16, corner: 5)
-                            Spacer()
-                            SkeletonBlock(width: 72, height: 9)
-                        }
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? 92 : 64,
-                            height: 20)
-                        SkeletonBlock(width: 84, height: 8)
-                    }
-                    .padding(UIScale.pt(15))
-                    .background(
-                        Color.secondary.opacity(0.06),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
-                }
-            }
-
-            AttentionSkeletonCard(rows: 1, includesBar: true)
-            AttentionSkeletonCard(rows: 6, includesBar: false)
-        }
-    }
-}
-
-private struct AttentionSkeletonCard: View {
-    let rows: Int
-    let includesBar: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack {
-                VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                    SkeletonBlock(width: 136, height: 11)
-                    SkeletonBlock(width: 188, height: 8)
-                }
-                Spacer()
-                SkeletonBlock(width: 68, height: 9)
-            }
-            if includesBar {
-                SkeletonBlock(height: 12, corner: 6)
-                HStack(spacing: UIScale.pt(18)) {
-                    ForEach(0..<4, id: \.self) { _ in
-                        SkeletonBlock(width: 76, height: 8)
-                    }
-                }
-            } else {
-                ForEach(0..<rows, id: \.self) { index in
-                    if index > 0 { Divider() }
-                    HStack(spacing: UIScale.pt(12)) {
-                        SkeletonBlock(width: 24, height: 24, corner: 6)
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? 142 : 188,
-                                height: 9)
-                            SkeletonBlock(width: 96, height: 7)
-                        }
-                        Spacer()
-                        SkeletonBlock(width: 54, height: 9)
-                    }
-                }
-            }
-        }
-        .padding(UIScale.pt(16))
-        .background(
-            Color.secondary.opacity(0.06),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
 }
 
@@ -498,7 +294,7 @@ private struct AttentionSetupView: View {
             }
             .padding(.bottom, 4)
 
-            AttentionCard {
+            PageCard {
                 SetupStep(
                     number: "1", title: "Choose your sources",
                     subtitle:
@@ -518,18 +314,22 @@ private struct AttentionSetupView: View {
                 }
             }
 
-            AttentionCard {
+            PageCard {
                 SetupStep(
                     number: "2", title: "Set the detail level",
                     subtitle:
                         "The browser extension and Mac collector apply this before writing to disk."
                 )
-                Picker("Privacy", selection: $model.settings.privacyLevel) {
-                    Text("Applications only").tag(AttentionPrivacyLevel.applications)
-                    Text("Domains").tag(AttentionPrivacyLevel.domains)
-                    Text("Detailed").tag(AttentionPrivacyLevel.detailed)
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Privacy", selection: $model.settings.privacyLevel,
+                    options: [AttentionPrivacyLevel.applications, .domains, .detailed],
+                    label: {
+                        switch $0 {
+                        case .applications: "Applications only"
+                        case .domains: "Domains"
+                        case .detailed: "Detailed"
+                        }
+                    })
                 Text(privacyDescription)
                     .font(.system(size: UIScale.pt(12)))
                     .foregroundStyle(.secondary)
@@ -560,7 +360,7 @@ private struct AttentionSetupView: View {
                         applicationTracking: applicationTracking,
                         browserTracking: browserTracking)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .controlSize(.large)
                 .disabled(!applicationTracking && !browserTracking)
             }
@@ -587,7 +387,7 @@ private struct AttentionCollectingView: View {
     @Bindable var model: AttentionPageModel
 
     var body: some View {
-        AttentionCard {
+        PageCard {
             VStack(spacing: 18) {
                 ZStack {
                     Circle().fill(Color.accentColor.opacity(0.12)).frame(
@@ -624,27 +424,11 @@ private struct AttentionCollectingView: View {
                         good: model.browserConnected)
                 }
                 Button("Review setup") { model.section = .settings }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.edith(.secondary))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 42)
         }
-    }
-}
-
-struct AttentionCard<Content: View>: View {
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 13) { content }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                .regularMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(.primary.opacity(0.08), lineWidth: 1))
     }
 }
 
@@ -736,7 +520,7 @@ struct BrowserInstallCard: View {
     let showToken: Bool
 
     var body: some View {
-        AttentionCard {
+        PageCard {
             HStack(alignment: .top) {
                 SetupStep(
                     number: "3", title: "Connect each browser profile",

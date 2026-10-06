@@ -1,6 +1,9 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
+@testable import Edith
 @testable import EdithHelper
 @testable import EdithKit
 
@@ -143,7 +146,9 @@ import Testing
         #expect(source.contains("ExtensionReadinessModel"))
         #expect(source.contains("await readiness.refresh(.status).value"))
         #expect(source.contains("readiness.refresh(.verify)"))
-        #expect(source.contains(".onDisappear { readiness.cancel() }"))
+        #expect(
+            source.contains(
+                ".pageTask(id: \"\\(entry.id):\\(invalidation)\", cancel: readiness.cancel)"))
         #expect(!source.contains("Task { await refresh() }"))
         #expect(
             source.components(
@@ -163,12 +168,7 @@ import Testing
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
-        let sheetStart = try #require(source.range(of: "private struct ExtensionSettingsSheet"))
-        let sheetEnd = try #require(
-            source.range(
-                of: "private struct ExtensionLifecycleRows",
-                range: sheetStart.upperBound..<source.endIndex))
-        let sheet = source[sheetStart.lowerBound..<sheetEnd.lowerBound]
+        let sheet = try Self.viewDeclaration("ExtensionSettingsSheet", in: source)
         let controls = try #require(sheet.range(of: "ExtensionDetailRows(entry: entry)"))
         let readiness = try #require(sheet.range(of: "ExtensionLifecycleRows("))
 
@@ -182,16 +182,9 @@ import Testing
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/Edith/Features/Settings/Views/ExtensionsPane.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
-        let cardStart = try #require(source.range(of: "private struct ExtensionMarketplaceCard"))
-        let headerStart = try #require(source.range(of: "struct ExtensionSettingsHeader"))
-        let sheetStart = try #require(source.range(of: "private struct ExtensionSettingsSheet"))
-        let cardSource = String(source[cardStart.lowerBound..<headerStart.lowerBound])
-        let headerSource = String(source[headerStart.lowerBound..<sheetStart.lowerBound])
-        let sheetEnd = try #require(
-            source.range(
-                of: "private struct ExtensionLifecycleRows",
-                range: sheetStart.upperBound..<source.endIndex))
-        let sheet = String(source[sheetStart.lowerBound..<sheetEnd.lowerBound])
+        let cardSource = try Self.viewDeclaration("ExtensionMarketplaceCard", in: source)
+        let headerSource = try Self.viewDeclaration("ExtensionSettingsHeader", in: source)
+        let sheet = try Self.viewDeclaration("ExtensionSettingsSheet", in: source)
         let header = try #require(sheet.range(of: "ExtensionSettingsHeader("))
         let form = try #require(sheet.range(of: "Form {"))
 
@@ -214,6 +207,162 @@ import Testing
         #expect(!sheet.contains(".disabled(lidAwakeOperations.applying)"))
         #expect(sheet.contains("Button(\"Set up required tools...\")"))
         #expect(sheet.contains("ToolProvisioningSheet(entry: entry)"))
+    }
+
+    @MainActor
+    @Test(arguments: [false, true], [false, true])
+    func renderedHeaderSwitchIsAccessibleAndRespectsOperationOwnership(
+        initiallyEnabled: Bool, operationOwnsSwitch: Bool
+    ) async throws {
+        let state = HeaderSwitchState(enabled: initiallyEnabled)
+        _ = TestWindowHost.application
+        let restoreAccessibility = Self.enableAccessibility()
+        defer { restoreAccessibility() }
+        let host = NSHostingView(
+            rootView: HeaderSwitchFixture(state: state, operationOwnsSwitch: operationOwnsSwitch))
+        host.frame = NSRect(x: 0, y: 0, width: 560, height: 80)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        window.layoutIfNeeded()
+        host.layoutSubtreeIfNeeded()
+        let elements = try await Self.settleAccessibility(in: host) {
+            $0.contains { $0.accessibilityRole() == .checkBox }
+        }
+        let switches = elements.filter {
+            $0.accessibilityRole() == .checkBox
+        }
+        #expect(switches.count == 1)
+        let control = try #require(switches.first)
+        #expect(control.accessibilityLabel() == "Sample Extension enabled")
+        #expect(control.isAccessibilityEnabled() == !operationOwnsSwitch)
+        #expect((control.accessibilityValue() as? NSNumber)?.boolValue == initiallyEnabled)
+
+        _ = control.accessibilityPerformPress()
+        let updatedElements = try await Self.settleAccessibility(in: host) {
+            $0.contains {
+                $0.accessibilityRole() == .checkBox
+                    && ($0.accessibilityValue() as? NSNumber)?.boolValue == state.enabled
+            }
+        }
+        #expect(state.enabled == (operationOwnsSwitch ? initiallyEnabled : !initiallyEnabled))
+        if !operationOwnsSwitch {
+            let updatedControl = try #require(
+                updatedElements.first {
+                    $0.accessibilityRole() == .checkBox
+                })
+            #expect((updatedControl.accessibilityValue() as? NSNumber)?.boolValue == state.enabled)
+            #expect(updatedControl.accessibilityPerformPress())
+            let restoredElements = try await Self.settleAccessibility(in: host) {
+                $0.contains {
+                    $0.accessibilityRole() == .checkBox
+                        && ($0.accessibilityValue() as? NSNumber)?.boolValue == initiallyEnabled
+                }
+            }
+            #expect(state.enabled == initiallyEnabled)
+            #expect(
+                restoredElements.first { $0.accessibilityRole() == .checkBox }?
+                    .accessibilityValue() as? NSNumber == NSNumber(value: initiallyEnabled))
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
+    @MainActor
+    private static func accessibilityElements(in root: NSObject) -> [AccessibilityElement] {
+        var visited: Set<ObjectIdentifier> = []
+        func descendants(_ object: NSObject) -> [AccessibilityElement] {
+            guard visited.insert(ObjectIdentifier(object)).inserted else { return [] }
+            let element = AccessibilityElement(object: object)
+            return [element] + element.children.flatMap(descendants)
+        }
+        return descendants(root)
+    }
+
+    @MainActor
+    private static func settleAccessibility(
+        in host: NSView, until ready: ([AccessibilityElement]) -> Bool
+    ) async throws -> [AccessibilityElement] {
+        for _ in 0..<20 {
+            host.layoutSubtreeIfNeeded()
+            let elements = accessibilityElements(in: host)
+            if ready(elements) { return elements }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        return accessibilityElements(in: host)
+    }
+
+    @MainActor
+    private final class HeaderSwitchState: ObservableObject {
+        @Published var enabled: Bool
+
+        init(enabled: Bool) {
+            self.enabled = enabled
+        }
+    }
+
+    @MainActor
+    private struct HeaderSwitchFixture: View {
+        @ObservedObject var state: HeaderSwitchState
+        let operationOwnsSwitch: Bool
+
+        var body: some View {
+            ExtensionSettingsHeader(
+                title: "Sample Extension", enabled: $state.enabled,
+                disabled: operationOwnsSwitch)
+        }
+    }
+
+    @MainActor
+    private static func enableAccessibility() -> () -> Void {
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        return {
+            for (attribute, value) in zip(attributes, previous) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
+    }
+
+    @MainActor
+    private struct AccessibilityElement {
+        let object: NSObject
+
+        var children: [NSObject] {
+            (object as AnyObject).accessibilityChildren?() as? [NSObject] ?? []
+        }
+
+        func accessibilityRole() -> NSAccessibility.Role? {
+            (object as AnyObject).accessibilityRole?()
+        }
+
+        func accessibilityLabel() -> String? {
+            (object as AnyObject).accessibilityLabel?()
+        }
+
+        func isAccessibilityEnabled() -> Bool {
+            (object as AnyObject).isAccessibilityEnabled?() ?? false
+        }
+
+        func accessibilityValue() -> Any? {
+            (object as AnyObject).accessibilityValue?()
+        }
+
+        func supportsPress() -> Bool {
+            (object as AnyObject).isAccessibilitySelectorAllowed?(
+                #selector(NSAccessibilityProtocol.accessibilityPerformPress)) ?? false
+        }
+
+        func accessibilityPerformPress() -> Bool {
+            (object as AnyObject).accessibilityPerformPress?() ?? false
+        }
+
+        func accessibilityFrame() -> CGRect {
+            (object as AnyObject).accessibilityFrame?() ?? .zero
+        }
     }
 
     @Test func micMuteShortcutControlsAreReachableWhereUsersConfigureExtensions() throws {
@@ -401,7 +550,7 @@ import Testing
         #expect(tools.contains("mutationCenter().install"))
     }
 
-    @Test func homeQuickActionsStretchEnabledActionsAcrossOneRow() throws {
+    @Test func homeQuickActionsAdaptToAvailableWidthAndKeepEnabledActionsReachable() throws {
         let sourceURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -409,9 +558,16 @@ import Testing
             .appendingPathComponent("Sources/Edith/Features/Pages/Views/HomePageView.swift")
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-        #expect(source.contains("private var actionCount: Int"))
-        #expect(source.contains("count: max(1, actionCount)"))
-        #expect(!source.contains("count: 4"))
+        let card = try Self.viewDeclaration("QuickActionsCard", in: source)
+        #expect(card.contains(".adaptive(minimum: UIScale.pt("))
+        #expect(card.contains("LazyVGrid(columns: columns"))
+        #expect(card.contains("Button(action: action)"))
+        for feature in [
+            "systemEnabled", "keepAwakeEnabled", "lidAwakeEnabled",
+            "keystrokeHighlightEnabled", "presenterEnabled",
+        ] {
+            #expect(card.contains("if \(feature) {"))
+        }
         #expect(source.contains("title: \"Lid awake\""))
         #expect(source.contains("title: \"Keystrokes\""))
         #expect(source.contains("AppStorageKeys.KeystrokeHighlight.enabled"))
@@ -419,6 +575,88 @@ import Testing
         #expect(source.contains("lidAwakeOperations.perform(.on"))
         #expect(source.contains("lidAwakeOperations.perform(.off)"))
         #expect(!source.contains("IPC.Name.toggleLidAwake"))
+    }
+
+    @MainActor
+    @Test
+    func renderedHomeQuickActionsRemainAccessibleAtCompactWidthsAndIncreasedZoom() async throws {
+        let defaults = SharedDefaults.store
+        let enabledKeys = [
+            AppStorageKeys.Tabs.systemEnabled, AppStorageKeys.General.keepAwakeEnabled,
+            LidAwakeState.enabledKey, AppStorageKeys.KeystrokeHighlight.enabled,
+            AppStorageKeys.Presenter.enabled,
+        ]
+        let hiddenKeys = [
+            AppStorageKeys.Tabs.usageEnabled, AppStorageKeys.Tabs.musicEnabled,
+            AppStorageKeys.Tabs.calendarEnabled, AppStorageKeys.Tabs.codeStatsEnabled,
+        ]
+        let keys = enabledKeys + hiddenKeys
+        let previousValues = keys.map { defaults.object(forKey: $0) }
+        let previousZoom = UIScale.current
+        defer {
+            for (key, value) in zip(keys, previousValues) {
+                defaults.set(value, forKey: key)
+            }
+            UIScale.apply(previousZoom)
+        }
+        for key in enabledKeys { defaults.set(true, forKey: key) }
+        for key in hiddenKeys { defaults.set(false, forKey: key) }
+        _ = TestWindowHost.application
+        let restoreAccessibility = Self.enableAccessibility()
+        defer { restoreAccessibility() }
+        let titles = [
+            "Clean keys", "Keep awake", "Lid awake", "Keystrokes", "Presenter mode",
+        ]
+
+        for width in [420.0, 1200.0] {
+            for zoom in [1.0, 1.6] {
+                UIScale.apply(zoom)
+                let host = NSHostingView(
+                    rootView: HomePage()
+                        .environment(\.automaticViewActionsEnabled, false)
+                        .environment(\.terminalLaunchEnabled, false)
+                        .environment(\.windowVisible, false)
+                        .transaction { $0.animation = nil })
+                host.frame = NSRect(x: 0, y: 0, width: width, height: 1800)
+                let window = TestWindowHost.window(contentRect: host.frame)
+                window.contentView = host
+                window.orderBack(nil)
+                defer { window.orderOut(nil) }
+                window.layoutIfNeeded()
+                host.layoutSubtreeIfNeeded()
+                let elements = try await Self.settleAccessibility(in: host) { elements in
+                    titles.allSatisfy { title in
+                        elements.contains {
+                            $0.accessibilityRole() == .button
+                                && $0.accessibilityLabel()?.contains(title) == true
+                                && $0.accessibilityFrame().width > 0
+                        }
+                    }
+                }
+                let buttons = elements.filter {
+                    $0.accessibilityRole() == .button
+                }
+                let viewport = window.convertToScreen(host.convert(host.bounds, to: nil))
+                var actionFrames: [CGRect] = []
+                for title in titles {
+                    let matches = buttons.filter {
+                        $0.accessibilityLabel()?.contains(title) == true
+                    }
+                    #expect(matches.count == 1, "\(title) at width \(width), zoom \(zoom)")
+                    let button = try #require(matches.first)
+                    #expect(button.isAccessibilityEnabled())
+                    #expect(button.supportsPress())
+                    let frame = button.accessibilityFrame()
+                    #expect(frame.width > 0 && frame.height > 0)
+                    #expect(viewport.insetBy(dx: -1, dy: -1).contains(frame))
+                    actionFrames.append(frame)
+                }
+                if width == 420 {
+                    #expect(Set(actionFrames.map { Int($0.midY.rounded()) }).count > 1)
+                }
+                #expect(!TestWindowHost.isExposedOnDesktop(window))
+            }
+        }
     }
 
     @Test func lidAwakeUISurfacesUseCorrelatedOperationsAndExposeFailures() throws {

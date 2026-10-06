@@ -75,7 +75,7 @@ struct MachinesRows: View {
                     + "options in your config keep working. Host keys are pinned on first "
                     + "connection.")
         }
-        .sheet(isPresented: $addSheetPresented) {
+        .edithSheet(isPresented: $addSheetPresented, dismissible: false) {
             AddMachineSheet { machine, secrets in
                 model.add(machine, secrets: changes(secrets))
             }

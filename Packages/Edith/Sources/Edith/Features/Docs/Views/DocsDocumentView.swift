@@ -318,7 +318,7 @@ private struct DocsCodeBlock: View {
         .overlay(
             RoundedRectangle(cornerRadius: UIScale.pt(9)).strokeBorder(DashSkin.line(dark))
         )
-        .task(id: "\(dark)-\(highlightLanguage ?? "")-\(text.hashValue)") {
+        .pageTask(id: "\(dark)-\(highlightLanguage ?? "")-\(text.hashValue)") {
             guard let language = highlightLanguage else { return }
             highlighted = await DocsCodeHighlight.shared.highlight(
                 text: text, language: language, dark: dark)

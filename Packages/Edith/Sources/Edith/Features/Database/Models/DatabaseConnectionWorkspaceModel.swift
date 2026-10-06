@@ -1,73 +1,8 @@
 import AppKit
 import EdithDatabase
+import EdithKit
 import Foundation
 import Observation
-
-struct DatabaseConnectionSummary: Identifiable, Equatable, Sendable {
-    let id: DatabaseConnectionID
-    let name: String
-    let product: DatabaseProduct
-    let environmentKind: DatabaseEnvironmentKind
-    let environmentLabel: String
-    let environmentProtection: DatabaseEnvironmentProtection
-    let readOnlyPolicy: DatabaseReadOnlyPolicy
-    let productionPolicy: DatabaseProductionPolicy
-    let groupIdentity: String?
-    let group: String?
-    let tags: [String]
-    let color: String?
-    let isFavorite: Bool
-    let lastUsedAt: Date?
-    let defaultDatabase: String?
-    let defaultSchema: String?
-    let logicalDatabase: String?
-    let networkEndpoints: [DatabaseNetworkEndpoint]
-
-    init(definition: DatabaseConnectionDefinition) {
-        id = definition.id
-        name = DatabaseConnectionDisplayText.rendered(
-            definition.displayName,
-            fallback: "Untitled connection")
-        product = definition.productHint
-        environmentKind = definition.environment.kind
-        environmentLabel = DatabaseConnectionDisplayText.rendered(
-            definition.environment.label,
-            fallback: definition.environment.kind.title)
-        environmentProtection = definition.environment.protection
-        readOnlyPolicy = definition.readOnlyPolicy
-        productionPolicy = definition.productionPolicy
-        groupIdentity = definition.group
-        group = DatabaseConnectionDisplayText.optional(definition.group)
-        tags = definition.tags.prefix(8).map {
-            DatabaseConnectionDisplayText.rendered($0, fallback: "Tag", limit: 96)
-        }
-        color = DatabaseConnectionDisplayText.optional(definition.color)
-        isFavorite = definition.isFavorite
-        lastUsedAt = definition.lastUsedAt
-        defaultDatabase = DatabaseConnectionDisplayText.optional(definition.namespaces.database)
-        defaultSchema = DatabaseConnectionDisplayText.optional(definition.namespaces.schema)
-        logicalDatabase = DatabaseConnectionDisplayText.optional(
-            definition.namespaces.logicalDatabase)
-        switch definition.location {
-        case .network(let endpoints):
-            networkEndpoints = endpoints
-        case .sqlite, .memory:
-            networkEndpoints = []
-        }
-    }
-
-    var environmentSummary: String {
-        "\(environmentKind.title), \(environmentLabel), \(environmentProtection.title)"
-    }
-
-    var readOnlySummary: String {
-        readOnlyPolicy.title
-    }
-
-    var productionSummary: String {
-        productionPolicy.title
-    }
-}
 
 struct DatabaseConnectionGroupOption: Identifiable, Equatable, Hashable, Sendable {
     let id: String
@@ -292,7 +227,7 @@ final class DatabaseConnectionWorkspaceModel {
     private var capabilityStates: [DatabaseConnectionID: DatabaseCapabilityState] = [:]
     private var sessionGenerations: [DatabaseConnectionID: UUID] = [:]
     private var capabilityGenerations: [DatabaseConnectionID: UUID] = [:]
-    private var listGeneration = UUID()
+    let listLoad = ContentLoad()
 
     init(
         sender: any DatabaseBrokerCommandSending = DatabaseBrokerCommandClient(),
@@ -376,7 +311,7 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func selectSavedConnection(_ connection: DatabaseConnectionDefinition) {
-        listGeneration = UUID()
+        listLoad.cancel()
         let summary = DatabaseConnectionSummary(definition: connection)
         summariesByID[connection.id] = summary
         selectedConnectionID = connection.id
@@ -387,7 +322,7 @@ final class DatabaseConnectionWorkspaceModel {
         _ connection: DatabaseConnectionDefinition,
         disconnectsSession: Bool
     ) {
-        listGeneration = UUID()
+        listLoad.cancel()
         let summary = DatabaseConnectionSummary(definition: connection)
         summariesByID[connection.id] = summary
         if disconnectsSession {
@@ -405,7 +340,7 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func applyDuplicatedConnection(_ connection: DatabaseConnectionDefinition) {
-        listGeneration = UUID()
+        listLoad.cancel()
         let summary = DatabaseConnectionSummary(definition: connection)
         summariesByID[connection.id] = summary
         let current = listState.connections
@@ -416,7 +351,7 @@ final class DatabaseConnectionWorkspaceModel {
 
     @discardableResult
     func removeManagedConnection(_ connectionID: DatabaseConnectionID) -> DatabaseConnectionID? {
-        listGeneration = UUID()
+        listLoad.cancel()
         let current = listState.connections
         let removedIndex = current.firstIndex { $0.id == connectionID }
         let remaining = current.filter { $0.id != connectionID }
@@ -435,8 +370,7 @@ final class DatabaseConnectionWorkspaceModel {
     }
 
     func loadConnections() async {
-        let generation = UUID()
-        listGeneration = generation
+        let generation = listLoad.begin()
         let priorState = listState
         let previous = listState.connections
         let search = normalizedSearch
@@ -454,16 +388,23 @@ final class DatabaseConnectionWorkspaceModel {
                             order: .recentlyUsed,
                             limit: Self.connectionListLimit))))
             try Task.checkCancellation()
-            guard listGeneration == generation else { return }
+            guard listLoad.isCurrent(generation) else { return }
             finishConnectionList(response)
+            if case let .failed(_, message) = listState {
+                listLoad.fail(generation, message: message)
+            } else {
+                listLoad.complete(generation)
+            }
         } catch is CancellationError {
-            guard listGeneration == generation else { return }
+            guard listLoad.owns(generation) else { return }
+            listLoad.cancel(generation)
             listState =
                 priorState == .idle
                 ? .failed([], "Loading saved database connections was cancelled.") : priorState
         } catch {
-            guard listGeneration == generation else { return }
+            guard listLoad.isCurrent(generation) else { return }
             let message = Self.message(for: error, action: .list)
+            listLoad.fail(generation, message: message)
             listState = .failed(previous, message)
             announcement(message)
         }
@@ -1014,7 +955,7 @@ extension DatabaseTopologyKind {
     }
 }
 
-private enum DatabaseConnectionDisplayText {
+enum DatabaseConnectionDisplayText {
     static func optional(_ value: String?, limit: Int = 160) -> String? {
         guard let value else { return nil }
         let rendered = rendered(value, fallback: "", limit: limit)

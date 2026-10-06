@@ -14,6 +14,7 @@ struct TimeLapseSources {
     static func load() async throws -> Self {
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true)
+        try Task.checkCancellation()
         return await Task.detached(priority: .utility) {
             let displays = content.displays.sorted { $0.displayID < $1.displayID }
             let windows = content.windows.filter { $0.frame.width > 1 && $0.frame.height > 1 }

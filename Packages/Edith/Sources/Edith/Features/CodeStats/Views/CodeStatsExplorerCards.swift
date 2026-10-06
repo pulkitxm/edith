@@ -28,10 +28,9 @@ struct CodeStatsRepositoryStripCard: View {
     @State private var hovered: CodeStatsStripCell?
 
     var body: some View {
-        SkinCard(
+        PageCard(
             title: "Repository activity",
-            note: "Each row scaled to its own busiest month, so small repos stay visible",
-            dark: dark
+            note: "Each row scaled to its own busiest month, so small repos stay visible"
         ) {
             if explorer.stripRepositories.isEmpty {
                 Text("No repository activity in this range.")
@@ -159,12 +158,11 @@ struct CodeStatsYearOverYearCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Year over year", note: "Same month, different years", dark: dark) {
-            Picker("Metric", selection: $commits) {
-                Text("Lines").tag(false)
-                Text("Commits").tag(true)
-            }
-            .pickerStyle(.segmented)
+        PageCard(title: "Year over year", note: "Same month, different years") {
+            EdithSegmentedPicker(
+                "Metric", selection: $commits, options: [false, true],
+                label: { $0 ? "Commits" : "Lines" }
+            )
             .labelsHidden()
             .fixedSize()
             Chart {
@@ -253,7 +251,7 @@ private struct CodeStatsRhythmChart: View {
     @State private var hovered: String?
 
     var body: some View {
-        SkinCard(title: title, note: "Commits, hover for lines", dark: dark, fill: true) {
+        PageCard(title: title, note: "Commits, hover for lines", fill: true) {
             Chart(bars) { bar in
                 BarMark(x: .value("When", bar.label), y: .value("Commits", bar.commits))
                     .foregroundStyle(
@@ -346,8 +344,8 @@ private struct CodeStatsDonut: View {
     }
 
     var body: some View {
-        SkinCard(
-            title: title, note: "Share of lines, click a slice to filter", dark: dark, fill: true
+        PageCard(
+            title: title, note: "Share of lines, click a slice to filter", fill: true
         ) {
             if slices.reduce(0, { $0 + $1.lines }) == 0 {
                 Text("No counted lines in this range.")
@@ -434,8 +432,7 @@ struct CodeStatsNewRepositoriesCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "New repositories", note: "Month of your first commit in each", dark: dark)
-        {
+        PageCard(title: "New repositories", note: "Month of your first commit in each") {
             if explorer.newRepositories.isEmpty {
                 Text("You did not start any new repositories in this range.")
                     .font(.system(size: UIScale.pt(12)))

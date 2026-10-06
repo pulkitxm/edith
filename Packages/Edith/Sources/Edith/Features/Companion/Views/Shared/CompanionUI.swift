@@ -5,38 +5,6 @@ enum CompanionMetrics {
     static var columnWidth: CGFloat { UIScale.pt(680) }
     static var cardSpacing: CGFloat { UIScale.pt(16) }
     static var rowSpacing: CGFloat { UIScale.pt(10) }
-    static var twoColumnThreshold: CGFloat { UIScale.pt(1020) }
-}
-
-struct CompanionGrid<Primary: View, Secondary: View, Full: View>: View {
-    let width: CGFloat
-    @ViewBuilder var primary: () -> Primary
-    @ViewBuilder var secondary: () -> Secondary
-    @ViewBuilder var full: () -> Full
-
-    private var wide: Bool { width >= CompanionMetrics.twoColumnThreshold }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-            if wide {
-                HStack(alignment: .top, spacing: CompanionMetrics.cardSpacing) {
-                    VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                        primary()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                    VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                        secondary()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-                }
-            } else {
-                primary()
-                secondary()
-            }
-            full()
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
 }
 
 struct CompanionButton: View {
@@ -54,71 +22,21 @@ struct CompanionButton: View {
     var help: String? = nil
     let action: () -> Void
 
-    @Environment(\.colorScheme) private var scheme
-    @State private var hovering = false
-
-    private var dark: Bool { scheme == .dark }
     private var inactive: Bool { disabled || busy }
-
-    private var labelColor: Color {
-        switch role {
-        case .primary: return DashSkin.paper(dark)
-        case .normal: return DashSkin.ink(dark)
-        case .destructive: return DashSkin.danger
-        }
-    }
-
-    private var fillColor: Color {
-        switch role {
-        case .primary:
-            return hovering && !inactive ? DashSkin.accentDeep(dark) : DashSkin.accent(dark)
-        case .normal, .destructive:
-            return hovering && !inactive
-                ? DashSkin.line(dark).opacity(0.45) : DashSkin.paper(dark).opacity(0.6)
-        }
-    }
-
-    private var borderColor: Color {
-        switch role {
-        case .primary: return .clear
-        case .normal: return DashSkin.lineStrong(dark)
-        case .destructive: return DashSkin.danger.opacity(0.55)
-        }
-    }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: UIScale.pt(6)) {
                 if busy {
-                    SkeletonGroup {
-                        SkeletonBlock(
-                            width: max(48, CGFloat((busyTitle ?? title).count) * 6),
-                            height: 9,
-                            corner: 4)
-                    }
-                } else {
-                    Text(title)
-                        .font(.system(size: UIScale.pt(12), weight: .medium))
+                    LoadingIndicator()
                 }
+                Text(busy ? (busyTitle ?? title) : title).font(.edithText(.callout))
             }
-            .foregroundStyle(labelColor)
-            .padding(.horizontal, UIScale.pt(12))
-            .frame(minHeight: UIScale.pt(26))
-            .background {
-                RoundedRectangle(cornerRadius: UIScale.pt(8)).fill(fillColor)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    .strokeBorder(borderColor, lineWidth: UIScale.pt(1))
-            }
-            .opacity(inactive ? 0.55 : 1)
-            .contentShape(RoundedRectangle(cornerRadius: UIScale.pt(8)))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(
+            .edith(role == .primary ? .primary : role == .destructive ? .destructive : .secondary)
+        )
         .disabled(inactive)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .animation(.easeOut(duration: 0.12), value: busy)
         .help(help ?? "")
         .accessibilityLabel(busy ? (busyTitle ?? "\(title) in progress") : title)
     }
@@ -397,7 +315,7 @@ struct CompanionConfirmSheet: View {
             }
         }
         .padding(UIScale.pt(20))
-        .frame(width: UIScale.pt(400))
+        .frame(width: PresentationMetrics.width(400))
         .background(DashSkin.paper(dark))
     }
 }
@@ -410,7 +328,7 @@ struct CompanionSkeletonCard<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+        PagePanel(fill: fill) {
             HStack(alignment: .firstTextBaseline) {
                 SkeletonBlock(width: titleWidth, height: 16, corner: 5)
                 Spacer()
@@ -418,19 +336,8 @@ struct CompanionSkeletonCard<Content: View>: View {
                     SkeletonBlock(width: noteWidth, height: 9, corner: 4)
                 }
             }
+        } content: {
             content()
         }
-        .padding(
-            EdgeInsets(
-                top: UIScale.pt(16), leading: UIScale.pt(16),
-                bottom: UIScale.pt(14), trailing: UIScale.pt(16))
-        )
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .widgetBar(
-            cornerRadius: 16,
-            fill: DashSkin.paper2(dark),
-            stroke: DashSkin.line(dark),
-            shadow: .black.opacity(dark ? 0.32 : 0.05)
-        )
     }
 }

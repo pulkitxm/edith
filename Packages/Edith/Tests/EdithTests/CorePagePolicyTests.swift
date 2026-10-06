@@ -18,7 +18,7 @@ import Testing
         let extensions = try source("Features/Settings/Views/ExtensionsPane.swift")
         let system = try source("Features/Pages/Views/SystemPageView.swift")
 
-        #expect(extensions.contains(".adaptive(minimum:"))
+        #expect(extensions.contains("PageMetrics.cardColumns(compact,"))
         #expect(extensions.contains("EdithButtonStyle(.selection"))
         #expect(system.contains("EdithButtonStyle(.destructive)"))
         #expect(system.contains(".accessibilityLabel(\"Dismiss status\")"))
@@ -26,7 +26,8 @@ import Testing
 
     @Test func aboutPreservesTheCenteredIdentityLayout() throws {
         let source = try source("Features/Settings/Views/AboutPane.swift")
-        #expect(source.contains("GeometryReader { proxy in"))
+        #expect(source.contains("PageScaffold(width: .readable, pinnedHeader: true, header: {})"))
+        #expect(!source.contains("GeometryReader"))
         #expect(source.contains("multilineTextAlignment(.center)"))
         #expect(source.contains(".background(theme.opacity(0.16), in: Capsule())"))
         #expect(source.contains(".frame(maxWidth: UIScale.pt(340))"))
@@ -38,8 +39,9 @@ import Testing
         let attention = try source("Features/Attention/Views/AttentionPage.swift")
         let dashboard = try source("Features/Dashboard/Views/DashboardView.swift")
 
-        #expect(attention.contains("LoadingContainer("))
-        #expect(dashboard.contains(".task(id: refresh.updating)"))
+        #expect(attention.contains("PageLoading("))
+        #expect(attention.contains(".pageRefresh("))
+        #expect(dashboard.contains(".pageTask(id: refresh.updating"))
         #expect(
             dashboard.contains(
                 "AgentTopicStream.values(UsageTopicSnapshot.self, topic: .usage)"))

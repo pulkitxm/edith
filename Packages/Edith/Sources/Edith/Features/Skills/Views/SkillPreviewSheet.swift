@@ -49,12 +49,9 @@ struct SkillPreviewSheet: View {
             }
             .padding(UIScale.pt(24))
             HStack {
-                Picker("View", selection: $mode) {
-                    ForEach(Mode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "View", selection: $mode, options: Mode.allCases, label: { $0.rawValue }
+                )
                 .labelsHidden()
                 .frame(width: UIScale.pt(210))
                 Spacer()
@@ -76,14 +73,14 @@ struct SkillPreviewSheet: View {
                 Text(
                     "Showing cached Markdown. Reopen to retry GitHub; installation downloads the complete skill separately."
                 )
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
                 .padding(.horizontal, UIScale.pt(24)).padding(.bottom, UIScale.pt(12))
             }
             Divider()
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(width: UIScale.pt(740), height: UIScale.pt(650))
-        .task(id: refreshID) {
+        .frame(width: PresentationMetrics.width(740), height: PresentationMetrics.height(650))
+        .pageTask(id: refreshID) {
             error = nil
             copied = false
             do {
@@ -117,9 +114,10 @@ struct SkillPreviewSheet: View {
             }
         } else if let error {
             VStack(spacing: UIScale.pt(12)) {
-                Image(systemName: "wifi.exclamationmark").font(.title2).foregroundStyle(.secondary)
+                Image(systemName: "wifi.exclamationmark").font(.edithText(.title2)).foregroundStyle(
+                    .secondary)
                 Text(error).multilineTextAlignment(.center)
-                    .font(.callout).frame(maxWidth: UIScale.pt(380))
+                    .font(.edithText(.callout)).frame(maxWidth: UIScale.pt(380))
                 Button("Try again") { refreshID = UUID() }
             }
         } else {

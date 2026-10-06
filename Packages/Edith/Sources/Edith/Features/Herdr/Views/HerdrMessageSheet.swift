@@ -54,7 +54,7 @@ struct HerdrMessageSheet: View {
             footer
         }
         .padding(UIScale.pt(16))
-        .frame(width: UIScale.pt(460))
+        .frame(width: PresentationMetrics.width(460))
         .background(DashSkin.paper(dark))
         .onAppear { editorFocused = true }
     }
@@ -211,12 +211,13 @@ struct HerdrMessageSheet: View {
                 Spacer()
                 Button("Done") { dismiss() }
                     .buttonStyle(.edith(.primary))
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(.cancelAction)
             } else {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .buttonStyle(.edith(.secondary))
                     .keyboardShortcut(.cancelAction)
+                    .disabled(sending)
                 Button(sendTitle) { Task { await submit() } }
                     .buttonStyle(.edith(.primary))
                     .keyboardShortcut(.return, modifiers: .command)

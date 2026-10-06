@@ -416,16 +416,16 @@ struct MachineOverviewTab: View {
         metricsGrid
         if let slow = session.slow {
             if !slow.disks.isEmpty {
-                SkinCard(title: "Storage", dark: dark) { storage(slow) }
+                PageCard(title: "Storage") { storage(slow) }
             }
         } else {
             MeterRowsSkeleton(title: "Storage", rows: 2, dark: dark)
         }
         if let slow = session.slow, !slow.temps.isEmpty || slow.gpu != nil {
-            SkinCard(title: "Hardware", dark: dark) { hardware(slow) }
+            PageCard(title: "Hardware") { hardware(slow) }
         }
         if !session.facts.who.isEmpty || session.facts.updatesAvailable != nil {
-            SkinCard(title: "Host", dark: dark) { hostFacts }
+            PageCard(title: "Host") { hostFacts }
         }
     }
 

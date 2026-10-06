@@ -477,7 +477,7 @@ struct LimitsMenuPanel: View {
             } else {
                 ForEach(store.enabledProviders) { provider in
                     let limits = store.limits(for: provider)
-                    Text(provider.label).font(.headline)
+                    Text(provider.label).font(.edithText(.headline))
                     let slots = MenuBarLimits.slots(for: provider).filter { slot in
                         slot != .fable || limits.window(for: slot) != nil
                     }
@@ -490,11 +490,11 @@ struct LimitsMenuPanel: View {
                 }
             }
             if let error = store.limitsError {
-                Text(error).font(.caption).foregroundStyle(.secondary)
+                Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             if let updated = store.limitsUpdatedAt {
                 Text("Updated \(updated, style: .relative) ago")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
         }
     }

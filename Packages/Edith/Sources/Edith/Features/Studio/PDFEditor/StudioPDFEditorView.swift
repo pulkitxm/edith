@@ -10,10 +10,12 @@ struct StudioPDFEditorView: View {
     @State private var showsThumbnails = true
     @State private var showsSignaturePad = false
     @State private var confirmingLeave = false
+    @State private var showsInspector = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     @MainActor init(model: StudioModel, url: URL, mode: StudioPDFEditorMode) {
-        self.init(model: model, editor: StudioPDFEditorModel(url: url, mode: mode))
+        self.init(model: model, editor: model.pdfEditor(for: url, mode: mode))
     }
 
     init(model: StudioModel, editor: StudioPDFEditorModel) {
@@ -33,10 +35,6 @@ struct StudioPDFEditorView: View {
             Divider()
             if editor.needsPassword {
                 StudioPDFPasswordPrompt(editor: editor)
-            } else if let failure = editor.loadError {
-                StudioEmptyNote(symbol: "exclamationmark.triangle", text: failure)
-                    .padding(UIScale.pt(20))
-                Spacer()
             } else if editor.session != nil {
                 StudioPDFModeBar(editor: editor)
                 Divider()
@@ -44,13 +42,16 @@ struct StudioPDFEditorView: View {
                     if editor.mode == .organize {
                         StudioPDFOrganizeGrid(editor: editor)
                     } else {
-                        StudioPDFCanvas(editor: editor, showsThumbnails: showsThumbnails)
+                        StudioPDFCanvas(
+                            editor: editor, showsThumbnails: showsThumbnails && !compact)
                     }
-                    Divider()
-                    StudioPDFInspector(
-                        model: model, editor: editor, showsSignaturePad: $showsSignaturePad
-                    )
-                    .frame(width: UIScale.pt(270))
+                    if !compact {
+                        Divider()
+                        StudioPDFInspector(
+                            model: model, editor: editor, showsSignaturePad: $showsSignaturePad
+                        )
+                        .frame(width: UIScale.pt(270))
+                    }
                 }
                 if let status = editor.status {
                     HStack {
@@ -70,7 +71,14 @@ struct StudioPDFEditorView: View {
                     .background(.bar)
                 }
             } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                PageLoading(
+                    state: editor.loading.state,
+                    message: editor.loadError ?? "The PDF could not be opened.",
+                    layout: .editor, retry: editor.load
+                ) {
+                    EmptyView()
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -78,7 +86,7 @@ struct StudioPDFEditorView: View {
             if editor.isSaving {
                 ZStack {
                     Color.black.opacity(0.15)
-                    ProgressView("Saving…")
+                    LoadingIndicator("Saving…")
                         .padding(UIScale.pt(22))
                         .background(
                             .regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
@@ -93,7 +101,7 @@ struct StudioPDFEditorView: View {
         } message: {
             Text("Your edits to \(editor.url.lastPathComponent) have not been saved yet.")
         }
-        .sheet(isPresented: $showsSignaturePad) {
+        .edithSheet(isPresented: $showsSignaturePad, dismissible: false) {
             StudioSignaturePad { image in
                 editor.saveSignature(image)
                 showsSignaturePad = false
@@ -101,7 +109,7 @@ struct StudioPDFEditorView: View {
                 showsSignaturePad = false
             }
         }
-        .task { if editor.session == nil { editor.load() } }
+        .pageTask(cancel: editor.cancelLoading) { if editor.session == nil { editor.load() } }
     }
 
     private func leave() {
@@ -114,6 +122,17 @@ struct StudioPDFEditorView: View {
 
     @ViewBuilder private var trailing: some View {
         HStack(spacing: UIScale.pt(6)) {
+            if compact {
+                Button("Inspector", systemImage: "sidebar.right") { showsInspector.toggle() }
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.edith(.iconOnly))
+                    .popover(isPresented: $showsInspector) {
+                        StudioPDFInspector(
+                            model: model, editor: editor, showsSignaturePad: $showsSignaturePad
+                        )
+                        .frame(width: UIScale.pt(270), height: UIScale.pt(320))
+                    }
+            }
             Button {
                 editor.undo()
             } label: {

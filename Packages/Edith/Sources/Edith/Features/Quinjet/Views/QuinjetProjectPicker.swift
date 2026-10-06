@@ -61,7 +61,6 @@ struct QuinjetLocalProjectPicker: View {
             }
 
             content
-                .pageContent(compact)
         }
     }
 
@@ -96,9 +95,7 @@ struct QuinjetLocalProjectPicker: View {
         } else {
             ScrollView {
                 LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: UIScale.pt(330)), spacing: UIScale.pt(14))
-                    ],
+                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
                     spacing: UIScale.pt(14)
                 ) {
                     ForEach(model.filteredProjects) { project in
@@ -113,6 +110,7 @@ struct QuinjetLocalProjectPicker: View {
                     }
                 }
                 .padding(.top, UIScale.pt(2))
+                .pageContent(compact)
             }
         }
     }

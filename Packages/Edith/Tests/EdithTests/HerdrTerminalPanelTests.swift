@@ -138,15 +138,16 @@ private actor HerdrPanelHerdr {
             let specification = try HerdrTerminalBridgeSpecification(
                 encoded: #require(request.arguments.last))
             #expect(specification.mouse == mouse)
-            var router = HerdrTerminalInputRouter(mouse: specification.mouse)
+            #expect(specification.transport == .terminal)
+            #expect(specification.arguments.contains("attach"))
+            #expect(!specification.arguments.contains("control"))
+            var router = HerdrTerminalInputRouter(
+                mouse: specification.mouse, transport: specification.transport)
             let commands = try router.commands(for: reports)
             if mouse == .buttons {
                 #expect(commands.count == 1)
                 let command = try #require(commands.first)
-                let record = try #require(
-                    JSONSerialization.jsonObject(with: command) as? [String: Any])
-                let bytes = try #require(record["bytes"] as? String)
-                #expect(Data(base64Encoded: bytes) == reports)
+                #expect(command == reports)
             } else {
                 #expect(commands.isEmpty)
             }

@@ -410,6 +410,36 @@ private actor HerdrWatchHarness {
             store.sessions.contains { $0.agent.id == updated.id && $0.agent.kind == "Claude Code" })
     }
 
+    @Test func completedEmptyInventoryResolvesNavigation() {
+        let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        #expect(!store.inventoryReady)
+
+        store.apply([])
+
+        #expect(store.inventoryReady)
+        #expect(store.hosts.isEmpty)
+        #expect(store.inventoryFailureMessage == nil)
+    }
+
+    @Test func failedHostInventoryResolvesNavigationAndKeepsItsFailure() {
+        let store = HerdrStore(defaults: Self.scratchDefaults(), liveWatcher: { _ in })
+        store.apply([
+            HerdrHostSnapshot(
+                id: "unreachable", name: "Build machine", isLocal: false,
+                sshTarget: "fixture.invalid", herdrPresent: false, reachable: false,
+                error: "Connection refused")
+        ])
+
+        #expect(store.inventoryReady)
+        #expect(store.agents.isEmpty)
+        #expect(store.inventoryFailureMessage == "Build machine: Connection refused")
+
+        store.apply([.local(herdrPresent: true)])
+
+        #expect(store.inventoryReady)
+        #expect(store.inventoryFailureMessage == nil)
+    }
+
     @Test func stoppedAndReplacedWatchersCannotPublish() async {
         let harness = HerdrWatchHarness()
         let store = HerdrStore { callback in await harness.watch(callback) }
@@ -467,7 +497,7 @@ private actor HerdrWatchHarness {
     }
 
     @Test(arguments: ["Cursor Agent", "cursor-agent-cli", "Codex", "OpenCode"])
-    func localAgentAttachmentUsesTheRawTerminalBridge(kind: String) async throws {
+    func localAgentAttachmentUsesTheGraphicsCapableTerminalClient(kind: String) async throws {
         let store = HerdrStore()
         let selected = agent(kind, pane: "pane-1")
         store.open(selected)
@@ -479,11 +509,11 @@ private actor HerdrWatchHarness {
         let request = try await store.attachRequest(
             for: tab, environment: environment, localExecutable: executable,
             bridgeExecutable: bridge)
-        let controller = HerdrOperationExecution.localControlRequest(
+        let controller = HerdrOperationExecution.localAttachRequest(
             for: selected, environment: environment, executable: executable)
         let expected = try HerdrTerminalBridge.launchRequest(
             bridgeExecutable: bridge, controller: controller,
-            mouse: .buttons)
+            mouse: .buttons, transport: .terminal)
 
         #expect(request == expected)
     }

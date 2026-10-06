@@ -336,9 +336,11 @@ final class HerdrSocketClient: @unchecked Sendable {
 
 enum HerdrSocketDiscovery {
     static func local() -> [(name: String, path: String)] {
-        let root = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/herdr")
-        return sockets(under: root)
+        let configHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
+        let root =
+            configHome.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config")
+        return sockets(under: root.appendingPathComponent("herdr"))
     }
 
     static func remoteProbeCommand() -> String {

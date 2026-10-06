@@ -15,86 +15,103 @@ final class CompanionLibraryModel: CompanionRefreshable {
     private(set) var ingesting = false
     private(set) var ingestSummary: String?
     private(set) var indexing = false
-    private(set) var loaded = false
+    let loading = ContentLoad()
+    let detailLoad = ContentLoad()
+    let searchLoad = ContentLoad()
+    var loaded: Bool { loading.hasContent }
     private(set) var selectedId: String?
     private(set) var detail: CompanionEpisodeDetail?
     private(set) var signals: [CompanionSignal] = []
     private(set) var media: Data?
-    private(set) var loadingDetail = false
+    var loadingDetail: Bool { detailLoad.isRunning }
     private(set) var error: String?
     let playback = AudioPlayback()
     private var searchTask: Task<Void, Never>?
+    private let reads: CompanionLibraryReads
+
+    init(reads: CompanionLibraryReads = .live) {
+        self.reads = reads
+    }
 
     private var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
     }
 
     func refresh() async {
-        do {
-            episodes = try await client.episodes(limit: 60)
-            loaded = true
+        await loading.perform(operation: reads.episodes) { value in
+            episodes = value
             error = nil
-        } catch {
-            self.error = error.localizedDescription
         }
+        if let message = loading.errorMessage { error = message }
     }
 
     func searchChanged() {
         searchTask?.cancel()
+        searchLoad.cancel()
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             hits = []
             return
         }
+        searchLoad.reset()
+        hits = []
+        let client = client
         searchTask = Task {
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
-            do {
-                let client = client
-                let found = try await CompanionChatLibraryOperationExecution.search(
-                    query: trimmed, limit: 12
-                ) { query, limit in
-                    try await client.search(query: query, k: limit)
+            await searchLoad.perform(
+                preservingContent: false,
+                operation: {
+                    try await CompanionChatLibraryOperationExecution.search(
+                        query: trimmed, limit: 12
+                    ) { query, limit in
+                        try await client.search(query: query, k: limit)
+                    }
                 }
-                guard !Task.isCancelled else { return }
+            ) { found in
                 hits = found
                 error = nil
-            } catch {
-                if !Task.isCancelled { self.error = error.localizedDescription }
             }
+            guard !Task.isCancelled else { return }
+            if let message = searchLoad.errorMessage { error = message }
         }
     }
 
-    func select(_ id: String) async {
-        guard selectedId != id else { return }
+    func select(_ id: String, retry: Bool = false) async {
+        guard selectedId != id || retry else { return }
         playback.stop()
         selectedId = id
         detail = nil
         signals = []
         media = nil
-        loadingDetail = true
-        defer { loadingDetail = false }
-        do {
-            let client = client
-            detail = try await CompanionChatLibraryOperationExecution.episode(id: id) { id in
-                try await client.episodeDetail(id: id)
+        let reads = reads
+        await detailLoad.perform(
+            preservingContent: false,
+            operation: {
+                let detail = try await reads.episode(id)
+                let kind = detail.kind
+                var signals: [CompanionSignal] = []
+                var media: Data?
+                if kind == "voice" {
+                    signals = try await reads.signals(id)
+                }
+                if kind == "voice" || kind == "pdf" {
+                    media = try await reads.media(id)
+                }
+                return (detail, signals, media)
             }
-            let kind = detail?.kind ?? ""
-            if kind == "voice" {
-                signals = (try? await client.signals(episodeId: id)) ?? []
-            }
-            if kind == "voice" || kind == "pdf" {
-                let (data, _) = try await client.media(episodeId: id)
-                media = data
-                if kind == "voice" { playback.load(data) }
-            }
+        ) { result in
+            detail = result.0
+            signals = result.1
+            media = result.2
+            if result.0.kind == "voice", let data = result.2 { playback.load(data) }
             error = nil
-        } catch {
-            self.error = error.localizedDescription
         }
+        if let message = detailLoad.errorMessage { error = message }
     }
 
     func closeDetail() {
+        detailLoad.cancel()
         playback.stop()
         selectedId = nil
         detail = nil
@@ -287,12 +304,21 @@ struct CompanionLibraryScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+        PageWorkspace {
             stats
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                listColumn
+        } content: {
+            if compact {
                 if model.selectedId != nil {
                     detailColumn
+                } else {
+                    listColumn
+                }
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                    listColumn
+                    if model.selectedId != nil {
+                        detailColumn
+                    }
                 }
             }
             if let error = model.error {
@@ -303,7 +329,9 @@ struct CompanionLibraryScreen: View {
         }
         .pageContent(compact)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task(id: isActive ? generation : -1) {
+        .pageTask(
+            id: generation, active: isActive && requestsEnabled, cancel: { model.loading.cancel() }
+        ) {
             guard isActive, requestsEnabled, refreshedGeneration != generation else { return }
             await model.refresh()
             if !Task.isCancelled { refreshedGeneration = generation }
@@ -415,29 +443,38 @@ struct CompanionLibraryScreen: View {
             SearchField(placeholder: "Search your memory", text: $model.query)
             ScrollView {
                 VStack(spacing: UIScale.pt(6)) {
-                    if !model.hits.isEmpty {
-                        ForEach(model.hits, id: \.chunkId) { hit in
-                            hitRow(hit)
+                    if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        PageLoading(
+                            state: model.searchLoad.state,
+                            message: model.searchLoad.errorMessage
+                                ?? "The search could not be completed.",
+                            layout: .list, retry: model.searchChanged
+                        ) {
+                            if model.hits.isEmpty {
+                                Text("Nothing in the memory matches that.")
+                                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                            }
+                            ForEach(model.hits, id: \.chunkId) { hit in
+                                hitRow(hit)
+                            }
                         }
-                    } else if model.query.trimmingCharacters(in: .whitespaces).isEmpty {
-                        ForEach(model.episodes, id: \.id) { episode in
-                            episodeRow(episode)
-                        }
-                        if model.episodes.isEmpty {
-                            if !model.loaded, model.error == nil {
-                                CompanionEpisodeRowsSkeleton(dark: dark)
-                            } else {
+                    } else {
+                        PageLoading(
+                            state: model.loading.state,
+                            message: model.loading.errorMessage ?? "Memory could not be loaded.",
+                            layout: .list, refreshing: model.loading.isRefreshing,
+                            retry: { Task { await model.refresh() } }
+                        ) {
+                            ForEach(model.episodes, id: \.id) { episode in
+                                episodeRow(episode)
+                            }
+                            if model.episodes.isEmpty {
                                 Text("Nothing ingested yet. Drop files above to give it memory.")
                                     .font(.system(size: UIScale.pt(12)))
                                     .foregroundStyle(DashSkin.inkFaint(dark))
                                     .padding(.top, UIScale.pt(12))
                             }
                         }
-                    } else {
-                        Text("Nothing in the memory matches that.")
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .padding(.top, UIScale.pt(12))
                     }
                 }
             }
@@ -525,7 +562,7 @@ struct CompanionLibraryScreen: View {
     }
 
     private var detailColumn: some View {
-        SkinCard(title: model.detail?.title ?? "Episode", dark: dark) {
+        PageCard(title: model.detail?.title ?? "Episode") {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 HStack {
                     if let detail = model.detail {
@@ -553,12 +590,19 @@ struct CompanionLibraryScreen: View {
                     .buttonStyle(.edith(.borderless))
                     .help("Close")
                 }
-                if model.loadingDetail {
-                    CompanionEpisodeDetailSkeleton(
-                        kind: model.episodes.first(where: { $0.id == model.selectedId })?.kind,
-                        dark: dark)
-                } else if let detail = model.detail {
-                    preview(detail)
+                PageLoading(
+                    state: model.detailLoad.state,
+                    message: model.detailLoad.errorMessage ?? "This episode could not be loaded.",
+                    layout: .editor,
+                    retry: {
+                        if let id = model.selectedId {
+                            Task { await model.select(id, retry: true) }
+                        }
+                    }
+                ) {
+                    if let detail = model.detail {
+                        preview(detail)
+                    }
                 }
             }
         }
@@ -679,81 +723,6 @@ struct CompanionLibraryScreen: View {
                 .monospacedDigit()
                 .foregroundStyle(DashSkin.inkSoft(dark))
         }
-    }
-}
-
-private struct CompanionEpisodeRowsSkeleton: View {
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(spacing: UIScale.pt(6)) {
-                ForEach(0..<6, id: \.self) { index in
-                    HStack(spacing: UIScale.pt(9)) {
-                        SkeletonBlock(width: 42, height: 18, corner: 5)
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? 136 : 184,
-                            height: 10)
-                        Spacer(minLength: 0)
-                        SkeletonBlock(width: 68, height: 8)
-                    }
-                    .padding(.horizontal, UIScale.pt(11))
-                    .padding(.vertical, UIScale.pt(7))
-                    .background(
-                        DashSkin.paper2(dark),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(10))
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: UIScale.pt(10))
-                            .strokeBorder(DashSkin.line(dark))
-                    }
-                }
-            }
-        }
-        .accessibilityLabel("Loading memory")
-    }
-}
-
-private struct CompanionEpisodeDetailSkeleton: View {
-    let kind: String?
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                switch kind {
-                case "pdf":
-                    SkeletonBlock(height: 320, corner: 10)
-                case "voice":
-                    HStack(spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: 28, height: 28, corner: 14)
-                        SkeletonBlock(height: 6, corner: 3)
-                        SkeletonBlock(width: 38, height: 8)
-                    }
-                    ForEach(0..<6, id: \.self) { index in
-                        SkeletonBlock(
-                            width: index == 5 ? 180 : nil,
-                            height: 8)
-                    }
-                    HStack(alignment: .bottom, spacing: UIScale.pt(4)) {
-                        ForEach(0..<16, id: \.self) { index in
-                            SkeletonBlock(
-                                height: CGFloat(10 + index % 4 * 5),
-                                corner: 2)
-                        }
-                    }
-                    .frame(height: UIScale.pt(28), alignment: .bottom)
-                default:
-                    ForEach(0..<10, id: \.self) { index in
-                        SkeletonBlock(
-                            width: index == 9 ? 156 : nil,
-                            height: 8)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-        .accessibilityLabel("Loading episode")
     }
 }
 

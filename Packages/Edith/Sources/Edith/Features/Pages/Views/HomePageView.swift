@@ -32,6 +32,7 @@ struct HomePage: View {
     @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
         var keystrokeHighlightEnabled = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
@@ -39,88 +40,68 @@ struct HomePage: View {
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
     var body: some View {
-        GeometryReader { geo in
-            let compact = geo.size.width < UIScale.pt(640)
-            VStack(spacing: UIScale.pt(0)) {
-                HomeHeader(dark: dark)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                                WorldClocksCard(dark: dark)
-                                if systemEnabled || keepAwakeEnabled || presenterEnabled
-                                    || lidAwakeEnabled
-                                    || keystrokeHighlightEnabled
-                                {
-                                    QuickActionsCard(dark: dark)
-                                }
-                            }
-                            VStack(spacing: UIScale.pt(16)) {
-                                WorldClocksCard(dark: dark)
-                                if systemEnabled || keepAwakeEnabled || presenterEnabled
-                                    || lidAwakeEnabled
-                                    || keystrokeHighlightEnabled
-                                {
-                                    QuickActionsCard(dark: dark)
-                                }
-                            }
-                        }
-                        if usageEnabled {
-                            if model.homeUsage.hasDays {
-                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                    ActivityHeatmap(
-                                        days: model.homeUsage.calendarDays,
-                                        cuts: model.homeUsage.heatCuts,
-                                        model: model, dark: dark, blur: blurMoney)
-                                }
-                            } else if !model.loadAttempted {
-                                SkinCard(title: "Activity", note: "daily cost", dark: dark) {
-                                    ActivityHeatmapSkeleton()
-                                }
-                            }
-                        }
-                        LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(compact ? 260 : 340)),
-                                    spacing: UIScale.pt(16))
-                            ],
-                            alignment: .leading, spacing: UIScale.pt(16)
-                        ) {
-                            Group {
-                                if calendarEnabled { MeetingsCard(dark: dark) }
-                                if usageEnabled {
-                                    UsageSummaryCard(dark: dark)
-                                    RateLimitsDialsView(dark: dark, showsJumpLink: true)
-                                }
-                                if musicEnabled { MusicCard(dark: dark) }
-                                if codeStatsEnabled, dataSuiteEnabled {
-                                    CodeStatsHomeCard(dark: dark)
-                                }
-                            }
-                            .frame(maxHeight: .infinity, alignment: .top)
-                        }
+        PageScaffold(pinnedHeader: true) {
+            HomeHeader(dark: dark)
+        } content: {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                    WorldClocksCard(dark: dark)
+                    if systemEnabled || keepAwakeEnabled || presenterEnabled
+                        || lidAwakeEnabled
+                        || keystrokeHighlightEnabled
+                    {
+                        QuickActionsCard(dark: dark)
                     }
-                    .pageContent(compact)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                VStack(spacing: UIScale.pt(16)) {
+                    WorldClocksCard(dark: dark)
+                    if systemEnabled || keepAwakeEnabled || presenterEnabled
+                        || lidAwakeEnabled
+                        || keystrokeHighlightEnabled
+                    {
+                        QuickActionsCard(dark: dark)
+                    }
                 }
             }
-            .background(background)
-            .environment(\.compactLayout, compact)
+            if usageEnabled {
+                if model.homeUsage.hasDays {
+                    PageCard(title: "Activity", note: "daily cost") {
+                        ActivityHeatmap(
+                            days: model.homeUsage.calendarDays,
+                            cuts: model.homeUsage.heatCuts,
+                            model: model, dark: dark, blur: blurMoney)
+                    }
+                } else if !model.loadAttempted {
+                    PageCard(title: "Activity", note: "daily cost") {
+                        ActivityHeatmapSkeleton()
+                    }
+                }
+            }
+            LazyVGrid(
+                columns: PageMetrics.cardColumns(compact, minimum: 340, spacing: 16),
+                alignment: .leading, spacing: UIScale.pt(16)
+            ) {
+                Group {
+                    if calendarEnabled { MeetingsCard(dark: dark) }
+                    if usageEnabled {
+                        UsageSummaryCard(dark: dark)
+                        RateLimitsDialsView(dark: dark, showsJumpLink: true)
+                    }
+                    if musicEnabled { MusicCard(dark: dark) }
+                    if codeStatsEnabled, dataSuiteEnabled {
+                        CodeStatsHomeCard(dark: dark)
+                    }
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+            }
         }
         .navigationTitle("Home")
-        .task(id: usageEnabled) {
-            guard automaticActionsEnabled, usageEnabled else { return }
+        .pageTask(id: usageEnabled, active: usageEnabled) {
             await model.restoreCachedHomeUsage()
             await model.load()
         }
-        .onAppear {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.endObserving) {
             model.beginObserving()
-        }
-        .onDisappear {
-            guard automaticActionsEnabled else { return }
-            model.endObserving()
         }
     }
 
@@ -290,7 +271,7 @@ private struct WorldClocksCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "World clocks", note: "hover a clock to remove", dark: dark) {
+        PageCard(title: "World clocks", note: "hover a clock to remove") {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 WrapHStack(spacing: UIScale.pt(20), lineSpacing: 16) {
                     ClockTile(
@@ -567,20 +548,12 @@ private struct QuickActionsCard: View {
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
 
     private var theme: Color { themeColor(themeName) }
-    private var actionCount: Int {
-        (systemEnabled ? 1 : 0) + (keepAwakeEnabled ? 1 : 0)
-            + (lidAwakeEnabled ? 1 : 0)
-            + (keystrokeHighlightEnabled ? 1 : 0)
-            + (presenterEnabled ? 1 : 0)
-    }
     private var columns: [GridItem] {
-        Array(
-            repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
-            count: max(1, actionCount))
+        [GridItem(.adaptive(minimum: UIScale.pt(130)), spacing: UIScale.pt(12))]
     }
 
     var body: some View {
-        SkinCard(title: "Quick actions", dark: dark) {
+        PageCard(title: "Quick actions") {
             LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
                 if systemEnabled {
                     tile(
@@ -724,7 +697,7 @@ private struct MeetingsCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Today's meetings", note: note, dark: dark) {
+        PageCard(title: "Today's meetings", note: note) {
             VStack(alignment: .leading, spacing: UIScale.pt(0)) {
                 if store.authStatus != .fullAccess {
                     accessPrompt
@@ -883,7 +856,7 @@ private struct UsageSummaryCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Agent usage", note: "last 14 days", dark: dark) {
+        PageCard(title: "Agent usage", note: "last 14 days") {
             if model.homeUsage.hasDays {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     HStack(spacing: UIScale.pt(24)) {
@@ -1058,9 +1031,8 @@ private struct MusicCard: View {
     }
 
     var body: some View {
-        SkinCard(
-            title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks",
-            dark: dark
+        PageCard(
+            title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 if let track = remote.current {
@@ -1180,6 +1152,10 @@ private struct HomeArtworkThumb: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
         .presenterCover(.music)
-        .task(id: track.id) { artwork = await TrackMeta.artwork(for: track) }
+        .pageTask(id: track.id) {
+            let loaded = await TrackMeta.artwork(for: track)
+            guard !Task.isCancelled else { return }
+            artwork = loaded
+        }
     }
 }

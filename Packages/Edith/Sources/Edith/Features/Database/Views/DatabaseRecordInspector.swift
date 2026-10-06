@@ -76,10 +76,11 @@ struct DatabaseRecordInspector: View {
                 height: UIScale.pt(38))
             Divider()
             if usesDocuments {
-                Picker("Document view", selection: $showsSource) {
-                    Text("Tree").tag(false)
-                    Text("Source").tag(true)
-                }.pickerStyle(.segmented).labelsHidden().padding(UIScale.pt(10))
+                EdithSegmentedPicker(
+                    "Document view", selection: $showsSource, options: [false, true],
+                    label: { $0 ? "Source" : "Tree" }
+                )
+                .labelsHidden().padding(UIScale.pt(10))
                 if record.identity?.kind == .searchDocument, let identity = record.identity {
                     Text(
                         (identity.components + identity.concurrencyTokens).map {

@@ -18,7 +18,7 @@ final class DatabasePageModel {
     private let ensureReady: @Sendable () async throws -> Void
     private let repairService: @Sendable () async throws -> Void
     private let preparePack: @Sendable (@escaping @Sendable (Double) -> Void) async throws -> Void
-    private var generation = UUID()
+    let loading = ContentLoad()
 
     init(
         ensureReady: @escaping @Sendable () async throws -> Void = {
@@ -57,30 +57,33 @@ final class DatabasePageModel {
         _ pendingState: Readiness,
         operation: @Sendable () async throws -> Void
     ) async {
-        let requestGeneration = UUID()
-        generation = requestGeneration
+        let requestGeneration = loading.begin(preservingContent: false)
+        defer { if Task.isCancelled { loading.cancel(requestGeneration) } }
         readiness = pendingState
         do {
             try await preparePack { fraction in
                 Task { @MainActor in
-                    guard self.generation == requestGeneration, self.readiness != .ready else {
+                    guard self.loading.isCurrent(requestGeneration), self.readiness != .ready else {
                         return
                     }
                     self.readiness = .installing(fraction)
                 }
             }
-            guard generation == requestGeneration, !Task.isCancelled else { return }
+            guard loading.isCurrent(requestGeneration) else { return }
             readiness = pendingState
             try await operation()
-            guard generation == requestGeneration, !Task.isCancelled else { return }
+            guard loading.isCurrent(requestGeneration) else { return }
             readiness = .ready
+            loading.complete(requestGeneration)
             announce("Database tools are ready.")
         } catch is CancellationError {
-            guard generation == requestGeneration else { return }
+            guard loading.owns(requestGeneration) else { return }
+            loading.cancel(requestGeneration)
             readiness = .failed("The database readiness check was cancelled.")
             announce("Database tools need attention.")
         } catch {
-            guard generation == requestGeneration, !Task.isCancelled else { return }
+            guard loading.isCurrent(requestGeneration) else { return }
+            loading.fail(requestGeneration, message: Self.message(for: error))
             readiness = .failed(Self.message(for: error))
             announce("Database tools need attention.")
         }

@@ -59,13 +59,14 @@ struct ExtensionsPane: View {
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             PageHeader(
                 "Extensions",
                 accessory: {
                     searchField
                     categoryRow
                 })
+        } content: {
             ScrollViewReader { proxy in
                 ScrollView {
                     extensionGrid
@@ -94,10 +95,10 @@ struct ExtensionsPane: View {
         ) { _ in
             if automaticActionsEnabled { refreshPermissionState() }
         }
-        .sheet(item: $selectedEntry) { entry in
+        .edithSheet(item: $selectedEntry) { entry in
             ExtensionSettingsSheet(entry: entry, lidAwakeOperations: lidAwakeOperations)
         }
-        .sheet(item: $permissionRequest) { request in
+        .edithSheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
                 request: request, grantedPermissions: grantedPermissions,
                 grant: { _ = try MainPermissionOperations.center.request($0) },
@@ -106,10 +107,10 @@ struct ExtensionsPane: View {
                 enable: { enableRequestedExtension(request) },
                 refresh: requestPermissionRefresh)
         }
-        .sheet(item: $provisioningEntry) { entry in
+        .edithSheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry)
         }
-        .sheet(isPresented: $installsDatabasePack) {
+        .edithSheet(isPresented: $installsDatabasePack, dismissible: nil) {
             DatabasePackInstallSheet()
         }
         .alert(
@@ -205,11 +206,7 @@ struct ExtensionsPane: View {
     }
 
     private var gridColumns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: UIScale.pt(compact ? 280 : 340)),
-                spacing: UIScale.pt(14), alignment: .top)
-        ]
+        PageMetrics.cardColumns(compact, minimum: 340, spacing: 14, alignment: .top)
     }
 
     private func openSettings(for entry: ExtensionRegistryEntry) {
@@ -348,7 +345,7 @@ private struct SuiteHeader: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
             }
-            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
             Rectangle()
                 .fill(DashSkin.line(dark))
                 .frame(height: UIScale.pt(1))
@@ -484,7 +481,7 @@ struct ExtensionSettingsHeader: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.headline)
+                .font(.edithText(.headline))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             Toggle(isOn: $enabled) {
@@ -500,9 +497,11 @@ struct ExtensionSettingsHeader: View {
     }
 }
 
-private struct ExtensionSettingsSheet: View {
+struct ExtensionSettingsSheet: View {
     let entry: ExtensionRegistryEntry
     let coordinator: ExtensionModalCoordinator
+    let enableOnAppear: Bool
+    @State private var startedEnableFlow = false
     @Environment(\.dismiss) private var dismiss
     @ExtensionEnablementStorage private var enabled: Bool
     @State private var grantedPermissions: [ExtensionPermission: Bool]
@@ -512,11 +511,15 @@ private struct ExtensionSettingsSheet: View {
     @State private var invalidation = 0
     @ObservedObject private var lidAwakeOperations: LidAwakeOperationModel
 
-    init(entry: ExtensionRegistryEntry, lidAwakeOperations: LidAwakeOperationModel) {
+    init(
+        entry: ExtensionRegistryEntry, lidAwakeOperations: LidAwakeOperationModel,
+        enableOnAppear: Bool = false
+    ) {
         let coordinator = ExtensionModalCoordinator(
             entry: entry, mutationCenter: .application)
         self.entry = entry
         self.coordinator = coordinator
+        self.enableOnAppear = enableOnAppear
         _lidAwakeOperations = ObservedObject(wrappedValue: lidAwakeOperations)
         _enabled = ExtensionEnablementStorage(entry: entry)
         _grantedPermissions = State(
@@ -547,7 +550,7 @@ private struct ExtensionSettingsSheet: View {
                     invalidateReadiness()
                 }
             }
-            .formStyle(.grouped)
+            .edithForm()
         }
         .safeAreaInset(edge: .bottom, spacing: UIScale.pt(0)) {
             VStack(spacing: UIScale.pt(0)) {
@@ -565,6 +568,11 @@ private struct ExtensionSettingsSheet: View {
         .onChange(of: grantedPermissions) {
             enableAfterPermissionGrantIfReady()
         }
+        .task {
+            guard enableOnAppear, !startedEnableFlow else { return }
+            startedEnableFlow = true
+            enabledBinding.wrappedValue = true
+        }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
                 for: IPC.Name.permissionsRefreshed)
@@ -581,7 +589,7 @@ private struct ExtensionSettingsSheet: View {
         .onReceive(NotificationCenter.default.publisher(for: .cliToolProvisioned)) { _ in
             invalidateReadiness()
         }
-        .sheet(item: $permissionRequest) { request in
+        .edithSheet(item: $permissionRequest) { request in
             ExtensionPermissionSheet(
                 request: request, grantedPermissions: grantedPermissions,
                 grant: { _ = try MainPermissionOperations.center.request($0) },
@@ -590,12 +598,12 @@ private struct ExtensionSettingsSheet: View {
                 enable: { enableAfterPermissions() },
                 refresh: refreshPermissionState)
         }
-        .sheet(item: $provisioningEntry) { entry in
+        .edithSheet(item: $provisioningEntry) { entry in
             ToolProvisioningSheet(entry: entry) {
                 invalidateReadiness()
             }
         }
-        .sheet(isPresented: $installsDatabasePack) {
+        .edithSheet(isPresented: $installsDatabasePack, dismissible: nil) {
             DatabasePackInstallSheet()
         }
         .alert(
@@ -609,9 +617,8 @@ private struct ExtensionSettingsSheet: View {
             Text(lidAwakeErrorMessage ?? "")
         }
         .frame(
-            minWidth: UIScale.pt(520), idealWidth: UIScale.pt(560), maxWidth: UIScale.pt(560),
-            minHeight: UIScale.pt(260),
-            idealHeight: idealHeight, maxHeight: UIScale.pt(620))
+            width: PresentationMetrics.width(560),
+            height: PresentationMetrics.height(Double(idealHeight)))
     }
 
     private var enabledBinding: Binding<Bool> {
@@ -783,7 +790,7 @@ private struct ExtensionLifecycleRows: View {
                 Section("Command line") {
                     ForEach(lifecycle.cliExamples, id: \.self) { example in
                         Text(example)
-                            .font(.system(.body, design: .monospaced))
+                            .font(.edithText(.body, design: .monospaced))
                             .textSelection(.enabled)
                     }
                 }
@@ -810,12 +817,11 @@ private struct ExtensionLifecycleRows: View {
                 }
             }
         }
-        .task(id: "\(entry.id):\(invalidation)") {
+        .pageTask(id: "\(entry.id):\(invalidation)", cancel: readiness.cancel) {
             let discoveryTrace = PerformanceTrace.begin(.extensionDiscovery, "extensions.report")
             defer { PerformanceTrace.end(discoveryTrace) }
             await readiness.refresh(.status).value
         }
-        .onDisappear { readiness.cancel() }
     }
 
     private func checkRow(_ check: ExtensionLifecycleCheck) -> some View {
@@ -833,7 +839,7 @@ private struct ExtensionLifecycleRows: View {
                 .settingsCaption()
             if let command = check.recoveryCommand {
                 Text(command)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.edithText(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -914,7 +920,7 @@ private struct ExtensionLifecycleRows: View {
                 .settingsCaption()
             if let command = instruction.command {
                 Text(command)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.edithText(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
@@ -1371,7 +1377,7 @@ private struct AttentionRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .task { model.reload() }
+        .pageTask { model.reload() }
     }
 }
 
@@ -1519,8 +1525,7 @@ private struct QuinjetRows: View {
                     Text(option.label).tag(option.rawValue)
                 }
             }
-            .task {
-                guard automaticActionsEnabled else { return }
+            .pageTask {
                 themes = (try? await QuinjetClient.live.themes()) ?? QuinjetTheme.allCases
             }
         }
@@ -1568,14 +1573,17 @@ private struct ExtensionPermissionSheet: View {
                         .lineLimit(1)
                 }
             }
-            VStack(spacing: UIScale.pt(10)) {
-                ForEach(request.required, id: \.self) { permission in
-                    permissionCard(permission, required: true)
-                }
-                ForEach(request.optional, id: \.self) { permission in
-                    permissionCard(permission, required: false)
+            ScrollView {
+                VStack(spacing: UIScale.pt(10)) {
+                    ForEach(request.required, id: \.self) { permission in
+                        permissionCard(permission, required: true)
+                    }
+                    ForEach(request.optional, id: \.self) { permission in
+                        permissionCard(permission, required: false)
+                    }
                 }
             }
+            .frame(maxHeight: UIScale.pt(360))
             if let actionError {
                 Label(actionError, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
@@ -1596,7 +1604,7 @@ private struct ExtensionPermissionSheet: View {
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(540))
+        .frame(width: PresentationMetrics.width(540), height: PresentationMetrics.height(560))
         .onAppear(perform: refresh)
         .onReceive(
             NotificationCenter.default.publisher(
@@ -1692,7 +1700,7 @@ private struct ClaudeStatusLineRow: View {
         LabeledContent("Claude Code status line") {
             HStack(spacing: 8) {
                 if let failure {
-                    Text(failure).font(.caption).foregroundStyle(.secondary)
+                    Text(failure).font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Text(connected == true ? "Connected" : "Not connected")
                     .foregroundStyle(.secondary)
@@ -1700,7 +1708,11 @@ private struct ClaudeStatusLineRow: View {
                     .disabled(connected == nil)
             }
         }
-        .task { connected = await ClaudeStatusLine.isConnected() }
+        .pageTask {
+            let result = await ClaudeStatusLine.isConnected()
+            guard !Task.isCancelled else { return }
+            connected = result
+        }
     }
 
     private func toggle() {
@@ -2087,7 +2099,11 @@ private struct UsageRows: View {
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
-        .task(id: notifyMaster) { projections = await LimitAlertInspector.previewLines() }
+        .pageTask(id: notifyMaster) {
+            let result = await LimitAlertInspector.previewLines()
+            guard !Task.isCancelled else { return }
+            projections = result
+        }
         .onChange(of: claudeEnabled) { reconcileProviders() }
         .onChange(of: codexEnabled) {
             if enabled && codexEnabled {

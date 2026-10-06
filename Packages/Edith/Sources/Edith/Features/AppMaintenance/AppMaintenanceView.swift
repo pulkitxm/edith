@@ -48,7 +48,7 @@ final class AppMaintenanceModel {
     private let discover: AppMaintenanceDiscover
     private let updateExecutor = AppUpdateExecutor()
     private var task: Task<Void, Never>?
-    private var generation = UUID()
+    let loading = ContentLoad()
     private var discovered: [AppUpdateItem] = []
     private var brewCache: Data?
     private var brewCachedAt: Date?
@@ -102,8 +102,7 @@ final class AppMaintenanceModel {
 
     func refresh(automatic: Bool = false, interval: TimeInterval = 86_400) {
         task?.cancel()
-        let generation = UUID()
-        self.generation = generation
+        let generation = loading.begin()
         refreshInterval = interval
         var previousIDs: Set<String> = []
         previousIDs.reserveCapacity(updates.count)
@@ -122,13 +121,13 @@ final class AppMaintenanceModel {
     }
 
     private func performRefresh(
-        generation: UUID, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
+        generation: UInt64, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
     ) async {
         let claim = await snapshots.claim()
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         let snapshot = await snapshots.load()
         let state = await Task.detached { [updatePersistence] in updatePersistence.load() }.value
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         updateState = state
         updateHistory = state.history
         lastUpdateRefresh = state.lastRefresh
@@ -140,15 +139,17 @@ final class AppMaintenanceModel {
             brewCachedAt = snapshot.homebrewCachedAt
             if !applications.isEmpty || !updates.isEmpty {
                 phase = .ready
+                loading.retainContent()
             }
         }
         let brewFresh = brewCachedAt.map { Date().timeIntervalSince($0) < interval } ?? false
         reuseCachedBrew = brewFresh
         let scanned = await inventory(brewFresh ? brewCache : nil)
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         let keptSelection = selectedApplicationID
         applications = scanned
         phase = .ready
+        loading.retainContent()
         if let keptSelection, !scanned.contains(where: { $0.id == keptSelection }) {
             selectedApplicationID = nil
             plan = nil
@@ -157,7 +158,7 @@ final class AppMaintenanceModel {
         let found = await discover(scanned, brewFresh ? brewCache : nil, brewFresh) { batch in
             await self.absorb(batch, generation: generation)
         }
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         discovered = found
         updates = updatePersistence.visible(found, state: updateState, now: Date())
         reconcileUpdates()
@@ -173,20 +174,25 @@ final class AppMaintenanceModel {
             }.value
             try await snapshots.save(snapshotToSave, replacing: claim)
         } catch {
-            guard !Task.isCancelled, generation == self.generation else { return }
+            guard loading.isCurrent(generation) else { return }
             errorMessage = error.localizedDescription
         }
-        guard !Task.isCancelled, generation == self.generation else { return }
+        guard loading.isCurrent(generation) else { return }
         checkingUpdates = false
         phase = .ready
+        if let errorMessage {
+            loading.fail(generation, message: errorMessage)
+        } else {
+            loading.complete(generation)
+        }
         guard automatic else { return }
         var freshCount = 0
         for update in updates where !previousIDs.contains(update.id) { freshCount += 1 }
         if freshCount > 0 { await notify(updateCount: freshCount) }
     }
 
-    private func absorb(_ batch: AppUpdateDiscoveryBatch, generation: UUID) {
-        guard generation == self.generation, !Task.isCancelled else { return }
+    private func absorb(_ batch: AppUpdateDiscoveryBatch, generation: UInt64) {
+        guard loading.isCurrent(generation) else { return }
         if batch.channel == .homebrew, let data = batch.homebrewData {
             applications = AppMaintenanceInventory.applyingHomebrewUpdates(data, to: applications)
             if brewCache != data || !reuseCachedBrew {
@@ -452,6 +458,7 @@ final class AppMaintenanceModel {
     }
 
     func cancel() {
+        loading.cancel()
         task?.cancel()
         task = nil
         Task { await updateExecutor.cancel() }
@@ -568,25 +575,19 @@ struct AppMaintenanceView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             header
             Divider()
+        } content: {
             content
         }
-        .frame(minWidth: UIScale.pt(700), minHeight: UIScale.pt(520))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationRoute("section", selection: sectionBinding)
-        .task { model.refresh(interval: updateRefreshInterval) }
-        .task(id: updateAutoRefresh) {
-            guard updateAutoRefresh else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(
-                    for: .seconds(max(updateRefreshInterval, 900)))
-                guard !Task.isCancelled else { return }
-                model.refresh(automatic: true, interval: updateRefreshInterval)
-            }
+        .pageTask(cancel: model.cancel) { model.refresh(interval: updateRefreshInterval) }
+        .pageRefresh(
+            active: updateAutoRefresh, interval: { .seconds(max(updateRefreshInterval, 900)) }
+        ) {
+            model.refresh(automatic: true, interval: updateRefreshInterval)
         }
-        .onDisappear { model.cancel() }
         .fileImporter(
             isPresented: $showingDiskImagePicker,
             allowedContentTypes: [UTType(filenameExtension: "dmg") ?? .data]
@@ -594,7 +595,7 @@ struct AppMaintenanceView: View {
             guard case .success(let url) = result else { return }
             model.prepareDiskImage(url, destination: installDestination)
         }
-        .sheet(item: installPlanBinding) { plan in
+        .edithSheet(item: installPlanBinding, dismissible: model.phase != .installing) { plan in
             AppMaintenanceInstallReview(
                 plan: plan, installing: model.phase == .installing,
                 onCancel: { model.cancelInstallPlan() },
@@ -639,46 +640,56 @@ struct AppMaintenanceView: View {
                 .accessibilityLabel("App Maintenance section")
             },
             accessory: {
-                HStack(spacing: UIScale.pt(10)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                     Text(section.summary)
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(.secondary)
-                    Spacer()
+                        .lineLimit(2)
                     if section.usesApplicationInventory {
-                        Button {
-                            showingUpdateSettings.toggle()
-                        } label: {
-                            Image(systemName: "gearshape")
-                        }
-                        .help("Update settings")
-                        .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                        Menu {
-                            Picker("Destination", selection: $installDestinationRaw) {
-                                ForEach(AppMaintenanceInstallDestination.allCases, id: \.rawValue) {
-                                    destination in
-                                    Text(destination.title).tag(destination.rawValue)
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: UIScale.pt(10)) {
+                                Button {
+                                    showingUpdateSettings.toggle()
+                                } label: {
+                                    Image(systemName: "gearshape")
                                 }
+                                .help("Update settings")
+                                .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                                Menu {
+                                    Picker("Destination", selection: $installDestinationRaw) {
+                                        ForEach(
+                                            AppMaintenanceInstallDestination.allCases,
+                                            id: \.rawValue
+                                        ) {
+                                            destination in
+                                            Text(destination.title).tag(destination.rawValue)
+                                        }
+                                    }
+                                } label: {
+                                    Label(installDestination.title, systemImage: "folder")
+                                }
+                                if model.checkingUpdates {
+                                    Text("Checking updates")
+                                        .font(.system(size: UIScale.pt(12)))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Button {
+                                    showingDiskImagePicker = true
+                                } label: {
+                                    Label(
+                                        "Install Disk Image",
+                                        systemImage: "externaldrive.badge.plus")
+                                }
+                                .disabled(model.phase != .ready)
+                                Button {
+                                    model.refresh(interval: updateRefreshInterval)
+                                } label: {
+                                    Label("Refresh", systemImage: "arrow.clockwise")
+                                }
+                                .disabled(model.phase != .ready)
+                                .buttonStyle(.edith(.secondary))
                             }
-                        } label: {
-                            Label(installDestination.title, systemImage: "folder")
                         }
-                        if model.checkingUpdates {
-                            Text("Checking updates")
-                                .font(.system(size: UIScale.pt(12)))
-                                .foregroundStyle(.secondary)
-                        }
-                        Button {
-                            showingDiskImagePicker = true
-                        } label: {
-                            Label("Install Disk Image", systemImage: "externaldrive.badge.plus")
-                        }
-                        .disabled(model.phase != .ready)
-                        Button {
-                            model.refresh(interval: updateRefreshInterval)
-                        } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
-                        }
-                        .disabled(model.phase != .ready)
                     }
                 }
             }
@@ -698,16 +709,25 @@ struct AppMaintenanceView: View {
             .scrollIndicators(.never)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if model.phase == .loading {
-            AppMaintenanceSectionSkeleton(section: section)
+            ScrollView {
+                PageSkeleton(layout: .list)
+                    .pageContent(compact)
+            }
+        } else if compact {
+            VStack(spacing: 0) {
+                sectionInventory.frame(height: UIScale.pt(180))
+                Divider()
+                detail.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else {
             HSplitView {
                 sectionInventory
                     .frame(
-                        minWidth: UIScale.pt(280), idealWidth: UIScale.pt(320),
+                        minWidth: UIScale.pt(260), idealWidth: UIScale.pt(300),
                         maxWidth: UIScale.pt(380),
                         maxHeight: .infinity)
                 detail
-                    .frame(minWidth: UIScale.pt(460), maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(minWidth: UIScale.pt(360), maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -730,9 +750,9 @@ struct AppMaintenanceView: View {
                 .padding(UIScale.pt(12))
             Divider()
             if filteredApplications.isEmpty {
-                ContentUnavailableView(
-                    "No applications", systemImage: "app.dashed",
-                    description: Text("No installed app matches this search."))
+                ContentStatusView(
+                    "No applications", message: "No installed app matches this search.",
+                    symbol: "app.dashed")
             } else {
                 List(filteredApplications) { application in
                     Button {
@@ -770,9 +790,9 @@ struct AppMaintenanceView: View {
                 .padding(UIScale.pt(12))
             Divider()
             if filteredUpdates.isEmpty {
-                ContentUnavailableView(
-                    "No updates", systemImage: "checkmark.circle",
-                    description: Text("Everything visible is current, ignored, or snoozed."))
+                ContentStatusView(
+                    "No updates", message: "Everything visible is current, ignored, or snoozed.",
+                    symbol: "checkmark.circle")
             } else {
                 List(filteredUpdates) { item in
                     HStack(spacing: UIScale.pt(9)) {
@@ -833,9 +853,9 @@ struct AppMaintenanceView: View {
     private var historyInventory: some View {
         Group {
             if model.updateHistory.isEmpty {
-                ContentUnavailableView(
-                    "No Update History", systemImage: "clock",
-                    description: Text("Completed update attempts will appear here."))
+                ContentStatusView(
+                    "No Update History", message: "Completed update attempts will appear here.",
+                    symbol: "clock")
             } else {
                 List(model.updateHistory, id: \.finishedAt) { result in
                     VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -909,7 +929,7 @@ struct AppMaintenanceView: View {
                     .font(.system(size: UIScale.pt(44), weight: .light))
                     .foregroundStyle(.secondary)
                 Text("Choose an application")
-                    .font(.headline)
+                    .font(.edithText(.headline))
                 Text(
                     "Edith will show the app and exact bundle-identifier matches before anything moves."
                 )
@@ -943,7 +963,7 @@ struct AppMaintenanceView: View {
                             .frame(width: UIScale.pt(54), height: UIScale.pt(54))
                     }
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        Text(item.name).font(.title3.weight(.semibold))
+                        Text(item.name).font(.edithText(.title3).weight(.semibold))
                         Text("\(item.currentVersion) → \(item.availableVersion)")
                             .foregroundStyle(.secondary)
                     }
@@ -956,11 +976,17 @@ struct AppMaintenanceView: View {
                 GroupBox("Release") {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                         if let title = item.releaseTitle { Text(title).fontWeight(.medium) }
-                        Text(
-                            item.releaseNotes ?? "Release notes are not available from this source."
-                        )
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                        ScrollView {
+                            Text(
+                                item.releaseNotes
+                                    ?? "Release notes are not available from this source."
+                            )
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: UIScale.pt(180))
                         if let releaseURL = item.releaseURL {
                             Link("Open release information", destination: releaseURL)
                         }
@@ -970,7 +996,7 @@ struct AppMaintenanceView: View {
                 }
                 GroupBox("Reviewed action") {
                     VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        Text(item.command).font(.system(.callout, design: .monospaced))
+                        Text(item.command).font(.edithText(.callout, design: .monospaced))
                             .textSelection(.enabled)
                         Text(
                             "Checked \(item.checkedAt.formatted(date: .abbreviated, time: .shortened))"
@@ -1003,20 +1029,21 @@ struct AppMaintenanceView: View {
                     Spacer()
                     Button(
                         item.action == .openUpdater && model.selectedUpdateIDs.count == 1
-                            ? "Open App Updater" : "Run \(model.selectedUpdateIDs.count) Updates"
+                            ? "Open App Updater"
+                            : "Run \(model.selectedUpdateIDs.count) Updates"
                     ) {
                         confirmingUpdates = true
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(model.selectedUpdateIDs.isEmpty)
                 }
             }
             .padding(UIScale.pt(22))
         } else {
-            ContentUnavailableView(
-                "Select an update", systemImage: "arrow.down.app",
-                description: Text(
-                    "Choose updates to review their source, command, and release information."))
+            ContentStatusView(
+                "Select an update",
+                message: "Choose updates to review their source, command, and release information.",
+                symbol: "arrow.down.app")
         }
     }
 
@@ -1025,7 +1052,7 @@ struct AppMaintenanceView: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: UIScale.pt(44), weight: .light))
                 .foregroundStyle(.secondary)
-            Text("Update History").font(.headline)
+            Text("Update History").font(.edithText(.headline))
             Text("Each attempt records its source, version, retries, result, and finish time.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -1052,7 +1079,7 @@ struct AppMaintenanceView: View {
             Text("Automatic refresh only checks. Updates always require an explicit action.")
                 .settingsCaption()
         }
-        .formStyle(.grouped)
+        .edithForm()
         .frame(width: UIScale.pt(360), height: UIScale.pt(300))
     }
 
@@ -1079,7 +1106,7 @@ struct AppMaintenanceView: View {
                             "\(update.latestVersion) available through \(update.source)",
                             systemImage: "arrow.down.circle.fill"
                         )
-                        .font(.caption)
+                        .font(.edithText(.caption))
                         .foregroundStyle(.green)
                     }
                 }
@@ -1123,8 +1150,7 @@ struct AppMaintenanceView: View {
                     Button("Move to Trash", role: .destructive) {
                         confirmingRemoval = true
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.red)
+                    .buttonStyle(.edith(.destructive))
                     .disabled(model.selectedItems.isEmpty)
                 }
             }
@@ -1136,107 +1162,12 @@ struct AppMaintenanceView: View {
     private var statusMessage: some View {
         if let message = model.errorMessage {
             Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.red)
         } else if let message = model.resultMessage {
             Label(message, systemImage: "checkmark.circle.fill")
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.green)
-        }
-    }
-}
-
-struct AppMaintenanceSectionSkeleton: View {
-    let section: AppMaintenanceSection
-
-    var body: some View {
-        SkeletonGroup {
-            HSplitView {
-                inventory
-                    .frame(
-                        minWidth: UIScale.pt(280), idealWidth: UIScale.pt(320),
-                        maxWidth: UIScale.pt(380),
-                        maxHeight: .infinity)
-                detail
-                    .frame(minWidth: UIScale.pt(460), maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityLabel("Loading \(section.rawValue)")
-    }
-
-    @ViewBuilder
-    private var inventory: some View {
-        if section == .history {
-            VStack(spacing: 0) {
-                ForEach(0..<7, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        HStack {
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? 118 : 154,
-                                height: 10)
-                            Spacer()
-                            SkeletonBlock(width: 14, height: 14, corner: 7)
-                        }
-                        SkeletonBlock(width: 104, height: 8)
-                        SkeletonBlock(width: 76, height: 8)
-                    }
-                    .padding(.horizontal, UIScale.pt(12))
-                    .padding(.vertical, UIScale.pt(9))
-                }
-                Spacer(minLength: 0)
-            }
-        } else {
-            VStack(spacing: 0) {
-                SkeletonBlock(height: 24, corner: 6)
-                    .padding(UIScale.pt(12))
-                Divider()
-                VStack(spacing: 0) {
-                    ForEach(0..<7, id: \.self) { index in
-                        HStack(spacing: UIScale.pt(9)) {
-                            if section == .updates {
-                                SkeletonBlock(width: 14, height: 14, corner: 3)
-                            }
-                            SkeletonBlock(width: 28, height: 28, corner: 7)
-                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                                SkeletonBlock(
-                                    width: index.isMultiple(of: 2) ? 112 : 148,
-                                    height: 10)
-                                SkeletonBlock(width: 82, height: 8)
-                            }
-                            Spacer(minLength: 0)
-                            if section == .updates {
-                                SkeletonBlock(width: 48, height: 8)
-                            }
-                        }
-                        .padding(.horizontal, UIScale.pt(12))
-                        .padding(.vertical, UIScale.pt(9))
-                    }
-                    Spacer(minLength: 0)
-                }
-                Divider()
-                HStack {
-                    SkeletonBlock(width: 82, height: 8)
-                    Spacer()
-                    SkeletonBlock(width: 62, height: 8)
-                }
-                .padding(.horizontal, UIScale.pt(12))
-                .frame(height: UIScale.pt(34))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var detail: some View {
-        switch section {
-        case .updates:
-            AppMaintenanceUpdateSkeleton()
-        case .removal:
-            AppMaintenanceRemovalSkeleton()
-        case .history:
-            AppMaintenanceHistorySkeleton()
-        case .packages, .cleaner:
-            EmptyView()
         }
     }
 }
@@ -1415,7 +1346,7 @@ private struct AppMaintenanceItemRow: View {
             }
             Spacer()
             Text(JunkScanner.format(item.sizeBytes))
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
             Button {
@@ -1483,7 +1414,7 @@ private struct AppMaintenanceInstallReview: View {
                     .settingsCaption()
                 }
             }
-            .formStyle(.grouped)
+            .edithForm()
             Divider()
             HStack {
                 if installing {
@@ -1495,16 +1426,17 @@ private struct AppMaintenanceInstallReview: View {
                 }
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
                     .disabled(installing)
                 Button(plan.replacesExisting ? "Replace App" : "Install App") {
                     onInstall(replaceExisting, moveImageToTrash)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .disabled(installing || plan.replacesExisting && !replaceExisting)
             }
             .padding(UIScale.pt(16))
         }
-        .frame(width: UIScale.pt(620), height: UIScale.pt(560))
+        .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(560))
         .interactiveDismissDisabled(installing)
     }
 }

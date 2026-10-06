@@ -12,7 +12,8 @@ final class CompanionMindModel: CompanionRefreshable {
     private(set) var core: [CompanionCoreSection] = []
     private(set) var calibration: [CompanionCalibration] = []
     private(set) var savingCore = false
-    private(set) var loaded = false
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
     private(set) var runningNightly = false
     private(set) var error: String?
 
@@ -21,25 +22,25 @@ final class CompanionMindModel: CompanionRefreshable {
     }
 
     func refresh() async {
-        do {
-            let client = client
+        let client = client
+        await loading.perform(operation: {
             async let beliefs = client.beliefs(limit: 30)
             async let claims = client.claims(limit: 30)
             async let observations = client.observations(limit: 40, kind: nil)
             async let runs = client.runs(limit: 5)
             async let core = client.core()
             async let calibration = client.calibration()
-            self.beliefs = try await beliefs
-            self.claims = try await claims
-            self.observations = try await observations
-            self.runs = try await runs
-            self.core = (try? await core) ?? []
-            self.calibration = (try? await calibration) ?? []
-            loaded = true
+            return try await (beliefs, claims, observations, runs, core, calibration)
+        }) { result in
+            self.beliefs = result.0
+            self.claims = result.1
+            self.observations = result.2
+            self.runs = result.3
+            self.core = result.4
+            self.calibration = result.5
             error = nil
-        } catch {
-            self.error = error.localizedDescription
         }
+        if let message = loading.errorMessage { error = message }
     }
 
     func saveCore(section: String, content: String) async {
@@ -107,33 +108,32 @@ struct CompanionMindScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        GeometryReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: CompanionMetrics.cardSpacing) {
-                    if let error = model.error {
-                        Text(error)
-                            .font(.system(size: UIScale.pt(11.5)))
-                            .foregroundStyle(DashSkin.warn)
-                    }
-                    if !model.loaded, model.error == nil {
-                        CompanionMindLoadingSkeleton(width: proxy.size.width, dark: dark)
-                    } else {
-                        CompanionGrid(width: proxy.size.width) {
-                            beliefsCard
-                        } secondary: {
-                            claimsCard
-                            nightlyCard
-                        } full: {
-                            coreCard
-                            calibrationCard
-                            observationsCard
-                        }
-                    }
+        PageScaffold(pinnedHeader: true, header: {}) {
+            if model.loaded, let error = model.error {
+                PageNotice(error, tone: .error)
+            }
+            PageLoading(
+                state: model.loading.state,
+                message: model.loading.errorMessage
+                    ?? "The companion mind could not be loaded.",
+                layout: .cards, refreshing: model.loading.isRefreshing,
+                retry: { Task { await model.refresh() } }
+            ) {
+                PageGrid {
+                    beliefsCard
+                } secondary: {
+                    claimsCard
+                    nightlyCard
+                } full: {
+                    coreCard
+                    calibrationCard
+                    observationsCard
                 }
-                .pageContent(compact)
             }
         }
-        .task(id: isActive ? generation : -1) {
+        .pageTask(
+            id: generation, active: isActive && requestsEnabled, cancel: { model.loading.cancel() }
+        ) {
             guard isActive else { return }
             if requestsEnabled, refreshedGeneration != generation {
                 await model.refresh()
@@ -143,16 +143,15 @@ struct CompanionMindScreen: View {
                 barsFilled = true
             }
         }
-        .sheet(item: $detail) { detail in
+        .edithSheet(item: $detail) { detail in
             MindDetailSheet(detail: detail, dark: dark, openEpisode: openEpisode) {
                 self.detail = nil
             }
-            .transientPresentation()
         }
     }
 
     private var coreCard: some View {
-        SkinCard(title: "Who you are", note: "always in context", dark: dark) {
+        PageCard(title: "Who you are", note: "always in context") {
             if model.core.isEmpty {
                 emptyText("Empty until the nightly run writes it, or until you write it yourself.")
             } else {
@@ -204,7 +203,7 @@ struct CompanionMindScreen: View {
     }
 
     private var calibrationCard: some View {
-        SkinCard(title: "Calibration", note: "in both directions", dark: dark) {
+        PageCard(title: "Calibration", note: "in both directions") {
             if model.calibration.isEmpty {
                 emptyText("Nothing scored yet; this needs claims and records to compare.")
             } else {
@@ -229,7 +228,7 @@ struct CompanionMindScreen: View {
     }
 
     private var beliefsCard: some View {
-        SkinCard(title: "Beliefs", note: "what it concluded", dark: dark, fill: true) {
+        PageCard(title: "Beliefs", note: "what it concluded", fill: true) {
             if model.beliefs.isEmpty {
                 emptyText("Nothing concluded yet. The nightly run forms beliefs from episodes.")
             } else {
@@ -282,7 +281,7 @@ struct CompanionMindScreen: View {
     }
 
     private var claimsCard: some View {
-        SkinCard(title: "Claims", note: "checked against reality", dark: dark) {
+        PageCard(title: "Claims", note: "checked against reality") {
             if model.claims.isEmpty {
                 emptyText("No claims extracted yet.")
             } else {
@@ -321,8 +320,8 @@ struct CompanionMindScreen: View {
     }
 
     private var observationsCard: some View {
-        SkinCard(
-            title: "Observed activity", note: "what the connectors saw", dark: dark
+        PageCard(
+            title: "Observed activity", note: "what the connectors saw"
         ) {
             if model.observations.isEmpty {
                 emptyText("No observations yet. Sync GitHub from Settings.")
@@ -358,10 +357,9 @@ struct CompanionMindScreen: View {
     }
 
     private var nightlyCard: some View {
-        SkinCard(
+        PageCard(
             title: "Nightly run",
-            note: "02:00 on the companion",
-            dark: dark
+            note: "02:00 on the companion"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 CompanionButton(
@@ -416,137 +414,6 @@ struct CompanionMindScreen: View {
         Text(message)
             .font(.system(size: UIScale.pt(12)))
             .foregroundStyle(DashSkin.inkFaint(dark))
-    }
-}
-
-private struct CompanionMindLoadingSkeleton: View {
-    let width: CGFloat
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            CompanionGrid(width: width) {
-                beliefsCard
-            } secondary: {
-                claimsCard
-                nightlyCard
-            } full: {
-                coreCard
-                calibrationCard
-                observationsCard
-            }
-        }
-        .accessibilityLabel("Loading the companion mind")
-    }
-
-    private var beliefsCard: some View {
-        CompanionSkeletonCard(titleWidth: 58, noteWidth: 104, dark: dark, fill: true) {
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                ForEach(0..<6, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 2) ? nil : 226,
-                                height: 10,
-                                corner: 4)
-                            Spacer(minLength: 0)
-                            SkeletonBlock(width: 28, height: 8, corner: 4)
-                        }
-                        SkeletonBlock(height: 5, corner: 3)
-                    }
-                    .padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(6))
-                }
-            }
-        }
-    }
-
-    private var claimsCard: some View {
-        CompanionSkeletonCard(titleWidth: 52, noteWidth: 132, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                ForEach(0..<6, id: \.self) { index in
-                    HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(6)) {
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? nil : 214,
-                            height: 10,
-                            corner: 4)
-                        Spacer(minLength: 0)
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 3) ? 70 : 54, height: 16, corner: 8)
-                    }
-                    .padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(6))
-                }
-            }
-        }
-    }
-
-    private var nightlyCard: some View {
-        CompanionSkeletonCard(titleWidth: 86, noteWidth: 118, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                SkeletonBlock(width: 76, height: 26, corner: 8)
-                SkeletonBlock(width: 216, height: 9, corner: 4)
-                HStack(spacing: UIScale.pt(6)) {
-                    SkeletonBlock(width: 64, height: 20, corner: 7)
-                    SkeletonBlock(width: 82, height: 20, corner: 7)
-                    SkeletonBlock(width: 58, height: 20, corner: 7)
-                }
-            }
-        }
-    }
-
-    private var coreCard: some View {
-        CompanionSkeletonCard(titleWidth: 82, noteWidth: 94, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                ForEach(0..<3, id: \.self) { index in
-                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                        HStack(spacing: UIScale.pt(8)) {
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 84 : 112, height: 9)
-                            Spacer(minLength: 0)
-                            SkeletonBlock(width: 68, height: 8)
-                            SkeletonBlock(width: 24, height: 8)
-                        }
-                        SkeletonBlock(width: index == 2 ? 318 : nil, height: 10)
-                        SkeletonBlock(width: index == 1 ? 248 : 284, height: 10)
-                    }
-                }
-            }
-        }
-    }
-
-    private var calibrationCard: some View {
-        CompanionSkeletonCard(titleWidth: 82, noteWidth: 106, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                ForEach(0..<4, id: \.self) { index in
-                    HStack(spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: index.isMultiple(of: 2) ? 96 : 126, height: 9)
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? 54 : 72, height: 16, corner: 8)
-                        Spacer(minLength: 0)
-                        SkeletonBlock(width: 48, height: 8)
-                    }
-                }
-            }
-        }
-    }
-
-    private var observationsCard: some View {
-        CompanionSkeletonCard(titleWidth: 122, noteWidth: 142, dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                ForEach(0..<6, id: \.self) { index in
-                    HStack(spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: 84, height: 8)
-                        SkeletonBlock(
-                            width: index.isMultiple(of: 2) ? nil : 248,
-                            height: 9)
-                        Spacer(minLength: 0)
-                        SkeletonBlock(width: 68, height: 8)
-                    }
-                    .padding(.horizontal, UIScale.pt(8))
-                    .padding(.vertical, UIScale.pt(6))
-                }
-            }
-        }
     }
 }
 
@@ -614,6 +481,7 @@ private struct MindDetailSheet: View {
     private func loadRefs() async {
         var refs: [(String, String)] = []
         for id in contextIds {
+            guard !Task.isCancelled else { return }
             if let episode = try? await client.episodeDetail(id: id) {
                 let date = String(episode.occurredAt.prefix(10))
                 refs.append((id, "\(episode.title) · \(episode.kind) · \(date)"))
@@ -621,6 +489,7 @@ private struct MindDetailSheet: View {
                 refs.append((id, "episode \(String(id.prefix(8)))…"))
             }
         }
+        guard !Task.isCancelled else { return }
         episodeRefs = refs
         episodeRefsLoaded = true
     }
@@ -643,13 +512,17 @@ private struct MindDetailSheet: View {
                 .buttonStyle(.edith(.borderless))
                 .help("Close")
             }
-            content
-            Spacer(minLength: 0)
+            ScrollView {
+                content.frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .padding(UIScale.pt(20))
-        .frame(width: UIScale.pt(460), height: UIScale.pt(360), alignment: .topLeading)
+        .frame(
+            width: PresentationMetrics.width(460), height: PresentationMetrics.height(360),
+            alignment: .topLeading
+        )
         .background(DashSkin.paper(dark))
-        .task(id: generation) {
+        .pageTask(id: generation) {
             if requestsEnabled {
                 await loadRefs()
             } else {

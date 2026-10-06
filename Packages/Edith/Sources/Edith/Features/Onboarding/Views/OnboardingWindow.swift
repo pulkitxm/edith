@@ -12,7 +12,9 @@ enum OnboardingWindow {
             return
         }
         let onboardingWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: UIScale.pt(620), height: UIScale.pt(560)),
+            contentRect: NSRect(
+                x: 0, y: 0, width: PresentationMetrics.width(620),
+                height: PresentationMetrics.height(560)),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         onboardingWindow.title = "Welcome to Edith"
@@ -24,7 +26,8 @@ enum OnboardingWindow {
         let hosting = NSHostingController(rootView: OnboardingView(onFinish: close))
         hosting.sizingOptions = []
         onboardingWindow.contentViewController = hosting
-        onboardingWindow.setContentSize(NSSize(width: 620, height: 560))
+        onboardingWindow.setContentSize(
+            NSSize(width: PresentationMetrics.width(620), height: PresentationMetrics.height(560)))
         onboardingWindow.center()
         onboardingWindow.delegate = OnboardingWindowDelegate.shared
         window = onboardingWindow

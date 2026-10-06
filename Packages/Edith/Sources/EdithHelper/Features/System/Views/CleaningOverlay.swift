@@ -33,20 +33,20 @@ struct CleaningOverlayView: View {
                     .font(.system(size: 52))
                 if store.phase == .cleaning {
                     Text("Keyboard is off - clean away")
-                        .font(.title)
+                        .font(.edithText(.title))
                     Text("Auto-restores in \(store.failsafeRemaining)s")
-                        .font(.callout)
+                        .font(.edithText(.callout))
                         .foregroundStyle(.white.opacity(0.7))
                         .monospacedDigit()
                     Button("Done cleaning") {
                         store.stopCleaning()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .tint(themeColor(themeName))
                     .controlSize(.large)
                 } else {
                     Text("Starting in \(store.armingCountdown)…")
-                        .font(.title)
+                        .font(.edithText(.title))
                         .monospacedDigit()
                     Text("Move your hands away from the keyboard.")
                         .foregroundStyle(.white.opacity(0.7))

@@ -70,7 +70,7 @@ struct AttentionHeadline: View {
         let perHour = Double(summary.contextSwitches) / hours
         let longestBlock = summary.focusBlocks.map(\.duration).max() ?? 0
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(12))],
+            columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
             spacing: UIScale.pt(12)
         ) {
             AttentionTile(
@@ -280,53 +280,58 @@ struct AttentionTriagePanel: View {
                 .disabled(model.categorizing || !model.settings.jevCategorizationEnabled)
             }
         ) {
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, entity in
                     if index > 0 { Divider().opacity(0.6) }
-                    HStack(spacing: UIScale.pt(10)) {
-                        AttentionEntityIcon(entity: entity, size: 26)
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(entity.name)
-                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                                .foregroundStyle(DashSkin.ink(dark))
+                    VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                        HStack(spacing: UIScale.pt(10)) {
+                            AttentionEntityIcon(entity: entity, size: 26)
+                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                Text(entity.name)
+                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .foregroundStyle(DashSkin.ink(dark))
+                                    .lineLimit(1)
+                                Text(
+                                    entity.details.first?.name
+                                        ?? AttentionFormat.duration(entity.duration)
+                                )
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
                                 .lineLimit(1)
-                            Text(
-                                entity.details.first?.name
-                                    ?? AttentionFormat.duration(entity.duration)
-                            )
-                            .font(.system(size: UIScale.pt(10.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                        }
-                        .frame(minWidth: UIScale.pt(140), alignment: .leading)
-                        Text(AttentionFormat.duration(entity.duration))
-                            .font(.system(size: UIScale.pt(11.5), weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                        Spacer(minLength: UIScale.pt(6))
-                        if entity.categorySource == .jev {
-                            Button {
-                                model.assign(entity: entity, to: entity.category.id)
-                            } label: {
-                                AttentionChip(
-                                    title: "Keep \(entity.category.name)",
-                                    color: AttentionPalette.category(entity.category, dark: dark),
-                                    active: true)
                             }
-                            .buttonStyle(.edith(.borderless))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(AttentionFormat.duration(entity.duration))
+                                .font(.system(size: UIScale.pt(11.5), weight: .semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                            Spacer(minLength: UIScale.pt(6))
+                            AttentionCategoryMenu(model: model, entity: entity)
                         }
-                        ForEach(quick.filter { $0.id != entity.category.id }.prefix(4)) {
-                            category in
-                            Button {
-                                model.assign(entity: entity, to: category.id)
-                            } label: {
-                                AttentionChip(
-                                    title: category.name,
-                                    color: AttentionPalette.category(category, dark: dark))
+                        WrapHStack(spacing: UIScale.pt(6)) {
+                            if entity.categorySource == .jev {
+                                Button {
+                                    model.assign(entity: entity, to: entity.category.id)
+                                } label: {
+                                    AttentionChip(
+                                        title: "Keep \(entity.category.name)",
+                                        color: AttentionPalette.category(
+                                            entity.category, dark: dark),
+                                        active: true)
+                                }
+                                .buttonStyle(.edith(.borderless))
                             }
-                            .buttonStyle(.edith(.borderless))
+                            ForEach(quick.filter { $0.id != entity.category.id }.prefix(4)) {
+                                category in
+                                Button {
+                                    model.assign(entity: entity, to: category.id)
+                                } label: {
+                                    AttentionChip(
+                                        title: category.name,
+                                        color: AttentionPalette.category(category, dark: dark))
+                                }
+                                .buttonStyle(.edith(.borderless))
+                            }
                         }
-                        AttentionCategoryMenu(model: model, entity: entity)
                     }
                     .padding(.vertical, UIScale.pt(6))
                 }

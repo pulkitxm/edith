@@ -5,7 +5,7 @@ import SwiftUI
 struct CodeStatsHeader: View {
     let model: CodeStatsModel
     @Environment(\.colorScheme) private var scheme
-    @State private var sharing = false
+    @State private var sharePresentation: ExportCardPresentation<CodeStatsExportDeck>?
 
     private var dark: Bool { scheme == .dark }
 
@@ -18,13 +18,14 @@ struct CodeStatsHeader: View {
     var body: some View {
         PageHeader("Code Stats") {
             HStack(spacing: UIScale.pt(8)) {
-                Button {
-                    sharing = true
-                } label: {
-                    Label("Share", systemImage: "square.and.arrow.up")
+                ExportCardButton(
+                    isEnabled: shareSnapshot != nil, help: "Share code stats as images"
+                ) {
+                    guard let shareSnapshot else { return }
+                    sharePresentation = ExportCardPresentation(
+                        deck: CodeStatsExportDeck(snapshot: shareSnapshot),
+                        title: "Share code stats")
                 }
-                .disabled(shareSnapshot == nil)
-                .help("Share code stats as images")
                 if model.isRunning {
                     Button {
                         Task { await model.cancel() }
@@ -38,7 +39,7 @@ struct CodeStatsHeader: View {
                     } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(!model.canStart)
                 }
             }
@@ -46,13 +47,6 @@ struct CodeStatsHeader: View {
             HStack(spacing: UIScale.pt(12)) {
                 if let profile = model.status?.state.profile {
                     CodeStatsProfileBadge(profile: profile, dark: dark)
-                } else if model.status == nil {
-                    SkeletonGroup {
-                        HStack(spacing: UIScale.pt(8)) {
-                            SkeletonBlock(width: 28, height: 28, corner: 14)
-                            SkeletonBlock(width: 140, height: 12)
-                        }
-                    }
                 }
                 Spacer(minLength: UIScale.pt(8))
                 if let status = model.status {
@@ -60,11 +54,7 @@ struct CodeStatsHeader: View {
                 }
             }
         }
-        .sheet(isPresented: $sharing) {
-            if let shareSnapshot {
-                CodeStatsExportSheet(snapshot: shareSnapshot) { sharing = false }
-            }
-        }
+        .exportCardPresentation(item: $sharePresentation)
     }
 }
 
@@ -129,28 +119,16 @@ struct CodeStatsBannerView: View {
     let retry: () -> Void
     @Environment(\.colorScheme) private var scheme
 
-    private var tint: Color { banner.tone == .danger ? DashSkin.danger : DashSkin.warn }
-
     var body: some View {
         let dark = scheme == .dark
-        HStack(alignment: .top, spacing: UIScale.pt(12)) {
-            Image(systemName: banner.symbol)
-                .font(.system(size: UIScale.pt(16), weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: UIScale.pt(22))
-            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                Text(banner.title)
-                    .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    .foregroundStyle(DashSkin.ink(dark))
-                Text(banner.message)
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .fixedSize(horizontal: false, vertical: true)
-                if let command = banner.command {
-                    CodeStatsCommandHint(command: command, dark: dark)
-                }
+        PageNotice(
+            banner.message, title: banner.title,
+            tone: banner.tone == .danger ? .error : .warning, symbol: banner.symbol
+        ) {
+            if let command = banner.command {
+                CodeStatsCommandHint(command: command, dark: dark)
             }
-            Spacer(minLength: UIScale.pt(8))
+        } actions: {
             if banner.choosesFolder {
                 Button("Choose folder...", action: choose)
             }
@@ -158,10 +136,6 @@ struct CodeStatsBannerView: View {
                 Button("Retry", action: retry)
             }
         }
-        .padding(UIScale.pt(14))
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .widgetBar(cornerRadius: 14, fill: tint.opacity(0.08), stroke: tint.opacity(0.35))
-        .accessibilityElement(children: .contain)
     }
 }
 
@@ -181,7 +155,7 @@ struct CodeStatsCommandHint: View {
             } label: {
                 Image(systemName: "doc.on.doc")
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.edith(.borderless))
             .help("Copy")
         }
         .padding(.horizontal, UIScale.pt(8))

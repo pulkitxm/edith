@@ -28,10 +28,7 @@ struct StudioProjectsView: View {
                             text: "Edit a video from Files, or start a new project to see it here.")
                     } else {
                         LazyVGrid(
-                            columns: [
-                                GridItem(
-                                    .adaptive(minimum: UIScale.pt(220)), spacing: UIScale.pt(12))
-                            ],
+                            columns: PageMetrics.cardColumns(compact, minimum: 220, spacing: 12),
                             alignment: .leading, spacing: UIScale.pt(12)
                         ) {
                             ForEach(model.videoProjects) { project in
@@ -118,7 +115,7 @@ struct StudioProjectsView: View {
             }
             .pageContent(compact, width: .readable)
         }
-        .task { model.refreshProjects() }
+        .pageTask { model.refreshProjects() }
     }
 }
 

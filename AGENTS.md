@@ -5,6 +5,40 @@ GitHub Actions runs the checks and cuts the release. Workflows live in
 request runs the checks. A push to `main` runs them again, and a product
 change on `main` publishes the next release.
 
+## Shared screen UI
+
+- Compose scrolling pages with `PageScaffold` and pane-based tools with
+  `PageWorkspace`. Reuse `PageHeader`, `PageSectionHeader`, and `PageMetrics` for
+  structure and responsive headers. Read `compactLayout` from the window host
+  instead of defining another breakpoint inside a page.
+- Use `EdithSegmentedPicker` for segmented choices. Native segmented pickers
+  have intrinsic label widths that can overflow inspectors and compact windows.
+- Use `ContentLoad` for request ownership and loading state, `PageLoading` for
+  page-level presentation, and `LoadingContainer` for component-level content.
+  Choose a shared `PageSkeleton` recipe instead of writing feature-specific
+  full-page placeholders. `LoadingIndicator`, `SkeletonBlock`, and
+  `SkeletonReplica` share the same animation. Keep compute-heavy construction
+  behind loading, retain content during refresh, and expose recovery actions.
+- Use `pageTask` and `pageRefresh` for page work and observation. They share
+  window visibility, automatic-action, and cancellation rules. Retained editors,
+  recordings, terminals, and app services belong to their resource owners.
+- Present sheets through the shared presentation API so Escape and outside
+  clicks behave consistently. Disable dismissal while an operation owns the
+  presentation or when closing would discard unsaved edits.
+- Reuse the shared export and activity components for usage and code statistics
+  instead of creating feature-specific renderers, delivery helpers, or grids.
+- Use the selected app theme, `UIScale`, `Motion`, and shared surface and control
+  styles. Semantic status colors and exported artwork palettes may differ.
+- Use `Font.edithText` for semantic text styles so headings, captions, and
+  editor labels follow window zoom.
+- Verify screen layouts at compact and regular widths, increased zoom, and both
+  color schemes. Global navigation shortcuts belong to the window router and
+  must work when a terminal, web view, or text field is the first responder.
+- Keep source code comment-free. Functional tooling directives and license
+  blocks are the only exceptions. Run `make ci-comments` before submitting.
+
+See `docs/shared-screen-architecture.md` for the loading and ownership contract.
+
 ## Development builds
 
 Every worktree builds and runs its own development app, so several branches can

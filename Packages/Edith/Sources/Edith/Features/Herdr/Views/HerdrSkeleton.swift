@@ -55,34 +55,3 @@ struct HerdrSkeleton: View {
         .padding(.vertical, UIScale.pt(8))
     }
 }
-
-struct HerdrBoardSkeleton: View {
-    let dark: Bool
-    let compact: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    ForEach(0..<4, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                            HStack(spacing: UIScale.pt(8)) {
-                                SkeletonBlock(width: 7, height: 7, corner: 3.5)
-                                SkeletonBlock(
-                                    width: index.isMultiple(of: 2) ? 54 : 72, height: 10)
-                                SkeletonBlock(width: 14, height: 9)
-                            }
-                            HerdrSkeleton(dark: dark, rows: index == 0 ? 3 : 1)
-                        }
-                        .frame(width: UIScale.pt(compact ? 220 : 240), alignment: .topLeading)
-                        .frame(minHeight: UIScale.pt(220), alignment: .topLeading)
-                    }
-                }
-                .pageContent(compact)
-                .padding(.top, UIScale.pt(46))
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Loading Herdr board")
-    }
-}

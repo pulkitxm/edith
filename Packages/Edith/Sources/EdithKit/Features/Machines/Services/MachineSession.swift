@@ -25,6 +25,7 @@ public final class MachineSession {
     private var liveMetrics = MachineLiveMetrics()
     public private(set) var docker = DockerAvailability(status: .unknown)
     public private(set) var containersLoaded = false
+    public private(set) var containersError: String?
     public private(set) var containers: [DockerContainer] = []
     public private(set) var images: [DockerImage] = []
     public private(set) var volumes: [DockerVolume] = []
@@ -55,6 +56,11 @@ public final class MachineSession {
     public var netTxHistory: [Double] { liveMetrics.netTxHistory }
     public var diskReadHistory: [Double] { liveMetrics.diskReadHistory }
     public var diskWriteHistory: [Double] { liveMetrics.diskWriteHistory }
+
+    public var containerInventoryReady: Bool {
+        containersLoaded || containersError != nil || state.failureMessage != nil
+            || (docker.status != .unknown && !docker.isAvailable)
+    }
 
     private let connection: SSHConnection?
     private let localSampler: LocalMachineSampler?
@@ -155,6 +161,9 @@ public final class MachineSession {
         if containersLoaded != snapshot.containersLoaded {
             containersLoaded = snapshot.containersLoaded
         }
+        if containersError != snapshot.containersError {
+            containersError = snapshot.containersError
+        }
         if containers != snapshot.containers { containers = snapshot.containers }
         if images != snapshot.images { images = snapshot.images }
         if volumes != snapshot.volumes { volumes = snapshot.volumes }
@@ -181,6 +190,10 @@ public final class MachineSession {
                 AgentMachineMetricsRefresh.operation, payload: AgentPayload.encode(request))
         } catch {
             if action == .speed { internetSpeedError = error.localizedDescription }
+            if action == .docker { containersError = error.localizedDescription }
+            if action == .reconnect {
+                state = .failed(message: error.localizedDescription, recoverable: true)
+            }
         }
     }
 
@@ -682,17 +695,26 @@ public final class MachineSession {
         guard let connection, docker.isAvailable, !dockerRefreshRunning else { return }
         dockerRefreshRunning = true
         defer { dockerRefreshRunning = false }
-        guard
-            let result = try? await connection.run(
-                DockerCommands.containersWithStats(platform: remotePlatform ?? .linux), timeout: 30),
-            result.succeeded
-        else { return }
-        let sections = result.stdoutText.components(separatedBy: DockerCommands.listSeparator)
-        let parsed = DockerParsing.containers(psOutput: sections.first ?? "")
-        containers =
-            sections.count > 1
-            ? DockerParsing.applyStats(sections[1], to: parsed) : parsed
-        containersLoaded = true
+        do {
+            let command = DockerCommands.containersWithStats(platform: remotePlatform ?? .linux)
+            let result = try await connection.run(command, timeout: 30)
+            guard !Task.isCancelled else { return }
+            guard result.succeeded else {
+                throw SSHConnectionError.commandFailed(
+                    command: command, status: result.status,
+                    stderr: result.stderrText.isEmpty ? result.stdoutText : result.stderrText)
+            }
+            let sections = result.stdoutText.components(separatedBy: DockerCommands.listSeparator)
+            let parsed = DockerParsing.containers(psOutput: sections.first ?? "")
+            containers =
+                sections.count > 1
+                ? DockerParsing.applyStats(sections[1], to: parsed) : parsed
+            containersLoaded = true
+            containersError = nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            containersError = error.localizedDescription
+        }
     }
 
     public func refreshImagesAndVolumes() async {

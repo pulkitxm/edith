@@ -40,12 +40,14 @@ struct SEOAuditPage: View {
         }
         .presenterCover(.siteAudit)
         .background(DashSkin.paper(scheme == .dark))
-        .navigationRoute("project", selection: projectBinding, isValid: projectIsValid)
-        .task {
-            guard automaticActionsEnabled else { return }
+        .navigationRoute(
+            "project", selection: projectBinding, isValid: projectIsValid,
+            isReady: model.projectsLoaded
+        )
+        .pageTask {
             await model.refreshProjects()
         }
-        .sheet(isPresented: $model.newProjectPresented) {
+        .edithSheet(isPresented: $model.newProjectPresented, dismissible: false) {
             SEOAuditNewProjectSheet(model: model)
         }
         .alert(
@@ -74,28 +76,32 @@ private struct SEOAuditProjectsView: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: UIScale.pt(20)) {
-                PageHeader {
-                    Text("Site Audit")
-                } accessory: {
-                    HStack(spacing: UIScale.pt(14)) {
-                        Text("Crawl every page, inspect every share card, and keep each run local.")
-                            .font(.system(size: UIScale.pt(13)))
-                            .foregroundStyle(DashSkin.inkSoft(dark))
-                        Button(action: model.presentNewProject) {
-                            Label("New project", systemImage: "plus")
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.isRunning)
+        PageScaffold {
+            PageHeader {
+                Text("Site Audit")
+            } accessory: {
+                HStack(spacing: UIScale.pt(14)) {
+                    Text("Crawl every page, inspect every share card, and keep each run local.")
+                        .font(.system(size: UIScale.pt(13)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                    Button(action: model.presentNewProject) {
+                        Label("New project", systemImage: "plus")
                     }
+                    .buttonStyle(.edith(.primary))
+                    .disabled(model.isRunning)
                 }
-                projects
-                    .pageGutter(compact)
             }
-            .padding(.bottom, UIScale.pt(PageMetrics.bottom))
+        } content: {
+            if model.projectsLoaded, let error = model.projectsLoadError {
+                PageNotice(
+                    error, tone: .error,
+                    actions: {
+                        Button("Retry") { Task { await model.refreshProjects() } }
+                    })
+            }
+            projects
         }
-        .sheet(item: $projectBeingRenamed) { project in
+        .edithSheet(item: $projectBeingRenamed, dismissible: false) { project in
             SEOAuditRenameProjectSheet(project: project) { name in
                 Task { await model.renameProject(id: project.id, to: name) }
             }
@@ -119,8 +125,19 @@ private struct SEOAuditProjectsView: View {
         }
     }
 
-    @ViewBuilder
     private var projects: some View {
+        PageLoading(
+            state: model.projectsLoad.state,
+            message: model.projectsLoadError ?? "",
+            layout: .cards, refreshing: model.projectsLoad.isRefreshing,
+            retry: { Task { await model.refreshProjects() } }
+        ) {
+            projectContent
+        }
+    }
+
+    @ViewBuilder
+    private var projectContent: some View {
         if model.projects.isEmpty {
             VStack(spacing: UIScale.pt(10)) {
                 Image(systemName: "square.stack.3d.up.slash")
@@ -134,7 +151,7 @@ private struct SEOAuditProjectsView: View {
                 Button(action: model.presentNewProject) {
                     Label("Create a project", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(52))
@@ -143,11 +160,8 @@ private struct SEOAuditProjectsView: View {
                 PageSectionHeader(
                     "Projects", subtitle: "\(model.projects.count) local workspaces")
                 LazyVGrid(
-                    columns: [
-                        GridItem(
-                            .adaptive(minimum: UIScale.pt(compact ? 240 : 290)),
-                            spacing: UIScale.pt(14))
-                    ], spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(compact, minimum: 290, spacing: 14),
+                    spacing: UIScale.pt(14)
                 ) {
                     ForEach(model.projects) { project in
                         let active = model.isRunning && model.selectedProject?.id == project.id
@@ -224,13 +238,13 @@ private struct SEOAuditNewProjectSheet: View {
                 Button(action: { Task { await model.beginNewProject() } }) {
                     Label("Create and discover", systemImage: "arrow.right")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .keyboardShortcut(.defaultAction)
                 .disabled(model.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(500))
+        .frame(width: PresentationMetrics.width(500))
         .background(DashSkin.paper(dark))
         .presenterCover(.siteAudit)
     }
@@ -409,7 +423,7 @@ private struct SEOAuditProjectCard: View {
                 .frame(height: UIScale.pt(3))
             }
         }
-        .task(id: snapshotFileURL) {
+        .pageTask(id: snapshotFileURL) {
             snapshotImage = nil
             guard let url = snapshotFileURL else { return }
             let loaded = await SEOSnapshotCache.image(for: url)
@@ -504,13 +518,13 @@ private struct SEOAuditRenameProjectSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save name", action: submit)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .keyboardShortcut(.defaultAction)
                     .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(420))
+        .frame(width: PresentationMetrics.width(420))
         .presenterCover(.siteAudit)
     }
 

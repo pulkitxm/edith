@@ -30,7 +30,7 @@ enum WindowZoomCommit {
 @MainActor
 enum MainWindow {
     private static var window: NSWindow?
-    private static let updater = UpdaterModel(startingUpdater: !AgentService.usesCustomService)
+    static let updater = UpdaterModel(startingUpdater: !AgentService.usesCustomService)
 
     #if DEBUG
     private static var snapshotObserver: NSObjectProtocol?
@@ -68,11 +68,11 @@ enum MainWindow {
         #if DEBUG
         installSnapshotHook()
         #endif
-        UIScale.install(from: SharedDefaults.store)
         if let window {
             WindowPresentation.present(window)
             return
         }
+        UIScale.install(from: SharedDefaults.store)
         let visibleFrame =
             NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let initialSize = MainWindowFramePolicy.defaultSize(visibleFrame: visibleFrame)

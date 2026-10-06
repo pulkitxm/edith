@@ -334,6 +334,34 @@ enum StudioTestFiles {
 
 @MainActor
 @Suite(.serialized) struct StudioEditorModelTests {
+    @Test func suppliedStudioModelOverridesTheWindowOwner() throws {
+        let studio = StudioModel(defaults: StudioTestFiles.defaults(), loadsState: false)
+        studio.notice = "Synthetic supplied model notice"
+        let host = try auditHost(
+            StudioPage(model: studio)
+                .environment(\.windowSessionOwner, WindowSessionOwner())
+                .environment(\.automaticViewActionsEnabled, false),
+            size: CGSize(width: 800, height: 600))
+        #expect(try auditText(host).contains("Synthetic supplied model notice"))
+    }
+
+    @Test func documentSessionsSurviveNavigationAndExplicitDiscardRemovesThem() {
+        let studio = StudioModel(defaults: StudioTestFiles.defaults(), loadsState: false)
+        let url = URL(fileURLWithPath: "/synthetic/session-image.png")
+        studio.route = .imageEditor(url)
+        let editor = studio.imageEditor(for: url)
+        editor.edit { $0.adjustments.contrast = 0.3 }
+        studio.route = .home
+        studio.route = .imageEditor(url)
+        #expect(studio.imageEditor(for: url) === editor)
+        #expect(editor.document.adjustments.contrast == 0.3)
+        studio.goHome()
+        let reopened = studio.imageEditor(for: url)
+        #expect(reopened !== editor)
+        #expect(!reopened.hasChanges)
+        studio.closeEditors()
+    }
+
     @Test func pdfEditorAnnotatesUndoesAndSavesACopy() async throws {
         let folder = try StudioTestFiles.folder()
         let source = folder.appendingPathComponent("Contract.pdf")
@@ -341,6 +369,7 @@ enum StudioTestFiles {
         let studio = StudioModel(defaults: StudioTestFiles.defaults(), loadsState: false)
         let editor = StudioPDFEditorModel(url: source, mode: .annotate)
         editor.load()
+        #expect(await StudioTestFiles.waitUntil { editor.session != nil })
         #expect(editor.pageCount == 2)
         editor.tool = .rectangle
         editor.drag(from: CGPoint(x: 100, y: 100), to: CGPoint(x: 200, y: 180), page: 0)
@@ -375,12 +404,13 @@ enum StudioTestFiles {
         #expect(editor.isDirty)
     }
 
-    @Test func pdfEditorFormsSignaturesAndCrop() throws {
+    @Test func pdfEditorFormsSignaturesAndCrop() async throws {
         let folder = try StudioTestFiles.folder()
         let source = folder.appendingPathComponent("Form.pdf")
         try StudioTestFiles.pdf(source, pages: ["Name ________"])
         let editor = StudioPDFEditorModel(url: source, mode: .forms)
         editor.load()
+        #expect(await StudioTestFiles.waitUntil { editor.session != nil })
         #expect(editor.tool == .fill)
         editor.tool = .textField
         editor.drag(from: CGPoint(x: 100, y: 600), to: CGPoint(x: 300, y: 624), page: 0)
@@ -636,6 +666,7 @@ enum StudioTestFiles {
         let (model, urls) = try library()
         let pdf = StudioPDFEditorModel(url: urls[0], mode: .annotate)
         pdf.load()
+        #expect(await StudioTestFiles.waitUntil { pdf.session != nil })
         pdf.tool = .rectangle
         pdf.drag(from: CGPoint(x: 90, y: 400), to: CGPoint(x: 330, y: 470), page: 0)
         pdf.tool = .arrow

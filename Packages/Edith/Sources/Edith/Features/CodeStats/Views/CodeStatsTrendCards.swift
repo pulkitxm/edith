@@ -36,12 +36,12 @@ struct CodeStatsTrendCard: View {
     }
 
     var body: some View {
-        SkinCard(title: "Output over time", note: note, dark: dark) {
+        PageCard(title: "Output over time", note: note) {
             HStack(spacing: UIScale.pt(10)) {
-                Picker("Metric", selection: $metric) {
-                    ForEach(CodeStatsTrendMetric.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
+                EdithSegmentedPicker(
+                    "Metric", selection: $metric, options: CodeStatsTrendMetric.allCases,
+                    label: { $0.rawValue }
+                )
                 .labelsHidden()
                 .fixedSize()
                 Toggle("Cumulative", isOn: $cumulative)
@@ -53,7 +53,7 @@ struct CodeStatsTrendCard: View {
                         actions.zoom(brushed.lowerBound, brushed.upperBound)
                         self.brushed = nil
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .controlSize(.small)
                 }
             }
@@ -199,9 +199,9 @@ struct CodeStatsRepositoryCards: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
-            SkinCard(
+            PageCard(
                 title: "Commits per repository",
-                note: "Top 10, click to filter, right-click a row below to exclude", dark: dark
+                note: "Top 10, click to filter, right-click a row below to exclude"
             ) {
                 Toggle("Log scale", isOn: $logScale)
                     .toggleStyle(.switch)
@@ -289,7 +289,7 @@ struct CodeStatsStackedCard: View {
     }
 
     var body: some View {
-        SkinCard(title: title, note: note, dark: dark) {
+        PageCard(title: title, note: note) {
             Chart(points) { point in
                 if percent {
                     AreaMark(
@@ -358,9 +358,9 @@ private struct CodeStatsRepositoryTable: View {
 
     var body: some View {
         let sorted = rows[sort] ?? []
-        SkinCard(
+        PageCard(
             title: "Repositories",
-            note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits", dark: dark
+            note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits"
         ) {
             Grid(
                 alignment: .leading, horizontalSpacing: UIScale.pt(14),
@@ -419,7 +419,7 @@ private struct CodeStatsRepositoryTable: View {
             }
             if sorted.count > Self.collapsedCount {
                 Button(expanded ? "Show fewer" : "Show all \(sorted.count)") { expanded.toggle() }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.edith(.borderless))
             }
         }
     }

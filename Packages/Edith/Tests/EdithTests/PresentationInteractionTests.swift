@@ -40,6 +40,15 @@ import Testing
             !monitor.shouldDismiss(for: try mouse(in: parent, at: outside, type: .rightMouseDown)))
         NSApp.sendEvent(try mouse(in: parent, at: outside))
         #expect(dismissals == 1)
+        monitor.dismissible = false
+        #expect(!monitor.shouldDismiss(for: try mouse(in: parent, at: outside)))
+        monitor.dismissible = true
+        let child = TestWindowHost.window(
+            contentRect: NSRect(x: 0, y: 0, width: 180, height: 120), styleMask: [.titled])
+        sheet.beginSheet(child)
+        #expect(!monitor.shouldDismiss(for: try mouse(in: parent, at: outside)))
+        sheet.endSheet(child)
+        child.orderOut(nil)
         parent.endSheet(sheet)
         #expect(!monitor.shouldDismiss(for: try mouse(in: parent, at: outside)))
     }

@@ -7,8 +7,7 @@ struct CodeStatsAuditCard: View {
     let dark: Bool
 
     var body: some View {
-        SkinCard(title: "What counts", note: "Counted versus excluded, with the reason", dark: dark)
-        {
+        PageCard(title: "What counts", note: "Counted versus excluded, with the reason") {
             HStack(spacing: UIScale.pt(18)) {
                 tally("Counted", audit.counted, emphasis: true)
                 tally("Raw in the mirror", audit.raw, emphasis: false)
@@ -63,7 +62,7 @@ struct CodeStatsAuditCard: View {
                 Button(entry.counted ? "Exclude" : "Count") {
                     Task { await model.updateFilter(toggle) }
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.edith(.borderless))
                 .font(.system(size: UIScale.pt(11), weight: .medium))
             }
         }
@@ -98,8 +97,8 @@ struct CodeStatsLargestCommitsCard: View {
     private static let shown = 12
 
     var body: some View {
-        SkinCard(
-            title: "Biggest commits", note: "Raw size, with how each one is counted", dark: dark
+        PageCard(
+            title: "Biggest commits", note: "Raw size, with how each one is counted"
         ) {
             VStack(spacing: UIScale.pt(7)) {
                 ForEach(commits.prefix(Self.shown), id: \.sha) { commit in
@@ -168,8 +167,8 @@ struct CodeStatsHygieneCard: View {
 
     var body: some View {
         if !audit.duplicateRepositories.isEmpty || !audit.suggestions.isEmpty {
-            SkinCard(
-                title: "Duplicates and identities", note: "Counted once, never twice", dark: dark
+            PageCard(
+                title: "Duplicates and identities", note: "Counted once, never twice"
             ) {
                 if !audit.suggestions.isEmpty {
                     Text("These authors look like you but are not counted yet.")
@@ -190,7 +189,7 @@ struct CodeStatsHygieneCard: View {
                             }
                             Spacer()
                             Button("Count as me") { model.addIdentity(suggestion.value) }
-                                .buttonStyle(.borderless)
+                                .buttonStyle(.edith(.borderless))
                         }
                     }
                     if model.identityPendingRecount {

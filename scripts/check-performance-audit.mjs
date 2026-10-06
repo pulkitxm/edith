@@ -229,6 +229,16 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
   const nonisolatedRanges = declarationRanges(masked, "nonisolated");
   const functionRanges = callableRanges(masked);
   const detachedRanges = [];
+  const contentLoads = new Set(
+    [
+      ...masked.matchAll(
+        /\b(?:let|var)\s+(\w+)\s*(?::\s*ContentLoad\b|=\s*ContentLoad\s*\()/g,
+      ),
+    ].map((match) => match[1]),
+  );
+  const contentLoadReceiver = contentLoads.size
+    ? `(?:self\\s*\\.\\s*)?(?:${[...contentLoads].join("|")})\\s*\\.`
+    : null;
 
   for (const match of masked.matchAll(/\bTask\.detached\b/g)) {
     const expression = detachedExpression(masked, match.index);
@@ -374,7 +384,26 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const range = closureRange(masked, match.index);
     if (!range) continue;
     const [opening, end] = range;
-    const body = masked.slice(opening + 1, end);
+    let body = masked.slice(opening + 1, end);
+    if (contentLoadReceiver) {
+      const protectedRanges = [];
+      for (const managed of body.matchAll(
+        new RegExp(`${contentLoadReceiver}perform\\s*\\(`, "g"),
+      )) {
+        const argumentsStart = body.indexOf("(", managed.index);
+        let managedEnd = closingDelimiter(body, argumentsStart, "(", ")");
+        let after = managedEnd + 1;
+        while (/\s/.test(body[after])) after += 1;
+        if (body[after] === "{") managedEnd = closingBrace(body, after);
+        protectedRanges.push([managed.index, managedEnd + 1]);
+      }
+      for (const [start, finish] of protectedRanges.reverse()) {
+        body =
+          body.slice(0, start) +
+          body.slice(start, finish).replace(/[^\n]/g, " ") +
+          body.slice(finish);
+      }
+    }
     if (!/\bawait\b/.test(body)) continue;
     const ownerRange = enclosingRange(functionRanges, match.index);
     const owner = ownerRange
@@ -391,13 +420,18 @@ export function findPerformanceViolations(source, path = "fixture.swift") {
     const publication = body
       .slice(lastAwait)
       .match(/(?:self\s*\??\s*\.)?\b[A-Za-z_]\w*\s*=(?!=)\s*/);
+    const publicationPrefix = body.slice(
+      lastAwait,
+      publication ? lastAwait + publication.index : body.length,
+    );
     const guarded =
       /Task\.isCancelled|Task\.checkCancellation|\bgeneration\b\s*==|==\s*\w*Generation\b|CancellationError/.test(
-        body.slice(
-          lastAwait,
-          publication ? lastAwait + publication.index : body.length,
-        ),
-      );
+        publicationPrefix,
+      ) ||
+      (contentLoadReceiver !== null &&
+        new RegExp(`${contentLoadReceiver}isCurrent\\s*\\(`).test(
+          publicationPrefix,
+        ));
     const replacementGuard = owner.match(
       new RegExp(
         `\\bguard\\s+${receiver}\\s*==\\s*nil\\s+else\\s*\\{[^{}]*\\breturn\\s*\\}`,

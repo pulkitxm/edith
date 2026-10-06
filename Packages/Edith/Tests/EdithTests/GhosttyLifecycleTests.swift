@@ -47,6 +47,38 @@ import Testing
         #expect(restored.rows == laidOut.rows)
     }
 
+    @Test @MainActor func anInitiallyEmptyViewStartsAfterReceivingItsLayoutSize() throws {
+        let environment = ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" }
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let view = GhosttyTerminalView(
+            launch: GhosttyLaunch(
+                executable: "/bin/sh", arguments: ["-c", "cat"], environment: environment))
+        var readySizes: [NSSize] = []
+        view.onReady = { readySizes.append(view.bounds.size) }
+        defer {
+            view.removeFromSuperview()
+            window.contentView = nil
+            view.shutdown()
+        }
+        window.contentView = NSView(frame: window.contentLayoutRect)
+        window.contentView?.addSubview(view)
+
+        #expect(view.surface == nil)
+        #expect(readySizes.isEmpty)
+
+        let pane = NSSize(width: 446, height: 303)
+        view.setFrameSize(pane)
+        view.layoutSubtreeIfNeeded()
+        let surface = try #require(view.surface)
+        let size = ghostty_surface_size(surface)
+        let backingSize = view.convertToBacking(view.bounds.size)
+
+        #expect(size.width_px == UInt32(backingSize.width))
+        #expect(size.height_px == UInt32(backingSize.height))
+        #expect(view.layer?.bounds.size == view.bounds.size)
+        #expect(readySizes == [pane])
+    }
+
     @Test @MainActor func anExitedChildCannotCloseTheSurfaceThatReusesItsSlot() async throws {
         let environment = ProcessInfo.processInfo.environment.map { "\($0.key)=\($0.value)" }
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))

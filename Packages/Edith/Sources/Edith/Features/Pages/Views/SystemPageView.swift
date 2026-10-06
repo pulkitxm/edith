@@ -5,7 +5,6 @@ struct SystemPage: View {
     @State private var model = RunningAppsModel()
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @Environment(\.windowVisible) private var windowVisible
     @State private var confirmQuitAll = false
     @State private var pendingQuit: RunningAppRow?
 
@@ -13,28 +12,20 @@ struct SystemPage: View {
     private var hidesRunningApps: Bool { PresenterState.shared.hides(.runningApps) }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageScaffold(pinnedHeader: true) {
             header
-            ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                    if let status = model.actionStatus {
-                        actionStatus(status)
-                    }
-                    if model.loaded {
-                        summary
-                    } else {
-                        SystemSummarySkeleton(dark: dark)
-                    }
-                    SkinCard(title: "Running apps", dark: dark) {
-                        appList
-                    }
-                }
-                .pageContent(compact)
-                .background(ScrollPauseMonitor { model.setScrolling($0) })
+        } content: {
+            if let status = model.actionStatus {
+                actionStatus(status)
             }
+            PageLoading(state: model.loading.state, layout: .list) {
+                summary
+                PageCard(title: "Running apps") {
+                    appList
+                }
+            }
+            .background(ScrollPauseMonitor { model.setScrolling($0) })
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
         .confirmationDialog(
             hidesRunningApps ? "Quit this app?" : "Quit \(pendingQuit?.name ?? "app")?",
             isPresented: Binding(
@@ -52,11 +43,8 @@ struct SystemPage: View {
         } message: {
             Text("The app will close. Unsaved changes will prompt you first.")
         }
-        .task(id: windowVisible) {
-            while windowVisible, !Task.isCancelled {
-                if !model.scrolling { await model.refresh() }
-                try? await Task.sleep(for: .seconds(2), tolerance: .milliseconds(500))
-            }
+        .pageRefresh(interval: { .seconds(2) }, cancel: { model.loading.cancel() }) {
+            if !model.scrolling { await model.refresh() }
         }
     }
 

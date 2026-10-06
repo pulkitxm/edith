@@ -917,14 +917,14 @@ struct MusicPage: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             pageHeader
+        } content: {
             trackList
         }
-        .background(DashSkin.paper(dark).ignoresSafeArea(edges: .vertical))
         .navigationRoute("place", selection: musicPlaceBinding, isValid: musicPlaceIsValid)
         .navigationTitle("Music")
-        .sheet(isPresented: $showDownloader) {
+        .edithSheet(isPresented: $showDownloader) {
             DownloadSheet()
         }
         .alert("New folder", isPresented: $showNewFolder) {
@@ -1507,10 +1507,12 @@ private struct MusicFolderRow: View {
             folderMenu(
                 folder, onOpen: onOpen, onPlay: onPlay, onRename: onRename, onDelete: onDelete)
         }
-        .task(id: folder.relativePath) {
+        .pageTask(id: folder.relativePath) {
             let path = folder.relativePath
             trackCount = TrackMeta.cachedTrackCount(under: path)
-            trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            let count = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            guard !Task.isCancelled else { return }
+            trackCount = count
         }
     }
 }
@@ -1607,9 +1609,11 @@ private struct MusicPageRow: View {
                 onMove: onMove, onToggleFavourite: onToggleFavourite,
                 onOpenFolder: onOpenFolder)
         }
-        .task {
+        .pageTask(id: track.id) {
             duration = TrackMeta.cachedDurationLabel(for: track)
-            duration = await TrackMeta.durationLabel(for: track)
+            let value = await TrackMeta.durationLabel(for: track)
+            guard !Task.isCancelled else { return }
+            duration = value
         }
     }
 }
@@ -1781,10 +1785,12 @@ private struct MusicFolderTile: View {
             folderMenu(
                 folder, onOpen: onOpen, onPlay: onPlay, onRename: onRename, onDelete: onDelete)
         }
-        .task(id: folder.relativePath) {
+        .pageTask(id: folder.relativePath) {
             let path = folder.relativePath
             trackCount = TrackMeta.cachedTrackCount(under: path)
-            trackCount = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            let count = await Task.detached { TrackMeta.trackCount(under: path) }.value
+            guard !Task.isCancelled else { return }
+            trackCount = count
         }
     }
 }
@@ -1875,9 +1881,11 @@ private struct MusicTrackTile: View {
                 onMove: onMove, onToggleFavourite: onToggleFavourite,
                 onOpenFolder: onOpenFolder)
         }
-        .task {
+        .pageTask(id: track.id) {
             duration = TrackMeta.cachedDurationLabel(for: track)
-            duration = await TrackMeta.durationLabel(for: track)
+            let value = await TrackMeta.durationLabel(for: track)
+            guard !Task.isCancelled else { return }
+            duration = value
         }
     }
 }
@@ -1907,25 +1915,29 @@ struct MusicDetailOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture { presenter.dismiss() }
                     .transition(.opacity)
-                MusicDetailSheet(
-                    track: track,
-                    theme: theme,
-                    beginRename: presenter.beginRename,
-                    onRename: { remote.rename(track, to: $0) },
-                    onDelete: {
-                        presenter.dismiss()
-                        deleteTarget = track
-                    },
-                    onOpenFolder: {
-                        remote.navigate(to: $0)
-                        mainWindowSection = MainDestination.music.rawValue
-                    },
-                    onClose: { presenter.dismiss() }
-                )
-                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(16)))
-                .shadow(color: .black.opacity(0.45), radius: UIScale.pt(40), y: UIScale.pt(16))
-                .padding(UIScale.pt(24))
-                .transition(.scale(scale: 0.96).combined(with: .opacity))
+                GeometryReader { geometry in
+                    MusicDetailSheet(
+                        track: track,
+                        availableSize: geometry.size,
+                        theme: theme,
+                        beginRename: presenter.beginRename,
+                        onRename: { remote.rename(track, to: $0) },
+                        onDelete: {
+                            presenter.dismiss()
+                            deleteTarget = track
+                        },
+                        onOpenFolder: {
+                            remote.navigate(to: $0)
+                            mainWindowSection = MainDestination.music.rawValue
+                        },
+                        onClose: { presenter.dismiss() }
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(16)))
+                    .shadow(color: .black.opacity(0.45), radius: UIScale.pt(40), y: UIScale.pt(16))
+                    .padding(UIScale.pt(24))
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
                 Button("Close", action: presenter.dismiss)
                     .keyboardShortcut(.cancelAction)
                     .opacity(0)
@@ -1962,6 +1974,7 @@ struct MusicDetailOverlay: View {
 
 private struct MusicDetailSheet: View {
     let track: Track
+    let availableSize: CGSize
     let theme: Color
     let beginRename: Bool
     let onRename: (String) -> Void
@@ -1983,11 +1996,18 @@ private struct MusicDetailSheet: View {
     var body: some View {
         VStack(spacing: UIScale.pt(0)) {
             header
-            content
+            ScrollView { content }
         }
-        .frame(width: UIScale.pt(track.isVideo ? 760 : 400))
+        .frame(
+            width: min(
+                PresentationMetrics.width(track.isVideo ? 760 : 400),
+                max(0, availableSize.width - UIScale.pt(48))),
+            height: min(
+                PresentationMetrics.height(track.isVideo ? 650 : 560),
+                max(0, availableSize.height - UIScale.pt(48)))
+        )
         .background(sheetBackground)
-        .task(id: track.id) {
+        .pageTask(id: track.id) {
             name = track.url.deletingPathExtension().lastPathComponent
             namedTrack = track.id
             sourceURL = YoutubeDownloader.shared.sourceURL(
@@ -2255,6 +2275,7 @@ extension View {
 }
 
 struct MusicFooter: View {
+    @State private var playerOptionsPresented = false
     @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
@@ -2291,6 +2312,7 @@ struct MusicFooter: View {
                     }
                 }
                 .frame(height: UIScale.pt(Self.expandedHeight))
+                .padding(.trailing, UIScale.pt(28))
                 .frame(maxWidth: .infinity)
                 .background(.regularMaterial)
                 .overlay(alignment: .top) {
@@ -2344,14 +2366,39 @@ struct MusicFooter: View {
     }
 
     private func playing(_ track: Track) -> some View {
+        ViewThatFits(in: .horizontal) {
+            playingControls(track, compact: false).frame(minWidth: UIScale.pt(820))
+            playingControls(track, compact: true)
+        }
+    }
+
+    private func playingControls(_ track: Track, compact: Bool) -> some View {
         HStack(spacing: UIScale.pt(14)) {
             trackInfo(track)
                 .frame(maxWidth: .infinity, alignment: .leading)
             transport
-            scrubber
-                .frame(maxWidth: UIScale.pt(420))
-            rightControls
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            if compact {
+                Button {
+                    playerOptionsPresented = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .accessibilityLabel("Playback options")
+                .popover(isPresented: $playerOptionsPresented) {
+                    VStack(spacing: UIScale.pt(12)) {
+                        scrubber
+                        ScrollView(.horizontal, showsIndicators: false) { rightControls }
+                    }
+                    .padding(UIScale.pt(16))
+                    .frame(width: PresentationMetrics.width(320))
+                }
+            } else {
+                scrubber
+                    .frame(maxWidth: UIScale.pt(420))
+                rightControls
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .padding(.horizontal, UIScale.pt(22))
     }
@@ -2554,12 +2601,14 @@ private struct PageArtworkThumb: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.22))
         .presenterCover(.music)
-        .task(id: track.id) {
+        .pageTask(id: track.id) {
             if track.isVideo, TrackMeta.artworkCached(for: track) == nil {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
             }
-            artwork = await TrackMeta.artwork(for: track)
+            let loaded = await TrackMeta.artwork(for: track)
+            guard !Task.isCancelled else { return }
+            artwork = loaded
         }
     }
 }

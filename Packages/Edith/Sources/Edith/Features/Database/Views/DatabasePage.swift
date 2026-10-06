@@ -55,20 +55,31 @@ struct DatabasePage: View {
     private var theme: Color { palette.accent }
 
     var body: some View {
-        VStack(spacing: 0) {
-            PageHeader("Database")
-            Divider().opacity(0.35)
+        PageWorkspace {
+            if model.readiness != .ready {
+                PageHeader("Database")
+                Divider().opacity(0.35)
+            }
+        } content: {
             pageContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(palette.canvas)
-        .navigationRoute("connection", selection: connectionBinding, isValid: connectionIsValid)
+        .navigationRoute(
+            "connection", selection: connectionBinding, isValid: connectionIsValid,
+            isReady: {
+                if model.failureDetail != nil { return true }
+                switch connectionWorkspace.listState {
+                case .idle, .loading: return false
+                default: return true
+                }
+            }()
+        )
         .environment(\.databaseAppTheme, palette.theme)
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await model.refresh()
         }
-        .task(id: connectionListTaskID) {
+        .pageTask(id: connectionListTaskID) {
             guard automaticActionsEnabled, model.readiness == .ready else { return }
             let search = connectionWorkspace.searchText.trimmingCharacters(
                 in: .whitespacesAndNewlines)
@@ -88,14 +99,14 @@ struct DatabasePage: View {
             guard let focusedConnectionID, focusedConnectionID != connectionID else { return }
             self.focusedConnectionID = nil
         }
-        .sheet(
+        .edithSheet(
             item: Binding(
                 get: { workspace.safetyReview },
                 set: { review in
                     if review == nil {
                         workspace.dismissSafetyReview()
                     }
-                })
+                }), dismissible: nil
         ) { session in
             let current = workspace.safetyReview ?? session
             DatabaseSafetyReviewSheet(
@@ -107,7 +118,7 @@ struct DatabasePage: View {
                 cancelOperation: { workspace.cancelSafetyOperation() },
                 dismiss: { workspace.dismissSafetyReview() })
         }
-        .sheet(item: $connectionCreation) { connectionCreation in
+        .edithSheet(item: $connectionCreation, dismissible: nil) { connectionCreation in
             DatabaseConnectionCreationSheet(
                 model: connectionCreation,
                 saved: { connection in
@@ -122,7 +133,7 @@ struct DatabasePage: View {
                 },
                 cancel: { self.connectionCreation = nil })
         }
-        .sheet(item: $connectionManagementRoute) { route in
+        .edithSheet(item: $connectionManagementRoute, dismissible: nil) { route in
             DatabaseConnectionManagementSheet(
                 connection: route.connection,
                 model: connectionManagement,
@@ -214,7 +225,7 @@ struct DatabasePage: View {
             let connection = connectionWorkspace.selectedConnection,
             connection.id == focusedConnectionID
         {
-            focusedContent(connection)
+            focusedWorkspace(connection)
         } else {
             connectionCatalog
         }
@@ -233,22 +244,6 @@ struct DatabasePage: View {
             },
             busyConnectionID: connectionManagement.activeConnectionID,
             performConnectionAction: performConnectionAction)
-    }
-
-    @ViewBuilder
-    private func focusedContent(_ connection: DatabaseConnectionSummary) -> some View {
-        if compact {
-            focusedWorkspace(connection)
-                .environment(\.compactLayout, true)
-        } else {
-            ViewThatFits(in: .horizontal) {
-                focusedWorkspace(connection)
-                    .environment(\.compactLayout, false)
-                    .frame(minWidth: UIScale.pt(680))
-                focusedWorkspace(connection)
-                    .environment(\.compactLayout, true)
-            }
-        }
     }
 
     private func focusedWorkspace(_ connection: DatabaseConnectionSummary) -> some View {

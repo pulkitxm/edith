@@ -8,6 +8,10 @@ final class SEOAuditModel {
     static let shared = SEOAuditModel()
 
     var projects: [SEOAuditProjectSummary] = []
+    let projectsLoad = ContentLoad()
+    var projectsLoaded: Bool { projectsLoad.hasContent }
+    var loadingProjects: Bool { projectsLoad.isRunning }
+    var projectsLoadError: String? { projectsLoad.errorMessage }
     var selectedProject: SEOAuditProject?
     var projectDetailPresented = false
     var selectedRunID: UUID?
@@ -551,11 +555,17 @@ final class SEOAuditModel {
     }
 
     func refreshProjects() async {
+        guard !loadingProjects else { return }
+        let request = projectsLoad.begin()
+        defer { if Task.isCancelled { projectsLoad.cancel(request) } }
         do {
             let value = try await client.projects()
             try Task.checkCancellation()
+            guard projectsLoad.isCurrent(request) else { return }
             projects = value
-        } catch is CancellationError {
-        } catch { errorMessage = error.localizedDescription }
+            projectsLoad.complete(request)
+        } catch {
+            projectsLoad.fail(request, error: error)
+        }
     }
 }

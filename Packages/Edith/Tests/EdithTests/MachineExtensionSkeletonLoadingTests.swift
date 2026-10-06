@@ -43,7 +43,7 @@ import Testing
                 "QuinjetPreparingMachineSkeleton", "QuinjetProjectGridSkeleton",
                 "QuinjetFolderBrowserSkeleton",
             ],
-            "Herdr/Views/HerdrPage.swift": ["HerdrBoardSkeleton"],
+            "Herdr/Views/HerdrPage.swift": ["PageLoading"],
             "Herdr/Views/HerdrSessionView.swift": [
                 "HerdrAgentTerminalSkeleton", "TerminalLoadingSkeleton",
             ],

@@ -7,6 +7,7 @@ struct StudioRunnerView: View {
     let model: StudioModel
     let job: StudioJob
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +21,10 @@ struct StudioRunnerView: View {
                 }
             }
             Divider()
-            HStack(spacing: 0) {
+            let layout =
+                compact
+                ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+            layout {
                 Group {
                     if job.phase == .finished, let result = job.result {
                         StudioResultView(model: model, job: job, result: result)
@@ -31,7 +35,7 @@ struct StudioRunnerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 StudioOptionsPanel(model: model, job: job)
-                    .frame(width: UIScale.pt(330))
+                    .frame(width: compact ? nil : UIScale.pt(330))
             }
         }
         .background(DashSkin.paper(scheme == .dark))
@@ -89,7 +93,7 @@ struct StudioInputsPanel: View {
                                     job: job, url: url, index: index, ordered: ordered,
                                     facts: model.facts[url]
                                 )
-                                .task(id: url) { await model.loadFacts(for: url) }
+                                .pageTask(id: url) { await model.loadFacts(for: url) }
                             }
                         }
                         if ordered {
@@ -329,7 +333,7 @@ struct StudioProgressCard: View {
                         .font(.system(size: UIScale.pt(11.5)))
                         .foregroundStyle(.secondary)
                 }
-                ProgressView(value: job.progress)
+                LoadingProgress(value: job.progress)
                     .frame(width: UIScale.pt(260))
                 Text("\(Int((job.progress * 100).rounded()))%")
                     .font(DashSkin.mono(11))

@@ -106,19 +106,19 @@ struct SEOAuditPageAccordion: View {
 
     private var detail: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            HStack(spacing: UIScale.pt(10)) {
+            WrapHStack(spacing: UIScale.pt(10)) {
                 if let url = URL(string: page.url) {
                     Link(destination: url) {
                         Label("Open page", systemImage: "arrow.up.right")
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.edith(.secondary))
                 }
                 Button(action: runLighthouse) {
                     Label(
                         page.hasLighthouseScores ? "Run Lighthouse again" : "Run Lighthouse",
                         systemImage: "gauge.with.needle")
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .disabled(!lighthouseAvailable || lighthouseRunning)
                 if lighthouseRunning {
                     SkeletonGroup {
@@ -130,7 +130,6 @@ struct SEOAuditPageAccordion: View {
                         .font(.system(size: UIScale.pt(10.5), weight: .medium))
                         .foregroundStyle(DashSkin.warn)
                 }
-                Spacer()
                 Text(selected ? "Included in next audit" : "Excluded from next audit")
                     .font(DashSkin.mono(9, weight: .semibold))
                     .foregroundStyle(selected ? DashSkin.ok : .secondary)
@@ -294,7 +293,7 @@ struct SEOAuditPageAccordion: View {
             }
         }
         .clipped()
-        .task(id: snapshotFileURL) {
+        .pageTask(id: snapshotFileURL) {
             snapshotImage = nil
             guard let url = snapshotFileURL else { return }
             let loaded = await SEOSnapshotCache.image(for: url)

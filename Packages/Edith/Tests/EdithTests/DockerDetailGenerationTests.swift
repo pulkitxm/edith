@@ -106,18 +106,21 @@ private actor DockerDetailCommandHarness {
         #expect(!model.processesFailed)
     }
 
-    @Test func malformedProcessOutputClearsCachedRowsAndPublishesFailure() async {
+    @Test func malformedProcessRefreshRetainsCachedRowsAndPublishesFailure() async {
         let model = DockerDetailModel()
         let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
         let container = Self.container(id: "api")
         model.startLogs(session: session, container: container)
-        model.processes = [
-            DockerProcess(pid: "1", user: "root", cpu: "0", memory: "0", command: "old")
-        ]
+        await model.loadProcesses(container: container) { _, _ in
+            .success(Self.process(pid: "1", command: "old"))
+        }
 
         await model.loadProcesses(container: container) { _, _ in .success("invalid") }
 
-        #expect(model.processes.isEmpty)
+        #expect(model.processes.map(\.pid) == ["1"])
+        #expect(model.processesLoad.state == .content)
+        #expect(model.processesLoad.errorMessage != nil)
+        #expect(!model.processesLoading)
         #expect(model.processesFailed)
     }
 

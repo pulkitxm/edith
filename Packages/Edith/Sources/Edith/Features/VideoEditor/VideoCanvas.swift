@@ -59,7 +59,7 @@ struct VideoCanvas: View {
                 }
             }
         }
-        .task(id: cameraPath) {
+        .pageTask(id: cameraPath) {
             guard let cameraPath else { return }
             let asset = AVURLAsset(url: URL(fileURLWithPath: cameraPath))
             if let track = try? await asset.loadTracks(withMediaType: .video).first,
@@ -93,7 +93,7 @@ private struct VideoCanvasHandle: View {
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.edith(.borderless))
         .highPriorityGesture(drag("move"))
         .overlay(alignment: .bottomTrailing) {
             if selected {
@@ -105,7 +105,7 @@ private struct VideoCanvasHandle: View {
         }
         .overlay(alignment: .topLeading) {
             if selected {
-                Text(title).font(.caption2).lineLimit(1).padding(4)
+                Text(title).font(.edithText(.caption2)).lineLimit(1).padding(4)
                     .background(.black.opacity(0.7)).offset(y: -24).allowsHitTesting(false)
             }
         }

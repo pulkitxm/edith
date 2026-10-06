@@ -21,9 +21,9 @@ struct TerminalSettingsPane: View {
             fallbackSection
             launchSection
         }
-        .formStyle(.grouped)
+        .edithForm()
         .navigationTitle("Terminal")
-        .task {
+        .pageTask {
             if terminalLaunchEnabled { await refresh() }
         }
         .onReceive(

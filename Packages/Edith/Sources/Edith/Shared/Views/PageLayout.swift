@@ -20,6 +20,20 @@ enum PageMetrics {
     static func titleFont(_ compact: Bool) -> Font {
         DashSkin.heading(compact ? compactTitleSize : titleSize)
     }
+
+    static func cardColumns(
+        _ compact: Bool, minimum: Double, maximum: Double = .infinity,
+        spacing: Double? = nil, alignment: Alignment = .center
+    ) -> [GridItem] {
+        let maximum = UIScale.pt(maximum)
+        return [
+            GridItem(
+                compact
+                    ? .flexible(minimum: 0, maximum: maximum)
+                    : .adaptive(minimum: UIScale.pt(minimum), maximum: maximum),
+                spacing: spacing.map { CGFloat(UIScale.pt($0)) }, alignment: alignment)
+        ]
+    }
 }
 
 enum PageContentWidth {
@@ -34,7 +48,152 @@ enum PageContentWidth {
     }
 }
 
+struct PageScaffold<Header: View, Content: View>: View {
+    var width: PageContentWidth = .fluid
+    var pinnedHeader = false
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let content: () -> Content
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if pinnedHeader { header() }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if !pinnedHeader { header() }
+                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                        content()
+                    }
+                    .pageContent(compact, width: width)
+                }
+            }
+        }
+        .pageSurface()
+    }
+}
+
+struct PageWorkspace<Header: View, Content: View>: View {
+    @ViewBuilder let header: () -> Header
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header()
+            content().frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .pageSurface()
+    }
+}
+
+private struct PageSurface: ViewModifier {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.windowVisible) private var visible
+    @Environment(\.loadingAnimationsEnabled) private var animationsEnabled
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(DashSkin.paper(scheme == .dark))
+            .environment(\.loadingAnimationsEnabled, visible && animationsEnabled)
+    }
+}
+
+private struct PageTaskIdentity<ID: Equatable>: Equatable {
+    let value: ID
+    let visible: Bool
+    let enabled: Bool
+}
+
+@MainActor
+private final class PageTaskOwner {
+    private var request: UUID?
+    private var cancellation: (() -> Void)?
+
+    func begin(cancel: @escaping () -> Void) -> UUID {
+        stop()
+        let request = UUID()
+        self.request = request
+        cancellation = cancel
+        return request
+    }
+
+    func stop(_ request: UUID? = nil) {
+        if let request, self.request != request { return }
+        let cancellation = cancellation
+        self.request = nil
+        self.cancellation = nil
+        cancellation?()
+    }
+}
+
+private struct PageTask<ID: Equatable>: ViewModifier {
+    let id: ID
+    let active: Bool
+    let cancel: @MainActor () -> Void
+    let operation: @MainActor () async -> Void
+    @Environment(\.windowVisible) private var visible
+    @Environment(\.automaticViewActionsEnabled) private var enabled
+    @State private var owner = PageTaskOwner()
+
+    func body(content: Content) -> some View {
+        content.task(id: PageTaskIdentity(value: id, visible: visible, enabled: enabled && active))
+        {
+            guard visible, enabled, active, !Task.isCancelled else { return }
+            let request = owner.begin(cancel: cancel)
+            defer { if Task.isCancelled { owner.stop(request) } }
+            await operation()
+        }
+        .onDisappear { owner.stop() }
+        .onChange(of: visible) { _, visible in
+            if !visible { owner.stop() }
+        }
+        .onChange(of: enabled) { _, enabled in
+            if !enabled { owner.stop() }
+        }
+        .onChange(of: active) { _, active in
+            if !active { owner.stop() }
+        }
+    }
+}
+
 extension View {
+    func pageSurface() -> some View {
+        modifier(PageSurface())
+    }
+
+    func pageTask<ID: Equatable>(
+        id: ID, active: Bool = true, cancel: @escaping @MainActor () -> Void = {},
+        operation: @escaping @MainActor () async -> Void
+    ) -> some View {
+        modifier(PageTask(id: id, active: active, cancel: cancel, operation: operation))
+    }
+
+    func pageTask(
+        active: Bool = true, cancel: @escaping @MainActor () -> Void = {},
+        operation: @escaping @MainActor () async -> Void
+    ) -> some View {
+        pageTask(id: true, active: active, cancel: cancel, operation: operation)
+    }
+
+    func pageRefresh(
+        active: Bool = true,
+        interval: @escaping @MainActor () -> Duration,
+        cancel: @escaping @MainActor () -> Void = {},
+        operation: @escaping @MainActor () async -> Void
+    ) -> some View {
+        pageTask(active: active, cancel: cancel) {
+            while !Task.isCancelled {
+                await operation()
+                guard !Task.isCancelled else { return }
+                do {
+                    try await Task.sleep(for: interval(), tolerance: .milliseconds(500))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
     func pageGutter(_ compact: Bool) -> some View {
         padding(.horizontal, PageMetrics.gutter(compact))
     }
@@ -62,20 +221,33 @@ struct PageSectionHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(title)
-                    .font(.system(size: UIScale.pt(15), weight: .semibold))
-                if let subtitle {
-                    Text(subtitle)
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(.secondary)
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+                heading.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: UIScale.pt(8))
+                trailing().fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: UIScale.pt(8))
-            trailing()
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                heading
+                ScrollView(.horizontal) {
+                    trailing()
+                }
+                .scrollIndicators(.hidden)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            Text(title)
+                .font(.system(size: UIScale.pt(15), weight: .semibold))
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -99,14 +271,19 @@ struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
-                title()
-                    .font(PageMetrics.titleFont(compact))
-                    .foregroundStyle(DashSkin.ink(scheme == .dark))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                Spacer(minLength: UIScale.pt(8))
-                trailing()
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(12)) {
+                    heading.fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: UIScale.pt(8))
+                    trailing().fixedSize(horizontal: true, vertical: false)
+                }
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    heading
+                    ScrollView(.horizontal) {
+                        trailing()
+                    }
+                    .scrollIndicators(.hidden)
+                }
             }
             accessory()
         }
@@ -114,6 +291,14 @@ struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
         .pageGutter(compact)
         .padding(.top, UIScale.pt(PageMetrics.top))
         .padding(.bottom, UIScale.pt(PageMetrics.headerBottom))
+    }
+
+    private var heading: some View {
+        title()
+            .font(PageMetrics.titleFont(compact))
+            .foregroundStyle(DashSkin.ink(scheme == .dark))
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
     }
 }
 

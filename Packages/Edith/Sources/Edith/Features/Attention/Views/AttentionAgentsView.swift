@@ -13,9 +13,7 @@ struct AttentionAgentsView: View {
         let interval = model.period.interval()
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             LazyVGrid(
-                columns: Array(
-                    repeating: GridItem(.flexible(), spacing: UIScale.pt(12)),
-                    count: compact ? 2 : 5),
+                columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 12),
                 spacing: UIScale.pt(12)
             ) {
                 AttentionTile(
@@ -61,15 +59,8 @@ struct AttentionAgentsView: View {
                         points: agents.concurrency, domain: interval.start...interval.end,
                         height: 150)
                 }
-                if compact {
-                    table("Machines", agents.machines, color: violet)
-                    table("Agents", agents.kinds, color: violet)
-                } else {
-                    HStack(alignment: .top, spacing: UIScale.pt(14)) {
-                        table("Machines", agents.machines, color: violet)
-                        table("Agents", agents.kinds, color: violet)
-                    }
-                }
+                table("Machines", agents.machines, color: violet)
+                table("Agents", agents.kinds, color: violet)
                 if !agents.projects.isEmpty {
                     table("Projects", agents.projects, color: violet)
                 }

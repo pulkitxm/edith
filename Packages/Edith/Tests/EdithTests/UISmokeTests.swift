@@ -72,7 +72,7 @@ private func settledBitmap(
 
     @Test func loadingSkeletonsRender() {
         #expect(renders(MachineOverviewSkeleton(dark: true)))
-        #expect(renders(FleetHomeSkeleton(dark: true)))
+        #expect(renders(PageSkeleton(layout: .cards)))
         #expect(renders(MusicLibrarySkeleton(grid: false)))
         #expect(renders(MusicLibrarySkeleton(grid: true)))
         #expect(renders(ListRowsSkeleton(rows: 4, dark: true)))
@@ -199,7 +199,7 @@ private func settledBitmap(
                     github: .signedOut)
             ),
         ]
-        #expect(renders(CodeStatsReportSkeleton(dark: true)))
+        #expect(renders(PageSkeleton(layout: .analytics)))
         for (name, status) in phases {
             for scheme in [ColorScheme.light, .dark] {
                 let agent = CodeStatsFakeAgent(
@@ -229,10 +229,7 @@ private func settledBitmap(
     }
 
     @Test func everyAppMaintenanceSkeletonRenders() {
-        #expect(renders(AppMaintenanceSectionSkeleton(section: .updates)))
-        #expect(renders(HomebrewPageSkeleton()))
-        #expect(renders(AppMaintenanceSectionSkeleton(section: .removal)))
-        #expect(renders(AppMaintenanceSectionSkeleton(section: .history)))
+        #expect(renders(PageSkeleton(layout: .list)))
     }
 
     @Test func docsPageRendersTablesCodeAndAskResultsInBothAppearances() async throws {
@@ -287,7 +284,7 @@ private func settledBitmap(
         let model = HomebrewPageModel()
         model.status = HomebrewStatus(
             available: true, executable: "/opt/homebrew/bin/brew", version: "Homebrew 5.0.0")
-        model.loaded = true
+        model.loading.setContent()
         model.packages = [
             HomebrewPackage(
                 kind: .formula, name: "ripgrep", displayName: "ripgrep",
@@ -302,7 +299,12 @@ private func settledBitmap(
         #expect(renders(HomebrewMaintenanceView(model: model)))
     }
 
-    @Test func mainWindowRendersEveryDestination() {
+    @Test(arguments: [false, true], [ColorScheme.light, .dark])
+    func mainWindowRendersEveryDestination(compact: Bool, scheme: ColorScheme) {
+        let previousZoom = UIScale.current
+        UIScale.apply(compact ? 1.6 : 1.0)
+        defer { UIScale.apply(previousZoom) }
+        let width = compact ? 680.0 : 1400.0
         let saved = SharedDefaults.store.string(forKey: "mainWindowSection")
         let savedSettingsTab = SharedDefaults.store.string(forKey: "settingsTab")
         defer {
@@ -320,7 +322,9 @@ private func settledBitmap(
         for destination in MainDestination.allCases {
             SharedDefaults.store.set(destination.rawValue, forKey: "mainWindowSection")
             #expect(
-                renders(MainWindowView(updater: smokeUpdater())),
+                renders(
+                    MainWindowView(updater: smokeUpdater()).environment(\.colorScheme, scheme),
+                    width: width, height: 850),
                 "\(destination.rawValue) failed to render")
         }
         SharedDefaults.store.set("permissions", forKey: "mainWindowSection")

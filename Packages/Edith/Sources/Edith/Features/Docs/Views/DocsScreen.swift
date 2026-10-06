@@ -43,16 +43,18 @@ struct DocsScreen: View {
     @Environment(\.windowRouter) private var router
     @FocusState private var askFocused: Bool
     @FocusState private var filterFocused: Bool
+    @State private var navigatorPresented = false
 
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
         @Bindable var browser = browser
-        VStack(spacing: 0) {
+        PageWorkspace {
             PageHeader(
                 "Docs", trailing: { history },
                 accessory: { askField(question: $browser.question) })
             Rectangle().fill(DashSkin.line(dark)).frame(height: UIScale.pt(1))
+        } content: {
             ZStack(alignment: .top) {
                 content
                 if browser.resultsVisible, let answer = browser.answer {
@@ -62,13 +64,16 @@ struct DocsScreen: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(dark))
         .background(shortcuts)
-        .navigationRoute("page", selection: pageBinding, isValid: pageIsValid)
+        .navigationRoute(
+            "page", selection: pageBinding,
+            isValid: { browser.library != nil && pageIsValid($0) },
+            isReady: {
+                if automaticActionsEnabled { await browser.load() }
+            }
+        )
         .navigationTitle("Docs")
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await browser.load()
         }
     }
@@ -80,18 +85,20 @@ struct DocsScreen: View {
             if let library = browser.library {
                 GeometryReader { geometry in
                     HStack(spacing: 0) {
-                        DocsNavigator(
-                            browser: browser, filter: $browser.filter,
-                            filterFocused: $filterFocused, dark: dark
-                        )
-                        .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
-                        Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
+                        if !compact {
+                            DocsNavigator(
+                                browser: browser, filter: $browser.filter,
+                                filterFocused: $filterFocused, dark: dark
+                            )
+                            .frame(width: UIScale.pt(DocsNavigation.navigationWidth))
+                            Rectangle().fill(DashSkin.line(dark)).frame(width: UIScale.pt(1))
+                        }
                         document(library, width: geometry.size.width)
                     }
                 }
             } else {
                 VStack(spacing: UIScale.pt(10)) {
-                    ProgressView().controlSize(.small)
+                    LoadingIndicator()
                     Text("Loading the reference")
                         .font(.system(size: UIScale.pt(12)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -126,6 +133,25 @@ struct DocsScreen: View {
 
     private var history: some View {
         HStack(spacing: UIScale.pt(14)) {
+            if compact {
+                Button {
+                    navigatorPresented = true
+                } label: {
+                    Image(systemName: "sidebar.left")
+                }
+                .accessibilityLabel("Browse reference")
+                .popover(isPresented: $navigatorPresented) {
+                    @Bindable var browser = browser
+                    DocsNavigator(
+                        browser: browser, filter: $browser.filter,
+                        filterFocused: $filterFocused, dark: dark
+                    )
+                    .frame(
+                        width: UIScale.pt(DocsNavigation.navigationWidth), height: UIScale.pt(420)
+                    )
+                    .onChange(of: browser.location) { navigatorPresented = false }
+                }
+            }
             Button {
                 router?.goBack()
             } label: {
@@ -180,7 +206,7 @@ struct DocsScreen: View {
                 if !browser.clearQuestion() { askFocused = false }
             }
             if browser.asking {
-                ProgressView().controlSize(.small)
+                LoadingIndicator()
             }
             Text("\u{2318}K")
                 .font(DashSkin.mono(10.5, weight: .medium))
@@ -195,9 +221,9 @@ struct DocsScreen: View {
     }
 
     private func document(_ library: DocsLibrary, width: Double) -> some View {
-        let outline = width >= UIScale.pt(DocsNavigation.outlineThreshold)
+        let outline = !compact && width >= UIScale.pt(DocsNavigation.outlineThreshold)
         let column =
-            width - UIScale.pt(DocsNavigation.navigationWidth)
+            width - (compact ? 0 : UIScale.pt(DocsNavigation.navigationWidth + 1))
             - (outline ? UIScale.pt(DocsNavigation.outlineWidth) : 0)
         let content = min(
             column - PageMetrics.gutter(compact) * 2, UIScale.pt(DocsNavigation.readableWidth))
@@ -205,7 +231,7 @@ struct DocsScreen: View {
             if let page = browser.page {
                 DocsPageView(
                     browser: browser, page: page,
-                    group: library.groups.first { $0.id == page.group }, width: max(content, 280),
+                    group: library.groups.first { $0.id == page.group }, width: max(content, 0),
                     dark: dark)
                 if outline {
                     DocsOutline(browser: browser, page: page, dark: dark)

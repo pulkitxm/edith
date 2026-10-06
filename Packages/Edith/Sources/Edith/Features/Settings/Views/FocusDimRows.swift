@@ -49,15 +49,14 @@ struct FocusDimRows: View {
                     .settingsCaption()
             }
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Picker(
+                EdithSegmentedPicker(
                     "Other displays",
                     selection: $otherDisplaysMode.configured(
-                        AppStorageKeys.FocusDim.otherDisplaysMode)
-                ) {
-                    Text("Highlight front window").tag(FocusDimDisplayMode.perScreenFront)
-                    Text("Dim unfocused fully").tag(FocusDimDisplayMode.dimUnfocused)
-                }
-                .pickerStyle(.segmented)
+                        AppStorageKeys.FocusDim.otherDisplaysMode),
+                    options: [FocusDimDisplayMode.perScreenFront, .dimUnfocused],
+                    label: {
+                        $0 == .perScreenFront ? "Highlight front window" : "Dim unfocused fully"
+                    })
                 Text(
                     "Highlight the front window on each screen, or fully dim displays without keyboard focus so you can tell where you're typing."
                 )

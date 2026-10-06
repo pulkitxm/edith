@@ -7,6 +7,7 @@ struct HerdrDetailColumn: View {
     var hideAgents = false
     var onSetView: ((HerdrAgentView) -> Void)?
     var presenterID: String?
+    var maximumWidth: Double = .infinity
     @State private var detailDragBaseWidth: Double?
     @State private var liveDetailWidth: Double?
 
@@ -27,7 +28,7 @@ struct HerdrDetailColumn: View {
     }
 
     private var detailDisplayWidth: Double {
-        UIScale.pt(HerdrPaneSizing.detail(liveDetailWidth ?? store.detailWidth))
+        min(maximumWidth, UIScale.pt(HerdrPaneSizing.detail(liveDetailWidth ?? store.detailWidth)))
     }
 
     private func resizeDetail(_ translation: CGFloat) {

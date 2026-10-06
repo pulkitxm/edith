@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import CoreText
+import EdithKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -184,7 +185,7 @@ struct VideoCaptionEditor: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Captions").font(.headline)
+            Text("Captions").font(.edithText(.headline))
             Button(
                 model.isTranscribing ? "Transcribing…" : "Generate from speech",
                 action: model.generateCaptions
@@ -200,7 +201,7 @@ struct VideoCaptionEditor: View {
             Text(
                 "Select a caption to position it on the canvas. Drag its timeline edges to adjust timing."
             )
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
             ForEach(
                 (model.project?.annotations ?? []).filter { $0.type == "text" }.sorted {
                     model.captionOutputRange($0).start < model.captionOutputRange($1).start
@@ -235,7 +236,9 @@ private struct VideoCaptionRow: View {
                     .accessibilityLabel("Caption end")
             }.onSubmit { draft.apply("time") }
             Button("Discard caption drafts") { draft.refresh(discard: true) }
-            if let failure = draft.failure { Text(failure).font(.caption).foregroundStyle(.red) }
+            if let failure = draft.failure {
+                Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+            }
             if caption.captionStyle == nil {
                 Toggle(
                     "Highlight words",
@@ -264,7 +267,7 @@ private struct VideoCaptionRow: View {
                     };
                     model.rebuild()
                 }
-                Button("Merge next in same clock") {
+                Button("Merge next") {
                     model.mutate { $0.mergeCaption(caption.id) }; model.rebuild()
                 }
             }

@@ -26,7 +26,8 @@ final class CleanerModel {
     private(set) var lastReclaimed: Int64 = 0
     private(set) var drives: [DriveInfo] = []
     private(set) var driveOptions: [DriveInfo] = []
-    private(set) var loadingDriveOptions = false
+    let driveOptionsLoad = ContentLoad()
+    var loadingDriveOptions: Bool { driveOptionsLoad.isRunning }
     private(set) var customFolders: [String] = []
     var search = ""
     private(set) var expanded: Set<String> = []
@@ -111,11 +112,10 @@ final class CleanerModel {
     }
 
     func loadDriveOptions() {
-        loadingDriveOptions = true
         Task {
-            let all = await Task.detached { JunkScanner.drives() }.value
-            driveOptions = all
-            loadingDriveOptions = false
+            await driveOptionsLoad.perform(operation: { JunkScanner.drives() }) {
+                driveOptions = $0
+            }
         }
     }
 
@@ -331,12 +331,12 @@ struct CleanerCard: View {
     var body: some View {
         Group {
             if framed {
-                SkinCard(title: "Reclaim developer space", dark: dark) { content }
+                PageCard(title: "Reclaim developer space") { content }
             } else {
                 content
             }
         }
-        .sheet(isPresented: $showDrivePicker) {
+        .edithSheet(isPresented: $showDrivePicker) {
             DrivePickerSheet(
                 model: model, dark: dark, confirmTitle: pickerScans ? "Scan" : "Done"
             ) {
@@ -528,7 +528,7 @@ struct CleanerCard: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, UIScale.pt(9))
         }
-        .buttonStyle(.borderedProminent)
+        .buttonStyle(.edith(.primary))
         .tint(DashSkin.accent(dark))
         .controlSize(.large)
         .disabled(model.scanning || model.selectedTotal == 0)

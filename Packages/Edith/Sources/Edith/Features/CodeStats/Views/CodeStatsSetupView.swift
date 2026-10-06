@@ -13,9 +13,8 @@ struct CodeStatsSetupView: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        SkinCard(
-            title: "Set up Code Stats", note: "Mirror your GitHub and count your commits",
-            dark: dark
+        PageCard(
+            title: "Set up Code Stats", note: "Mirror your GitHub and count your commits"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 folderStep
@@ -38,14 +37,13 @@ struct CodeStatsSetupView: View {
                     } label: {
                         Label("Start first sync", systemImage: "play.fill")
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .controlSize(.large)
                     .disabled(!model.canStart)
                 }
             }
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask {
             await model.loadProfileIfNeeded()
         }
     }
@@ -158,17 +156,20 @@ struct CodeStatsSetupView: View {
             detail:
                 "A refresh missed while the Mac slept or the drive was unplugged runs once as soon as it can."
         ) {
-            Picker(
+            EdithSegmentedPicker(
                 "Refresh",
                 selection: Binding(
                     get: { CodeStatsScheduleKind(model.schedule) },
-                    set: { kind in Task { await model.setSchedule(kind) } })
-            ) {
-                Text("Manually").tag(CodeStatsScheduleKind.manual)
-                Text("Daily").tag(CodeStatsScheduleKind.daily)
-                Text("Weekly").tag(CodeStatsScheduleKind.weekly)
-            }
-            .pickerStyle(.segmented)
+                    set: { kind in Task { await model.setSchedule(kind) } }),
+                options: [CodeStatsScheduleKind.manual, .daily, .weekly],
+                label: {
+                    switch $0 {
+                    case .manual: "Manually"
+                    case .daily: "Daily"
+                    case .weekly: "Weekly"
+                    }
+                }
+            )
             .labelsHidden()
             .fixedSize()
         }
@@ -221,7 +222,7 @@ private struct CodeStatsIdentityChips: View {
                         } label: {
                             Image(systemName: "xmark.circle.fill")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.edith(.borderless))
                         .accessibilityLabel("Remove \(label)")
                     }
                     .font(.system(size: UIScale.pt(11.5)))

@@ -4,6 +4,32 @@ import Observation
 import Speech
 import SwiftUI
 
+private final class CompanionRecordingResources {
+    let engine = AVAudioEngine()
+    var file: AVAudioFile?
+    var speech: SFSpeechRecognizer?
+    var speechRequest: SFSpeechAudioBufferRecognitionRequest?
+    var speechTask: SFSpeechRecognitionTask?
+    var ticker: Timer?
+    var hasTap = false
+
+    func stop() {
+        if hasTap { engine.inputNode.removeTap(onBus: 0) }
+        hasTap = false
+        engine.stop()
+        speechRequest?.endAudio()
+        speechTask?.cancel()
+        speechRequest = nil
+        speechTask = nil
+        speech = nil
+        ticker?.invalidate()
+        ticker = nil
+        file = nil
+    }
+
+    deinit { stop() }
+}
+
 @MainActor
 @Observable
 final class CompanionCaptureModel {
@@ -26,14 +52,12 @@ final class CompanionCaptureModel {
     private(set) var waiting: [CompanionOutboxItem] = []
     private(set) var draining = false
 
-    private let engine = AVAudioEngine()
-    private var file: AVAudioFile?
+    @ObservationIgnored private let recording = CompanionRecordingResources()
     private var fileURL: URL?
-    private var speech: SFSpeechRecognizer?
-    private var speechRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var speechTask: SFSpeechRecognitionTask?
     private var startedAt: Date?
-    private var ticker: Timer?
+    private var startGeneration = 0
+    private var starting = false
+    private var captureActive = false
     @ObservationIgnored private nonisolated(unsafe) var outboxObserver: NSObjectProtocol?
 
     init() {
@@ -51,6 +75,7 @@ final class CompanionCaptureModel {
     }
 
     func toggleRecording() async {
+        guard captureActive, !starting, !remembering else { return }
         switch phase {
         case .recording: stopRecording()
         case .idle, .preview: await startRecording()
@@ -58,6 +83,10 @@ final class CompanionCaptureModel {
     }
 
     private func startRecording() async {
+        starting = true
+        startGeneration += 1
+        let generation = startGeneration
+        defer { if generation == startGeneration { starting = false } }
         outcome = nil
         error = nil
         let allowed = await withCheckedContinuation { continuation in
@@ -65,6 +94,7 @@ final class CompanionCaptureModel {
                 continuation.resume(returning: granted)
             }
         }
+        guard generation == startGeneration, !Task.isCancelled else { return }
         guard allowed else {
             error = "Microphone access was refused; grant it in System Settings, Privacy."
             return
@@ -74,8 +104,9 @@ final class CompanionCaptureModel {
                 continuation.resume(returning: status)
             }
         }
+        guard generation == startGeneration, !Task.isCancelled else { return }
 
-        let input = engine.inputNode
+        let input = recording.engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else {
             error = "No usable microphone input was found."
@@ -83,12 +114,13 @@ final class CompanionCaptureModel {
         }
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("companion-captures", isDirectory: true)
+        let previousURL = fileURL
         do {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true)
             let stamp = Self.stamp()
-            let url = directory.appendingPathComponent("voice-\(stamp).wav")
-            file = try AVAudioFile(
+            let url = directory.appendingPathComponent("voice-\(stamp)-\(UUID().uuidString).wav")
+            recording.file = try AVAudioFile(
                 forWriting: url,
                 settings: [
                     AVFormatIDKey: kAudioFormatLinearPCM,
@@ -106,71 +138,94 @@ final class CompanionCaptureModel {
             return
         }
 
-        transcript = ""
         if speechStatus == .authorized, let recognizer = SFSpeechRecognizer(),
             recognizer.isAvailable
         {
-            speech = recognizer
+            recording.speech = recognizer
             let request = SFSpeechAudioBufferRecognitionRequest()
             request.shouldReportPartialResults = true
             if recognizer.supportsOnDeviceRecognition {
                 request.requiresOnDeviceRecognition = true
             }
-            speechRequest = request
-            speechTask = recognizer.recognitionTask(with: request) { [weak self] result, _ in
+            recording.speechRequest = request
+            recording.speechTask = recognizer.recognitionTask(with: request) {
+                [weak self] result, _ in
                 guard let text = result?.bestTranscription.formattedString else { return }
                 Task { @MainActor in
-                    self?.transcript = text
+                    guard let self, self.startGeneration == generation,
+                        self.phase == .recording
+                    else { return }
+                    self.transcript = text
                 }
             }
-        } else {
-            transcript = ""
         }
 
         let mono = AVAudioFormat(
             commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1,
             interleaved: false)
-        input.installTap(onBus: 0, bufferSize: 4096, format: mono) { [weak self] buffer, _ in
-            guard let self else { return }
-            try? self.file?.write(from: buffer)
-            self.speechRequest?.append(buffer)
+        input.installTap(onBus: 0, bufferSize: 4096, format: mono) {
+            [weak self, weak recording] buffer, _ in
+            guard let recording else { return }
+            try? recording.file?.write(from: buffer)
+            recording.speechRequest?.append(buffer)
             let rms = Self.rms(buffer)
             Task { @MainActor in
+                guard let self, self.startGeneration == generation, self.phase == .recording else {
+                    return
+                }
                 self.level = rms
             }
         }
+        recording.hasTap = true
 
         do {
-            engine.prepare()
-            try engine.start()
+            recording.engine.prepare()
+            try recording.engine.start()
         } catch {
-            input.removeTap(onBus: 0)
+            recording.stop()
+            if let fileURL { try? FileManager.default.removeItem(at: fileURL) }
+            fileURL = previousURL
             self.error = "Could not start the microphone: \(error.localizedDescription)"
             return
         }
+        if let previousURL { try? FileManager.default.removeItem(at: previousURL) }
+        transcript = ""
         startedAt = Date()
         duration = 0
         phase = .recording
-        ticker = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+        recording.ticker = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) {
+            [weak self] _ in
             Task { @MainActor in
-                guard let self, let startedAt = self.startedAt else { return }
+                guard let self, self.phase == .recording, let startedAt = self.startedAt else {
+                    return
+                }
                 self.duration = Date().timeIntervalSince(startedAt)
             }
         }
     }
 
     private func stopRecording() {
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        speechRequest?.endAudio()
-        speechTask?.finish()
-        ticker?.invalidate()
+        startGeneration += 1
+        recording.stop()
+        if let startedAt { duration = Date().timeIntervalSince(startedAt) }
+        startedAt = nil
         level = 0
-        file = nil
         phase = .preview
     }
 
+    func setCaptureActive(_ active: Bool) {
+        captureActive = active
+        if !active { leaveCapture() }
+    }
+
+    private func leaveCapture() {
+        startGeneration += 1
+        starting = false
+        if phase == .recording { stopRecording() }
+    }
+
     func discard() {
+        leaveCapture()
         if let fileURL {
             try? FileManager.default.removeItem(at: fileURL)
         }
@@ -182,6 +237,7 @@ final class CompanionCaptureModel {
 
     func remember() async {
         guard let fileURL, !remembering else { return }
+        leaveCapture()
         remembering = true
         defer { remembering = false }
         let kept = await Task.detached(priority: .utility) {
@@ -281,18 +337,16 @@ struct CompanionCaptureScreen: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+        PageScaffold(pinnedHeader: true, header: {}) {
             if !model.waiting.isEmpty {
                 waitingBanner
             }
-            HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            PageColumns {
                 speakCard
                 writeCard
             }
         }
-        .pageContent(compact)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .task(id: isActive ? generation : -1) {
+        .pageTask(id: generation, active: isActive) {
             guard isActive, refreshedGeneration != generation else { return }
             await model.refreshWaiting()
             if !Task.isCancelled { refreshedGeneration = generation }
@@ -325,7 +379,7 @@ struct CompanionCaptureScreen: View {
     }
 
     private var speakCard: some View {
-        SkinCard(title: "Speak", note: speakNote, dark: dark, fill: true) {
+        PageCard(title: "Speak", note: speakNote, fill: true) {
             VStack(spacing: UIScale.pt(14)) {
                 Spacer(minLength: 0)
                 recordButton
@@ -425,7 +479,8 @@ struct CompanionCaptureScreen: View {
                     .frame(width: max(0, geometry.size.width * model.level))
             }
         }
-        .frame(width: UIScale.pt(220), height: UIScale.pt(5))
+        .frame(maxWidth: UIScale.pt(220))
+        .frame(height: UIScale.pt(5))
         .opacity(model.phase == .recording ? 1 : 0.35)
     }
 
@@ -470,7 +525,7 @@ struct CompanionCaptureScreen: View {
     }
 
     private var writeCard: some View {
-        SkinCard(title: "Write", note: "a quick note straight to memory", dark: dark, fill: true) {
+        PageCard(title: "Write", note: "a quick note straight to memory", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 TextEditor(text: $model.note)
                     .font(.system(size: UIScale.pt(12.5)))

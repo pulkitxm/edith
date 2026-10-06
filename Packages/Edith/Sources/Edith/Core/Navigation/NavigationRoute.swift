@@ -125,8 +125,11 @@ final class WindowRouter {
     struct Slot {
         let depth: Int
         let name: String
+        let owner: UUID?
         var order: Int
         var value: String
+        var ready: Bool
+        var scope: [String]
         var accept: (String) -> Bool
         var apply: (String) -> Void
     }
@@ -141,6 +144,10 @@ final class WindowRouter {
     @ObservationIgnored private var passDepth = 0
     @ObservationIgnored private var passAgain = false
     @ObservationIgnored private var settleGeneration = 0
+    @ObservationIgnored private var settlePausedForReadiness = false
+    @ObservationIgnored private var staleOrders: Set<Int> = []
+    @ObservationIgnored private var restoreSource: NavigationHistory?
+    @ObservationIgnored private let restoreTimeout: TimeInterval
     @ObservationIgnored private weak var attachedWindow: NSWindow?
     @ObservationIgnored private static var registry: [ObjectIdentifier: WindowRouter] = [:]
     @ObservationIgnored private static weak var mainRouter: WindowRouter?
@@ -148,24 +155,30 @@ final class WindowRouter {
     var canGoBack: Bool { history.canGoBack }
     var canGoForward: Bool { history.canGoForward }
 
+    init(restoreTimeout: TimeInterval = 0.75) {
+        self.restoreTimeout = restoreTimeout
+    }
+
     private var slotLocation: String {
-        let values = slots.sorted(by: Self.ordered).map(\.value).filter { !$0.isEmpty }
+        var values: [String] = []
+        for slot in slots where !staleOrders.contains(slot.order) && !slot.value.isEmpty {
+            values.append(slot.value)
+        }
         return NavigationRoute(segments: values).description
     }
 
     var location: String {
-        let landed = slotLocation
-        guard restoring, let current = history.current else { return landed }
-        if current.hasPrefix(landed + "/") { return current }
-        return landed
+        if restoring, let current = history.current { return current }
+        return slotLocation
     }
 
     static var commandTarget: WindowRouter? {
         forKeyWindow() ?? mainRouter
     }
 
-    static func router(for window: NSWindow) -> WindowRouter? {
-        registry[ObjectIdentifier(window)]
+    static func router(for window: NSWindow?) -> WindowRouter? {
+        guard let window else { return nil }
+        return registry[ObjectIdentifier(window)]
     }
 
     static func forKeyWindow() -> WindowRouter? {
@@ -193,37 +206,71 @@ final class WindowRouter {
     }
 
     func sync(
-        depth: Int, name: String, value: String, accept: @escaping (String) -> Bool,
+        depth: Int, name: String, value: String, owner: UUID? = nil, ready: Bool = true,
+        scope: [String] = [],
+        accept: @escaping (String) -> Bool,
         apply: @escaping (String) -> Void
     ) {
-        guard let index = slots.firstIndex(where: { $0.depth == depth && $0.name == name }) else {
-            register(depth: depth, name: name, value: value, accept: accept, apply: apply)
+        guard
+            let index = slots.firstIndex(where: {
+                $0.depth == depth && $0.name == name && $0.owner == owner
+            })
+        else {
+            register(
+                depth: depth, name: name, value: value, owner: owner, ready: ready, scope: scope,
+                accept: accept,
+                apply: apply)
             return
         }
+        let rejoining = staleOrders.contains(slots[index].order)
+        if rejoining {
+            guard slots[index].scope != scope else { return }
+            staleOrders.remove(slots[index].order)
+            slots[index].value = value
+        }
+        slots[index].scope = scope
         let previous = slots[index].value
         slots[index].accept = accept
         slots[index].apply = apply
-        guard previous != value else { return }
+        slots[index].ready = ready
+        if restoring {
+            if !applying { applyPending() }
+            return
+        }
+        guard previous != value || rejoining else { return }
         slots[index].value = value
         if restoring || applying || passDepth > 0 { return }
-        slots.removeAll { $0.depth > depth }
-        history.record(slotLocation)
+        invalidateDescendants(depth: depth, value: value)
+        if rejoining {
+            history.coalesceExtension(slotLocation)
+        } else {
+            history.record(slotLocation)
+        }
     }
 
     func register(
-        depth: Int, name: String, value: String, accept: @escaping (String) -> Bool,
+        depth: Int, name: String, value: String, owner: UUID? = nil, ready: Bool = true,
+        scope: [String] = [],
+        accept: @escaping (String) -> Bool,
         apply: @escaping (String) -> Void
     ) {
-        if let index = slots.firstIndex(where: { $0.depth == depth && $0.name == name }) {
+        if let index = slots.firstIndex(where: {
+            $0.depth == depth && $0.name == name && $0.owner == owner
+        }) {
+            staleOrders.remove(slots[index].order)
             slots[index].value = value
+            slots[index].ready = ready
+            slots[index].scope = scope
             slots[index].accept = accept
             slots[index].apply = apply
         } else {
             nextOrder += 1
-            slots.append(
-                Slot(
-                    depth: depth, name: name, order: nextOrder, value: value, accept: accept,
-                    apply: apply))
+            let slot = Slot(
+                depth: depth, name: name, owner: owner, order: nextOrder, value: value,
+                ready: ready, scope: scope, accept: accept,
+                apply: apply)
+            let insertion = slots.firstIndex { Self.ordered(slot, $0) } ?? slots.endIndex
+            slots.insert(slot, at: insertion)
         }
         if restoring {
             applyPending()
@@ -249,24 +296,32 @@ final class WindowRouter {
         slots[index].apply = apply
         slots[index].value = value
         if restoring || applying || passDepth > 0 { return }
-        slots.removeAll { $0.depth > depth }
+        invalidateDescendants(depth: depth, value: value)
         history.record(slotLocation)
     }
 
-    func unregister(depth: Int, name: String) {
-        guard slots.contains(where: { $0.depth == depth && $0.name == name }) else { return }
-        slots.removeAll { $0.depth == depth && $0.name == name }
-        finishRestore()
+    func unregister(depth: Int, name: String, owner: UUID? = nil) {
+        guard
+            let slot = slots.first(where: {
+                $0.depth == depth && $0.name == name && $0.owner == owner
+            })
+        else { return }
+        slots.removeAll { $0.order == slot.order }
+        let wasStale = staleOrders.remove(slot.order) != nil
+        if wasStale { return }
+        if restoring { applyPending() } else { history.replaceCurrent(slotLocation) }
     }
 
     func goBack() {
+        let source = history
         guard let raw = history.goBack(), let route = NavigationRoute(raw) else { return }
-        beginRestore(route)
+        beginRestore(route, source: source)
     }
 
     func goForward() {
+        let source = history
         guard let raw = history.goForward(), let route = NavigationRoute(raw) else { return }
-        beginRestore(route)
+        beginRestore(route, source: source)
     }
 
     func navigate(to raw: String) {
@@ -275,15 +330,19 @@ final class WindowRouter {
         beginRestore(route)
     }
 
-    private func beginRestore(_ route: NavigationRoute) {
+    private func beginRestore(_ route: NavigationRoute, source: NavigationHistory? = nil) {
         restoring = true
         lastRestoreRejected = false
         pending = route.segments
+        restoreSource = source
         settleGeneration += 1
+        settlePausedForReadiness = false
+        scheduleSettle()
         applyPending()
     }
 
     private func applyPending() {
+        guard restoring else { return }
         if passDepth > 0 {
             passAgain = true
             return
@@ -296,12 +355,20 @@ final class WindowRouter {
                 applyPending()
             }
         }
-        let ordered = slots.sorted(by: Self.ordered)
-        let snapshot = ordered.map { (depth: $0.depth, name: $0.name, value: $0.value) }
+        var ordered: [Slot] = []
+        for slot in slots where !staleOrders.contains(slot.order) { ordered.append(slot) }
+        let snapshot = ordered
         var pointer = 0
         var rejected = false
+        var waitingForReadiness = false
         applying = true
         for slot in ordered {
+            if staleOrders.contains(slot.order) { continue }
+            if pointer >= pending.count && slot.value.isEmpty { continue }
+            if !slot.ready {
+                waitingForReadiness = true
+                break
+            }
             if pointer >= pending.count {
                 if !slot.value.isEmpty { write(slot, "") }
                 continue
@@ -321,7 +388,9 @@ final class WindowRouter {
                     let after =
                         candidate.depth > slot.depth
                         || (candidate.depth == slot.depth && candidate.order > slot.order)
-                    return after && (candidate.value == component || candidate.accept(component))
+                    return after && !staleOrders.contains(candidate.order)
+                        && candidate.ready
+                        && (candidate.value == component || candidate.accept(component))
                 }
                 if laterAccepts { continue }
                 rejected = true
@@ -334,7 +403,7 @@ final class WindowRouter {
             for item in snapshot {
                 guard
                     let index = slots.firstIndex(where: {
-                        $0.depth == item.depth && $0.name == item.name
+                        $0.order == item.order
                     }),
                     slots[index].value != item.value
                 else { continue }
@@ -343,19 +412,32 @@ final class WindowRouter {
             lastRestoreRejected = true
         }
         applying = false
+        if rejected, let source = restoreSource, let raw = source.current,
+            let route = NavigationRoute(raw)
+        {
+            history = source
+            beginRestore(route)
+            lastRestoreRejected = true
+            return
+        }
         if passAgain { return }
-        let waiting = !rejected && pointer < pending.count
-        if waiting {
+        let waiting = !rejected && (pointer < pending.count || waitingForReadiness)
+        if waiting && !waitingForReadiness && settlePausedForReadiness {
+            settlePausedForReadiness = false
             scheduleSettle()
-        } else {
+        }
+        if !waiting {
             finishRestore()
         }
     }
 
     private func write(_ slot: Slot, _ value: String) {
         guard
-            let index = slots.firstIndex(where: { $0.depth == slot.depth && $0.name == slot.name })
+            let index = slots.firstIndex(where: { $0.order == slot.order })
         else { return }
+        if slots[index].value != value {
+            invalidateDescendants(depth: slot.depth, value: value)
+        }
         slots[index].value = value
         slots[index].apply(value)
     }
@@ -363,18 +445,29 @@ final class WindowRouter {
     private func finishRestore() {
         restoring = false
         pending = []
+        restoreSource = nil
+        settlePausedForReadiness = false
         settleGeneration += 1
         history.replaceCurrent(slotLocation)
     }
 
-    private func scheduleSettle() {
-        settleGeneration += 1
-        let generation = settleGeneration
-        DispatchQueue.main.async { [weak self] in
-            DispatchQueue.main.async {
-                guard let self, self.restoring, self.settleGeneration == generation else { return }
-                self.finishRestore()
+    private func invalidateDescendants(depth: Int, value: String) {
+        for slot in slots where slot.depth > depth {
+            if !slot.scope.indices.contains(depth) || slot.scope[depth] != value {
+                staleOrders.insert(slot.order)
             }
+        }
+    }
+
+    private func scheduleSettle() {
+        let generation = settleGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + restoreTimeout) { [weak self] in
+            guard let self, self.restoring, self.settleGeneration == generation else { return }
+            if self.slots.contains(where: { !self.staleOrders.contains($0.order) && !$0.ready }) {
+                self.settlePausedForReadiness = true
+                return
+            }
+            self.finishRestore()
         }
     }
 

@@ -138,6 +138,7 @@ final class VirtualCameraEngine {
 
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
         guard request.changesState else { return snapshot() }
+        if request == .retry { stopStreaming() }
         var next = state
         let message = try VirtualCameraRequestReducer.apply(
             request, to: &next, sources: VirtualCameraDevices.sources())
@@ -323,9 +324,10 @@ final class VirtualCameraEngine {
             : VirtualCameraFormat.standard.frameRate
         pipeline.update(state: effectiveState())
         let previewBus = previewBus
-        pipeline.start { buffer in
+        let pipeline = pipeline
+        pipeline.start { [weak pipeline] buffer in
             sink.send(buffer, frameRate: frameRate)
-            previewBus.publish(buffer)
+            previewBus.publish(buffer, reference: pipeline?.reference)
         }
         streamingRoute = target
         triggerQuit = false

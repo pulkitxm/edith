@@ -21,10 +21,6 @@ import Testing
         #expect(dashboard.contains("LazyVStack(spacing: UIScale.pt(16))"))
         #expect(
             dashboard.contains(
-                "VStack(spacing: UIScale.pt(16)) {\n                                    activityRow(compact: compact)"
-            ))
-        #expect(
-            dashboard.contains(
                 "model.modelTotals.count > DashboardChartLayout.visibleModelRows"))
         #expect(dashboard.contains("model.allSources.count > 3"))
         #expect(dashboard.contains("if !compactLayout"))

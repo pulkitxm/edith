@@ -9,7 +9,8 @@ final class AgentEventsModel {
     private(set) var events: [AgentEvent] = []
     private(set) var matches: [AgentEvent] = []
     private(set) var visibleCount = pageSize
-    private(set) var loading = true
+    let contentLoad = ContentLoad()
+    var loading: Bool { contentLoad.state == .loading }
     var failure: String?
     var paused = false
     private var search = ""
@@ -20,7 +21,7 @@ final class AgentEventsModel {
 
     func receive(_ events: [AgentEvent]) {
         self.events = Array(events.suffix(AgentDiagnostics.capacity))
-        loading = false
+        contentLoad.setContent()
         failure = nil
         rebuildMatches()
     }
@@ -47,16 +48,18 @@ final class AgentEventsModel {
 
     func observe() async {
         guard !paused else { return }
-        if events.isEmpty { loading = true }
+        let request = contentLoad.begin()
+        defer { if Task.isCancelled { contentLoad.cancel(request) } }
         do {
             let value = try await AgentClient.shared.snapshotAsync(
                 [AgentEvent].self, topic: .events)
             try Task.checkCancellation()
+            guard contentLoad.isCurrent(request) else { return }
             receive(value)
         } catch is CancellationError {
             return
         } catch {
-            loading = false
+            contentLoad.fail(request, error: error)
             failure = error.localizedDescription
         }
         for await events in AgentTopicStream.values([AgentEvent].self, topic: .events) {
@@ -97,14 +100,14 @@ struct AgentEventsScreen: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Event timeline").font(.system(size: UIScale.pt(20), weight: .semibold))
                     Text("Recent background activity")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.edithText(.callout)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 16)
                 Label(
                     model.paused ? "Paused" : "Live",
                     systemImage: model.paused ? "pause.circle" : "dot.radiowaves.left.and.right"
                 )
-                .font(.caption.weight(.medium))
+                .font(.edithText(.caption).weight(.medium))
                 .foregroundStyle(model.paused ? .secondary : Color.accentColor)
                 Button {
                     dismiss()
@@ -170,7 +173,7 @@ struct AgentEventsScreen: View {
                     Text("Live updates paused")
                 }
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
             .padding(.horizontal, 24).padding(.vertical, 12)
         }
         .frame(
@@ -179,11 +182,10 @@ struct AgentEventsScreen: View {
         )
         .background(.regularMaterial)
         .disclosureGroupStyle(EdithDisclosureGroupStyle())
-        .task(id: "\(model.paused)-\(retryID)") {
-            guard automaticActionsEnabled else { return }
+        .pageTask(id: retryID, active: !model.paused, cancel: { model.contentLoad.cancel() }) {
             await model.observe()
         }
-        .task(id: search) {
+        .pageTask(id: search) {
             do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
             model.filter(search: search, errorsOnly: errorsOnly)
         }
@@ -210,13 +212,12 @@ struct AgentEventsScreen: View {
             }
             .frame(maxHeight: .infinity)
         } else if model.matches.isEmpty {
-            ContentUnavailableView(
+            ContentStatusView(
                 model.events.isEmpty ? "Waiting for events" : "No matching events",
-                systemImage: "waveform.path.ecg",
-                description: Text(
-                    model.events.isEmpty
-                        ? "Run a background job to follow its activity here."
-                        : "Change the search or turn off the failures filter.")
+                message: model.events.isEmpty
+                    ? "Run a background job to follow its activity here."
+                    : "Change the search or turn off the failures filter.",
+                symbol: "waveform.path.ecg"
             )
             .frame(maxHeight: .infinity)
         } else {

@@ -51,7 +51,7 @@ struct ClipboardHistoryView: View {
             }
             .listStyle(.inset)
         }
-        .frame(width: UIScale.pt(480), height: UIScale.pt(520))
+        .frame(width: PresentationMetrics.width(480), height: PresentationMetrics.height(520))
         .onAppear { model.start() }
         .onDisappear { model.stop() }
     }

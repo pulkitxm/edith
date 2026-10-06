@@ -10,21 +10,32 @@ struct DatabaseServiceProgressView: View {
     let theme: Color
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            progress
+            catalog
+        }
+    }
+
+    @ViewBuilder
+    private var progress: some View {
+        if let fraction {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                Text(title)
+                    .font(.system(size: UIScale.pt(15), weight: .semibold))
+                Text(detail)
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(.secondary)
+                LoadingProgress(value: fraction)
+                    .accessibilityLabel(title)
+            }
+            .pageGutter(compact)
+            .padding(.top, UIScale.pt(16))
+        }
+    }
+
+    private var catalog: some View {
         SkeletonReplica("\(title). \(detail)") {
             VStack(alignment: .leading, spacing: 0) {
-                if let fraction {
-                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        Text(title)
-                            .font(.system(size: UIScale.pt(15), weight: .semibold))
-                        Text(detail)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(.secondary)
-                        ProgressView(value: min(max(fraction, 0), 1))
-                            .accessibilityLabel(title)
-                    }
-                    .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
-                    .padding(.top, UIScale.pt(16))
-                }
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     HStack(alignment: .center, spacing: UIScale.pt(12)) {
                         Text("Connections")
@@ -48,7 +59,7 @@ struct DatabaseServiceProgressView: View {
                     )
                     .frame(maxWidth: UIScale.pt(560))
                 }
-                .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
+                .pageGutter(compact)
                 .padding(.vertical, UIScale.pt(compact ? 14 : 18))
                 .background(palette.panel.opacity(0.64))
                 Divider().opacity(0.35)
@@ -70,7 +81,7 @@ struct DatabaseServiceProgressView: View {
                                 index: index, palette: palette, theme: theme)
                         }
                     }
-                    .padding(.horizontal, UIScale.pt(compact ? 16 : 28))
+                    .pageGutter(compact)
                     .padding(.vertical, UIScale.pt(compact ? 18 : 24))
                 }
             }
@@ -87,6 +98,13 @@ struct DatabaseServiceRecoveryView: View {
     let repair: () -> Void
 
     var body: some View {
+        ScrollView {
+            recoveryContent
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var recoveryContent: some View {
         VStack(spacing: UIScale.pt(18)) {
             Image(systemName: "wrench.and.screwdriver.fill")
                 .font(.system(size: UIScale.pt(34), weight: .medium))
@@ -118,8 +136,7 @@ struct DatabaseServiceRecoveryView: View {
         }
         .frame(maxWidth: UIScale.pt(560))
         .padding(UIScale.pt(36))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
+        .frame(maxWidth: .infinity)
     }
 }
 

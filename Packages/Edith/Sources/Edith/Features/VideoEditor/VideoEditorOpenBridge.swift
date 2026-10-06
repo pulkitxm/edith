@@ -5,9 +5,29 @@ import Observation
 @MainActor
 @Observable
 final class VideoEditorOpenBridge {
-    struct Presentation {
+    @MainActor final class Presentation {
         let request: VideoEditorService.OpenRequest
         let model: VideoEditorModel
+        private weak var owner: StudioModel?
+        private var claimed = false
+
+        init(request: VideoEditorService.OpenRequest, model: VideoEditorModel) {
+            self.request = request
+            self.model = model
+        }
+
+        func claim(for owner: StudioModel) -> Bool {
+            if claimed { return self.owner === owner }
+            self.owner = owner
+            claimed = true
+            return true
+        }
+
+        func close(for owner: StudioModel) {
+            guard self.owner === owner else { return }
+            self.owner = nil
+            model.close()
+        }
     }
 
     static let shared = VideoEditorOpenBridge()

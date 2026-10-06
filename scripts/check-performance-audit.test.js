@@ -212,6 +212,63 @@ test("replacement tasks guard state publication after suspension", () => {
   ).not.toContain("stale-task-publication");
 });
 
+test("shared content loads protect only their managed publication", () => {
+  const source = `
+    @MainActor final class Model {
+      let loading = ContentLoad()
+      var refreshTask: Task<Void, Never>?
+      func refresh() {
+        refreshTask?.cancel()
+        refreshTask = Task {
+          await loading.perform(operation: { try await load() }) { rows in
+            self.rows = rows
+          }
+        }
+      }
+    }
+  `;
+  const rules = (value) =>
+    findPerformanceViolations(value).map(({ rule }) => rule);
+  expect(rules(source)).not.toContain("stale-task-publication");
+  expect(rules(source.replace("ContentLoad()", "UnownedLoader()"))).toContain(
+    "stale-task-publication",
+  );
+  expect(
+    rules(
+      source.replace(
+        "\n        }",
+        "\n          let result = await unownedRead()\n          self.rows = result\n        }",
+      ),
+    ),
+  ).toContain("stale-task-publication");
+});
+
+test("shared content load tickets guard publication after an uncooperative worker", () => {
+  const source = `
+    @MainActor final class Model {
+      let loading = ContentLoad()
+      var refreshTask: Task<Void, Never>?
+      func refresh() {
+        refreshTask?.cancel()
+        let request = loading.begin()
+        refreshTask = Task {
+          let result = await load()
+          guard loading.isCurrent(request) else { return }
+          self.rows = result
+        }
+      }
+    }
+  `;
+  expect(
+    findPerformanceViolations(source).map(({ rule }) => rule),
+  ).not.toContain("stale-task-publication");
+  expect(
+    findPerformanceViolations(
+      source.replace("ContentLoad()", "UnownedLoader()"),
+    ).map(({ rule }) => rule),
+  ).toContain("stale-task-publication");
+});
+
 test("main-actor projection chains are rejected without flagging one bounded projection", () => {
   const unsafe = `
     @MainActor

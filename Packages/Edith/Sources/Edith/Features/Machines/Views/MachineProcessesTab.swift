@@ -41,12 +41,12 @@ struct MachineProcessesTab: View {
                                 DashSkin.warn.opacity(0.12),
                                 in: RoundedRectangle(cornerRadius: UIScale.pt(9)))
                     }
-                    SkinCard(
+                    PageCard(
                         title: "Top processes",
                         note: session.sample.map {
                             "\($0.tasks.total > 0 ? "\($0.tasks.total) tasks · " : "")"
                                 + "sampled every 2s"
-                        }, dark: dark
+                        }
                     ) {
                         table
                     }
@@ -72,11 +72,10 @@ struct MachineProcessesTab: View {
         HStack(spacing: UIScale.pt(10)) {
             SearchField(placeholder: "Filter processes", text: $query)
                 .frame(maxWidth: UIScale.pt(280))
-            Picker("", selection: $sortByMemory) {
-                Text("CPU").tag(false)
-                Text("Memory").tag(true)
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "", selection: $sortByMemory, options: [false, true],
+                label: { $0 ? "Memory" : "CPU" }
+            )
             .labelsHidden()
             .frame(width: UIScale.pt(160))
             Spacer(minLength: 0)

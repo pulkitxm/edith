@@ -65,7 +65,7 @@ struct SettingsPane: View {
     }
 
     var body: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        PageWorkspace {
             PageHeader(
                 tab.wrappedValue.label,
                 trailing: {
@@ -84,6 +84,7 @@ struct SettingsPane: View {
                         .foregroundStyle(.secondary)
                 }
             )
+        } content: {
             Group {
                 switch tab.wrappedValue {
                 case .general: GeneralPane()
@@ -101,8 +102,6 @@ struct SettingsPane: View {
             .frame(maxWidth: contentMaximumWidth, maxHeight: .infinity, alignment: .topLeading)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("tab", selection: tab)
         .navigationTitle(tab.wrappedValue.label)
         .onAppear {
@@ -178,7 +177,7 @@ private struct UpdatesPane: View {
                                     showingSchedule = true
                                 }
                             )
-                            .sheet(isPresented: $showingSchedule) {
+                            .edithSheet(isPresented: $showingSchedule) {
                                 UpdateSchedulePanel(updater: updater)
                             }
                             .accessibilityHint(
@@ -187,7 +186,7 @@ private struct UpdatesPane: View {
                         Text("Updates")
                     }
                 }
-                .formStyle(.grouped)
+                .edithForm()
             } else {
                 Text("Updates are unavailable in this build")
                     .foregroundStyle(.secondary)
@@ -231,7 +230,7 @@ struct GeneralPane: View {
                 .onChange(of: appearance) { _, value in applyAppearance(value) }
 
                 LabeledContent("Theme") {
-                    HStack(spacing: UIScale.pt(10)) {
+                    WrapHStack(spacing: UIScale.pt(10)) {
                         Toggle(
                             "Use accent",
                             isOn: Binding(
@@ -309,7 +308,7 @@ struct GeneralPane: View {
             }
 
         }
-        .formStyle(.grouped)
+        .edithForm()
         .navigationTitle("General")
         .onAppear {
             if automaticActionsEnabled { refreshPermissionState() }

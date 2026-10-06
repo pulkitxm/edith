@@ -40,12 +40,7 @@ struct PermissionsPane: View {
     }
 
     private var columns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: UIScale.pt(compact ? 280 : 360)),
-                spacing: UIScale.pt(12),
-                alignment: .top)
-        ]
+        PageMetrics.cardColumns(compact, minimum: 360, spacing: 12, alignment: .top)
     }
 
     @ViewBuilder
@@ -103,23 +98,29 @@ struct PermissionsPane: View {
     }
 
     private var summary: some View {
-        HStack(alignment: .top, spacing: UIScale.pt(14)) {
+        let layout =
+            compact
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(14)))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: UIScale.pt(14)))
+        return layout {
             VStack(alignment: .leading, spacing: UIScale.pt(4)) {
                 Text(headline)
                     .font(.system(size: UIScale.pt(15), weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(
                     "Grant access here once and every extension that needs it works straight away, with no prompt mid-task."
                 )
                 .settingsCaption()
                 .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
+            if !compact { Spacer(minLength: 0) }
             if !pending.isEmpty {
                 Button("Grant \(pending.count) Remaining") {
                     for usage in pending { grant(usage) }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.edith(.primary))
                 .tint(accent)
+                .fixedSize()
             }
         }
         .pageGutter(compact)
@@ -133,32 +134,35 @@ struct PermissionsPane: View {
     }
 
     private var filterRow: some View {
-        HStack(spacing: UIScale.pt(8)) {
-            ForEach(PermissionFilter.allCases, id: \.self) { item in
-                Button {
-                    withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                        filterRaw = item.rawValue
-                    }
-                } label: {
-                    HStack(spacing: UIScale.pt(5)) {
-                        Text(item.rawValue)
-                        if item == .attention, attentionCount > 0 {
-                            Text("\(attentionCount)")
-                                .padding(.horizontal, UIScale.pt(5))
-                                .background(
-                                    filter == item ? Color.white.opacity(0.25) : Color.red,
-                                    in: Capsule()
-                                )
-                                .foregroundStyle(Color.white)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: UIScale.pt(8)) {
+                ForEach(PermissionFilter.allCases, id: \.self) { item in
+                    Button {
+                        withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+                            filterRaw = item.rawValue
                         }
+                    } label: {
+                        HStack(spacing: UIScale.pt(5)) {
+                            Text(item.rawValue)
+                                .lineLimit(1)
+                            if item == .attention, attentionCount > 0 {
+                                Text("\(attentionCount)")
+                                    .padding(.horizontal, UIScale.pt(5))
+                                    .background(
+                                        filter == item ? Color.white.opacity(0.25) : Color.red,
+                                        in: Capsule()
+                                    )
+                                    .foregroundStyle(Color.white)
+                            }
+                        }
+                        .font(.system(size: UIScale.pt(10), weight: .semibold))
                     }
-                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .buttonStyle(
+                        EdithButtonStyle(.selection, selected: filter == item, tint: accent)
+                    )
+                    .fixedSize()
                 }
-                .buttonStyle(
-                    EdithButtonStyle(.selection, selected: filter == item, tint: accent)
-                )
             }
-            Spacer(minLength: 0)
         }
         .pageGutter(compact)
     }
@@ -201,6 +205,7 @@ struct PermissionsPane: View {
 private struct PermissionCard: View {
     let usage: PermissionUsage
     let grant: (PermissionUsage) -> Void
+    @Environment(\.compactLayout) private var compact
 
     private var permission: ExtensionPermission { usage.permission }
 
@@ -214,12 +219,18 @@ private struct PermissionCard: View {
                     (usage.isGranted ? Color.green : Color.secondary).opacity(0.12),
                     in: RoundedRectangle(cornerRadius: UIScale.pt(10), style: .continuous))
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                HStack(spacing: UIScale.pt(8)) {
+                VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                     Text(permission.displayName)
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
-                    statusBadge
-                    Spacer(minLength: 0)
-                    action
+                    let layout =
+                        compact
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(8)))
+                        : AnyLayout(HStackLayout(spacing: UIScale.pt(8)))
+                    layout {
+                        statusBadge
+                        if !compact { Spacer(minLength: 0) }
+                        action
+                    }
                 }
                 Text(permission.firstUseExplanation ?? permission.reason)
                     .settingsCaption()
@@ -258,6 +269,8 @@ private struct PermissionCard: View {
 
     private func badge(_ text: String, color: Color) -> some View {
         Text(text)
+            .lineLimit(1)
+            .fixedSize()
             .font(.system(size: UIScale.pt(10), weight: .semibold))
             .foregroundStyle(color)
             .padding(.horizontal, UIScale.pt(7))
@@ -268,11 +281,12 @@ private struct PermissionCard: View {
     @ViewBuilder private var action: some View {
         if MainPermissionOperations.center.remediation(for: permission).action == .request {
             Button("Grant...") { grant(usage) }
+                .buttonStyle(.edith(.secondary))
         }
     }
 
     private var usedByRow: some View {
-        HStack(spacing: UIScale.pt(6)) {
+        WrapHStack(spacing: UIScale.pt(6)) {
             ForEach(usage.users) { entry in
                 let enabled = usage.enabledUsers.contains(entry)
                 let required = usage.requiredBy.contains(entry)

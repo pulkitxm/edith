@@ -9,11 +9,7 @@ struct StudioFilesView: View {
     @Environment(\.compactLayout) private var compact
 
     private var columns: [GridItem] {
-        [
-            GridItem(
-                .adaptive(minimum: UIScale.pt(222), maximum: UIScale.pt(280)),
-                spacing: UIScale.pt(14))
-        ]
+        PageMetrics.cardColumns(compact, minimum: 222, maximum: 280, spacing: 14)
     }
 
     var body: some View {
@@ -64,6 +60,7 @@ struct StudioFilesView: View {
 struct StudioDropHero: View {
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     private let popular = [
         "pdf.merge", "pdf.compress", "pdf.edit", "pdf.sign", "image.compress",
@@ -79,6 +76,7 @@ struct StudioDropHero: View {
                     .foregroundStyle(DashSkin.accent(scheme == .dark))
                 Text("Drop files here to start")
                     .font(.system(size: UIScale.pt(20), weight: .semibold))
+                    .multilineTextAlignment(.center)
                 Text(
                     "Images, PDFs, videos, audio and documents. Edit, compress, convert, merge, split and more, all on this Mac."
                 )
@@ -86,7 +84,11 @@ struct StudioDropHero: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: UIScale.pt(440))
-                HStack(spacing: UIScale.pt(8)) {
+                let actions =
+                    compact
+                    ? AnyLayout(VStackLayout(spacing: UIScale.pt(8)))
+                    : AnyLayout(HStackLayout(spacing: UIScale.pt(8)))
+                actions {
                     Button {
                         model.chooseFiles()
                     } label: {
@@ -102,6 +104,7 @@ struct StudioDropHero: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .padding(.horizontal, UIScale.pt(12))
             .padding(.vertical, UIScale.pt(40))
             .background(
                 DashSkin.paper2(scheme == .dark), in: RoundedRectangle(cornerRadius: UIScale.pt(18))
@@ -116,9 +119,7 @@ struct StudioDropHero: View {
                     .font(DashSkin.mono(10, weight: .semibold))
                     .foregroundStyle(DashSkin.inkFaint(scheme == .dark))
                 LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: UIScale.pt(200)), spacing: UIScale.pt(10))
-                    ],
+                    columns: PageMetrics.cardColumns(compact, minimum: 200, spacing: 10),
                     spacing: UIScale.pt(10)
                 ) {
                     ForEach(popular, id: \.self) { id in
@@ -139,23 +140,29 @@ struct StudioFileFilters: View {
     let model: StudioModel
 
     var body: some View {
-        HStack(spacing: UIScale.pt(6)) {
-            StudioChip(title: "All", count: model.files.count, selected: model.kindFilter == nil) {
-                model.kindFilter = nil
-            }
-            ForEach(model.kindsPresent, id: \.self) { kind in
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: UIScale.pt(6)) {
                 StudioChip(
-                    title: kind.pluralTitle, count: StudioLibraryQuery.kindCount(model.files, kind),
-                    selected: model.kindFilter == kind
+                    title: "All", count: model.files.count, selected: model.kindFilter == nil
                 ) {
-                    model.kindFilter = model.kindFilter == kind ? nil : kind
+                    model.kindFilter = nil
                 }
+                ForEach(model.kindsPresent, id: \.self) { kind in
+                    StudioChip(
+                        title: kind.pluralTitle,
+                        count: StudioLibraryQuery.kindCount(model.files, kind),
+                        selected: model.kindFilter == kind
+                    ) {
+                        model.kindFilter = model.kindFilter == kind ? nil : kind
+                    }
+                }
+                Spacer(minLength: UIScale.pt(8))
+                Button("Select all") { model.selectAll() }
+                    .buttonStyle(.edith(.toolbar))
+                    .keyboardShortcut("a", modifiers: .command)
+                    .foregroundStyle(.secondary)
             }
-            Spacer(minLength: UIScale.pt(8))
-            Button("Select all") { model.selectAll() }
-                .buttonStyle(.edith(.toolbar))
-                .keyboardShortcut("a", modifiers: .command)
-                .foregroundStyle(.secondary)
+            .fixedSize(horizontal: true, vertical: false)
         }
     }
 }
@@ -241,7 +248,7 @@ struct StudioFileCard: View {
         )
         .onHover { hovering = $0 }
         .contextMenu { StudioFileMenuItems(model: model, item: item) }
-        .task(id: item.url) { await model.loadFacts(for: item.url) }
+        .pageTask(id: item.url) { await model.loadFacts(for: item.url) }
     }
 
     private var badge: String? {

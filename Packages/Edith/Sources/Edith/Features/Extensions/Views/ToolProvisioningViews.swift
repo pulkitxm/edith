@@ -7,14 +7,16 @@ struct ToolProvisioningSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ToolProvisioningPanel(
-            title: "Setting up \(entry.title)", tools: activeTools,
-            continueAction: {
-                completed()
-                dismiss()
-            }
-        )
-        .frame(width: UIScale.pt(520))
+        ScrollView {
+            ToolProvisioningPanel(
+                title: "Setting up \(entry.title)", tools: activeTools,
+                continueAction: {
+                    completed()
+                    dismiss()
+                }
+            )
+        }
+        .frame(width: PresentationMetrics.width(520), height: PresentationMetrics.height(480))
     }
 
     private var activeTools: [CLIToolSpec] {

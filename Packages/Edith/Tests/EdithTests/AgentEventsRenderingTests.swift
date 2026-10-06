@@ -79,8 +79,8 @@ import Testing
         await model.awaitPendingComputation()
         let agent = BackgroundAgentModel()
         agent.registration = .enabled
-        agent.loading = false
-        agent.tasksLoading = false
+        agent.contentLoad.setContent()
+        agent.tasksLoad.setContent()
         agent.runtime = AgentRuntimeSnapshot(
             build: "sample", startedAt: Date().addingTimeInterval(-3600), processIdentifier: 1234,
             residentBytes: 32_000_000, cpuPercent: 0.2, subscriberCount: 2,

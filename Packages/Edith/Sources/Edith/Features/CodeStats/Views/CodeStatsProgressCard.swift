@@ -11,13 +11,13 @@ struct CodeStatsProgressCard: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        SkinCard(
-            title: trigger == .scheduled ? "Scheduled refresh" : "Refreshing", dark: dark
+        PageCard(
+            title: trigger == .scheduled ? "Scheduled refresh" : "Refreshing"
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                 CodeStatsPhaseStepper(current: progress.phase, dark: dark)
                 VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                    ProgressView(value: min(max(progress.overallFraction, 0), 1))
+                    LoadingProgress(value: progress.overallFraction)
                         .progressViewStyle(.linear)
                         .tint(DashSkin.accent(dark))
                     HStack {
@@ -122,7 +122,7 @@ private struct CodeStatsInFlight: View {
 
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
-            ProgressView().controlSize(.mini)
+            LoadingIndicator()
             Text(repositories.prefix(4).joined(separator: ", "))
                 .font(DashSkin.mono(11))
                 .foregroundStyle(DashSkin.inkSoft(dark))

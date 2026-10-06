@@ -21,7 +21,7 @@ struct CodeStatsLanguageCards: View {
     }
 
     private var shares: some View {
-        SkinCard(title: "Languages", note: "Share of lines authored", dark: dark, fill: true) {
+        PageCard(title: "Languages", note: "Share of lines authored", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 ForEach(Array(projection.languageShares.enumerated()), id: \.element.id) {
                     index, share in
@@ -111,39 +111,49 @@ struct CodeStatsHabitCards: View {
     }
 
     private var punchcard: some View {
-        SkinCard(title: "When you commit", note: "Weekday by hour", dark: dark, fill: true) {
-            Grid(horizontalSpacing: UIScale.pt(2), verticalSpacing: UIScale.pt(2)) {
-                ForEach(Array(projection.punchcardRows.enumerated()), id: \.offset) { row, name in
-                    GridRow {
-                        Text(name)
-                            .font(.system(size: UIScale.pt(9)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .frame(width: UIScale.pt(28), alignment: .leading)
-                        ForEach(projection.punchcard[(row * 24)..<(row * 24 + 24)]) { cell in
-                            RoundedRectangle(cornerRadius: UIScale.pt(2))
-                                .fill(CodeStatsHeat.color(cell.level, dark: dark))
-                                .frame(minWidth: UIScale.pt(10), maxWidth: .infinity)
-                                .frame(height: UIScale.pt(16))
-                                .help(
-                                    "\(cell.weekday) \(cell.hour):00, \(CodeStatsNumberFormat.grouped(cell.commits)) commits"
-                                )
-                        }
+        PageCard(title: "When you commit", note: "Weekday by hour", fill: true) {
+            ViewThatFits(in: .horizontal) {
+                punchcardGrid
+                ScrollView(.horizontal) {
+                    punchcardGrid
+                }
+                .scrollIndicators(.automatic)
+            }
+        }
+    }
+
+    private var punchcardGrid: some View {
+        Grid(horizontalSpacing: UIScale.pt(2), verticalSpacing: UIScale.pt(2)) {
+            ForEach(Array(projection.punchcardRows.enumerated()), id: \.offset) { row, name in
+                GridRow {
+                    Text(name)
+                        .font(.system(size: UIScale.pt(9)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(width: UIScale.pt(28), alignment: .leading)
+                    ForEach(projection.punchcard[(row * 24)..<(row * 24 + 24)]) { cell in
+                        RoundedRectangle(cornerRadius: UIScale.pt(2))
+                            .fill(CodeStatsHeat.color(cell.level, dark: dark))
+                            .frame(minWidth: UIScale.pt(10), maxWidth: .infinity)
+                            .frame(height: UIScale.pt(16))
+                            .help(
+                                "\(cell.weekday) \(cell.hour):00, \(CodeStatsNumberFormat.grouped(cell.commits)) commits"
+                            )
                     }
                 }
-                GridRow {
-                    Text("")
-                    ForEach(0..<24, id: \.self) { hour in
-                        Text(hour.isMultiple(of: 6) ? "\(hour)" : "")
-                            .font(.system(size: UIScale.pt(9)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                    }
+            }
+            GridRow {
+                Text("")
+                ForEach(0..<24, id: \.self) { hour in
+                    Text(hour.isMultiple(of: 6) ? "\(hour)" : "")
+                        .font(.system(size: UIScale.pt(9)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
                 }
             }
         }
     }
 
     private var topDays: some View {
-        SkinCard(title: "Top days", note: "By lines authored", dark: dark, fill: true) {
+        PageCard(title: "Top days", note: "By lines authored", fill: true) {
             VStack(alignment: .leading, spacing: UIScale.pt(7)) {
                 ForEach(Array(projection.topDays.enumerated()), id: \.element.id) { index, day in
                     HStack(spacing: UIScale.pt(8)) {

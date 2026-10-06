@@ -6,10 +6,11 @@ import Observation
 final class CompanionHomeModel: CompanionRefreshable {
     private(set) var checks: [CompanionCheck] = []
     private(set) var status: CompanionStatus?
-    private(set) var error: String?
+    let loading = ContentLoad()
+    var error: String? { loading.errorMessage }
     private(set) var generation = 0
     private(set) var reachable = false
-    private(set) var hasAttemptedRefresh = false
+    var hasAttemptedRefresh: Bool { loading.state != .loading && loading.state != .cancelled }
 
     var client: CompanionClient {
         CompanionClient(baseURL: CompanionClient.endpoint(override: nil))
@@ -31,22 +32,21 @@ final class CompanionHomeModel: CompanionRefreshable {
     }
 
     func refresh() async {
-        defer { hasAttemptedRefresh = true }
-        do {
-            let client = client
+        let client = client
+        await loading.perform(operation: {
             async let liveness = client.health(timeout: 5)
             async let snapshot = client.status()
-            checks = try await liveness.checks
-            status = try await snapshot
-            error = nil
+            return try await (liveness.checks, snapshot)
+        }) { result in
+            checks = result.0
+            status = result.1
             if !reachable {
                 reachable = true
                 generation += 1
             }
-        } catch {
-            self.error = error.localizedDescription
+        }
+        if loading.errorMessage != nil {
             reachable = false
-            checks = []
         }
     }
 }

@@ -141,7 +141,7 @@ struct AttentionEntitiesPanel: View {
             .font(DashSkin.mono(10))
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
-            ScrollView {
+            Group {
                 LazyVStack(spacing: 4) {
                     ForEach(items.prefix(shown)) { entity in
                         Button {
@@ -156,8 +156,6 @@ struct AttentionEntitiesPanel: View {
                     }
                 }
             }
-            .frame(height: UIScale.pt(min(450, CGFloat(min(shown, items.count)) * 62 + 8)))
-            .clipped()
             if items.count > shown {
                 Button("Show \(min(40, items.count - shown)) more of \(items.count)") {
                     shown += 40
@@ -273,7 +271,7 @@ struct AttentionActivityInspector: View {
                 )
                 .font(.system(size: UIScale.pt(12))).foregroundStyle(.secondary)
             } else {
-                ScrollView {
+                Group {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(details.prefix(limit)) { detail in
                             VStack(alignment: .leading, spacing: 5) {
@@ -311,7 +309,6 @@ struct AttentionActivityInspector: View {
                         }
                     }
                 }
-                .frame(maxHeight: UIScale.pt(300))
             }
         }
         .padding(UIScale.pt(16))

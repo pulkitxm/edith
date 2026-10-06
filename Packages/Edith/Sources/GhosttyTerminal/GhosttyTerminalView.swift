@@ -112,7 +112,6 @@ public final class GhosttyTerminalView: NSView {
         currentDirectory = launch.workingDirectory
         allowsLocalFileLinks = launch.allowsLocalFileLinks
         super.init(frame: .zero)
-        wantsLayer = true
         registerForDraggedTypes(Array(Self.dropTypes))
         addSubview(linkHoverView)
         searchBar.translatesAutoresizingMaskIntoConstraints = false
@@ -210,7 +209,7 @@ public final class GhosttyTerminalView: NSView {
     }
 
     private func startIfNeeded() {
-        guard !closed, surface == nil, let launch else { return }
+        guard !closed, surface == nil, window != nil, !bounds.isEmpty, let launch else { return }
         GhosttyRuntime.shared.start()
         guard let app = GhosttyRuntime.shared.handle else { return }
 
@@ -321,6 +320,7 @@ public final class GhosttyTerminalView: NSView {
 
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        startIfNeeded()
         applySize()
     }
 
@@ -434,6 +434,9 @@ public final class GhosttyTerminalView: NSView {
 
     public override func layout() {
         super.layout()
+        startIfNeeded()
+        applySize()
+        scheduleDraw()
         linkHoverView.frame = bounds
     }
 

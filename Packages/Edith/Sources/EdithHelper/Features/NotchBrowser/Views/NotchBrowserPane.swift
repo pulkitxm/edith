@@ -16,7 +16,9 @@ struct NotchBrowserPane<Leading: View>: View {
                 }
                 .padding(.horizontal, NotchBrowserGeometry.chromePadding)
                 .frame(height: 32)
-                NotchBrowserSetupView(store: store)
+                ScrollView {
+                    NotchBrowserSetupView(store: store)
+                }
             } else {
                 NotchBrowserTabStrip(store: store) { leading }
                 NotchBrowserToolbar(store: store)
@@ -171,9 +173,22 @@ struct NotchBrowserDialogView: View {
     let dialog: BrowserDialog
     @State private var text = ""
 
+    private var preventsOutsideDismissal: Bool {
+        if case .prompt = dialog.kind { true } else { false }
+    }
+
     var body: some View {
         ZStack {
-            Color.black.opacity(0.45)
+            Button {
+                dialog.resolve(dialog.kind == .alert, nil)
+            } label: {
+                Color.black.opacity(0.45)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            .keyboardShortcut(.cancelAction)
+            .disabled(preventsOutsideDismissal)
+            .accessibilityLabel(dialog.kind == .alert ? "Close dialog" : "Cancel dialog")
             VStack(alignment: .leading, spacing: 12) {
                 Text(dialog.host.isEmpty ? "This page says" : "\(dialog.host) says")
                     .font(.system(size: 12, weight: .semibold))
@@ -206,6 +221,8 @@ struct NotchBrowserDialogView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.12), lineWidth: 1)
             )
+            .contentShape(Rectangle())
+            .onTapGesture {}
         }
         .onAppear {
             if case .prompt(let defaultText) = dialog.kind { text = defaultText }

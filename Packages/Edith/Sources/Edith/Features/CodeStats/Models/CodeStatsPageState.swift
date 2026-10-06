@@ -11,8 +11,8 @@ enum CodeStatsPagePhase: Equatable, Sendable {
     static func resolve(
         status: CodeStatsStatus?, hasReport: Bool, reportLoaded: Bool, reportFailed: Bool = false
     ) -> CodeStatsPagePhase {
-        guard let status else { return .loading }
         if hasReport { return .content }
+        guard let status else { return .loading }
         if status.isRunning { return .firstRun }
         if status.state.reportedAt != nil, reportFailed { return .unavailable }
         if status.state.reportedAt != nil, !reportLoaded { return .loading }

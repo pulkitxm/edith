@@ -1,3 +1,4 @@
+import EdithKit
 import SwiftUI
 
 struct VideoBackgroundInspector: View {
@@ -14,7 +15,8 @@ struct VideoBackgroundInspector: View {
                     set: { update($0 ? VideoBackground() : nil) }))
             if let background {
                 Text("Uses the original, independently of foreground crop and motion.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                Text("Background framing").font(.edithText(.caption)).foregroundStyle(.secondary)
                 Picker(
                     "Background framing",
                     selection: Binding(
@@ -25,6 +27,8 @@ struct VideoBackgroundInspector: View {
                     Text("Fill").tag(VideoVisualEffects.Framing.fill)
                     Text("Full width").tag(VideoVisualEffects.Framing.fullWidth)
                 }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
                 value("Background focal X", \.focalX)
                 value("Background focal Y", \.focalY)
                 value("Blur radius (canvas px)", \.blurRadius)

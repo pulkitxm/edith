@@ -91,7 +91,7 @@ struct OnboardingView: View {
             footer
                 .frame(height: UIScale.pt(58))
         }
-        .frame(width: UIScale.pt(620), height: UIScale.pt(560))
+        .frame(width: PresentationMetrics.width(620), height: PresentationMetrics.height(560))
         .background(DashSkin.paper(dark))
         .onReceive(Timer.publish(every: 2, on: .main, in: .common).autoconnect()) { _ in
             guard step == .permissions else { return }
@@ -460,8 +460,14 @@ struct OnboardingView: View {
     }
 
     private var readyStep: some View {
+        ScrollView {
+            readyContent
+        }
+    }
+
+    private var readyContent: some View {
         VStack(spacing: UIScale.pt(0)) {
-            Spacer(minLength: 44)
+            Spacer(minLength: UIScale.pt(44))
             ZStack {
                 Circle()
                     .fill(DashSkin.accent(dark).opacity(0.13))
@@ -528,7 +534,7 @@ struct OnboardingView: View {
                 .keyboardShortcut(.defaultAction)
                 .frame(width: UIScale.pt(210))
                 .padding(.top, UIScale.pt(22))
-            Spacer(minLength: 28)
+            Spacer(minLength: UIScale.pt(28))
         }
         .padding(.horizontal, UIScale.pt(48))
     }

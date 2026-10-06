@@ -31,6 +31,7 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
     private let output = AVCaptureVideoDataOutput()
     private let lock = NSLock()
     private var handler: FrameHandler?
+    private var failureHandler: (@Sendable (String) -> Void)?
     private var configuration: Configuration?
     private var input: AVCaptureDeviceInput?
     private var activeValue: Active?
@@ -64,11 +65,17 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         lock.withLock { handler != nil }
     }
 
-    public func start(_ configuration: Configuration, handler: @escaping FrameHandler) {
-        lock.withLock { self.handler = handler }
+    public func start(
+        _ configuration: Configuration, failed: @escaping @Sendable (String) -> Void,
+        handler: @escaping FrameHandler
+    ) {
+        lock.withLock {
+            self.handler = handler
+            self.failureHandler = failed
+        }
         sessionQueue.async { [weak self] in
             guard let self else { return }
-            self.apply(configuration)
+            guard self.apply(configuration) else { return }
             if !self.session.isRunning {
                 self.session.startRunning()
                 self.reassertFormat()
@@ -78,12 +85,13 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
 
     public func update(_ configuration: Configuration) {
         guard isRunning else { return }
-        sessionQueue.async { [weak self] in self?.apply(configuration) }
+        sessionQueue.async { [weak self] in _ = self?.apply(configuration) }
     }
 
     public func stop() {
         lock.withLock {
             handler = nil
+            failureHandler = nil
             activeValue = nil
         }
         sessionQueue.async { [weak self] in
@@ -107,32 +115,44 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
             self.input.map { self.session.removeInput($0) }
             self.input = nil
             self.configuration = nil
-            self.apply(configuration)
+            _ = self.apply(configuration)
         }
     }
 
-    private func apply(_ next: Configuration) {
-        guard lock.withLock({ handler != nil }) else { return }
-        guard next != configuration || input == nil else { return }
+    private func apply(_ next: Configuration) -> Bool {
+        guard lock.withLock({ handler != nil }) else { return false }
+        guard next != configuration || input == nil else { return true }
         guard let device = VirtualCameraDevices.device(for: next.sourceID) else {
-            lock.withLock { activeValue = nil }
-            return
+            fail(
+                "The selected camera is no longer available. Reconnect it or choose another camera."
+            )
+            return false
         }
         session.beginConfiguration()
         defer { session.commitConfiguration() }
         if input?.device.uniqueID != device.uniqueID {
             if let input { session.removeInput(input) }
-            guard let replacement = try? AVCaptureDeviceInput(device: device),
-                session.canAddInput(replacement)
-            else {
+            let replacement: AVCaptureDeviceInput
+            do {
+                replacement = try AVCaptureDeviceInput(device: device)
+            } catch {
                 input = nil
-                lock.withLock { activeValue = nil }
-                return
+                fail(error.localizedDescription)
+                return false
+            }
+            guard session.canAddInput(replacement) else {
+                input = nil
+                fail("The camera could not be opened. Close other camera apps and try again.")
+                return false
             }
             session.addInput(replacement)
             input = replacement
         }
-        if !session.outputs.contains(output), session.canAddOutput(output) {
+        if !session.outputs.contains(output) {
+            guard session.canAddOutput(output) else {
+                fail("The camera output could not be configured. Try reconnecting the camera.")
+                return false
+            }
             session.addOutput(output)
         }
         let options = VirtualCameraDevices.formatOptions(for: device)
@@ -141,7 +161,8 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
             device.formats.indices.contains(choice.index)
         {
             chosenFormat = device.formats[choice.index]
-            configure(device, format: device.formats[choice.index], frameRate: next.frameRate)
+            guard configure(device, format: device.formats[choice.index], frameRate: next.frameRate)
+            else { return false }
         }
         let dimensions = CMVideoFormatDescriptionGetDimensions(
             device.activeFormat.formatDescription)
@@ -151,18 +172,27 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
                 height: Int(dimensions.height))
         }
         configuration = next
+        return true
+    }
+
+    private func fail(_ message: String) {
+        let failed = lock.withLock {
+            activeValue = nil
+            return failureHandler
+        }
+        failed?(message)
     }
 
     private func reassertFormat() {
         guard let device = input?.device, let desired = chosenFormat,
             device.activeFormat != desired, let configuration
         else { return }
-        configure(device, format: desired, frameRate: configuration.frameRate)
+        _ = configure(device, format: desired, frameRate: configuration.frameRate)
     }
 
     private func configure(
         _ device: AVCaptureDevice, format: AVCaptureDevice.Format, frameRate: Double
-    ) {
+    ) -> Bool {
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
@@ -175,8 +205,10 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
                 device.activeVideoMinFrameDuration = duration
                 device.activeVideoMaxFrameDuration = duration
             }
+            return true
         } catch {
-            return
+            fail(error.localizedDescription)
+            return false
         }
     }
 

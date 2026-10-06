@@ -447,15 +447,19 @@ struct ContainerTerminalSheet: View {
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(DashSkin.warn)
                 }
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
+                Button("Done") {
+                    holder.requestUserClose { accepted in
+                        if accepted { dismiss() }
+                    }
+                }
+                .buttonStyle(.edith(.secondary))
             }
             .padding(UIScale.pt(14))
             Divider()
             TerminalPane(holder: holder, palette: .edith(dark: dark))
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
-        .frame(width: UIScale.pt(760), height: UIScale.pt(520))
+        .frame(width: PresentationMetrics.width(760), height: PresentationMetrics.height(520))
         .onAppear(perform: start)
         .onDisappear { holder.stop() }
     }

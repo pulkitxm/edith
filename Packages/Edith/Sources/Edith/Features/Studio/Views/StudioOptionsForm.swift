@@ -168,12 +168,10 @@ struct StudioChoiceField: View {
 
     var body: some View {
         if segmented {
-            Picker("", selection: $selection) {
-                ForEach(choices, id: \.value) { choice in
-                    Text(choice.label).tag(choice.value)
-                }
-            }
-            .pickerStyle(.segmented)
+            EdithSegmentedPicker(
+                "", selection: $selection, options: choices.map(\.value),
+                label: { value in choices.first { $0.value == value }?.label ?? value }
+            )
             .labelsHidden()
         } else {
             Picker("", selection: $selection) {
@@ -286,7 +284,7 @@ struct StudioPagesField: View {
                 .foregroundStyle(problem == nil ? Color.secondary : DashSkin.danger)
             }
         }
-        .task(id: job.inputs.first) {
+        .pageTask(id: job.inputs.first) {
             guard let url = job.inputs.first(where: { $0.studioKind == .pdf }) else {
                 pageCount = nil
                 return
@@ -356,7 +354,7 @@ struct StudioSpanField: View {
         .onChange(of: span) { _, _ in load() }
         .onChange(of: start) { _, _ in commit() }
         .onChange(of: end) { _, _ in commit() }
-        .task(id: job.inputs.first) {
+        .pageTask(id: job.inputs.first) {
             guard let url = job.inputs.first else {
                 duration = nil
                 return
@@ -472,7 +470,7 @@ struct StudioRectField: View {
                     .buttonStyle(.edith(.toolbar))
             }
         }
-        .task(id: job.inputs.first) {
+        .pageTask(id: job.inputs.first) {
             guard let url = job.inputs.first else {
                 image = nil
                 return

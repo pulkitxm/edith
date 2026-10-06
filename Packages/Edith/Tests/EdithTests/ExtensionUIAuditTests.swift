@@ -76,7 +76,7 @@ struct ExtensionUIAuditTests {
         try await Task.sleep(for: .milliseconds(100))
         host.layoutSubtreeIfNeeded()
         let text = try auditText(host)
-        #expect(text.contains("Connections"))
+        #expect(text.contains("Database"))
         #expect(text.contains("Add connection"))
         #expect(!text.contains("Database needs a quick repair"))
         try auditCapture(host, name: "database-ready")
@@ -142,7 +142,7 @@ struct ExtensionUIAuditTests {
         defaults.set(true, forKey: entry.defaultsKey)
         defer { defaults.set(previous, forKey: entry.defaultsKey) }
         let host = try auditHost(
-            Form { ExtensionDetailRows(entry: entry) }.formStyle(.grouped),
+            Form { ExtensionDetailRows(entry: entry) }.edithForm(),
             size: CGSize(width: 900, height: 1000))
         let text = try auditText(host)
         #expect(!text.isEmpty, "Controls must render for \(id)")

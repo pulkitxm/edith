@@ -155,12 +155,10 @@ private struct QuinjetRemoteProjectPicker: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(9)) {
                     QuinjetMachineStrip(
                         machines: machines, selection: tab.machineID, select: selectMachine)
-                    Picker("View", selection: $mode) {
-                        ForEach(QuinjetMachinePickerMode.allCases) { item in
-                            Text(item.title).tag(item)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    EdithSegmentedPicker(
+                        "View", selection: $mode, options: QuinjetMachinePickerMode.allCases,
+                        label: { $0.title }
+                    )
                     .labelsHidden()
                     if mode == .recent { searchField } else { pathField }
                 }
@@ -169,7 +167,6 @@ private struct QuinjetRemoteProjectPicker: View {
             Group {
                 if mode == .recent { recentContent } else { browserContent }
             }
-            .pageContent(compact)
         }
         .background(shortcuts)
     }
@@ -269,9 +266,8 @@ private struct QuinjetRemoteProjectPicker: View {
         } else {
             ScrollView {
                 LazyVGrid(
-                    columns: [
-                        GridItem(.adaptive(minimum: UIScale.pt(330)), spacing: UIScale.pt(14))
-                    ], spacing: UIScale.pt(14)
+                    columns: PageMetrics.cardColumns(compact, minimum: 330, spacing: 14),
+                    spacing: UIScale.pt(14)
                 ) {
                     ForEach(projects) { project in
                         QuinjetProjectCard(
@@ -285,6 +281,7 @@ private struct QuinjetRemoteProjectPicker: View {
                     }
                 }
                 .padding(.top, UIScale.pt(2))
+                .pageContent(compact)
             }
         }
     }
@@ -321,12 +318,13 @@ private struct QuinjetRemoteProjectPicker: View {
                     }
                 }
                 .padding(.top, UIScale.pt(2))
+                .pageContent(compact)
             }
             .overlay {
                 if picker.entries.isEmpty, !picker.loading, !picker.canOpenCurrentDirectory {
-                    ContentUnavailableView(
-                        "No matching folders", systemImage: "folder",
-                        description: Text("Check the path or keep typing.")
+                    ContentStatusView(
+                        "No matching folders", message: "Check the path or keep typing.",
+                        symbol: "folder"
                     )
                     .allowsHitTesting(false)
                 }

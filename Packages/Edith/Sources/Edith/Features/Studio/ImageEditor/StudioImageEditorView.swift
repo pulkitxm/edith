@@ -7,10 +7,12 @@ struct StudioImageEditorView: View {
     let model: StudioModel
     @State private var editor: StudioImageEditorModel
     @State private var confirmingLeave = false
+    @State private var showsInspector = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     @MainActor init(model: StudioModel, url: URL) {
-        self.init(model: model, editor: StudioImageEditorModel(url: url))
+        self.init(model: model, editor: model.imageEditor(for: url))
     }
 
     init(model: StudioModel, editor: StudioImageEditorModel) {
@@ -25,6 +27,17 @@ struct StudioImageEditorView: View {
                 back: leave
             ) {
                 HStack(spacing: UIScale.pt(6)) {
+                    if compact {
+                        Button("Inspector", systemImage: "sidebar.right") {
+                            showsInspector.toggle()
+                        }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.edith(.iconOnly))
+                        .popover(isPresented: $showsInspector) {
+                            StudioImageInspector(editor: editor)
+                                .frame(width: UIScale.pt(280), height: UIScale.pt(320))
+                        }
+                    }
                     Button {
                         editor.undo()
                     } label: {
@@ -60,20 +73,23 @@ struct StudioImageEditorView: View {
                 }
             }
             Divider()
-            if let failure = editor.loadError, editor.preview == nil {
-                StudioEmptyNote(symbol: "exclamationmark.triangle", text: failure).padding(
-                    UIScale.pt(20))
-                Spacer()
-            } else {
+            PageLoading(
+                state: editor.loadingState,
+                message: editor.loadError ?? editor.rendering.errorMessage
+                    ?? "The image could not be opened.",
+                layout: .editor, retry: editor.load
+            ) {
                 HStack(spacing: 0) {
                     StudioImageToolRail(editor: editor)
                     Divider()
                     StudioImageCanvas(editor: editor)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(Color.black.opacity(scheme == .dark ? 0.35 : 0.06))
-                    Divider()
-                    StudioImageInspector(editor: editor)
-                        .frame(width: UIScale.pt(280))
+                    if !compact {
+                        Divider()
+                        StudioImageInspector(editor: editor)
+                            .frame(width: UIScale.pt(280))
+                    }
                 }
             }
             if let status = editor.status {
@@ -99,17 +115,17 @@ struct StudioImageEditorView: View {
         )
         .overlay(alignment: .topTrailing) {
             if editor.isRendering, editor.preview != nil {
-                ProgressView()
+                LoadingIndicator()
                     .controlSize(.small)
                     .padding(.top, UIScale.pt(66))
-                    .padding(.trailing, UIScale.pt(300))
+                    .padding(.trailing, UIScale.pt(compact ? 20 : 300))
             }
         }
         .overlay {
             if editor.isSaving {
                 ZStack {
                     Color.black.opacity(0.15)
-                    ProgressView("Saving full resolution…")
+                    LoadingIndicator("Saving full resolution…")
                         .padding(UIScale.pt(22))
                         .background(
                             .regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
@@ -124,7 +140,7 @@ struct StudioImageEditorView: View {
         } message: {
             Text("Your edits to \(editor.url.lastPathComponent) have not been saved yet.")
         }
-        .task { if editor.preview == nil { editor.load() } }
+        .pageTask { if editor.preview == nil { editor.load() } }
     }
 
     private func leave() {
@@ -146,37 +162,39 @@ struct StudioImageToolRail: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(spacing: UIScale.pt(4)) {
-            ForEach(StudioImagePanel.allCases) { panel in
-                Button {
-                    editor.switchPanel(panel)
-                } label: {
-                    VStack(spacing: UIScale.pt(3)) {
-                        Image(systemName: panel.symbol)
-                            .font(.system(size: UIScale.pt(15)))
-                        Text(panel.title.components(separatedBy: " ").first ?? panel.title)
-                            .font(.system(size: UIScale.pt(9.5), weight: .medium))
-                            .lineLimit(1)
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: UIScale.pt(4)) {
+                ForEach(StudioImagePanel.allCases) { panel in
+                    Button {
+                        editor.switchPanel(panel)
+                    } label: {
+                        VStack(spacing: UIScale.pt(3)) {
+                            Image(systemName: panel.symbol)
+                                .font(.system(size: UIScale.pt(15)))
+                            Text(panel.title.components(separatedBy: " ").first ?? panel.title)
+                                .font(.system(size: UIScale.pt(9.5), weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .frame(width: UIScale.pt(60), height: UIScale.pt(46))
+                        .foregroundStyle(
+                            editor.panel == panel ? DashSkin.accent(scheme == .dark) : Color.primary
+                        )
+                        .background(
+                            editor.panel == panel
+                                ? DashSkin.accent(scheme == .dark).opacity(0.14) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                        )
+                        .edithButtonTarget(.borderless)
                     }
-                    .frame(width: UIScale.pt(60), height: UIScale.pt(46))
-                    .foregroundStyle(
-                        editor.panel == panel ? DashSkin.accent(scheme == .dark) : Color.primary
-                    )
-                    .background(
-                        editor.panel == panel
-                            ? DashSkin.accent(scheme == .dark).opacity(0.14) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    )
-                    .edithButtonTarget(.borderless)
+                    .buttonStyle(.edith(.borderless))
+                    .help(panel.title)
+                    .accessibilityLabel(panel.title)
+                    .accessibilityAddTraits(editor.panel == panel ? .isSelected : [])
                 }
-                .buttonStyle(.edith(.borderless))
-                .help(panel.title)
-                .accessibilityLabel(panel.title)
-                .accessibilityAddTraits(editor.panel == panel ? .isSelected : [])
             }
-            Spacer()
+            .padding(UIScale.pt(6))
         }
-        .padding(UIScale.pt(6))
+        .frame(width: UIScale.pt(72))
     }
 }
 
@@ -214,7 +232,7 @@ struct StudioImageCanvas: View {
                 .contentShape(Rectangle())
                 .gesture(gesture(in: rect))
             } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                LoadingIndicator().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }

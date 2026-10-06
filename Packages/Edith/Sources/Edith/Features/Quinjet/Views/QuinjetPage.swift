@@ -2,7 +2,11 @@ import EdithKit
 import SwiftUI
 
 struct QuinjetPage: View {
-    @State private var model = QuinjetPageModel()
+    @StateObject private var fallbackOwner = WindowSessionOwner()
+    @Environment(\.windowSessionOwner) private var sessionOwner
+    @Environment(\.windowRouter) private var router
+    @State private var bridgeToken = UUID()
+    private var model: QuinjetPageModel { sessionOwner?.quinjet ?? fallbackOwner.quinjet }
     @AppStorage(AppStorageKeys.Quinjet.terminal, store: SharedDefaults.store)
     private var terminalName = QuinjetTerminal.embedded.rawValue
     @AppStorage(AppStorageKeys.Quinjet.theme, store: SharedDefaults.store)
@@ -14,9 +18,10 @@ struct QuinjetPage: View {
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
 
     var body: some View {
-        VStack(spacing: 0) {
+        PageWorkspace {
             tabBar
             Divider().opacity(0.45)
+        } content: {
             ZStack {
                 ForEach(model.tabs) { tab in
                     tabContent(tab, presented: tab.id == model.selected)
@@ -26,16 +31,15 @@ struct QuinjetPage: View {
             }
         }
         .presenterCover(.review)
-        .background(DashSkin.paper(scheme == .dark))
         .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
             model.setSessionLaunchEnabled(launchEnabled)
-            QuinjetSessionBridge.shared.attach(model)
+            QuinjetSessionBridge.shared.attach(model, token: bridgeToken, router: router)
         }
-        .task {
-            guard automaticActionsEnabled else { return }
+        .pageTask(cancel: model.cancelDiscovery) {
             await model.refreshThemes()
+            guard !Task.isCancelled else { return }
             await model.refreshProjects()
         }
         .onChange(of: configuration) { _, configuration in
@@ -45,8 +49,7 @@ struct QuinjetPage: View {
             model.setSessionLaunchEnabled(enabled)
         }
         .onDisappear {
-            QuinjetSessionBridge.shared.detach(model)
-            model.stopAll()
+            QuinjetSessionBridge.shared.detach(token: bridgeToken)
         }
     }
 
@@ -366,9 +369,8 @@ private struct QuinjetTerminalWorkspace: View {
         if tab.loadingWorktrees {
             QuinjetWorktreePickerSkeleton(dark: dark)
         } else if let error = tab.errorMessage, tab.worktrees.isEmpty {
-            ContentUnavailableView(
-                "Worktrees unavailable", systemImage: "exclamationmark.triangle",
-                description: Text(error)
+            ContentStatusView(
+                "Worktrees unavailable", message: error, symbol: "exclamationmark.triangle"
             )
             .padding(UIScale.pt(16))
             .frame(width: UIScale.pt(360), height: UIScale.pt(220))

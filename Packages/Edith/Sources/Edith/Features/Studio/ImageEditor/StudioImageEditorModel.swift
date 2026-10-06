@@ -84,6 +84,13 @@ final class StudioImageEditorModel {
     private var saveTask: Task<Void, Never>?
     private var thumbnailTask: Task<Void, Never>?
     private var faceTask: Task<Void, Never>?
+    let loading = ContentLoad()
+    let rendering = ContentLoad()
+
+    var loadingState: ContentLoadingState {
+        if preview != nil { return .content }
+        return source == nil ? loading.state : rendering.state
+    }
 
     static let previewSize = 1800
 
@@ -107,22 +114,35 @@ final class StudioImageEditorModel {
 
     func load() {
         loadTask?.cancel()
+        let request = loading.begin(preservingContent: source != nil)
+        loadError = nil
         let url = self.url
         let previewSize = Self.previewSize
         loadTask = Task { [weak self] in
             let loaded = await Task.detached(priority: .userInitiated) {
                 StudioImageEditorWork.loadSource(url, maxPixelSize: previewSize)
             }.value
-            guard let self, !Task.isCancelled else { return }
+            guard let self, self.loading.isCurrent(request) else { return }
             switch loaded {
             case let .success(image):
                 self.source = image
+                self.loading.complete(request)
                 self.render()
                 self.renderThumbnails()
             case let .failure(error):
                 self.loadError = error.localizedDescription
+                self.loading.fail(request, error: error)
             }
         }
+    }
+
+    func close() {
+        loading.cancel()
+        rendering.cancel()
+        loadTask?.cancel()
+        renderTask?.cancel()
+        thumbnailTask?.cancel()
+        faceTask?.cancel()
     }
 
     func edit(_ change: (inout ImageEditDocument) -> Void) {
@@ -171,6 +191,7 @@ final class StudioImageEditorModel {
         guard let source else { return }
         renderTask?.cancel()
         let document = self.document
+        let request = rendering.begin(preservingContent: preview != nil)
         let size = fast ? 900 : Self.previewSize
         let wantsGeometry = panel == .crop
         renderTask = Task { [weak self] in
@@ -178,15 +199,17 @@ final class StudioImageEditorModel {
                 StudioImageEditorWork.render(
                     document, source: source, size: size, geometry: wantsGeometry)
             }.value
-            guard let self, !Task.isCancelled else { return }
+            guard let self, self.rendering.isCurrent(request) else { return }
             switch rendered {
             case let .success(images):
                 self.preview = images.preview
                 self.renderedDocument = document
                 if let geometry = images.geometry { self.geometry = geometry }
                 self.loadError = nil
+                self.rendering.complete(request)
             case let .failure(error):
                 self.status = error.localizedDescription
+                self.rendering.fail(request, error: error)
             }
         }
     }

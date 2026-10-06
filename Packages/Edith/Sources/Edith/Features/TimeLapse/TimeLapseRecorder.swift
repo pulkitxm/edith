@@ -28,16 +28,21 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var lastDirectory: URL?
     var preview: CGImage?
     var sourceRevision = 0
+    let sourceLoad = ContentLoad()
+    let library = TimeLapseLibraryModel()
     @ObservationIgnored private var sourceSnapshot: TimeLapseSources?
+    @ObservationIgnored private var thumbnailCache: [String: CGImage] = [:]
     private let thumbnailLoader = TimeLapseThumbnailLoader()
-    private var previewVisible = false
+    private var previewConsumers: Set<UUID> = []
+    var previewVisible: Bool { !previewConsumers.isEmpty }
+    private var activeSession: UUID?
     private var streams: [SCStream] = []
     private var outputs: [TimeLapseCaptureOutput] = []
     private var writer: TimeLapseWriter?
     private var sleepAssertions: [IOPMAssertionID] = []
 
     var canStart: Bool {
-        !busy && !recording
+        !busy && !recording && !sourceLoad.isRunning
             && (sourceMode == "displays" ? !selectedDisplays.isEmpty : !selectedWindows.isEmpty)
     }
 
@@ -45,13 +50,19 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         VideoProject.libraryURL.appendingPathComponent("TimeLapses", isDirectory: true)
     }
 
-    func loadSources() async {
+    func loadSources(
+        operation:
+            @escaping @Sendable () async throws -> (TimeLapseSources, [TimeLapseMicrophoneChoice]) =
+            {
+                async let sources = TimeLapseSources.load()
+                async let microphones = TimeLapseMicrophoneChoice.load()
+                return try await (sources, microphones)
+            }
+    ) async {
         guard !busy, !recording else { return }
-        busy = true
-        defer { busy = false }
-        do {
-            let sources = try await TimeLapseSources.load()
+        await sourceLoad.perform(operation: operation) { [self] sources, microphones in
             sourceSnapshot = sources
+            thumbnailCache.removeAll()
             sourceRevision += 1
             displays = sources.displayChoices
             windows = sources.windowChoices
@@ -60,26 +71,34 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             if selectedDisplays.isEmpty, let first = displays.first {
                 selectedDisplays.insert(first.id)
             }
-            microphones = await TimeLapseMicrophoneChoice.load()
-            error = nil
-        } catch { self.error = error.localizedDescription }
+            self.microphones = microphones
+        }
     }
 
     func sourceThumbnail(mode: String, id: UInt32) async -> CGImage? {
         guard !recording, let sources = sourceSnapshot else { return nil }
-        return await thumbnailLoader.load {
+        let key = "\(mode)-\(id)"
+        if let image = thumbnailCache[key] { return image }
+        let revision = sourceRevision
+        let image = await thumbnailLoader.load {
             await sources.thumbnail(mode: mode, id: id)
         }
+        guard !Task.isCancelled, !recording, revision == sourceRevision else { return nil }
+        if let image {
+            if thumbnailCache.count >= 32 { thumbnailCache.removeAll() }
+            thumbnailCache[key] = image
+        }
+        return image
     }
 
-    private func receivePreview(_ image: CGImage) {
-        guard recording, previewVisible else { return }
+    private func receivePreview(_ image: CGImage, session: UUID) {
+        guard recording, previewVisible, activeSession == session else { return }
         preview = image
     }
 
-    func showPreview(_ visible: Bool) {
-        previewVisible = visible
-        writer?.setPreviewEnabled(visible)
+    func showPreview(_ visible: Bool, consumer: UUID) {
+        if visible { previewConsumers.insert(consumer) } else { previewConsumers.remove(consumer) }
+        writer?.setPreviewEnabled(previewVisible)
     }
 
     func start() async {
@@ -113,24 +132,26 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             let size = (width: plan.width, height: plan.height)
             let session = TimeLapseSession(
                 settings: settings, width: size.width, height: size.height)
+            activeSession = session.id
             let directory = Self.libraryURL.appendingPathComponent(
                 session.id.uuidString, isDirectory: true)
             let writer = try TimeLapseWriter(
                 directory: directory, session: session, sourceCount: filters.count,
                 failure: { [weak self] message in
                     Task { @MainActor in
-                        guard let self else { return }
+                        guard let self, self.activeSession == session.id else { return }
                         self.error = message
                         await self.stop(reason: message)
                     }
                 },
                 progress: { [weak self] frames, bytes, seconds in
                     Task { @MainActor in
-                        self?.frames = frames; self?.bytes = bytes; self?.playbackSeconds = seconds
+                        guard let self, self.activeSession == session.id else { return }
+                        self.frames = frames; self.bytes = bytes; self.playbackSeconds = seconds
                     }
                 },
                 preview: { [weak self] image in
-                    await self?.receivePreview(image)
+                    await self?.receivePreview(image, session: session.id)
                 })
             writer.setPreviewEnabled(previewVisible)
             self.writer = writer
@@ -229,6 +250,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             outputs.removeAll()
             if let writer { _ = await writer.stop(reason: error.localizedDescription) }
             self.writer = nil
+            activeSession = nil
             releaseSleepAssertion()
         }
     }
@@ -248,6 +270,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         frames = Int64(session.frames)
         playbackSeconds = session.playbackSeconds
         self.writer = nil
+        activeSession = nil
         releaseSleepAssertion()
         recording = false
         busy = false
@@ -262,10 +285,11 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     func defersQuit(_ sender: NSApplication) -> Bool {
-        guard recording || busy else { return false }
+        guard recording || busy || library.exporting else { return false }
         Task {
             while busy { try? await Task.sleep(for: .milliseconds(100)) }
             await stop()
+            await library.finishExport()
             sender.terminate(nil)
         }
         return true

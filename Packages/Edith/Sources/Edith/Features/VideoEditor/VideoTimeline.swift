@@ -18,18 +18,19 @@ struct VideoTimeline: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                Label("Timeline", systemImage: "rectangle.stack").font(.headline)
+                Label("Timeline", systemImage: "rectangle.stack").font(.edithText(.headline))
                 Button("Split", systemImage: "scissors", action: model.splitAtPlayhead)
                 Button("Delete", systemImage: "trash", action: model.deleteSelection)
                     .disabled(model.selection == nil)
                 Toggle("Snap", isOn: $snapping).toggleStyle(.button)
                 Spacer()
-                Text("Drag to move · edges to trim").font(.caption).foregroundStyle(.secondary)
+                Text("Drag to move · edges to trim").font(.edithText(.caption)).foregroundStyle(
+                    .secondary)
                 Button("Fit") { scale = max(8, min(180, 900 / max(1, model.duration))) }
                 Slider(value: $scale, in: 8...240).frame(width: UIScale.pt(110)).accessibilityLabel(
                     "Timeline scale")
             }
-            .buttonStyle(.borderless).padding(12)
+            .buttonStyle(.edith(.borderless)).padding(12)
             Divider()
             ScrollView([.horizontal, .vertical]) {
                 let width = max(900, model.duration * scale + 80)
@@ -66,17 +67,19 @@ struct VideoTimeline: View {
             }
             .coordinateSpace(name: "editTimeline")
         }
-        .frame(minHeight: UIScale.pt(180), idealHeight: UIScale.pt(240), maxHeight: UIScale.pt(280))
+        .frame(minHeight: UIScale.pt(100), idealHeight: UIScale.pt(200), maxHeight: UIScale.pt(280))
     }
 
     private func ruler(width: Double) -> some View {
         let step = max(1, Int(ceil(60 / scale)))
         return HStack(spacing: 0) {
-            Text("TIME").font(.caption2).foregroundStyle(.secondary).frame(width: UIScale.pt(90))
+            Text("TIME").font(.edithText(.caption2)).foregroundStyle(.secondary).frame(
+                width: UIScale.pt(90))
             Canvas { context, size in
                 for second in stride(from: 0, through: Int(ceil(model.duration)), by: step) {
                     context.draw(
-                        Text(time(Double(second))).font(.caption2).foregroundStyle(.secondary),
+                        Text(time(Double(second))).font(.edithText(.caption2)).foregroundStyle(
+                            .secondary),
                         at: CGPoint(x: Double(second) * scale + 2, y: 10), anchor: .leading)
                 }
             }
@@ -293,11 +296,11 @@ struct VideoTimelineRegion: View {
         HStack(spacing: 0) {
             handle("start")
             Button(action: select) {
-                Text(title).font(.caption).lineLimit(1).frame(
+                Text(title).font(.edithText(.caption)).lineLimit(1).frame(
                     maxWidth: .infinity, maxHeight: .infinity
                 )
                 .contentShape(Rectangle())
-            }.buttonStyle(.borderless).highPriorityGesture(drag("move"))
+            }.buttonStyle(.edith(.borderless)).highPriorityGesture(drag("move"))
             handle("end")
         }
         .frame(

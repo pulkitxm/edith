@@ -66,7 +66,7 @@ struct VideoProjectCard: View {
                                 lineWidth: hovering ? 2 : 1)
                     }
                 Text(listing.title)
-                    .font(.callout.weight(.medium))
+                    .font(.edithText(.callout).weight(.medium))
                     .lineLimit(1)
                     .truncationMode(.middle)
                 HStack(spacing: UIScale.pt(6)) {
@@ -77,7 +77,7 @@ struct VideoProjectCard: View {
                             .background(Capsule().fill(Color.primary.opacity(0.08)))
                     }
                 }
-                .font(.caption)
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             }
@@ -85,7 +85,7 @@ struct VideoProjectCard: View {
         }
         .buttonStyle(.edith(.borderless))
         .onHover { hovering = $0 }
-        .task(id: listing.previewURL) {
+        .pageTask(id: listing.previewURL) {
             guard image == nil, let url = listing.previewURL else { return }
             image = await VideoProjectThumbnails.image(for: url)
         }
