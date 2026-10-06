@@ -43,7 +43,8 @@ struct ExportCardButton: View {
         Button(action: action) { Label("Share", systemImage: "square.and.arrow.up") }
             .buttonStyle(.edith(.secondary))
             .disabled(!isEnabled)
-            .help(help)
+            .keyboardShortcut("e", modifiers: .command)
+            .help("\(help) (⌘E)")
     }
 }
 
@@ -52,10 +53,15 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     let title: String
     @Binding var busy: Bool
     let onDismiss: () -> Void
+    var pasteboard: NSPasteboard = .general
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @State private var index = 0
+    @State private var direction = 1
+    @State private var copied = false
+    @State private var copyCount = 0
     @State private var previews: [Deck.Card: NSImage] = [:]
     @State private var previewErrors: [Deck.Card: String] = [:]
     @State private var previewAttempt = 0
@@ -90,6 +96,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                             .foregroundStyle(DashSkin.inkSoft(dark, theme: theme))
                         arrow("chevron.right", shortcut: .rightArrow, movement: 1)
                     }
+                    pagination
                 }
             }
             .frame(maxWidth: .infinity)
@@ -97,10 +104,18 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 Button {
                     deliver(save: false)
                 } label: {
-                    Label("Copy image", systemImage: "doc.on.doc")
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text(copied ? "Copied!" : "Copy image")
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                            .symbolEffect(
+                                .bounce, options: .nonRepeating, value: reduceMotion ? 0 : copyCount
+                            )
+                    }
                 }
                 .buttonStyle(.edith(.primary))
                 .keyboardShortcut("c", modifiers: .command)
+                .help("Copy image (⌘C)")
                 Button {
                     deliver(save: true)
                 } label: {
@@ -108,6 +123,7 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 }
                 .buttonStyle(.edith(.secondary))
                 .keyboardShortcut("s", modifiers: .command)
+                .help("Save PNG (⌘S)")
                 if busy { LoadingIndicator() }
             }
             .disabled(busy || previews[card] == nil)
@@ -118,7 +134,13 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                         systemImage: status.failed ? "exclamationmark.triangle" : "checkmark.circle"
                     )
                     .foregroundStyle(
-                        status.failed ? DashSkin.danger : DashSkin.inkSoft(dark, theme: theme))
+                        status.failed ? DashSkin.danger : DashSkin.inkSoft(dark, theme: theme)
+                    )
+                    .id(status.id)
+                    .transition(
+                        Motion.transition(
+                            .move(edge: .bottom).combined(with: .opacity),
+                            reduceMotion: reduceMotion, preferCrossFade: false))
                 } else {
                     Text("⌘C to copy · ⌘S to save · Escape to close")
                         .foregroundStyle(DashSkin.inkFaint(dark))
@@ -140,7 +162,10 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
             guard status != nil else { return }
             try? await Task.sleep(for: .seconds(3))
             guard !Task.isCancelled else { return }
-            status = nil
+            withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                status = nil
+                copied = false
+            }
         }
         .onDisappear {
             actionTask?.cancel(); busy = false
@@ -158,6 +183,13 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
         ) {
             if let image = previews[card] {
                 Image(nsImage: image).resizable().scaledToFit()
+                    .id(card)
+                    .transition(
+                        Motion.transition(
+                            .asymmetric(
+                                insertion: .move(edge: direction > 0 ? .trailing : .leading),
+                                removal: .move(edge: direction > 0 ? .leading : .trailing)),
+                            reduceMotion: reduceMotion, preferCrossFade: false))
             }
         } placeholder: {
             SkeletonGroup {
@@ -193,19 +225,61 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
     }
 
     private func move(_ movement: Int) {
-        index = (index + movement + deck.cards.count) % deck.cards.count
-        status = nil
+        select((index + movement + deck.cards.count) % deck.cards.count, direction: movement)
+    }
+
+    private var pagination: some View {
+        HStack(spacing: UIScale.pt(6)) {
+            ForEach(deck.cards.indices, id: \.self) { destination in
+                Button {
+                    select(destination, direction: destination > index ? 1 : -1)
+                } label: {
+                    Circle()
+                        .fill(
+                            destination == index
+                                ? DashSkin.ink(dark, theme: theme)
+                                : DashSkin.inkFaint(dark).opacity(0.3)
+                        )
+                        .frame(
+                            width: UIScale.pt(destination == index ? 7 : 6),
+                            height: UIScale.pt(destination == index ? 7 : 6)
+                        )
+                        .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                }
+                .buttonStyle(.edith(.borderless))
+                .disabled(busy)
+                .accessibilityLabel(deck.title(for: deck.cards[destination]))
+                .accessibilityAddTraits(destination == index ? .isSelected : [])
+            }
+        }
+    }
+
+    private func select(_ destination: Int, direction: Int) {
+        guard !busy, destination != index else { return }
+        self.direction = direction
+        withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
+            index = destination
+            status = nil
+            copied = false
+        }
     }
 
     private func loadPreview() async {
-        let selected = card
-        guard previews[selected] == nil else { return }
-        await Task.yield()
-        guard !Task.isCancelled else { return }
-        do {
-            previews[selected] = try ExportCardRenderer.image(deck.content(for: selected), scale: 1)
-        } catch {
-            previewErrors[selected] = error.localizedDescription
+        let candidates = [
+            index, (index + 1) % deck.cards.count,
+            (index + deck.cards.count - 1) % deck.cards.count,
+        ]
+        for destination in candidates {
+            let selected = deck.cards[destination]
+            guard previews[selected] == nil, previewErrors[selected] == nil else { continue }
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            do {
+                previews[selected] = try ExportCardRenderer.image(
+                    deck.content(for: selected), scale: 1)
+            } catch {
+                previewErrors[selected] = error.localizedDescription
+            }
         }
     }
 
@@ -231,15 +305,26 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                 let data = try ExportCardRenderer.pngData(deck.content(for: selected))
                 if let url {
                     try ExportDelivery.write(data, to: url)
-                    status = ExportCardStatus(message: "Saved to \(url.lastPathComponent)")
+                    showStatus(ExportCardStatus(message: "Saved to \(url.lastPathComponent)"))
                 } else {
-                    try ExportDelivery.copyPNG(data)
-                    status = ExportCardStatus(message: "Image copied")
+                    try ExportDelivery.copyPNG(data, to: pasteboard)
+                    withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+                        copied = true
+                        copyCount += 1
+                    }
+                    showStatus(ExportCardStatus(message: "Image copied"))
                 }
             } catch is CancellationError {
             } catch {
-                status = ExportCardStatus(message: error.localizedDescription, failed: true)
+                showStatus(ExportCardStatus(message: error.localizedDescription, failed: true))
             }
+        }
+    }
+
+    private func showStatus(_ status: ExportCardStatus) {
+        withAnimation(Motion.animation(Motion.feedback, reduceMotion: reduceMotion)) {
+            if status.failed { copied = false }
+            self.status = status
         }
     }
 }
