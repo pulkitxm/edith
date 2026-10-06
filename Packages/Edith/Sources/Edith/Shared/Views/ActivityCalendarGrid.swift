@@ -11,6 +11,9 @@ struct ActivityCalendarGrid<Detail: View>: View {
     @State private var hovered: String?
 
     private var gridHeight: CGFloat { UIScale.pt(12 + 3 + 7 * cellSize + 6 * 3) }
+    private var gridWidth: CGFloat {
+        UIScale.pt(16 + CGFloat(weeks.count) * (cellSize + 3) - 3)
+    }
     private var weekdays: [String] {
         (0..<7).map { calendar.veryShortWeekdaySymbols[(calendar.firstWeekday - 1 + $0) % 7] }
     }
@@ -25,12 +28,13 @@ struct ActivityCalendarGrid<Detail: View>: View {
                             .frame(width: UIScale.pt(12), height: UIScale.pt(cellSize))
                     }
                 }
+                .frame(width: UIScale.pt(12))
                 GeometryReader { geometry in
                     ScrollView(.horizontal) {
-                        LazyHStack(alignment: .top, spacing: UIScale.pt(3)) {
-                            ForEach(weeks) { week in
+                        HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                            ForEach(Array(weeks.enumerated()), id: \.element.id) { index, week in
                                 VStack(spacing: UIScale.pt(3)) {
-                                    Text(week.monthLabel)
+                                    Text(monthLabel(at: index))
                                         .fixedSize(horizontal: true, vertical: false)
                                         .frame(
                                             width: UIScale.pt(cellSize), height: UIScale.pt(12),
@@ -90,8 +94,14 @@ struct ActivityCalendarGrid<Detail: View>: View {
                 }
             }
         }
+        .frame(maxWidth: max(UIScale.pt(16), gridWidth), alignment: .leading)
         .font(.system(size: UIScale.pt(9)))
         .foregroundStyle(DashSkin.inkFaint(dark))
+    }
+
+    private func monthLabel(at index: Int) -> String {
+        let following = weeks.dropFirst(index + 1).prefix(2)
+        return following.contains { !$0.monthLabel.isEmpty } ? "" : weeks[index].monthLabel
     }
 }
 
