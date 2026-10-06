@@ -212,3 +212,120 @@ and 1 when a value is out of range or a scene or camera does not exist.
 - [`ed extensions`](../extensions/README.md)
 - [`ed permissions`](../permissions/README.md)
 - [All command groups](../README.md)
+
+## Meeting playback and recording
+
+The buttons below the stage switch between Live, Away, Freeze and Stop. Choose a
+camera, a local video, or a display/window. The virtual camera selected in Meet
+stays the same when the source changes inside Edith.
+
+```text
+ed camera video ~/Movies/demo.mp4 [--once] [--json]
+ed camera play playing|paused|stopped [--json]
+ed camera freeze [--json]
+ed camera screen list [--json]
+ed camera screen window:123 [--json]
+ed camera record start --path ~/Movies/meeting.mp4 [--json]
+ed camera record stop [--json]
+ed camera mirror true|false [--json]
+```
+
+Video files loop unless `--once` is set. Pause video holds its current position;
+Freeze holds the composed frame and resumes from that position. Stop completely
+releases the source. Selecting a camera returns to live capture. Screens and
+windows require macOS screen recording permission. A window that closes must be
+selected again.
+
+Record saves the composed outgoing picture, including looks and overlays, as an
+MP4. It can record without another app opening the virtual camera. Stop recording
+waits for the file to finish before reporting it saved. When meeting audio is
+running at the start of recording, the MP4 also includes its mixed audio track.
+
+Meet flips its local camera preview horizontally. Use Edith's Audience preview
+to check overlay text. Mirror self preview affects only Edith's preview. Flip
+participant output, or `ed camera mirror`, flips the complete outgoing image,
+including text, for every recipient. Leave it off for readable text in the
+normal outgoing stream.
+
+## Meeting audio
+
+Edith installs its microphone driver through the application’s existing
+privileged helper during setup and updates. Approve Edith’s background helper
+through its normal setup flow. Installation reloads CoreAudio when the driver
+changes, which briefly interrupts sound. If macOS still has not loaded the device,
+restart macOS once. Select Edith Microphone in Meet or Zoom. Edith sends
+one mix to that device. The video virtual camera remains a separate device.
+Choose your physical microphone as Edith's input, never the same loopback device
+as both input and output. Device UIDs and effect settings stay saved across
+restarts, so changing clips or video sources does not require reselecting the
+meeting microphone. Audio starts only after you explicitly enable it.
+
+```sh
+ed camera audio devices
+ed camera audio input "MacBook Pro Microphone"
+ed camera audio output "Edith Microphone"
+ed camera audio on
+ed camera audio record "Good morning"
+ed camera audio save
+ed camera audio play "Good morning"
+ed camera audio import thunder --path ~/Sounds/thunder.wav --sound
+ed camera audio edit thunder --start 0.2 --end 2.4 --gain 0.7
+ed camera audio play thunder
+ed camera audio voice deep
+ed camera audio effects --pitch -200 --reverb 8 --delay 0
+ed camera audio levels --mic 1 --clips 0.9 --source 0.6
+ed camera audio source true
+ed camera audio mute
+ed camera audio stop
+ed camera audio off
+```
+
+Presets are natural, deep, bright, cinematic, radio, telephone, robot, alien and
+echo. Speech snippets use the live microphone's effect chain. Sound effects
+bypass voice effects. Both join the same compressed mix to avoid sudden level
+jumps. Microphone mute keeps sounds and clips available. Stop stops all clips.
+
+Imports are copied into Edith's local audio library. Trimming and gain edits
+preserve the original file. Removing a clip removes its library entry while
+retaining the recording on disk. Save the current snippet before changing audio
+devices or turning audio off. A snippet's library entry is saved when recording
+starts so captured audio remains recoverable after an interrupted session.
+
+Enable source audio to include the selected video file or screen capture in the
+meeting mix. It follows playback, pause, freeze and looping. Disable source audio
+to share only its picture. A selected window includes audio from its owning app;
+a selected display includes system audio. Screen capture excludes Edith’s own audio to avoid
+feeding the mix back into itself.
+
+Edith Microphone is a native CoreAudio driver bundled with Edith. It requires no
+separate audio application. Development builds carry a distinct device identity per
+worktree and do not install system components automatically. The driver transports stereo 48 kHz audio with a bounded memory buffer
+and sends silence when Edith stops producing audio. It does not become the
+system output device. Voice presets, mixing, trimming and recording run locally
+inside Edith.
+
+## Local voice models
+
+Import a ContentVec ONNX encoder and an RVC v1 or v2 ONNX voice export through
+the Voice panel. Edith validates both models, copies them into its library and
+runs them through its bundled native inference runtime. There is no separate
+server, application or runtime installation. Models must be self-contained ONNX
+files with 32, 40 or 48 kHz output. PyTorch checkpoints are not accepted.
+
+```sh
+ed camera audio model-import "My voice" --encoder ~/Models/contentvec.onnx --path ~/Models/voice.onnx
+ed camera audio model "My voice"
+ed camera audio model-pitch --transpose -3
+ed camera audio model-off
+ed camera audio model-remove "My voice"
+```
+
+The selected model converts live speech and speech snippets before the shared
+voice effects. Sounds and source audio keep their original voices. Conversion
+buffers 480 ms of speech and adds model processing time. A model that cannot
+keep up stops conversion and displays an error. Choosing Original voice restores
+unconverted speech. Muting the physical microphone still allows speech snippets
+and sounds to play. Voice model selection and pitch survive app restarts.
+
+Voice models are imported assets. Edith does not label a pitch effect as a
+celebrity voice or provide a built-in celebrity model.

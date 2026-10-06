@@ -211,6 +211,8 @@ private final class LidAwakeDaemonRegistrar {
 
     private let service = SMAppService.daemon(plistName: LidAwakePrivilegedService.plistName)
     private var registrationInFlight = false
+    private var microphoneSyncInFlight = false
+    private var microphoneSynced = false
     private lazy var approvalRefresher = ApprovalStatusRefresher { [weak self] in
         self?.publishStatus()
     }
@@ -252,22 +254,29 @@ private final class LidAwakeDaemonRegistrar {
         publishStatus()
     }
 
-    private func registerCurrent(fingerprint: String?) {
+    private func registerCurrent(fingerprint: String?, retries: Int = 2) {
         do {
             try service.register()
+            registrationInFlight = false
             persist(fingerprint)
             publishStatus()
         } catch {
             let failure = error as NSError
-            if service.status == .requiresApproval
-                || (failure.domain == "SMAppServiceErrorDomain" && failure.code == 1)
-            {
+            if service.status == .requiresApproval {
                 persist(fingerprint)
+            } else if service.status == .notRegistered, retries > 0 {
+                registrationInFlight = true
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    self?.registerCurrent(fingerprint: fingerprint, retries: retries - 1)
+                }
+                return
             } else {
                 NSLog(
                     "Service Management registration failed (%@ %ld): %@", failure.domain,
                     failure.code, failure.localizedDescription)
             }
+            registrationInFlight = false
             publishStatus()
         }
     }
@@ -283,6 +292,40 @@ private final class LidAwakeDaemonRegistrar {
             }
         SharedDefaults.store.setIfChanged(state, forKey: LidAwakePrivilegedService.stateKey)
         approvalRefresher.update(awaitingApproval: state == "awaitingApproval")
+        if state == "enabled" { synchronizeMeetingMicrophone() }
+    }
+
+    private func synchronizeMeetingMicrophone() {
+        guard !microphoneSyncInFlight, !microphoneSynced else { return }
+        microphoneSyncInFlight = true
+        let connection = NSXPCConnection(
+            machServiceName: LidAwakePrivilegedService.machServiceName, options: .privileged)
+        connection.remoteObjectInterface = NSXPCInterface(with: LidAwakePrivilegedProtocol.self)
+        connection.resume()
+        let finish: @Sendable (NSError?) -> Void = { [weak self] error in
+            connection.invalidate()
+            let message = error?.localizedDescription
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.microphoneSyncInFlight = false
+                self.microphoneSynced = message == nil
+                SharedDefaults.store.setIfChanged(
+                    message ?? "", forKey: MeetingMicrophoneDeployment.errorKey)
+            }
+        }
+        guard
+            let proxy = connection.remoteObjectProxyWithErrorHandler({ finish($0 as NSError) })
+                as? LidAwakePrivilegedProtocol
+        else {
+            finish(
+                NSError(
+                    domain: MeetingMicrophoneDeployment.identifier, code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Edith’s privileged helper is unavailable."
+                    ]))
+            return
+        }
+        proxy.synchronizeMeetingMicrophone(reply: finish)
     }
 
     private func persist(_ fingerprint: String?) {
@@ -295,14 +338,23 @@ private final class LidAwakeDaemonRegistrar {
         let helper = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Library/PrivilegedHelperTools")
             .appendingPathComponent(LidAwakePrivilegedService.bundleIdentifier)
+        guard let application = signingFingerprint(Bundle.main.bundleURL),
+            let executable = signingFingerprint(helper)
+        else { return nil }
+        return application + ":" + executable
+    }
+
+    private func signingFingerprint(_ url: URL) -> String? {
         var code: SecStaticCode?
         guard
-            SecStaticCodeCreateWithPath(helper as CFURL, [], &code) == errSecSuccess,
+            SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
             let code
         else { return nil }
         var information: CFDictionary?
         guard
-            SecCodeCopySigningInformation(code, [], &information) == errSecSuccess,
+            SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+                == errSecSuccess,
             let values = information as? [CFString: Any],
             let data = values[kSecCodeInfoUnique] as? Data
         else { return nil }

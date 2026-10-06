@@ -1082,6 +1082,15 @@ private extension VirtualCameraOperation {
             userInterface("Virtual Camera header", "pause behind a card", ["--style", "card"])
         case .resume:
             userInterface("Virtual Camera header", "go live again")
+        case .audio: userInterface("Meeting audio", "choose a voice effect", ["voice", "deep"])
+        case .video: userInterface("Meeting controls", "choose a video file", ["demo.mp4"])
+        case .play: userInterface("Meeting controls", "pause video playback", ["paused"])
+        case .freeze: userInterface("Meeting controls", "freeze the meeting video")
+        case .mirror: userInterface("Camera output", "flip the participant output", ["false"])
+        case .record:
+            userInterface(
+                "Meeting controls", "record the composed video", ["start", "--path", "demo.mp4"])
+        case .screen: userInterface("Meeting controls", "select a screen or window", ["list"])
         case .sceneList:
             userInterface("Virtual Camera scenes", "list the saved scenes")
         case .sceneApply:

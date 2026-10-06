@@ -19,10 +19,13 @@ struct TimeLapseSourceSelection {
         }
     }
 
-    mutating func toggle(_ id: UInt32) {
+    mutating func toggle(_ id: UInt32, maximumCount: Int = 16) {
         if selected.contains(id) {
             selected.remove(id)
-        } else if selected.count < 16 {
+        } else if maximumCount == 1 {
+            selected = [id]
+            if mode == "windows" { systemAudio = true }
+        } else if selected.count < maximumCount {
             selected.insert(id)
             if mode == "windows" { systemAudio = true }
         }
@@ -45,38 +48,62 @@ struct TimeLapseSourceSelection {
 @available(macOS 15.0, *)
 struct TimeLapseSourcePicker: View {
     let recorder: TimeLapseRecorder
+    var compact = false
+    var thumbnail: (@MainActor (String, UInt32) async -> CGImage?)?
+
+    var body: some View {
+        ScreenCaptureSourcePicker(
+            sources: recorder, compact: compact,
+            selection: TimeLapseSourceSelection(
+                mode: recorder.sourceMode, displays: recorder.selectedDisplays,
+                windows: recorder.selectedWindows,
+                systemAudio: recorder.sourceMode == "windows" || recorder.settings.systemAudio),
+            thumbnail: thumbnail, onSelection: { $0.apply(to: recorder) })
+    }
+}
+
+struct ScreenCaptureSourcePicker: View {
+    let sources: any ScreenCaptureSourceProviding
     let compact: Bool
+    let maximumCount: Int
+    let title: String
+    let detail: String
     private let thumbnail: @MainActor (String, UInt32) async -> CGImage?
     private let loadsSources: Bool
+    private let onSelection: (TimeLapseSourceSelection) -> Void
     @State private var selection: TimeLapseSourceSelection
     @State private var search = ""
     @State private var refresh = 0
     @Environment(\.dismiss) private var dismiss
 
     init(
-        recorder: TimeLapseRecorder, compact: Bool = false,
-        thumbnail: (@MainActor (String, UInt32) async -> CGImage?)? = nil
+        sources: any ScreenCaptureSourceProviding, compact: Bool = false,
+        selection: TimeLapseSourceSelection, maximumCount: Int = 16,
+        title: String = "Choose what to record",
+        detail: String = "Select up to 16 sources. Each window is captured independently.",
+        thumbnail: (@MainActor (String, UInt32) async -> CGImage?)? = nil,
+        onSelection: @escaping (TimeLapseSourceSelection) -> Void
     ) {
-        self.recorder = recorder
+        self.sources = sources
         self.compact = compact
+        self.maximumCount = maximumCount
+        self.title = title
+        self.detail = detail
+        self.onSelection = onSelection
         loadsSources = thumbnail == nil
         self.thumbnail =
-            thumbnail ?? { [weak recorder] mode, id in
-                await recorder?.sourceThumbnail(mode: mode, id: id)
+            thumbnail ?? { mode, id in
+                await sources.sourceThumbnail(mode: mode, id: id)
             }
-        _selection = State(
-            initialValue: TimeLapseSourceSelection(
-                mode: recorder.sourceMode, displays: recorder.selectedDisplays,
-                windows: recorder.selectedWindows,
-                systemAudio: recorder.sourceMode == "windows" || recorder.settings.systemAudio))
+        _selection = State(initialValue: selection)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack {
                 VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Text("Choose what to record").font(.edithText(.title3)).fontWeight(.semibold)
-                    Text("Select up to 16 sources. Each window is captured independently.")
+                    Text(title).font(.edithText(.title3)).fontWeight(.semibold)
+                    Text(detail)
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -84,7 +111,7 @@ struct TimeLapseSourcePicker: View {
                     refresh += 1
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                }.buttonStyle(.edith(.borderless)).disabled(recorder.sourceLoad.isRunning)
+                }.buttonStyle(.edith(.borderless)).disabled(sources.sourceLoad.isRunning)
                     .help("Refresh sources").accessibilityLabel("Refresh sources")
             }
             EdithSegmentedPicker(
@@ -96,9 +123,9 @@ struct TimeLapseSourcePicker: View {
             }
             ScrollView {
                 PageLoading(
-                    state: loadsSources ? recorder.sourceLoad.state : .content,
-                    message: recorder.sourceLoad.errorMessage ?? "Choose displays or windows.",
-                    layout: .cards, refreshing: recorder.sourceLoad.isRefreshing,
+                    state: loadsSources ? sources.sourceLoad.state : .content,
+                    message: sources.sourceLoad.errorMessage ?? "Choose displays or windows.",
+                    layout: .cards, refreshing: sources.sourceLoad.isRefreshing,
                     retry: { refresh += 1 }
                 ) {
                     if choices.isEmpty {
@@ -116,16 +143,19 @@ struct TimeLapseSourcePicker: View {
                                     choice: choice,
                                     selected: selection.selected.contains(choice.id),
                                     disabled: !selection.selected.contains(choice.id)
-                                        && selection.selected.count >= 16,
-                                    revision: recorder.sourceRevision,
+                                        && maximumCount > 1
+                                        && selection.selected.count >= maximumCount,
+                                    revision: sources.sourceRevision,
                                     thumbnail: { await thumbnail(selection.mode, choice.id) },
-                                    action: { selection.toggle(choice.id) })
+                                    action: {
+                                        selection.toggle(choice.id, maximumCount: maximumCount)
+                                    })
                             }
                         }.padding(UIScale.pt(2))
                     }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
-            if recorder.sourceLoad.hasContent, let error = recorder.sourceLoad.errorMessage {
+            if sources.sourceLoad.hasContent, let error = sources.sourceLoad.errorMessage {
                 PageNotice(
                     error, tone: .error,
                     actions: {
@@ -153,13 +183,13 @@ struct TimeLapseSourcePicker: View {
                     Button("Cancel") { dismiss() }.buttonStyle(.edith(.secondary))
                         .keyboardShortcut(.cancelAction)
                     Button("Use selection") {
-                        selection.apply(to: recorder)
+                        onSelection(selection)
                         dismiss()
                     }.buttonStyle(.edith(.primary)).keyboardShortcut(.defaultAction)
                         .disabled(
-                            recorder.sourceLoad.isRunning || recorder.busy || recorder.recording
+                            sources.sourceLoad.isRunning || sources.captureSelectionBlocked
                                 || selection.selected.isEmpty
-                                || selection.selected.count > 16
+                                || selection.selected.count > maximumCount
                         )
                 }
             }
@@ -170,12 +200,13 @@ struct TimeLapseSourcePicker: View {
             height: PresentationMetrics.height(600)
         )
         .pageSurface()
-        .pageTask(id: refresh, active: loadsSources) { await recorder.loadSources() }
-        .onChange(of: recorder.sourceRevision) { _, _ in
+        .pageTask(id: refresh, active: loadsSources) { await sources.refreshCaptureSources() }
+        .onChange(of: sources.sourceRevision) { _, _ in
             selection.reconcile(
-                displays: Set(recorder.displays.map(\.id)),
-                windows: Set(recorder.windows.map(\.id)))
+                displays: Set(sources.displays.map(\.id)),
+                windows: Set(sources.windows.map(\.id)))
         }
+        .tracksWindowVisibility()
     }
 
     private var columns: [GridItem] {
@@ -192,13 +223,13 @@ struct TimeLapseSourcePicker: View {
 
     private var choices: [TimeLapseSourceCard.Choice] {
         if selection.mode == "displays" {
-            return recorder.displays.enumerated().map { index, display in
+            return sources.displays.enumerated().map { index, display in
                 .init(
                     id: display.id, title: "Display \(index + 1)",
                     subtitle: "\(display.width) × \(display.height)", symbol: "display")
             }
         }
-        return recorder.windows.filter {
+        return sources.windows.filter {
             search.isEmpty
                 || "\($0.application) \($0.title)".localizedCaseInsensitiveContains(search)
         }.map {

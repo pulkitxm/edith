@@ -33,12 +33,9 @@ final class VideoRecorder: NSObject, SCRecordingOutputDelegate, SCStreamDelegate
         busy = true
         defer { busy = false }
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(
-                true, onScreenWindowsOnly: true)
+            let content = try await VirtualCameraScreenCatalog.content()
             displays = content.displays
-            windows = content.windows.filter {
-                $0.frame.width > 100 && $0.frame.height > 100 && !($0.title ?? "").isEmpty
-            }
+            windows = VirtualCameraScreenCatalog.windows(in: content)
             if source.isEmpty, let display = displays.first {
                 source = "display:\(display.displayID)"
             }

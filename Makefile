@@ -150,7 +150,10 @@ ci-swift-lint:
 	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 	cd $(STUDIO_PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 
-ci-swift-build: approve-package-plugins
+ci-meeting-microphone:
+	python3 scripts/build-meeting-microphone.py --test --output .build/meeting-microphone
+
+ci-swift-build: approve-package-plugins ci-meeting-microphone
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
@@ -225,6 +228,10 @@ verify-bundle: verify-release-build-settings
 	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
 	test 1 -eq "$$(find dist/Edith.app -name EdithShared.framework | wc -l | tr -d ' ')"
+	test 1 -eq "$$(find dist/Edith.app -name MeetingVoice.framework | wc -l | tr -d ' ')"
+	test ! -e dist/Edith.app/Contents/Frameworks/onnxruntime.framework
+	test -x dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver/Contents/MacOS/EdithMicrophone
+	codesign --verify --strict dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver
 	test -x dist/Edith.app/Contents/Frameworks/EdithShared.framework/Versions/A/EdithShared
 	test ! -e dist/Edith.app/Contents/Frameworks/EdithKit.framework
 	test ! -e dist/Edith.app/Contents/Frameworks/EdithCore.framework

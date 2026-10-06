@@ -529,10 +529,12 @@ enum StudioTestFiles {
         return (model, urls)
     }
 
-    func prewarm(_ urls: [URL]) async {
+    func prewarm(_ urls: [URL]) async throws {
         for url in urls {
             for side in [48.0, 64, 160, 220, 320] {
-                _ = await StudioThumbnails.shared.thumbnail(for: url, side: side)
+                let image = try #require(
+                    await StudioThumbnails.shared.thumbnail(for: url, side: side))
+                #expect(image.size.width > 0 && image.size.height > 0)
             }
         }
     }
@@ -543,10 +545,10 @@ enum StudioTestFiles {
             StudioPage(model: empty).environment(\.automaticViewActionsEnabled, false),
             name: "studio-empty")
         let (model, urls) = try library()
-        await prewarm(urls)
+        try await prewarm(urls)
         for url in urls {
             await model.loadFacts(for: url)
-            #expect(StudioThumbnails.shared.cached(url, side: 220) != nil)
+            #expect(await StudioThumbnails.shared.thumbnail(for: url, side: 220) != nil)
         }
         model.selection = [urls[0], urls[1]]
         try render(
@@ -567,7 +569,7 @@ enum StudioTestFiles {
 
     @Test func runnerAndResultRender() async throws {
         let (model, urls) = try library()
-        await prewarm(urls)
+        try await prewarm(urls)
         for url in urls { await model.loadFacts(for: url) }
         model.open(toolID: "pdf.merge", with: [urls[0], urls[1]])
         try render(
@@ -576,7 +578,7 @@ enum StudioTestFiles {
         guard case let .tool(id) = model.route, let job = model.job(id) else { return }
         model.run(job)
         #expect(await StudioTestFiles.waitUntil { !job.isRunning })
-        await prewarm(job.result?.outputs.map(\.url) ?? [])
+        try await prewarm(job.result?.outputs.map(\.url) ?? [])
         try render(
             StudioPage(model: model).environment(\.automaticViewActionsEnabled, false),
             name: "studio-result")
@@ -604,7 +606,7 @@ enum StudioTestFiles {
         try StudioTestFiles.receiptPhoto(photo)
         model.add([photo])
         model.notice = nil
-        await prewarm([photo])
+        try await prewarm([photo])
         await model.loadFacts(for: photo)
         model.open(toolID: "pdf.scan", with: [photo])
         guard case let .tool(id) = model.route, let job = model.job(id) else {

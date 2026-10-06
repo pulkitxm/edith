@@ -8,6 +8,13 @@ import Testing
 @testable import EdithKit
 
 @Suite struct VirtualCameraRequestReducerTests {
+    @Test func fractionalTimeoutKeepsRequestAlive() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let deadline = VirtualCameraOperationExecution.deadline(for: .milliseconds(500), now: now)
+        #expect(deadline.timeIntervalSince(now) == 0.5)
+        #expect(VirtualCameraRuntimeRequest(request: .status, deadline: deadline).isLive(at: now))
+    }
+
     let sources = [
         VirtualCameraSource(id: "a", name: "FaceTime HD Camera", kind: .builtIn),
         VirtualCameraSource(id: "b", name: "Studio Display Camera", kind: .external),
@@ -277,6 +284,8 @@ import Testing
                 "headline", "apps", "framesPerSecond", "camera", "cameraResolution", "output",
                 "cameraAccess", "privacy", "privacyMessage", "scene", "sceneModified", "framing",
                 "look", "background", "systemBackgroundActive", "message",
+                "videoSource", "videoPath", "playback", "loop", "sourceAudio", "mirrorOutput",
+                "recordingPath", "audio",
             ])
         #expect(object["cameraResolution"] == .string("1920x1080"))
         #expect(object["message"] == .string("Done."))

@@ -23,4 +23,5 @@ public enum LidAwakeCommand {
 
 @objc public protocol LidAwakePrivilegedProtocol {
     func setSleepDisabled(_ disable: Bool, reply: @escaping (NSError?) -> Void)
+    func synchronizeMeetingMicrophone(reply: @escaping (NSError?) -> Void)
 }

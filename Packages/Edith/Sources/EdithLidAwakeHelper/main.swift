@@ -59,6 +59,29 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
         }
     }
 
+    func synchronizeMeetingMicrophone(reply: @escaping (NSError?) -> Void) {
+        do {
+            guard let executable = Bundle.main.executableURL else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            let application = try MeetingMicrophoneDeployment.application(containing: executable)
+            if try MeetingMicrophoneDeployment.synchronize(application: application) {
+                let result = try LidAwakeCommandProcess.run(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/killall"),
+                    arguments: ["-TERM", "coreaudiod"])
+                guard !result.timedOut, result.terminationStatus == 0 else {
+                    throw NSError(
+                        domain: MeetingMicrophoneDeployment.identifier, code: 1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Edith Microphone is installed. Restart macOS to load the audio device."
+                        ])
+                }
+            }
+            reply(nil)
+        } catch { reply(error as NSError) }
+    }
+
     private static func loadClientRequirement() -> SecRequirement? {
         var ownCode: SecCode?
         guard
@@ -79,7 +102,7 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
             let teamIdentifier = values[kSecCodeInfoTeamIdentifier] as? String
         else { return nil }
         let expression =
-            "identifier \"\(LidAwakePrivilegedService.clientBundleIdentifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(teamIdentifier)\""
+            "(identifier \"\(LidAwakePrivilegedService.clientBundleIdentifier)\" or identifier \"com.pulkit.edith\") and anchor apple generic and certificate leaf[subject.OU] = \"\(teamIdentifier)\""
         var requirement: SecRequirement?
         guard
             SecRequirementCreateWithString(expression as CFString, [], &requirement)

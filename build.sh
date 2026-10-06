@@ -235,7 +235,7 @@ rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 mkdir -p "$APP/Contents/Frameworks"
-for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwakeSupport; do
+for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwakeSupport MeetingVoice; do
   source="$HELPER/Contents/Frameworks/$framework.framework"
   destination="$APP/Contents/Frameworks/$framework.framework"
   if [ -d "$source" ] && [ ! -d "$destination" ]; then
@@ -244,6 +244,7 @@ for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwake
     rm -rf "$source"
   fi
 done
+rm -rf "$APP/Contents/Frameworks/onnxruntime.framework" "$HELPER/Contents/Frameworks/onnxruntime.framework"
 rmdir "$HELPER/Contents/Frameworks" 2>/dev/null || true
 
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
@@ -361,7 +362,20 @@ codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier "$AGENT_IDENTIFIER" "$AGENT"
-sign "$HELPER"
+sign "$HELPER" "Resources/Helper.entitlements"
+python3 scripts/build-meeting-microphone.py --application "$APP_IDENTIFIER" \
+  --version "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
+  --identity "$SIGN_IDENTITY" --output "$APP/Contents/Library/Audio/Plug-Ins/HAL"
+python3 scripts/build-meeting-microphone.py --test --output "$DERIVED/MeetingMicrophoneTests" \
+  --driver "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
+if [ "$APP_IDENTIFIER" = "com.pulkit.edith" ] && [ -n "$TEAM_ID" ]; then
+  SIGNATURE_TEST="$DERIVED/MeetingMicrophoneTests/signature-check"
+  xcrun swiftc -parse-as-library \
+    Packages/Edith/Sources/EdithLidAwakeSupport/MeetingMicrophoneDeployment.swift \
+    scripts/verify-meeting-microphone-signature.swift -o "$SIGNATURE_TEST"
+  sign_tool "$SIGNATURE_TEST"
+  "$SIGNATURE_TEST" "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
+fi
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
   : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \

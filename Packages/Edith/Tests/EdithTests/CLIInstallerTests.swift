@@ -135,6 +135,11 @@ import Testing
             at: CLIProcessProbe.binary.deletingLastPathComponent()
                 .appendingPathComponent("Sparkle.framework").resolvingSymlinksInPath(),
             to: isolated.deletingLastPathComponent().appendingPathComponent("Sparkle.framework"))
+        try FileManager.default.copyItem(
+            at: CLIProcessProbe.binary.deletingLastPathComponent()
+                .appendingPathComponent("libMeetingVoice.dylib").resolvingSymlinksInPath(),
+            to: isolated.deletingLastPathComponent().appendingPathComponent("libMeetingVoice.dylib")
+        )
         let target = root.appendingPathComponent("links")
         let outside = root.appendingPathComponent("outside")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)

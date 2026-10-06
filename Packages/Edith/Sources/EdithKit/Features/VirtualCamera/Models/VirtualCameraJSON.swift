@@ -47,6 +47,12 @@ public extension VirtualCameraSnapshot {
             ]),
             "cameraAccess": .string(cameraAccess),
             "privacy": .string(state.privacy.rawValue),
+            "videoSource": .string(state.media.kind.rawValue),
+            "videoPath": .optional(state.media.path),
+            "playback": .string(state.media.playback.rawValue),
+            "loop": .bool(state.media.loop),
+            "sourceAudio": .bool(state.media.audioEnabled),
+            "mirrorOutput": .bool(state.mirrorOutput),
             "privacyMessage": .string(state.privacyMessage),
             "scene": .optional(state.activeScene?.name),
             "sceneModified": .bool(state.activeSceneIsModified),
@@ -64,6 +70,8 @@ public extension VirtualCameraSnapshot {
             "background": .string(state.composition.background.mode.rawValue),
             "systemBackgroundActive": .bool(systemBackgroundActive),
             "message": .optional(message),
+            "recordingPath": .optional(recordingPath),
+            "audio": state.audio.jsonValue(status: audioStatus),
         ])
     }
 

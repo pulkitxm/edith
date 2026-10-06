@@ -6,6 +6,20 @@ import Testing
 @testable import Edith
 
 @Suite struct TimeLapseSourceTests {
+    @Test func meetingSelectionReplacesThePreviousSource() {
+        var selection = TimeLapseSourceSelection(
+            mode: "windows", displays: [99], windows: [1], systemAudio: false)
+        selection.toggle(2, maximumCount: 1)
+        #expect(selection.windows == [2])
+        selection.systemAudio = false
+        selection.toggle(2, maximumCount: 1)
+        #expect(selection.windows.isEmpty)
+        #expect(!selection.systemAudio)
+        selection.mode = "displays"
+        selection.toggle(100, maximumCount: 1)
+        #expect(selection.displays == [100])
+    }
+
     @Test(arguments: [
         (CGSize(width: 3840, height: 2160), 320, 180),
         (CGSize(width: 1000, height: 2000), 90, 180),
