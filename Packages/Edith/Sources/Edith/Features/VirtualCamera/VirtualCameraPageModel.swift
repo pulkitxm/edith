@@ -6,12 +6,14 @@ import Foundation
 import UniformTypeIdentifiers
 
 enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
+    case audio
+    case voice
+    case devices
     case frame
     case look
     case background
     case overlays
     case output
-    case audio
 
     var id: String { rawValue }
 
@@ -22,7 +24,9 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "Background"
         case .overlays: "Overlays"
         case .output: "Output"
-        case .audio: "Audio"
+        case .audio: "Sounds"
+        case .voice: "Voice"
+        case .devices: "Audio devices"
         }
     }
 
@@ -34,6 +38,8 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .overlays: "text.below.photo"
         case .output: "video.badge.checkmark"
         case .audio: "waveform"
+        case .voice: "person.wave.2"
+        case .devices: "mic"
         }
     }
 }
@@ -62,10 +68,15 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var previewFailure: String?
     @Published var tab: VirtualCameraInspectorTab = .frame {
         didSet {
+            defaults.set(tab.rawValue, forKey: "virtualCameraInspectorSection")
+            inspectorExpanded = true
             guard tab == .look, let reference = previewReference, reference !== thumbnailSource
             else { return }
             updateLookThumbnails(from: reference)
         }
+    }
+    @Published var inspectorExpanded = true {
+        didSet { defaults.set(inspectorExpanded, forKey: "virtualCameraInspectorExpanded") }
     }
     @Published var showsGrid = false
     @Published private(set) var lookThumbnails: [VirtualCameraLookPreset: CGImage] = [:]
@@ -114,6 +125,8 @@ final class VirtualCameraPageModel: ObservableObject {
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
+        let restoredExpansion =
+            defaults.object(forKey: "virtualCameraInspectorExpanded") as? Bool ?? true
         self.defaults = defaults
         self.state = state
         self.pipeline = pipeline
@@ -123,6 +136,11 @@ final class VirtualCameraPageModel: ObservableObject {
         self.sourceProvider = sourceProvider
         self.previewBus = previewBus
         self.cameraAccess = accessProvider()
+        self.tab =
+            VirtualCameraInspectorTab(
+                rawValue: defaults.string(forKey: "virtualCameraInspectorSection") ?? "audio")
+            ?? .audio
+        self.inspectorExpanded = restoredExpansion
         display.onAvailabilityChanged = { [weak self] available in
             self?.hasPreviewFrame = available
             if available {

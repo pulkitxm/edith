@@ -6,59 +6,52 @@ import SwiftUI
 struct VirtualCameraInspector: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
-    @State private var choosingTab = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Button {
-                choosingTab = true
-            } label: {
-                HStack {
-                    Label(model.tab.title, systemImage: model.tab.symbolName)
-                        .font(.edithText(.headline))
-                    Spacer()
-                    Image(systemName: "chevron.down")
-                }
-                .padding(UIScale.pt(12))
-                .frame(maxWidth: .infinity, minHeight: UIScale.pt(44), alignment: .leading)
-            }
-            .buttonStyle(.edith(.secondary))
-            .accessibilityLabel("Adjust: \(model.tab.title)")
-            .popover(isPresented: $choosingTab) {
-                VStack(spacing: UIScale.pt(4)) {
-                    ForEach(VirtualCameraInspectorTab.allCases) { tab in
+        ScrollView {
+            VStack(spacing: UIScale.pt(8)) {
+                ForEach(VirtualCameraInspectorTab.allCases) { section in
+                    let expanded = model.tab == section && model.inspectorExpanded
+                    VStack(spacing: UIScale.pt(12)) {
                         Button {
-                            model.tab = tab
-                            choosingTab = false
+                            if model.tab == section {
+                                model.inspectorExpanded.toggle()
+                            } else {
+                                model.tab = section
+                            }
                         } label: {
-                            Label(tab.title, systemImage: tab.symbolName)
-                                .font(.edithText(.body))
-                                .frame(
-                                    maxWidth: .infinity, minHeight: UIScale.pt(28),
-                                    alignment: .leading)
+                            HStack {
+                                Label(section.title, systemImage: section.symbolName)
+                                Spacer()
+                                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            }
+                            .font(.edithText(.body))
+                            .frame(
+                                maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
                         }
-                        .buttonStyle(.edith(.toolbar))
+                        .buttonStyle(.edith(.secondary))
+                        .accessibilityLabel(
+                            "\(section.title), \(expanded ? "expanded" : "collapsed")")
+                        if expanded { panel(section) }
                     }
                 }
-                .padding(UIScale.pt(12))
-                .frame(width: UIScale.pt(220))
             }
-            ScrollView {
-                VStack(spacing: UIScale.pt(12)) {
-                    switch model.tab {
-                    case .frame:
-                        VirtualCameraFramePanel(model: model, dark: dark)
-                        VirtualCameraSceneStrip(model: model, dark: dark)
-                    case .look: VirtualCameraLookPanel(model: model, dark: dark)
-                    case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
-                    case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
-                    case .output: VirtualCameraOutputPanel(model: model, dark: dark)
-                    case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
-                    }
-                }
-                .padding(UIScale.pt(2))
-            }
+            .padding(UIScale.pt(2))
+        }
+    }
 
+    @ViewBuilder private func panel(_ section: VirtualCameraInspectorTab) -> some View {
+        switch section {
+        case .frame:
+            VirtualCameraFramePanel(model: model, dark: dark)
+            VirtualCameraSceneStrip(model: model, dark: dark)
+        case .look: VirtualCameraLookPanel(model: model, dark: dark)
+        case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
+        case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
+        case .output: VirtualCameraOutputPanel(model: model, dark: dark)
+        case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
+        case .voice: VirtualCameraAudioPanel(model: model, dark: dark, section: .voice)
+        case .devices: VirtualCameraAudioPanel(model: model, dark: dark, section: .devices)
         }
     }
 }
@@ -198,12 +191,6 @@ struct VirtualCameraFramePanel: View {
                 title: "Framing", detail: "Drag the preview to move, scroll or pinch to zoom.",
                 dark: dark
             ) {
-                VirtualCameraSliderRow(
-                    title: "Zoom",
-                    value: Binding(
-                        get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
-                    range: VirtualCameraFraming.zoomRange, neutral: 1,
-                    format: { String(format: "%.2fx", $0) }, dark: dark)
                 VirtualCameraSliderRow(
                     title: "Left to right", value: model.binding(\.framing.centerX), range: 0...1,
                     neutral: 0.5, format: percent, dark: dark)

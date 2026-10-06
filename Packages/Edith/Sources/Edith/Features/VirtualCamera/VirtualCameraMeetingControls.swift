@@ -6,19 +6,19 @@ struct VirtualCameraMeetingControls: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
     @State private var choosingScreen = false
+    @State private var choosingZoom = false
+    @State private var audioDevices: [MeetingAudioDevice] = []
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(12)) {
                 sourceMenu
-                Spacer(minLength: UIScale.pt(8))
-                if model.state.media.kind != .camera {
-                    Toggle("Source audio", isOn: model.stateBinding(\.media.audioEnabled))
-                        .toggleStyle(.button)
-                        .help("Send this video's or window's audio to your meeting microphone")
-                }
+                microphoneMenu
                 Menu {
+                    if model.state.media.kind != .camera {
+                        Toggle("Source audio", isOn: model.stateBinding(\.media.audioEnabled))
+                    }
                     Toggle("Mirror preview", isOn: model.stateBinding(\.mirrorPreview))
                     Toggle("Thirds grid", isOn: $model.showsGrid)
                     if model.state.media.kind == .video {
@@ -72,6 +72,31 @@ struct VirtualCameraMeetingControls: View {
                 .disabled(model.audioPending)
                 Spacer(minLength: UIScale.pt(4))
                 Button {
+                    choosingZoom = true
+                } label: {
+                    Label(
+                        String(format: "%.1fx", model.composition.framing.zoom),
+                        systemImage: "plus.magnifyingglass"
+                    )
+                    .frame(minHeight: UIScale.pt(28))
+                }
+                .buttonStyle(.edith(.secondary))
+                .accessibilityLabel("Video zoom")
+                .popover(isPresented: $choosingZoom) {
+                    VStack(spacing: UIScale.pt(12)) {
+                        Text("Zoom").font(.edithText(.headline))
+                        Slider(
+                            value: Binding(
+                                get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
+                            in: VirtualCameraFraming.zoomRange
+                        )
+                        .accessibilityLabel("Video zoom level")
+                        Button("Reset to 1x") { model.setZoom(1) }
+                            .buttonStyle(.edith(.secondary))
+                    }
+                    .padding(UIScale.pt(16)).frame(width: UIScale.pt(240))
+                }
+                Button {
                     model.toggleRecording()
                 } label: {
                     Label(
@@ -91,6 +116,27 @@ struct VirtualCameraMeetingControls: View {
         .edithSheet(isPresented: $choosingScreen, dismissible: false) {
             VirtualCameraScreenPicker(model: model, compact: compact)
         }
+        .pageTask {
+            audioDevices = await Task.detached(priority: .utility) { MeetingAudioDevices.list() }
+                .value
+        }
+    }
+
+    private var microphoneMenu: some View {
+        Menu {
+            Button("System microphone") { model.performAudio(.input("")) }
+            ForEach(audioDevices.filter { $0.inputChannels > 0 && !$0.virtual }) { device in
+                Button(device.name) { model.performAudio(.input(device.id)) }
+            }
+        } label: {
+            Label(model.snapshot?.audioStatus?.inputName ?? "Microphone", systemImage: "mic")
+                .lineLimit(1).truncationMode(.middle)
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
+        }
+        .menuStyle(.borderlessButton)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .disabled(model.audioPending)
+        .accessibilityLabel("Audio source")
     }
 
     private var sourceMenu: some View {

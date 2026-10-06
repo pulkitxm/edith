@@ -9,9 +9,9 @@ struct VirtualCameraAudioPanel: View {
     @State private var devices: [MeetingAudioDevice] = []
     @State private var snippetName = ""
     @State private var editing: MeetingAudioClip?
-    @State private var section = Section.sounds
+    var section = Section.sounds
 
-    private enum Section: String, CaseIterable {
+    enum Section: String, CaseIterable {
         case sounds = "Sounds"
         case voice = "Voice"
         case devices = "Devices"
@@ -42,9 +42,6 @@ struct VirtualCameraAudioPanel: View {
             if let failure = status?.failure ?? status?.sourceFailure {
                 Text(failure).font(.edithText(.body)).foregroundStyle(.red)
             }
-            EdithSegmentedPicker(
-                "Audio controls", selection: $section, options: Section.allCases,
-                label: { $0.rawValue })
             switch section {
             case .sounds:
                 soundboard

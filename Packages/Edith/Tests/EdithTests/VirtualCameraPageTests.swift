@@ -74,6 +74,20 @@ import Testing
         #expect(stored.composition.look.preset == .film)
     }
 
+    @Test func accordionSelectionAndExpansionSurviveReopening() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.tab = .devices
+        model.inspectorExpanded = false
+        let reopened = VirtualCameraPageModel(
+            defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
+        #expect(reopened.tab == .devices)
+        #expect(!reopened.inspectorExpanded)
+        reopened.tab = .voice
+        #expect(reopened.inspectorExpanded)
+        #expect(defaults.string(forKey: "virtualCameraInspectorSection") == "voice")
+    }
+
     @Test func leavingThePageDoesNotOverwriteAHelperBackgroundChange() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }

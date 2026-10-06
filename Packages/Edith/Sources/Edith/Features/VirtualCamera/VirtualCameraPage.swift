@@ -59,17 +59,10 @@ struct VirtualCameraPage: View {
                     HStack(spacing: UIScale.pt(12)) {
                         VirtualCameraStatusPill(model: model, dark: dark)
                         Button {
-                            model.tab = .audio
-                            showingInspector = true
-                        } label: {
-                            Label("Audio", systemImage: "waveform")
-                        }
-                        .buttonStyle(.edith(.secondary))
-                        Button {
                             showingInspector.toggle()
                         } label: {
                             Label(
-                                showingInspector && !compact ? "Hide controls" : "Adjust",
+                                showingInspector ? "Hide controls" : "Show controls",
                                 systemImage: "slider.horizontal.3")
                         }
                         .buttonStyle(.edith(.secondary))
