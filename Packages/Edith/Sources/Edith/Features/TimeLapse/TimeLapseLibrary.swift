@@ -160,7 +160,7 @@ enum TimeLapseExporter {
         }
         repeat {
             try Task.checkCancellation()
-            let factor = min(32, remaining)
+            let factor = min(4, remaining)
             let audioTracks = try await audio.loadTracks(withMediaType: .audio)
             for track in audioTracks {
                 let range = CMTimeRange(start: .zero, duration: track.timeRange.end)
