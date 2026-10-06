@@ -31,8 +31,16 @@ import Testing
                             .environment(\.loadingAnimationsEnabled, false),
                         size: CGSize(width: 800, height: 850))
                     host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+                    let window = TestWindowHost.window(contentRect: host.frame)
+                    window.appearance = host.appearance
+                    window.contentView = host
+                    window.orderBack(nil)
+                    defer { window.orderOut(nil) }
+                    window.layoutIfNeeded()
                     try await Task.sleep(for: .milliseconds(200))
                     host.layoutSubtreeIfNeeded()
+                    host.displayIfNeeded()
+                    #expect(!TestWindowHost.isExposedOnDesktop(window))
                     if failed {
                         let text = try auditText(host)
                         #expect(text.contains("Retry"))
