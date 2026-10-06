@@ -7,41 +7,54 @@ import subprocess
 import sys
 
 
-def sample_group(group):
-    if sys.platform != "darwin":
-        return
+def process_tree(root):
     processes = subprocess.run(
-        ["ps", "-axo", "pid=,pgid=,comm="],
+        ["ps", "-axo", "pid=,ppid=,pgid=,comm="],
         text=True,
         capture_output=True,
         check=True,
     )
-    for line in processes.stdout.splitlines():
-        fields = line.strip().split(None, 2)
-        if len(fields) != 3 or int(fields[1]) != group:
+    rows = [line.strip().split(None, 3) for line in processes.stdout.splitlines()]
+    descendants = {root}
+    while True:
+        children = {
+            int(row[0]) for row in rows
+            if len(row) == 4 and (int(row[1]) in descendants or int(row[2]) == root)
+        }
+        if children <= descendants:
+            break
+        descendants.update(children)
+    return [(int(row[0]), row[3]) for row in rows if len(row) == 4 and int(row[0]) in descendants]
+
+
+def sample_group(processes):
+    if sys.platform != "darwin":
+        return
+    for pid, command in processes:
+        if "swiftpm-testing-helper" not in command:
             continue
-        if "swiftpm-testing-helper" not in fields[2]:
-            continue
-        print(f"Capturing stalled test process {fields[0]}", flush=True)
+        print(f"Capturing stalled test process {pid}", flush=True)
         try:
-            subprocess.run(["sample", fields[0], "3", "-file", "/dev/stdout"], timeout=20)
+            subprocess.run(["sample", str(pid), "3", "-file", "/dev/stdout"], timeout=20)
         except subprocess.TimeoutExpired:
             print("Stack capture timed out", file=sys.stderr, flush=True)
 
 
-def stop_group(process):
-    try:
-        os.killpg(process.pid, signal.SIGTERM)
-    except ProcessLookupError:
-        return
+def signal_processes(processes, value):
+    for pid, _ in reversed(processes):
+        try:
+            os.kill(pid, value)
+        except ProcessLookupError:
+            pass
+
+
+def stop_group(process, processes):
+    signal_processes(processes, signal.SIGTERM)
     try:
         process.wait(timeout=5)
     except subprocess.TimeoutExpired:
         pass
-    try:
-        os.killpg(process.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
+    signal_processes(processes, signal.SIGKILL)
 
 
 def run(command, timeout):
@@ -50,12 +63,13 @@ def run(command, timeout):
         return process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         print(f"Test command exceeded {timeout:g} seconds: {command}", file=sys.stderr, flush=True)
+        processes = process_tree(process.pid)
         try:
-            sample_group(process.pid)
+            sample_group(processes)
         except (OSError, subprocess.SubprocessError) as error:
             print(f"Stack capture failed: {error}", file=sys.stderr, flush=True)
         finally:
-            stop_group(process)
+            stop_group(process, processes)
             process.wait()
         return 124
 
