@@ -61,7 +61,9 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
 
     func synchronizeMeetingMicrophone(reply: @escaping (NSError?) -> Void) {
         do {
-            let executable = URL(fileURLWithPath: CommandLine.arguments[0])
+            guard let executable = Bundle.main.executableURL else {
+                throw CocoaError(.fileNoSuchFile)
+            }
             let application = try MeetingMicrophoneDeployment.application(containing: executable)
             try MeetingMicrophoneDeployment.synchronize(application: application)
             reply(nil)

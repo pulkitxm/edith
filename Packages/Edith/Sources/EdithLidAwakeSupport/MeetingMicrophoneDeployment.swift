@@ -3,6 +3,7 @@ import Foundation
 import Security
 
 public enum MeetingMicrophoneDeployment {
+    public static let errorKey = "meetingMicrophoneDeploymentError"
     public static let identifier = "com.pulkit.edith.microphone"
     public static let relativePath = "Contents/Library/Audio/Plug-Ins/HAL/" + identifier + ".driver"
     public static let destinationRoot = URL(fileURLWithPath: "/Library/Audio/Plug-Ins/HAL")

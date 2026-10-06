@@ -303,7 +303,7 @@ private final class LidAwakeDaemonRegistrar {
                 self.microphoneSyncInFlight = false
                 self.microphoneSynced = message == nil
                 SharedDefaults.store.setIfChanged(
-                    message ?? "", forKey: "meetingMicrophoneDeploymentError")
+                    message ?? "", forKey: MeetingMicrophoneDeployment.errorKey)
             }
         }
         guard

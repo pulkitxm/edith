@@ -59,10 +59,8 @@ struct VirtualCameraAudioPanel: View {
                 }
                 Button("Refresh devices") { refreshDevices() }.buttonStyle(.edith(.toolbar))
                 if !devices.contains(where: { $0.id == MeetingMicrophone.id }) {
-                    Text(
-                        "Edith Microphone is included with the application. Complete Edith’s background helper approval in Settings. If setup is complete, restart macOS to load the audio device."
-                    )
-                    .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+                    Text(MeetingMicrophone.setupMessage)
+                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
                 }
                 Text(
                     status?.running == true

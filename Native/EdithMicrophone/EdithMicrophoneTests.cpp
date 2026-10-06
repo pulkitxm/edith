@@ -4,7 +4,20 @@
 #include <thread>
 #include <vector>
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc > 1) {
+        CFURLRef url = CFURLCreateFromFileSystemRepresentation(nullptr, reinterpret_cast<const UInt8 *>(argv[1]), std::strlen(argv[1]), true);
+        CFPlugInRef plugin = CFPlugInCreate(nullptr, url);
+        assert(plugin != nullptr);
+        CFArrayRef factories = CFPlugInFindFactoriesForPlugInTypeInPlugIn(kAudioServerPlugInTypeUUID, plugin);
+        assert(factories && CFArrayGetCount(factories) == 1);
+        auto loaded = static_cast<AudioServerPlugInDriverRef>(CFPlugInInstanceCreate(nullptr, static_cast<CFUUIDRef>(CFArrayGetValueAtIndex(factories, 0)), kAudioServerPlugInTypeUUID));
+        assert(loaded && *loaded && (*loaded)->Initialize);
+        AudioServerPlugInHostInterface host{};
+        assert((*loaded)->Initialize(loaded, &host) == noErr);
+        (*loaded)->Release(loaded);
+        CFRelease(factories); CFRelease(plugin); CFRelease(url);
+    }
     assert(EdithMicrophoneFactory(nullptr, kAudioServerPlugInTypeUUID) == driver);
     AudioServerPlugInHostInterface testHost{};
     assert(interface.Initialize(driver, &testHost) == noErr);

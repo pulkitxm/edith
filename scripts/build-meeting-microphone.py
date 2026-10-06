@@ -39,4 +39,4 @@ subprocess.run(["xcrun", "clang++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-W
                 "-fvisibility=hidden", f'-DEDITH_MICROPHONE_UID="{uid}"',
                 f'-DEDITH_MICROPHONE_NAME="{name}"', str(source / "EdithMicrophone.cpp"),
                 "-framework", "CoreAudio", "-framework", "CoreFoundation", "-o", str(executable)], check=True)
-subprocess.run(["codesign", "--force", "--sign", args.identity, str(driver)], check=True)
+subprocess.run(["codesign", "--force", "--sign", args.identity, "--options", "runtime", str(driver)], check=True)
