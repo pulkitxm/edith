@@ -14,6 +14,8 @@ struct CameraAudioCommand: AsyncParsableCommand {
     @Argument(help: "Device, voice preset or snippet name.") var value: String?
     @Option(help: "File to import.") var path: String?
     @Option(help: "ContentVec ONNX encoder for model-import.") var encoder: String?
+    @Option(parsing: .unconditional, help: "Model pitch in semitones, from -24 to 24.")
+    var transpose: Float?
     @Flag(help: "Import a sound effect that bypasses voice effects.") var sound = false
     @Option(help: "Clip trim start in seconds.") var start: Double = 0
     @Option(help: "Clip trim end in seconds.") var end: Double?
@@ -21,7 +23,8 @@ struct CameraAudioCommand: AsyncParsableCommand {
     @Option(help: "Microphone gain from 0 to 2.") var mic: Float?
     @Option(help: "Snippet gain from 0 to 2.") var clips: Float?
     @Option(help: "Video or screen audio gain from 0 to 2.") var source: Float?
-    @Option(help: "Pitch adjustment in cents, from -1200 to 1200.") var pitch: Float?
+    @Option(parsing: .unconditional, help: "Pitch adjustment in cents, from -1200 to 1200.")
+    var pitch: Float?
     @Option(help: "Reverb wet mix from 0 to 100.") var reverb: Float?
     @Option(help: "Echo wet mix from 0 to 100.") var delay: Float?
     @Flag(name: .long, help: "Emit JSON.") var json = false
@@ -70,10 +73,10 @@ struct CameraAudioCommand: AsyncParsableCommand {
                     voice: URL(fileURLWithPath: (path as NSString).expandingTildeInPath).path)
             case "model": request = .selectVoice(try requiredValue())
             case "model-pitch":
-                guard let value = Float(try requiredValue()) else {
-                    throw CLIFailure("Pass a pitch in semitones from -24 to 24.")
+                guard let transpose else {
+                    throw CLIFailure("Pass --transpose in semitones from -24 to 24.")
                 }
-                request = .modelPitch(value)
+                request = .modelPitch(transpose)
             case "model-off": request = .selectVoice("")
             case "model-remove": request = .removeVoice(try requiredValue())
             case "levels": request = .levels(mic: mic, clips: clips, source: source)

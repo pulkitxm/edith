@@ -157,6 +157,8 @@ def merge(derived, config, app, release):
         '-Xlinker', '-install_name', '-Xlinker', SHARED_ID,
         '-filelist', str(objects),
         '-o', str(shared / 'Versions/A/EdithShared'),
+        f'-F{frameworks}',
+        '-Xlinker', '-rpath', '-Xlinker', '@loader_path/../../..',
         *link_flags(kit),
         '-L/usr/lib/swift',
         f'-L{developer}/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx',

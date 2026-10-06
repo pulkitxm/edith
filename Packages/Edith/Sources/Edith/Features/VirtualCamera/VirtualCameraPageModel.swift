@@ -154,7 +154,11 @@ final class VirtualCameraPageModel: ObservableObject {
         else { return nil }
         if !sourcesLoaded { return "Finding cameras" }
         if previewFeed == .pending { return "Connecting to Edith Bar" }
-        return "Starting camera"
+        switch state.media.kind {
+        case .camera: return "Starting camera"
+        case .video: return "Starting video"
+        case .screen: return "Starting screen capture"
+        }
     }
 
     var showsHelperPreview: Bool { previewFeed == .helper }

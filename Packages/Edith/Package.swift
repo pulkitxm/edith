@@ -18,9 +18,7 @@ let products: [Product] = [
 ]
 
 let dependencies: [Package.Dependency] = [
-    .package(
-        url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git",
-        revision: "b7fb7f7dea8a2469e6335d95a61b8f36d0dc83b2"),
+    .package(path: "../MeetingVoice"),
     .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.19.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
@@ -47,12 +45,6 @@ let shippedSwiftSettings: [SwiftSetting] = [
 ]
 
 let targets: [Target] = [
-    .target(
-        name: "MeetingVoiceRuntime",
-        dependencies: [.product(name: "onnxruntime", package: "onnxruntime-swift-package-manager")],
-        cxxSettings: [.unsafeFlags(["-std=c++17"])],
-        linkerSettings: [.linkedLibrary("c++")]
-    ),
     .target(
         name: "EdithCore",
         swiftSettings: [.swiftLanguageMode(.v5)]
@@ -147,7 +139,8 @@ let targets: [Target] = [
     .target(
         name: "EdithKit",
         dependencies: [
-            "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport", "MeetingVoiceRuntime",
+            "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport",
+            .product(name: "MeetingVoice", package: "MeetingVoice"),
         ],
         resources: [
             .process("Resources"),

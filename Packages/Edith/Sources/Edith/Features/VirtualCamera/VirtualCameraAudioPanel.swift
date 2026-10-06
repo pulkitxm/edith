@@ -184,7 +184,9 @@ struct VirtualCameraAudioPanel: View {
             }
         }
         .task { refreshDevices() }
-        .sheet(item: $editing) { clip in VirtualCameraClipEditor(model: model, clip: clip) }
+        .edithSheet(item: $editing, dismissible: !model.audioPending) { clip in
+            VirtualCameraClipEditor(model: model, clip: clip) { editing = nil }
+        }
     }
 
     private func level(_ name: String, value: Float, change: @escaping (Float) -> Void) -> some View
@@ -221,7 +223,7 @@ struct VirtualCameraAudioPanel: View {
 struct VirtualCameraClipEditor: View {
     @ObservedObject var model: VirtualCameraPageModel
     let clip: MeetingAudioClip
-    @Environment(\.dismiss) private var dismiss
+    let dismiss: () -> Void
     @State private var start = ""
     @State private var end = ""
     @State private var gain: Double = 1

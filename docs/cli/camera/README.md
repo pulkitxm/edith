@@ -314,7 +314,7 @@ files with 32, 40 or 48 kHz output. PyTorch checkpoints are not accepted.
 ```sh
 ed camera audio model-import "My voice" --encoder ~/Models/contentvec.onnx --path ~/Models/voice.onnx
 ed camera audio model "My voice"
-ed camera audio model-pitch -3
+ed camera audio model-pitch --transpose -3
 ed camera audio model-off
 ed camera audio model-remove "My voice"
 ```

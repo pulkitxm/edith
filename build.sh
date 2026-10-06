@@ -235,7 +235,7 @@ rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 mkdir -p "$APP/Contents/Frameworks"
-for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwakeSupport; do
+for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwakeSupport MeetingVoice; do
   source="$HELPER/Contents/Frameworks/$framework.framework"
   destination="$APP/Contents/Frameworks/$framework.framework"
   if [ -d "$source" ] && [ ! -d "$destination" ]; then
@@ -244,6 +244,7 @@ for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwake
     rm -rf "$source"
   fi
 done
+rm -rf "$APP/Contents/Frameworks/onnxruntime.framework" "$HELPER/Contents/Frameworks/onnxruntime.framework"
 rmdir "$HELPER/Contents/Frameworks" 2>/dev/null || true
 
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"

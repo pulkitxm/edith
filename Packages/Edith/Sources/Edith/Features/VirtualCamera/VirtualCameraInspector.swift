@@ -19,6 +19,7 @@ struct VirtualCameraInspector: View {
                                 .font(.system(size: UIScale.pt(13)))
                             Text(tab.title)
                                 .font(.system(size: UIScale.pt(10), weight: .medium))
+                                .lineLimit(1).minimumScaleFactor(0.75)
                         }
                         .frame(maxWidth: .infinity)
                         .foregroundStyle(

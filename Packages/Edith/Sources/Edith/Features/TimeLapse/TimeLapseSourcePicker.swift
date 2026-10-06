@@ -206,6 +206,7 @@ struct ScreenCaptureSourcePicker: View {
                 displays: Set(sources.displays.map(\.id)),
                 windows: Set(sources.windows.map(\.id)))
         }
+        .tracksWindowVisibility()
     }
 
     private var columns: [GridItem] {
