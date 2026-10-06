@@ -6,6 +6,7 @@ struct VirtualCameraMeetingControls: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
     @State private var choosingScreen = false
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
@@ -107,54 +108,51 @@ struct VirtualCameraMeetingControls: View {
         }
         .padding(UIScale.pt(12))
         .background(RoundedRectangle(cornerRadius: UIScale.pt(12)).fill(DashSkin.paper2(dark)))
-        .sheet(isPresented: $choosingScreen) { VirtualCameraScreenPicker(model: model) }
+        .edithSheet(isPresented: $choosingScreen, dismissible: false) {
+            VirtualCameraScreenPicker(model: model, compact: compact)
+        }
     }
 }
 
 struct VirtualCameraScreenPicker: View {
     @ObservedObject var model: VirtualCameraPageModel
-    @Environment(\.dismiss) private var dismiss
-    @State private var sources: [VirtualCameraScreenSource] = []
-    @State private var selection = ""
-    @State private var failure: String?
+    var compact = false
+    @State private var sources = ScreenCaptureSourceCatalog()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            Text("Screen or window").font(.headline)
-            if let failure { Text(failure).foregroundStyle(.red) }
-            if sources.isEmpty && failure == nil { ProgressView("Finding sources…") }
-            Picker("Source", selection: $selection) {
-                ForEach(sources) { source in Text(source.name).tag(source.id) }
-            }
-            Text("The selected screen or window replaces your camera in the meeting.")
-                .font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button("Cancel") { dismiss() }
-                Spacer()
-                Button("Use source") {
-                    model.update {
-                        $0.media = VirtualCameraMedia(kind: .screen, screenID: selection)
-                        $0.privacy = .live
-                        $0.composition.framing = VirtualCameraFraming()
-                    }
-                    dismiss()
-                }
-                .disabled(selection.isEmpty)
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(UIScale.pt(24))
-        .frame(width: UIScale.pt(480))
-        .task {
-            do {
-                sources = try await VirtualCameraScreenCatalog.sources()
-                selection = sources.first?.id ?? ""
-            } catch { failure = error.localizedDescription }
-        }
+        ScreenCaptureSourcePicker(
+            sources: sources, compact: compact, selection: model.screenSelection,
+            maximumCount: 1, title: "Choose what to share",
+            detail: "Select a window or display to use as your meeting video.",
+            onSelection: { model.selectScreen($0) })
     }
 }
 
 extension VirtualCameraPageModel {
+    var screenSelection: TimeLapseSourceSelection {
+        let parts = (state.media.screenID ?? "").split(separator: ":")
+        let window = parts.first == "window"
+        let id = parts.count == 2 ? UInt32(parts[1]) : nil
+        return TimeLapseSourceSelection(
+            mode: window ? "windows" : "displays",
+            displays: !window ? Set(id.map { [$0] } ?? []) : [],
+            windows: window ? Set(id.map { [$0] } ?? []) : [],
+            systemAudio: state.media.audioEnabled)
+    }
+
+    func selectScreen(_ selection: TimeLapseSourceSelection) {
+        guard selection.selected.count == 1, let id = selection.selected.first else { return }
+        update {
+            $0.media = VirtualCameraMedia(
+                kind: .screen,
+                screenID: "\(selection.mode == "windows" ? "window" : "display"):\(id)",
+                audioEnabled: selection.systemAudio)
+            $0.privacy = .live
+            $0.composition.framing = VirtualCameraFraming()
+        }
+        flushSave()
+    }
+
     func toggleRecording() {
         let request: VirtualCameraRequest
         if snapshot?.recordingPath != nil {

@@ -196,6 +196,35 @@ import Testing
         #expect(model.state.privacy == .live)
     }
 
+    @Test func screenPickerPersistsTheSourceAndItsAudioChoice() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.setZoom(2)
+        model.pause(.freeze)
+        model.selectScreen(
+            TimeLapseSourceSelection(
+                mode: "windows", displays: [5], windows: [42], systemAudio: true))
+        #expect(model.state.media.kind == .screen)
+        #expect(model.state.media.screenID == "window:42")
+        #expect(model.state.media.audioEnabled)
+        #expect(model.state.privacy == .live)
+        #expect(model.composition.framing == VirtualCameraFraming())
+        #expect(VirtualCameraStore.load(defaults).media == model.state.media)
+        #expect(model.screenSelection.windows == [42])
+        #expect(model.screenSelection.displays.isEmpty)
+        model.selectScreen(
+            TimeLapseSourceSelection(
+                mode: "displays", displays: [5], windows: [], systemAudio: false))
+        #expect(model.state.media.screenID == "display:5")
+        #expect(!model.state.media.audioEnabled)
+        #expect(model.screenSelection.displays == [5])
+        let previous = model.state
+        model.selectScreen(
+            TimeLapseSourceSelection(
+                mode: "windows", displays: [], windows: [1, 2], systemAudio: true))
+        #expect(model.state == previous)
+    }
+
     @Test func removingAnImageTurnsItsFeatureOff() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
