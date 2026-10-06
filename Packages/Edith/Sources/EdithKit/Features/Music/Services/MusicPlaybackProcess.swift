@@ -15,6 +15,7 @@ public final class MusicPlaybackProcess: @unchecked Sendable {
         let outputPipe = Pipe()
         input = inputPipe.fileHandleForWriting
         output = outputPipe.fileHandleForReading
+        _ = fcntl(input.fileDescriptor, F_SETNOSIGPIPE, 1)
         output.readabilityHandler = { handle in
             let data = handle.availableData
             if data.isEmpty { handle.readabilityHandler = nil } else { receive(data) }

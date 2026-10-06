@@ -172,6 +172,21 @@ import WebKit
         #expect(!store.bool(forKey: "musicSpotifyAccountSaved"))
         #expect(!session.disconnecting)
     }
+
+    @Test func exitedPlayerRejectsWritesWithoutBreakingTheApp() async throws {
+        let process = try MusicPlaybackProcess(
+            executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", "exit 0"],
+            receive: { _ in }, onExit: {})
+        await process.waitForExit()
+        let failed = DispatchSemaphore(value: 0)
+        process.send(Data([10])) { failed.signal() }
+        let rejected = await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                continuation.resume(returning: failed.wait(timeout: .now() + 2) == .success)
+            }
+        }
+        #expect(rejected)
+    }
 }
 
 @MainActor @Suite struct MusicBrowserConnectionTests {
