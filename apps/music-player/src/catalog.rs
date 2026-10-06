@@ -99,6 +99,7 @@ pub struct Library {
     ready: std::sync::atomic::AtomicBool,
     current: std::sync::Mutex<Option<String>>,
     queue_writes: Mutex<()>,
+    saved_state: Mutex<()>,
     slots: Arc<Semaphore>,
     service: String,
     account: String,
@@ -127,6 +128,7 @@ impl Library {
             ready: false.into(),
             current: std::sync::Mutex::new(None),
             queue_writes: Mutex::new(()),
+            saved_state: Mutex::new(()),
             slots: Arc::new(Semaphore::new(4)),
             service: service.into(),
             account,
@@ -416,6 +418,7 @@ impl Library {
     }
 
     async fn saved_status(&self, uri: &str) {
+        let _saved_order = self.saved_state.lock().await;
         if self.ready.load(std::sync::atomic::Ordering::SeqCst)
             && let Ok(result) = self
                 .request(
@@ -443,6 +446,11 @@ impl Library {
         let library = Arc::clone(self);
         let kind = kind.to_owned();
         tokio::spawn(async move {
+            let _saved_order = if kind == "setSaved" {
+                Some(library.saved_state.lock().await)
+            } else {
+                None
+            };
             let result = async {
                 let _queue_order = if kind == "queueAdd" {
                     Some(library.queue_writes.lock().await)
@@ -673,7 +681,7 @@ fn artwork(value: &Value) -> Option<String> {
         .iter()
         .find_map(|image| image["url"].as_str())?;
     let url = Url::parse(source).ok()?;
-    (source.len() <= 512
+    (url.as_str().len() <= 512
         && url.scheme() == "https"
         && url.username().is_empty()
         && url.password().is_none()
@@ -906,6 +914,10 @@ mod tests {
         let result = page(&request("album"), &json!({"items":rows}));
         assert!(serde_json::to_vec(&result).unwrap().len() < 60000);
         assert!(result["items"][0]["artwork"].is_null());
+        let expanded = format!("https://i.scdn.co/image/{}", "😀".repeat(100));
+        assert!(expanded.len() < 512);
+        assert!(Url::parse(&expanded).unwrap().as_str().len() > 512);
+        assert!(artwork(&json!({"images":[{"url":expanded}]})).is_none());
     }
 
     #[test]
