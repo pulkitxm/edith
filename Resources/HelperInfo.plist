@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.307</string>
+	<string>0.0.308</string>
 	<key>CFBundleVersion</key>
-	<string>318</string>
+	<string>319</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>
@@ -37,10 +37,10 @@
 	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Edith frames your camera for Edith Camera, the virtual camera video apps can pick, and shows a preview in the notch so you can check yourself before a call.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Edith mixes your microphone with saved speech, voice effects and media audio for meetings, and records snippets when you choose Record mic.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Edith mixes your microphone with saved speech, voice effects and media audio for meetings, and records snippets when you choose Record mic.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
 	<string>Edith needs this to scan an external drive you pick in the Cleaner.</string>
 	<key>NSUserNotificationAlertStyle</key>
