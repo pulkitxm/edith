@@ -191,7 +191,7 @@ final class MusicSpotifyLibrary {
         }
         guard let values = response.items, values.allSatisfy(\.valid),
             response.current?.valid != false,
-            response.nextOffset.map({ $0 > request.offset }) != false,
+            response.nextOffset == nil || (response.nextOffset ?? 0) > request.offset,
             response.total.map({ $0 >= 0 }) != false
         else {
             let message = "Spotify returned an invalid library response. Try again."
@@ -333,11 +333,13 @@ final class MusicSpotifyLibrary {
     }
 
     private func finishHome() {
-        let shelves = loads.filter { $0.key != "queue" }.map(\.value)
-        guard currentDestination == .home, !shelves.contains(where: { $0.isRunning }) else {
-            return
+        guard currentDestination == .home else { return }
+        var shelfError: String?
+        for (kind, owner) in loads where kind != "queue" {
+            if owner.isRunning { return }
+            if shelfError == nil { shelfError = owner.errorMessage }
         }
-        if let message = shelves.compactMap(\.errorMessage).first {
+        if let message = shelfError {
             if !recent.isEmpty || !topTracks.isEmpty || !topArtists.isEmpty || !playlists.isEmpty
                 || !albums.isEmpty || !artists.isEmpty || !shows.isEmpty
             {
