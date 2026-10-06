@@ -44,6 +44,17 @@ it, so `ed np --json` and `ed music --player spotify` both work.
 
 ## Players
 
+The Music page also offers **Local music**, **Spotify**, and **YouTube Music**.
+Connect Spotify in your browser to stream with a Premium account inside Edith.
+Paste a track, album, playlist, or episode link, or choose Edith in Spotify
+Connect. Credentials stay in Keychain and Disconnect removes the saved grant.
+For YouTube Music, sign in in Chrome and connect that profile on the Music page.
+Only YouTube cookies are imported into a separate session, which Disconnect
+clears. The embedded player provides your library, search, and playback.
+Switching sources pauses the previous player. These streaming sessions use the
+Music page controls; the CLI players below still target the local library and
+the separate Spotify and Apple Music applications.
+
 There are exactly three players, and they are named `builtin`, `spotify` and
 `apple`. `builtin` is Edith's own library player, which lives in the menu bar
 app and shows up as `Edith` in human output.

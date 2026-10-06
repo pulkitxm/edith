@@ -3,6 +3,7 @@ import Network
 import SQLite3
 
 @testable import EdithHelper
+@testable import EdithKit
 
 struct SyntheticChromeCookie {
     var host: String

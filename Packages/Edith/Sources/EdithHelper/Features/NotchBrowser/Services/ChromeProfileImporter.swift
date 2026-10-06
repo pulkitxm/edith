@@ -1,3 +1,4 @@
+import EdithKit
 import CryptoKit
 import Foundation
 import WebKit

@@ -833,6 +833,10 @@ private struct MusicListSelection {
 }
 
 struct MusicPage: View {
+    @State private var accounts = MusicAccounts.shared
+    init(accounts: MusicAccounts? = nil) {
+        _accounts = State(initialValue: accounts ?? .shared)
+    }
     @State private var remote = MusicRemote.shared
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
@@ -920,7 +924,11 @@ struct MusicPage: View {
         PageWorkspace {
             pageHeader
         } content: {
-            trackList
+            if accounts.selected == .local {
+                trackList
+            } else {
+                MusicProviderContent(accounts: accounts)
+            }
         }
         .navigationRoute("place", selection: musicPlaceBinding, isValid: musicPlaceIsValid)
         .navigationTitle("Music")
@@ -1020,24 +1028,35 @@ struct MusicPage: View {
 
     private var pageHeader: some View {
         PageHeader("Music") {
-            headerActions
+            if accounts.selected == .local { headerActions }
         } accessory: {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                if musicFolderStale {
-                    HStack(spacing: UIScale.pt(5)) {
-                        Text("A previous external music folder was skipped.")
-                        Button("Choose it again", action: chooseMusicFolder)
-                            .buttonStyle(.link)
+                Picker(
+                    "Music source",
+                    selection: Binding(get: { accounts.selected }, set: { accounts.select($0) })
+                ) {
+                    ForEach(MusicProvider.allCases) { provider in
+                        Label(provider.title, systemImage: provider.symbol).tag(provider)
                     }
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(.secondary)
                 }
-                searchField
-                breadcrumbBar
-                if tabMusicEnabled, remote.restorePending > 0 {
-                    Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
-                        .settingsCaption()
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                .pickerStyle(.segmented)
+                if accounts.selected == .local {
+                    if musicFolderStale {
+                        HStack(spacing: UIScale.pt(5)) {
+                            Text("A previous external music folder was skipped.")
+                            Button("Choose it again", action: chooseMusicFolder)
+                                .buttonStyle(.link)
+                        }
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(.secondary)
+                    }
+                    searchField
+                    breadcrumbBar
+                    if tabMusicEnabled, remote.restorePending > 0 {
+                        Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
+                            .settingsCaption()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }
@@ -2275,6 +2294,10 @@ extension View {
 }
 
 struct MusicFooter: View {
+    @State private var accounts = MusicAccounts.shared
+    init(accounts: MusicAccounts? = nil) {
+        _accounts = State(initialValue: accounts ?? .shared)
+    }
     @State private var playerOptionsPresented = false
     @State private var remote = MusicRemote.shared
     @ObservedObject private var visibility = WindowVisibility.shared
@@ -2305,7 +2328,18 @@ struct MusicFooter: View {
                 collapsedLine
             } else {
                 Group {
-                    if let track = remote.current {
+                    if accounts.selected == .spotify {
+                        MusicStreamingControls(accounts: accounts).padding(
+                            .horizontal, UIScale.pt(22))
+                    } else if accounts.selected == .youtubeMusic {
+                        HStack {
+                            Label("YouTube Music", systemImage: "play.circle")
+                            Spacer()
+                            Button("Open player") {
+                                mainWindowSection = MainDestination.music.rawValue
+                            }
+                        }.padding(.horizontal, UIScale.pt(22))
+                    } else if let track = remote.current {
                         playing(track)
                     } else {
                         idle
@@ -2339,8 +2373,7 @@ struct MusicFooter: View {
                     .fill(theme)
                     .frame(
                         width: geo.size.width
-                            * MusicBarProgress.fraction(
-                                elapsed: remote.elapsed, duration: remote.duration))
+                            * accounts.progress)
             }
         }
         .frame(height: UIScale.pt(Self.collapsedHeight))
@@ -2624,10 +2657,11 @@ struct MusicSidebarPill: View {
     let theme: Color
     let expand: () -> Void
     @State private var remote = MusicRemote.shared
+    @State private var accounts = MusicAccounts.shared
     @ObservedObject private var visibility = WindowVisibility.shared
 
     private var progress: Double {
-        MusicBarProgress.fraction(elapsed: remote.elapsed, duration: remote.duration)
+        accounts.progress
     }
 
     var body: some View {
@@ -2637,19 +2671,19 @@ struct MusicSidebarPill: View {
                     Image(systemName: "chevron.up")
                         .font(.system(size: UIScale.pt(9), weight: .semibold))
                         .foregroundStyle(theme)
-                    Text(remote.current?.title ?? "Nothing playing")
+                    Text(accounts.playerTitle ?? "Nothing playing")
                         .font(.system(size: UIScale.pt(11.5), weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .presenterBlur(.music)
                     Spacer(minLength: 0)
-                    if remote.current != nil {
+                    if accounts.playerTitle != nil {
                         PlaybackWave(
-                            playing: remote.isPlaying && visibility.visible,
+                            playing: accounts.isPlaying && visibility.visible,
                             color: theme.opacity(0.9), maxHeight: UIScale.pt(9))
                     }
                 }
-                if remote.current != nil {
+                if accounts.playerTitle != nil, accounts.selected != .youtubeMusic {
                     GeometryReader { geo in
                         ZStack(alignment: .leading) {
                             Capsule().fill(Color.primary.opacity(0.12))

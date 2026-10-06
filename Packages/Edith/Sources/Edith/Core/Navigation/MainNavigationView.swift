@@ -627,6 +627,16 @@ struct MainWindowView: View {
             let handled = MainActor.assumeIsolated {
                 guard !VideoPlaybackKeyView.claims(event) else { return false }
                 let remote = MusicRemote.shared
+                let accounts = MusicAccounts.shared
+                if accounts.selected != .local {
+                    guard accounts.selected == .spotify else { return false }
+                    return MusicKeyCommand.handle(
+                        keyCode: code, modifiers: mods, active: accounts.spotify.connected,
+                        .init(
+                            playPause: { accounts.spotify.send(["action": "toggle"]) },
+                            seekBy: { accounts.spotify.seek(by: $0) },
+                            volumeBy: { accounts.spotify.setVolume(accounts.spotify.volume + $0) }))
+                }
                 return MusicKeyCommand.handle(
                     keyCode: code, modifiers: mods, active: remote.current != nil,
                     .init(
@@ -641,10 +651,12 @@ struct MainWindowView: View {
     private func syncMusicResources() {
         if musicEnabled {
             MusicRemote.shared.start()
+            MusicAccounts.shared.activate()
             installMusicKeys()
         } else {
             removeMusicKeys()
             MusicRemote.shared.stop()
+            MusicAccounts.shared.shutdown()
         }
     }
 
@@ -658,6 +670,7 @@ struct MainWindowView: View {
     private var musicFooterVisible: Bool {
         guard musicEnabled, mediaSuite else { return false }
         return !musicBarAutoHide || MusicRemote.shared.current != nil
+            || MusicAccounts.shared.spotify.connected || MusicAccounts.shared.youtubeConnected
     }
 
     private var detailShadow: Color {

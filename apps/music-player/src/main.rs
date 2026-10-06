@@ -76,9 +76,13 @@ fn execute(spirc: &Spirc, command: Command) -> Result<bool, librespot::core::Err
     Ok(true)
 }
 
-async fn run(service: &str, name: &str, forget: bool) -> Result<(), Box<dyn std::error::Error>> {
+async fn run(
+    service: &str,
+    name: &str,
+    mode: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let entry = keyring::Entry::new(service, "spotify")?;
-    if forget {
+    if mode == Some("--forget") {
         match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => return Ok(()),
             Err(error) => return Err(error.into()),
@@ -93,6 +97,9 @@ async fn run(service: &str, name: &str, forget: bool) -> Result<(), Box<dyn std:
     let credentials = match saved {
         Some(credentials) => credentials,
         None => {
+            if mode == Some("--resume") {
+                return Err("sign-in is required".into());
+            }
             emit(json!({"event": "authorizing"}));
             let client_id = config.client_id.clone();
             let token = tokio::task::spawn_blocking(move || {
@@ -114,7 +121,10 @@ async fn run(service: &str, name: &str, forget: bool) -> Result<(), Box<dyn std:
         audio_backend::find(Some("rodio".into())).ok_or("the audio output is unavailable")?;
     let mixer = mixer::find(None).ok_or("the audio mixer is unavailable")?(MixerConfig::default())?;
     let player = Player::new(
-        PlayerConfig::default(),
+        PlayerConfig {
+            position_update_interval: Some(std::time::Duration::from_secs(1)),
+            ..PlayerConfig::default()
+        },
         session.clone(),
         mixer.get_soft_volume(),
         move || sink(None, AudioFormat::default()),
@@ -169,6 +179,7 @@ async fn run(service: &str, name: &str, forget: bool) -> Result<(), Box<dyn std:
                     })),
                     PlayerEvent::Playing { position_ms, .. } => emit(json!({"event": "state", "playing": true, "elapsed": f64::from(position_ms) / 1000.0})),
                     PlayerEvent::Paused { position_ms, .. } => emit(json!({"event": "state", "playing": false, "elapsed": f64::from(position_ms) / 1000.0})),
+                    PlayerEvent::PositionChanged { position_ms, .. } | PlayerEvent::Seeked { position_ms, .. } | PlayerEvent::PositionCorrection { position_ms, .. } => emit(json!({"event": "position", "elapsed": f64::from(position_ms) / 1000.0})),
                     PlayerEvent::Stopped { .. } => emit(json!({"event": "state", "playing": false, "elapsed": 0})),
                     PlayerEvent::Unavailable { .. } => emit(json!({"event": "error", "message": "Spotify could not play this item. Check Premium and its availability in your region."})),
                     PlayerEvent::VolumeChanged { volume } => emit(json!({"event": "volume", "value": f64::from(volume) / f64::from(u16::MAX)})),
@@ -191,13 +202,9 @@ async fn main() {
     if args.len() < 3 || args.len() > 4 {
         std::process::exit(2);
     }
-    if run(
-        &args[1],
-        &args[2],
-        args.get(3).is_some_and(|arg| arg == "--forget"),
-    )
-    .await
-    .is_err()
+    if run(&args[1], &args[2], args.get(3).map(String::as_str))
+        .await
+        .is_err()
     {
         emit(
             json!({"event": "error", "message": "Spotify could not connect. Check your internet connection and Premium account, or disconnect and sign in again."}),

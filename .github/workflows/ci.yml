@@ -49,6 +49,7 @@ jobs:
       source: ${{ steps.areas.outputs.source }}
       companion: ${{ steps.areas.outputs.companion }}
       companion_runtime: ${{ steps.areas.outputs.companion_runtime }}
+      music_player: ${{ steps.areas.outputs.music_player }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -85,7 +86,7 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(scripts/test-swift-test-isolation\.py$|Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
+          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -95,6 +96,25 @@ jobs:
           area source '\.(swift|js|mjs|ts|tsx|css|json|ya?ml|html)$'
           area companion '^apps/companion/'
           area companion_runtime '^apps/companion/(Dockerfile|compose(\.[^/]+)?\.yaml)$'
+          area music_player '^(apps/music-player/|build\.sh$|\.github/workflows/)'
+
+  music-player:
+    name: music-player
+    needs: changes
+    if: needs.changes.outputs.music_player == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Rust toolchain
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt
+      - name: Format, lint, and test Spotify playback
+        working-directory: apps/music-player
+        run: |
+          cargo +stable fmt --check
+          cargo +stable clippy --locked --all-targets -- -D warnings
+          cargo +stable test --locked
 
   checks:
     name: checks

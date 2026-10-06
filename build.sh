@@ -220,6 +220,8 @@ LAUNCH_AGENTS="$APP/Contents/Library/LaunchAgents"
 AGENT="$APP/Contents/MacOS/edithd"
 rm -rf dist && mkdir -p dist
 ditto "$BUILT" "$APP"
+cargo build --locked --release --manifest-path apps/music-player/Cargo.toml
+install -m 755 apps/music-player/target/release/edith-music-player "$APP/Contents/MacOS/edith-music-player"
 rm -f "$APP/Contents/MacOS/edh"
 rm -f "$APP/Contents/MacOS/ed"
 install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"
@@ -362,6 +364,7 @@ codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier "$AGENT_IDENTIFIER" "$AGENT"
 sign "$HELPER"
+sign_tool "$APP/Contents/MacOS/edith-music-player"
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
   : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \

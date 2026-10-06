@@ -256,7 +256,7 @@ public enum ExtensionRegistry {
             defaultsKey: "tabTimeLapseEnabled", requiredCapabilities: [.screenTimeLapse]),
         ExtensionRegistryEntry(
             id: "music", title: "Music",
-            subtitle: "Plays your local music folder, with media keys and a player bar.",
+            subtitle: "Play local music, connect Spotify, or listen with YouTube Music.",
             symbolName: "music.note", suite: .media, host: .bar, featured: false,
             defaultsKey: "tabMusicEnabled", requiredCapabilities: [.localMusicPlayback],
             optionalCapabilities: [.mediaControls]),
