@@ -89,6 +89,7 @@ import WebKit
         #expect(!session.playing)
         #expect(session.title.isEmpty)
         #expect(session.error == "Premium is required.")
+        #expect(session.hasSavedAccount)
     }
 
     @Test func invalidOrUnboundedResponsesDoNotCorruptPlayback() {
@@ -170,6 +171,7 @@ import WebKit
         await session.disconnect()
         #expect(!session.connected)
         #expect(!store.bool(forKey: "musicSpotifyAccountSaved"))
+        #expect(!session.hasSavedAccount)
         #expect(!session.disconnecting)
     }
 

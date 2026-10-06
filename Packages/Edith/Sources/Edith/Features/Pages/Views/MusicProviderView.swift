@@ -37,6 +37,10 @@ struct MusicProviderContent: View {
                         .accessibilityLabel("Connecting Spotify")
                     Button("Cancel") { accounts.spotify.stop() }
                 } else {
+                    if accounts.spotify.hasSavedAccount {
+                        Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
+                            .disabled(accounts.spotify.disconnecting)
+                    }
                     Button("Connect Spotify") { accounts.spotify.connect() }
                         .disabled(accounts.spotify.disconnecting)
                 }

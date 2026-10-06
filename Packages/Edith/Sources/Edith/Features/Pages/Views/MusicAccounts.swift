@@ -27,6 +27,8 @@ final class MusicSpotifySession {
     private let defaults: UserDefaults
     private let service: String
 
+    var hasSavedAccount: Bool { defaults.bool(forKey: "musicSpotifyAccountSaved") }
+
     var elapsed: Double {
         min(duration, max(0, elapsedBase + (playing ? Date().timeIntervalSince(updatedAt) : 0)))
     }
@@ -44,7 +46,7 @@ final class MusicSpotifySession {
 
     func connect(authorize: Bool = true) {
         guard !connected, process == nil, !disconnecting else { return }
-        guard authorize || defaults.bool(forKey: "musicSpotifyAccountSaved") else { return }
+        guard authorize || hasSavedAccount else { return }
         guard let executable, FileManager.default.isExecutableFile(atPath: executable.path) else {
             error = MusicConnectionError.playerUnavailable.localizedDescription
             return
