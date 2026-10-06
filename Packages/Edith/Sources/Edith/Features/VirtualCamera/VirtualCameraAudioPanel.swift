@@ -65,7 +65,9 @@ struct VirtualCameraAudioPanel: View {
                 Button(status?.recordingName == nil ? "Record mic" : "Save") {
                     model.performAudio(
                         status?.recordingName == nil
-                            ? .recordClip(snippetName.isEmpty ? "Snippet \(audio.clips.count + 1)" : snippetName)
+                            ? .recordClip(
+                                snippetName.isEmpty
+                                    ? "Snippet \(audio.clips.count + 1)" : snippetName)
                             : .finishClip)
                 }
                 .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
@@ -113,7 +115,8 @@ struct VirtualCameraAudioPanel: View {
                         Button("Edit…") { editing = clip }
                         Button("Remove") { model.performAudio(.removeClip(clip.id.uuidString)) }
                     } label: {
-                        Image(systemName: "ellipsis").frame(width: UIScale.pt(24), height: UIScale.pt(28))
+                        Image(systemName: "ellipsis").frame(
+                            width: UIScale.pt(24), height: UIScale.pt(28))
                     }
                     .menuStyle(.borderlessButton).fixedSize()
                     .accessibilityLabel("Options for \(clip.name)")
@@ -141,7 +144,8 @@ struct VirtualCameraAudioPanel: View {
             Picker(
                 "Effect",
                 selection: Binding(
-                    get: { audio.preset }, set: { value in model.update { $0.audio.preset = value } })
+                    get: { audio.preset },
+                    set: { value in model.update { $0.audio.preset = value } })
             ) {
                 ForEach(MeetingVoicePreset.allCases, id: \.self) { Text($0.title).tag($0) }
             }
@@ -149,8 +153,11 @@ struct VirtualCameraAudioPanel: View {
             DisclosureGroup("Fine tune") {
                 VStack(spacing: UIScale.pt(12)) {
                     if audio.voiceModelID != nil {
-                        adjustment("Model pitch", value: Double(audio.voiceTranspose), range: -24...24) {
-                            value in model.update { $0.audio.voiceTranspose = Float(value.rounded()) }
+                        adjustment(
+                            "Model pitch", value: Double(audio.voiceTranspose), range: -24...24
+                        ) {
+                            value in
+                            model.update { $0.audio.voiceTranspose = Float(value.rounded()) }
                         }
                     }
                     adjustment("Pitch", value: Double(audio.pitch), range: -1200...1200) {
@@ -261,7 +268,8 @@ struct VirtualCameraAudioPanel: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         model.performAudio(
             .importClip(
-                name: snippetName.isEmpty ? url.deletingPathExtension().lastPathComponent : snippetName,
+                name: snippetName.isEmpty
+                    ? url.deletingPathExtension().lastPathComponent : snippetName,
                 path: url.path, speech: speech))
     }
 }

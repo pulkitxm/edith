@@ -53,22 +53,28 @@ struct VirtualCameraPage: View {
 
     var body: some View {
         PageWorkspace {
-            PageHeader("Virtual Camera", trailing: {
-                HStack(spacing: UIScale.pt(12)) {
-                    VirtualCameraStatusPill(model: model, dark: dark)
-                    Button {
-                        model.tab = .audio
-                        showingInspector = true
-                    } label: {
-                        Label("Audio", systemImage: "waveform")
+            PageHeader(
+                "Virtual Camera",
+                trailing: {
+                    HStack(spacing: UIScale.pt(12)) {
+                        VirtualCameraStatusPill(model: model, dark: dark)
+                        Button {
+                            model.tab = .audio
+                            showingInspector = true
+                        } label: {
+                            Label("Audio", systemImage: "waveform")
+                        }
+                        .buttonStyle(.edith(.secondary))
+                        Button {
+                            showingInspector.toggle()
+                        } label: {
+                            Label(
+                                showingInspector && !compact ? "Hide controls" : "Adjust",
+                                systemImage: "slider.horizontal.3")
+                        }
+                        .buttonStyle(.edith(.secondary))
                     }
-                    .buttonStyle(.edith(.secondary))
-                    Button { showingInspector.toggle() } label: {
-                        Label(showingInspector && !compact ? "Hide controls" : "Adjust", systemImage: "slider.horizontal.3")
-                    }
-                    .buttonStyle(.edith(.secondary))
-                }
-            })
+                })
         } content: {
             GeometryReader { geometry in
                 HStack(spacing: UIScale.pt(16)) {

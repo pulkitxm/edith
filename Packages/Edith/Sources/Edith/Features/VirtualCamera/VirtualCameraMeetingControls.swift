@@ -40,14 +40,18 @@ struct VirtualCameraMeetingControls: View {
                 .accessibilityLabel("Meeting options")
             }
             HStack(spacing: UIScale.pt(12)) {
-                Button { model.toggleMeetingPlayback() } label: {
+                Button {
+                    model.toggleMeetingPlayback()
+                } label: {
                     Label(
                         model.meetingPlaying ? "Pause" : "Play",
-                        systemImage: model.meetingPlaying ? "pause.fill" : "play.fill")
-                        .frame(minWidth: UIScale.pt(88), minHeight: UIScale.pt(28))
+                        systemImage: model.meetingPlaying ? "pause.fill" : "play.fill"
+                    )
+                    .frame(minWidth: UIScale.pt(88), minHeight: UIScale.pt(28))
                 }
                 .buttonStyle(.edith(.primary))
-                .help(model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
+                .help(
+                    model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
                 Button {
                     if !model.state.audio.enabled {
                         model.performAudio(.enable(true))
@@ -56,21 +60,26 @@ struct VirtualCameraMeetingControls: View {
                     }
                 } label: {
                     Label(
-                        !model.state.audio.enabled ? "Enable audio"
+                        !model.state.audio.enabled
+                            ? "Enable audio"
                             : model.state.audio.muted ? "Unmute mic" : "Mute mic",
                         systemImage: model.state.audio.muted || !model.state.audio.enabled
-                            ? "mic.slash.fill" : "mic.fill")
-                        .frame(minHeight: UIScale.pt(28))
+                            ? "mic.slash.fill" : "mic.fill"
+                    )
+                    .frame(minHeight: UIScale.pt(28))
                 }
                 .buttonStyle(.edith(.secondary))
                 .disabled(model.audioPending)
                 Spacer(minLength: UIScale.pt(4))
-                Button { model.toggleRecording() } label: {
+                Button {
+                    model.toggleRecording()
+                } label: {
                     Label(
                         model.snapshot?.recordingPath == nil ? "Record" : "Stop recording",
                         systemImage: model.snapshot?.recordingPath == nil
-                            ? "record.circle" : "stop.circle.fill")
-                        .frame(minHeight: UIScale.pt(28))
+                            ? "record.circle" : "stop.circle.fill"
+                    )
+                    .frame(minHeight: UIScale.pt(28))
                 }
                 .buttonStyle(.edith(.secondary))
                 .disabled(model.state.privacy == .stopped && model.snapshot?.recordingPath == nil)
@@ -110,7 +119,8 @@ struct VirtualCameraMeetingControls: View {
     private var sourceTitle: String {
         switch model.state.media.kind {
         case .camera: model.selectedSource?.name ?? "Choose camera"
-        case .video: model.state.media.path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Video"
+        case .video:
+            model.state.media.path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Video"
         case .screen: "Screen or window"
         }
     }

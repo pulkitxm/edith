@@ -990,8 +990,11 @@ enum VirtualCameraSyntheticStudio {
         audioStatus.running = true
         meetingSnapshot.audioStatus = audioStatus
         meetingSnapshot.state = model.state
-        model.injectForTesting(snapshot: meetingSnapshot, sources: VirtualCameraPageModelTests.sources)
-        for tab in [VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output, .audio] {
+        model.injectForTesting(
+            snapshot: meetingSnapshot, sources: VirtualCameraPageModelTests.sources)
+        for tab in [
+            VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output, .audio,
+        ] {
             model.tab = tab
             try renderPage(
                 model, preview: preview, renderer: renderer,

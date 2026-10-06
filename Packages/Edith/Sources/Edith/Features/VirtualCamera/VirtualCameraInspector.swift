@@ -10,7 +10,9 @@ struct VirtualCameraInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Button { choosingTab = true } label: {
+            Button {
+                choosingTab = true
+            } label: {
                 HStack {
                     Label(model.tab.title, systemImage: model.tab.symbolName)
                         .font(.edithText(.headline))
@@ -31,7 +33,9 @@ struct VirtualCameraInspector: View {
                         } label: {
                             Label(tab.title, systemImage: tab.symbolName)
                                 .font(.edithText(.body))
-                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
+                                .frame(
+                                    maxWidth: .infinity, minHeight: UIScale.pt(28),
+                                    alignment: .leading)
                         }
                         .buttonStyle(.edith(.toolbar))
                     }
