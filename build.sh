@@ -362,6 +362,9 @@ codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier "$AGENT_IDENTIFIER" "$AGENT"
 sign "$HELPER" "Resources/Helper.entitlements"
+python3 scripts/build-meeting-microphone.py --application "$APP_IDENTIFIER" \
+  --version "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
+  --identity "$SIGN_IDENTITY" --output "$APP/Contents/Resources"
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
   : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \

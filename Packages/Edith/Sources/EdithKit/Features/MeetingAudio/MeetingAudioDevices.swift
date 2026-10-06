@@ -55,7 +55,7 @@ public enum MeetingAudioDevices {
         guard matches.count == 1, let device = matches.first else {
             throw MeetingAudioLibrary.error(
                 output
-                    ? "Choose an installed virtual audio output, such as BlackHole 2ch."
+                    ? "Choose Edith Microphone from ed camera audio devices."
                     : "The microphone is unavailable. Choose one from ed camera audio devices.")
         }
         return device

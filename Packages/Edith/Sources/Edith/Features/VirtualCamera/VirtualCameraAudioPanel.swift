@@ -10,6 +10,7 @@ struct VirtualCameraAudioPanel: View {
     @State private var snippetName = ""
     @State private var importSound = false
     @State private var editing: MeetingAudioClip?
+    @State private var installationFailure: String?
 
     private var audio: MeetingAudioState { model.state.audio }
     private var status: MeetingAudioStatus? { model.snapshot?.audioStatus }
@@ -46,16 +47,26 @@ struct VirtualCameraAudioPanel: View {
                     selection: Binding(
                         get: { audio.outputID ?? "" }, set: { model.performAudio(.output($0)) })
                 ) {
-                    Text("Select virtual device").tag("")
+                    Text(MeetingMicrophone.name).tag("")
                     ForEach(devices.filter { $0.virtual && $0.outputChannels > 0 }) {
                         Text($0.name).tag($0.id)
                     }
                 }
                 Button("Refresh devices") { refreshDevices() }.buttonStyle(.edith(.toolbar))
-                if !devices.contains(where: { $0.virtual && $0.outputChannels > 0 }) {
-                    Link(
-                        "Install BlackHole 2ch",
-                        destination: URL(string: "https://existential.audio/blackhole/")!)
+                if !devices.contains(where: { $0.id == MeetingMicrophone.id }) {
+                    Button("Install Edith Microphone") {
+                        do { try MeetingMicrophone.install() } catch {
+                            installationFailure = error.localizedDescription
+                        }
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    Text(
+                        "Approve installation in macOS, restart your Mac, then refresh devices. Select Edith Microphone in your meeting."
+                    )
+                    .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+                }
+                if let installationFailure {
+                    Text(installationFailure).font(.edithText(.caption)).foregroundStyle(.red)
                 }
                 Text(
                     status?.running == true

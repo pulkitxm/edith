@@ -66,12 +66,13 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         if let id = state.outputID {
             output = try MeetingAudioDevices.resolve(id, output: true)
         } else if let device = devices.first(where: {
-            $0.virtual && $0.outputChannels > 0 && $0.name.contains("BlackHole")
+            $0.id == MeetingMicrophone.id && $0.outputChannels > 0
         }) {
             output = device
         } else {
             throw MeetingAudioLibrary.error(
-                "Install BlackHole 2ch, then select it as the virtual microphone in your meeting.")
+                "Install Edith Microphone from the Audio panel, restart your Mac, then select it in your meeting."
+            )
         }
         let input: MeetingAudioDevice
         if let id = state.inputID {

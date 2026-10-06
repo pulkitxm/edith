@@ -9,7 +9,7 @@ struct CameraAudioCommand: AsyncParsableCommand {
 
     @Argument(
         help:
-            "status, devices, on, off, input, output, mute, unmute, voice, levels, effects, import, record, save, play, stop, edit, remove or source."
+            "status, devices, on, off, input, output, mute, unmute, voice, levels, effects, import, record, save, play, stop, edit, remove, source or install."
     ) var action = "status"
     @Argument(help: "Device, voice preset or snippet name.") var value: String?
     @Option(help: "File to import.") var path: String?
@@ -37,6 +37,17 @@ struct CameraAudioCommand: AsyncParsableCommand {
                             "\($0.name): \($0.id) (in \($0.inputChannels), out \($0.outputChannels)\($0.virtual ? ", virtual" : ""))"
                         )
                     }
+                }
+                return
+            }
+            if action == "install" {
+                try await MeetingMicrophone.install()
+                let message =
+                    "Approve Edith Microphone installation in macOS, restart your Mac, then select it in your meeting."
+                if json {
+                    CLIOut.json(.object(["message": .string(message)]))
+                } else {
+                    CLIOut.out(message)
                 }
                 return
             }

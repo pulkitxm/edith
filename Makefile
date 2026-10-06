@@ -150,7 +150,10 @@ ci-swift-lint:
 	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 	cd $(STUDIO_PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
 
-ci-swift-build: approve-package-plugins
+ci-meeting-microphone:
+	python3 scripts/build-meeting-microphone.py --test --output .build/meeting-microphone
+
+ci-swift-build: approve-package-plugins ci-meeting-microphone
 	@test -n "$(DEVELOPER_DIR)" \
 	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
 	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
