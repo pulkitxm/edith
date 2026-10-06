@@ -60,15 +60,33 @@ import Testing
         #expect(exports == 1)
     }
 
-    @Test func copyShortcutDeliversTheSelectedCardAndShowsFeedback() async throws {
-        try await copyShortcut(UsageExportDeck(snapshot: usage), name: "usage")
+    @Test(arguments: [1.0, 1.6])
+    func copyShortcutDeliversTheSelectedCardAndShowsFeedback(zoom: Double) async throws {
+        let previous = UIScale.current
+        UIScale.apply(zoom)
+        defer { UIScale.apply(previous) }
+        let suffix = zoom == 1 ? "" : "-zoom"
+        try await copyShortcut(UsageExportDeck(snapshot: usage), name: "usage\(suffix)", zoom: zoom)
         try await copyShortcut(
             CodeStatsExportDeck(
                 snapshot: CodeStatsExportSnapshot(report: CodeStatsPageFixture.report(.all))),
-            name: "code-stats")
+            name: "code-stats\(suffix)", zoom: zoom)
     }
 
-    private func copyShortcut<Deck: ExportCardDeck>(_ deck: Deck, name: String) async throws {
+    private func copyShortcut<Deck: ExportCardDeck>(_ deck: Deck, name: String, zoom: Double)
+        async throws
+    {
+        _ = TestWindowHost.application
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, previous) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
         let pasteboard = NSPasteboard(name: .init(UUID().uuidString))
         defer { pasteboard.releaseGlobally() }
         let host = NSHostingView(
@@ -76,10 +94,12 @@ import Testing
                 ExportCardInteractionHost(
                     deck: deck, title: "Share \(name)", pasteboard: pasteboard
                 )
-                .environment(\.colorScheme, .dark)
+                .environment(\.colorScheme, zoom == 1 ? .dark : .light)
                 .environment(\.scenePhase, .active)))
-        host.frame = NSRect(x: 0, y: 0, width: 720, height: 610)
-        host.appearance = NSAppearance(named: .darkAqua)
+        host.frame = NSRect(
+            x: 0, y: 0, width: PresentationMetrics.width(720),
+            height: PresentationMetrics.height(610))
+        host.appearance = NSAppearance(named: zoom == 1 ? .darkAqua : .aqua)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host
         window.orderBack(nil)
@@ -96,7 +116,7 @@ import Testing
         }
         #expect(window.performKeyEquivalent(with: try key("c", code: 8, in: window)))
         if let evidence {
-            for frame in 1..<13 {
+            for frame in 1..<(zoom == 1 ? 13 : 2) {
                 try await Task.sleep(for: .milliseconds(50))
                 host.layoutSubtreeIfNeeded()
                 try capture(host, to: evidence.appendingPathComponent("copy-\(name)-\(frame).png"))
@@ -118,6 +138,38 @@ import Testing
         try await Task.sleep(for: .milliseconds(100))
         let expected = try ExportCardRenderer.pngData(deck.content(for: deck.cards[1]))
         #expect(pasteboard.data(forType: .png) == expected)
+        let label = deck.title(for: try #require(deck.cards.last))
+        let frame = try paginationFrame(label: label, host: host)
+        let local = window.convertFromScreen(frame)
+        #expect(NSRect(origin: .zero, size: host.frame.size).contains(local))
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            window.sendEvent(
+                try #require(
+                    NSEvent.mouseEvent(
+                        with: type,
+                        location: NSPoint(x: local.midX, y: local.midY), modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1,
+                        pressure: type == .leftMouseDown ? 1 : 0)))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect((try auditText(host)).contains(label))
+    }
+
+    private func paginationFrame(label: String, host: NSView) throws -> CGRect {
+        var pending: [NSObject] = [host]
+        while let object = pending.popLast() {
+            if (object as AnyObject).accessibilityRole?() == .button,
+                (object as AnyObject).accessibilityLabel?() == label,
+                let frame = (object as AnyObject).accessibilityFrame?()
+            {
+                return frame
+            }
+            pending.append(
+                contentsOf: (object as AnyObject).accessibilityChildren?() as? [NSObject] ?? [])
+        }
+        throw ExportCardTestError.missingPagination
     }
 
     private func capture(_ host: NSView, to url: URL) throws {
@@ -175,4 +227,8 @@ private struct ExportCardInteractionHost<Deck: ExportCardDeck>: View {
         ExportCardSheet(
             deck: deck, title: title, busy: $busy, onDismiss: {}, pasteboard: pasteboard)
     }
+}
+
+private enum ExportCardTestError: Error {
+    case missingPagination
 }

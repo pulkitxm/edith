@@ -83,23 +83,22 @@ struct ExportCardSheet<Deck: ExportCardDeck>: View {
                     .accessibilityLabel("Close export")
                     .help("Close (Escape)")
             }
-            ScrollView {
-                VStack(spacing: UIScale.pt(12)) {
-                    preview
-                    HStack(spacing: UIScale.pt(12)) {
-                        arrow("chevron.left", shortcut: .leftArrow, movement: -1)
-                        Text(deck.title(for: card))
-                            .font(DashSkin.heading(14))
-                            .lineLimit(1)
-                        Text("\(index + 1) / \(deck.cards.count)")
-                            .font(DashSkin.mono(11))
-                            .foregroundStyle(DashSkin.inkSoft(dark, theme: theme))
-                        arrow("chevron.right", shortcut: .rightArrow, movement: 1)
-                    }
-                    pagination
-                }
+            GeometryReader { geometry in
+                preview
+                    .frame(width: min(geometry.size.width, geometry.size.height * 1.5))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(maxWidth: .infinity)
+            HStack(spacing: UIScale.pt(12)) {
+                arrow("chevron.left", shortcut: .leftArrow, movement: -1)
+                Text(deck.title(for: card))
+                    .font(DashSkin.heading(14))
+                    .lineLimit(1)
+                Text("\(index + 1) / \(deck.cards.count)")
+                    .font(DashSkin.mono(11))
+                    .foregroundStyle(DashSkin.inkSoft(dark, theme: theme))
+                arrow("chevron.right", shortcut: .rightArrow, movement: 1)
+            }
+            pagination
             HStack(spacing: UIScale.pt(12)) {
                 Button {
                     deliver(save: false)
