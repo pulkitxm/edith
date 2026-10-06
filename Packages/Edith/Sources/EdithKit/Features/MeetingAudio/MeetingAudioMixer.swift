@@ -71,7 +71,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
             output = device
         } else {
             throw MeetingAudioLibrary.error(
-                "Install Edith Microphone from the Audio panel, restart your Mac, then select it in your meeting."
+                "Edith Microphone is unavailable. Complete Edith’s application setup and background helper approval in Settings."
             )
         }
         let input: MeetingAudioDevice

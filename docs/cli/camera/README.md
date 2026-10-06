@@ -249,9 +249,10 @@ normal outgoing stream.
 
 ## Meeting audio
 
-Install Edith Microphone from the Audio panel, or run `ed camera audio install`.
-Approve the native macOS installer and restart your Mac once. Select Edith
-Microphone in Meet or Zoom. Edith sends
+Edith installs its microphone driver through the application’s existing
+privileged helper during setup and updates. Approve Edith’s background helper
+through its normal setup flow. If macOS has not loaded the device yet, restart
+macOS once. Select Edith Microphone in Meet or Zoom. Edith sends
 one mix to that device. The video virtual camera remains a separate device.
 Choose your physical microphone as Edith's input, never the same loopback device
 as both input and output. Device UIDs and effect settings stay saved across
@@ -295,8 +296,8 @@ to share only its picture. Screen capture excludes Edith’s own audio to avoid
 feeding the mix back into itself.
 
 Edith Microphone is a native CoreAudio driver bundled with Edith. It requires no
-separate audio application. Development builds install a distinct device per
-worktree. The driver transports stereo 48 kHz audio with a bounded memory buffer
+separate audio application. Development builds carry a distinct device identity per
+worktree and do not install system components automatically. The driver transports stereo 48 kHz audio with a bounded memory buffer
 and sends silence when Edith stops producing audio. It does not become the
 system output device. Voice presets, mixing, trimming and recording run locally
 inside Edith.

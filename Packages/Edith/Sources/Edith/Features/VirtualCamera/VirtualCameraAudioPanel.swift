@@ -10,7 +10,6 @@ struct VirtualCameraAudioPanel: View {
     @State private var snippetName = ""
     @State private var importSound = false
     @State private var editing: MeetingAudioClip?
-    @State private var installationFailure: String?
 
     private var audio: MeetingAudioState { model.state.audio }
     private var status: MeetingAudioStatus? { model.snapshot?.audioStatus }
@@ -28,6 +27,9 @@ struct VirtualCameraAudioPanel: View {
                         model.performAudio(.enable(status?.running != true))
                     }
                     .buttonStyle(.edith(.primary))
+                    .disabled(
+                        status?.running != true
+                            && !devices.contains { $0.virtual && $0.outputChannels > 0 })
                     Button(audio.muted ? "Unmute mic" : "Mute mic") {
                         model.performAudio(.mute(!audio.muted))
                     }
@@ -47,26 +49,20 @@ struct VirtualCameraAudioPanel: View {
                     selection: Binding(
                         get: { audio.outputID ?? "" }, set: { model.performAudio(.output($0)) })
                 ) {
-                    Text(MeetingMicrophone.name).tag("")
+                    Text(
+                        devices.contains(where: { $0.id == MeetingMicrophone.id })
+                            ? MeetingMicrophone.name : "Meeting microphone unavailable"
+                    ).tag("")
                     ForEach(devices.filter { $0.virtual && $0.outputChannels > 0 }) {
                         Text($0.name).tag($0.id)
                     }
                 }
                 Button("Refresh devices") { refreshDevices() }.buttonStyle(.edith(.toolbar))
                 if !devices.contains(where: { $0.id == MeetingMicrophone.id }) {
-                    Button("Install Edith Microphone") {
-                        do { try MeetingMicrophone.install() } catch {
-                            installationFailure = error.localizedDescription
-                        }
-                    }
-                    .buttonStyle(.edith(.secondary))
                     Text(
-                        "Approve installation in macOS, restart your Mac, then refresh devices. Select Edith Microphone in your meeting."
+                        "Edith Microphone is included with the application. Complete Edith’s background helper approval in Settings. If setup is complete, restart macOS to load the audio device."
                     )
                     .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
-                }
-                if let installationFailure {
-                    Text(installationFailure).font(.edithText(.caption)).foregroundStyle(.red)
                 }
                 Text(
                     status?.running == true

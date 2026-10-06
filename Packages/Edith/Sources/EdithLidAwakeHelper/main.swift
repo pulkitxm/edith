@@ -59,6 +59,15 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
         }
     }
 
+    func synchronizeMeetingMicrophone(reply: @escaping (NSError?) -> Void) {
+        do {
+            let executable = URL(fileURLWithPath: CommandLine.arguments[0])
+            let application = try MeetingMicrophoneDeployment.application(containing: executable)
+            try MeetingMicrophoneDeployment.synchronize(application: application)
+            reply(nil)
+        } catch { reply(error as NSError) }
+    }
+
     private static func loadClientRequirement() -> SecRequirement? {
         var ownCode: SecCode?
         guard
@@ -79,7 +88,7 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
             let teamIdentifier = values[kSecCodeInfoTeamIdentifier] as? String
         else { return nil }
         let expression =
-            "identifier \"\(LidAwakePrivilegedService.clientBundleIdentifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(teamIdentifier)\""
+            "(identifier \"\(LidAwakePrivilegedService.clientBundleIdentifier)\" or identifier \"com.pulkit.edith\") and anchor apple generic and certificate leaf[subject.OU] = \"\(teamIdentifier)\""
         var requirement: SecRequirement?
         guard
             SecRequirementCreateWithString(expression as CFString, [], &requirement)

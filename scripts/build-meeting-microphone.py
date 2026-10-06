@@ -2,7 +2,6 @@ import argparse
 import pathlib
 import plistlib
 import subprocess
-import tempfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--application", default="com.pulkit.edith")
@@ -25,23 +24,19 @@ uid = args.application + ".microphone"
 slot = args.application.removeprefix("com.pulkit.edith.dev.")
 name = "Edith Microphone" if args.application == "com.pulkit.edith" else f"Edith Microphone ({slot})"
 factory = "1A9DB29B-7D06-41B3-921F-244565DD86D9"
-with tempfile.TemporaryDirectory(prefix="edith-microphone-") as temporary:
-    driver = pathlib.Path(temporary) / (uid + ".driver")
-    executable = driver / "Contents/MacOS/EdithMicrophone"
-    executable.parent.mkdir(parents=True)
-    info = {"CFBundleIdentifier": uid, "CFBundleName": name, "CFBundleExecutable": "EdithMicrophone",
-            "CFBundlePackageType": "BNDL", "CFBundleShortVersionString": args.version,
-            "CFBundleVersion": args.version, "CFPlugInDynamicRegistration": False,
-            "CFPlugInFactories": {factory: "EdithMicrophoneFactory"},
-            "CFPlugInTypes": {"443ABAB8-E7B3-491A-B985-BEB9187030DB": [factory]}}
-    with (driver / "Contents/Info.plist").open("wb") as handle:
-        plistlib.dump(info, handle)
-    subprocess.run(["xcrun", "clang++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
-                    "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=14.0", "-bundle",
-                    "-fvisibility=hidden", f'-DEDITH_MICROPHONE_UID="{uid}"',
-                    f'-DEDITH_MICROPHONE_NAME="{name}"', str(source / "EdithMicrophone.cpp"),
-                    "-framework", "CoreAudio", "-framework", "CoreFoundation", "-o", str(executable)], check=True)
-    subprocess.run(["codesign", "--force", "--sign", args.identity, str(driver)], check=True)
-    subprocess.run(["pkgbuild", "--component", str(driver), "--install-location", "/Library/Audio/Plug-Ins/HAL",
-                    "--identifier", uid, "--version", args.version,
-                    str(args.output / "EdithMicrophone.pkg")], check=True)
+driver = args.output / (uid + ".driver")
+executable = driver / "Contents/MacOS/EdithMicrophone"
+executable.parent.mkdir(parents=True)
+info = {"CFBundleIdentifier": uid, "CFBundleName": name, "CFBundleExecutable": "EdithMicrophone",
+        "CFBundlePackageType": "BNDL", "CFBundleShortVersionString": args.version,
+        "CFBundleVersion": args.version, "CFPlugInDynamicRegistration": False,
+        "CFPlugInFactories": {factory: "EdithMicrophoneFactory"},
+        "CFPlugInTypes": {"443ABAB8-E7B3-491A-B985-BEB9187030DB": [factory]}}
+with (driver / "Contents/Info.plist").open("wb") as handle:
+    plistlib.dump(info, handle)
+subprocess.run(["xcrun", "clang++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
+                "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=14.0", "-bundle",
+                "-fvisibility=hidden", f'-DEDITH_MICROPHONE_UID="{uid}"',
+                f'-DEDITH_MICROPHONE_NAME="{name}"', str(source / "EdithMicrophone.cpp"),
+                "-framework", "CoreAudio", "-framework", "CoreFoundation", "-o", str(executable)], check=True)
+subprocess.run(["codesign", "--force", "--sign", args.identity, str(driver)], check=True)
