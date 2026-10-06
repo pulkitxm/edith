@@ -2,6 +2,7 @@ import AppKit
 import EdithKit
 import SwiftUI
 import UniformTypeIdentifiers
+import UniformTypeIdentifiers
 
 struct VirtualCameraAudioPanel: View {
     @ObservedObject var model: VirtualCameraPageModel
@@ -89,6 +90,33 @@ struct VirtualCameraAudioPanel: View {
                 title: "Voice",
                 detail: "Live speech and saved speech snippets use the same effects.", dark: dark
             ) {
+                Picker(
+                    "Voice model",
+                    selection: Binding(
+                        get: { audio.voiceModelID?.uuidString ?? "" },
+                        set: { model.performAudio(.selectVoice($0)) })
+                ) {
+                    Text("Original voice").tag("")
+                    ForEach(audio.voiceModels) { Text($0.name).tag($0.id.uuidString) }
+                }
+                HStack {
+                    Button("Import voice model…") { model.importVoiceModel() }
+                        .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
+                    if let id = audio.voiceModelID {
+                        Button("Remove") { model.performAudio(.removeVoice(id.uuidString)) }
+                            .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
+                    }
+                }
+                Text(
+                    "Import a ContentVec encoder and an RVC ONNX voice. Conversion runs locally with about half a second of buffering."
+                )
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+                if audio.voiceModelID != nil {
+                    adjustment("Model pitch", value: Double(audio.voiceTranspose), range: -24...24)
+                    { value in
+                        model.update { $0.audio.voiceTranspose = Float(value.rounded()) }
+                    }
+                }
                 Picker(
                     "Preset",
                     selection: Binding(
@@ -234,6 +262,20 @@ struct VirtualCameraClipEditor: View {
 }
 
 extension VirtualCameraPageModel {
+    func importVoiceModel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "onnx") ?? .data]
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose the ContentVec ONNX encoder"
+        guard panel.runModal() == .OK, let encoder = panel.url else { return }
+        panel.message = "Choose an RVC ONNX voice model"
+        guard panel.runModal() == .OK, let voice = panel.url else { return }
+        performAudio(
+            .importVoice(
+                name: voice.deletingPathExtension().lastPathComponent,
+                encoder: encoder.path, voice: voice.path))
+    }
+
     func performAudio(_ request: MeetingAudioRequest, completion: (() -> Void)? = nil) {
         guard !audioPending else { return }
         flushSave()

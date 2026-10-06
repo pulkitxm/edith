@@ -15,6 +15,9 @@ public final class MeetingAudioMixer: @unchecked Sendable {
     private var outputTap = false
     private var clipPlayers: [UUID: AVAudioPlayerNode] = [:]
     private var inputTap = false
+    private var speechTap = false
+    private var voiceStream: MeetingVoiceStream?
+    private var voicePlayer: AVAudioPlayerNode?
     private var recording: AVAudioFile?
     private var recordingClip: MeetingAudioClip?
     private var state = MeetingAudioState()
@@ -36,7 +39,10 @@ public final class MeetingAudioMixer: @unchecked Sendable {
     }
 
     private func apply(_ next: MeetingAudioState) throws {
-        let rebuild = next.inputID != state.inputID || next.outputID != state.outputID
+        let rebuild =
+            next.inputID != state.inputID || next.outputID != state.outputID
+            || next.voiceModelID != state.voiceModelID
+            || next.voiceTranspose != state.voiceTranspose
         guard recording == nil || (next.enabled && !rebuild) else {
             throw MeetingAudioLibrary.error(
                 "Save the recording before changing audio devices or disabling audio.")
@@ -54,7 +60,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         for (id, player) in clipPlayers {
             player.volume = (next.clips.first { $0.id == id }?.gain ?? 1) * next.clipsGain
         }
-        updateStatus { $0.failure = nil }
+        if voiceStream?.isStopped != true { updateStatus { $0.failure = nil } }
     }
 
     private func start() throws {
@@ -105,8 +111,39 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         for node in effects.nodes { engine.attach(node) }
         engine.connect(engine.inputNode, to: mic, format: inputFormat)
         engine.connect(mic, to: speech, fromBus: 0, toBus: 0, format: inputFormat)
+        self.engine = engine
+        self.effects = effects
+        micMixer = mic
+        speechMixer = speech
+        var completed = false
+        defer { if !completed { stop() } }
         let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
         var previous: AVAudioNode = speech
+        if let id = state.voiceModelID {
+            guard let model = state.voiceModels.first(where: { $0.id == id }) else {
+                throw MeetingAudioLibrary.error("The selected voice model is unavailable.")
+            }
+            let player = AVAudioPlayerNode()
+            engine.attach(player)
+            let stream = try MeetingVoiceStream(
+                model: model, input: format, player: player, transpose: state.voiceTranspose,
+                failure: { [weak self] message in self?.updateStatus { $0.failure = message } })
+            let gate = AVAudioMixerNode()
+            engine.attach(gate)
+            engine.connect(speech, to: gate, format: format)
+            gate.outputVolume = 0
+            engine.connect(gate, to: engine.mainMixerNode, fromBus: 0, toBus: 2, format: format)
+            speech.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+                if let copy = Self.copy(buffer) { stream.enqueue(copy) }
+            }
+            speechTap = true
+            voiceStream = stream
+            voicePlayer = player
+            let resampler = AVAudioMixerNode()
+            engine.attach(resampler)
+            engine.connect(player, to: resampler, format: stream.outputFormat)
+            previous = resampler
+        }
         for node in effects.nodes {
             engine.connect(previous, to: node, format: format)
             previous = node
@@ -167,6 +204,8 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         source.volume = state.sourceGain
         do { try engine.start() } catch { stop(); throw error }
         source.play()
+        voicePlayer?.play()
+        completed = true
         updateStatus {
             $0.running = true
             $0.inputName = input.name
@@ -284,6 +323,41 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         case .playClip(let name):
             try play(try MeetingAudioLibrary.clip(name, in: next), state: next)
         case .stopClips: stopClips()
+        case .importVoice(let name, let encoder, let voice):
+            guard
+                !next.voiceModels.contains(where: {
+                    $0.name.caseInsensitiveCompare(name) == .orderedSame
+                })
+            else {
+                throw MeetingAudioLibrary.error("A voice model named \(name) already exists.")
+            }
+            next.voiceModels.append(
+                try MeetingVoiceLibrary.importing(name: name, encoder: encoder, voice: voice))
+        case .selectVoice(let name):
+            if name.isEmpty {
+                next.voiceModelID = nil
+            } else {
+                guard
+                    let model = next.voiceModels.first(where: {
+                        $0.name.caseInsensitiveCompare(name) == .orderedSame
+                            || $0.id.uuidString == name
+                    })
+                else {
+                    throw MeetingAudioLibrary.error("No voice model named \(name).")
+                }
+                next.voiceModelID = model.id
+            }
+        case .modelPitch(let value): next.voiceTranspose = try checked(value, range: -24...24)
+        case .removeVoice(let name):
+            guard
+                let model = next.voiceModels.first(where: {
+                    $0.name.caseInsensitiveCompare(name) == .orderedSame || $0.id.uuidString == name
+                })
+            else {
+                throw MeetingAudioLibrary.error("No voice model named \(name).")
+            }
+            if next.voiceModelID == model.id { next.voiceModelID = nil }
+            next.voiceModels.removeAll { $0.id == model.id }
         case .removeClip(let name):
             let clip = try MeetingAudioLibrary.clip(name, in: next)
             finishPlayer(clip.id, name: clip.name)
@@ -392,6 +466,11 @@ public final class MeetingAudioMixer: @unchecked Sendable {
 
     private func stop() {
         generation += 1
+        voiceStream?.stop()
+        voiceStream = nil
+        voicePlayer = nil
+        if speechTap { speechMixer?.removeTap(onBus: 0) }
+        speechTap = false
         stopClips()
         if inputTap { engine?.inputNode.removeTap(onBus: 0) }
         inputTap = false

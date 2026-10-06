@@ -24,7 +24,7 @@
     },
     {
       "name": "media",
-      "filter": "^EdithTests\\.(Music|MeetingAudio|MeetingMicrophone|VirtualCamera|Ghostty|Audio|Video|Terminal|Emoji)"
+      "filter": "^EdithTests\\.(Music|MeetingAudio|MeetingMicrophone|MeetingVoice|VirtualCamera|Ghostty|Audio|Video|Terminal|Emoji)"
     },
     { "name": "dashboard", "filter": "^EdithTests\\.(Dashboard|CodeStats)" },
     { "name": "extensions", "filter": "^EdithTests\\.(Extension|Lid)" },

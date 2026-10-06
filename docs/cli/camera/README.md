@@ -292,7 +292,8 @@ starts so captured audio remains recoverable after an interrupted session.
 
 Enable source audio to include the selected video file or screen capture in the
 meeting mix. It follows playback, pause, freeze and looping. Disable source audio
-to share only its picture. Screen capture excludes Edith’s own audio to avoid
+to share only its picture. A selected window includes audio from its owning app;
+a selected display includes system audio. Screen capture excludes Edith’s own audio to avoid
 feeding the mix back into itself.
 
 Edith Microphone is a native CoreAudio driver bundled with Edith. It requires no
@@ -301,3 +302,29 @@ worktree and do not install system components automatically. The driver transpor
 and sends silence when Edith stops producing audio. It does not become the
 system output device. Voice presets, mixing, trimming and recording run locally
 inside Edith.
+
+## Local voice models
+
+Import a ContentVec ONNX encoder and an RVC v1 or v2 ONNX voice export through
+the Voice panel. Edith validates both models, copies them into its library and
+runs them through its bundled native inference runtime. There is no separate
+server, application or runtime installation. Models must be self-contained ONNX
+files with 32, 40 or 48 kHz output. PyTorch checkpoints are not accepted.
+
+```sh
+ed camera audio model-import "My voice" --encoder ~/Models/contentvec.onnx --path ~/Models/voice.onnx
+ed camera audio model "My voice"
+ed camera audio model-pitch -3
+ed camera audio model-off
+ed camera audio model-remove "My voice"
+```
+
+The selected model converts live speech and speech snippets before the shared
+voice effects. Sounds and source audio keep their original voices. Conversion
+buffers 480 ms of speech and adds model processing time. A model that cannot
+keep up stops conversion and displays an error. Choosing Original voice restores
+unconverted speech. Muting the physical microphone still allows speech snippets
+and sounds to play. Voice model selection and pitch survive app restarts.
+
+Voice models are imported assets. Edith does not label a pitch effect as a
+celebrity voice or provide a built-in celebrity model.

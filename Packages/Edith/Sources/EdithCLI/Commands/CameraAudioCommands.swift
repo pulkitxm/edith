@@ -9,10 +9,11 @@ struct CameraAudioCommand: AsyncParsableCommand {
 
     @Argument(
         help:
-            "status, devices, on, off, input, output, mute, unmute, voice, levels, effects, import, record, save, play, stop, edit, remove or source."
+            "status, devices, on, off, input, output, mute, unmute, voice, levels, effects, import, record, save, play, stop, edit, remove, source, model-import, model, model-pitch, model-off or model-remove."
     ) var action = "status"
     @Argument(help: "Device, voice preset or snippet name.") var value: String?
     @Option(help: "File to import.") var path: String?
+    @Option(help: "ContentVec ONNX encoder for model-import.") var encoder: String?
     @Flag(help: "Import a sound effect that bypasses voice effects.") var sound = false
     @Option(help: "Clip trim start in seconds.") var start: Double = 0
     @Option(help: "Clip trim end in seconds.") var end: Double?
@@ -59,6 +60,22 @@ struct CameraAudioCommand: AsyncParsableCommand {
                     )
                 }
                 request = .voice(preset)
+            case "model-import":
+                guard let path, let encoder else {
+                    throw CLIFailure("Pass --path for the ONNX voice and --encoder for ContentVec.")
+                }
+                request = .importVoice(
+                    name: try requiredValue(),
+                    encoder: URL(fileURLWithPath: (encoder as NSString).expandingTildeInPath).path,
+                    voice: URL(fileURLWithPath: (path as NSString).expandingTildeInPath).path)
+            case "model": request = .selectVoice(try requiredValue())
+            case "model-pitch":
+                guard let value = Float(try requiredValue()) else {
+                    throw CLIFailure("Pass a pitch in semitones from -24 to 24.")
+                }
+                request = .modelPitch(value)
+            case "model-off": request = .selectVoice("")
+            case "model-remove": request = .removeVoice(try requiredValue())
             case "levels": request = .levels(mic: mic, clips: clips, source: source)
             case "effects": request = .effects(pitch: pitch, reverb: reverb, delay: delay)
             case "import":
@@ -86,6 +103,7 @@ struct CameraAudioCommand: AsyncParsableCommand {
                     "meeting audio: \(snapshot.audioStatus?.running == true ? "running" : "off"), voice: \(audio.preset.title)"
                 )
                 if let error = snapshot.audioStatus?.failure { CLIOut.out(error) }
+                audio.voiceModels.forEach { CLIOut.out("\($0.name) (voice model)") }
                 audio.clips.forEach { CLIOut.out("\($0.name) (\($0.speech ? "speech" : "sound"))") }
             }
         }

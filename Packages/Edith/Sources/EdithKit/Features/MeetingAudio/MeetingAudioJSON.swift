@@ -17,6 +17,15 @@ public extension MeetingAudioState {
             "inputName": .optional(status?.inputName), "outputName": .optional(status?.outputName),
             "muted": .bool(muted), "micGain": .double(Double(micGain)),
             "clipsGain": .double(Double(clipsGain)), "sourceGain": .double(Double(sourceGain)),
+            "voiceModel": .optional(voiceModelID?.uuidString),
+            "voiceTranspose": .double(Double(voiceTranspose)),
+            "voiceModels": .array(
+                voiceModels.map {
+                    .object([
+                        "id": .string($0.id.uuidString), "name": .string($0.name),
+                        "encoder": .string($0.encoderPath), "model": .string($0.voicePath),
+                    ])
+                }),
             "voice": .string(preset.rawValue), "pitch": .double(Double(pitch)),
             "reverb": .double(Double(reverb)), "delay": .double(Double(delay)),
             "recording": .optional(status?.recordingName), "error": .optional(status?.failure),

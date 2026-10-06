@@ -46,6 +46,9 @@ public struct MeetingAudioState: Codable, Equatable, Sendable {
     public var reverb: Float = 0
     public var delay: Float = 0
     public var clips: [MeetingAudioClip] = []
+    public var voiceModels: [MeetingVoiceModel] = []
+    public var voiceModelID: UUID?
+    public var voiceTranspose: Float = 0
 
     public init() {}
 }
@@ -66,6 +69,10 @@ public enum MeetingAudioRequest: Codable, Equatable, Sendable {
     case playClip(String)
     case stopClips
     case removeClip(String)
+    case importVoice(name: String, encoder: String, voice: String)
+    case selectVoice(String)
+    case modelPitch(Float)
+    case removeVoice(String)
 }
 
 public struct MeetingAudioStatus: Codable, Equatable, Sendable {
