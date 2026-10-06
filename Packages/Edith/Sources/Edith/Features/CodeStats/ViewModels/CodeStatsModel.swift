@@ -58,6 +58,7 @@ final class CodeStatsModel {
     var loadingState: ContentLoadingState {
         if report != nil { return .content }
         if status == nil { return statusLoad.state }
+        if !reportLoaded { return reportLoad.state }
         switch phase {
         case .loading: return reportLoad.state == .content ? .loading : reportLoad.state
         case .firstRun: return .loading
@@ -132,6 +133,7 @@ final class CodeStatsModel {
 
     func refresh() async {
         await loadStatus()
+        guard !Task.isCancelled else { return }
         await loadReport()
     }
 

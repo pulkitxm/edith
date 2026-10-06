@@ -13,36 +13,53 @@ struct CodeStatsHomeSummary: Equatable, Sendable {
 
 struct CodeStatsHomeCard: View {
     let dark: Bool
-    @State private var model = CodeStatsModel.shared
+    @State private var model: CodeStatsModel
     @State private var summary: CodeStatsHomeSummary?
-    @State private var loaded = false
-    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @State private var loading = ContentLoad()
+    @State private var retry = 0
+
+    init(dark: Bool, model: CodeStatsModel? = nil) {
+        self.dark = dark
+        _model = State(initialValue: model ?? CodeStatsModel.shared)
+    }
 
     var body: some View {
         PageCard(title: "Code Stats", note: "Last 30 days") {
-            if let summary {
-                content(summary)
-            } else if loaded {
-                Text("No code stats yet. Set up the mirror to start counting.")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                JumpLink(title: "Open Code Stats", destination: .codeStats, dark: dark)
-            } else {
-                SkeletonGroup {
-                    VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                        SkeletonBlock(width: UIScale.pt(220), height: UIScale.pt(26))
-                        SkeletonBlock(height: UIScale.pt(110))
-                        SkeletonBlock(width: UIScale.pt(180), height: UIScale.pt(14))
-                    }
+            LoadingContainer(
+                state: loading.state, title: "No code stats yet",
+                message: loading.errorMessage ?? "Set up the mirror to start counting.",
+                retry: { retry += 1 }, refreshing: loading.isRefreshing
+            ) {
+                if let summary { content(summary) }
+            } placeholder: {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    PageSkeletonControls()
+                    ActivityCalendarSkeleton(cellSize: 11)
+                    SkeletonBlock(width: 180, height: 14)
                 }
             }
+            if loading.state == .empty {
+                JumpLink(title: "Open Code Stats", destination: .codeStats, dark: dark)
+            }
         }
-        .pageTask(id: model.table?.rows.count ?? -1) {
-            guard automaticActionsEnabled else { return }
-            if model.table == nil { await model.refresh() }
-            summary = await model.homeSummary()
-            loaded = true
+        .pageTask(id: "\(model.table?.rows.count ?? -1):\(retry)", cancel: { loading.cancel() }) {
+            await loadSummary()
         }
+    }
+
+    private func loadSummary() async {
+        let request = loading.begin()
+        defer { if Task.isCancelled { loading.cancel(request) } }
+        if model.table == nil { await model.refresh() }
+        guard loading.isCurrent(request) else { return }
+        if let error = model.loadingError {
+            loading.fail(request, message: error)
+            return
+        }
+        let next = await model.homeSummary()
+        guard loading.isCurrent(request) else { return }
+        summary = next
+        loading.complete(request, empty: next == nil)
     }
 
     private func content(_ summary: CodeStatsHomeSummary) -> some View {

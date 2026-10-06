@@ -7,6 +7,39 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct AnalyticsLoadingRenderingTests {
+    @Test func sharedSkeletonIsVisibleOnTheFirstFrame() throws {
+        let host = try auditHost(
+            LoadingContainer(state: .loading) {
+                Color.blue
+            } placeholder: {
+                Color(.sRGB, red: 1, green: 0, blue: 0, opacity: 1).frame(width: 160, height: 80)
+            }
+            .environment(\.loadingAnimationsEnabled, false),
+            size: CGSize(width: 160, height: 80))
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let center = try #require(
+            bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(
+                .deviceRGB))
+        #expect(center.redComponent > 0.9)
+        #expect(center.blueComponent < 0.1)
+    }
+
+    @Test func codeChartsKeepSkeletonsBetweenStatusAndReportLoading() async throws {
+        let fixture = try models()
+        defer { fixture.cleanup() }
+        await fixture.code.loadStatus()
+        #expect(fixture.code.loadingState == .loading)
+        let host = try auditHost(
+            CodeStatsPage(model: fixture.code)
+                .environment(\.automaticViewActionsEnabled, false)
+                .environment(\.loadingAnimationsEnabled, false)
+                .environment(\.colorScheme, .dark),
+            size: CGSize(width: 1200, height: 850))
+        #expect(!(try auditText(host)).contains("Choose folder"))
+        try capture(host, name: "code-stats-pending-report")
+    }
+
     @Test func allAnalyticsPagesExposeRecoveryAtCompactZoom() throws {
         let previous = UIScale.current
         UIScale.apply(1.6)

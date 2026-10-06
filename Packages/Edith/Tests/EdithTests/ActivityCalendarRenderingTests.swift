@@ -63,6 +63,38 @@ import Testing
                     try #require(bitmap.representation(using: .png, properties: [:]))
                         .write(
                             to: root.appendingPathComponent("activity-\(Int(width))-\(scheme).png"))
+                    let calendar = CodeStatsPageFixture.calendar
+                    let start = CodeStatsPageFixture.date("2026-04-01")
+                    let days = (0..<188).map { index in
+                        ActivityCalendarDay(
+                            id: "sample-\(index)",
+                            date: calendar.date(byAdding: .day, value: index, to: start),
+                            value: Double(index * 13 % 24))
+                    }
+                    let populated = ActivityCalendar.weeks(days: days, calendar: calendar)
+                    let height = UIScale.pt(240)
+                    host.rootView = AnyView(
+                        PageCard(title: "Activity") {
+                            ActivityCalendarGrid(
+                                weeks: populated, dark: scheme == .dark, calendar: calendar
+                            ) { _ in
+                                Text("Synthetic activity")
+                            }
+                        }
+                        .padding(UIScale.pt(12))
+                        .frame(width: width, height: height, alignment: .top)
+                        .environment(\.colorScheme, scheme)
+                        .background(DashSkin.paper(scheme == .dark)))
+                    host.frame.size.height = height
+                    window.setContentSize(host.frame.size)
+                    try await Task.sleep(for: .milliseconds(100))
+                    host.layoutSubtreeIfNeeded()
+                    let card = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                    host.cacheDisplay(in: host.bounds, to: card)
+                    try #require(card.representation(using: .png, properties: [:]))
+                        .write(
+                            to: root.appendingPathComponent(
+                                "activity-card-\(Int(width))-\(scheme).png"))
                 }
             }
         }

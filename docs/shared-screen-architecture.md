@@ -48,6 +48,8 @@ The ticket API supports existing event-driven and staged loaders.
 refresh feedback, and unavailable states. `PageLoading` supplies shared page
 placeholder recipes. Feature views choose analytics, list, cards, or editor
 geometry instead of implementing another loading screen.
+Skeletons appear on the first frame, including between staged status and report
+requests. Setup and empty results appear only after their data requests finish.
 
 `SkeletonGroup`, `SkeletonBlock`, `SkeletonReplica`, and `LoadingIndicator` use
 the same `LoadingMotion` clock and shimmer renderer. Mounting a different screen
@@ -89,6 +91,9 @@ Shared controls own interaction styling, theme colors, focus, disabled state,
 and sizing. Use `EdithSegmentedPicker` for segmented selection, shared surfaces
 for cards, and the shared activity and export components for their respective
 content. Feature-specific calculations feed those components as values.
+The export button owns Command-E. The shared export sheet owns Command-C copy,
+Command-S save, arrow-key navigation, animated copy confirmation, and card
+transitions. Reduced motion keeps confirmation visible without spatial effects.
 
 `edithSheet` owns Escape and outside-click dismissal. Operation ownership and
 unsaved edits determine dismissibility. Global history commands are owned by the

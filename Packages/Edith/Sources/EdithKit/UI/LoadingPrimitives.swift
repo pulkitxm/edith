@@ -34,7 +34,6 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
     private let placeholder: () -> Placeholder
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var showsLoading = false
 
     public init(
         state: ContentLoadingState,
@@ -70,7 +69,6 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
                     }
             } else if state == .loading {
                 SkeletonGroup { placeholder() }
-                    .opacity(showsLoading ? 1 : 0)
             } else {
                 unavailable
             }
@@ -78,13 +76,6 @@ public struct LoadingContainer<Content: View, Placeholder: View>: View {
         .animation(
             Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: state
         )
-        .task(id: state) {
-            showsLoading = false
-            guard state == .loading else { return }
-            try? await Task.sleep(for: .milliseconds(150))
-            guard !Task.isCancelled else { return }
-            showsLoading = true
-        }
     }
 
     private var unavailable: some View {

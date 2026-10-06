@@ -45,6 +45,38 @@ import Testing
                 == .content)
     }
 
+    @Test func initialReportLoadingCannotPresentSetupEvenWithoutReportedAt() async {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        let model = model(agent)
+        await model.loadStatus()
+        #expect(model.report == nil)
+        #expect(model.loadingState == .loading)
+        let request = model.reportLoad.begin()
+        #expect(model.loadingState == .loading)
+        model.reportLoad.fail(request, message: "Synthetic report unavailable")
+        #expect(model.loadingState == .error)
+        await model.loadReport()
+        #expect(model.loadingState == .content)
+        #expect(model.phase == .content)
+    }
+
+    @Test func retainedReportsRemainVisibleDuringRefresh() async {
+        let agent = CodeStatsFakeAgent(
+            status: CodeStatsPageFixture.status(),
+            reports: [.days(90): CodeStatsPageFixture.report()])
+        let model = model(agent)
+        await model.refresh()
+        let request = model.reportLoad.begin()
+        #expect(model.loadingState == .content)
+        #expect(model.isRefreshing)
+        model.reportLoad.fail(request, message: "Synthetic refresh unavailable")
+        #expect(model.loadingState == .content)
+        #expect(model.report != nil)
+        #expect(!model.isRefreshing)
+    }
+
     @Test func emptyMirrorShowsTheSetupChecklist() async {
         let agent = CodeStatsFakeAgent(
             status: CodeStatsPageFixture.status(storage: .notConfigured))
