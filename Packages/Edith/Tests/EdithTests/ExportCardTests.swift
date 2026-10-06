@@ -122,8 +122,15 @@ import Testing
                 try capture(host, to: evidence.appendingPathComponent("copy-\(name)-\(frame).png"))
             }
         }
+        let clock = ContinuousClock()
+        let deliveryDeadline = clock.now.advanced(by: .seconds(10))
+        while pasteboard.data(forType: .png) == nil, clock.now < deliveryDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        _ = try #require(pasteboard.data(forType: .png))
         try await Task.sleep(for: .milliseconds(250))
-        #expect(pasteboard.data(forType: .png) != nil)
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
         var text = try auditText(host)
         #expect(text.contains("Copied!"))
         #expect(text.contains("Image copied"))
