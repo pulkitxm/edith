@@ -11,10 +11,13 @@ import Testing
         }
     }
 
-    private func ready(_ commands: Commands, timeout: Duration = .seconds(30))
-        -> MusicSpotifyLibrary
-    {
-        let library = MusicSpotifyLibrary(timeout: timeout) { commands.values.append($0) }
+    private func ready(
+        _ commands: Commands, timeout: Duration = .seconds(30),
+        playlistTimeout: Duration = .seconds(95)
+    ) -> MusicSpotifyLibrary {
+        let library = MusicSpotifyLibrary(timeout: timeout, playlistTimeout: playlistTimeout) {
+            commands.values.append($0)
+        }
         library.apply(["event": "libraryState", "ready": true, "authorizing": false])
         return library
     }
@@ -140,6 +143,28 @@ import Testing
         #expect(commands.values.filter { $0["kind"] as? String == "playlists" }.count == 1)
     }
 
+    @Test func playlistFallbackOwnsLongerDeadlineAndRejectsLateResponses() async throws {
+        let commands = Commands()
+        let library = ready(commands, timeout: .milliseconds(5), playlistTimeout: .seconds(1))
+        library.open(item(kind: "playlist"))
+        let request = commands.last("playlist")
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(library.load.isRunning)
+        try respond(library, to: request, items: [item()])
+        #expect(library.items == [item()] && library.error == nil)
+        let expiringCommands = Commands()
+        let expiring = ready(
+            expiringCommands, timeout: .seconds(1), playlistTimeout: .milliseconds(1))
+        expiring.open(item(kind: "playlist"))
+        let late = expiringCommands.last("playlist")
+        for _ in 0..<100 where expiring.load.isRunning {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(!expiring.load.isRunning && expiring.error != nil)
+        try respond(expiring, to: late, items: [item()])
+        #expect(expiring.items.isEmpty)
+    }
+
     @Test func invalidCatalogAndArtworkAreRejected() throws {
         let commands = Commands()
         let library = ready(commands)
@@ -233,6 +258,18 @@ import Testing
         }
         #expect(library.load.hasContent && !library.load.isRunning && library.recent == [item()])
         #expect(library.error == "Sample shelf failed")
+    }
+
+    @Test func savedPlaylistsRemainVisibleWithoutListeningHistory() throws {
+        let commands = Commands()
+        let library = ready(commands)
+        library.activate()
+        for command in commands.values {
+            let values = command["kind"] as? String == "playlists" ? [item(kind: "playlist")] : []
+            try respond(library, to: command, items: values)
+        }
+        #expect(library.playlists.count == 1 && library.recent.isEmpty && library.topTracks.isEmpty)
+        #expect(library.load.state == .content && library.error == nil)
     }
 
     @Test func backgroundShelfErrorsDoNotReplaceVisibleSearchRecovery() throws {

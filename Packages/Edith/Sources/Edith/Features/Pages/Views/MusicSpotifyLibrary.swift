@@ -76,6 +76,7 @@ final class MusicSpotifyLibrary {
     let load = ContentLoad()
     @ObservationIgnored private var sender: ([String: Any]) -> Void
     @ObservationIgnored private let timeout: Duration
+    @ObservationIgnored private let playlistTimeout: Duration
     private var loads: [String: ContentLoad] = [:]
     @ObservationIgnored private var pending: [String: Request] = [:]
     @ObservationIgnored private var deadlines: [String: Task<Void, Never>] = [:]
@@ -104,8 +105,12 @@ final class MusicSpotifyLibrary {
         var error: String?
     }
 
-    init(timeout: Duration = .seconds(30), sender: @escaping ([String: Any]) -> Void = { _ in }) {
+    init(
+        timeout: Duration = .seconds(30), playlistTimeout: Duration = .seconds(95),
+        sender: @escaping ([String: Any]) -> Void = { _ in }
+    ) {
         self.timeout = timeout
+        self.playlistTimeout = playlistTimeout
         self.sender = sender
     }
 
@@ -191,7 +196,7 @@ final class MusicSpotifyLibrary {
         }
         guard let values = response.items, values.allSatisfy(\.valid),
             response.current?.valid != false,
-            response.nextOffset.map({ $0 > request.offset }) != false,
+            response.nextOffset == nil || (response.nextOffset ?? 0) > request.offset,
             response.total.map({ $0 >= 0 }) != false
         else {
             let message = "Spotify returned an invalid library response. Try again."
@@ -333,11 +338,13 @@ final class MusicSpotifyLibrary {
     }
 
     private func finishHome() {
-        let shelves = loads.filter { $0.key != "queue" }.map(\.value)
-        guard currentDestination == .home, !shelves.contains(where: { $0.isRunning }) else {
-            return
+        guard currentDestination == .home else { return }
+        var shelfError: String?
+        for (kind, owner) in loads where kind != "queue" {
+            if owner.isRunning { return }
+            if shelfError == nil { shelfError = owner.errorMessage }
         }
-        if let message = shelves.compactMap(\.errorMessage).first {
+        if let message = shelfError {
             if !recent.isEmpty || !topTracks.isEmpty || !topArtists.isEmpty || !playlists.isEmpty
                 || !albums.isEmpty || !artists.isEmpty || !shows.isEmpty
             {
@@ -348,7 +355,9 @@ final class MusicSpotifyLibrary {
                 load.fail(ticket, message: message)
             }
         } else {
-            load.setContent(empty: recent.isEmpty && topTracks.isEmpty && topArtists.isEmpty)
+            load.setContent(
+                empty: recent.isEmpty && topTracks.isEmpty && topArtists.isEmpty
+                    && playlists.isEmpty && albums.isEmpty)
         }
     }
 
@@ -374,8 +383,9 @@ final class MusicSpotifyLibrary {
         if let id { command["id"] = id }
         if let query { command["query"] = query }
         if paging, let nextCursor { command["cursor"] = nextCursor }
-        deadlines[requestId] = Task { [weak self, timeout] in
-            do { try await Task.sleep(for: timeout) } catch { return }
+        let deadline = kind == "playlist" ? playlistTimeout : timeout
+        deadlines[requestId] = Task { [weak self, deadline] in
+            do { try await Task.sleep(for: deadline) } catch { return }
             guard let self, let request = self.pending.removeValue(forKey: requestId) else {
                 return
             }
