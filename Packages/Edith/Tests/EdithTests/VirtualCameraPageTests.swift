@@ -74,18 +74,28 @@ import Testing
         #expect(stored.composition.look.preset == .film)
     }
 
-    @Test func accordionSelectionAndExpansionSurviveReopening() {
+    @Test func multipleAccordionSectionsSurviveReopening() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
-        model.tab = .devices
-        model.inspectorExpanded = false
+        model.setInspectorExpanded(.audio, false)
+        model.setInspectorExpanded(.voice, true)
+        model.setInspectorExpanded(.devices, true)
+        model.setInspectorExpanded(.frame, true)
+        #expect(model.expandedInspectorSections == [.voice, .devices, .frame])
         let reopened = VirtualCameraPageModel(
             defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
-        #expect(reopened.tab == .devices)
-        #expect(!reopened.inspectorExpanded)
-        reopened.tab = .voice
-        #expect(reopened.inspectorExpanded)
-        #expect(defaults.string(forKey: "virtualCameraInspectorSection") == "voice")
+        #expect(reopened.tab == .frame)
+        #expect(reopened.expandedInspectorSections == [.voice, .devices, .frame])
+        reopened.setInspectorExpanded(.voice, false)
+        #expect(reopened.expandedInspectorSections == [.devices, .frame])
+        let closed = VirtualCameraPageModel(
+            defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
+        #expect(closed.expandedInspectorSections == [.devices, .frame])
+        closed.setInspectorExpanded(.devices, false)
+        closed.setInspectorExpanded(.frame, false)
+        let empty = VirtualCameraPageModel(
+            defaults: defaults, accessProvider: { .denied }, sourceProvider: { Self.sources })
+        #expect(empty.expandedInspectorSections.isEmpty)
     }
 
     @Test func leavingThePageDoesNotOverwriteAHelperBackgroundChange() {
@@ -1009,7 +1019,9 @@ enum VirtualCameraSyntheticStudio {
         for tab in [
             VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output, .audio,
         ] {
-            model.tab = tab
+            for section in VirtualCameraInspectorTab.allCases {
+                model.setInspectorExpanded(section, section == tab)
+            }
             try renderPage(
                 model, preview: preview, renderer: renderer,
                 to: output.appendingPathComponent("page-\(tab.rawValue).png"))
@@ -1020,11 +1032,16 @@ enum VirtualCameraSyntheticStudio {
             for (label, size, compact, zoom, controls) in [
                 ("meeting", CGSize(width: 1440, height: 900), false, 1.0, false),
                 ("audio", CGSize(width: 1440, height: 900), false, 1.0, true),
+                ("voice", CGSize(width: 1440, height: 1000), false, 1.0, true),
                 ("compact", CGSize(width: 620, height: 720), true, 1.0, false),
                 ("zoom", CGSize(width: 1440, height: 1000), false, 1.3, true),
             ] {
                 UIScale.apply(zoom)
-                model.tab = .audio
+                for section in VirtualCameraInspectorTab.allCases {
+                    model.setInspectorExpanded(
+                        section,
+                        label == "voice" ? [.voice, .devices].contains(section) : section == .audio)
+                }
                 try renderPage(
                     model, preview: preview, renderer: renderer,
                     to: output.appendingPathComponent("ux-\(label)-\(dark ? "dark" : "light").png"),

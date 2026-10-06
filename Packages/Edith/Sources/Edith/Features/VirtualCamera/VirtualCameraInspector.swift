@@ -10,15 +10,12 @@ struct VirtualCameraInspector: View {
     var body: some View {
         ScrollView {
             VStack(spacing: UIScale.pt(8)) {
+                meetingAudioControl
                 ForEach(VirtualCameraInspectorTab.allCases) { section in
-                    let expanded = model.tab == section && model.inspectorExpanded
+                    let expanded = model.expandedInspectorSections.contains(section)
                     VStack(spacing: UIScale.pt(12)) {
                         Button {
-                            if model.tab == section {
-                                model.inspectorExpanded.toggle()
-                            } else {
-                                model.tab = section
-                            }
+                            model.setInspectorExpanded(section, !expanded)
                         } label: {
                             HStack {
                                 Label(section.title, systemImage: section.symbolName)
@@ -38,6 +35,29 @@ struct VirtualCameraInspector: View {
             }
             .padding(UIScale.pt(2))
         }
+    }
+
+    private var meetingAudioControl: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack {
+                Text("Meeting audio").font(.edithText(.body))
+                Spacer()
+                Toggle(
+                    "Meeting audio",
+                    isOn: Binding(
+                        get: { model.state.audio.enabled },
+                        set: { model.performAudio(.enable($0)) })
+                )
+                .labelsHidden().toggleStyle(.switch).disabled(model.audioPending)
+            }
+            if let failure = model.snapshot?.audioStatus?.failure
+                ?? model.snapshot?.audioStatus?.sourceFailure
+            {
+                Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(UIScale.pt(12)).edithSurface(cornerRadius: 12)
     }
 
     @ViewBuilder private func panel(_ section: VirtualCameraInspectorTab) -> some View {

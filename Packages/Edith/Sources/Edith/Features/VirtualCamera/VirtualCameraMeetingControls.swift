@@ -12,8 +12,9 @@ struct VirtualCameraMeetingControls: View {
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             HStack(spacing: UIScale.pt(12)) {
-                sourceMenu
-                microphoneMenu
+                sourceMenu.frame(maxWidth: UIScale.pt(280), alignment: .leading)
+                microphoneMenu.frame(maxWidth: UIScale.pt(280), alignment: .leading)
+                Spacer(minLength: 0)
                 Menu {
                     if model.state.media.kind != .camera {
                         Toggle("Source audio", isOn: model.stateBinding(\.media.audioEnabled))
@@ -40,12 +41,12 @@ struct VirtualCameraMeetingControls: View {
             }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: UIScale.pt(12)) {
-                    playbackButton
-                    microphoneButton
-                    zoomSlider.frame(width: UIScale.pt(180))
-                    recordingButton
+                    playbackButton.fixedSize()
+                    microphoneButton.fixedSize()
+                    Spacer(minLength: UIScale.pt(12))
+                    zoomSlider.frame(width: UIScale.pt(220))
+                    recordingButton.fixedSize()
                 }
-                .fixedSize(horizontal: true, vertical: false)
                 VStack(spacing: UIScale.pt(10)) {
                     HStack(spacing: UIScale.pt(12)) {
                         playbackButton
@@ -146,7 +147,6 @@ struct VirtualCameraMeetingControls: View {
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
         }
         .menuStyle(.borderlessButton)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .disabled(model.audioPending)
         .accessibilityLabel("Audio source")
     }
@@ -169,7 +169,6 @@ struct VirtualCameraMeetingControls: View {
                 .frame(minHeight: UIScale.pt(28))
         }
         .menuStyle(.borderlessButton)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .help("Choose your video source")
         .accessibilityLabel("Video source: \(sourceTitle)")
     }

@@ -69,14 +69,20 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published var tab: VirtualCameraInspectorTab = .frame {
         didSet {
             defaults.set(tab.rawValue, forKey: "virtualCameraInspectorSection")
-            inspectorExpanded = true
+            expandedInspectorSections.insert(tab)
             guard tab == .look, let reference = previewReference, reference !== thumbnailSource
             else { return }
             updateLookThumbnails(from: reference)
         }
     }
-    @Published var inspectorExpanded = true {
-        didSet { defaults.set(inspectorExpanded, forKey: "virtualCameraInspectorExpanded") }
+    @Published private(set) var expandedInspectorSections: Set<VirtualCameraInspectorTab> = [.audio]
+    {
+        didSet {
+            defaults.set(
+                VirtualCameraInspectorTab.allCases.filter { expandedInspectorSections.contains($0) }
+                    .map(\.rawValue),
+                forKey: "virtualCameraInspectorExpandedSections")
+        }
     }
     @Published var showsGrid = false
     @Published private(set) var lookThumbnails: [VirtualCameraLookPreset: CGImage] = [:]
@@ -125,8 +131,9 @@ final class VirtualCameraPageModel: ObservableObject {
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
-        let restoredExpansion =
-            defaults.object(forKey: "virtualCameraInspectorExpanded") as? Bool ?? true
+        let restoredSections =
+            defaults.stringArray(forKey: "virtualCameraInspectorExpandedSections")
+            .map { Set($0.compactMap(VirtualCameraInspectorTab.init(rawValue:))) } ?? [.audio]
         self.defaults = defaults
         self.state = state
         self.pipeline = pipeline
@@ -140,13 +147,21 @@ final class VirtualCameraPageModel: ObservableObject {
             VirtualCameraInspectorTab(
                 rawValue: defaults.string(forKey: "virtualCameraInspectorSection") ?? "audio")
             ?? .audio
-        self.inspectorExpanded = restoredExpansion
+        self.expandedInspectorSections = restoredSections
         display.onAvailabilityChanged = { [weak self] available in
             self?.hasPreviewFrame = available
             if available {
                 self?.previewFailure = nil
                 self?.previewStartedAt = nil
             }
+        }
+    }
+
+    func setInspectorExpanded(_ section: VirtualCameraInspectorTab, _ expanded: Bool) {
+        if expanded {
+            tab = section
+        } else {
+            expandedInspectorSections.remove(section)
         }
     }
 
@@ -292,7 +307,9 @@ final class VirtualCameraPageModel: ObservableObject {
             previewStatistics = statistics
         }
         refreshPreviewHealth()
-        if tab == .look, let reference = previewReference, reference !== thumbnailSource {
+        if expandedInspectorSections.contains(.look), let reference = previewReference,
+            reference !== thumbnailSource
+        {
             updateLookThumbnails(from: reference)
         }
         let access = accessProvider()
@@ -446,7 +463,9 @@ final class VirtualCameraPageModel: ObservableObject {
                         self.pipelineGeneration == generation
                     else { return }
                     self.helperReference = reference
-                    if self.tab == .look { self.updateLookThumbnails(from: reference) }
+                    if self.expandedInspectorSections.contains(.look) {
+                        self.updateLookThumbnails(from: reference)
+                    }
                 }
             }
         }

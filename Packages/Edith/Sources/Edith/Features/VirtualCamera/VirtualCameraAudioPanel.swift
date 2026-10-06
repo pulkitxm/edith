@@ -22,26 +22,6 @@ struct VirtualCameraAudioPanel: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
-            HStack {
-                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                    Text("Meeting audio").font(.edithText(.headline))
-                    Text(status?.running == true ? "Sending to your meeting" : "Audio is off")
-                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
-                }
-                Spacer()
-                Toggle(
-                    "Meeting audio",
-                    isOn: Binding(
-                        get: { audio.enabled },
-                        set: { model.performAudio(.enable($0)) })
-                )
-                .labelsHidden().toggleStyle(.switch)
-                .disabled(model.audioPending)
-            }
-            .padding(UIScale.pt(12)).edithSurface(cornerRadius: 12)
-            if let failure = status?.failure ?? status?.sourceFailure {
-                Text(failure).font(.edithText(.body)).foregroundStyle(.red)
-            }
             switch section {
             case .sounds:
                 soundboard
@@ -50,7 +30,7 @@ struct VirtualCameraAudioPanel: View {
             case .devices: deviceSettings
             }
         }
-        .task { refreshDevices() }
+        .pageTask { if section == .devices { refreshDevices() } }
         .edithSheet(item: $editing, dismissible: !model.audioPending) { clip in
             VirtualCameraClipEditor(model: model, clip: clip) { editing = nil }
         }
@@ -158,26 +138,37 @@ struct VirtualCameraAudioPanel: View {
 
     private var voice: some View {
         VirtualCameraPanelSection(title: "Your voice", dark: dark) {
-            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-                Text("Voice model").font(.edithText(.body))
-                Picker(
-                    "Voice model",
-                    selection: Binding(
-                        get: { audio.voiceModelID?.uuidString ?? "" },
-                        set: { model.performAudio(.selectVoice($0)) })
-                ) {
-                    Text("Original voice").tag("")
-                    ForEach(audio.voiceModels) { Text($0.name).tag($0.id.uuidString) }
-                }
-                .labelsHidden().controlSize(.large).frame(maxWidth: .infinity)
-            }
-            Picker(
-                "Effect",
-                selection: Binding(
-                    get: { audio.preset },
-                    set: { value in model.update { $0.audio.preset = value } })
+            Grid(
+                alignment: .leading, horizontalSpacing: UIScale.pt(12),
+                verticalSpacing: UIScale.pt(12)
             ) {
-                ForEach(MeetingVoicePreset.allCases, id: \.self) { Text($0.title).tag($0) }
+                GridRow {
+                    Text("Voice model").font(.edithText(.body))
+                    Picker(
+                        "Voice model",
+                        selection: Binding(
+                            get: { audio.voiceModelID?.uuidString ?? "" },
+                            set: { model.performAudio(.selectVoice($0)) })
+                    ) {
+                        Text("Original voice").tag("")
+                        ForEach(audio.voiceModels) { Text($0.name).tag($0.id.uuidString) }
+                    }
+                    .labelsHidden().pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                GridRow {
+                    Text("Effect").font(.edithText(.body))
+                    Picker(
+                        "Effect",
+                        selection: Binding(
+                            get: { audio.preset },
+                            set: { value in model.update { $0.audio.preset = value } })
+                    ) {
+                        ForEach(MeetingVoicePreset.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden().pickerStyle(.menu)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .font(.edithText(.body))
             DisclosureGroup("Fine tune") {
@@ -232,7 +223,7 @@ struct VirtualCameraAudioPanel: View {
                     Text("System microphone").tag("")
                     ForEach(devices.filter { $0.inputChannels > 0 }) { Text($0.name).tag($0.id) }
                 }
-                .labelsHidden().controlSize(.large).frame(maxWidth: .infinity)
+                .labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
                 Text("Meeting microphone").font(.edithText(.body)).padding(.top, UIScale.pt(8))
                 Picker(
                     "Meeting microphone",
@@ -244,12 +235,14 @@ struct VirtualCameraAudioPanel: View {
                         Text($0.name).tag($0.id)
                     }
                 }
-                .labelsHidden().controlSize(.large).frame(maxWidth: .infinity)
+                .labelsHidden().pickerStyle(.menu).frame(maxWidth: .infinity, alignment: .leading)
             }
             Text("Choose this virtual microphone in Meet. Your device choices stay saved.")
                 .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
                 .fixedSize(horizontal: false, vertical: true)
-            if !devices.contains(where: { $0.id == MeetingMicrophone.id }) {
+            if status?.running != true
+                && !devices.contains(where: { $0.id == MeetingMicrophone.id })
+            {
                 Text(MeetingMicrophone.setupMessage).font(.edithText(.caption))
             }
             Button("Refresh devices") { refreshDevices() }.buttonStyle(.edith(.secondary))
