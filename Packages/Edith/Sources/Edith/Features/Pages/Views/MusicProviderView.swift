@@ -33,7 +33,8 @@ struct MusicProviderContent: View {
                 if accounts.spotify.connected {
                     Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
                 } else if accounts.spotify.connecting {
-                    ProgressView().controlSize(.small)
+                    SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
+                        .accessibilityLabel("Connecting Spotify")
                     Button("Cancel") { accounts.spotify.stop() }
                 } else {
                     Button("Connect Spotify") { accounts.spotify.connect() }
@@ -73,7 +74,10 @@ struct MusicProviderContent: View {
             HStack {
                 Label("YouTube Music", systemImage: "play.circle").font(.title2.weight(.semibold))
                 Spacer()
-                if accounts.youtubeConnecting { ProgressView().controlSize(.small) }
+                if accounts.youtubeConnecting {
+                    SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
+                        .accessibilityLabel("Connecting YouTube Music")
+                }
                 Button(
                     accounts.youtubeConnected ? "Reconnect" : "Connect YouTube Music",
                     action: chooseProfile
