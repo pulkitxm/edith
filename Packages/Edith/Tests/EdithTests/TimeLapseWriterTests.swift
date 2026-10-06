@@ -320,10 +320,59 @@ import Testing
                     abs(try await asset.load(.duration).seconds - session.playbackSeconds) < 0.05)
                 #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
                 #expect(try await audioHasSignal(asset))
+                #expect(abs(try audioFrequency(at: destination) - 440) < 40)
                 #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
             }
             let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-            #expect(!files.contains { $0.hasSuffix(".m4a") || $0.hasSuffix(".partial") })
+            #expect(
+                !files.contains {
+                    $0.hasSuffix(".m4a") || $0.hasSuffix(".caf") || $0.hasSuffix(".partial")
+                })
+        }
+    }
+
+    @Test(arguments: [30.0, 1800])
+    func acceleratedShortAudioKeepsItsEnding(speed: Double) async throws {
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var settings = timeLapseSettings()
+        settings.speed = speed
+        settings.systemAudio = true
+        let writer = try TimeLapseWriter(
+            directory: directory,
+            session: TimeLapseSession(settings: settings, width: 64, height: 64), sourceCount: 1,
+            failure: { _ in }, progress: { _, _, _ in })
+        let image = try buffer(color: .green)
+        await withCheckedContinuation { continuation in
+            writer.queue.async {
+                writer.setFrame(image, source: 0)
+                writer.capture(at: 100)
+                continuation.resume()
+            }
+        }
+        var session = await writer.stop()
+        #expect(session.failure == nil)
+        #expect(session.frames == 1)
+        let start = try #require(session.segments.first).startedAt
+        let audio = directory.appendingPathComponent("ending.wav")
+        try continuousAudio(
+            at: audio, seconds: settings.interval,
+            activeRange: (settings.interval * 0.55)..<settings.interval)
+        session.segments.append(
+            .init(
+                file: "ending.wav", kind: "system", frames: 0, startedAt: start,
+                duration: settings.interval))
+        if #available(macOS 15.0, *) {
+            for quality in TimeLapseExportQuality.allCases {
+                let destination = directory.appendingPathComponent(
+                    "ending-\(quality.id.hashValue).\(quality.fileExtension)")
+                try await TimeLapseExporter.export(
+                    .init(session: session, directory: directory), quality: quality, to: destination
+                )
+                let asset = AVURLAsset(url: destination)
+                #expect(abs(try await asset.load(.duration).seconds - 1.0 / 30) < 0.01)
+                #expect(try await audioHasSignal(asset))
+            }
         }
     }
 
@@ -409,7 +458,9 @@ import Testing
         var snapshot: [CGImage] { lock.withLock { images } }
     }
 
-    private func continuousAudio(at url: URL, seconds: Double) throws {
+    private func continuousAudio(
+        at url: URL, seconds: Double, activeRange: Range<Double>? = nil
+    ) throws {
         let file = try AVAudioFile(
             forWriting: url,
             settings: [
@@ -426,12 +477,48 @@ import Testing
             }
         }
         var remaining = Int((seconds * 48000).rounded())
+        var written = 0
         while remaining > 0 {
             let count = min(48000, remaining)
+            if let activeRange {
+                for index in 0..<count {
+                    let time = Double(written + index) / 48000
+                    let value =
+                        activeRange.contains(time)
+                        ? Float(sin(2 * .pi * 440 * time)) * 0.4 : 0
+                    for channel in 0..<2 { channels[channel][index] = value }
+                }
+            }
             buffer.frameLength = AVAudioFrameCount(count)
             try file.write(from: buffer)
             remaining -= count
+            written += count
         }
+    }
+
+    private func audioFrequency(at url: URL) throws -> Double {
+        let file = try AVAudioFile(forReading: url)
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 4096))
+        var offset = 0
+        var armed = false
+        var crossings: [Int] = []
+        while file.framePosition < file.length {
+            try file.read(into: buffer)
+            let values = try #require(buffer.floatChannelData)[0]
+            for index in 0..<Int(buffer.frameLength) {
+                if values[index] < -0.02 { armed = true }
+                if armed && values[index] > 0.02 {
+                    crossings.append(offset + index)
+                    armed = false
+                }
+            }
+            offset += Int(buffer.frameLength)
+        }
+        let first = try #require(crossings.first)
+        let last = try #require(crossings.last)
+        #expect(crossings.count > 10)
+        return Double(crossings.count - 1) * file.processingFormat.sampleRate / Double(last - first)
     }
 
     private func audioHasSignal(_ asset: AVAsset) async throws -> Bool {
