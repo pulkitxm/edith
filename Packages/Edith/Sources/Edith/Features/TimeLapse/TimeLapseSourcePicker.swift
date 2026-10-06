@@ -49,6 +49,7 @@ struct TimeLapseSourceSelection {
 struct TimeLapseSourcePicker: View {
     let recorder: TimeLapseRecorder
     var compact = false
+    var maximumHeight: Double?
     var thumbnail: (@MainActor (String, UInt32) async -> CGImage?)?
 
     var body: some View {
@@ -58,7 +59,8 @@ struct TimeLapseSourcePicker: View {
                 mode: recorder.sourceMode, displays: recorder.selectedDisplays,
                 windows: recorder.selectedWindows,
                 systemAudio: recorder.sourceMode == "windows" || recorder.settings.systemAudio),
-            thumbnail: thumbnail, onSelection: { $0.apply(to: recorder) })
+            thumbnail: thumbnail, maximumHeight: maximumHeight,
+            onSelection: { $0.apply(to: recorder) })
     }
 }
 
@@ -66,6 +68,7 @@ struct ScreenCaptureSourcePicker: View {
     let sources: any ScreenCaptureSourceProviding
     let compact: Bool
     let maximumCount: Int
+    let maximumHeight: Double?
     let title: String
     let detail: String
     private let thumbnail: @MainActor (String, UInt32) async -> CGImage?
@@ -82,11 +85,13 @@ struct ScreenCaptureSourcePicker: View {
         title: String = "Choose what to record",
         detail: String = "Select up to 16 sources. Each window is captured independently.",
         thumbnail: (@MainActor (String, UInt32) async -> CGImage?)? = nil,
+        maximumHeight: Double? = nil,
         onSelection: @escaping (TimeLapseSourceSelection) -> Void
     ) {
         self.sources = sources
         self.compact = compact
         self.maximumCount = maximumCount
+        self.maximumHeight = maximumHeight
         self.title = title
         self.detail = detail
         self.onSelection = onSelection
@@ -123,12 +128,13 @@ struct ScreenCaptureSourcePicker: View {
             }
             ScrollView {
                 PageLoading(
-                    state: loadsSources ? sources.sourceLoad.state : .content,
+                    state: loadsSources && sources.sourceLoad.errorMessage == nil
+                        ? sources.sourceLoad.state : .content,
                     message: sources.sourceLoad.errorMessage ?? "Choose displays or windows.",
                     layout: .cards, refreshing: sources.sourceLoad.isRefreshing,
                     retry: { refresh += 1 }
                 ) {
-                    if choices.isEmpty {
+                    if choices.isEmpty && sources.sourceLoad.errorMessage == nil {
                         ContentUnavailableView(
                             search.isEmpty ? "No sources available" : "No matching windows",
                             systemImage: selection.mode == "displays" ? "display" : "macwindow",
@@ -155,28 +161,30 @@ struct ScreenCaptureSourcePicker: View {
                     }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).id(selection.mode)
-            if sources.sourceLoad.hasContent, let error = sources.sourceLoad.errorMessage {
+            if let error = sources.sourceLoad.errorMessage {
                 PageNotice(
                     error, tone: .error,
                     actions: {
                         Button("Retry") { refresh += 1 }
                     })
             }
-            Divider()
-            HStack {
-                Label(
-                    selection.mode == "windows" ? "Selected app audio" : "System audio",
-                    systemImage: "speaker.wave.2")
-                Spacer()
-                Toggle(
-                    selection.mode == "windows" ? "Selected app audio" : "System audio",
-                    isOn: $selection.systemAudio
-                ).labelsHidden()
-                    .toggleStyle(.switch)
-            }.font(.edithText(.callout))
-            if selection.mode == "windows" {
-                Text("Audio follows the selected apps, including their other windows.")
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+            if sources.sourceLoad.errorMessage == nil || sources.sourceLoad.hasContent {
+                Divider()
+                HStack {
+                    Label(
+                        selection.mode == "windows" ? "Selected app audio" : "System audio",
+                        systemImage: "speaker.wave.2")
+                    Spacer()
+                    Toggle(
+                        selection.mode == "windows" ? "Selected app audio" : "System audio",
+                        isOn: $selection.systemAudio
+                    ).labelsHidden()
+                        .toggleStyle(.switch)
+                }.font(.edithText(.callout))
+                if selection.mode == "windows" {
+                    Text("Audio follows the selected apps, including their other windows.")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
             }
             PageSectionHeader(selectionSummary) {
                 HStack {
@@ -197,7 +205,7 @@ struct ScreenCaptureSourcePicker: View {
         .padding(UIScale.pt(24))
         .frame(
             width: PresentationMetrics.width(compact ? 500 : 700),
-            height: PresentationMetrics.height(600)
+            height: min(PresentationMetrics.height(600), maximumHeight ?? .infinity)
         )
         .pageSurface()
         .pageTask(id: refresh, active: loadsSources) { await sources.refreshCaptureSources() }

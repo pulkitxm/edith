@@ -36,14 +36,16 @@ import Testing
                 }
                 let views = [
                     AnyView(TimeLapseControls(recorder: recorder, enabled: true)),
-                    AnyView(TimeLapseSourcePicker(recorder: recorder, compact: true)),
+                    AnyView(
+                        TimeLapseSourcePicker(
+                            recorder: recorder, compact: true, maximumHeight: 600)),
                 ]
                 for (index, view) in views.enumerated() {
                     let host = try auditHost(
                         view.environment(\.compactLayout, true).environment(\.colorScheme, scheme)
                             .environment(\.automaticViewActionsEnabled, false)
                             .environment(\.loadingAnimationsEnabled, false),
-                        size: CGSize(width: 800, height: 850))
+                        size: CGSize(width: 800, height: index == 0 ? 850 : 600))
                     host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                     let window = TestWindowHost.window(contentRect: host.frame)
                     window.appearance = host.appearance
