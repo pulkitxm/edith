@@ -78,10 +78,12 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var expandedInspectorSections: Set<VirtualCameraInspectorTab> = [.audio]
     {
         didSet {
-            defaults.set(
-                VirtualCameraInspectorTab.allCases.filter { expandedInspectorSections.contains($0) }
-                    .map(\.rawValue),
-                forKey: "virtualCameraInspectorExpandedSections")
+            var storedSections: [String] = []
+            for section in VirtualCameraInspectorTab.allCases
+            where expandedInspectorSections.contains(section) {
+                storedSections.append(section.rawValue)
+            }
+            defaults.set(storedSections, forKey: "virtualCameraInspectorExpandedSections")
         }
     }
     @Published var showsGrid = false
@@ -131,9 +133,17 @@ final class VirtualCameraPageModel: ObservableObject {
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
-        let restoredSections =
-            defaults.stringArray(forKey: "virtualCameraInspectorExpandedSections")
-            .map { Set($0.compactMap(VirtualCameraInspectorTab.init(rawValue:))) } ?? [.audio]
+        var restoredSections: Set<VirtualCameraInspectorTab> = [.audio]
+        if let storedSections = defaults.stringArray(
+            forKey: "virtualCameraInspectorExpandedSections")
+        {
+            restoredSections = []
+            for value in storedSections {
+                if let section = VirtualCameraInspectorTab(rawValue: value) {
+                    restoredSections.insert(section)
+                }
+            }
+        }
         self.defaults = defaults
         self.state = state
         self.pipeline = pipeline

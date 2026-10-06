@@ -5,7 +5,20 @@ import Foundation
 struct CameraAudioCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "audio",
-        abstract: "Mix your microphone, speech snippets and effects into a virtual microphone.")
+        abstract: "Send microphone audio, speech snippets and effects to your meeting.",
+        discussion: """
+            Controls the meeting audio mix sent to Edith Microphone. The physical
+            microphone, saved speech snippets, starter sounds and selected source
+            audio share one output so the meeting device stays selected when you
+            change inputs. The status action reports the current mix and failures.
+
+            Reads audio settings and devices. Other actions change saved routing,
+            voice effects or playback; import and recording write local audio files.
+            Voice model import needs both a ContentVec encoder and an ONNX voice.
+
+            ed camera audio status --json
+            ed camera audio play soundboard:chime
+            """)
 
     @Argument(
         help:
@@ -14,7 +27,7 @@ struct CameraAudioCommand: AsyncParsableCommand {
     @Argument(help: "Device, voice preset or snippet name.") var value: String?
     @Option(help: "File to import.") var path: String?
     @Option(help: "ContentVec ONNX encoder for model-import.") var encoder: String?
-    @Option(parsing: .unconditional, help: "Model pitch in semitones, from -24 to 24.")
+    @Option(parsing: .unconditional, help: "Model pitch offset in semitones.")
     var transpose: Float?
     @Flag(help: "Import a sound effect that bypasses voice effects.") var sound = false
     @Option(help: "Clip trim start in seconds.") var start: Double = 0
