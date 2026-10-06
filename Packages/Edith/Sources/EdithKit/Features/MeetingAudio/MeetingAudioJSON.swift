@@ -31,6 +31,10 @@ public extension MeetingAudioState {
             "recording": .optional(status?.recordingName), "error": .optional(status?.failure),
             "sourceError": .optional(status?.sourceFailure),
             "playing": .array((status?.playing ?? []).map { .string($0) }),
+            "sounds": .array(
+                MeetingSound.allCases.map {
+                    .object(["id": .string($0.identifier), "name": .string($0.name)])
+                }),
             "clips": .array(
                 clips.map {
                     .object([

@@ -6,6 +6,46 @@ import Testing
 
 @Suite(.serialized)
 struct MeetingAudioTests {
+    @Test func starterSoundsContainDistinctPlayableAudio() throws {
+        var signatures = Set<Int>()
+        for sound in MeetingSound.allCases {
+            let buffer = try sound.render()
+            #expect(buffer.format.sampleRate == 48000)
+            #expect(buffer.frameLength == AVAudioFrameCount(sound.duration * 48000))
+            let channel = try #require(buffer.floatChannelData?[0])
+            var energy = 0.0
+            for frame in 0..<Int(buffer.frameLength) {
+                #expect(channel[frame].isFinite)
+                #expect(abs(channel[frame]) <= 0.9)
+                energy += Double(channel[frame] * channel[frame])
+            }
+            let rms = sqrt(energy / Double(buffer.frameLength))
+            #expect(rms > 0.01)
+            signatures.insert(Int(energy * 1000))
+            let clip = try MeetingAudioLibrary.clip(sound.identifier, in: MeetingAudioState())
+            #expect(!clip.speech)
+            #expect(clip.name == sound.name)
+            let file = try AVAudioFile(forReading: URL(fileURLWithPath: clip.path))
+            #expect(file.length == Int64(buffer.frameLength))
+        }
+        #expect(signatures.count == MeetingSound.allCases.count)
+    }
+
+    @Test func invalidUploadsLeaveTheLibraryUnchanged() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "invalid-\(UUID()).wav")
+        try Data("This is not an audio file".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let mixer = MeetingAudioMixer()
+        defer { mixer.shutdown() }
+        let state = MeetingAudioState()
+        await #expect(throws: (any Error).self) {
+            try await mixer.perform(
+                .importClip(name: "Invalid", path: url.path, speech: false), state: state)
+        }
+        #expect(state.clips.isEmpty)
+    }
+
     @Test func importedClipsAreOwnedTrimmedAndPersisted() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(
             "tone-\(UUID()).caf")

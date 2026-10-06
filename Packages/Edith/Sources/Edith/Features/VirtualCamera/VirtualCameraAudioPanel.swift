@@ -46,7 +46,9 @@ struct VirtualCameraAudioPanel: View {
                 "Audio controls", selection: $section, options: Section.allCases,
                 label: { $0.rawValue })
             switch section {
-            case .sounds: sounds
+            case .sounds:
+                soundboard
+                sounds
             case .voice: voice
             case .devices: deviceSettings
             }
@@ -54,6 +56,37 @@ struct VirtualCameraAudioPanel: View {
         .task { refreshDevices() }
         .edithSheet(item: $editing, dismissible: !model.audioPending) { clip in
             VirtualCameraClipEditor(model: model, clip: clip) { editing = nil }
+        }
+    }
+
+    private var soundboard: some View {
+        VirtualCameraPanelSection(title: "Soundboard", dark: dark) {
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: UIScale.pt(8)
+            ) {
+                ForEach(MeetingSound.allCases, id: \.self) { sound in
+                    let playing = status?.playing.contains(sound.name) == true
+                    Button {
+                        model.performAudio(playing ? .stopClips : .playClip(sound.identifier))
+                    } label: {
+                        HStack(spacing: UIScale.pt(8)) {
+                            Image(systemName: playing ? "stop.fill" : sound.symbol)
+                                .frame(width: UIScale.pt(20))
+                            Text(sound.name).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(24))
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    .disabled(status?.running != true || model.audioPending)
+                    .accessibilityLabel("\(playing ? "Stop" : "Play") \(sound.name)")
+                }
+            }
+            if status?.running != true {
+                Text("Enable meeting audio to send sounds through your meeting microphone.")
+                    .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -73,7 +106,7 @@ struct VirtualCameraAudioPanel: View {
                 .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
             }
             HStack {
-                Menu("Import audio") {
+                Menu("Upload audio") {
                     Button("Speech snippet…") { importClip(speech: true) }
                     Button("Sound effect…") { importClip(speech: false) }
                 }
@@ -94,7 +127,7 @@ struct VirtualCameraAudioPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(audio.clips) { clip in
-                let playing = status?.playing.contains(clip.id.uuidString) == true
+                let playing = status?.playing.contains(clip.name) == true
                 HStack(spacing: UIScale.pt(12)) {
                     Button {
                         model.performAudio(playing ? .stopClips : .playClip(clip.id.uuidString))

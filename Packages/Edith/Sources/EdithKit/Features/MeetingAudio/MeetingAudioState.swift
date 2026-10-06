@@ -93,14 +93,17 @@ public enum MeetingAudioLibrary {
 
     public static func clip(_ name: String, in state: MeetingAudioState) throws -> MeetingAudioClip
     {
-        guard
-            let clip = state.clips.first(where: {
-                $0.name.caseInsensitiveCompare(name) == .orderedSame || $0.id.uuidString == name
-            })
-        else {
-            throw error("No audio clip named \(name).")
+        if let clip = state.clips.first(where: {
+            $0.name.caseInsensitiveCompare(name) == .orderedSame || $0.id.uuidString == name
+        }) {
+            return clip
         }
-        return clip
+        if let sound = MeetingSound.allCases.first(where: {
+            $0.identifier == name || $0.name.caseInsensitiveCompare(name) == .orderedSame
+        }) {
+            return try sound.clip()
+        }
+        throw error("No audio clip named \(name).")
     }
 
     public static func error(_ message: String) -> NSError {

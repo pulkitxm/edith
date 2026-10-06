@@ -274,6 +274,13 @@ public final class MeetingAudioMixer: @unchecked Sendable {
             guard file.length > 0 else {
                 throw MeetingAudioLibrary.error("The audio file is empty.")
             }
+            guard
+                let probe = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 1024)
+            else { throw MeetingAudioLibrary.error("The audio format is not supported.") }
+            try file.read(into: probe)
+            guard probe.frameLength > 0 else {
+                throw MeetingAudioLibrary.error("The audio file could not be decoded.")
+            }
             try FileManager.default.createDirectory(
                 at: MeetingAudioLibrary.directory, withIntermediateDirectories: true)
             let url = MeetingAudioLibrary.directory.appendingPathComponent(UUID().uuidString)
