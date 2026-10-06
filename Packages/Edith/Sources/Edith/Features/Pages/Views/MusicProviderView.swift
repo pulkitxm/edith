@@ -374,7 +374,15 @@ struct MusicProviderContent: View {
     }
 }
 
-private struct MusicYoutubeWebView: NSViewRepresentable {
+struct MusicYoutubeWebView: View {
+    let view: WKWebView
+
+    var body: some View {
+        MusicYoutubeWebViewHost(view: view).id(ObjectIdentifier(view))
+    }
+}
+
+private struct MusicYoutubeWebViewHost: NSViewRepresentable {
     let view: WKWebView
     func makeNSView(context: Context) -> NSView { view }
     func updateNSView(_ nsView: NSView, context: Context) {}

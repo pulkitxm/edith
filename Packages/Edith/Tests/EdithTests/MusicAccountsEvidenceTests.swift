@@ -2,11 +2,40 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
+import WebKit
 
 @testable import Edith
 @testable import EdithKit
 
 @MainActor @Suite struct MusicAccountsEvidenceTests {
+    @Test func reconnectingReplacesTheEmbeddedYouTubePlayer() async throws {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        let first = WKWebView(frame: .zero, configuration: configuration)
+        let second = WKWebView(frame: .zero, configuration: configuration)
+        let host = NSHostingView(rootView: MusicYoutubeWebView(view: first))
+        host.frame = NSRect(x: 0, y: 0, width: 640, height: 480)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        for _ in 0..<100 {
+            host.layoutSubtreeIfNeeded()
+            if first.superview != nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(first.superview != nil)
+        host.rootView = MusicYoutubeWebView(view: second)
+        for _ in 0..<100 {
+            host.layoutSubtreeIfNeeded()
+            if second.superview != nil, first.superview == nil { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(second.superview != nil)
+        #expect(first.superview == nil)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["EDITH_MUSIC_EVIDENCE_DIR"] != nil))
     func rendersStreamingSourcesWithSyntheticAccountData() async throws {
         let environment = ProcessInfo.processInfo.environment
