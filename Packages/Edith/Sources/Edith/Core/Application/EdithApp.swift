@@ -254,22 +254,29 @@ private final class LidAwakeDaemonRegistrar {
         publishStatus()
     }
 
-    private func registerCurrent(fingerprint: String?) {
+    private func registerCurrent(fingerprint: String?, retries: Int = 2) {
         do {
             try service.register()
+            registrationInFlight = false
             persist(fingerprint)
             publishStatus()
         } catch {
             let failure = error as NSError
-            if service.status == .requiresApproval
-                || (failure.domain == "SMAppServiceErrorDomain" && failure.code == 1)
-            {
+            if service.status == .requiresApproval {
                 persist(fingerprint)
+            } else if service.status == .notRegistered, retries > 0 {
+                registrationInFlight = true
+                Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(2))
+                    self?.registerCurrent(fingerprint: fingerprint, retries: retries - 1)
+                }
+                return
             } else {
                 NSLog(
                     "Service Management registration failed (%@ %ld): %@", failure.domain,
                     failure.code, failure.localizedDescription)
             }
+            registrationInFlight = false
             publishStatus()
         }
     }
@@ -331,15 +338,23 @@ private final class LidAwakeDaemonRegistrar {
         let helper = Bundle.main.bundleURL
             .appendingPathComponent("Contents/Library/PrivilegedHelperTools")
             .appendingPathComponent(LidAwakePrivilegedService.bundleIdentifier)
+        guard let application = signingFingerprint(Bundle.main.bundleURL),
+            let executable = signingFingerprint(helper)
+        else { return nil }
+        return application + ":" + executable
+    }
+
+    private func signingFingerprint(_ url: URL) -> String? {
         var code: SecStaticCode?
         guard
-            SecStaticCodeCreateWithPath(helper as CFURL, [], &code) == errSecSuccess,
+            SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
             let code
         else { return nil }
         var information: CFDictionary?
         guard
             SecCodeCopySigningInformation(
-                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+                == errSecSuccess,
             let values = information as? [CFString: Any],
             let data = values[kSecCodeInfoUnique] as? Data
         else { return nil }

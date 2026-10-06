@@ -2,7 +2,6 @@ import AppKit
 import EdithKit
 import SwiftUI
 import UniformTypeIdentifiers
-import UniformTypeIdentifiers
 
 struct VirtualCameraAudioPanel: View {
     @ObservedObject var model: VirtualCameraPageModel

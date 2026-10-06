@@ -65,7 +65,19 @@ final class LidAwakeHelper: NSObject, NSXPCListenerDelegate, LidAwakePrivilegedP
                 throw CocoaError(.fileNoSuchFile)
             }
             let application = try MeetingMicrophoneDeployment.application(containing: executable)
-            try MeetingMicrophoneDeployment.synchronize(application: application)
+            if try MeetingMicrophoneDeployment.synchronize(application: application) {
+                let result = try LidAwakeCommandProcess.run(
+                    executableURL: URL(fileURLWithPath: "/usr/bin/killall"),
+                    arguments: ["-TERM", "coreaudiod"])
+                guard !result.timedOut, result.terminationStatus == 0 else {
+                    throw NSError(
+                        domain: MeetingMicrophoneDeployment.identifier, code: 1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Edith Microphone is installed. Restart macOS to load the audio device."
+                        ])
+                }
+            }
             reply(nil)
         } catch { reply(error as NSError) }
     }

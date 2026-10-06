@@ -251,8 +251,9 @@ normal outgoing stream.
 
 Edith installs its microphone driver through the application’s existing
 privileged helper during setup and updates. Approve Edith’s background helper
-through its normal setup flow. If macOS has not loaded the device yet, restart
-macOS once. Select Edith Microphone in Meet or Zoom. Edith sends
+through its normal setup flow. Installation reloads CoreAudio when the driver
+changes, which briefly interrupts sound. If macOS still has not loaded the device,
+restart macOS once. Select Edith Microphone in Meet or Zoom. Edith sends
 one mix to that device. The video virtual camera remains a separate device.
 Choose your physical microphone as Edith's input, never the same loopback device
 as both input and output. Device UIDs and effect settings stay saved across

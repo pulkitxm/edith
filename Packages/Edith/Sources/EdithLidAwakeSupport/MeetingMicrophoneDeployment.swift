@@ -40,7 +40,13 @@ public enum MeetingMicrophoneDeployment {
         else {
             throw failure("The installed microphone path is invalid.")
         }
-        if let current = try? verify(installed), current == sourceSignature { return false }
+        let ownership =
+            try? files.attributesOfItem(atPath: installed.path)[.ownerAccountID] as? NSNumber
+        if let current = try? verify(installed), current == sourceSignature,
+            geteuid() != 0 || ownership?.intValue == 0
+        {
+            return false
+        }
         try files.createDirectory(
             at: destination, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o755])
@@ -51,6 +57,15 @@ public enum MeetingMicrophoneDeployment {
             throw failure("The microphone component changed during deployment.")
         }
         try files.setAttributes([.posixPermissions: 0o755], ofItemAtPath: staging.path)
+        if geteuid() == 0 {
+            let ownership: [FileAttributeKey: Any] = [.ownerAccountID: 0, .groupOwnerAccountID: 0]
+            try files.setAttributes(ownership, ofItemAtPath: staging.path)
+            if let contents = files.enumerator(at: staging, includingPropertiesForKeys: nil) {
+                for case let item as URL in contents {
+                    try files.setAttributes(ownership, ofItemAtPath: item.path)
+                }
+            }
+        }
         let replacing = files.fileExists(atPath: installed.path)
         guard
             renamex_np(
@@ -73,7 +88,8 @@ public enum MeetingMicrophoneDeployment {
         guard SecCodeCopySelf([], &own) == errSecSuccess, let own,
             SecCodeCopyStaticCode(own, [], &ownStatic) == errSecSuccess, let ownStatic,
             SecCodeCopySigningInformation(
-                ownStatic, SecCSFlags(rawValue: kSecCSSigningInformation), &ownInfo) == errSecSuccess,
+                ownStatic, SecCSFlags(rawValue: kSecCSSigningInformation), &ownInfo)
+                == errSecSuccess,
             let values = ownInfo as? [CFString: Any],
             let team = values[kSecCodeInfoTeamIdentifier] as? String,
             !team.isEmpty, team.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
@@ -90,8 +106,9 @@ public enum MeetingMicrophoneDeployment {
                 requirement) == errSecSuccess
         else { throw failure("The microphone component failed signature verification.") }
         var info: CFDictionary?
-        guard SecCodeCopySigningInformation(
-            code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
+        guard
+            SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
             let values = info as? [CFString: Any], let digest = values[kSecCodeInfoUnique] as? Data
         else {
             throw failure("The microphone component has no signing fingerprint.")
