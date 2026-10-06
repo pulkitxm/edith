@@ -23,6 +23,8 @@ struct MeetingAudioTests {
             #expect(rms > 0.01)
             signatures.insert(Int(energy * 1000))
             let clip = try MeetingAudioLibrary.clip(sound.identifier, in: MeetingAudioState())
+            #expect(clip.id == sound.id)
+            #expect(try sound.clip().id == clip.id)
             #expect(!clip.speech)
             #expect(clip.name == sound.name)
             let file = try AVAudioFile(forReading: URL(fileURLWithPath: clip.path))

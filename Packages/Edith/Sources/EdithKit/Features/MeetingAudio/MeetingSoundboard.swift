@@ -31,6 +31,12 @@ public enum MeetingSound: String, CaseIterable, Sendable {
 
     public var identifier: String { "soundboard:\(rawValue)" }
 
+    public var id: UUID {
+        UUID(
+            uuidString: String(
+                format: "00000000-0000-4000-8000-%012d", Self.allCases.firstIndex(of: self)! + 1))!
+    }
+
     public var duration: Double {
         switch self {
         case .applause, .thunder: 3
@@ -51,7 +57,7 @@ public enum MeetingSound: String, CaseIterable, Sendable {
             let file = try AVAudioFile(forWriting: url, settings: buffer.format.settings)
             try file.write(from: buffer)
         }
-        return MeetingAudioClip(name: name, path: url.path, speech: false)
+        return MeetingAudioClip(id: id, name: name, path: url.path, speech: false)
     }
 
     public func render() throws -> AVAudioPCMBuffer {

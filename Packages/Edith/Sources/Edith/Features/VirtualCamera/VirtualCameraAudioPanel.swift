@@ -65,7 +65,7 @@ struct VirtualCameraAudioPanel: View {
                 columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: UIScale.pt(8)
             ) {
                 ForEach(MeetingSound.allCases, id: \.self) { sound in
-                    let playing = status?.playing.contains(sound.name) == true
+                    let playing = status?.playing.contains(sound.id.uuidString) == true
                     Button {
                         model.performAudio(playing ? .stopClips : .playClip(sound.identifier))
                     } label: {
@@ -127,7 +127,7 @@ struct VirtualCameraAudioPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             ForEach(audio.clips) { clip in
-                let playing = status?.playing.contains(clip.name) == true
+                let playing = status?.playing.contains(clip.id.uuidString) == true
                 HStack(spacing: UIScale.pt(12)) {
                     Button {
                         model.performAudio(playing ? .stopClips : .playClip(clip.id.uuidString))

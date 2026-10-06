@@ -371,7 +371,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
             next.voiceModels.removeAll { $0.id == model.id }
         case .removeClip(let name):
             let clip = try MeetingAudioLibrary.clip(name, in: next)
-            finishPlayer(clip.id, name: clip.name)
+            finishPlayer(clip.id)
             next.clips.removeAll { $0.id == clip.id }
         }
         try apply(next)
@@ -418,21 +418,21 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         }
         player.volume = clip.gain * state.clipsGain
         clipPlayers[clip.id] = player
-        updateStatus { $0.playing.append(clip.name) }
+        updateStatus { $0.playing.append(clip.id.uuidString) }
         player.scheduleSegment(
             file, startingFrame: start, frameCount: AVAudioFrameCount(end - start), at: nil,
             completionCallbackType: .dataPlayedBack
         ) { [weak self] _ in
-            self?.queue.async { [weak self] in self?.finishPlayer(clip.id, name: clip.name) }
+            self?.queue.async { [weak self] in self?.finishPlayer(clip.id) }
         }
         player.play()
     }
 
-    private func finishPlayer(_ id: UUID, name: String) {
+    private func finishPlayer(_ id: UUID) {
         guard let player = clipPlayers.removeValue(forKey: id) else { return }
         player.stop()
         engine?.detach(player)
-        updateStatus { $0.playing.removeAll { $0 == name } }
+        updateStatus { $0.playing.removeAll { $0 == id.uuidString } }
     }
 
     private func stopClips() {
