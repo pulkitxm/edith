@@ -9,6 +9,7 @@ parser.add_argument("--version", default="1.0")
 parser.add_argument("--identity", default="-")
 parser.add_argument("--output", type=pathlib.Path, required=True)
 parser.add_argument("--test", action="store_true")
+parser.add_argument("--driver", type=pathlib.Path)
 args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parent.parent
 source = root / "Native/EdithMicrophone"
@@ -18,7 +19,7 @@ if args.test:
     subprocess.run(["xcrun", "clang++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     str(source / "EdithMicrophoneTests.cpp"), "-framework", "CoreAudio",
                     "-framework", "CoreFoundation", "-o", str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
+    subprocess.run([str(binary)] + ([str(args.driver)] if args.driver else []), check=True)
     raise SystemExit(0)
 uid = args.application + ".microphone"
 slot = args.application.removeprefix("com.pulkit.edith.dev.")

@@ -365,6 +365,8 @@ sign "$HELPER" "Resources/Helper.entitlements"
 python3 scripts/build-meeting-microphone.py --application "$APP_IDENTIFIER" \
   --version "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
   --identity "$SIGN_IDENTITY" --output "$APP/Contents/Library/Audio/Plug-Ins/HAL"
+python3 scripts/build-meeting-microphone.py --test --output "$DERIVED/MeetingMicrophoneTests" \
+  --driver "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
   : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \
