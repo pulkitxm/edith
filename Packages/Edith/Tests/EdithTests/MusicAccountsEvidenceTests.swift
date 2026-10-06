@@ -45,6 +45,15 @@ import Testing
                     at: directory.appendingPathComponent("\(name)\(suffix).png"))
             }
         }
+        accounts.select(.spotify)
+        for scheme in [ColorScheme.dark, .light] {
+            UIScale.apply(1)
+            try await captureView(
+                HomeMusicCard(dark: scheme == .dark, accounts: accounts).padding(16),
+                width: 420, height: 200, scheme: scheme,
+                at: directory.appendingPathComponent(
+                    "home-music-\(scheme == .dark ? "dark" : "light").png"))
+        }
         spotify.stop()
         defaults.removeObject(forKey: "musicSpotifyAccountSaved")
         accounts.select(.spotify)
@@ -62,14 +71,22 @@ import Testing
         _ accounts: MusicAccounts, width: CGFloat, scheme: ColorScheme, at url: URL
     ) async throws {
         let height = max(640, UIScale.pt(540))
+        try await captureView(
+            VStack(spacing: 0) {
+                MusicPage(accounts: accounts)
+                MusicFooter(accounts: accounts)
+            }, width: width, height: height, scheme: scheme, at: url)
+    }
+
+    private func captureView<Content: View>(
+        _ content: Content, width: CGFloat, height: CGFloat, scheme: ColorScheme, at url: URL
+    ) async throws {
         let host = NSHostingView(
             rootView:
-                VStack(spacing: 0) {
-                    MusicPage(accounts: accounts)
-                    MusicFooter(accounts: accounts)
-                }
+                content
                 .environment(\.colorScheme, scheme)
                 .environment(\.compactLayout, width < 900)
+                .environment(\.automaticViewActionsEnabled, false)
                 .frame(width: width, height: height)
                 .background(Color(nsColor: .windowBackgroundColor)))
         let window = TestWindowHost.window(
