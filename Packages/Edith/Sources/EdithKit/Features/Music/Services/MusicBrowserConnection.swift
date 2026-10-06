@@ -26,8 +26,10 @@ public enum MusicBrowserConnection {
     public static func importSession(profile: ChromeProfile, into store: WKWebsiteDataStore)
         async throws
     {
-        let cookies = try await Task.detached { try cookies(profile: profile) }.value
-        try await apply(cookies, to: store)
+        let importedCookies = try await Task.detached {
+            try MusicBrowserConnection.cookies(profile: profile)
+        }.value
+        try await apply(importedCookies, to: store)
     }
 
     @MainActor

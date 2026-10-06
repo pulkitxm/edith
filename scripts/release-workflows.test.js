@@ -162,6 +162,7 @@ test("publication depends directly on every required check in the current run", 
     "checks",
     "companion",
     "dmg",
+    "music-player",
     "promo-video",
     "swift-build",
     "swift-test",
@@ -181,7 +182,13 @@ test("publication depends directly on every required check in the current run", 
     context.needs[name].result = "skipped";
     expect(condition(publish.if, context)).toBe(false);
   }
-  const optional = ["swift-test", "companion", "promo-video", "swift-build"];
+  const optional = [
+    "swift-test",
+    "companion",
+    "music-player",
+    "promo-video",
+    "swift-build",
+  ];
   for (let mask = 0; mask < 2 ** optional.length; mask += 1) {
     const context = publicationContext();
     optional.forEach((name, index) => {
