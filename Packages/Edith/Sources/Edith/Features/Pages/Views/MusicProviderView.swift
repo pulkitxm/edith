@@ -21,28 +21,30 @@ struct MusicProviderContent: View {
         }
         .padding(UIScale.pt(22))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .font(Font.edithText(.body))
+        .buttonStyle(.edith(.secondary))
         .edithSheet(isPresented: $showProfiles) { profilePicker }
-        .task { accounts.activate() }
+        .pageTask { accounts.activate() }
     }
 
     private var spotify: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            HStack {
-                Label("Spotify", systemImage: "waveform.circle").font(.title2.weight(.semibold))
-                Spacer()
-                if accounts.spotify.connected {
-                    Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
-                } else if accounts.spotify.connecting {
-                    SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
-                        .accessibilityLabel("Connecting Spotify")
-                    Button("Cancel") { accounts.spotify.stop() }
-                } else {
-                    if accounts.spotify.hasSavedAccount {
+            PageSectionHeader("Spotify") {
+                HStack {
+                    if accounts.spotify.connected {
                         Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
+                    } else if accounts.spotify.connecting {
+                        SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
+                            .accessibilityLabel("Connecting Spotify")
+                        Button("Cancel") { accounts.spotify.stop() }
+                    } else {
+                        if accounts.spotify.hasSavedAccount {
+                            Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
+                                .disabled(accounts.spotify.disconnecting)
+                        }
+                        Button("Connect Spotify") { accounts.spotify.connect() }
                             .disabled(accounts.spotify.disconnecting)
                     }
-                    Button("Connect Spotify") { accounts.spotify.connect() }
-                        .disabled(accounts.spotify.disconnecting)
                 }
             }
             if accounts.spotify.connected {
@@ -75,24 +77,24 @@ struct MusicProviderContent: View {
 
     private var youtube: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack {
-                Label("YouTube Music", systemImage: "play.circle").font(.title2.weight(.semibold))
-                Spacer()
-                if accounts.youtubeConnecting {
-                    SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
-                        .accessibilityLabel("Connecting YouTube Music")
-                }
-                Button(
-                    accounts.youtubeConnected ? "Reconnect" : "Connect YouTube Music",
-                    action: chooseProfile
-                )
-                .disabled(accounts.youtubeConnecting)
-                if accounts.youtubeConnected {
-                    Button("Reload") {
-                        accounts.youtubeError = nil; accounts.youtubeView?.reload()
+            PageSectionHeader("YouTube Music") {
+                HStack {
+                    if accounts.youtubeConnecting {
+                        SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
+                            .accessibilityLabel("Connecting YouTube Music")
                     }
-                    Button("Disconnect") { Task { await accounts.disconnectYoutube() } }
-                        .disabled(accounts.youtubeConnecting)
+                    Button(
+                        accounts.youtubeConnected ? "Reconnect" : "Connect YouTube Music",
+                        action: chooseProfile
+                    )
+                    .disabled(accounts.youtubeConnecting)
+                    if accounts.youtubeConnected {
+                        Button("Reload") {
+                            accounts.youtubeError = nil; accounts.youtubeView?.reload()
+                        }
+                        Button("Disconnect") { Task { await accounts.disconnectYoutube() } }
+                            .disabled(accounts.youtubeConnecting)
+                    }
                 }
             }
             if let error = accounts.youtubeError { errorMessage(error) }
@@ -114,7 +116,7 @@ struct MusicProviderContent: View {
 
     private func errorMessage(_ message: String) -> some View {
         Label(message, systemImage: "exclamationmark.circle")
-            .font(.callout).foregroundStyle(.orange)
+            .font(Font.edithText(.callout)).foregroundStyle(.orange)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -136,7 +138,7 @@ struct MusicProviderContent: View {
 
     private var profilePicker: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            Text("Connect YouTube Music").font(.title2.weight(.semibold))
+            Text("Connect YouTube Music").font(Font.edithText(.title2).weight(.semibold))
             Text(
                 "Choose the Chrome profile signed in to your music account. macOS may ask you to allow access to Chrome Safe Storage in Keychain."
             )
@@ -159,6 +161,8 @@ struct MusicProviderContent: View {
                 .keyboardShortcut(.defaultAction)
             }
         }
+        .font(Font.edithText(.body))
+        .buttonStyle(.edith(.secondary))
         .padding(UIScale.pt(24)).frame(width: UIScale.pt(480))
     }
 
@@ -187,50 +191,84 @@ private struct MusicYoutubeWebView: NSViewRepresentable {
 }
 
 struct MusicStreamingControls: View {
+    @Environment(\.compactLayout) private var compact
     @State private var accounts = MusicAccounts.shared
     init(accounts: MusicAccounts? = nil) {
         _accounts = State(initialValue: accounts ?? .shared)
     }
 
     var body: some View {
-        HStack(spacing: UIScale.pt(14)) {
-            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                Text(accounts.spotify.title.isEmpty ? "Nothing playing" : accounts.spotify.title)
-                    .font(.headline).lineLimit(1).presenterBlur(.music)
-                Text(accounts.spotify.playing ? "Playing from Spotify" : "Spotify")
-                    .font(.caption).foregroundStyle(.secondary)
+        Group {
+            if compact {
+                VStack(spacing: UIScale.pt(8)) {
+                    HStack(spacing: UIScale.pt(14)) {
+                        trackSummary
+                        transport
+                    }
+                    HStack(spacing: UIScale.pt(14)) {
+                        positionSlider
+                        volumeSlider
+                    }
+                }
+            } else {
+                HStack(spacing: UIScale.pt(14)) {
+                    trackSummary
+                    transport
+                    positionSlider.frame(width: UIScale.pt(160))
+                    volumeSlider
+                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .font(Font.edithText(.body))
+        .disabled(!accounts.spotify.connected)
+    }
+
+    private var trackSummary: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+            Text(accounts.spotify.title.isEmpty ? "Nothing playing" : accounts.spotify.title)
+                .font(Font.edithText(.headline)).lineLimit(1).presenterBlur(.music)
+            Text(accounts.spotify.playing ? "Playing from Spotify" : "Spotify")
+                .font(Font.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var transport: some View {
+        HStack(spacing: UIScale.pt(14)) {
             control("backward.fill", label: "Previous track", action: "previous")
             control(
                 accounts.spotify.playing ? "pause.fill" : "play.fill", label: "Play or pause",
                 action: "toggle")
             control("forward.fill", label: "Next track", action: "next")
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
-                Slider(
-                    value: Binding(
-                        get: {
-                            accounts.spotify.duration > 0
-                                ? accounts.spotify.elapsed / accounts.spotify.duration : 0
-                        },
-                        set: {
-                            accounts.spotify.seek(
-                                by: $0 * accounts.spotify.duration - accounts.spotify.elapsed)
-                        }),
-                    in: 0...1
-                )
-                .frame(width: UIScale.pt(160))
-                .disabled(accounts.spotify.duration <= 0)
-                .accessibilityLabel("Spotify playback position")
-            }
+        }
+    }
+
+    private var positionSlider: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
             Slider(
                 value: Binding(
-                    get: { accounts.spotify.volume }, set: { accounts.spotify.setVolume($0) }),
+                    get: {
+                        accounts.spotify.duration > 0
+                            ? accounts.spotify.elapsed / accounts.spotify.duration : 0
+                    },
+                    set: {
+                        accounts.spotify.seek(
+                            by: $0 * accounts.spotify.duration - accounts.spotify.elapsed)
+                    }),
                 in: 0...1
             )
-            .frame(width: UIScale.pt(90)).accessibilityLabel("Spotify volume")
+            .disabled(accounts.spotify.duration <= 0)
+            .accessibilityLabel("Spotify playback position")
         }
-        .disabled(!accounts.spotify.connected)
+    }
+
+    private var volumeSlider: some View {
+        Slider(
+            value: Binding(
+                get: { accounts.spotify.volume }, set: { accounts.spotify.setVolume($0) }),
+            in: 0...1
+        )
+        .frame(width: UIScale.pt(90)).accessibilityLabel("Spotify volume")
     }
 
     private func control(_ symbol: String, label: String, action: String) -> some View {
@@ -239,6 +277,7 @@ struct MusicStreamingControls: View {
         } label: {
             Image(systemName: symbol)
         }
+        .buttonStyle(.edith(.toolbar))
         .accessibilityLabel(label).help(label)
     }
 }

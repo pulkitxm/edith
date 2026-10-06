@@ -19,6 +19,8 @@ import Testing
         let defaults = UserDefaults(suiteName: "test.music.evidence.\(UUID().uuidString)")!
         let spotify = MusicSpotifySession(executable: nil, defaults: defaults)
         let accounts = MusicAccounts(defaults: defaults, spotify: spotify, pauseLocal: {})
+        let originalScale = UIScale.current
+        defer { UIScale.apply(originalScale) }
         accounts.select(.spotify)
         spotify.receive(
             Data(
@@ -29,25 +31,42 @@ import Testing
 
                 """.utf8), generation: spotify.generation)
         spotify.error = nil
-        try await capture(accounts, at: directory.appendingPathComponent("spotify.png"))
-        accounts.select(.youtubeMusic)
-        try await capture(accounts, at: directory.appendingPathComponent("youtube-music.png"))
+        for provider in [MusicProvider.spotify, .youtubeMusic] {
+            accounts.select(provider)
+            let name = provider == .spotify ? "spotify" : "youtube-music"
+            let layouts: [(CGFloat, ColorScheme, Double, String)] = [
+                (1024, .dark, 1, ""), (600, .light, 1, "-compact-light"),
+                (1024, .light, 1.5, "-zoom-light"), (600, .dark, 1.5, "-compact-zoom"),
+            ]
+            for (width, scheme, zoom, suffix) in layouts {
+                UIScale.apply(zoom)
+                try await capture(
+                    accounts, width: width, scheme: scheme,
+                    at: directory.appendingPathComponent("\(name)\(suffix).png"))
+            }
+        }
         accounts.shutdown()
     }
 
-    private func capture(_ accounts: MusicAccounts, at url: URL) async throws {
+    private func capture(
+        _ accounts: MusicAccounts, width: CGFloat, scheme: ColorScheme, at url: URL
+    ) async throws {
+        let height = max(640, UIScale.pt(540))
         let host = NSHostingView(
             rootView:
                 VStack(spacing: 0) {
                     MusicPage(accounts: accounts)
                     MusicFooter(accounts: accounts)
                 }
-                .environment(\.colorScheme, .dark)
-                .frame(width: 1024, height: 640)
+                .environment(\.colorScheme, scheme)
+                .environment(\.compactLayout, width < 900)
+                .frame(width: width, height: height)
                 .background(Color(nsColor: .windowBackgroundColor)))
         let window = TestWindowHost.window(
-            contentRect: NSRect(x: 0, y: 0, width: 1024, height: 640))
+            contentRect: NSRect(x: 0, y: 0, width: width, height: height))
         window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        host.appearance = window.appearance
         window.contentView = host
         window.orderFront(nil)
         defer { window.close() }

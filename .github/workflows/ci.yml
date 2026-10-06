@@ -669,7 +669,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [version, dmg, checks, swift-test, companion, promo-video, swift-build]
+    needs: [version, dmg, checks, swift-test, companion, music-player, promo-video, swift-build]
     if: >-
       !cancelled()
       && needs.version.result == 'success'
@@ -678,6 +678,7 @@ jobs:
       && needs.checks.result == 'success'
       && contains(fromJSON('["success","skipped"]'), needs.swift-test.result)
       && contains(fromJSON('["success","skipped"]'), needs.companion.result)
+      && contains(fromJSON('["success","skipped"]'), needs.music-player.result)
       && contains(fromJSON('["success","skipped"]'), needs.promo-video.result)
       && contains(fromJSON('["success","skipped"]'), needs.swift-build.result)
     runs-on: ubuntu-latest

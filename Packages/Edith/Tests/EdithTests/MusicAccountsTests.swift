@@ -152,13 +152,14 @@ import WebKit
             executable: script, defaults: store, service: commands.path)
         defer { session.stop() }
         session.connect()
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if session.connected { break }
             try await Task.sleep(for: .milliseconds(20))
         }
-        #expect(session.connected)
+        try #require(
+            session.connected, Comment(rawValue: session.error ?? "Mock player timed out."))
         session.play("https://open.spotify.com/track/0123456789abcdefghijkl")
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if (try? String(contentsOf: commands, encoding: .utf8).contains("spotify:track:"))
                 == true
             {

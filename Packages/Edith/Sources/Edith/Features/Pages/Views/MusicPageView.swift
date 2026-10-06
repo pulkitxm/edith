@@ -1031,15 +1031,12 @@ struct MusicPage: View {
             if accounts.selected == .local { headerActions }
         } accessory: {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                Picker(
+                EdithSegmentedPicker(
                     "Music source",
-                    selection: Binding(get: { accounts.selected }, set: { accounts.select($0) })
-                ) {
-                    ForEach(MusicProvider.allCases) { provider in
-                        Label(provider.title, systemImage: provider.symbol).tag(provider)
-                    }
-                }
-                .pickerStyle(.segmented)
+                    selection: Binding(get: { accounts.selected }, set: { accounts.select($0) }),
+                    options: MusicProvider.allCases, label: { $0.title }
+                )
+                .frame(maxWidth: UIScale.pt(440))
                 if accounts.selected == .local {
                     if musicFolderStale {
                         HStack(spacing: UIScale.pt(5)) {
@@ -2338,7 +2335,10 @@ struct MusicFooter: View {
                             Button("Open player") {
                                 mainWindowSection = MainDestination.music.rawValue
                             }
-                        }.padding(.horizontal, UIScale.pt(22))
+                        }
+                        .font(Font.edithText(.body))
+                        .buttonStyle(.edith(.toolbar))
+                        .padding(.horizontal, UIScale.pt(22))
                     } else if let track = remote.current {
                         playing(track)
                     } else {
