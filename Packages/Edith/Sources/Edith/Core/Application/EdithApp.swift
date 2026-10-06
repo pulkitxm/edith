@@ -338,7 +338,8 @@ private final class LidAwakeDaemonRegistrar {
         else { return nil }
         var information: CFDictionary?
         guard
-            SecCodeCopySigningInformation(code, [], &information) == errSecSuccess,
+            SecCodeCopySigningInformation(
+                code, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
             let values = information as? [CFString: Any],
             let data = values[kSecCodeInfoUnique] as? Data
         else { return nil }
