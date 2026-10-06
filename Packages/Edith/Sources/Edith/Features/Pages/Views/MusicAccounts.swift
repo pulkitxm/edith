@@ -13,6 +13,7 @@ final class MusicSpotifySession {
     private(set) var disconnecting = false
     private(set) var account = ""
     private(set) var title = ""
+    private(set) var uri = ""
     private(set) var artist = ""
     private(set) var album = ""
     private(set) var artworkURL: URL?
@@ -29,6 +30,7 @@ final class MusicSpotifySession {
     private let executable: URL?
     private let defaults: UserDefaults
     private let service: String
+    let library = MusicSpotifyLibrary()
 
     var hasSavedAccount: Bool { defaults.bool(forKey: "musicSpotifyAccountSaved") }
 
@@ -45,6 +47,7 @@ final class MusicSpotifySession {
         self.executable = executable
         self.defaults = defaults
         self.service = service
+        library.configure { [weak self] in self?.send($0) }
     }
 
     func connect(authorize: Bool = true) {
@@ -83,18 +86,22 @@ final class MusicSpotifySession {
     func receive(_ data: Data, generation token: Int) {
         guard token == generation else { return }
         buffer.append(data)
-        guard buffer.count <= 65_536 else {
-            error = "The Spotify player sent an invalid response."
-            stop()
-            return
-        }
         while let end = buffer.firstIndex(of: 10) {
+            guard buffer.distance(from: buffer.startIndex, to: end) <= 65_536 else {
+                error = "The Spotify player sent an invalid response."
+                stop()
+                return
+            }
             let line = Data(buffer[..<end])
             buffer.removeSubrange(...end)
             guard let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else {
                 continue
             }
             apply(event)
+        }
+        if buffer.count > 65_536 {
+            error = "The Spotify player sent an invalid response."
+            stop()
         }
     }
 
@@ -108,8 +115,11 @@ final class MusicSpotifySession {
             account = event["account"] as? String ?? "Spotify account"
             defaults.set(true, forKey: "musicSpotifyAccountSaved")
             send(["action": "volume", "value": volume])
+            library.activate()
+        case "libraryState", "catalog", "libraryChanged": library.apply(event)
         case "track":
             title = event["title"] as? String ?? ""
+            uri = event["uri"] as? String ?? ""
             artist = event["artist"] as? String ?? ""
             album = event["album"] as? String ?? ""
             artworkURL = Self.coverURL(event["artwork"] as? String)
@@ -117,8 +127,9 @@ final class MusicSpotifySession {
             elapsedBase = 0
             updatedAt = Date()
         case "state":
-            playing = event["playing"] as? Bool ?? false
-            elapsedBase = max(0, event["elapsed"] as? Double ?? 0)
+            library.applyPlaybackState(event)
+            elapsedBase = max(0, event["elapsed"] as? Double ?? elapsed)
+            playing = event["playing"] as? Bool ?? playing
             updatedAt = Date()
         case "position":
             elapsedBase = max(0, event["elapsed"] as? Double ?? 0)
@@ -181,6 +192,7 @@ final class MusicSpotifySession {
         process?.stop()
         process = nil
         buffer = Data()
+        library.reset()
         resetPlayback()
     }
 
@@ -189,6 +201,7 @@ final class MusicSpotifySession {
         connecting = false
         account = ""
         title = ""
+        uri = ""
         artist = ""
         album = ""
         artworkURL = nil
