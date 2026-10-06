@@ -183,7 +183,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["timeout-minutes"]).toBe(30);
   expect(build.if).toBeUndefined();
   expect(run.run).toBe(
-    `for batch in \${{ matrix.batches }}; do\n  ./test.sh --skip-build --batch "$batch"\ndone\n`,
+    `for batch in \${{ matrix.batches }}; do\n  python3 ../../scripts/run-test-with-timeout.py --timeout 480 -- ./test.sh --skip-build --batch "$batch"\ndone\n`,
   );
   expect(job.strategy["fail-fast"]).toBe(false);
   expect(job.strategy["max-parallel"]).toBe(4);
@@ -206,7 +206,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
     },
   ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);
-  expect(run["timeout-minutes"]).toBe(15);
+  expect(run["timeout-minutes"]).toBe(20);
   expect(run.if).toBeUndefined();
   expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
   expect(save.if).toBe(
