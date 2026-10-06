@@ -57,6 +57,8 @@ final class VirtualCameraEngine {
     private var triggerQuit = false
     private var obsCooldownUntil = Date.distantPast
     private let previewBus: VirtualCameraPreviewBus
+    private var recordingPath: String?
+    private var recordingFinishing = false
 
     var streaming: Bool { streamingRoute != nil }
 
@@ -160,6 +162,48 @@ final class VirtualCameraEngine {
         return state.privacy
     }
 
+    func performRecording(_ request: VirtualCameraRequest) async throws -> VirtualCameraSnapshot {
+        guard !recordingFinishing else { throw CocoaError(.fileWriteUnknown) }
+        switch request {
+        case .screenSources:
+            var result = snapshot()
+            result.screenSources = try await VirtualCameraScreenCatalog.sources()
+            return result
+        case .recordStart(let path):
+            guard recordingPath == nil else { throw CocoaError(.fileWriteFileExists) }
+            guard state.privacy != .stopped else {
+                throw NSError(
+                    domain: "MeetingRecording", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Choose Live before recording."])
+            }
+            try pipeline.startRecording(to: URL(fileURLWithPath: path))
+            recordingPath = path
+            if !streaming { startRecordingPreview() }
+            publishIfChanged()
+            return snapshot(message: "Recording started.")
+        case .recordStop:
+            guard recordingPath != nil else { throw CocoaError(.fileNoSuchFile) }
+            recordingFinishing = true
+            defer {
+                recordingFinishing = false
+                recordingPath = nil
+                if !streaming { pipeline.stop() }
+                publishIfChanged()
+            }
+            let url = try await pipeline.stopRecording()
+            recordingPath = nil
+            return snapshot(message: "Saved \(url.path)")
+        default:
+            return try perform(request)
+        }
+    }
+
+    private func startRecordingPreview() {
+        pipeline.update(state: effectiveState())
+        let bus = previewBus
+        pipeline.start { buffer in bus.publish(buffer) }
+    }
+
     func snapshot(message: String? = nil) -> VirtualCameraSnapshot {
         let statistics = pipeline.statistics
         let sources = VirtualCameraDevices.sources()
@@ -173,7 +217,7 @@ final class VirtualCameraEngine {
             format: route == .edithCamera ? extensionStatus?.format ?? .standard : .standard,
             cameraAccess: VirtualCameraClients.accessDescription(environment.authorization()),
             systemBackgroundActive: statistics.systemBackgroundActive,
-            state: state, message: message)
+            state: state, message: message, recordingPath: recordingPath)
     }
 
     private func clients() -> [VirtualCameraClient] {
@@ -197,7 +241,9 @@ final class VirtualCameraEngine {
     }
 
     private func effectiveState() -> VirtualCameraState {
-        guard environment.authorization() != .authorized, state.privacy == .live else {
+        guard state.media.kind == .camera, environment.authorization() != .authorized,
+            state.privacy == .live
+        else {
             return state
         }
         var gated = state
@@ -335,7 +381,7 @@ final class VirtualCameraEngine {
 
     private func stopStreaming() {
         guard let streamingRoute else { return }
-        pipeline.stop()
+        if recordingPath == nil { pipeline.stop() } else { startRecordingPreview() }
         (streamingRoute == .edithCamera ? edithSink : obsSink).disconnect()
         self.streamingRoute = nil
         trigger = nil

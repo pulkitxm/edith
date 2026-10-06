@@ -20,7 +20,10 @@ struct CameraCommand: AsyncParsableCommand {
             CameraFrameCommand.self, CameraResetCommand.self, CameraResetLookCommand.self,
             CameraLookCommand.self,
             CameraBackgroundCommand.self, CameraPauseCommand.self, CameraResumeCommand.self,
-            CameraSceneCommand.self, CameraExtensionCommand.self,
+            CameraSceneCommand.self, CameraVideoCommand.self, CameraPlayCommand.self,
+            CameraFreezeCommand.self, CameraMirrorCommand.self, CameraRecordCommand.self,
+            CameraScreenCommand.self,
+            CameraExtensionCommand.self,
         ],
         defaultSubcommand: CameraStatusCommand.self)
 }

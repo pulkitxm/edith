@@ -135,7 +135,8 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     var hasNoCameraSource: Bool {
-        sourcesLoaded && cameraAccess == .authorized && sources.isEmpty && !hasPreviewFrame
+        state.media.kind == .camera && sourcesLoaded && cameraAccess == .authorized
+            && sources.isEmpty && !hasPreviewFrame
             && !(snapshot?.live == true && helperReachable)
             && !(snapshot == nil && statusPending)
             && state.privacy == .live
@@ -428,7 +429,9 @@ final class VirtualCameraPageModel: ObservableObject {
 
     private func startLocalPreview() {
         cameraAccess = accessProvider()
-        guard visible, cameraAccess == .authorized, previewFeed != .local else { return }
+        guard visible, (cameraAccess == .authorized || state.media.kind != .camera),
+            previewFeed != .local
+        else { return }
         guard let pipeline else {
             preparePipeline()
             return
@@ -570,7 +573,11 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func selectSource(_ source: VirtualCameraSource) {
-        update { $0.sourceID = source.id }
+        update {
+            $0.sourceID = source.id
+            $0.media = VirtualCameraMedia()
+            $0.privacy = .live
+        }
     }
 
     func apply(_ scene: VirtualCameraScene) {

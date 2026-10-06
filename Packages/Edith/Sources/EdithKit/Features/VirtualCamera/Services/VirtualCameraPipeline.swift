@@ -37,6 +37,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private let clock: @Sendable () -> TimeInterval
     private let lock = NSLock()
     private lazy var capture = VirtualCameraCapture(frameQueue: queue)
+    private lazy var video = VirtualCameraVideoSource(queue: queue)
+    private lazy var screen = VirtualCameraScreenCapture(queue: queue)
     private var state: VirtualCameraState
     private var outputSize: CGSize
     private var frameRate: Int
@@ -57,6 +59,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private var stats = Statistics()
     private var referenceValue: CGImage?
     private var referenceAt: TimeInterval?
+    private var recorder: VirtualCameraRecorder?
 
     public init(
         state: VirtualCameraState, outputSize: CGSize, frameRate: Int = 30,
@@ -74,6 +77,35 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     public var statistics: Statistics { lock.withLock { stats } }
+
+    public func startRecording(to url: URL) throws {
+        try queue.sync {
+            guard recorder == nil else { throw CocoaError(.fileWriteFileExists) }
+            recorder = try VirtualCameraRecorder(url: url, size: outputSize)
+        }
+    }
+
+    public func stopRecording() async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { [weak self] in
+                guard let self, let recorder = self.recorder else {
+                    continuation.resume(throwing: CocoaError(.fileNoSuchFile))
+                    return
+                }
+                self.recorder = nil
+                recorder.finish { continuation.resume(with: $0) }
+            }
+        }
+    }
+
+    private func emit(_ buffer: CVPixelBuffer) {
+        if let recorder {
+            do { try recorder.append(buffer, at: clock()) } catch {
+                updateStats { $0.failureMessage = error.localizedDescription }
+            }
+        }
+        output?(buffer)
+    }
 
     public var reference: CGImage? { lock.withLock { referenceValue } }
 
@@ -95,6 +127,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             self.running = false
             self.output = nil
             self.capture.stop()
+            self.video.stop()
+            self.screen.stop()
             self.stopPrivacyTimer()
             self.analyzer.reset()
             self.framer.reset()
@@ -154,7 +188,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             privacyKey = ""
         }
         guard running else { return }
-        if next.privacy != previous.privacy {
+        if next.privacy != previous.privacy || next.media != previous.media {
             applyRunMode()
         } else if next.privacy.usesCamera {
             capture.update(captureConfiguration())
@@ -170,6 +204,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
 
     private func applyRunMode() {
         if state.privacy == .stopped {
+            video.stop()
+            screen.stop()
             capture.stop()
             stopPrivacyTimer()
             analyzer.reset()
@@ -177,6 +213,41 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             privacyBuffer = nil
             updateStats { $0 = Statistics() }
             return
+        }
+        if state.privacy.usesCamera, state.media.kind == .screen {
+            capture.stop()
+            video.stop()
+            stopPrivacyTimer()
+            screen.start(
+                state.media, size: outputSize, frameRate: frameRate,
+                failed: { [weak self] message in
+                    self?.updateStats { $0.failureMessage = message }
+                }
+            ) { [weak self] buffer in
+                self?.handleCapture(buffer, systemBackgroundActive: false)
+            }
+            updateStats { $0.usingCamera = false }
+            return
+        }
+        screen.stop()
+        if state.privacy.usesCamera, state.media.kind == .video {
+            capture.stop()
+            stopPrivacyTimer()
+            video.update(
+                state.media, frameRate: frameRate,
+                failed: { [weak self] message in
+                    self?.updateStats { $0.failureMessage = message }
+                }
+            ) { [weak self] buffer in
+                self?.handleCapture(buffer, systemBackgroundActive: false)
+            }
+            updateStats { $0.usingCamera = false }
+            return
+        }
+        if state.media.kind == .video {
+            video.suspend()
+        } else {
+            video.stop()
         }
         if state.privacy.usesCamera {
             stopPrivacyTimer()
@@ -205,7 +276,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         if let rendered = render(
             buffer, at: clock(), systemBackgroundActive: systemBackgroundActive)
         {
-            output(rendered)
+            emit(rendered)
         }
         if let active = capture.active {
             updateStats {
@@ -248,7 +319,11 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             image: image, composition: composition, framing: framing,
             mask: wantsMask ? analysis.mask : nil, date: Date(), assets: assets,
             systemBackgroundActive: systemBackgroundActive)
-        let composed = renderer.compose(input, output: outputSize)
+        var composed = renderer.compose(input, output: outputSize)
+        if state.mirrorOutput {
+            composed = VirtualCameraRenderer.oriented(
+                composed, framing: VirtualCameraFraming(flipHorizontal: true))
+        }
         if referenceAt.map({ time - $0 >= Self.referenceInterval || time < $0 }) ?? true {
             referenceAt = time
             let small = renderer.cgImage(
@@ -334,7 +409,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             guard let self, self.running, !self.state.privacy.usesCamera, let output = self.output,
                 let frame = self.makePrivacyFrame()
             else { return }
-            output(frame)
+            self.emit(frame)
         }
         timer.resume()
         privacyTimer = timer

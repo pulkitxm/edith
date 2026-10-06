@@ -670,10 +670,13 @@ struct VirtualCameraOutputPanel: View {
                     "Scene changes", selection: model.stateBinding(\.transition),
                     options: VirtualCameraTransition.allCases, label: { $0.title })
                 VirtualCameraToggleRow(
-                    title: "Mirror the preview", isOn: model.stateBinding(\.mirrorPreview),
+                    title: "Mirror self preview", isOn: model.stateBinding(\.mirrorPreview),
+                    dark: dark)
+                VirtualCameraToggleRow(
+                    title: "Flip participant output", isOn: model.stateBinding(\.mirrorOutput),
                     dark: dark)
                 Text(
-                    "Mirroring only flips this preview. Apps receive the picture the right way round."
+                    "Meet mirrors its self preview. Use the audience preview here to check text and overlays."
                 )
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkFaint(dark))

@@ -52,6 +52,28 @@ final class VirtualCameraActionBridge {
     }
 
     private func receive(_ info: [AnyHashable: Any], engine: VirtualCameraEngine?) {
+        if let runtime = VirtualCameraRuntimeRequest(payload: info),
+            runtime.isLive(at: Date()), let engine
+        {
+            switch runtime.request {
+            case .recordStart, .recordStop, .screenSources:
+                Task { @MainActor in
+                    do {
+                        let snapshot = try await engine.performRecording(runtime.request)
+                        IPC.post(
+                            IPC.Name.virtualCameraActionResult,
+                            userInfo: snapshot.resultPayload(requestID: runtime.requestID))
+                    } catch {
+                        IPC.post(
+                            IPC.Name.virtualCameraActionResult,
+                            userInfo: engine.snapshot().resultPayload(
+                                requestID: runtime.requestID, error: error.localizedDescription))
+                    }
+                }
+                return
+            default: break
+            }
+        }
         guard let payload = Self.reply(to: info, engine: engine) else { return }
         IPC.post(IPC.Name.virtualCameraActionResult, userInfo: payload)
     }

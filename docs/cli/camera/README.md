@@ -212,3 +212,37 @@ and 1 when a value is out of range or a scene or camera does not exist.
 - [`ed extensions`](../extensions/README.md)
 - [`ed permissions`](../permissions/README.md)
 - [All command groups](../README.md)
+
+## Meeting playback and recording
+
+The buttons below the stage switch between Live, Away, Freeze and Stop. Choose a
+camera, a local video, or a display/window. The virtual camera selected in Meet
+stays the same when the source changes inside Edith.
+
+```text
+ed camera video ~/Movies/demo.mp4 [--once] [--json]
+ed camera play playing|paused|stopped [--json]
+ed camera freeze [--json]
+ed camera screen list [--json]
+ed camera screen window:123 [--json]
+ed camera record start --path ~/Movies/meeting.mp4 [--json]
+ed camera record stop [--json]
+ed camera mirror true|false [--json]
+```
+
+Video files loop unless `--once` is set. Pause video holds its current position;
+Freeze holds the composed frame and resumes from that position. Stop completely
+releases the source. Selecting a camera returns to live capture. Screens and
+windows require macOS screen recording permission. A window that closes must be
+selected again.
+
+Record saves the composed outgoing picture, including looks and overlays, as an
+MP4. It can record without another app opening the virtual camera. Stop recording
+waits for the file to finish before reporting it saved. This recording currently
+contains video only.
+
+Meet flips its local camera preview horizontally. Use Edith's Audience preview
+to check overlay text. Mirror self preview affects only Edith's preview. Flip
+participant output, or `ed camera mirror`, flips the complete outgoing image,
+including text, for every recipient. Leave it off for readable text in the
+normal outgoing stream.

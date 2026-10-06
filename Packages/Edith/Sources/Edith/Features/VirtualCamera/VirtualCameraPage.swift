@@ -58,6 +58,7 @@ struct VirtualCameraPage: View {
             PageColumns {
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     VirtualCameraStage(model: model, dark: dark)
+                    VirtualCameraMeetingControls(model: model, dark: dark)
                     VirtualCameraToolbar(model: model, dark: dark)
                     VirtualCameraSceneStrip(model: model, dark: dark)
                 }

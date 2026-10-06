@@ -27,6 +27,12 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
     case background
     case pause
     case resume
+    case video
+    case play
+    case freeze
+    case mirror
+    case record
+    case screen
     case sceneList
     case sceneApply
     case sceneSave
@@ -56,6 +62,12 @@ public enum VirtualCameraOperation: String, CaseIterable, Equatable, Sendable {
         case .pause:
             descriptor(["pause"], "Hide the camera behind a card, blank or frozen frame.", .write)
         case .resume: descriptor(["resume"], "Show the live camera again.", .write)
+        case .video: descriptor(["video"], "Use a video file as the camera.", .write)
+        case .play: descriptor(["play"], "Control video playback.", .write)
+        case .freeze: descriptor(["freeze"], "Hold the last video frame.", .write)
+        case .mirror: descriptor(["mirror"], "Flip the complete output for participants.", .write)
+        case .record: descriptor(["record"], "Record the composed meeting video.", .write)
+        case .screen: descriptor(["screen"], "Use a screen or window as the camera.", .write)
         case .sceneList: descriptor(["scene", "list"], "List saved scenes.", .read)
         case .sceneApply: descriptor(["scene", "apply"], "Switch to a saved scene.", .write)
         case .sceneSave: descriptor(["scene", "save"], "Save the current look as a scene.", .write)
@@ -116,6 +128,8 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
     public var systemBackgroundActive: Bool
     public var state: VirtualCameraState
     public var message: String?
+    public var recordingPath: String?
+    public var screenSources: [VirtualCameraScreenSource]?
 
     public init(
         enabled: Bool, helperRunning: Bool, extensionInstalled: Bool, obsAvailable: Bool = false,
@@ -124,7 +138,7 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
         source: VirtualCameraSource? = nil, sourceWidth: Int = 0, sourceHeight: Int = 0,
         sources: [VirtualCameraSource] = [], format: VirtualCameraFormat = .standard,
         cameraAccess: String = "unknown", systemBackgroundActive: Bool = false,
-        state: VirtualCameraState, message: String? = nil
+        state: VirtualCameraState, message: String? = nil, recordingPath: String? = nil
     ) {
         self.enabled = enabled
         self.helperRunning = helperRunning
@@ -144,6 +158,7 @@ public struct VirtualCameraSnapshot: Codable, Equatable, Sendable {
         self.systemBackgroundActive = systemBackgroundActive
         self.state = state
         self.message = message
+        self.recordingPath = recordingPath
     }
 
     public static func stored(
