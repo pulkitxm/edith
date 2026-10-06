@@ -150,42 +150,52 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         }
         engine.connect(previous, to: engine.mainMixerNode, fromBus: 0, toBus: 0, format: format)
         engine.connect(source, to: engine.mainMixerNode, fromBus: 0, toBus: 1, format: format)
-        engine.attach(effects.compressor)
-        engine.connect(engine.mainMixerNode, to: effects.compressor, format: format)
-        engine.connect(effects.compressor, to: engine.outputNode, format: nil)
+        engine.attach(effects.limiter)
+        engine.connect(engine.mainMixerNode, to: effects.limiter, format: format)
+        engine.connect(effects.limiter, to: engine.outputNode, format: nil)
         self.engine = engine
         self.effects = effects
         micMixer = mic
         speechMixer = speech
         sourcePlayer = source
         mediaAudio = MeetingMediaAudio(player: source, queue: queue)
-        generation += 1
-        let generation = generation
+        let generation = lock.withLock {
+            self.generation += 1
+            pendingBuffers = 0
+            return self.generation
+        }
         capture = try MeetingAudioCapture(
-            deviceID: input.id, queue: queue, format: inputFormat,
+            deviceID: input.id,
+            queue: DispatchQueue(label: "com.pulkit.edith.meeting.capture", qos: .userInteractive),
+            format: inputFormat,
             receive: { [weak self] copy in
-                guard let self else { return }
-                let accepted = self.lock.withLock {
-                    guard self.pendingBuffers < 8 else { return false }
+                guard let self, copy.frameLength > 0 else { return }
+                let depth = self.lock.withLock {
+                    guard self.generation == generation, self.pendingBuffers < 16 else { return 0 }
                     self.pendingBuffers += 1
-                    return true
+                    return self.pendingBuffers
                 }
-                guard accepted else { return }
-                guard self.generation == generation else {
-                    self.lock.withLock { self.pendingBuffers -= 1 }
-                    return
+                guard depth > 0 else { return }
+                microphone.scheduleBuffer(copy, completionCallbackType: .dataPlayedBack) {
+                    [weak self] _ in
+                    guard let self else { return }
+                    self.lock.withLock {
+                        if self.generation == generation {
+                            self.pendingBuffers = max(0, self.pendingBuffers - 1)
+                        }
+                    }
                 }
-                if let recording = self.recording {
+                if depth >= 2 && !microphone.isPlaying { microphone.play() }
+                self.queue.async { [weak self] in
+                    guard let self, self.lock.withLock({ self.generation == generation }),
+                        let recording = self.recording
+                    else { return }
                     do { try recording.write(from: copy) } catch {
                         self.updateStatus { $0.failure = error.localizedDescription }
                     }
                 }
-                microphone.scheduleBuffer(copy, completionCallbackType: .dataPlayedBack) {
-                    [weak self] _ in
-                    self?.lock.withLock { self?.pendingBuffers -= 1 }
-                }
             }, failure: { [weak self] message in self?.updateStatus { $0.failure = message } })
-        effects.compressor.installTap(onBus: 0, bufferSize: 1024, format: format) {
+        effects.limiter.installTap(onBus: 0, bufferSize: 1024, format: format) {
             [weak self] buffer, time in
             guard let self, let copy = Self.copy(buffer) else { return }
             let timestamp =
@@ -203,7 +213,6 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         source.volume = state.sourceGain
         do {
             try engine.start()
-            microphone.play()
             try capture?.start()
         } catch { stop(); throw error }
         source.play()
@@ -476,7 +485,10 @@ public final class MeetingAudioMixer: @unchecked Sendable {
     public func shutdown() { queue.async { [weak self] in self?.stop() } }
 
     private func stop() {
-        generation += 1
+        lock.withLock {
+            generation += 1
+            pendingBuffers = 0
+        }
         voiceStream?.stop()
         voiceStream = nil
         voicePlayer = nil
@@ -487,7 +499,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         capture = nil
         micPlayer?.stop()
         micPlayer = nil
-        if outputTap { effects?.compressor.removeTap(onBus: 0) }
+        if outputTap { effects?.limiter.removeTap(onBus: 0) }
         outputTap = false
         mediaAudio?.stop()
         mediaAudio = nil

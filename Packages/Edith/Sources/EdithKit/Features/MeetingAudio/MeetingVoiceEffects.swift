@@ -7,10 +7,10 @@ public final class MeetingVoiceEffects {
     public let distortion = AVAudioUnitDistortion()
     public let delay = AVAudioUnitDelay()
     public let reverb = AVAudioUnitReverb()
-    public let compressor = AVAudioUnitEffect(
+    public let limiter = AVAudioUnitEffect(
         audioComponentDescription: AudioComponentDescription(
             componentType: kAudioUnitType_Effect,
-            componentSubType: kAudioUnitSubType_DynamicsProcessor,
+            componentSubType: kAudioUnitSubType_PeakLimiter,
             componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0,
             componentFlagsMask: 0))
 
@@ -21,16 +21,7 @@ public final class MeetingVoiceEffects {
         delay.delayTime = 0.18
         delay.feedback = 15
         AudioUnitSetParameter(
-            compressor.audioUnit, kDynamicsProcessorParam_Threshold, kAudioUnitScope_Global, 0, -18,
-            0)
-        AudioUnitSetParameter(
-            compressor.audioUnit, kDynamicsProcessorParam_HeadRoom, kAudioUnitScope_Global, 0, 6, 0)
-        AudioUnitSetParameter(
-            compressor.audioUnit, kDynamicsProcessorParam_AttackTime, kAudioUnitScope_Global, 0,
-            0.005, 0)
-        AudioUnitSetParameter(
-            compressor.audioUnit, kDynamicsProcessorParam_ReleaseTime, kAudioUnitScope_Global, 0,
-            0.08, 0)
+            limiter.audioUnit, kLimiterParam_PreGain, kAudioUnitScope_Global, 0, 0, 0)
     }
 
     public func apply(_ state: MeetingAudioState) {
@@ -58,5 +49,10 @@ public final class MeetingVoiceEffects {
         }
         if state.preset == .echo { delay.wetDryMix = max(state.delay, 25) }
         if state.preset == .cinematic { reverb.wetDryMix = max(state.reverb, 8) }
+        pitch.bypass = pitch.pitch == 0
+        equalizer.bypass = state.preset != .telephone && state.preset != .radio
+        distortion.bypass = distortion.wetDryMix == 0
+        delay.bypass = delay.wetDryMix == 0
+        reverb.bypass = reverb.wetDryMix == 0
     }
 }

@@ -107,6 +107,24 @@ struct MeetingAudioTests {
         let telephone = try render(.telephone)
         #expect(natural > 0.03)
         #expect(telephone < natural * 0.4)
+        #expect(abs(natural - 0.2 / sqrt(2)) < 0.002)
+    }
+
+    @Test func naturalVoiceBypassesInactiveProcessing() {
+        let effects = MeetingVoiceEffects()
+        effects.apply(MeetingAudioState())
+        #expect(effects.pitch.bypass)
+        #expect(effects.equalizer.bypass)
+        #expect(effects.distortion.bypass)
+        #expect(effects.delay.bypass)
+        #expect(effects.reverb.bypass)
+        var state = MeetingAudioState()
+        state.pitch = 300
+        state.reverb = 20
+        effects.apply(state)
+        #expect(!effects.pitch.bypass)
+        #expect(!effects.reverb.bypass)
+        #expect(effects.delay.bypass)
     }
 
     private func render(_ preset: MeetingVoicePreset) throws -> Double {
@@ -122,6 +140,9 @@ struct MeetingAudioTests {
             previous = node
         }
         engine.connect(previous, to: engine.mainMixerNode, format: format)
+        engine.attach(effects.limiter)
+        engine.connect(engine.mainMixerNode, to: effects.limiter, format: format)
+        engine.connect(effects.limiter, to: engine.outputNode, format: format)
         var state = MeetingAudioState()
         state.preset = preset
         effects.apply(state)
