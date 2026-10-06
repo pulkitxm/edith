@@ -250,7 +250,14 @@ test("swift tests leave enough time for a cold libghostty build", () => {
     ciWorkflow.indexOf("\n  swift-test:"),
     ciWorkflow.indexOf("\n  companion:"),
   );
-  expect(swiftTestJob).toContain("timeout-minutes: 60");
+  expect(swiftTestJob).toContain("timeout-minutes: 90");
+  const job = workflow.jobs["swift-test"];
+  const build = job.steps.find((step) => step.name === "Build tests");
+  const tests = job.steps.find((step) => step.name === "Tests");
+  expect(build["timeout-minutes"]).toBeGreaterThanOrEqual(45);
+  expect(job["timeout-minutes"]).toBeGreaterThanOrEqual(
+    build["timeout-minutes"] + tests["timeout-minutes"] + 15,
+  );
   expect(swiftTestJob).toContain("name: Cache libghostty");
   expect(swiftTestJob).toContain("name: Build libghostty");
 });

@@ -256,7 +256,7 @@ jobs:
     concurrency:
       group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -312,7 +312,7 @@ jobs:
       - name: Verify test isolation
         run: python3 -B scripts/test-swift-test-isolation.py
       - name: Build tests
-        timeout-minutes: 30
+        timeout-minutes: 45
         run: ./test.sh --build-only
         working-directory: Packages/Edith
       - name: Save compiled tests
