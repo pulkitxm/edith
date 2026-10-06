@@ -6,16 +6,11 @@ import SwiftUI
 struct VirtualCameraInspector: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
+    @State private var choosingTab = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            Menu {
-                ForEach(VirtualCameraInspectorTab.allCases) { tab in
-                    Button { model.tab = tab } label: {
-                        Label(tab.title, systemImage: tab.symbolName)
-                    }
-                }
-            } label: {
+            Button { choosingTab = true } label: {
                 HStack {
                     Label(model.tab.title, systemImage: model.tab.symbolName)
                         .font(.edithText(.headline))
@@ -25,9 +20,25 @@ struct VirtualCameraInspector: View {
                 .padding(UIScale.pt(12))
                 .frame(maxWidth: .infinity, minHeight: UIScale.pt(44), alignment: .leading)
             }
-            .menuStyle(.borderlessButton)
-            .edithSurface(cornerRadius: 12)
+            .buttonStyle(.edith(.secondary))
             .accessibilityLabel("Adjust: \(model.tab.title)")
+            .popover(isPresented: $choosingTab) {
+                VStack(spacing: UIScale.pt(4)) {
+                    ForEach(VirtualCameraInspectorTab.allCases) { tab in
+                        Button {
+                            model.tab = tab
+                            choosingTab = false
+                        } label: {
+                            Label(tab.title, systemImage: tab.symbolName)
+                                .font(.edithText(.body))
+                                .frame(maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
+                        }
+                        .buttonStyle(.edith(.toolbar))
+                    }
+                }
+                .padding(UIScale.pt(12))
+                .frame(width: UIScale.pt(220))
+            }
             ScrollView {
                 VStack(spacing: UIScale.pt(12)) {
                     switch model.tab {
