@@ -7,7 +7,9 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseRenderTests {
-    @Test @MainActor func loadingAndRecoveryUseSharedPresentationAtCompactZoom() async throws {
+    @Test(arguments: ["windows", "displays"])
+    @MainActor
+    func loadingAndRecoveryUseSharedPresentationAtCompactZoom(sourceMode: String) async throws {
         guard #available(macOS 15.0, *) else { return }
         let previousZoom = UIScale.current
         UIScale.apply(1.6)
@@ -15,6 +17,7 @@ import Testing
         for scheme in [ColorScheme.light, .dark] {
             for failed in [false, true] {
                 let recorder = TimeLapseRecorder()
+                recorder.sourceMode = sourceMode
                 if failed {
                     recorder.sourceLoad.fail(
                         recorder.sourceLoad.begin(),
@@ -58,7 +61,7 @@ import Testing
                             at: directory, withIntermediateDirectories: true)
                         try png.write(
                             to: directory.appendingPathComponent(
-                                "recorder-\(index == 0 ? "page" : "picker")-\(failed ? "recovery" : "loading")-\(scheme).png"
+                                "recorder-\(index == 0 ? "page" : "picker")-\(sourceMode)-\(failed ? "recovery" : "loading")-\(scheme).png"
                             ))
                     }
                 }
