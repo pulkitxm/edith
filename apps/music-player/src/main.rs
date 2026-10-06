@@ -1,3 +1,4 @@
+use clap::Parser;
 use librespot::{
     connect::{ConnectConfig, LoadRequest, LoadRequestOptions, Spirc},
     core::{authentication::Credentials, config::SessionConfig, session::Session},
@@ -13,6 +14,16 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::io::{self, Write};
 use tokio::io::{AsyncBufReadExt, BufReader};
+
+#[derive(Parser)]
+struct Arguments {
+    service: String,
+    name: String,
+    #[arg(long, conflicts_with = "forget")]
+    resume: bool,
+    #[arg(long)]
+    forget: bool,
+}
 
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "camelCase")]
@@ -198,14 +209,15 @@ async fn run(
 
 #[tokio::main]
 async fn main() {
-    let args: Vec<_> = std::env::args().collect();
-    if args.len() < 3 || args.len() > 4 {
-        std::process::exit(2);
-    }
-    if run(&args[1], &args[2], args.get(3).map(String::as_str))
-        .await
-        .is_err()
-    {
+    let args = Arguments::parse();
+    let mode = if args.forget {
+        Some("--forget")
+    } else if args.resume {
+        Some("--resume")
+    } else {
+        None
+    };
+    if run(&args.service, &args.name, mode).await.is_err() {
         emit(
             json!({"event": "error", "message": "Spotify could not connect. Check your internet connection and Premium account, or disconnect and sign in again."}),
         );
@@ -216,6 +228,24 @@ async fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_account_modes_without_using_the_executable_as_identity() {
+        let args =
+            Arguments::try_parse_from(["untrusted", "test.service", "Music", "--resume"]).unwrap();
+        assert_eq!(args.service, "test.service");
+        assert_eq!(args.name, "Music");
+        assert!(args.resume);
+        assert!(!args.forget);
+        assert!(Arguments::try_parse_from(["player", "test.service"]).is_err());
+        assert!(
+            Arguments::try_parse_from(["player", "test.service", "Music", "--unknown"]).is_err()
+        );
+        assert!(
+            Arguments::try_parse_from(["player", "test.service", "Music", "--resume", "--forget"])
+                .is_err()
+        );
+    }
 
     #[test]
     fn accepts_supported_spotify_uris() {
