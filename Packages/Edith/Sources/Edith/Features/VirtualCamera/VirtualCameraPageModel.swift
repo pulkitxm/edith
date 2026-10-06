@@ -11,6 +11,7 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
     case background
     case overlays
     case output
+    case audio
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "Background"
         case .overlays: "Overlays"
         case .output: "Output"
+        case .audio: "Audio"
         }
     }
 
@@ -31,6 +33,7 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "person.crop.rectangle"
         case .overlays: "text.below.photo"
         case .output: "video.badge.checkmark"
+        case .audio: "waveform"
         }
     }
 }
@@ -67,6 +70,7 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published var showsGrid = false
     @Published private(set) var lookThumbnails: [VirtualCameraLookPreset: CGImage] = [:]
     @Published var errorMessage: String?
+    @Published var audioPending = false
 
     let display = VirtualCameraPreviewDisplay()
     let extensionManager: VirtualCameraExtensionManager
@@ -631,6 +635,10 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func pause(_ mode: VirtualCameraPrivacy) {
+        guard mode != .stopped || snapshot?.recordingPath == nil else {
+            errorMessage = "Stop the recording before stopping the camera."
+            return
+        }
         update { $0.privacy = mode }
         flushSave()
     }

@@ -37,6 +37,8 @@
 	<string>Edith shows today's calendar events in its menu bar panel.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Edith frames your camera for Edith Camera, the virtual camera video apps can pick, and shows a preview in the notch so you can check yourself before a call.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Edith mixes your microphone with saved speech, voice effects and media audio for meetings, and records snippets when you choose Record mic.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSRemovableVolumesUsageDescription</key>

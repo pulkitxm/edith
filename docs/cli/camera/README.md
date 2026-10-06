@@ -246,3 +246,42 @@ to check overlay text. Mirror self preview affects only Edith's preview. Flip
 participant output, or `ed camera mirror`, flips the complete outgoing image,
 including text, for every recipient. Leave it off for readable text in the
 normal outgoing stream.
+
+## Meeting audio
+
+Install BlackHole 2ch and select it as the microphone in Meet or Zoom. Edith sends
+one mix to that device. The video virtual camera remains a separate device.
+Choose your physical microphone as Edith's input, never the same loopback device
+as both input and output. Device UIDs and effect settings stay saved across
+restarts, so changing clips or video sources does not require reselecting the
+meeting microphone. Audio starts only after you explicitly enable it.
+
+```sh
+ed camera audio devices
+ed camera audio input "MacBook Pro Microphone"
+ed camera audio output "BlackHole 2ch"
+ed camera audio on
+ed camera audio record "Good morning"
+ed camera audio save
+ed camera audio play "Good morning"
+ed camera audio import thunder --path ~/Sounds/thunder.wav --sound
+ed camera audio edit thunder --start 0.2 --end 2.4 --gain 0.7
+ed camera audio play thunder
+ed camera audio voice deep
+ed camera audio effects --pitch -200 --reverb 8 --delay 0
+ed camera audio levels --mic 1 --clips 0.9 --source 0.6
+ed camera audio mute
+ed camera audio stop
+ed camera audio off
+```
+
+Presets are natural, deep, bright, cinematic, radio, telephone, robot, alien and
+echo. Speech snippets use the live microphone's effect chain. Sound effects
+bypass voice effects. Both join the same compressed mix to avoid sudden level
+jumps. Microphone mute keeps sounds and clips available. Stop stops all clips.
+
+Imports are copied into Edith's local audio library. Trimming and gain edits
+preserve the original file. Removing a clip removes its library entry while
+retaining the recording on disk. Save the current snippet before changing audio
+devices or turning audio off. A snippet's library entry is saved when recording
+starts so captured audio remains recoverable after an interrupted session.

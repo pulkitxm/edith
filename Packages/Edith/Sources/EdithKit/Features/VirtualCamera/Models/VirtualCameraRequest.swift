@@ -47,6 +47,8 @@ public struct VirtualCameraBackgroundChange: Codable, Equatable, Sendable {
 
 public enum VirtualCameraRequest: Codable, Equatable, Sendable {
     case status
+    case audio(MeetingAudioRequest)
+    case sourceAudio(Bool)
     case retry
     case screenSources
     case recordStart(String)
@@ -134,6 +136,11 @@ public enum VirtualCameraRequestReducer {
         }
     ) throws -> String {
         switch request {
+        case .audio:
+            throw MeetingAudioLibrary.error("Audio requests require the running meeting mixer.")
+        case .sourceAudio(let enabled):
+            state.media.audioEnabled = enabled
+            return "Source audio \(enabled ? "on" : "off")."
         case .status, .screenSources:
             return "Status"
         case .recordStart, .recordStop:

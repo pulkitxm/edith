@@ -71,6 +71,7 @@ public extension VirtualCameraSnapshot {
             "systemBackgroundActive": .bool(systemBackgroundActive),
             "message": .optional(message),
             "recordingPath": .optional(recordingPath),
+            "audio": state.audio.jsonValue(status: audioStatus),
         ])
     }
 

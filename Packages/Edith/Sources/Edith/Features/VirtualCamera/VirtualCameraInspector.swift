@@ -38,6 +38,7 @@ struct VirtualCameraInspector: View {
                 case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
                 case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
                 case .output: VirtualCameraOutputPanel(model: model, dark: dark)
+                case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
                 }
             }
         }

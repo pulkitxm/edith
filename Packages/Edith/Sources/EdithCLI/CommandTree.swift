@@ -270,6 +270,11 @@ public enum CommandTree {
             options: ["--json", "-h", "--help", "--version", "--style", "--message"],
             optionValues: ["--style": .free, "--message": .free]),
         "ed camera resume": Spec(options: ["--json", "-h", "--help", "--version"]),
+        "ed camera audio": Spec(
+            options: [
+                "--json", "--path", "--sound", "--start", "--end", "--gain", "--mic", "--clips",
+                "--source", "--pitch", "--reverb", "--delay", "--help",
+            ], arguments: [.free, .free]),
         "ed camera video": Spec(options: ["--json", "--once", "--help"], arguments: [.localPath]),
         "ed camera play": Spec(options: ["--json", "--help"], arguments: [.free]),
         "ed camera freeze": Spec(options: ["--json", "--help"]),

@@ -361,7 +361,7 @@ codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
 codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
   --identifier "$AGENT_IDENTIFIER" "$AGENT"
-sign "$HELPER"
+sign "$HELPER" "Resources/Helper.entitlements"
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
   : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \

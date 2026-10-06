@@ -347,9 +347,13 @@ struct VirtualCameraToolbar: View {
                     Button("Refresh cameras") { model.refreshSources() }
                 } label: {
                     Label(
-                        model.selectedSource?.name
-                            ?? (model.sourcesLoaded ? "No camera" : "Finding cameras"),
-                        systemImage: model.selectedSource?.symbolName ?? "video.slash")
+                        model.state.media.kind == .camera
+                            ? model.selectedSource?.name
+                                ?? (model.sourcesLoaded ? "No camera" : "Finding cameras")
+                            : model.state.media.kind == .video ? "Video file" : "Screen or window",
+                        systemImage: model.state.media.kind == .camera
+                            ? model.selectedSource?.symbolName ?? "video.slash"
+                            : model.state.media.kind == .video ? "film" : "display")
                 }
                 .menuStyle(.borderlessButton)
                 .lineLimit(1)
