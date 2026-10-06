@@ -922,7 +922,7 @@ struct MusicPage: View {
 
     var body: some View {
         PageWorkspace {
-            pageHeader
+            if accounts.selected != .spotify || !accounts.spotify.connected { pageHeader }
         } content: {
             if accounts.selected == .local {
                 trackList
@@ -2316,6 +2316,7 @@ struct MusicFooter: View {
     private var blur: Bool { presenterState.active && presenterBlurMusic }
     private var dark: Bool { scheme == .dark }
 
+    private var barHeight: CGFloat { accounts.selected == .spotify ? 80 : Self.expandedHeight }
     static let expandedHeight: CGFloat = 64
     static let collapsedHeight: CGFloat = 2
 
@@ -2349,7 +2350,7 @@ struct MusicFooter: View {
                         idle
                     }
                 }
-                .frame(height: UIScale.pt(Self.expandedHeight))
+                .frame(height: UIScale.pt(barHeight))
                 .padding(.trailing, UIScale.pt(28))
                 .frame(maxWidth: .infinity)
                 .background(.regularMaterial)
@@ -2362,7 +2363,7 @@ struct MusicFooter: View {
             collapseToggle
         }
         .frame(
-            height: UIScale.pt(collapsed ? Self.collapsedHeight : Self.expandedHeight),
+            height: UIScale.pt(collapsed ? Self.collapsedHeight : barHeight),
             alignment: .bottom
         )
         .animation(Motion.animation(Motion.glide, reduceMotion: reduceMotion), value: collapsed)

@@ -55,11 +55,28 @@ import WebKit
             Data(
                 """
                 {"event":"connected","account":"sample-listener"}
-                {"event":"track","title":"Evening Colors","artist":"The Daylight Sessions","album":"After Hours","duration":210}
+                {"event":"track","uri":"spotify:track:0000000000000000010001","title":"Evening Colors","artist":"The Daylight Sessions","album":"After Hours","duration":210}
                 {"event":"state","playing":true,"elapsed":42}
 
                 """.utf8), generation: spotify.generation)
         spotify.error = nil
+        let catalog = MusicEvidenceCatalog(library: spotify.library)
+        spotify.library.configure { [weak catalog] in catalog?.respond(to: $0) }
+        spotify.library.apply(["event": "libraryState", "ready": true])
+        spotify.library.activate()
+        spotify.library.showQueue()
+        #expect(spotify.library.libraryReady)
+        #expect(spotify.library.playlists.count == 6)
+        #expect(spotify.library.queue.count == 7)
+        #expect(spotify.library.current?.uri == spotify.uri)
+        for scheme in [ColorScheme.dark, .light] {
+            UIScale.apply(1)
+            try await capture(
+                accounts, width: 1400, scheme: scheme, height: 900,
+                visibleText: ["Home", "Search", "Queue", "After Hours"],
+                at: directory.appendingPathComponent(
+                    "spotify-desktop-\(scheme == .dark ? "dark" : "light").png"))
+        }
         let layouts: [(CGFloat, ColorScheme, Double, String)] = [
             (1024, .dark, 1, ""), (600, .light, 1, "-compact-light"),
             (1024, .light, 1.5, "-zoom-light"), (600, .dark, 1.5, "-compact-zoom"),
@@ -75,6 +92,49 @@ import WebKit
             }
         }
         accounts.select(.spotify)
+        UIScale.apply(1)
+        let playlist = try #require(spotify.library.playlists.first)
+        spotify.library.open(playlist)
+        #expect(spotify.library.collection?.id == playlist.id)
+        #expect(spotify.library.items.count == 8)
+        try await capture(
+            accounts, width: 1400, scheme: .dark, height: 900,
+            visibleText: ["After Hours", "Evening Colors", "Low Tide"],
+            at: directory.appendingPathComponent("spotify-collection.png"))
+        UIScale.apply(1.5)
+        try await capture(
+            accounts, width: 600, scheme: .light,
+            visibleText: ["After Hours", "Evening Colors"],
+            at: directory.appendingPathComponent("spotify-collection-compact.png"))
+        UIScale.apply(1)
+        spotify.library.search("Evening")
+        #expect(spotify.library.currentDestination == .search("Evening"))
+        #expect(spotify.library.items.contains { $0.title == "Evening Colors" })
+        try await capture(
+            accounts, width: 1400, scheme: .light, height: 900,
+            visibleText: ["Evening Colors", "Search"],
+            at: directory.appendingPathComponent("spotify-search.png"))
+        UIScale.apply(1.5)
+        try await capture(
+            accounts, width: 600, scheme: .dark,
+            visibleText: ["Search results", "Evening Colors"],
+            at: directory.appendingPathComponent("spotify-search-compact.png"))
+        UIScale.apply(1)
+        spotify.library.navigate(to: .home)
+        catalog.failure = "Sample library refresh is unavailable. Try again."
+        spotify.library.refresh()
+        #expect(spotify.library.error == catalog.failure)
+        #expect(spotify.library.playlists.count == 6)
+        try await capture(
+            accounts, width: 1400, scheme: .dark, height: 900,
+            at: directory.appendingPathComponent("spotify-library-refresh-error.png"))
+        catalog.failure = nil
+        spotify.library.refresh()
+        spotify.library.apply(["event": "libraryState", "ready": false])
+        try await capture(
+            accounts, width: 1024, scheme: .light,
+            at: directory.appendingPathComponent("spotify-library-connect.png"))
+        spotify.library.apply(["event": "libraryState", "ready": true])
         for scheme in [ColorScheme.dark, .light] {
             UIScale.apply(1)
             try await captureView(
@@ -97,27 +157,29 @@ import WebKit
     }
 
     private func capture(
-        _ accounts: MusicAccounts, width: CGFloat, scheme: ColorScheme, at url: URL
+        _ accounts: MusicAccounts, width: CGFloat, scheme: ColorScheme, height: CGFloat? = nil,
+        visibleText: [String] = [], at url: URL
     ) async throws {
-        let height = max(640, UIScale.pt(540))
         try await captureView(
             VStack(spacing: 0) {
                 MusicPage(accounts: accounts)
                 MusicFooter(accounts: accounts)
-            }, width: width, height: height, scheme: scheme, at: url)
+            }, width: width, height: height ?? max(640, UIScale.pt(540)), scheme: scheme,
+            visibleText: visibleText, at: url)
     }
 
     private func captureView<Content: View>(
-        _ content: Content, width: CGFloat, height: CGFloat, scheme: ColorScheme, at url: URL
+        _ content: Content, width: CGFloat, height: CGFloat, scheme: ColorScheme,
+        visibleText: [String] = [], at url: URL
     ) async throws {
         let host = NSHostingView(
-            rootView:
+            rootView: AnyView(
                 content
-                .environment(\.colorScheme, scheme)
-                .environment(\.compactLayout, width < 900)
-                .environment(\.automaticViewActionsEnabled, false)
-                .frame(width: width, height: height)
-                .background(Color(nsColor: .windowBackgroundColor)))
+                    .environment(\.colorScheme, scheme)
+                    .environment(\.compactLayout, width < UIScale.pt(640))
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .frame(width: width, height: height)
+                    .background(Color(nsColor: .windowBackgroundColor))))
         let window = TestWindowHost.window(
             contentRect: NSRect(x: 0, y: 0, width: width, height: height))
         window.isReleasedWhenClosed = false
@@ -128,10 +190,120 @@ import WebKit
         defer { window.close() }
         for _ in 0..<8 { try await Task.sleep(for: .milliseconds(100)) }
         host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+        if !visibleText.isEmpty {
+            let text = try auditText(host)
+            for expected in visibleText { #expect(text.contains(expected)) }
+        }
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         let image = try #require(bitmap.representation(using: .png, properties: [:]))
         #expect(image.count > 10_000)
         try image.write(to: url)
+    }
+}
+
+@MainActor
+private final class MusicEvidenceCatalog {
+    let library: MusicSpotifyLibrary
+    var failure: String?
+    private let playlists: [SpotifyCatalogItem]
+    private let albums: [SpotifyCatalogItem]
+    private let artists: [SpotifyCatalogItem]
+    private let tracks: [SpotifyCatalogItem]
+    private let shows: [SpotifyCatalogItem]
+
+    init(library: MusicSpotifyLibrary) {
+        self.library = library
+        let albumNames = ["After Hours", "Daybreak", "Open Spaces", "The Quiet City"]
+        let artistNames = [
+            "The Daylight Sessions", "Harbor Echoes", "Soft Current", "Northern Lines",
+        ]
+        playlists = [
+            "After Hours", "Soft Focus", "Weekend Drift", "Morning Light", "Deep Work",
+            "On the Move",
+        ]
+        .enumerated().map { index, title in
+            Self.item(
+                index + 100, kind: "playlist", title: title, subtitle: "Playlist · Sample Music")
+        }
+        albums = albumNames.enumerated().map { index, title in
+            Self.item(index + 200, kind: "album", title: title, subtitle: artistNames[index])
+        }
+        artists = artistNames.enumerated().map { index, title in
+            Self.item(index + 300, kind: "artist", title: title, subtitle: "Artist")
+        }
+        tracks = [
+            "Evening Colors", "Low Tide", "New Horizons", "Slow Motion", "Sunlit Windows",
+            "Blue Hour", "Open Water", "Quiet Streets",
+        ]
+        .enumerated().map { index, title in
+            var item = Self.item(
+                index + 10001, kind: "track", title: title, subtitle: artistNames[index % 4])
+            item.duration = Double(210 + index * 17)
+            item.album = albumNames[index % 4]
+            return item
+        }
+        shows = [
+            Self.item(400, kind: "show", title: "Sounds of Tomorrow", subtitle: "Sample Audio")
+        ]
+    }
+
+    private static func item(_ number: Int, kind: String, title: String, subtitle: String)
+        -> SpotifyCatalogItem
+    {
+        let id = String(format: "%022d", number)
+        return SpotifyCatalogItem(
+            id: id, uri: "spotify:\(kind):\(id)", kind: kind, title: title,
+            subtitle: subtitle, description: "A synthetic collection for native music previews.",
+            owner: "Sample Music")
+    }
+
+    func respond(to command: [String: Any]) {
+        guard command["action"] as? String == "catalog",
+            let requestId = command["requestId"] as? String,
+            let kind = command["kind"] as? String
+        else { return }
+        if let failure {
+            library.apply(["event": "catalog", "requestId": requestId, "error": failure])
+            return
+        }
+        let items: [SpotifyCatalogItem]
+        var current: SpotifyCatalogItem?
+        switch kind {
+        case "playlists": items = playlists
+        case "albums": items = albums
+        case "artists": items = artists
+        case "shows": items = shows
+        case "recent", "topTracks", "liked": items = tracks
+        case "topArtists": items = artists
+        case "queue":
+            current = tracks.first
+            items = Array(tracks.dropFirst())
+        case "search":
+            let query = command["query"] as? String ?? ""
+            items = (tracks + albums + artists + playlists).filter {
+                $0.title.localizedCaseInsensitiveContains(query)
+                    || $0.subtitle.localizedCaseInsensitiveContains(query)
+            }
+        default:
+            current = (playlists + albums + artists + shows).first {
+                $0.kind == kind && $0.id == command["id"] as? String
+            }
+            items = tracks
+        }
+        guard let encoded = try? JSONEncoder().encode(items),
+            let values = try? JSONSerialization.jsonObject(with: encoded)
+        else { return }
+        var event: [String: Any] = [
+            "event": "catalog", "requestId": requestId, "items": values, "total": items.count,
+        ]
+        if let current, let encoded = try? JSONEncoder().encode(current),
+            let value = try? JSONSerialization.jsonObject(with: encoded)
+        {
+            event["current"] = value
+        }
+        library.apply(event)
     }
 }

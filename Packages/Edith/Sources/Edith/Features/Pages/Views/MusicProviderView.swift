@@ -12,7 +12,6 @@ struct MusicProviderContent: View {
         _accounts = State(initialValue: accounts ?? .shared)
     }
 
-    @State private var spotifyLink = ""
     @State private var profiles: [ChromeProfile] = []
     @State private var selectedProfile = ""
     @State private var showProfiles = false
@@ -20,7 +19,9 @@ struct MusicProviderContent: View {
 
     var body: some View {
         Group {
-            if accounts.selected == .youtubeMusic, accounts.youtubeConnected,
+            if accounts.selected == .spotify, accounts.spotify.connected {
+                MusicSpotifyWorkspace(accounts: accounts)
+            } else if accounts.selected == .youtubeMusic, accounts.youtubeConnected,
                 let view = accounts.youtubeView
             {
                 youtubePlayer(view)
@@ -41,141 +42,49 @@ struct MusicProviderContent: View {
 
     private var spotify: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            PageSectionHeader("Spotify", subtitle: "Stream in Edith") {
-                if accounts.spotify.connected {
-                    Menu {
-                        Button("Disconnect Spotify") {
-                            Task { await accounts.spotify.disconnect() }
-                        }
-                    } label: {
-                        Label(accounts.spotify.account, systemImage: "checkmark.circle.fill")
-                            .font(.edithText(.caption))
-                            .presenterBlur(.music)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-            }
+            PageSectionHeader("Spotify", subtitle: "Your music, inside Edith")
             if let error = accounts.spotify.error { errorNotice(error) }
-            if accounts.spotify.connected {
-                PageCard { nowPlaying }
-                PageColumns {
-                    PageCard(title: "Play a Spotify link") {
-                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                            Text("Tracks, albums, playlists, and podcasts.")
+            connectionCard(
+                provider: .spotify, title: "Listen with Spotify",
+                detail: "Browse your library, find new music, and play it here."
+            ) {
+                VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                    if accounts.spotify.connecting {
+                        HStack(spacing: UIScale.pt(8)) {
+                            LoadingIndicator()
+                            Text("Finish signing in in your browser.")
                                 .font(.edithText(.caption)).foregroundStyle(.secondary)
-                            EdithTextField(
-                                placeholder: "Paste a Spotify link", text: $spotifyLink,
-                                icon: "link", onSubmit: { accounts.spotify.play(spotifyLink) })
-                            Button {
-                                accounts.spotify.play(spotifyLink)
-                            } label: {
-                                Label("Play in Edith", systemImage: "play.fill")
-                            }
-                            .buttonStyle(.edith(.primary))
-                            .disabled(MusicProvider.spotifyURI(spotifyLink) == nil)
                         }
-                    }
-                    PageCard(title: "Spotify Connect") {
-                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                            featureRow(
-                                "hifispeaker", title: "Choose Edith as your device",
-                                detail: "Open Spotify's device picker to send your queue here.")
-                            Button {
-                                NSWorkspace.shared.open(MusicProvider.spotify.homeURL!)
-                            } label: {
-                                Label("Open Spotify", systemImage: "arrow.up.right")
-                            }
+                        Button("Cancel sign-in") { accounts.spotify.stop() }
                             .buttonStyle(.edith(.secondary))
+                    } else {
+                        Button {
+                            accounts.spotify.connect()
+                        } label: {
+                            Label("Connect Spotify", systemImage: "arrow.right")
+                        }
+                        .buttonStyle(.edith(.primary)).disabled(accounts.spotify.disconnecting)
+                        if accounts.spotify.hasSavedAccount {
+                            Button("Remove saved account") {
+                                Task { await accounts.spotify.disconnect() }
+                            }
+                            .buttonStyle(.edith(.secondary)).disabled(
+                                accounts.spotify.disconnecting)
                         }
                     }
-                }
-            } else {
-                connectionCard(
-                    provider: .spotify, title: "Listen with Spotify",
-                    detail: "Play your tracks and playlists without leaving Edith."
-                ) {
-                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                        if accounts.spotify.connecting {
-                            HStack(spacing: UIScale.pt(8)) {
-                                LoadingIndicator()
-                                Text("Finish signing in in your browser.")
-                                    .font(.edithText(.caption)).foregroundStyle(.secondary)
-                            }
-                            Button("Cancel sign-in") { accounts.spotify.stop() }
-                                .buttonStyle(.edith(.secondary))
-                        } else {
-                            Button {
-                                accounts.spotify.connect()
-                            } label: {
-                                Label("Connect Spotify", systemImage: "arrow.right")
-                            }
-                            .buttonStyle(.edith(.primary))
-                            .disabled(accounts.spotify.disconnecting)
-                            if accounts.spotify.hasSavedAccount {
-                                Button("Remove saved account") {
-                                    Task { await accounts.spotify.disconnect() }
-                                }
-                                .buttonStyle(.edith(.secondary))
-                                .disabled(accounts.spotify.disconnecting)
-                            }
-                        }
-                        Label("Spotify Premium required", systemImage: "info.circle")
-                            .font(.edithText(.caption)).foregroundStyle(.secondary)
-                    }
-                }
-                PageCard(title: "Two ways to listen") {
-                    PageColumns {
-                        featureRow(
-                            "link", title: "Paste a link",
-                            detail: "Play a track, album, playlist, or episode.")
-                        featureRow(
-                            "hifispeaker", title: "Use Spotify Connect",
-                            detail: "Choose Edith in Spotify's device picker.")
-                    }
-                }
-            }
-        }
-    }
-
-    private var nowPlaying: some View {
-        HStack(alignment: .center, spacing: UIScale.pt(compact ? 18 : 28)) {
-            MusicStreamingArtwork(
-                url: accounts.spotify.artworkURL, size: compact ? 96 : 156)
-            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                HStack(spacing: UIScale.pt(8)) {
-                    PlaybackWave(
-                        playing: accounts.spotify.playing,
-                        color: DashSkin.accent(scheme == .dark), maxHeight: UIScale.pt(12))
-                    Text(accounts.spotify.playing ? "NOW PLAYING" : "READY TO PLAY")
-                        .font(.edithText(.caption2)).fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                }
-                Text(
-                    accounts.spotify.title.isEmpty
-                        ? "Choose something to play" : accounts.spotify.title
-                )
-                .font(.edithText(compact ? .title2 : .largeTitle)).fontWeight(.semibold)
-                .lineLimit(3).presenterBlur(.music)
-                if !accounts.spotify.artist.isEmpty {
-                    Text(accounts.spotify.artist)
-                        .font(.edithText(.body)).foregroundStyle(.secondary)
-                        .lineLimit(2).presenterBlur(.music)
-                }
-                if !accounts.spotify.album.isEmpty {
-                    Text(accounts.spotify.album)
+                    Label("Spotify Premium required for playback", systemImage: "info.circle")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
-                        .lineLimit(1).presenterBlur(.music)
                 }
-                Text(
-                    accounts.spotify.title.isEmpty
-                        ? "Paste a link below, or use Spotify Connect." : "Playing inside Edith"
-                )
-                .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            PageColumns {
+                featureRow(
+                    "books.vertical", title: "Your whole library",
+                    detail: "Playlists, Liked Songs, albums, artists, and podcasts.")
+                featureRow(
+                    "magnifyingglass", title: "Find your next song",
+                    detail: "Search the catalog and build your listening queue.")
+            }
         }
-        .padding(UIScale.pt(8))
     }
 
     private var youtube: some View {
@@ -450,8 +359,8 @@ struct MusicStreamingControls: View {
     var body: some View {
         HStack(spacing: UIScale.pt(14)) {
             trackSummary
-            transport
             if compact {
+                transport
                 Button {
                     optionsPresented = true
                 } label: {
@@ -463,13 +372,30 @@ struct MusicStreamingControls: View {
                 .popover(isPresented: $optionsPresented) {
                     VStack(spacing: UIScale.pt(12)) {
                         positionSlider
+                        playbackModes
                         volumeSlider
                     }
                     .padding(UIScale.pt(16))
                     .frame(width: PresentationMetrics.width(280))
                 }
             } else {
-                positionSlider.frame(width: UIScale.pt(180))
+                VStack(spacing: UIScale.pt(3)) {
+                    HStack(spacing: UIScale.pt(12)) {
+                        playbackModes; transport
+                    }
+                    positionSlider
+                }.frame(width: UIScale.pt(280))
+                Spacer(minLength: 0)
+                Button {
+                    accounts.spotify.library.showQueue()
+                    accounts.spotify.library.navigate(to: .queue)
+                    SharedDefaults.store.set(
+                        MainDestination.music.rawValue,
+                        forKey: AppStorageKeys.General.mainWindowSection)
+                } label: {
+                    Image(systemName: "list.bullet")
+                }
+                .buttonStyle(.edith(.toolbar)).accessibilityLabel("Open playback queue")
                 volumeSlider
             }
         }
@@ -490,6 +416,30 @@ struct MusicStreamingControls: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var playbackModes: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Button {
+                accounts.spotify.library.setShuffle(!accounts.spotify.library.shuffle)
+            } label: {
+                Image(systemName: "shuffle").foregroundStyle(
+                    accounts.spotify.library.shuffle ? Color.accentColor : .secondary)
+            }.buttonStyle(.edith(.toolbar)).accessibilityLabel("Shuffle")
+            Button {
+                let modes = ["off", "context", "track"]
+                let index = modes.firstIndex(of: accounts.spotify.library.repeatMode) ?? 0
+                accounts.spotify.library.setRepeat(modes[(index + 1) % modes.count])
+            } label: {
+                Image(
+                    systemName: accounts.spotify.library.repeatMode == "track"
+                        ? "repeat.1" : "repeat"
+                )
+                .foregroundStyle(
+                    accounts.spotify.library.repeatMode == "off" ? Color.secondary : .accentColor)
+            }.buttonStyle(.edith(.toolbar)).accessibilityLabel(
+                "Repeat: \(accounts.spotify.library.repeatMode)")
+        }
     }
 
     private var transport: some View {
@@ -517,7 +467,7 @@ struct MusicStreamingControls: View {
                         }),
                     in: 0...1
                 )
-                .frame(width: UIScale.pt(compact ? 248 : 180))
+                .frame(width: UIScale.pt(compact ? 248 : 280))
                 .disabled(accounts.spotify.duration <= 0)
                 .accessibilityLabel("Spotify playback position")
                 HStack {
