@@ -825,11 +825,14 @@ public enum ExtensionLifecycleCatalog {
                     "ed extensions doctor timeLapse --json")
             ]),
         descriptor(
-            "music", "Play and organize a local music library with system media controls.",
+            "music", "Play local music and connect Spotify or YouTube Music accounts.",
             workflows: [
                 instruction(
                     "listen", "Play local music",
                     "Browse albums, artists and folders, then control playback."),
+                instruction(
+                    "accounts", "Connect streaming accounts",
+                    "Choose Spotify or YouTube Music on the Music page to connect and play."),
                 instruction(
                     "download", "Add music", "Queue supported URLs for download into the library."),
             ],

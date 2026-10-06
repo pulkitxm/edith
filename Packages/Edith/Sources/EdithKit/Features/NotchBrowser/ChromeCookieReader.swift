@@ -1,25 +1,25 @@
 import Foundation
 import SQLite3
 
-enum ChromeSameSite: Int, Sendable {
+public enum ChromeSameSite: Int, Sendable {
     case unspecified = -1
     case none = 0
     case lax = 1
     case strict = 2
 }
 
-struct ChromeCookie: Equatable, Sendable {
-    let host: String
-    let name: String
-    let value: String
-    let path: String
-    let expires: Date?
-    let isSecure: Bool
-    let isHTTPOnly: Bool
-    let sameSite: ChromeSameSite
-    let updated: Date
+public struct ChromeCookie: Equatable, Sendable {
+    public let host: String
+    public let name: String
+    public let value: String
+    public let path: String
+    public let expires: Date?
+    public let isSecure: Bool
+    public let isHTTPOnly: Bool
+    public let sameSite: ChromeSameSite
+    public let updated: Date
 
-    var httpCookie: HTTPCookie? {
+    public var httpCookie: HTTPCookie? {
         var properties: [HTTPCookiePropertyKey: Any] = [
             .domain: host,
             .path: path.isEmpty ? "/" : path,
@@ -38,11 +38,11 @@ struct ChromeCookie: Equatable, Sendable {
     }
 }
 
-enum ChromeCookieReaderError: Error, Equatable, LocalizedError {
+public enum ChromeCookieReaderError: Error, Equatable, LocalizedError {
     case missingDatabase
     case unreadable(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .missingDatabase: "This Chrome profile has no cookie database yet."
         case .unreadable(let reason): "Chrome's cookie database could not be read: \(reason)"
@@ -50,21 +50,22 @@ enum ChromeCookieReaderError: Error, Equatable, LocalizedError {
     }
 }
 
-enum ChromeCookieReader {
-    static let hashPrefixVersion = 24
+public enum ChromeCookieReader {
+    public static let hashPrefixVersion = 24
     private static let windowsEpochOffset: TimeInterval = 11_644_473_600
 
-    static func date(chromeMicroseconds value: Int64) -> Date? {
+    public static func date(chromeMicroseconds value: Int64) -> Date? {
         guard value > 0 else { return nil }
         return Date(timeIntervalSince1970: Double(value) / 1_000_000 - windowsEpochOffset)
     }
 
-    static func chromeMicroseconds(_ date: Date) -> Int64 {
+    public static func chromeMicroseconds(_ date: Date) -> Int64 {
         Int64((date.timeIntervalSince1970 + windowsEpochOffset) * 1_000_000)
     }
 
-    static func read(
+    public static func read(
         database: URL, key: ChromeCookieKey, updatedAfter: Date? = nil, now: Date = Date(),
+        allowedHosts: Set<String>? = nil,
         fileManager: FileManager = .default
     ) throws -> [ChromeCookie] {
         guard fileManager.fileExists(atPath: database.path) else {
@@ -78,7 +79,9 @@ enum ChromeCookieReader {
             defer { try? fileManager.removeItem(at: scratch) }
             do {
                 let copy = try snapshot(database, into: scratch, fileManager: fileManager)
-                return try rows(in: copy, key: key, updatedAfter: updatedAfter, now: now)
+                return try rows(
+                    in: copy, key: key, updatedAfter: updatedAfter, now: now,
+                    allowedHosts: allowedHosts)
             } catch {
                 lastError = error
             }
@@ -86,10 +89,11 @@ enum ChromeCookieReader {
         throw lastError
     }
 
-    static let snapshotAttempts = 3
-    static let sidecarSuffixes = ["-journal", "-wal", "-shm"]
+    public static let snapshotAttempts = 3
+    public static let sidecarSuffixes = ["-journal", "-wal", "-shm"]
 
-    static func fingerprint(_ database: URL, fileManager: FileManager = .default) -> [String] {
+    public static func fingerprint(_ database: URL, fileManager: FileManager = .default) -> [String]
+    {
         ([""] + sidecarSuffixes).map { suffix in
             let path = database.path + suffix
             guard let attributes = try? fileManager.attributesOfItem(atPath: path) else {
@@ -119,7 +123,10 @@ enum ChromeCookieReader {
         return copy
     }
 
-    private static func rows(in file: URL, key: ChromeCookieKey, updatedAfter: Date?, now: Date)
+    private static func rows(
+        in file: URL, key: ChromeCookieKey, updatedAfter: Date?, now: Date,
+        allowedHosts: Set<String>?
+    )
         throws -> [ChromeCookie]
     {
         var handle: OpaquePointer?
@@ -151,6 +158,7 @@ enum ChromeCookieReader {
         }
         var cookies: [ChromeCookie] = []
         while sqlite3_step(statement) == SQLITE_ROW {
+            if let allowedHosts, !allowedHosts.contains(text(statement, 0)) { continue }
             guard let cookie = cookie(from: statement, key: key, version: version, now: now)
             else { continue }
             cookies.append(cookie)

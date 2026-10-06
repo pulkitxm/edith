@@ -186,6 +186,7 @@ final class MainAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        MusicAccounts.shared.shutdown()
         if let settingsIPCObserver { IPC.stopObserving(settingsIPCObserver) }
         CalendarPermission.shutdown()
         flushSettingsChangedBroadcast()

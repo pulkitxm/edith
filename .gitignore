@@ -28,5 +28,6 @@ apps/promo-video/out/
 /dmg-root/
 .vercel
 apps/companion/target/
+apps/music-player/target/
 vendor/
 Packages/Edith/vendor/

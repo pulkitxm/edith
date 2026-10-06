@@ -40,6 +40,12 @@ a temporary keychain when needed and removes that keychain after the build.
 Developer ID signing remains the default. Local development signing requires
 `EDITH_RELEASE_ALLOW_DEV_SIGNING=1` in the signing configuration.
 
+App builds also need stable Rust and Cargo. `build.sh` builds the native Spotify
+player in `apps/music-player`, embeds it at `Contents/MacOS/edith-music-player`,
+and signs it with the app. Run `cargo test --locked` and
+`cargo clippy --locked --all-targets -- -D warnings` in that directory when
+changing playback commands or account handling.
+
 Needs Xcode, not just Command Line Tools: `edth.xcodeproj` at the repo root
 is what assembles the app. `build.sh` drives `xcodebuild` for the `EdithMain`
 scheme, which builds and embeds `EdithHelper` (the always-on menu bar
