@@ -7,7 +7,9 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseRenderTests {
-    @Test @MainActor func loadingAndRecoveryUseSharedPresentationAtCompactZoom() async throws {
+    @Test(arguments: ["windows", "displays"])
+    @MainActor
+    func loadingAndRecoveryUseSharedPresentationAtCompactZoom(sourceMode: String) async throws {
         guard #available(macOS 15.0, *) else { return }
         _ = TestWindowHost.application
         let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
@@ -26,6 +28,7 @@ import Testing
         for scheme in [ColorScheme.light, .dark] {
             for failed in [false, true] {
                 let recorder = TimeLapseRecorder()
+                recorder.sourceMode = sourceMode
                 if failed {
                     recorder.sourceLoad.fail(
                         recorder.sourceLoad.begin(),
@@ -43,11 +46,15 @@ import Testing
                         size: CGSize(width: 800, height: 850))
                     host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                     let window = TestWindowHost.window(contentRect: host.frame)
-                    defer { window.orderOut(nil) }
+                    window.appearance = host.appearance
                     window.contentView = host
                     window.orderBack(nil)
+                    defer { window.orderOut(nil) }
+                    window.layoutIfNeeded()
                     try await Task.sleep(for: .milliseconds(200))
                     host.layoutSubtreeIfNeeded()
+                    host.displayIfNeeded()
+                    #expect(!TestWindowHost.isExposedOnDesktop(window))
                     if failed {
                         let text = try auditText(host)
                         let retry = try #require(Self.retryButton(in: host))
@@ -69,7 +76,7 @@ import Testing
                             at: directory, withIntermediateDirectories: true)
                         try png.write(
                             to: directory.appendingPathComponent(
-                                "recorder-\(index == 0 ? "page" : "picker")-\(failed ? "recovery" : "loading")-\(scheme).png"
+                                "recorder-\(index == 0 ? "page" : "picker")-\(sourceMode)-\(failed ? "recovery" : "loading")-\(scheme).png"
                             ))
                     }
                 }
