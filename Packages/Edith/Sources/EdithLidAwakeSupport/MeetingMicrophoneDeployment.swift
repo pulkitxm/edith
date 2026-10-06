@@ -72,7 +72,8 @@ public enum MeetingMicrophoneDeployment {
         var ownInfo: CFDictionary?
         guard SecCodeCopySelf([], &own) == errSecSuccess, let own,
             SecCodeCopyStaticCode(own, [], &ownStatic) == errSecSuccess, let ownStatic,
-            SecCodeCopySigningInformation(ownStatic, [], &ownInfo) == errSecSuccess,
+            SecCodeCopySigningInformation(
+                ownStatic, SecCSFlags(rawValue: kSecCSSigningInformation), &ownInfo) == errSecSuccess,
             let values = ownInfo as? [CFString: Any],
             let team = values[kSecCodeInfoTeamIdentifier] as? String,
             !team.isEmpty, team.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
@@ -89,7 +90,8 @@ public enum MeetingMicrophoneDeployment {
                 requirement) == errSecSuccess
         else { throw failure("The microphone component failed signature verification.") }
         var info: CFDictionary?
-        guard SecCodeCopySigningInformation(code, [], &info) == errSecSuccess,
+        guard SecCodeCopySigningInformation(
+            code, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
             let values = info as? [CFString: Any], let digest = values[kSecCodeInfoUnique] as? Data
         else {
             throw failure("The microphone component has no signing fingerprint.")

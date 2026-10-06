@@ -368,6 +368,14 @@ python3 scripts/build-meeting-microphone.py --application "$APP_IDENTIFIER" \
   --identity "$SIGN_IDENTITY" --output "$APP/Contents/Library/Audio/Plug-Ins/HAL"
 python3 scripts/build-meeting-microphone.py --test --output "$DERIVED/MeetingMicrophoneTests" \
   --driver "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
+if [ "$APP_IDENTIFIER" = "com.pulkit.edith" ] && [ -n "$TEAM_ID" ]; then
+  SIGNATURE_TEST="$DERIVED/MeetingMicrophoneTests/signature-check"
+  xcrun swiftc -parse-as-library \
+    Packages/Edith/Sources/EdithLidAwakeSupport/MeetingMicrophoneDeployment.swift \
+    scripts/verify-meeting-microphone-signature.swift -o "$SIGNATURE_TEST"
+  sign_tool "$SIGNATURE_TEST"
+  "$SIGNATURE_TEST" "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
+fi
 
 if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
   : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \
