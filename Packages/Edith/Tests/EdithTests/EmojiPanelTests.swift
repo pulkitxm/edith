@@ -141,30 +141,33 @@ private let frequent = [
         #expect(model.moveSelection(delta: 1) == expected)
     }
 
-    @Test func staleSearchCannotReplaceTheNewestQueryOrPublishAfterCancellation() async {
+    @Test func staleSearchCannotReplaceTheNewestQueryOrPublishAfterCancellation() async throws {
         let fixture = EmojiPanelSearchFixture()
         let model = EmojiPanelModel(
             catalog: catalog, frequent: [], search: { await fixture.search($0) })
 
         model.setQuery("smile")
+        let stale = try #require(model.searchTask)
         await fixture.waitUntilStarted(1)
         model.setQuery("rocket")
+        let latest = try #require(model.searchTask)
         await fixture.waitUntilStarted(2)
         await fixture.release(1, result: [catalog.emoji[2]])
-        for _ in 0..<100 where model.isSearching { await Task.yield() }
+        await latest.value
 
         #expect(model.query == "rocket")
         #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
 
         await fixture.release(0, result: [catalog.emoji[0], catalog.emoji[1]])
-        await Task.yield()
+        await stale.value
         #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
 
         model.setQuery("love")
+        let cancelled = try #require(model.searchTask)
         await fixture.waitUntilStarted(3)
         model.cancelSearch()
         await fixture.release(2, result: [catalog.emoji[1]])
-        await Task.yield()
+        await cancelled.value
         #expect(model.sections.flatMap(\.emoji).map(\.character) == ["🚀"])
         #expect(!model.isSearching)
     }
