@@ -228,6 +228,10 @@ verify-bundle: verify-release-build-settings
 	  test ! -L "$$install_dir/edh"
 	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
 	test 1 -eq "$$(find dist/Edith.app -name EdithShared.framework | wc -l | tr -d ' ')"
+	test 1 -eq "$$(find dist/Edith.app -name MeetingVoice.framework | wc -l | tr -d ' ')"
+	test ! -e dist/Edith.app/Contents/Frameworks/onnxruntime.framework
+	test -x dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver/Contents/MacOS/EdithMicrophone
+	codesign --verify --strict dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver
 	test -x dist/Edith.app/Contents/Frameworks/EdithShared.framework/Versions/A/EdithShared
 	test ! -e dist/Edith.app/Contents/Frameworks/EdithKit.framework
 	test ! -e dist/Edith.app/Contents/Frameworks/EdithCore.framework

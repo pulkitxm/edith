@@ -36,7 +36,7 @@ info = {"CFBundleIdentifier": uid, "CFBundleName": name, "CFBundleExecutable": "
 with (driver / "Contents/Info.plist").open("wb") as handle:
     plistlib.dump(info, handle)
 subprocess.run(["xcrun", "clang++", "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
-                "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=14.0", "-bundle",
+                "-arch", "arm64", "-mmacosx-version-min=14.0", "-bundle",
                 "-fvisibility=hidden", f'-DEDITH_MICROPHONE_UID="{uid}"',
                 f'-DEDITH_MICROPHONE_NAME="{name}"', str(source / "EdithMicrophone.cpp"),
                 "-framework", "CoreAudio", "-framework", "CoreFoundation", "-o", str(executable)], check=True)
