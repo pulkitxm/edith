@@ -64,12 +64,24 @@ test("timeout diagnostics retain the final events beyond buffered test output", 
   const directory = mkdtempSync(join(tmpdir(), "test-timeout-events-"));
   try {
     const events = join(directory, "events.jsonl");
-    writeFileSync(events, Array.from({ length: 1000 }, (_, index) =>
-      JSON.stringify({ kind: "testStarted", test: `synthetic-${index}` })
-    ).join("\n"));
+    writeFileSync(
+      events,
+      Array.from({ length: 1000 }, (_, index) =>
+        JSON.stringify({ kind: "testStarted", test: `synthetic-${index}` }),
+      ).join("\n"),
+    );
     const result = Bun.spawnSync([
-      "python3", "-B", script, "--timeout", "0.2", "--events", events,
-      "--", "python3", "-c", "import time; time.sleep(60)",
+      "python3",
+      "-B",
+      script,
+      "--timeout",
+      "0.2",
+      "--events",
+      events,
+      "--",
+      "python3",
+      "-c",
+      "import time; time.sleep(60)",
     ]);
     expect(result.exitCode).toBe(124);
     const output = result.stderr.toString();

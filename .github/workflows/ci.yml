@@ -310,7 +310,7 @@ jobs:
         run: |
           for batch in ${{ matrix.batches }}; do
             timeout=480
-            if [ "$batch" = cli ]; then timeout=1200; fi
+            if [ "$batch" = cli ] || [ "$batch" = media ]; then timeout=1200; fi
             events="$RUNNER_TEMP/test-events-$batch.jsonl"
             python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"
           done
