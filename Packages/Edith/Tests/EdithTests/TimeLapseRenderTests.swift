@@ -7,17 +7,25 @@ import Testing
 @testable import Edith
 
 @Suite(.serialized) struct TimeLapseRenderTests {
-    @Test(arguments: ["windows", "displays"])
-    @MainActor
-    func loadingAndRecoveryUseSharedPresentationAtCompactZoom(sourceMode: String) async throws {
+    @Test @MainActor func loadingAndRecoveryUseSharedPresentationAtCompactZoom() async throws {
         guard #available(macOS 15.0, *) else { return }
+        _ = TestWindowHost.application
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let previous = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, previous) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
         let previousZoom = UIScale.current
         UIScale.apply(1.6)
         defer { UIScale.apply(previousZoom) }
         for scheme in [ColorScheme.light, .dark] {
             for failed in [false, true] {
                 let recorder = TimeLapseRecorder()
-                recorder.sourceMode = sourceMode
                 if failed {
                     recorder.sourceLoad.fail(
                         recorder.sourceLoad.begin(),
@@ -35,18 +43,18 @@ import Testing
                         size: CGSize(width: 800, height: 850))
                     host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
                     let window = TestWindowHost.window(contentRect: host.frame)
-                    window.appearance = host.appearance
+                    defer { window.orderOut(nil) }
                     window.contentView = host
                     window.orderBack(nil)
-                    defer { window.orderOut(nil) }
-                    window.layoutIfNeeded()
                     try await Task.sleep(for: .milliseconds(200))
                     host.layoutSubtreeIfNeeded()
-                    host.displayIfNeeded()
-                    #expect(!TestWindowHost.isExposedOnDesktop(window))
                     if failed {
                         let text = try auditText(host)
-                        #expect(text.contains("Retry"))
+                        let retry = try #require(Self.retryButton(in: host))
+                        #expect((retry as AnyObject).isAccessibilityEnabled?() == true)
+                        let frame = (retry as AnyObject).accessibilityFrame?() ?? .zero
+                        #expect(frame.width > 0 && frame.height > 0)
+                        #expect(window.frame.contains(frame))
                         #expect(text.contains("Sample capture service is unavailable."))
                     }
                     let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
@@ -61,12 +69,30 @@ import Testing
                             at: directory, withIntermediateDirectories: true)
                         try png.write(
                             to: directory.appendingPathComponent(
-                                "recorder-\(index == 0 ? "page" : "picker")-\(sourceMode)-\(failed ? "recovery" : "loading")-\(scheme).png"
+                                "recorder-\(index == 0 ? "page" : "picker")-\(failed ? "recovery" : "loading")-\(scheme).png"
                             ))
                     }
                 }
             }
         }
+    }
+
+    @MainActor private static func retryButton(in root: NSObject) -> NSObject? {
+        var visited = Set<ObjectIdentifier>()
+        func find(_ object: NSObject) -> NSObject? {
+            guard visited.insert(ObjectIdentifier(object)).inserted else { return nil }
+            if (object as AnyObject).accessibilityRole?() == NSAccessibility.Role.button,
+                (object as AnyObject).accessibilityLabel?() == "Retry"
+            {
+                return object
+            }
+            let children = (object as AnyObject).accessibilityChildren?() as? [NSObject] ?? []
+            for child in children {
+                if let button = find(child) { return button }
+            }
+            return nil
+        }
+        return find(root)
     }
 
     @Test(

@@ -134,7 +134,7 @@ enum TimeLapseExporter {
     {
         let tracks = try await composition.loadTracks(withMediaType: .audio)
         guard !tracks.isEmpty, tracks.count > 1 || speed != 1 else { return nil }
-        let audio = AVMutableComposition()
+        var audio = AVMutableComposition()
         for track in tracks {
             guard
                 let destination = audio.addMutableTrack(
@@ -150,6 +150,7 @@ enum TimeLapseExporter {
                     toDuration: CMTimeMultiplyByFloat64(timeline.duration, multiplier: speed))
             }
         }
+        var remaining = speed
         var temporary: [URL] = []
         var completed = false
         defer {
@@ -157,135 +158,60 @@ enum TimeLapseExporter {
                 try? FileManager.default.removeItem(at: url)
             }
         }
-        var mixedURL = directory.appendingPathComponent(".\(UUID().uuidString).caf")
-        temporary.append(mixedURL)
-        try await writeAudioMix(audio, to: mixedURL)
-        var remaining = speed
-        while remaining > 1 {
+        repeat {
+            try Task.checkCancellation()
             let factor = min(4, remaining)
-            let next = directory.appendingPathComponent(".\(UUID().uuidString).caf")
-            temporary.append(next)
-            try await accelerateAudio(from: mixedURL, to: next, factor: factor)
-            mixedURL = next
+            let audioTracks = try await audio.loadTracks(withMediaType: .audio)
+            for track in audioTracks {
+                let range = CMTimeRange(start: .zero, duration: track.timeRange.end)
+                track.scaleTimeRange(
+                    range,
+                    toDuration: CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / factor))
+            }
+            guard
+                let exporter = AVAssetExportSession(
+                    asset: audio, presetName: AVAssetExportPresetAppleM4A)
+            else { throw TimeLapseError.encoding("Audio mixing is unavailable on this Mac.") }
+            let mix = AVMutableAudioMix()
+            mix.inputParameters = audioTracks.map { track in
+                let parameters = AVMutableAudioMixInputParameters(track: track)
+                parameters.setVolume(audioTracks.count > 1 ? 0.5 : 1, at: .zero)
+                parameters.audioTimePitchAlgorithm = .spectral
+                return parameters
+            }
+            exporter.audioMix = mix
+            exporter.audioTimePitchAlgorithm = .spectral
+            let url = directory.appendingPathComponent(".\(UUID().uuidString).m4a")
+            temporary.append(url)
+            try await exporter.export(to: url, as: .m4a)
+            let asset = AVURLAsset(url: url)
+            guard let mixed = try await asset.loadTracks(withMediaType: .audio).first else {
+                throw TimeLapseError.empty
+            }
             remaining /= factor
-        }
-        let asset = AVURLAsset(url: mixedURL)
-        guard let mixed = try await asset.loadTracks(withMediaType: .audio).first else {
-            throw TimeLapseError.empty
-        }
-        for track in tracks { composition.removeTrack(track) }
-        guard
-            let destination = composition.addMutableTrack(
-                withMediaType: .audio,
-                preferredTrackID: kCMPersistentTrackID_Invalid)
-        else { throw TimeLapseError.empty }
-        var range = try await mixed.load(.timeRange)
-        range.duration = CMTimeMinimum(range.duration, composition.duration)
-        try destination.insertTimeRange(range, of: mixed, at: .zero)
-        completed = true
-        return mixedURL
-    }
-
-    private static func writeAudioMix(_ composition: AVComposition, to url: URL) async throws {
-        let tracks = try await composition.loadTracks(withMediaType: .audio)
-        let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32, sampleRate: 48000, channels: 2, interleaved: true)!
-        let file = try AVAudioFile(
-            forWriting: url, settings: format.settings,
-            commonFormat: .pcmFormatFloat32, interleaved: true)
-        let reader = try AVAssetReader(asset: composition)
-        let output = AVAssetReaderAudioMixOutput(
-            audioTracks: tracks,
-            audioSettings: [
-                AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48000,
-                AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 32,
-                AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
-            ])
-        let mix = AVMutableAudioMix()
-        mix.inputParameters = tracks.map { track in
-            let parameters = AVMutableAudioMixInputParameters(track: track)
-            parameters.setVolume(tracks.count > 1 ? 0.5 : 1, at: .zero)
-            return parameters
-        }
-        output.audioMix = mix
-        reader.add(output)
-        guard reader.startReading() else { throw reader.error ?? TimeLapseError.empty }
-        defer { reader.cancelReading() }
-        let silence = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4096)!
-        let silenceBytes = silence.mutableAudioBufferList.pointee.mBuffers
-        memset(silenceBytes.mData!, 0, Int(silenceBytes.mDataByteSize))
-        while let sample = output.copyNextSampleBuffer() {
-            try Task.checkCancellation()
-            let start = AVAudioFramePosition(
-                (CMSampleBufferGetPresentationTimeStamp(sample).seconds * format.sampleRate)
-                    .rounded())
-            while file.length < start {
-                try Task.checkCancellation()
-                silence.frameLength = AVAudioFrameCount(min(4096, start - file.length))
-                try file.write(from: silence)
+            if remaining > 1 {
+                audio = AVMutableComposition()
+                guard
+                    let next = audio.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid)
+                else { throw TimeLapseError.empty }
+                try next.insertTimeRange(try await mixed.load(.timeRange), of: mixed, at: .zero)
+            } else {
+                for track in tracks { composition.removeTrack(track) }
+                guard
+                    let destination = composition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid)
+                else { throw TimeLapseError.empty }
+                var range = try await mixed.load(.timeRange)
+                range.duration = CMTimeMinimum(range.duration, composition.duration)
+                try destination.insertTimeRange(range, of: mixed, at: .zero)
+                completed = true
+                return url
             }
-            let frames = CMSampleBufferGetNumSamples(sample)
-            guard frames > 0, let block = CMSampleBufferGetDataBuffer(sample),
-                let buffer = AVAudioPCMBuffer(
-                    pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))
-            else { throw TimeLapseError.empty }
-            buffer.frameLength = AVAudioFrameCount(frames)
-            let bytes = buffer.mutableAudioBufferList.pointee.mBuffers
-            guard CMBlockBufferGetDataLength(block) == Int(bytes.mDataByteSize),
-                CMBlockBufferCopyDataBytes(
-                    block, atOffset: 0, dataLength: Int(bytes.mDataByteSize),
-                    destination: bytes.mData!) == noErr
-            else { throw TimeLapseError.empty }
-            try file.write(from: buffer)
-        }
-        guard reader.status == .completed else { throw reader.error ?? TimeLapseError.empty }
-    }
-
-    private static func accelerateAudio(from source: URL, to destination: URL, factor: Double)
-        async throws
-    {
-        let input = try AVAudioFile(forReading: source)
-        let format = input.processingFormat
-        let engine = AVAudioEngine()
-        let player = AVAudioPlayerNode()
-        let pitch = AVAudioUnitTimePitch()
-        pitch.rate = Float(factor)
-        engine.attach(player)
-        engine.attach(pitch)
-        engine.connect(player, to: pitch, format: format)
-        engine.connect(pitch, to: engine.mainMixerNode, format: format)
-        try engine.enableManualRenderingMode(
-            .offline, format: format, maximumFrameCount: 4096)
-        defer { engine.stop() }
-        var settings = format.settings
-        settings[AVLinearPCMIsNonInterleaved] = false
-        let output = try AVAudioFile(forWriting: destination, settings: settings)
-        let buffer = AVAudioPCMBuffer(pcmFormat: engine.manualRenderingFormat, frameCapacity: 4096)!
-        player.scheduleFile(input, at: nil, completionHandler: nil)
-        try engine.start()
-        player.play()
-        let frames = AVAudioFramePosition((Double(input.length) / factor).rounded(.up))
-        var stalled = 0
-        while output.length < frames {
-            try Task.checkCancellation()
-            let count = AVAudioFrameCount(min(4096, frames - output.length))
-            switch try engine.renderOffline(count, to: buffer) {
-            case .success:
-                guard buffer.frameLength > 0 else { throw TimeLapseError.empty }
-                try output.write(from: buffer)
-                stalled = 0
-            case .cannotDoInCurrentContext, .insufficientDataFromInputNode:
-                stalled += 1
-                guard stalled <= 128 else {
-                    throw TimeLapseError.encoding("Audio acceleration stopped producing samples.")
-                }
-                await Task.yield()
-            case .error:
-                throw TimeLapseError.encoding("Audio acceleration failed.")
-            @unknown default:
-                throw TimeLapseError.encoding("Audio acceleration is unavailable on this Mac.")
-            }
-        }
+        } while remaining > 1
+        throw TimeLapseError.empty
     }
 
     @available(macOS 15.0, *)
