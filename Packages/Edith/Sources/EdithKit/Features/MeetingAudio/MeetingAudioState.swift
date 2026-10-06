@@ -75,6 +75,7 @@ public struct MeetingAudioStatus: Codable, Equatable, Sendable {
     public var recordingName: String?
     public var playing: [String] = []
     public var failure: String?
+    public var sourceFailure: String?
     public init() {}
 }
 

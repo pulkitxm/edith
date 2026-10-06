@@ -160,7 +160,7 @@ struct VirtualCameraStage: View {
             RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous)
                 .fill(Color.black)
             if model.state.privacy != .stopped,
-                model.cameraAccess == .authorized || model.hasPreviewFrame
+                !model.needsCameraAccess || model.hasPreviewFrame
             {
                 VirtualCameraPreview(
                     display: model.display, mirrored: model.state.mirrorPreview,
@@ -218,7 +218,7 @@ struct VirtualCameraStage: View {
                     LoadingIndicator(title).foregroundStyle(.white.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if model.cameraAccess != .authorized && !model.hasPreviewFrame {
+            } else if model.needsCameraAccess && !model.hasPreviewFrame {
                 VirtualCameraAccessPrompt(model: model)
             }
             if PresenterState.shared.hides(.camera), model.state.privacy != .stopped {

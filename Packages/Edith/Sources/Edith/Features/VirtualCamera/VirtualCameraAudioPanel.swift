@@ -67,6 +67,9 @@ struct VirtualCameraAudioPanel: View {
                 if let failure = status?.failure {
                     Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
                 }
+                if let failure = status?.sourceFailure {
+                    Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                }
                 level("Mic", value: audio.micGain) { value in
                     model.update { $0.audio.micGain = value }
                 }

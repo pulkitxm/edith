@@ -238,8 +238,8 @@ selected again.
 
 Record saves the composed outgoing picture, including looks and overlays, as an
 MP4. It can record without another app opening the virtual camera. Stop recording
-waits for the file to finish before reporting it saved. This recording currently
-contains video only.
+waits for the file to finish before reporting it saved. When meeting audio is
+running at the start of recording, the MP4 also includes its mixed audio track.
 
 Meet flips its local camera preview horizontally. Use Edith's Audience preview
 to check overlay text. Mirror self preview affects only Edith's preview. Flip
@@ -270,6 +270,7 @@ ed camera audio play thunder
 ed camera audio voice deep
 ed camera audio effects --pitch -200 --reverb 8 --delay 0
 ed camera audio levels --mic 1 --clips 0.9 --source 0.6
+ed camera audio source true
 ed camera audio mute
 ed camera audio stop
 ed camera audio off
@@ -285,3 +286,8 @@ preserve the original file. Removing a clip removes its library entry while
 retaining the recording on disk. Save the current snippet before changing audio
 devices or turning audio off. A snippet's library entry is saved when recording
 starts so captured audio remains recoverable after an interrupted session.
+
+Enable source audio to include the selected video file or screen capture in the
+meeting mix. It follows playback, pause, freeze and looping. Disable source audio
+to share only its picture. Screen capture excludes Edith’s own audio to avoid
+feeding the mix back into itself.

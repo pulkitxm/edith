@@ -10,6 +10,9 @@ public final class MeetingAudioMixer: @unchecked Sendable {
     private var micMixer: AVAudioMixerNode?
     private var speechMixer: AVAudioMixerNode?
     private var sourcePlayer: AVAudioPlayerNode?
+    private var mediaAudio: MeetingMediaAudio?
+    private var mixedOutput: (@Sendable (AVAudioPCMBuffer, TimeInterval) -> Void)?
+    private var outputTap = false
     private var clipPlayers: [UUID: AVAudioPlayerNode] = [:]
     private var inputTap = false
     private var recording: AVAudioFile?
@@ -117,6 +120,7 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         micMixer = mic
         speechMixer = speech
         sourcePlayer = source
+        mediaAudio = MeetingMediaAudio(player: source, queue: queue)
         generation += 1
         let generation = generation
         engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) {
@@ -144,6 +148,17 @@ public final class MeetingAudioMixer: @unchecked Sendable {
             }
         }
         inputTap = true
+        effects.compressor.installTap(onBus: 0, bufferSize: 1024, format: format) {
+            [weak self] buffer, time in
+            guard let self, let copy = Self.copy(buffer) else { return }
+            let timestamp =
+                time.isHostTimeValid
+                ? AVAudioTime.seconds(forHostTime: time.hostTime)
+                : ProcessInfo.processInfo.systemUptime
+            let handler = self.lock.withLock { self.mixedOutput }
+            handler?(copy, timestamp)
+        }
+        outputTap = true
         effects.apply(state)
         mic.outputVolume = state.muted ? 0 : state.micGain
         state.inputID = input.id
@@ -340,6 +355,38 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         updateStatus { $0.playing = [] }
     }
 
+    public func setMixedOutput(
+        _ output: @escaping @Sendable (AVAudioPCMBuffer, TimeInterval) -> Void
+    ) {
+        lock.withLock { mixedOutput = output }
+    }
+
+    public func syncVideoAudio(path: String, time: Double, playing: Bool) {
+        queue.async { [weak self] in
+            guard let self, self.state.enabled else { return }
+            do { try self.mediaAudio?.syncVideo(path: path, time: time, playing: playing) } catch {
+                self.updateStatus { $0.sourceFailure = error.localizedDescription }
+            }
+        }
+    }
+
+    public func appendScreenAudio(_ sample: CMSampleBuffer) {
+        guard let buffer = MeetingPCM.buffer(from: sample) else { return }
+        queue.async { [weak self] in
+            guard let self, self.state.enabled else { return }
+            do { try self.mediaAudio?.appendScreen(buffer) } catch {
+                self.updateStatus { $0.sourceFailure = error.localizedDescription }
+            }
+        }
+    }
+
+    public func stopSourceAudio() {
+        queue.async { [weak self] in
+            self?.mediaAudio?.stop()
+            self?.updateStatus { $0.sourceFailure = nil }
+        }
+    }
+
     public func shutdown() { queue.async { [weak self] in self?.stop() } }
 
     private func stop() {
@@ -347,6 +394,10 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         stopClips()
         if inputTap { engine?.inputNode.removeTap(onBus: 0) }
         inputTap = false
+        if outputTap { effects?.compressor.removeTap(onBus: 0) }
+        outputTap = false
+        mediaAudio?.stop()
+        mediaAudio = nil
         engine?.stop()
         engine = nil
         effects = nil

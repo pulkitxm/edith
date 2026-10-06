@@ -138,6 +138,8 @@ final class VirtualCameraPageModel: ObservableObject {
         case helper
     }
 
+    var needsCameraAccess: Bool { state.media.kind == .camera && cameraAccess != .authorized }
+
     var hasNoCameraSource: Bool {
         state.media.kind == .camera && sourcesLoaded && cameraAccess == .authorized
             && sources.isEmpty && !hasPreviewFrame
@@ -148,7 +150,7 @@ final class VirtualCameraPageModel: ObservableObject {
 
     var previewLoadingTitle: String? {
         guard state.privacy != .stopped, !hasNoCameraSource, previewFailure == nil,
-            cameraAccess == .authorized || snapshot?.live == true, !hasPreviewFrame
+            !needsCameraAccess || snapshot?.live == true, !hasPreviewFrame
         else { return nil }
         if !sourcesLoaded { return "Finding cameras" }
         if previewFeed == .pending { return "Connecting to Edith Bar" }

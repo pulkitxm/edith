@@ -14,21 +14,25 @@ public final class VirtualCameraVideoSource: @unchecked Sendable {
     private var frameHandler: ((CVPixelBuffer) -> Void)?
     private var failureHandler: ((String) -> Void)?
     private var reportedFailure = false
+    private var audioHandler: ((String, Double, Bool) -> Void)?
 
     public init(queue: DispatchQueue) { self.queue = queue }
 
     public func update(
         _ configuration: VirtualCameraMedia, frameRate: Int,
-        failed: @escaping (String) -> Void, frame: @escaping (CVPixelBuffer) -> Void
+        failed: @escaping (String) -> Void,
+        audio: ((String, Double, Bool) -> Void)? = nil, frame: @escaping (CVPixelBuffer) -> Void
     ) {
         self.configuration = configuration
         frameHandler = frame
         failureHandler = failed
+        audioHandler = audio
         if path != configuration.path || player == nil {
             stop()
             self.configuration = configuration
             frameHandler = frame
             failureHandler = failed
+            audioHandler = audio
             guard let path = configuration.path else { return }
             self.path = path
             let item = AVPlayerItem(url: URL(fileURLWithPath: path))
@@ -77,6 +81,9 @@ public final class VirtualCameraVideoSource: @unchecked Sendable {
                 player.currentItem?.error?.localizedDescription ?? "Cannot play this video.")
         }
         let time = player.currentTime()
+        if let path {
+            audioHandler?(path, time.seconds, configuration.audioEnabled && player.rate > 0)
+        }
         if itemOutput.hasNewPixelBuffer(forItemTime: time),
             let buffer = itemOutput.copyPixelBuffer(forItemTime: time, itemTimeForDisplay: nil)
         {
@@ -86,12 +93,14 @@ public final class VirtualCameraVideoSource: @unchecked Sendable {
     }
 
     public func suspend() {
+        if let path { audioHandler?(path, player?.currentTime().seconds ?? 0, false) }
         player?.pause()
         timer?.cancel()
         timer = nil
     }
 
     public func stop() {
+        if let path { audioHandler?(path, player?.currentTime().seconds ?? 0, false) }
         timer?.cancel()
         timer = nil
         player?.pause()

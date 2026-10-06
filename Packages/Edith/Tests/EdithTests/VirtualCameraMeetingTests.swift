@@ -8,6 +8,51 @@ import Testing
 
 @Suite(.serialized)
 struct VirtualCameraMeetingTests {
+    @Test func recordsMixedAudioAlongsideVideo() async throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "meeting-av-\(UUID()).mp4")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let pool = try #require(VirtualCameraPipeline.makePool(width: 320, height: 180))
+        var raw: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(nil, pool, &raw)
+        let frame = try #require(raw)
+        VirtualCameraRenderer().render(
+            CIImage(color: .blue).cropped(to: CGRect(x: 0, y: 0, width: 320, height: 180)),
+            into: frame)
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2))
+        let pcm = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1600))
+        pcm.frameLength = 1600
+        let writer = try VirtualCameraRecorder(
+            url: url, size: CGSize(width: 320, height: 180), audio: true)
+        for index in 0..<30 {
+            for channel in 0..<2 {
+                for sample in 0..<1600 {
+                    pcm.floatChannelData![channel][sample] =
+                        0.2 * sin(Float(index * 1600 + sample) * 2 * .pi * 440 / 48000)
+                }
+            }
+            try writer.append(frame, at: Double(index) / 30)
+            try writer.appendAudio(pcm, at: Double(index) / 30)
+            try await Task.sleep(for: .milliseconds(33))
+        }
+        _ = try await withCheckedThrowingContinuation { continuation in
+            writer.finish { continuation.resume(with: $0) }
+        }
+        let asset = AVURLAsset(url: url)
+        #expect(try await asset.loadTracks(withMediaType: .audio).count == 1)
+        #expect(try await asset.loadTracks(withMediaType: .video).count == 1)
+        let audio = try AVAudioFile(forReading: url)
+        #expect(Double(audio.length) / audio.processingFormat.sampleRate > 0.8)
+        let decoded = try #require(
+            AVAudioPCMBuffer(pcmFormat: audio.processingFormat, frameCapacity: 4800))
+        try audio.read(into: decoded)
+        let channel = try #require(decoded.floatChannelData?[0])
+        let rms = sqrt(
+            (0..<Int(decoded.frameLength)).reduce(0.0) { $0 + Double(channel[$1] * channel[$1]) }
+                / Double(decoded.frameLength))
+        #expect(rms > 0.05)
+    }
+
     @Test func recordsAPlayableComposedVideo() async throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(
             "meeting-\(UUID().uuidString).mp4")

@@ -20,6 +20,7 @@ public extension MeetingAudioState {
             "voice": .string(preset.rawValue), "pitch": .double(Double(pitch)),
             "reverb": .double(Double(reverb)), "delay": .double(Double(delay)),
             "recording": .optional(status?.recordingName), "error": .optional(status?.failure),
+            "sourceError": .optional(status?.sourceFailure),
             "playing": .array((status?.playing ?? []).map { .string($0) }),
             "clips": .array(
                 clips.map {

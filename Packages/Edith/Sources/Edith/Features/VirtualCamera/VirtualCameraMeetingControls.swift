@@ -88,6 +88,19 @@ struct VirtualCameraMeetingControls: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .lineLimit(1)
             }
+            if model.state.media.kind != .camera {
+                Toggle(
+                    "Include source audio",
+                    isOn: Binding(
+                        get: { model.state.media.audioEnabled },
+                        set: { value in model.update { $0.media.audioEnabled = value } })
+                )
+                .font(.edithText(.caption))
+                Text(
+                    "Enable meeting audio and choose its virtual microphone in your meeting to hear this source."
+                )
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
+            }
             Text(model.state.mirrorPreview ? "Mirrored self preview" : "Audience preview")
                 .font(.system(size: UIScale.pt(11), weight: .medium))
                 .foregroundStyle(DashSkin.inkFaint(dark))

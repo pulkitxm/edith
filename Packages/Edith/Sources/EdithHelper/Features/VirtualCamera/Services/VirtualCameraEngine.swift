@@ -82,6 +82,14 @@ final class VirtualCameraEngine {
         pipeline = VirtualCameraPipeline(
             state: state, outputSize: CGSize(width: format.width, height: format.height),
             frameRate: format.frameRate)
+        let mixer = audioMixer
+        pipeline.setSourceAudio(
+            video: { mixer.syncVideoAudio(path: $0, time: $1, playing: $2) },
+            screen: { mixer.appendScreenAudio($0) },
+            stop: { mixer.stopSourceAudio() })
+        mixer.setMixedOutput { [weak pipeline] buffer, time in
+            pipeline?.appendRecordingAudio(buffer, at: time)
+        }
     }
 
     func start() {
@@ -200,7 +208,8 @@ final class VirtualCameraEngine {
                     domain: "MeetingRecording", code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "Choose Live before recording."])
             }
-            try pipeline.startRecording(to: URL(fileURLWithPath: path))
+            try pipeline.startRecording(
+                to: URL(fileURLWithPath: path), audio: audioMixer.status.running)
             recordingPath = path
             if !streaming { startRecordingPreview() }
             publishIfChanged()

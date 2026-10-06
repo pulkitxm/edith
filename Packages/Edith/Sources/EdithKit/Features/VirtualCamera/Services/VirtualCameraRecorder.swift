@@ -9,8 +9,10 @@ public final class VirtualCameraRecorder {
     private let adaptor: AVAssetWriterInputPixelBufferAdaptor
     private var firstTime: TimeInterval?
     private var lastTime = CMTime.invalid
+    private var audioInput: AVAssetWriterInput?
+    private var lastAudioTime = CMTime.invalid
 
-    public init(url: URL, size: CGSize) throws {
+    public init(url: URL, size: CGSize, audio: Bool = false) throws {
         self.url = url
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         input = AVAssetWriterInput(
@@ -25,6 +27,18 @@ public final class VirtualCameraRecorder {
             throw CocoaError(.fileWriteUnknown)
         }
         writer.add(input)
+        if audio {
+            let audioInput = AVAssetWriterInput(
+                mediaType: .audio,
+                outputSettings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48000,
+                    AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128000,
+                ])
+            audioInput.expectsMediaDataInRealTime = true
+            guard writer.canAdd(audioInput) else { throw CocoaError(.fileWriteUnknown) }
+            writer.add(audioInput)
+            self.audioInput = audioInput
+        }
         guard writer.startWriting() else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
     }
 
@@ -41,6 +55,36 @@ public final class VirtualCameraRecorder {
             throw writer.error ?? CocoaError(.fileWriteUnknown)
         }
         lastTime = timestamp
+    }
+
+    public func appendAudio(_ buffer: AVAudioPCMBuffer, at time: TimeInterval) throws {
+        guard let audioInput, let firstTime, time >= firstTime, buffer.frameLength > 0 else {
+            return
+        }
+        guard writer.status == .writing else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
+        guard audioInput.isReadyForMoreMediaData else { return }
+        let timestamp = CMTime(seconds: time - firstTime, preferredTimescale: 48000)
+        guard !lastAudioTime.isValid || timestamp > lastAudioTime else { return }
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 1, timescale: Int32(buffer.format.sampleRate)),
+            presentationTimeStamp: timestamp, decodeTimeStamp: .invalid)
+        var sample: CMSampleBuffer?
+        let created = CMSampleBufferCreate(
+            allocator: kCFAllocatorDefault, dataBuffer: nil, dataReady: false,
+            makeDataReadyCallback: nil, refcon: nil,
+            formatDescription: buffer.format.formatDescription,
+            sampleCount: Int(buffer.frameLength), sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing, sampleSizeEntryCount: 0, sampleSizeArray: nil,
+            sampleBufferOut: &sample)
+        guard created == noErr, let sample else { throw CocoaError(.fileWriteUnknown) }
+        let copied = CMSampleBufferSetDataBufferFromAudioBufferList(
+            sample, blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault, flags: 0,
+            bufferList: buffer.audioBufferList)
+        guard copied == noErr, CMSampleBufferSetDataReady(sample) == noErr,
+            audioInput.append(sample)
+        else { throw writer.error ?? CocoaError(.fileWriteUnknown) }
+        lastAudioTime = timestamp
     }
 
     public func finish(_ completion: @escaping (Result<URL, Error>) -> Void) {
@@ -61,6 +105,7 @@ public final class VirtualCameraRecorder {
             return
         }
         input.markAsFinished()
+        audioInput?.markAsFinished()
         writer.finishWriting { [self] in
             completion(
                 writer.status == .completed
