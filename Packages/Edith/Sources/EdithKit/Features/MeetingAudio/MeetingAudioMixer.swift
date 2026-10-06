@@ -6,6 +6,8 @@ import Foundation
 public final class MeetingAudioMixer: @unchecked Sendable {
     public let queue = DispatchQueue(label: "com.pulkit.edith.meeting.audio", qos: .userInitiated)
     private var engine: AVAudioEngine?
+    private var capture: MeetingAudioCapture?
+    private var micPlayer: AVAudioPlayerNode?
     private var effects: MeetingVoiceEffects?
     private var micMixer: AVAudioMixerNode?
     private var speechMixer: AVAudioMixerNode?
@@ -14,7 +16,6 @@ public final class MeetingAudioMixer: @unchecked Sendable {
     private var mixedOutput: (@Sendable (AVAudioPCMBuffer, TimeInterval) -> Void)?
     private var outputTap = false
     private var clipPlayers: [UUID: AVAudioPlayerNode] = [:]
-    private var inputTap = false
     private var speechTap = false
     private var voiceStream: MeetingVoiceStream?
     private var voicePlayer: AVAudioPlayerNode?
@@ -95,23 +96,22 @@ public final class MeetingAudioMixer: @unchecked Sendable {
                 "The microphone and meeting output must be different devices.")
         }
         let engine = AVAudioEngine()
-        try setDevice(input.objectID, unit: engine.inputNode.audioUnit)
         try setDevice(output.objectID, unit: engine.outputNode.audioUnit)
-        let inputFormat = engine.inputNode.outputFormat(forBus: 0)
-        guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw MeetingAudioLibrary.error("The selected microphone has no audio format.")
-        }
+        let inputFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
         let effects = MeetingVoiceEffects()
         let mic = AVAudioMixerNode()
+        let microphone = AVAudioPlayerNode()
         let speech = AVAudioMixerNode()
         let source = AVAudioPlayerNode()
         engine.attach(mic)
+        engine.attach(microphone)
         engine.attach(speech)
         engine.attach(source)
         for node in effects.nodes { engine.attach(node) }
-        engine.connect(engine.inputNode, to: mic, format: inputFormat)
+        engine.connect(microphone, to: mic, format: inputFormat)
         engine.connect(mic, to: speech, fromBus: 0, toBus: 0, format: inputFormat)
         self.engine = engine
+        micPlayer = microphone
         self.effects = effects
         micMixer = mic
         speechMixer = speech
@@ -161,31 +161,30 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         mediaAudio = MeetingMediaAudio(player: source, queue: queue)
         generation += 1
         let generation = generation
-        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) {
-            [weak self] buffer, _ in
-            guard let self else { return }
-            let accepted = self.lock.withLock {
-                guard self.pendingBuffers < 8 else { return false }
-                self.pendingBuffers += 1
-                return true
-            }
-            guard accepted else { return }
-            guard let copy = Self.copy(buffer) else {
-                self.lock.withLock { self.pendingBuffers -= 1 }
-                return
-            }
-            self.queue.async { [weak self] in
+        capture = try MeetingAudioCapture(
+            deviceID: input.id, queue: queue, format: inputFormat,
+            receive: { [weak self] copy in
                 guard let self else { return }
-                defer { self.lock.withLock { self.pendingBuffers -= 1 } }
-                guard self.generation == generation else { return }
+                let accepted = self.lock.withLock {
+                    guard self.pendingBuffers < 8 else { return false }
+                    self.pendingBuffers += 1
+                    return true
+                }
+                guard accepted else { return }
+                guard self.generation == generation else {
+                    self.lock.withLock { self.pendingBuffers -= 1 }
+                    return
+                }
                 if let recording = self.recording {
                     do { try recording.write(from: copy) } catch {
                         self.updateStatus { $0.failure = error.localizedDescription }
                     }
                 }
-            }
-        }
-        inputTap = true
+                microphone.scheduleBuffer(copy, completionCallbackType: .dataPlayedBack) {
+                    [weak self] _ in
+                    self?.lock.withLock { self?.pendingBuffers -= 1 }
+                }
+            }, failure: { [weak self] message in self?.updateStatus { $0.failure = message } })
         effects.compressor.installTap(onBus: 0, bufferSize: 1024, format: format) {
             [weak self] buffer, time in
             guard let self, let copy = Self.copy(buffer) else { return }
@@ -202,7 +201,11 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         state.inputID = input.id
         state.outputID = output.id
         source.volume = state.sourceGain
-        do { try engine.start() } catch { stop(); throw error }
+        do {
+            try engine.start()
+            microphone.play()
+            try capture?.start()
+        } catch { stop(); throw error }
         source.play()
         voicePlayer?.play()
         completed = true
@@ -305,7 +308,8 @@ public final class MeetingAudioMixer: @unchecked Sendable {
             let url = MeetingAudioLibrary.directory.appendingPathComponent(UUID().uuidString)
                 .appendingPathExtension("caf")
             recording = try AVAudioFile(
-                forWriting: url, settings: engine.inputNode.outputFormat(forBus: 0).settings)
+                forWriting: url,
+                settings: AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!.settings)
             let clip = MeetingAudioClip(name: name, path: url.path)
             recordingClip = clip
             next.clips.append(clip)
@@ -472,8 +476,10 @@ public final class MeetingAudioMixer: @unchecked Sendable {
         if speechTap { speechMixer?.removeTap(onBus: 0) }
         speechTap = false
         stopClips()
-        if inputTap { engine?.inputNode.removeTap(onBus: 0) }
-        inputTap = false
+        capture?.stop()
+        capture = nil
+        micPlayer?.stop()
+        micPlayer = nil
         if outputTap { effects?.compressor.removeTap(onBus: 0) }
         outputTap = false
         mediaAudio?.stop()
