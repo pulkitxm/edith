@@ -8,87 +8,125 @@ struct VirtualCameraAudioPanel: View {
     let dark: Bool
     @State private var devices: [MeetingAudioDevice] = []
     @State private var snippetName = ""
-    @State private var importSound = false
     @State private var editing: MeetingAudioClip?
+    @State private var section = Section.sounds
+
+    private enum Section: String, CaseIterable {
+        case sounds = "Sounds"
+        case voice = "Voice"
+        case devices = "Devices"
+    }
 
     private var audio: MeetingAudioState { model.state.audio }
     private var status: MeetingAudioStatus? { model.snapshot?.audioStatus }
 
     var body: some View {
         VStack(spacing: UIScale.pt(12)) {
-            VirtualCameraPanelSection(
-                title: "Meeting microphone",
-                detail:
-                    "Choose the same virtual microphone in Meet. Device selections stay saved when you switch sources.",
-                dark: dark
-            ) {
-                HStack {
-                    Button(status?.running == true ? "Disable audio" : "Enable audio") {
-                        model.performAudio(.enable(status?.running != true))
-                    }
-                    .buttonStyle(.edith(.primary))
-                    .disabled(
-                        status?.running != true
-                            && !devices.contains { $0.virtual && $0.outputChannels > 0 })
-                    Button(audio.muted ? "Unmute mic" : "Mute mic") {
-                        model.performAudio(.mute(!audio.muted))
-                    }
-                    .buttonStyle(.edith(.secondary))
+            HStack {
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text("Meeting audio").font(.edithText(.headline))
+                    Text(status?.running == true ? "Sending to your meeting" : "Audio is off")
+                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
                 }
-                .disabled(model.audioPending)
-                Picker(
-                    "Microphone",
-                    selection: Binding(
-                        get: { audio.inputID ?? "" }, set: { model.performAudio(.input($0)) })
-                ) {
-                    Text("System microphone").tag("")
-                    ForEach(devices.filter { $0.inputChannels > 0 }) { Text($0.name).tag($0.id) }
-                }
-                Picker(
-                    "Meeting output",
-                    selection: Binding(
-                        get: { audio.outputID ?? "" }, set: { model.performAudio(.output($0)) })
-                ) {
-                    Text(
-                        devices.contains(where: { $0.id == MeetingMicrophone.id })
-                            ? MeetingMicrophone.name : "Meeting microphone unavailable"
-                    ).tag("")
-                    ForEach(devices.filter { $0.virtual && $0.outputChannels > 0 }) {
-                        Text($0.name).tag($0.id)
-                    }
-                }
-                Button("Refresh devices") { refreshDevices() }.buttonStyle(.edith(.toolbar))
-                if !devices.contains(where: { $0.id == MeetingMicrophone.id }) {
-                    Text(MeetingMicrophone.setupMessage)
-                        .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
-                }
-                Text(
-                    status?.running == true
-                        ? "Sending to \(status?.outputName ?? "virtual microphone")"
-                        : "Audio is off"
+                Spacer()
+                Toggle(
+                    "Meeting audio",
+                    isOn: Binding(
+                        get: { audio.enabled },
+                        set: { model.performAudio(.enable($0)) })
                 )
-                .font(.edithText(.caption))
-                .foregroundStyle(status?.running == true ? Color.green : DashSkin.inkFaint(dark))
-                if let failure = status?.failure {
-                    Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                .labelsHidden().toggleStyle(.switch)
+                .disabled(model.audioPending)
+            }
+            .padding(UIScale.pt(12)).edithSurface(cornerRadius: 12)
+            if let failure = status?.failure ?? status?.sourceFailure {
+                Text(failure).font(.edithText(.body)).foregroundStyle(.red)
+            }
+            EdithSegmentedPicker(
+                "Audio controls", selection: $section, options: Section.allCases,
+                label: { $0.rawValue })
+            switch section {
+            case .sounds: sounds
+            case .voice: voice
+            case .devices: deviceSettings
+            }
+        }
+        .task { refreshDevices() }
+        .edithSheet(item: $editing, dismissible: !model.audioPending) { clip in
+            VirtualCameraClipEditor(model: model, clip: clip) { editing = nil }
+        }
+    }
+
+    private var sounds: some View {
+        VirtualCameraPanelSection(title: "Snippets & sound effects", dark: dark) {
+            HStack {
+                TextField("Snippet name (optional)", text: $snippetName)
+                    .textFieldStyle(.roundedBorder)
+                Button(status?.recordingName == nil ? "Record mic" : "Save") {
+                    model.performAudio(
+                        status?.recordingName == nil
+                            ? .recordClip(snippetName.isEmpty ? "Snippet \(audio.clips.count + 1)" : snippetName)
+                            : .finishClip)
                 }
-                if let failure = status?.sourceFailure {
-                    Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
+            }
+            HStack {
+                Menu("Import audio") {
+                    Button("Speech snippet…") { importClip(speech: true) }
+                    Button("Sound effect…") { importClip(speech: false) }
                 }
-                level("Mic", value: audio.micGain) { value in
-                    model.update { $0.audio.micGain = value }
-                }
-                level("Clips", value: audio.clipsGain) { value in
-                    model.update { $0.audio.clipsGain = value }
-                }
-                level("Source", value: audio.sourceGain) { value in
-                    model.update { $0.audio.sourceGain = value }
+                .menuStyle(.borderlessButton).fixedSize()
+                Spacer()
+                if status?.playing.isEmpty == false {
+                    Button("Stop all") { model.performAudio(.stopClips) }
+                        .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
                 }
             }
-            VirtualCameraPanelSection(
-                title: "Voice",
-                detail: "Live speech and saved speech snippets use the same effects.", dark: dark
-            ) {
+            if let name = status?.recordingName {
+                Label("Recording \(name)", systemImage: "record.circle")
+                    .foregroundStyle(.red).font(.edithText(.body))
+            }
+            if audio.clips.isEmpty {
+                Text("Record a greeting or import a sound to play during your meeting.")
+                    .font(.edithText(.body)).foregroundStyle(DashSkin.inkSoft(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(audio.clips) { clip in
+                let playing = status?.playing.contains(clip.id.uuidString) == true
+                HStack(spacing: UIScale.pt(12)) {
+                    Button {
+                        model.performAudio(playing ? .stopClips : .playClip(clip.id.uuidString))
+                    } label: {
+                        Image(systemName: playing ? "stop.fill" : "play.fill")
+                            .frame(width: UIScale.pt(24), height: UIScale.pt(28))
+                    }
+                    .buttonStyle(.edith(.secondary))
+                    .disabled(status?.running != true || model.audioPending)
+                    .accessibilityLabel("\(playing ? "Stop" : "Play") \(clip.name)")
+                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                        Text(clip.name).font(.edithText(.body)).lineLimit(1)
+                        Text(clip.speech ? "Speech" : "Sound effect")
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Menu {
+                        Button("Edit…") { editing = clip }
+                        Button("Remove") { model.performAudio(.removeClip(clip.id.uuidString)) }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: UIScale.pt(24), height: UIScale.pt(28))
+                    }
+                    .menuStyle(.borderlessButton).fixedSize()
+                    .accessibilityLabel("Options for \(clip.name)")
+                }
+                .padding(.vertical, UIScale.pt(4))
+            }
+        }
+    }
+
+    private var voice: some View {
+        VirtualCameraPanelSection(title: "Your voice", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                Text("Voice model").font(.edithText(.body))
                 Picker(
                     "Voice model",
                     selection: Binding(
@@ -98,110 +136,116 @@ struct VirtualCameraAudioPanel: View {
                     Text("Original voice").tag("")
                     ForEach(audio.voiceModels) { Text($0.name).tag($0.id.uuidString) }
                 }
-                HStack {
-                    Button("Import voice model…") { model.importVoiceModel() }
-                        .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
-                    if let id = audio.voiceModelID {
-                        Button("Remove") { model.performAudio(.removeVoice(id.uuidString)) }
-                            .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
+                .labelsHidden().controlSize(.large).frame(maxWidth: .infinity)
+            }
+            Picker(
+                "Effect",
+                selection: Binding(
+                    get: { audio.preset }, set: { value in model.update { $0.audio.preset = value } })
+            ) {
+                ForEach(MeetingVoicePreset.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .font(.edithText(.body))
+            DisclosureGroup("Fine tune") {
+                VStack(spacing: UIScale.pt(12)) {
+                    if audio.voiceModelID != nil {
+                        adjustment("Model pitch", value: Double(audio.voiceTranspose), range: -24...24) {
+                            value in model.update { $0.audio.voiceTranspose = Float(value.rounded()) }
+                        }
+                    }
+                    adjustment("Pitch", value: Double(audio.pitch), range: -1200...1200) {
+                        value in model.update { $0.audio.pitch = Float(value) }
+                    }
+                    adjustment("Reverb", value: Double(audio.reverb), range: 0...100) {
+                        value in model.update { $0.audio.reverb = Float(value) }
+                    }
+                    adjustment("Echo", value: Double(audio.delay), range: 0...100) {
+                        value in model.update { $0.audio.delay = Float(value) }
                     }
                 }
-                Text(
-                    "Import a ContentVec encoder and an RVC ONNX voice. Conversion runs locally with about half a second of buffering."
-                )
-                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
-                if audio.voiceModelID != nil {
-                    adjustment("Model pitch", value: Double(audio.voiceTranspose), range: -24...24)
-                    { value in
-                        model.update { $0.audio.voiceTranspose = Float(value.rounded()) }
-                    }
-                }
-                Picker(
-                    "Preset",
-                    selection: Binding(
-                        get: { audio.preset },
-                        set: { value in model.update { $0.audio.preset = value } })
-                ) {
-                    ForEach(MeetingVoicePreset.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                adjustment("Pitch", value: Double(audio.pitch), range: -1200...1200) { value in
-                    model.update { $0.audio.pitch = Float(value) }
-                }
-                adjustment("Reverb", value: Double(audio.reverb), range: 0...100) { value in
-                    model.update { $0.audio.reverb = Float(value) }
-                }
-                adjustment("Echo", value: Double(audio.delay), range: 0...100) { value in
-                    model.update { $0.audio.delay = Float(value) }
+                .padding(.top, UIScale.pt(12))
+            }
+            .font(.edithText(.body))
+            HStack {
+                Button("Import voice…") { model.importVoiceModel() }
+                    .buttonStyle(.edith(.secondary)).disabled(model.audioPending)
+                    .help("Choose a ContentVec encoder and an RVC ONNX voice model")
+                Spacer()
+                if let id = audio.voiceModelID {
+                    Button("Remove") { model.performAudio(.removeVoice(id.uuidString)) }
+                        .buttonStyle(.edith(.borderless)).disabled(model.audioPending)
                 }
             }
-            VirtualCameraPanelSection(title: "Snippets and sounds", dark: dark) {
-                TextField("Snippet name", text: $snippetName)
-                HStack {
-                    Button(status?.recordingName == nil ? "Record mic" : "Save snippet") {
-                        model.performAudio(
-                            status?.recordingName == nil ? .recordClip(snippetName) : .finishClip)
-                    }
-                    .disabled(
-                        model.audioPending || (status?.recordingName == nil && snippetName.isEmpty))
-                    Button("Import…") { importClip() }.disabled(
-                        snippetName.isEmpty || model.audioPending)
-                }
-                Toggle("Import as sound effect", isOn: $importSound)
-                    .font(.edithText(.caption))
-                if let name = status?.recordingName {
-                    Text("Recording \(name)").foregroundStyle(.red)
-                }
-                ForEach(audio.clips) { clip in
-                    HStack {
-                        Button {
-                            model.performAudio(.playClip(clip.id.uuidString))
-                        } label: {
-                            Image(systemName: "play.fill")
-                        }
-                        .disabled(status?.running != true || model.audioPending)
-                        VStack(alignment: .leading) {
-                            Text(clip.name).lineLimit(1)
-                            Text(clip.speech ? "Speech" : "Sound effect").font(.edithText(.caption))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button {
-                            editing = clip
-                        } label: {
-                            Image(systemName: "slider.horizontal.3")
-                        }
-                        Button {
-                            model.performAudio(.removeClip(clip.id.uuidString))
-                        } label: {
-                            Image(systemName: "trash")
-                        }
-                    }
-                    .buttonStyle(.edith(.toolbar))
-                }
-                Button("Stop all clips") { model.performAudio(.stopClips) }.disabled(
-                    model.audioPending)
+            if audio.voiceModelID != nil {
+                Text("Voice conversion adds about half a second of buffering.")
+                    .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
             }
-        }
-        .task { refreshDevices() }
-        .edithSheet(item: $editing, dismissible: !model.audioPending) { clip in
-            VirtualCameraClipEditor(model: model, clip: clip) { editing = nil }
         }
     }
 
-    private func level(_ name: String, value: Float, change: @escaping (Float) -> Void) -> some View
-    {
-        adjustment(name, value: Double(value), range: 0...2) { change(Float($0)) }
+    private var deviceSettings: some View {
+        VirtualCameraPanelSection(title: "Audio devices", dark: dark) {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                Text("Microphone input").font(.edithText(.body))
+                Picker(
+                    "Microphone input",
+                    selection: Binding(
+                        get: { audio.inputID ?? "" }, set: { model.performAudio(.input($0)) })
+                ) {
+                    Text("System microphone").tag("")
+                    ForEach(devices.filter { $0.inputChannels > 0 }) { Text($0.name).tag($0.id) }
+                }
+                .labelsHidden().controlSize(.large).frame(maxWidth: .infinity)
+                Text("Meeting microphone").font(.edithText(.body)).padding(.top, UIScale.pt(8))
+                Picker(
+                    "Meeting microphone",
+                    selection: Binding(
+                        get: { audio.outputID ?? "" }, set: { model.performAudio(.output($0)) })
+                ) {
+                    Text(MeetingMicrophone.name).tag("")
+                    ForEach(devices.filter { $0.virtual && $0.outputChannels > 0 }) {
+                        Text($0.name).tag($0.id)
+                    }
+                }
+                .labelsHidden().controlSize(.large).frame(maxWidth: .infinity)
+            }
+            Text("Choose this virtual microphone in Meet. Your device choices stay saved.")
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+            if !devices.contains(where: { $0.id == MeetingMicrophone.id }) {
+                Text(MeetingMicrophone.setupMessage).font(.edithText(.caption))
+            }
+            Button("Refresh devices") { refreshDevices() }.buttonStyle(.edith(.secondary))
+            DisclosureGroup("Mix levels") {
+                VStack(spacing: UIScale.pt(12)) {
+                    adjustment("Mic", value: Double(audio.micGain), range: 0...2) {
+                        value in model.update { $0.audio.micGain = Float(value) }
+                    }
+                    adjustment("Clips", value: Double(audio.clipsGain), range: 0...2) {
+                        value in model.update { $0.audio.clipsGain = Float(value) }
+                    }
+                    adjustment("Source", value: Double(audio.sourceGain), range: 0...2) {
+                        value in model.update { $0.audio.sourceGain = Float(value) }
+                    }
+                }.padding(.top, UIScale.pt(12))
+            }
+            .font(.edithText(.body))
+        }
     }
 
     private func adjustment(
         _ name: String, value: Double, range: ClosedRange<Double>,
         change: @escaping (Double) -> Void
     ) -> some View {
-        HStack {
-            Text(name).font(.edithText(.caption)).frame(width: UIScale.pt(48), alignment: .leading)
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            HStack {
+                Text(name).font(.edithText(.body))
+                Spacer()
+                Text(String(format: "%.0f", range.upperBound == 2 ? value * 100 : value))
+                    .font(.edithText(.caption)).monospacedDigit()
+            }
             Slider(value: Binding(get: { value }, set: change), in: range)
-            Text(String(format: "%.0f", range.upperBound == 2 ? value * 100 : value))
-                .font(.edithText(.caption)).monospacedDigit().frame(width: UIScale.pt(38))
+                .accessibilityLabel(name)
         }
     }
 
@@ -211,11 +255,14 @@ struct VirtualCameraAudioPanel: View {
         }
     }
 
-    private func importClip() {
+    private func importClip(speech: Bool) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.audio, .movie]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        model.performAudio(.importClip(name: snippetName, path: url.path, speech: !importSound))
+        model.performAudio(
+            .importClip(
+                name: snippetName.isEmpty ? url.deletingPathExtension().lastPathComponent : snippetName,
+                path: url.path, speech: speech))
     }
 }
 

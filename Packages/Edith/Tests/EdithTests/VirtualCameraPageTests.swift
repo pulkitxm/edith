@@ -126,6 +126,39 @@ import Testing
         #expect(VirtualCameraStore.load(defaults).composition.background.mode == .blur)
     }
 
+    @Test func meetingTogglePausesVideoWithoutReplacingItAndResumesAllPauseModes() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        model.update { $0.media = VirtualCameraMedia(kind: .video, path: "/tmp/demo.mp4") }
+        model.toggleMeetingPlayback()
+        #expect(!model.meetingPlaying)
+        #expect(model.state.media.playback == .paused)
+        #expect(model.state.privacy == .live)
+        #expect(model.statusHeadline == "Paused")
+        #expect(model.state.media.path == "/tmp/demo.mp4")
+        for mode in [VirtualCameraPrivacy.freeze, .card, .blank, .stopped] {
+            model.pause(mode)
+            model.toggleMeetingPlayback()
+            #expect(model.meetingPlaying)
+            #expect(model.state.media.playback == .playing)
+        }
+        #expect(VirtualCameraStore.load(defaults) == model.state)
+    }
+
+    @Test func meetingToggleFreezesCameraAndScreenInsteadOfStoppingCapture() {
+        let (model, defaults, name) = Self.model()
+        defer { defaults.removePersistentDomain(forName: name) }
+        for kind in [VirtualCameraMediaKind.camera, .screen] {
+            model.update { $0.media.kind = kind }
+            model.toggleMeetingPlayback()
+            #expect(model.state.privacy == .freeze)
+            #expect(!model.meetingPlaying)
+            model.toggleMeetingPlayback()
+            #expect(model.state.privacy == .live)
+            #expect(model.meetingPlaying)
+        }
+    }
+
     @Test func dragEditsSaveDuringEventTracking() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
@@ -944,12 +977,44 @@ enum VirtualCameraSyntheticStudio {
         let buffer = try #require(VirtualCameraPlaceholder.makeBuffer(width: 1280, height: 720))
         renderer.render(preview, into: buffer)
         model.showPreviewFrame(buffer)
-        for tab in [VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output] {
+        model.update {
+            $0.audio.enabled = true
+            $0.audio.clips = [
+                MeetingAudioClip(name: "Good morning", path: "/tmp/demo-greeting.wav"),
+                MeetingAudioClip(name: "Thunder", path: "/tmp/demo-thunder.wav", speech: false),
+            ]
+        }
+        model.flushSave()
+        var meetingSnapshot = try #require(model.snapshot)
+        var audioStatus = MeetingAudioStatus()
+        audioStatus.running = true
+        meetingSnapshot.audioStatus = audioStatus
+        meetingSnapshot.state = model.state
+        model.injectForTesting(snapshot: meetingSnapshot, sources: VirtualCameraPageModelTests.sources)
+        for tab in [VirtualCameraInspectorTab.frame, .look, .background, .overlays, .output, .audio] {
             model.tab = tab
             try renderPage(
                 model, preview: preview, renderer: renderer,
                 to: output.appendingPathComponent("page-\(tab.rawValue).png"))
         }
+        let previousZoom = UIScale.current
+        defer { UIScale.apply(previousZoom) }
+        for dark in [true, false] {
+            for (label, size, compact, zoom, controls) in [
+                ("meeting", CGSize(width: 1440, height: 900), false, 1.0, false),
+                ("audio", CGSize(width: 1440, height: 900), false, 1.0, true),
+                ("compact", CGSize(width: 620, height: 720), true, 1.0, false),
+                ("zoom", CGSize(width: 1440, height: 1000), false, 1.3, true),
+            ] {
+                UIScale.apply(zoom)
+                model.tab = .audio
+                try renderPage(
+                    model, preview: preview, renderer: renderer,
+                    to: output.appendingPathComponent("ux-\(label)-\(dark ? "dark" : "light").png"),
+                    size: size, compact: compact, dark: dark, controlsVisible: controls)
+            }
+        }
+        UIScale.apply(previousZoom)
         model.updateComposition {
             $0.background = VirtualCameraBackground(
                 mode: .color, color: VirtualCameraColor(hex: "#1E293B") ?? .black)
@@ -984,17 +1049,21 @@ enum VirtualCameraSyntheticStudio {
 
     private func renderPage(
         _ model: VirtualCameraPageModel, preview: CIImage, renderer: VirtualCameraRenderer,
-        to url: URL
+        to url: URL, size: CGSize = CGSize(width: 1440, height: 1060),
+        compact: Bool = false, dark: Bool = true, controlsVisible: Bool = true
     ) throws {
         let host = NSHostingView(
-            rootView: VirtualCameraPage(model: model)
-                .environment(\.colorScheme, .dark)
+            rootView: VirtualCameraPage(model: model, controlsVisible: controlsVisible)
+                .environment(\.compactLayout, compact)
+                .environment(\.automaticViewActionsEnabled, false)
+                .environment(\.windowVisible, false)
+                .environment(\.colorScheme, dark ? .dark : .light)
                 .transaction { $0.animation = nil })
-        host.frame = NSRect(x: 0, y: 0, width: 1440, height: 1060)
-        host.appearance = NSAppearance(named: .darkAqua)
+        host.frame = CGRect(origin: .zero, size: size)
+        host.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let window = TestWindowHost.window(contentRect: host.frame)
         defer { window.orderOut(nil) }
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = host.appearance
         window.contentView = host
         window.orderBack(nil)
         for _ in 0..<3 {

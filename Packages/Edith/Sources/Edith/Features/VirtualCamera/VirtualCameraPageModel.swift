@@ -187,6 +187,7 @@ final class VirtualCameraPageModel: ObservableObject {
 
     var statusHeadline: String {
         if state.privacy == .stopped { return "Stopped" }
+        if state.media.kind == .video, !meetingPlaying { return "Paused" }
         if let snapshot, helperReachable { return snapshot.headline }
         if statusPending || helperReachable { return "Checking Edith Bar" }
         return "Edith Bar is not answering"

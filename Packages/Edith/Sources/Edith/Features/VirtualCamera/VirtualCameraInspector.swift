@@ -9,39 +9,41 @@ struct VirtualCameraInspector: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(spacing: UIScale.pt(4)) {
+            Menu {
                 ForEach(VirtualCameraInspectorTab.allCases) { tab in
-                    Button {
-                        model.tab = tab
-                    } label: {
-                        VStack(spacing: UIScale.pt(3)) {
-                            Image(systemName: tab.symbolName)
-                                .font(.system(size: UIScale.pt(13)))
-                            Text(tab.title)
-                                .font(.system(size: UIScale.pt(10), weight: .medium))
-                                .lineLimit(1).minimumScaleFactor(0.75)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .foregroundStyle(
-                            model.tab == tab ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                    Button { model.tab = tab } label: {
+                        Label(tab.title, systemImage: tab.symbolName)
                     }
-                    .buttonStyle(.edith(.toolbar))
-                    .accessibilityAddTraits(model.tab == tab ? .isSelected : [])
                 }
-            }
-            .padding(UIScale.pt(4))
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(10)).fill(DashSkin.paper2(dark)))
-            Group {
-                switch model.tab {
-                case .frame: VirtualCameraFramePanel(model: model, dark: dark)
-                case .look: VirtualCameraLookPanel(model: model, dark: dark)
-                case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
-                case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
-                case .output: VirtualCameraOutputPanel(model: model, dark: dark)
-                case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
+            } label: {
+                HStack {
+                    Label(model.tab.title, systemImage: model.tab.symbolName)
+                        .font(.edithText(.headline))
+                    Spacer()
+                    Image(systemName: "chevron.down")
                 }
+                .padding(UIScale.pt(12))
+                .frame(maxWidth: .infinity, minHeight: UIScale.pt(44), alignment: .leading)
             }
+            .menuStyle(.borderlessButton)
+            .edithSurface(cornerRadius: 12)
+            .accessibilityLabel("Adjust: \(model.tab.title)")
+            ScrollView {
+                VStack(spacing: UIScale.pt(12)) {
+                    switch model.tab {
+                    case .frame:
+                        VirtualCameraFramePanel(model: model, dark: dark)
+                        VirtualCameraSceneStrip(model: model, dark: dark)
+                    case .look: VirtualCameraLookPanel(model: model, dark: dark)
+                    case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
+                    case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
+                    case .output: VirtualCameraOutputPanel(model: model, dark: dark)
+                    case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
+                    }
+                }
+                .padding(UIScale.pt(2))
+            }
+
         }
     }
 }
