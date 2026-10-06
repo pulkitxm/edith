@@ -53,6 +53,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private var pool: CVPixelBufferPool?
     private var poolSize = CGSize.zero
     private var lastLiveBuffer: CVPixelBuffer?
+    private var lastLiveMirrored = false
     private var privacyBuffer: CVPixelBuffer?
     private var privacyKey = ""
     private var privacyTimer: DispatchSourceTimer?
@@ -372,6 +373,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         guard let buffer = makeBuffer() else { return nil }
         renderer.render(composed, into: buffer)
         lastLiveBuffer = buffer
+        lastLiveMirrored = state.mirrorOutput
         recordFrame(at: time)
         return buffer
     }
@@ -425,12 +427,31 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
 
     private func makePrivacyFrame() -> CVPixelBuffer? {
         guard state.privacy != .stopped else { return nil }
-        if state.privacy == .freeze, let lastLiveBuffer { return lastLiveBuffer }
-        let key = "\(state.privacy.rawValue)|\(state.privacyMessage)|\(outputSize)"
+        if state.privacy == .freeze, let lastLiveBuffer {
+            guard lastLiveMirrored != state.mirrorOutput else { return lastLiveBuffer }
+            guard let buffer = makeBuffer() else { return nil }
+            let image = VirtualCameraRenderer.oriented(
+                CIImage(cvPixelBuffer: lastLiveBuffer),
+                framing: VirtualCameraFraming(flipHorizontal: true))
+            renderer.render(image, into: buffer)
+            self.lastLiveBuffer = buffer
+            lastLiveMirrored = state.mirrorOutput
+            return buffer
+        }
+        let key =
+            "\(state.privacy.rawValue)|\(state.privacyMessage)|\(outputSize)|\(state.mirrorOutput)"
         if key == privacyKey, let privacyBuffer { return privacyBuffer }
-        let backdrop = lastLiveBuffer.map { CIImage(cvPixelBuffer: $0) }
-        let image = renderer.privacyImage(
+        let backdrop = lastLiveBuffer.map {
+            VirtualCameraRenderer.oriented(
+                CIImage(cvPixelBuffer: $0),
+                framing: VirtualCameraFraming(flipHorizontal: lastLiveMirrored))
+        }
+        var image = renderer.privacyImage(
             state.privacy, message: state.privacyMessage, backdrop: backdrop, output: outputSize)
+        if state.mirrorOutput {
+            image = VirtualCameraRenderer.oriented(
+                image, framing: VirtualCameraFraming(flipHorizontal: true))
+        }
         guard let buffer = makeBuffer() else { return nil }
         renderer.render(image, into: buffer)
         privacyBuffer = buffer

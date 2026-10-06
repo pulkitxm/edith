@@ -140,6 +140,39 @@ struct VirtualCameraMeetingTests {
         #expect(state.privacy == .live)
     }
 
+    @Test(arguments: [VirtualCameraPrivacy.card, .freeze])
+    func outputOrientationCanChangeWhileAwayOrFrozen(privacy: VirtualCameraPrivacy) throws {
+        var state = VirtualCameraState()
+        let pipeline = VirtualCameraPipeline(
+            state: state, outputSize: CGSize(width: 320, height: 180))
+        let input = try #require(VirtualCameraFixtures.quadrants())
+        _ = try #require(pipeline.process(input, at: 1))
+        state.privacy = privacy
+        state.privacyMessage = "Back in five"
+        pipeline.update(state: state)
+        let plain = try #require(pipeline.privacyFrame())
+        state.mirrorOutput = true
+        pipeline.update(state: state)
+        let flipped = try #require(pipeline.privacyFrame())
+        #expect(flipped !== plain)
+        state.mirrorOutput = false
+        pipeline.update(state: state)
+        let restored = try #require(pipeline.privacyFrame())
+        for y in stride(from: 10, to: 175, by: 5) {
+            for x in stride(from: 10, to: 310, by: 5) {
+                let a = VirtualCameraFixtures.pixel(plain, x: x, y: y)
+                let b = VirtualCameraFixtures.pixel(flipped, x: 319 - x, y: y)
+                let c = VirtualCameraFixtures.pixel(restored, x: x, y: y)
+                #expect(
+                    abs(a.red - b.red) <= 2 && abs(a.green - b.green) <= 2
+                        && abs(a.blue - b.blue) <= 2)
+                #expect(
+                    abs(a.red - c.red) <= 2 && abs(a.green - c.green) <= 2
+                        && abs(a.blue - c.blue) <= 2)
+            }
+        }
+    }
+
     @Test func outputMirroringIncludesTheOverlay() throws {
         let size = CGSize(width: 320, height: 180)
         var composition = VirtualCameraComposition()

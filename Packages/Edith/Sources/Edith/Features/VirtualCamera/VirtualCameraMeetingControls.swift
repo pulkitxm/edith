@@ -102,9 +102,11 @@ struct VirtualCameraMeetingControls: View {
                 )
                 .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
             }
-            Text(model.state.mirrorPreview ? "Mirrored self preview" : "Audience preview")
-                .font(.system(size: UIScale.pt(11), weight: .medium))
-                .foregroundStyle(DashSkin.inkFaint(dark))
+            EdithSegmentedPicker(
+                "Preview", selection: model.stateBinding(\.mirrorPreview),
+                options: [false, true], label: { $0 ? "Mirrored self view" : "Audience view" })
+            Text("Audience view shows the output orientation. Meet mirrors its local self view.")
+                .font(.edithText(.caption)).foregroundStyle(DashSkin.inkFaint(dark))
         }
         .padding(UIScale.pt(12))
         .background(RoundedRectangle(cornerRadius: UIScale.pt(12)).fill(DashSkin.paper2(dark)))
@@ -149,6 +151,7 @@ extension VirtualCameraPageModel {
                 audioEnabled: selection.systemAudio)
             $0.privacy = .live
             $0.composition.framing = VirtualCameraFraming()
+            $0.mirrorPreview = false
         }
         flushSave()
     }
@@ -183,6 +186,7 @@ extension VirtualCameraPageModel {
             $0.media = VirtualCameraMedia(kind: .video, path: url.path)
             $0.privacy = .live
             $0.composition.framing = VirtualCameraFraming()
+            $0.mirrorPreview = false
         }
     }
 }

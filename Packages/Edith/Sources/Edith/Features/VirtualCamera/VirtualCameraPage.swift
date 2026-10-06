@@ -50,22 +50,33 @@ struct VirtualCameraPage: View {
     }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true) {
+        PageWorkspace {
             PageHeader(
                 "Virtual Camera",
                 trailing: { VirtualCameraHeaderControls(model: model, dark: dark) })
         } content: {
-            PageColumns {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    VirtualCameraStage(model: model, dark: dark)
-                    VirtualCameraMeetingControls(model: model, dark: dark)
-                    VirtualCameraToolbar(model: model, dark: dark)
-                    VirtualCameraSceneStrip(model: model, dark: dark)
+            if compact {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                        meetingStage
+                        VirtualCameraInspector(model: model, dark: dark)
+                    }
+                    .pageContent(compact)
                 }
-                .frame(minWidth: UIScale.pt(0), maxWidth: .infinity, alignment: .topLeading)
-                VirtualCameraInspector(model: model, dark: dark)
-                    .frame(width: compact ? nil : UIScale.pt(340))
-                    .frame(maxWidth: compact ? .infinity : nil, alignment: .topLeading)
+            } else {
+                HStack(alignment: .top, spacing: UIScale.pt(16)) {
+                    ScrollView {
+                        meetingStage.padding(UIScale.pt(2))
+                    }
+                    .frame(maxWidth: .infinity)
+                    ScrollView {
+                        VirtualCameraInspector(model: model, dark: dark)
+                            .padding(UIScale.pt(2))
+                    }
+                    .frame(width: UIScale.pt(340))
+                }
+                .pageGutter(compact)
+                .padding(.bottom, UIScale.pt(12))
             }
         }
         .navigationRoute("inspector", selection: $model.tab)
@@ -86,6 +97,17 @@ struct VirtualCameraPage: View {
             Text(model.errorMessage ?? "")
         }
     }
+
+    private var meetingStage: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            VirtualCameraStage(model: model, dark: dark)
+            VirtualCameraMeetingControls(model: model, dark: dark)
+            VirtualCameraToolbar(model: model, dark: dark)
+            VirtualCameraSceneStrip(model: model, dark: dark)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
 }
 
 struct VirtualCameraHeaderControls: View {
