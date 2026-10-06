@@ -295,6 +295,12 @@ private final class VirtualCameraReply: @unchecked Sendable {
 }
 
 public enum VirtualCameraOperationExecution {
+    static func deadline(for timeout: Duration, now: Date = Date()) -> Date {
+        let components = timeout.components
+        let seconds = Double(components.seconds) + Double(components.attoseconds) / 1e18
+        return now.addingTimeInterval(seconds)
+    }
+
     public static var extensionEntry: ExtensionRegistryEntry? {
         ExtensionRegistry.entries.first { $0.defaultsKey == AppStorageKeys.VirtualCamera.enabled }
     }
@@ -302,9 +308,8 @@ public enum VirtualCameraOperationExecution {
     public static func request(
         _ request: VirtualCameraRequest, timeout: Duration = .seconds(10)
     ) async throws -> VirtualCameraSnapshot {
-        let seconds = Double(timeout.components.seconds)
         let runtime = VirtualCameraRuntimeRequest(
-            request: request, deadline: Date().addingTimeInterval(seconds))
+            request: request, deadline: deadline(for: timeout))
         guard let payload = runtime.payload else {
             throw VirtualCameraOperationFailure("The camera request could not be encoded.")
         }
