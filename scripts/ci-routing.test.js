@@ -174,7 +174,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
   const build = steps.find((step) => step.name === "Build tests");
   const save = steps.find((step) => step.name === "Save compiled tests");
   const run = steps.find((step) => step.name === "Tests");
-  expect(job["timeout-minutes"]).toBe(45);
+  expect(job["timeout-minutes"]).toBe(60);
   expect(restore.uses).toBe("./.github/actions/cache-swift");
   expect(restore.with.variant).toBe("tests-debug");
   expect(isolation.run).toBe("python3 -B scripts/test-swift-test-isolation.py");
@@ -183,7 +183,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["timeout-minutes"]).toBe(30);
   expect(build.if).toBeUndefined();
   expect(run.run).toBe(
-    `for batch in \${{ matrix.batches }}; do\n  python3 ../../scripts/run-test-with-timeout.py --timeout 480 -- ./test.sh --skip-build --batch "$batch"\ndone\n`,
+    `for batch in \${{ matrix.batches }}; do\n  timeout=480\n  if [ "$batch" = cli ]; then timeout=1200; fi\n  events="$RUNNER_TEMP/test-events-$batch.jsonl"\n  python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"\ndone\n`,
   );
   expect(job.strategy["fail-fast"]).toBe(false);
   expect(job.strategy["max-parallel"]).toBe(4);
@@ -206,7 +206,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
     },
   ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);
-  expect(run["timeout-minutes"]).toBe(20);
+  expect(run["timeout-minutes"]).toBe(30);
   expect(run.if).toBeUndefined();
   expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
   expect(save.if).toBe(

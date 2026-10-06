@@ -2,6 +2,7 @@
 import argparse
 import math
 import os
+import pathlib
 import signal
 import subprocess
 import sys
@@ -57,12 +58,28 @@ def stop_group(process, processes):
     signal_processes(processes, signal.SIGKILL)
 
 
-def run(command, timeout):
+def report_events(path):
+    if path is None:
+        return
+    try:
+        with path.open("rb") as source:
+            source.seek(0, os.SEEK_END)
+            source.seek(max(0, source.tell() - 65536))
+            lines = source.read().decode("utf-8", errors="replace").splitlines()[-20:]
+        print("Last test events:", file=sys.stderr, flush=True)
+        for line in lines:
+            print(line, file=sys.stderr, flush=True)
+    except OSError as error:
+        print(f"Test events unavailable: {error}", file=sys.stderr, flush=True)
+
+
+def run(command, timeout, events=None):
     process = subprocess.Popen(command, start_new_session=True)
     try:
         return process.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         print(f"Test command exceeded {timeout:g} seconds: {command}", file=sys.stderr, flush=True)
+        report_events(events)
         processes = process_tree(process.pid)
         try:
             sample_group(processes)
@@ -77,6 +94,7 @@ def run(command, timeout):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--timeout", type=float, required=True)
+    parser.add_argument("--events", type=pathlib.Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
     command = arguments.command
@@ -84,7 +102,7 @@ def main():
         command = command[1:]
     if not command or not math.isfinite(arguments.timeout) or arguments.timeout <= 0:
         parser.error("provide a command and a positive timeout")
-    return run(command, arguments.timeout)
+    return run(command, arguments.timeout, arguments.events)
 
 
 if __name__ == "__main__":

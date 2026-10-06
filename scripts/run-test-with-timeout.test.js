@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
-import { resolve } from "node:path";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 const script = resolve("scripts/run-test-with-timeout.py");
 
@@ -56,4 +58,25 @@ test("test descendants in separate process groups are also cleaned up", () => {
     .stdout.toString()
     .trim();
   expect(status === "" || status.startsWith("Z")).toBe(true);
+});
+
+test("timeout diagnostics retain the final events beyond buffered test output", () => {
+  const directory = mkdtempSync(join(tmpdir(), "test-timeout-events-"));
+  try {
+    const events = join(directory, "events.jsonl");
+    writeFileSync(events, Array.from({ length: 1000 }, (_, index) =>
+      JSON.stringify({ kind: "testStarted", test: `synthetic-${index}` })
+    ).join("\n"));
+    const result = Bun.spawnSync([
+      "python3", "-B", script, "--timeout", "0.2", "--events", events,
+      "--", "python3", "-c", "import time; time.sleep(60)",
+    ]);
+    expect(result.exitCode).toBe(124);
+    const output = result.stderr.toString();
+    expect(output).toContain("Last test events:");
+    expect(output).toContain('"test":"synthetic-999"');
+    expect(output).not.toContain('"test":"synthetic-979"');
+  } finally {
+    rmSync(directory, { recursive: true });
+  }
 });

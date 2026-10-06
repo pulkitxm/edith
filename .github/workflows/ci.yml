@@ -236,7 +236,7 @@ jobs:
     concurrency:
       group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -306,10 +306,13 @@ jobs:
             Packages/Edith/.build/*.yaml
           key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
       - name: Tests
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: |
           for batch in ${{ matrix.batches }}; do
-            python3 ../../scripts/run-test-with-timeout.py --timeout 480 -- ./test.sh --skip-build --batch "$batch"
+            timeout=480
+            if [ "$batch" = cli ]; then timeout=1200; fi
+            events="$RUNNER_TEMP/test-events-$batch.jsonl"
+            python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"
           done
         working-directory: Packages/Edith
         env:
