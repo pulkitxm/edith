@@ -30,6 +30,8 @@
     { "name": "extensions", "filter": "^EdithTests\\.(Extension|Lid)" },
     { "name": "files", "filter": "^EdithTests\\.(File|Finder|Shelf)" },
     { "name": "database-ui", "filter": "^EdithTests\\.Database" },
+    { "name": "studio", "filter": "^EdithTests\\.Studio" },
+    { "name": "time-lapse", "filter": "^EdithTests\\.TimeLapse" },
     { "name": "app", "complement": true }
   ],
   "studio": [

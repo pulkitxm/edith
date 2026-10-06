@@ -202,7 +202,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
     },
     {
       lane: "dashboard-app",
-      batches: "dashboard extensions files database-ui app",
+      batches: "dashboard extensions files database-ui studio time-lapse app",
     },
   ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);
