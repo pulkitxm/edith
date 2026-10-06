@@ -126,8 +126,13 @@ import Testing
         #expect(await fixture.launches.requests.isEmpty)
 
         fixture.clock.advance(301)
-        await fixture.service.fireDue()
-        try await eventually { await fixture.launches.requests.count == 1 }
+        let firstNextRunAt = fixture.clock.now.addingTimeInterval(300)
+        try await eventually {
+            await fixture.service.fireDue()
+            let recorded = try? await fixture.service.list().first
+            guard await fixture.launches.requests.count == 1 else { return false }
+            return recorded?.lastTaskID != nil && recorded?.nextRunAt == firstNextRunAt
+        }
         let request = try #require(await fixture.launches.requests.first)
         #expect(request.executableURL.path == "/usr/bin/true")
         #expect(request.arguments == ["--quiet"])
@@ -153,11 +158,20 @@ import Testing
         await fixture.launches.hold()
         _ = try await fixture.service.add(definition())
         fixture.clock.advance(301)
-        await fixture.service.fireDue()
-        try await eventually { await fixture.launches.requests.count == 1 }
+        let firstNextRunAt = fixture.clock.now.addingTimeInterval(300)
+        try await eventually {
+            await fixture.service.fireDue()
+            let recorded = try? await fixture.service.list().first
+            guard await fixture.launches.requests.count == 1 else { return false }
+            return recorded?.lastTaskID != nil && recorded?.nextRunAt == firstNextRunAt
+        }
 
         fixture.clock.advance(300)
-        await fixture.service.fireDue()
+        let skippedNextRunAt = fixture.clock.now.addingTimeInterval(300)
+        try await eventually {
+            await fixture.service.fireDue()
+            return (try? await fixture.service.list().first?.nextRunAt) == skippedNextRunAt
+        }
         #expect(await fixture.launches.requests.count == 1)
         let skipped = try #require(try await fixture.service.list().first)
         #expect(skipped.nextRunAt == fixture.clock.now.addingTimeInterval(300))
