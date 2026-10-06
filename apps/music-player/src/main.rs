@@ -1,6 +1,6 @@
 use clap::Parser;
 use librespot::{
-    connect::{ConnectConfig, LoadRequest, LoadRequestOptions, Spirc},
+    connect::{ConnectConfig, LoadRequest, LoadRequestOptions, PlayingTrack, Spirc},
     core::{authentication::Credentials, config::SessionConfig, session::Session},
     metadata::audio::UniqueFields,
     playback::{
@@ -29,13 +29,41 @@ struct Arguments {
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "camelCase")]
 enum Command {
-    Play { uri: String },
+    Play {
+        uri: String,
+        index: Option<u32>,
+    },
     Toggle,
     Pause,
     Next,
     Previous,
-    Seek { milliseconds: u32 },
-    Volume { value: f64 },
+    Seek {
+        milliseconds: u32,
+    },
+    Volume {
+        value: f64,
+    },
+    AuthorizeLibrary,
+    Catalog {
+        #[serde(flatten)]
+        request: catalog::Request,
+    },
+    QueueAdd {
+        uri: String,
+    },
+    Shuffle {
+        value: bool,
+    },
+    Repeat {
+        mode: String,
+    },
+    SetSaved {
+        uri: String,
+        saved: bool,
+    },
+    CreatePlaylist {
+        name: String,
+    },
     Disconnect,
 }
 
@@ -46,17 +74,12 @@ fn emit(value: Value) {
 }
 
 fn valid_uri(uri: &str) -> bool {
-    let pieces: Vec<_> = uri.split(':').collect();
-    pieces.len() == 3
-        && pieces[0] == "spotify"
-        && ["track", "album", "playlist", "episode"].contains(&pieces[1])
-        && pieces[2].len() == 22
-        && pieces[2].bytes().all(|b| b.is_ascii_alphanumeric())
+    catalog::catalog_uri(uri)
 }
 
 fn execute(spirc: &Spirc, command: Command) -> Result<bool, librespot::core::Error> {
     match command {
-        Command::Play { uri } => {
+        Command::Play { uri, index } => {
             if !valid_uri(&uri) {
                 return Err(librespot::core::Error::invalid_argument(
                     "invalid Spotify link",
@@ -65,9 +88,12 @@ fn execute(spirc: &Spirc, command: Command) -> Result<bool, librespot::core::Err
             spirc.activate()?;
             spirc.load(LoadRequest::from_context_uri(
                 uri,
-                LoadRequestOptions::default(),
+                LoadRequestOptions {
+                    start_playing: true,
+                    playing_track: index.map(PlayingTrack::Index),
+                    ..Default::default()
+                },
             ))?;
-            spirc.play()?;
         }
         Command::Toggle => spirc.play_pause()?,
         Command::Pause => spirc.pause()?,
@@ -80,9 +106,31 @@ fn execute(spirc: &Spirc, command: Command) -> Result<bool, librespot::core::Err
             }
             spirc.set_volume((value.clamp(0.0, 1.0) * u16::MAX as f64) as u16)?;
         }
+        Command::Shuffle { value } => spirc.shuffle(value)?,
+        Command::Repeat { mode } => match mode.as_str() {
+            "off" => {
+                spirc.repeat(false)?;
+                spirc.repeat_track(false)?;
+            }
+            "context" => {
+                spirc.repeat_track(false)?;
+                spirc.repeat(true)?;
+            }
+            "track" => spirc.repeat_track(true)?,
+            _ => {
+                return Err(librespot::core::Error::invalid_argument(
+                    "invalid repeat mode",
+                ));
+            }
+        },
         Command::Disconnect => {
             spirc.shutdown()?;
             return Ok(false);
+        }
+        _ => {
+            return Err(librespot::core::Error::invalid_argument(
+                "invalid playback command",
+            ));
         }
     }
     Ok(true)
@@ -95,6 +143,7 @@ async fn run(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let entry = keyring::Entry::new(service, "spotify")?;
     if mode == Some("--forget") {
+        catalog::Library::forget(service)?;
         match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => return Ok(()),
             Err(error) => return Err(error.into()),
@@ -163,6 +212,8 @@ async fn run(
     };
     entry.set_password(&serde_json::to_string(&reusable)?)?;
     emit(json!({"event": "connected", "account": session.username()}));
+    let library = catalog::Library::new(service, session.clone())?;
+    library.start(mode != Some("--resume"));
     let connection = tokio::spawn(connection);
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     loop {
@@ -174,6 +225,11 @@ async fn run(
                     continue;
                 }
                 match serde_json::from_str::<Command>(&line) {
+                    Ok(Command::AuthorizeLibrary) => library.start(true),
+                    Ok(Command::Catalog { request }) => library.catalog(request),
+                    Ok(Command::QueueAdd { uri }) => library.mutate("queueAdd", Some(uri), false, None),
+                    Ok(Command::SetSaved { uri, saved }) => library.mutate("setSaved", Some(uri), saved, None),
+                    Ok(Command::CreatePlaylist { name }) => library.mutate("createPlaylist", None, false, Some(name)),
                     Ok(command) => match execute(&spirc, command) {
                         Ok(true) => {},
                         Ok(false) => break,
@@ -186,6 +242,7 @@ async fn run(
                 let Some(event) = event else { break };
                 match event {
                     PlayerEvent::TrackChanged { audio_item } => {
+                        if let Ok(uri) = audio_item.track_id.to_uri() { library.track_changed(uri); }
                         let (artist, album) = match &audio_item.unique_fields {
                             UniqueFields::Track { artists, album, .. } => (
                                 artists.iter().map(|artist| artist.name.as_str()).collect::<Vec<_>>().join(", "),
@@ -198,6 +255,7 @@ async fn run(
                         };
                         emit(json!({
                             "event": "track", "title": audio_item.name,
+                            "uri": audio_item.track_id.to_uri().ok(),
                             "artist": artist, "album": album,
                             "artwork": audio_item.covers.first().map(|cover| &cover.url),
                             "duration": f64::from(audio_item.duration_ms) / 1000.0,
@@ -209,6 +267,8 @@ async fn run(
                     PlayerEvent::Stopped { .. } => emit(json!({"event": "state", "playing": false, "elapsed": 0})),
                     PlayerEvent::Unavailable { .. } => emit(json!({"event": "error", "message": "Spotify could not play this item. Check Premium and its availability in your region."})),
                     PlayerEvent::VolumeChanged { volume } => emit(json!({"event": "volume", "value": f64::from(volume) / f64::from(u16::MAX)})),
+                    PlayerEvent::ShuffleChanged { shuffle } => emit(json!({"event":"state","shuffle":shuffle})),
+                    PlayerEvent::RepeatChanged { context, track } => emit(json!({"event":"state","repeat":if track { "track" } else if context { "context" } else { "off" }})),
                     _ => {},
                 }
             }
@@ -294,3 +354,5 @@ mod tests {
         );
     }
 }
+mod catalog;
+mod session_catalog;

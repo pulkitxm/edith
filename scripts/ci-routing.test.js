@@ -19,6 +19,30 @@ const areaPatterns = new Map(
 
 const matchesArea = (area, path) => areaPatterns.get(area)?.test(path) ?? false;
 
+test("Spotify catalog changes run native and locked Rust checks", () => {
+  for (const path of [
+    "apps/music-player/src/catalog.rs",
+    "apps/music-player/Cargo.toml",
+    "apps/music-player/Cargo.lock",
+  ]) {
+    expect(matchesArea("music_player", path)).toBe(true);
+    expect(matchesArea("swift", path)).toBe(true);
+  }
+  expect(matchesArea("music_player", "docs/music.md")).toBe(false);
+  const job = ciJobs["music-player"];
+  expect(job.needs).toBe("changes");
+  expect(job.if).toBe("needs.changes.outputs.music_player == 'true'");
+  expect(job["runs-on"]).toBe("macos-26");
+  const checks = job.steps.find(
+    (step) => step["working-directory"] === "apps/music-player",
+  );
+  expect(checks.run).toContain("cargo +stable fmt --check");
+  expect(checks.run).toContain(
+    "cargo +stable clippy --locked --all-targets -- -D warnings",
+  );
+  expect(checks.run).toContain("cargo +stable test --locked");
+});
+
 const pushPaths = (workflow) => {
   const push = workflow.slice(
     workflow.indexOf("  push:"),
