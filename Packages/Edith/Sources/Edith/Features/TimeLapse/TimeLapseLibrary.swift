@@ -176,11 +176,11 @@ enum TimeLapseExporter {
             mix.inputParameters = audioTracks.map { track in
                 let parameters = AVMutableAudioMixInputParameters(track: track)
                 parameters.setVolume(audioTracks.count > 1 ? 0.5 : 1, at: .zero)
-                parameters.audioTimePitchAlgorithm = .spectral
+                parameters.audioTimePitchAlgorithm = .timeDomain
                 return parameters
             }
             exporter.audioMix = mix
-            exporter.audioTimePitchAlgorithm = .spectral
+            exporter.audioTimePitchAlgorithm = .timeDomain
             let url = directory.appendingPathComponent(".\(UUID().uuidString).m4a")
             temporary.append(url)
             try await exporter.export(to: url, as: .m4a)
