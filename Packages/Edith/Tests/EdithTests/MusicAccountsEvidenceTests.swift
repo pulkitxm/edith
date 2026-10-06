@@ -26,24 +26,34 @@ import Testing
             Data(
                 """
                 {"event":"connected","account":"sample-listener"}
-                {"event":"track","title":"Evening Colors","duration":210}
+                {"event":"track","title":"Evening Colors","artist":"The Daylight Sessions","album":"After Hours","duration":210}
                 {"event":"state","playing":true,"elapsed":42}
 
                 """.utf8), generation: spotify.generation)
         spotify.error = nil
+        let layouts: [(CGFloat, ColorScheme, Double, String)] = [
+            (1024, .dark, 1, ""), (600, .light, 1, "-compact-light"),
+            (1024, .light, 1.5, "-zoom-light"), (600, .dark, 1.5, "-compact-zoom"),
+        ]
         for provider in [MusicProvider.spotify, .youtubeMusic] {
             accounts.select(provider)
             let name = provider == .spotify ? "spotify" : "youtube-music"
-            let layouts: [(CGFloat, ColorScheme, Double, String)] = [
-                (1024, .dark, 1, ""), (600, .light, 1, "-compact-light"),
-                (1024, .light, 1.5, "-zoom-light"), (600, .dark, 1.5, "-compact-zoom"),
-            ]
             for (width, scheme, zoom, suffix) in layouts {
                 UIScale.apply(zoom)
                 try await capture(
                     accounts, width: width, scheme: scheme,
                     at: directory.appendingPathComponent("\(name)\(suffix).png"))
             }
+        }
+        spotify.stop()
+        defaults.removeObject(forKey: "musicSpotifyAccountSaved")
+        accounts.select(.spotify)
+        spotify.error = nil
+        for (width, scheme, zoom, suffix) in layouts {
+            UIScale.apply(zoom)
+            try await capture(
+                accounts, width: width, scheme: scheme,
+                at: directory.appendingPathComponent("spotify-connect\(suffix).png"))
         }
         accounts.shutdown()
     }

@@ -669,8 +669,9 @@ struct MainWindowView: View {
 
     private var musicFooterVisible: Bool {
         guard musicEnabled, mediaSuite else { return false }
-        return !musicBarAutoHide || MusicRemote.shared.current != nil
-            || MusicAccounts.shared.spotify.connected || MusicAccounts.shared.youtubeConnected
+        let accounts = MusicAccounts.shared
+        guard accounts.playerReady else { return false }
+        return !musicBarAutoHide || accounts.playerTitle != nil
     }
 
     private var detailShadow: Color {

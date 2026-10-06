@@ -76,6 +76,37 @@ import WebKit
         #expect(session.generation != old)
     }
 
+    @Test func trackMetadataUpdatesAndClearsBetweenTracks() {
+        let session = MusicSpotifySession(executable: nil, defaults: defaults())
+        event(
+            #"{"event":"track","title":"Mock Track","artist":"Mock Artist","album":"Mock Album","artwork":"https://i.scdn.co/image/mock-cover","duration":180}"#,
+            to: session)
+        #expect(session.artist == "Mock Artist")
+        #expect(session.album == "Mock Album")
+        #expect(session.artworkURL?.absoluteString == "https://i.scdn.co/image/mock-cover")
+        event(#"{"event":"track","title":"Another Mock Track","duration":90}"#, to: session)
+        #expect(session.artist.isEmpty)
+        #expect(session.album.isEmpty)
+        #expect(session.artworkURL == nil)
+        session.stop()
+        #expect(session.title.isEmpty)
+    }
+
+    @Test(arguments: [
+        "http://i.scdn.co/image/mock", "https://evil.example/image/mock",
+        "https://i.scdn.co.evil.example/image/mock", "https://user@i.scdn.co/image/mock",
+        "https://i.scdn.co:8443/image/mock", "file:///tmp/mock-cover.png",
+        "https://i.scdn.co/unrelated/mock",
+    ])
+    func rejectsUntrustedArtworkLocations(_ artwork: String) throws {
+        let session = MusicSpotifySession(executable: nil, defaults: defaults())
+        let event = try JSONSerialization.data(withJSONObject: [
+            "event": "track", "artwork": artwork,
+        ])
+        session.receive(event + Data([10]), generation: session.generation)
+        #expect(session.artworkURL == nil)
+    }
+
     @Test func errorsAreVisibleAndPlaybackResetsAfterExit() {
         let session = MusicSpotifySession(executable: nil, defaults: defaults())
         event(#"{"event":"connected","account":"mock-listener"}"#, to: session)
@@ -252,7 +283,13 @@ import WebKit
             defaults: defaults, spotify: spotify, pauseLocal: { pauses += 1 })
         accounts.select(.local)
         #expect(pauses == 0)
+        #expect(accounts.playerReady)
         accounts.select(.spotify)
+        #expect(!accounts.playerReady)
+        spotify.receive(
+            Data("{\"event\":\"connected\",\"account\":\"mock-listener\"}\n".utf8),
+            generation: spotify.generation)
+        #expect(accounts.playerReady)
         #expect(pauses == 1)
         #expect(defaults.string(forKey: "musicSelectedProvider") == "spotify")
         accounts.select(.youtubeMusic)
@@ -260,8 +297,10 @@ import WebKit
         #expect(accounts.selected == .youtubeMusic)
         #expect(!accounts.youtubeConnected)
         #expect(accounts.youtubeView == nil)
+        #expect(!accounts.playerReady)
         accounts.select(.local)
         #expect(accounts.selected == .local)
+        #expect(accounts.playerReady)
     }
 
     @Test func restoresKnownSourcesAndFallsBackForUnknownValues() {

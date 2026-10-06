@@ -13,6 +13,9 @@ final class MusicSpotifySession {
     private(set) var disconnecting = false
     private(set) var account = ""
     private(set) var title = ""
+    private(set) var artist = ""
+    private(set) var album = ""
+    private(set) var artworkURL: URL?
     private(set) var playing = false
     private(set) var duration = 0.0
     private(set) var volume = 0.7
@@ -107,6 +110,9 @@ final class MusicSpotifySession {
             send(["action": "volume", "value": volume])
         case "track":
             title = event["title"] as? String ?? ""
+            artist = event["artist"] as? String ?? ""
+            album = event["album"] as? String ?? ""
+            artworkURL = Self.coverURL(event["artwork"] as? String)
             duration = max(0, event["duration"] as? Double ?? 0)
             elapsedBase = 0
             updatedAt = Date()
@@ -122,6 +128,14 @@ final class MusicSpotifySession {
             error = event["message"] as? String ?? "Spotify could not complete this request."
         default: break
         }
+    }
+
+    private static func coverURL(_ value: String?) -> URL? {
+        guard let value, let url = URL(string: value),
+            url.scheme == "https", url.host == "i.scdn.co", url.user == nil,
+            url.password == nil, url.port == nil, url.path.hasPrefix("/image/")
+        else { return nil }
+        return url
     }
 
     func play(_ link: String) {
@@ -175,6 +189,9 @@ final class MusicSpotifySession {
         connecting = false
         account = ""
         title = ""
+        artist = ""
+        album = ""
+        artworkURL = nil
         playing = false
         duration = 0
         elapsedBase = 0
@@ -224,6 +241,14 @@ final class MusicAccounts: NSObject, WKNavigationDelegate, WKUIDelegate {
     private let defaults: UserDefaults
     private var youtubeGeneration = 0
     private let pauseLocal: @MainActor () -> Void
+
+    var playerReady: Bool {
+        switch selected {
+        case .local: true
+        case .spotify: spotify.connected
+        case .youtubeMusic: youtubeConnected
+        }
+    }
 
     var playerTitle: String? {
         switch selected {

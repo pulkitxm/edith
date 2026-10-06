@@ -2320,6 +2320,10 @@ struct MusicFooter: View {
     static let collapsedHeight: CGFloat = 2
 
     var body: some View {
+        if accounts.playerReady { playerBar }
+    }
+
+    private var playerBar: some View {
         ZStack(alignment: .trailing) {
             if collapsed {
                 collapsedLine

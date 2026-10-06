@@ -5,9 +5,13 @@ import WebKit
 
 struct MusicProviderContent: View {
     @State private var accounts = MusicAccounts.shared
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.colorScheme) private var scheme
+
     init(accounts: MusicAccounts? = nil) {
         _accounts = State(initialValue: accounts ?? .shared)
     }
+
     @State private var spotifyLink = ""
     @State private var profiles: [ChromeProfile] = []
     @State private var selectedProfile = ""
@@ -15,109 +19,295 @@ struct MusicProviderContent: View {
     @State private var profileError: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            if accounts.selected == .spotify { spotify } else { youtube }
-            Spacer(minLength: 0)
+        Group {
+            if accounts.selected == .youtubeMusic, accounts.youtubeConnected,
+                let view = accounts.youtubeView
+            {
+                youtubePlayer(view)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                        if accounts.selected == .spotify { spotify } else { youtube }
+                    }
+                    .pageContent(compact, width: .readable)
+                }
+                .scrollIndicators(.hidden)
+            }
         }
-        .padding(UIScale.pt(22))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .font(Font.edithText(.body))
-        .buttonStyle(.edith(.secondary))
+        .font(.edithText(.body))
         .edithSheet(isPresented: $showProfiles) { profilePicker }
         .pageTask { accounts.activate() }
     }
 
     private var spotify: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-            PageSectionHeader("Spotify") {
-                HStack {
-                    if accounts.spotify.connected {
-                        Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
-                    } else if accounts.spotify.connecting {
-                        SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
-                            .accessibilityLabel("Connecting Spotify")
-                        Button("Cancel") { accounts.spotify.stop() }
-                    } else {
-                        if accounts.spotify.hasSavedAccount {
-                            Button("Disconnect") { Task { await accounts.spotify.disconnect() } }
-                                .disabled(accounts.spotify.disconnecting)
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            PageSectionHeader("Spotify", subtitle: "Stream in Edith") {
+                if accounts.spotify.connected {
+                    Menu {
+                        Button("Disconnect Spotify") {
+                            Task { await accounts.spotify.disconnect() }
                         }
-                        Button("Connect Spotify") { accounts.spotify.connect() }
+                    } label: {
+                        Label(accounts.spotify.account, systemImage: "checkmark.circle.fill")
+                            .font(.edithText(.caption))
+                            .presenterBlur(.music)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                }
+            }
+            if let error = accounts.spotify.error { errorNotice(error) }
+            if accounts.spotify.connected {
+                PageCard { nowPlaying }
+                PageColumns {
+                    PageCard(title: "Play a Spotify link") {
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            Text("Tracks, albums, playlists, and podcasts.")
+                                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            EdithTextField(
+                                placeholder: "Paste a Spotify link", text: $spotifyLink,
+                                icon: "link", onSubmit: { accounts.spotify.play(spotifyLink) })
+                            Button {
+                                accounts.spotify.play(spotifyLink)
+                            } label: {
+                                Label("Play in Edith", systemImage: "play.fill")
+                            }
+                            .buttonStyle(.edith(.primary))
+                            .disabled(MusicProvider.spotifyURI(spotifyLink) == nil)
+                        }
+                    }
+                    PageCard(title: "Spotify Connect") {
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            featureRow(
+                                "hifispeaker", title: "Choose Edith as your device",
+                                detail: "Open Spotify's device picker to send your queue here.")
+                            Button {
+                                NSWorkspace.shared.open(MusicProvider.spotify.homeURL!)
+                            } label: {
+                                Label("Open Spotify", systemImage: "arrow.up.right")
+                            }
+                            .buttonStyle(.edith(.secondary))
+                        }
+                    }
+                }
+            } else {
+                connectionCard(
+                    provider: .spotify, title: "Listen with Spotify",
+                    detail: "Play your tracks and playlists without leaving Edith."
+                ) {
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        if accounts.spotify.connecting {
+                            HStack(spacing: UIScale.pt(8)) {
+                                LoadingIndicator()
+                                Text("Finish signing in in your browser.")
+                                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            }
+                            Button("Cancel sign-in") { accounts.spotify.stop() }
+                                .buttonStyle(.edith(.secondary))
+                        } else {
+                            Button {
+                                accounts.spotify.connect()
+                            } label: {
+                                Label("Connect Spotify", systemImage: "arrow.right")
+                            }
+                            .buttonStyle(.edith(.primary))
                             .disabled(accounts.spotify.disconnecting)
+                            if accounts.spotify.hasSavedAccount {
+                                Button("Remove saved account") {
+                                    Task { await accounts.spotify.disconnect() }
+                                }
+                                .buttonStyle(.edith(.secondary))
+                                .disabled(accounts.spotify.disconnecting)
+                            }
+                        }
+                        Label("Spotify Premium required", systemImage: "info.circle")
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    }
+                }
+                PageCard(title: "Two ways to listen") {
+                    PageColumns {
+                        featureRow(
+                            "link", title: "Paste a link",
+                            detail: "Play a track, album, playlist, or episode.")
+                        featureRow(
+                            "hifispeaker", title: "Use Spotify Connect",
+                            detail: "Choose Edith in Spotify's device picker.")
                     }
                 }
             }
-            if accounts.spotify.connected {
-                Text("Connected as \(accounts.spotify.account)")
-                    .presenterBlur(.music).foregroundStyle(.secondary)
-                Text(
-                    "Play a Spotify link here, or choose Edith in Spotify Connect to listen on this Mac."
-                )
-                .foregroundStyle(.secondary)
-                HStack {
-                    TextField("Spotify track, album, or playlist link", text: $spotifyLink)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { accounts.spotify.play(spotifyLink) }
-                    Button("Play") { accounts.spotify.play(spotifyLink) }
-                        .disabled(MusicProvider.spotifyURI(spotifyLink) == nil)
-                }
-                MusicStreamingControls(accounts: accounts)
-                Button("Browse Spotify") { NSWorkspace.shared.open(MusicProvider.spotify.homeURL!) }
-            } else {
-                Text(
-                    accounts.spotify.connecting
-                        ? "Finish signing in in your browser. You can cancel here at any time."
-                        : "Connect your Premium account to stream directly in Edith. Sign-in opens in your browser and your reusable credential stays in Keychain."
-                )
-                .foregroundStyle(.secondary)
-            }
-            if let error = accounts.spotify.error { errorMessage(error) }
         }
+    }
+
+    private var nowPlaying: some View {
+        HStack(alignment: .center, spacing: UIScale.pt(compact ? 18 : 28)) {
+            MusicStreamingArtwork(
+                url: accounts.spotify.artworkURL, size: compact ? 96 : 156)
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                HStack(spacing: UIScale.pt(8)) {
+                    PlaybackWave(
+                        playing: accounts.spotify.playing,
+                        color: DashSkin.accent(scheme == .dark), maxHeight: UIScale.pt(12))
+                    Text(accounts.spotify.playing ? "NOW PLAYING" : "READY TO PLAY")
+                        .font(.edithText(.caption2)).fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                }
+                Text(
+                    accounts.spotify.title.isEmpty
+                        ? "Choose something to play" : accounts.spotify.title
+                )
+                .font(.edithText(compact ? .title2 : .largeTitle)).fontWeight(.semibold)
+                .lineLimit(3).presenterBlur(.music)
+                if !accounts.spotify.artist.isEmpty {
+                    Text(accounts.spotify.artist)
+                        .font(.edithText(.body)).foregroundStyle(.secondary)
+                        .lineLimit(2).presenterBlur(.music)
+                }
+                if !accounts.spotify.album.isEmpty {
+                    Text(accounts.spotify.album)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .lineLimit(1).presenterBlur(.music)
+                }
+                Text(
+                    accounts.spotify.title.isEmpty
+                        ? "Paste a link below, or use Spotify Connect." : "Playing inside Edith"
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(UIScale.pt(8))
     }
 
     private var youtube: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            PageSectionHeader("YouTube Music") {
-                HStack {
-                    if accounts.youtubeConnecting {
-                        SkeletonGroup { SkeletonBlock(width: 16, height: 16, corner: 4) }
-                            .accessibilityLabel("Connecting YouTube Music")
+        VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            PageSectionHeader("YouTube Music", subtitle: "Your library and mixes, in Edith")
+            youtubeErrors
+            connectionCard(
+                provider: .youtubeMusic, title: "Listen with YouTube Music",
+                detail: "Bring your YouTube Music library, search, and playback into Edith."
+            ) {
+                HStack(spacing: UIScale.pt(10)) {
+                    Button(action: chooseProfile) {
+                        Label("Connect YouTube Music", systemImage: "arrow.right")
                     }
-                    Button(
-                        accounts.youtubeConnected ? "Reconnect" : "Connect YouTube Music",
-                        action: chooseProfile
-                    )
+                    .buttonStyle(.edith(.primary))
                     .disabled(accounts.youtubeConnecting)
-                    if accounts.youtubeConnected {
-                        Button("Reload") {
-                            accounts.youtubeError = nil; accounts.youtubeView?.reload()
-                        }
-                        Button("Disconnect") { Task { await accounts.disconnectYoutube() } }
-                            .disabled(accounts.youtubeConnecting)
-                    }
+                    if accounts.youtubeConnecting { LoadingIndicator() }
                 }
             }
-            if let error = accounts.youtubeError { errorMessage(error) }
-            if let error = profileError { errorMessage(error) }
-            if accounts.youtubeConnected, let view = accounts.youtubeView {
-                MusicYoutubeWebView(view: view)
-                    .frame(minHeight: UIScale.pt(360), maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
-                    .presenterCover(.music)
-            } else {
-                Text(
-                    "Sign in to YouTube Music in Chrome, then connect that profile. Edith imports only YouTube cookies into a separate player session. Your library, search, and playback stay inside this page."
-                )
-                .foregroundStyle(.secondary)
-                Button("Sign in in Chrome") { openYoutubeInChrome() }
+            PageCard(title: "Connect your account") {
+                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                        stepNumber(1)
+                        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                            Text("Sign in to YouTube Music")
+                                .font(.edithText(.headline))
+                            Text("Use the Chrome profile with your music account.")
+                                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            Button("Sign in in Chrome", action: openYoutubeInChrome)
+                                .buttonStyle(.edith(.secondary))
+                        }
+                    }
+                    Divider().opacity(0.5)
+                    HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                        stepNumber(2)
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            Text("Connect that profile")
+                                .font(.edithText(.headline))
+                            Text(
+                                "Your music opens here. Other websites and accounts stay in Chrome."
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        }
+                    }
+                }
             }
         }
     }
 
-    private func errorMessage(_ message: String) -> some View {
-        Label(message, systemImage: "exclamationmark.circle")
-            .font(Font.edithText(.callout)).foregroundStyle(.orange)
-            .fixedSize(horizontal: false, vertical: true)
+    private func youtubePlayer(_ view: WKWebView) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+            PageSectionHeader("YouTube Music") {
+                HStack(spacing: UIScale.pt(12)) {
+                    PageToolbarButton(
+                        action: {
+                            accounts.youtubeError = nil; view.reload()
+                        },
+                        systemImage: "arrow.clockwise", helperText: "Reload YouTube Music")
+                    Menu {
+                        Button("Reconnect", action: chooseProfile)
+                        Button("Disconnect YouTube Music") {
+                            Task { await accounts.disconnectYoutube() }
+                        }
+                    } label: {
+                        Label("Connected", systemImage: "checkmark.circle.fill")
+                            .font(.edithText(.caption))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .disabled(accounts.youtubeConnecting)
+                }
+            }
+            youtubeErrors
+            MusicYoutubeWebView(view: view)
+                .frame(minHeight: UIScale.pt(360), maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(12)))
+                .presenterCover(.music)
+        }
+        .pageGutter(compact)
+        .padding(.bottom, UIScale.pt(16))
+    }
+
+    @ViewBuilder private var youtubeErrors: some View {
+        if let error = accounts.youtubeError { errorNotice(error) }
+        if let error = profileError { errorNotice(error) }
+    }
+
+    private func connectionCard<Actions: View>(
+        provider: MusicProvider, title: String, detail: String,
+        @ViewBuilder actions: @escaping () -> Actions
+    ) -> some View {
+        PageCard {
+            let layout =
+                compact
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(18)))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: UIScale.pt(28)))
+            layout {
+                MusicSourceEmblem(provider: provider, size: compact ? 64 : 120)
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    Text(title).font(.edithText(.title2)).fontWeight(.semibold)
+                    Text(detail).font(.edithText(.body)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    actions()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(UIScale.pt(12))
+        }
+    }
+
+    private func featureRow(_ symbol: String, title: String, detail: String) -> some View {
+        HStack(alignment: .top, spacing: UIScale.pt(12)) {
+            Image(systemName: symbol)
+                .font(.edithText(.title3))
+                .foregroundStyle(DashSkin.accent(scheme == .dark))
+                .frame(width: UIScale.pt(30), height: UIScale.pt(30))
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                Text(title).font(.edithText(.headline))
+                Text(detail).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func stepNumber(_ number: Int) -> some View {
+        Text(number.formatted()).font(.edithText(.caption)).fontWeight(.semibold)
+            .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+            .background(.primary.opacity(0.07), in: Circle())
+    }
+
+    private func errorNotice(_ message: String) -> some View {
+        PageNotice(message, tone: .error)
     }
 
     private func chooseProfile() {
@@ -127,8 +317,7 @@ struct MusicProviderContent: View {
                 profiles = try await Task.detached { try MusicBrowserConnection.profiles() }.value
                 selectedProfile = profiles.first?.id ?? ""
                 if profiles.isEmpty {
-                    profileError =
-                        "Open Chrome and sign in to YouTube Music in a profile, then try again."
+                    profileError = "Open Chrome and sign in to YouTube Music, then try again."
                 } else {
                     showProfiles = true
                 }
@@ -138,18 +327,19 @@ struct MusicProviderContent: View {
 
     private var profilePicker: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-            Text("Connect YouTube Music").font(Font.edithText(.title2).weight(.semibold))
-            Text(
-                "Choose the Chrome profile signed in to your music account. macOS may ask you to allow access to Chrome Safe Storage in Keychain."
-            )
-            .foregroundStyle(.secondary)
+            Label("Connect YouTube Music", systemImage: "play.circle")
+                .font(.edithText(.title3)).fontWeight(.semibold)
+            Text("Choose the Chrome profile where you signed in to YouTube Music.")
+                .foregroundStyle(.secondary)
             Picker("Chrome profile", selection: $selectedProfile) {
                 ForEach(profiles) { profile in Text(profile.name).tag(profile.id) }
             }
             HStack {
-                Button("Sign in in Chrome") { openYoutubeInChrome() }
+                Button("Sign in in Chrome", action: openYoutubeInChrome)
+                    .buttonStyle(.edith(.secondary))
                 Spacer()
                 Button("Cancel") { showProfiles = false }
+                    .buttonStyle(.edith(.secondary))
                 Button("Connect") {
                     guard let profile = profiles.first(where: { $0.id == selectedProfile }) else {
                         return
@@ -157,13 +347,13 @@ struct MusicProviderContent: View {
                     showProfiles = false
                     Task { await accounts.connectYoutube(profile) }
                 }
+                .buttonStyle(.edith(.primary))
                 .disabled(selectedProfile.isEmpty)
                 .keyboardShortcut(.defaultAction)
             }
         }
-        .font(Font.edithText(.body))
-        .buttonStyle(.edith(.secondary))
-        .padding(UIScale.pt(24)).frame(width: UIScale.pt(480))
+        .font(.edithText(.body))
+        .padding(UIScale.pt(24)).frame(width: PresentationMetrics.width(480))
     }
 
     private func openYoutubeInChrome() {
@@ -186,49 +376,110 @@ struct MusicProviderContent: View {
 
 private struct MusicYoutubeWebView: NSViewRepresentable {
     let view: WKWebView
-    func makeNSView(context: Context) -> WKWebView { view }
-    func updateNSView(_ nsView: WKWebView, context: Context) {}
+    func makeNSView(context: Context) -> NSView { view }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+private struct MusicSourceEmblem: View {
+    let provider: MusicProvider
+    let size: Double
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let accent = DashSkin.accent(scheme == .dark)
+        ZStack {
+            Circle().fill(accent.opacity(0.08))
+            Circle().strokeBorder(accent.opacity(0.12), lineWidth: UIScale.pt(1))
+                .padding(UIScale.pt(size * 0.1))
+            Image(systemName: provider.symbol)
+                .font(.system(size: UIScale.pt(size * 0.38), weight: .light))
+                .foregroundStyle(accent)
+        }
+        .frame(width: UIScale.pt(size), height: UIScale.pt(size))
+        .accessibilityHidden(true)
+    }
+}
+
+struct MusicStreamingArtwork: View {
+    let url: URL?
+    var size = 40.0
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        AsyncImage(url: url) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        DashSkin.accent(scheme == .dark).opacity(0.3),
+                        DashSkin.paper2(scheme == .dark),
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing)
+                Circle().strokeBorder(.primary.opacity(0.08), lineWidth: UIScale.pt(1))
+                    .padding(UIScale.pt(size * 0.14))
+                Circle().fill(.primary.opacity(0.08))
+                    .frame(width: UIScale.pt(size * 0.33), height: UIScale.pt(size * 0.33))
+                Image(systemName: "music.note").font(.system(size: UIScale.pt(size * 0.25)))
+                    .foregroundStyle(DashSkin.accent(scheme == .dark))
+            }
+        }
+        .frame(width: UIScale.pt(size), height: UIScale.pt(size))
+        .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(size > 60 ? 12 : 6)))
+        .presenterCover(.music)
+        .accessibilityHidden(true)
+    }
 }
 
 struct MusicStreamingControls: View {
     @Environment(\.compactLayout) private var compact
+    @State private var optionsPresented = false
     @State private var accounts = MusicAccounts.shared
     init(accounts: MusicAccounts? = nil) {
         _accounts = State(initialValue: accounts ?? .shared)
     }
 
     var body: some View {
-        Group {
+        HStack(spacing: UIScale.pt(14)) {
+            trackSummary
+            transport
             if compact {
-                VStack(spacing: UIScale.pt(8)) {
-                    HStack(spacing: UIScale.pt(14)) {
-                        trackSummary
-                        transport
-                    }
-                    HStack(spacing: UIScale.pt(14)) {
+                Button {
+                    optionsPresented = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .frame(width: UIScale.pt(26), height: UIScale.pt(30))
+                }
+                .buttonStyle(.edith(.toolbar))
+                .accessibilityLabel("Spotify playback options")
+                .popover(isPresented: $optionsPresented) {
+                    VStack(spacing: UIScale.pt(12)) {
                         positionSlider
                         volumeSlider
                     }
+                    .padding(UIScale.pt(16))
+                    .frame(width: PresentationMetrics.width(280))
                 }
             } else {
-                HStack(spacing: UIScale.pt(14)) {
-                    trackSummary
-                    transport
-                    positionSlider.frame(width: UIScale.pt(160))
-                    volumeSlider
-                }
+                positionSlider.frame(width: UIScale.pt(180))
+                volumeSlider
             }
         }
-        .font(Font.edithText(.body))
+        .font(.edithText(.body))
         .disabled(!accounts.spotify.connected)
     }
 
     private var trackSummary: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-            Text(accounts.spotify.title.isEmpty ? "Nothing playing" : accounts.spotify.title)
-                .font(Font.edithText(.headline)).lineLimit(1).presenterBlur(.music)
-            Text(accounts.spotify.playing ? "Playing from Spotify" : "Spotify")
-                .font(Font.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+        HStack(spacing: UIScale.pt(10)) {
+            MusicStreamingArtwork(url: accounts.spotify.artworkURL)
+            VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                Text(accounts.spotify.title.isEmpty ? "Nothing playing" : accounts.spotify.title)
+                    .font(.edithText(.headline)).lineLimit(1).presenterBlur(.music)
+                Text(accounts.spotify.artist.isEmpty ? "Spotify" : accounts.spotify.artist)
+                    .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                    .presenterBlur(.music)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -245,30 +496,43 @@ struct MusicStreamingControls: View {
 
     private var positionSlider: some View {
         TimelineView(.periodic(from: .now, by: 1)) { _ in
-            Slider(
-                value: Binding(
-                    get: {
-                        accounts.spotify.duration > 0
-                            ? accounts.spotify.elapsed / accounts.spotify.duration : 0
-                    },
-                    set: {
-                        accounts.spotify.seek(
-                            by: $0 * accounts.spotify.duration - accounts.spotify.elapsed)
-                    }),
-                in: 0...1
-            )
-            .disabled(accounts.spotify.duration <= 0)
-            .accessibilityLabel("Spotify playback position")
+            VStack(spacing: UIScale.pt(2)) {
+                Slider(
+                    value: Binding(
+                        get: {
+                            accounts.spotify.duration > 0
+                                ? accounts.spotify.elapsed / accounts.spotify.duration : 0
+                        },
+                        set: {
+                            accounts.spotify.seek(
+                                by: $0 * accounts.spotify.duration - accounts.spotify.elapsed)
+                        }),
+                    in: 0...1
+                )
+                .frame(width: UIScale.pt(compact ? 248 : 180))
+                .disabled(accounts.spotify.duration <= 0)
+                .accessibilityLabel("Spotify playback position")
+                HStack {
+                    Text(TrackMeta.timeLabel(accounts.spotify.elapsed))
+                    Spacer()
+                    Text(TrackMeta.timeLabel(accounts.spotify.duration))
+                }
+                .font(.edithText(.caption2)).monospacedDigit().foregroundStyle(.secondary)
+            }
         }
     }
 
     private var volumeSlider: some View {
-        Slider(
-            value: Binding(
-                get: { accounts.spotify.volume }, set: { accounts.spotify.setVolume($0) }),
-            in: 0...1
-        )
-        .frame(width: UIScale.pt(90)).accessibilityLabel("Spotify volume")
+        HStack(spacing: UIScale.pt(6)) {
+            Image(systemName: "speaker.wave.2")
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            Slider(
+                value: Binding(
+                    get: { accounts.spotify.volume }, set: { accounts.spotify.setVolume($0) }),
+                in: 0...1
+            )
+            .frame(width: UIScale.pt(80)).accessibilityLabel("Spotify volume")
+        }
     }
 
     private func control(_ symbol: String, label: String, action: String) -> some View {
@@ -276,6 +540,8 @@ struct MusicStreamingControls: View {
             accounts.spotify.send(["action": action])
         } label: {
             Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(14)))
+                .frame(width: UIScale.pt(28), height: UIScale.pt(30))
         }
         .buttonStyle(.edith(.toolbar))
         .accessibilityLabel(label).help(label)

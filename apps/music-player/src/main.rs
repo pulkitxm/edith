@@ -2,6 +2,7 @@ use clap::Parser;
 use librespot::{
     connect::{ConnectConfig, LoadRequest, LoadRequestOptions, Spirc},
     core::{authentication::Credentials, config::SessionConfig, session::Session},
+    metadata::audio::UniqueFields,
     playback::{
         audio_backend,
         config::{AudioFormat, PlayerConfig},
@@ -184,10 +185,24 @@ async fn run(
             event = events.recv() => {
                 let Some(event) = event else { break };
                 match event {
-                    PlayerEvent::TrackChanged { audio_item } => emit(json!({
-                        "event": "track", "title": audio_item.name,
-                        "duration": f64::from(audio_item.duration_ms) / 1000.0,
-                    })),
+                    PlayerEvent::TrackChanged { audio_item } => {
+                        let (artist, album) = match &audio_item.unique_fields {
+                            UniqueFields::Track { artists, album, .. } => (
+                                artists.iter().map(|artist| artist.name.as_str()).collect::<Vec<_>>().join(", "),
+                                album.clone(),
+                            ),
+                            UniqueFields::Episode { show_name, .. } => (show_name.clone(), String::new()),
+                            UniqueFields::Local { artists, album, .. } => (
+                                artists.clone().unwrap_or_default(), album.clone().unwrap_or_default(),
+                            ),
+                        };
+                        emit(json!({
+                            "event": "track", "title": audio_item.name,
+                            "artist": artist, "album": album,
+                            "artwork": audio_item.covers.first().map(|cover| &cover.url),
+                            "duration": f64::from(audio_item.duration_ms) / 1000.0,
+                        }));
+                    },
                     PlayerEvent::Playing { position_ms, .. } => emit(json!({"event": "state", "playing": true, "elapsed": f64::from(position_ms) / 1000.0})),
                     PlayerEvent::Paused { position_ms, .. } => emit(json!({"event": "state", "playing": false, "elapsed": f64::from(position_ms) / 1000.0})),
                     PlayerEvent::PositionChanged { position_ms, .. } | PlayerEvent::Seeked { position_ms, .. } | PlayerEvent::PositionCorrection { position_ms, .. } => emit(json!({"event": "position", "elapsed": f64::from(position_ms) / 1000.0})),
