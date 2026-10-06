@@ -90,22 +90,27 @@ import Testing
         #expect(model.composition.background.mode == .none)
     }
 
-    @Test func helperStatusRepairsAMissedStateNotification() {
+    @Test func helperStatusRepairsStaleDefaultsAndAMissedStateNotification() {
         let (model, defaults, name) = Self.model()
         defer { defaults.removePersistentDomain(forName: name) }
         model.updateComposition { $0.background.mode = .color }
+        model.update { $0.media.audioEnabled = true }
         model.flushSave()
         var external = model.state
         external.composition.background.mode = .none
-        VirtualCameraStore.save(external, to: defaults)
+        external.media.audioEnabled = false
+        external.audio.enabled = true
         model.receive(
             VirtualCameraSnapshot(
                 enabled: true, helperRunning: true, extensionInstalled: false,
                 state: external))
         #expect(model.composition.background.mode == .none)
+        #expect(!model.state.media.audioEnabled)
+        #expect(model.state.audio.enabled)
         model.setZoom(2)
         model.flushSave()
         #expect(VirtualCameraStore.load(defaults).composition.background.mode == .none)
+        #expect(VirtualCameraStore.load(defaults).audio.enabled)
     }
 
     @Test func helperStatusDoesNotDiscardPendingWindowEdits() {

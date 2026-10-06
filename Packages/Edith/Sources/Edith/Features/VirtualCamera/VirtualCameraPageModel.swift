@@ -86,6 +86,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private let previewBusQueue = DispatchQueue(
         label: "com.pulkit.edith.camera.preview-demand", qos: .utility)
     private var saveTimer: Timer?
+    private var awaitingHelperState: VirtualCameraState?
     private var statusToken: NSObjectProtocol?
     private var stateToken: NSObjectProtocol?
     private var statusTask: Task<Void, Never>?
@@ -329,7 +330,12 @@ final class VirtualCameraPageModel: ObservableObject {
         statusPending = false
         if snapshot != decoded { snapshot = decoded }
         helperReachable = true
-        if saveTimer == nil { reloadState() }
+        if saveTimer == nil,
+            awaitingHelperState == nil || awaitingHelperState == decoded.state
+        {
+            awaitingHelperState = nil
+            reloadState(decoded.state)
+        }
         if visible { syncPreviewFeed() }
     }
 
@@ -354,6 +360,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func reloadState(_ announced: VirtualCameraState? = nil) {
+        if announced != nil { awaitingHelperState = nil }
         let stored = announced ?? VirtualCameraStore.load(defaults)
         guard stored != state else { return }
         state = stored
@@ -540,6 +547,7 @@ final class VirtualCameraPageModel: ObservableObject {
         saveTimer = nil
         guard VirtualCameraStore.load(defaults) != state else { return }
         VirtualCameraStore.save(state, to: defaults)
+        if visible { awaitingHelperState = state }
         VirtualCameraStore.announceChange(from: "window", state: state)
     }
 
