@@ -6,7 +6,6 @@ struct VirtualCameraMeetingControls: View {
     @ObservedObject var model: VirtualCameraPageModel
     let dark: Bool
     @State private var choosingScreen = false
-    @State private var choosingZoom = false
     @State private var audioDevices: [MeetingAudioDevice] = []
     @Environment(\.compactLayout) private var compact
 
@@ -39,76 +38,25 @@ struct VirtualCameraMeetingControls: View {
                 .help("Preview, playback and pause options")
                 .accessibilityLabel("Meeting options")
             }
-            HStack(spacing: UIScale.pt(12)) {
-                Button {
-                    model.toggleMeetingPlayback()
-                } label: {
-                    Label(
-                        model.meetingPlaying ? "Pause" : "Play",
-                        systemImage: model.meetingPlaying ? "pause.fill" : "play.fill"
-                    )
-                    .frame(minWidth: UIScale.pt(88), minHeight: UIScale.pt(28))
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: UIScale.pt(12)) {
+                    playbackButton
+                    microphoneButton
+                    zoomSlider.frame(width: UIScale.pt(180))
+                    recordingButton
                 }
-                .buttonStyle(.edith(.primary))
-                .help(
-                    model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
-                Button {
-                    if !model.state.audio.enabled {
-                        model.performAudio(.enable(true))
-                    } else {
-                        model.performAudio(.mute(!model.state.audio.muted))
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(spacing: UIScale.pt(10)) {
+                    HStack(spacing: UIScale.pt(12)) {
+                        playbackButton
+                        microphoneButton
+                        Spacer(minLength: UIScale.pt(4))
+                        recordingButton
                     }
-                } label: {
-                    Label(
-                        !model.state.audio.enabled
-                            ? "Enable audio"
-                            : model.state.audio.muted ? "Unmute mic" : "Mute mic",
-                        systemImage: model.state.audio.muted || !model.state.audio.enabled
-                            ? "mic.slash.fill" : "mic.fill"
-                    )
-                    .frame(minHeight: UIScale.pt(28))
+                    zoomSlider
                 }
-                .buttonStyle(.edith(.secondary))
-                .disabled(model.audioPending)
-                Spacer(minLength: UIScale.pt(4))
-                Button {
-                    choosingZoom = true
-                } label: {
-                    Label(
-                        String(format: "%.1fx", model.composition.framing.zoom),
-                        systemImage: "plus.magnifyingglass"
-                    )
-                    .frame(minHeight: UIScale.pt(28))
-                }
-                .buttonStyle(.edith(.secondary))
-                .accessibilityLabel("Video zoom")
-                .popover(isPresented: $choosingZoom) {
-                    VStack(spacing: UIScale.pt(12)) {
-                        Text("Zoom").font(.edithText(.headline))
-                        Slider(
-                            value: Binding(
-                                get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
-                            in: VirtualCameraFraming.zoomRange
-                        )
-                        .accessibilityLabel("Video zoom level")
-                        Button("Reset to 1x") { model.setZoom(1) }
-                            .buttonStyle(.edith(.secondary))
-                    }
-                    .padding(UIScale.pt(16)).frame(width: UIScale.pt(240))
-                }
-                Button {
-                    model.toggleRecording()
-                } label: {
-                    Label(
-                        model.snapshot?.recordingPath == nil ? "Record" : "Stop recording",
-                        systemImage: model.snapshot?.recordingPath == nil
-                            ? "record.circle" : "stop.circle.fill"
-                    )
-                    .frame(minHeight: UIScale.pt(28))
-                }
-                .buttonStyle(.edith(.secondary))
-                .disabled(model.state.privacy == .stopped && model.snapshot?.recordingPath == nil)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.edithText(.body))
         .padding(UIScale.pt(12))
@@ -119,6 +67,70 @@ struct VirtualCameraMeetingControls: View {
         .pageTask {
             audioDevices = await Task.detached(priority: .utility) { MeetingAudioDevices.list() }
                 .value
+        }
+    }
+
+    private var playbackButton: some View {
+        Button {
+            model.toggleMeetingPlayback()
+        } label: {
+            Label(
+                model.meetingPlaying ? "Pause" : "Play",
+                systemImage: model.meetingPlaying ? "pause.fill" : "play.fill"
+            )
+            .frame(minWidth: UIScale.pt(88), minHeight: UIScale.pt(28))
+        }
+        .buttonStyle(.edith(.primary))
+        .help(
+            model.meetingPlaying ? "Pause your meeting video" : "Resume your meeting video")
+    }
+
+    private var microphoneButton: some View {
+        Button {
+            if !model.state.audio.enabled {
+                model.performAudio(.enable(true))
+            } else {
+                model.performAudio(.mute(!model.state.audio.muted))
+            }
+        } label: {
+            Label(
+                !model.state.audio.enabled
+                    ? "Enable audio"
+                    : model.state.audio.muted ? "Unmute mic" : "Mute mic",
+                systemImage: model.state.audio.muted || !model.state.audio.enabled
+                    ? "mic.slash.fill" : "mic.fill"
+            )
+            .frame(minHeight: UIScale.pt(28))
+        }
+        .buttonStyle(.edith(.secondary))
+        .disabled(model.audioPending)
+    }
+
+    private var recordingButton: some View {
+        Button {
+            model.toggleRecording()
+        } label: {
+            Label(
+                model.snapshot?.recordingPath == nil ? "Record" : "Stop recording",
+                systemImage: model.snapshot?.recordingPath == nil
+                    ? "record.circle" : "stop.circle.fill"
+            )
+            .frame(minHeight: UIScale.pt(28))
+        }
+        .buttonStyle(.edith(.secondary))
+        .disabled(model.state.privacy == .stopped && model.snapshot?.recordingPath == nil)
+    }
+
+    private var zoomSlider: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Image(systemName: "magnifyingglass")
+            Slider(
+                value: Binding(get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
+                in: VirtualCameraFraming.zoomRange
+            )
+            .accessibilityLabel("Video zoom")
+            Text(String(format: "%.1fx", model.composition.framing.zoom))
+                .font(.edithText(.caption)).monospacedDigit().frame(width: UIScale.pt(36))
         }
     }
 
