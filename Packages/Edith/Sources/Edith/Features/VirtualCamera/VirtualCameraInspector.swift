@@ -8,38 +8,70 @@ struct VirtualCameraInspector: View {
     let dark: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-            HStack(spacing: UIScale.pt(4)) {
-                ForEach(VirtualCameraInspectorTab.allCases) { tab in
-                    Button {
-                        model.tab = tab
-                    } label: {
-                        VStack(spacing: UIScale.pt(3)) {
-                            Image(systemName: tab.symbolName)
-                                .font(.system(size: UIScale.pt(13)))
-                            Text(tab.title)
-                                .font(.system(size: UIScale.pt(10), weight: .medium))
+        ScrollView {
+            VStack(spacing: UIScale.pt(8)) {
+                meetingAudioControl
+                ForEach(VirtualCameraInspectorTab.allCases) { section in
+                    let expanded = model.expandedInspectorSections.contains(section)
+                    VStack(spacing: UIScale.pt(12)) {
+                        Button {
+                            model.setInspectorExpanded(section, !expanded)
+                        } label: {
+                            HStack {
+                                Label(section.title, systemImage: section.symbolName)
+                                Spacer()
+                                Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                            }
+                            .font(.edithText(.body))
+                            .frame(
+                                maxWidth: .infinity, minHeight: UIScale.pt(28), alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity)
-                        .foregroundStyle(
-                            model.tab == tab ? DashSkin.accent(dark) : DashSkin.inkSoft(dark))
+                        .buttonStyle(.edith(.secondary))
+                        .accessibilityLabel(
+                            "\(section.title), \(expanded ? "expanded" : "collapsed")")
+                        if expanded { panel(section) }
                     }
-                    .buttonStyle(.edith(.toolbar))
-                    .accessibilityAddTraits(model.tab == tab ? .isSelected : [])
                 }
             }
-            .padding(UIScale.pt(4))
-            .background(
-                RoundedRectangle(cornerRadius: UIScale.pt(10)).fill(DashSkin.paper2(dark)))
-            Group {
-                switch model.tab {
-                case .frame: VirtualCameraFramePanel(model: model, dark: dark)
-                case .look: VirtualCameraLookPanel(model: model, dark: dark)
-                case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
-                case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
-                case .output: VirtualCameraOutputPanel(model: model, dark: dark)
-                }
+            .padding(UIScale.pt(2))
+        }
+    }
+
+    private var meetingAudioControl: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            HStack {
+                Text("Meeting audio").font(.edithText(.body))
+                Spacer()
+                Toggle(
+                    "Meeting audio",
+                    isOn: Binding(
+                        get: { model.state.audio.enabled },
+                        set: { model.performAudio(.enable($0)) })
+                )
+                .labelsHidden().toggleStyle(.switch).disabled(model.audioPending)
             }
+            if let failure = model.snapshot?.audioStatus?.failure
+                ?? model.snapshot?.audioStatus?.sourceFailure
+            {
+                Text(failure).font(.edithText(.caption)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(UIScale.pt(12)).edithSurface(cornerRadius: 12)
+    }
+
+    @ViewBuilder private func panel(_ section: VirtualCameraInspectorTab) -> some View {
+        switch section {
+        case .frame:
+            VirtualCameraFramePanel(model: model, dark: dark)
+            VirtualCameraSceneStrip(model: model, dark: dark)
+        case .look: VirtualCameraLookPanel(model: model, dark: dark)
+        case .background: VirtualCameraBackgroundPanel(model: model, dark: dark)
+        case .overlays: VirtualCameraOverlayPanel(model: model, dark: dark)
+        case .output: VirtualCameraOutputPanel(model: model, dark: dark)
+        case .audio: VirtualCameraAudioPanel(model: model, dark: dark)
+        case .voice: VirtualCameraAudioPanel(model: model, dark: dark, section: .voice)
+        case .devices: VirtualCameraAudioPanel(model: model, dark: dark, section: .devices)
         }
     }
 }
@@ -179,12 +211,6 @@ struct VirtualCameraFramePanel: View {
                 title: "Framing", detail: "Drag the preview to move, scroll or pinch to zoom.",
                 dark: dark
             ) {
-                VirtualCameraSliderRow(
-                    title: "Zoom",
-                    value: Binding(
-                        get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
-                    range: VirtualCameraFraming.zoomRange, neutral: 1,
-                    format: { String(format: "%.2fx", $0) }, dark: dark)
                 VirtualCameraSliderRow(
                     title: "Left to right", value: model.binding(\.framing.centerX), range: 0...1,
                     neutral: 0.5, format: percent, dark: dark)
@@ -670,10 +696,13 @@ struct VirtualCameraOutputPanel: View {
                     "Scene changes", selection: model.stateBinding(\.transition),
                     options: VirtualCameraTransition.allCases, label: { $0.title })
                 VirtualCameraToggleRow(
-                    title: "Mirror the preview", isOn: model.stateBinding(\.mirrorPreview),
+                    title: "Mirror self preview", isOn: model.stateBinding(\.mirrorPreview),
+                    dark: dark)
+                VirtualCameraToggleRow(
+                    title: "Flip participant output", isOn: model.stateBinding(\.mirrorOutput),
                     dark: dark)
                 Text(
-                    "Mirroring only flips this preview. Apps receive the picture the right way round."
+                    "Meet mirrors its self preview. Use the audience preview here to check text and overlays."
                 )
                 .font(.system(size: UIScale.pt(11)))
                 .foregroundStyle(DashSkin.inkFaint(dark))

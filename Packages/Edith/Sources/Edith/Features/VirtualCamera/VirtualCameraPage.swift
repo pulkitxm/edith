@@ -25,11 +25,13 @@ struct VirtualCameraPageAttachment {
 struct VirtualCameraPage: View {
     @StateObject private var model: VirtualCameraPageModel
     @State private var attachment = VirtualCameraPageAttachment()
+    @State private var showingInspector = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
-    init(model: VirtualCameraPageModel? = nil) {
+    init(model: VirtualCameraPageModel? = nil, controlsVisible: Bool = false) {
         _model = StateObject(wrappedValue: model ?? VirtualCameraPageModel.shared)
+        _showingInspector = State(initialValue: controlsVisible)
     }
 
     private var dark: Bool { scheme == .dark }
@@ -50,23 +52,55 @@ struct VirtualCameraPage: View {
     }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true) {
+        PageWorkspace {
             PageHeader(
                 "Virtual Camera",
-                trailing: { VirtualCameraHeaderControls(model: model, dark: dark) })
+                trailing: {
+                    HStack(spacing: UIScale.pt(12)) {
+                        VirtualCameraStatusPill(model: model, dark: dark)
+                        Button {
+                            showingInspector.toggle()
+                        } label: {
+                            Label(
+                                showingInspector ? "Hide controls" : "Show controls",
+                                systemImage: "slider.horizontal.3")
+                        }
+                        .buttonStyle(.edith(.secondary))
+                    }
+                })
         } content: {
-            PageColumns {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    VirtualCameraStage(model: model, dark: dark)
-                    VirtualCameraToolbar(model: model, dark: dark)
-                    VirtualCameraSceneStrip(model: model, dark: dark)
+            GeometryReader { geometry in
+                HStack(spacing: UIScale.pt(16)) {
+                    meetingStage
+                    if !compact && showingInspector {
+                        VirtualCameraInspector(model: model, dark: dark)
+                            .frame(width: min(UIScale.pt(400), geometry.size.width * 0.4))
+                    }
                 }
-                .frame(minWidth: UIScale.pt(0), maxWidth: .infinity, alignment: .topLeading)
-                VirtualCameraInspector(model: model, dark: dark)
-                    .frame(width: compact ? nil : UIScale.pt(340))
-                    .frame(maxWidth: compact ? .infinity : nil, alignment: .topLeading)
+                .edithSheet(
+                    isPresented: Binding(
+                        get: { compact && showingInspector },
+                        set: { showingInspector = $0 })
+                ) {
+                    VStack(spacing: UIScale.pt(12)) {
+                        HStack {
+                            Text("Adjust your meeting").font(.edithText(.headline))
+                            Spacer()
+                            Button("Done") { showingInspector = false }
+                                .buttonStyle(.edith(.secondary))
+                        }
+                        VirtualCameraInspector(model: model, dark: dark)
+                    }
+                    .padding(UIScale.pt(16))
+                    .frame(
+                        width: min(UIScale.pt(440), geometry.size.width),
+                        height: min(UIScale.pt(580), geometry.size.height))
+                }
             }
+            .pageGutter(compact)
+            .padding(.bottom, UIScale.pt(12))
         }
+        .onChange(of: model.tab) { showingInspector = true }
         .navigationRoute("inspector", selection: $model.tab)
         .navigationRoute("scene", selection: sceneBinding, isValid: sceneIsValid)
         .pageTask(cancel: { attachment.release(model) }) {
@@ -85,38 +119,20 @@ struct VirtualCameraPage: View {
             Text(model.errorMessage ?? "")
         }
     }
-}
 
-struct VirtualCameraHeaderControls: View {
-    @ObservedObject var model: VirtualCameraPageModel
-    let dark: Bool
-
-    var body: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            VirtualCameraStatusPill(model: model, dark: dark)
-            if model.state.privacy == .live {
-                Menu {
-                    ForEach(
-                        [VirtualCameraPrivacy.stopped, .card, .blank, .freeze], id: \.self
-                    ) { mode in
-                        Button(mode.title) { model.pause(mode) }
-                    }
-                } label: {
-                    Label("Pause", systemImage: "pause.circle")
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                .help("Hide the camera from apps without leaving the call (⌃⌥⌘V by default)")
-            } else {
-                Button {
-                    model.resume()
-                } label: {
-                    Label("Go live", systemImage: "play.circle.fill")
-                }
-                .buttonStyle(.edith(.primary))
-                .help("Show the live camera again")
+    private var meetingStage: some View {
+        VStack(spacing: UIScale.pt(12)) {
+            GeometryReader { geometry in
+                let width = min(geometry.size.width, geometry.size.height * 16 / 9)
+                let height = width * 9 / 16
+                VirtualCameraStage(model: model, dark: dark)
+                    .frame(width: max(0, width), height: max(0, height))
+                    .frame(width: geometry.size.width, height: geometry.size.height)
             }
+            VirtualCameraMeetingControls(model: model, dark: dark)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -159,7 +175,7 @@ struct VirtualCameraStage: View {
             RoundedRectangle(cornerRadius: UIScale.pt(14), style: .continuous)
                 .fill(Color.black)
             if model.state.privacy != .stopped,
-                model.cameraAccess == .authorized || model.hasPreviewFrame
+                !model.needsCameraAccess || model.hasPreviewFrame
             {
                 VirtualCameraPreview(
                     display: model.display, mirrored: model.state.mirrorPreview,
@@ -176,7 +192,7 @@ struct VirtualCameraStage: View {
                         .font(.system(size: UIScale.pt(32)))
                     Text("Camera stopped")
                         .font(.system(size: UIScale.pt(18), weight: .semibold))
-                    Text("Capture, preview and output are off. Choose Go live to resume.")
+                    Text("Capture is off. Press Play to resume.")
                         .font(.system(size: UIScale.pt(12)))
                 }
                 .foregroundStyle(.white.opacity(0.7))
@@ -217,7 +233,7 @@ struct VirtualCameraStage: View {
                     LoadingIndicator(title).foregroundStyle(.white.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if model.cameraAccess != .authorized && !model.hasPreviewFrame {
+            } else if model.needsCameraAccess && !model.hasPreviewFrame {
                 VirtualCameraAccessPrompt(model: model)
             }
             if PresenterState.shared.hides(.camera), model.state.privacy != .stopped {
@@ -324,84 +340,6 @@ struct VirtualCameraAccessPrompt: View {
         }
         .multilineTextAlignment(.center)
         .padding()
-    }
-}
-
-struct VirtualCameraToolbar: View {
-    @ObservedObject var model: VirtualCameraPageModel
-    let dark: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack(spacing: UIScale.pt(10)) {
-                Menu {
-                    ForEach(model.sources) { source in
-                        Button {
-                            model.selectSource(source)
-                        } label: {
-                            Label(source.name, systemImage: source.symbolName)
-                        }
-                    }
-                    Divider()
-                    Button("Refresh cameras") { model.refreshSources() }
-                } label: {
-                    Label(
-                        model.selectedSource?.name
-                            ?? (model.sourcesLoaded ? "No camera" : "Finding cameras"),
-                        systemImage: model.selectedSource?.symbolName ?? "video.slash")
-                }
-                .menuStyle(.borderlessButton)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: UIScale.pt(180), alignment: .leading)
-                .help("Choose the camera Edith frames")
-            }
-            HStack(spacing: UIScale.pt(10)) {
-                Image(systemName: "minus.magnifyingglass")
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                Slider(
-                    value: Binding(
-                        get: { model.composition.framing.zoom }, set: { model.setZoom($0) }),
-                    in: VirtualCameraFraming.zoomRange
-                )
-                .frame(minWidth: UIScale.pt(60))
-                .accessibilityLabel("Zoom")
-                Image(systemName: "plus.magnifyingglass")
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                Text(String(format: "%.1fx", model.composition.framing.zoom))
-                    .font(DashSkin.mono(12))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .frame(width: UIScale.pt(40), alignment: .trailing)
-            }
-            HStack(spacing: UIScale.pt(10)) {
-                toolButton("rotate.left", "Rotate left") { model.rotate(clockwise: false) }
-                toolButton("rotate.right", "Rotate right") { model.rotate(clockwise: true) }
-                toolButton(
-                    "arrow.left.and.right.righttriangle.left.righttriangle.right",
-                    "Flip horizontally"
-                ) {
-                    model.updateComposition { $0.framing.flipHorizontal.toggle() }
-                }
-                toolButton(model.showsGrid ? "grid.circle.fill" : "grid", "Show the thirds grid") {
-                    model.showsGrid.toggle()
-                }
-                toolButton("arrow.counterclockwise", "Reset the framing") { model.resetFraming() }
-            }
-        }
-        .padding(.horizontal, UIScale.pt(12))
-        .padding(.vertical, UIScale.pt(8))
-        .edithSurface(cornerRadius: 12)
-    }
-
-    private func toolButton(_ symbol: String, _ help: String, action: @escaping () -> Void)
-        -> some View
-    {
-        Button(action: action) {
-            Image(systemName: symbol)
-        }
-        .buttonStyle(.edith(.iconOnly))
-        .help(help)
-        .accessibilityLabel(help)
     }
 }
 

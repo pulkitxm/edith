@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import CoreImage
 import CoreVideo
@@ -37,6 +38,8 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private let clock: @Sendable () -> TimeInterval
     private let lock = NSLock()
     private lazy var capture = VirtualCameraCapture(frameQueue: queue)
+    private lazy var video = VirtualCameraVideoSource(queue: queue)
+    private lazy var screen = VirtualCameraScreenCapture(queue: queue)
     private var state: VirtualCameraState
     private var outputSize: CGSize
     private var frameRate: Int
@@ -50,6 +53,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private var pool: CVPixelBufferPool?
     private var poolSize = CGSize.zero
     private var lastLiveBuffer: CVPixelBuffer?
+    private var lastLiveMirrored = false
     private var privacyBuffer: CVPixelBuffer?
     private var privacyKey = ""
     private var privacyTimer: DispatchSourceTimer?
@@ -57,6 +61,12 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     private var stats = Statistics()
     private var referenceValue: CGImage?
     private var referenceAt: TimeInterval?
+    private var recorder: VirtualCameraRecorder?
+    private var videoAudio: ((String, Double, Bool) -> Void)?
+    private var screenAudio: ((CMSampleBuffer) -> Void)?
+    private var stopAudio: (() -> Void)?
+    private var recordingAudioEnabled = false
+    private var pendingRecordingAudio = 0
 
     public init(
         state: VirtualCameraState, outputSize: CGSize, frameRate: Int = 30,
@@ -74,6 +84,65 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     public var statistics: Statistics { lock.withLock { stats } }
+
+    public func setSourceAudio(
+        video: @escaping (String, Double, Bool) -> Void, screen: @escaping (CMSampleBuffer) -> Void,
+        stop: @escaping () -> Void
+    ) {
+        queue.async { [weak self] in
+            self?.videoAudio = video
+            self?.screenAudio = screen
+            self?.stopAudio = stop
+        }
+    }
+
+    public func appendRecordingAudio(_ buffer: AVAudioPCMBuffer, at time: TimeInterval) {
+        let accepted = lock.withLock {
+            guard recordingAudioEnabled, pendingRecordingAudio < 8 else { return false }
+            pendingRecordingAudio += 1
+            return true
+        }
+        guard accepted else { return }
+        queue.async { [weak self] in
+            guard let self else { return }
+            defer { self.lock.withLock { self.pendingRecordingAudio -= 1 } }
+            guard let recorder = self.recorder else { return }
+            do { try recorder.appendAudio(buffer, at: time) } catch {
+                self.updateStats { $0.failureMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    public func startRecording(to url: URL, audio: Bool = false) throws {
+        try queue.sync {
+            guard recorder == nil else { throw CocoaError(.fileWriteFileExists) }
+            recorder = try VirtualCameraRecorder(url: url, size: outputSize, audio: audio)
+            lock.withLock { recordingAudioEnabled = audio }
+        }
+    }
+
+    public func stopRecording() async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            queue.async { [weak self] in
+                guard let self, let recorder = self.recorder else {
+                    continuation.resume(throwing: CocoaError(.fileNoSuchFile))
+                    return
+                }
+                self.recorder = nil
+                self.lock.withLock { self.recordingAudioEnabled = false }
+                recorder.finish { continuation.resume(with: $0) }
+            }
+        }
+    }
+
+    private func emit(_ buffer: CVPixelBuffer) {
+        if let recorder {
+            do { try recorder.append(buffer, at: clock()) } catch {
+                updateStats { $0.failureMessage = error.localizedDescription }
+            }
+        }
+        output?(buffer)
+    }
 
     public var reference: CGImage? { lock.withLock { referenceValue } }
 
@@ -95,6 +164,9 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             self.running = false
             self.output = nil
             self.capture.stop()
+            self.video.stop()
+            self.screen.stop()
+            self.stopAudio?()
             self.stopPrivacyTimer()
             self.analyzer.reset()
             self.framer.reset()
@@ -154,7 +226,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             privacyKey = ""
         }
         guard running else { return }
-        if next.privacy != previous.privacy {
+        if next.privacy != previous.privacy || next.media != previous.media {
             applyRunMode()
         } else if next.privacy.usesCamera {
             capture.update(captureConfiguration())
@@ -169,7 +241,10 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
     }
 
     private func applyRunMode() {
+        stopAudio?()
         if state.privacy == .stopped {
+            video.stop()
+            screen.stop()
             capture.stop()
             stopPrivacyTimer()
             analyzer.reset()
@@ -177,6 +252,41 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             privacyBuffer = nil
             updateStats { $0 = Statistics() }
             return
+        }
+        if state.privacy.usesCamera, state.media.kind == .screen {
+            capture.stop()
+            video.stop()
+            stopPrivacyTimer()
+            screen.start(
+                state.media, size: outputSize, frameRate: frameRate, audio: screenAudio,
+                failed: { [weak self] message in
+                    self?.updateStats { $0.failureMessage = message }
+                }
+            ) { [weak self] buffer in
+                self?.handleCapture(buffer, systemBackgroundActive: false)
+            }
+            updateStats { $0.usingCamera = false }
+            return
+        }
+        screen.stop()
+        if state.privacy.usesCamera, state.media.kind == .video {
+            capture.stop()
+            stopPrivacyTimer()
+            video.update(
+                state.media, frameRate: frameRate,
+                failed: { [weak self] message in
+                    self?.updateStats { $0.failureMessage = message }
+                }, audio: videoAudio
+            ) { [weak self] buffer in
+                self?.handleCapture(buffer, systemBackgroundActive: false)
+            }
+            updateStats { $0.usingCamera = false }
+            return
+        }
+        if state.media.kind == .video {
+            video.suspend()
+        } else {
+            video.stop()
         }
         if state.privacy.usesCamera {
             stopPrivacyTimer()
@@ -205,7 +315,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         if let rendered = render(
             buffer, at: clock(), systemBackgroundActive: systemBackgroundActive)
         {
-            output(rendered)
+            emit(rendered)
         }
         if let active = capture.active {
             updateStats {
@@ -248,7 +358,11 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             image: image, composition: composition, framing: framing,
             mask: wantsMask ? analysis.mask : nil, date: Date(), assets: assets,
             systemBackgroundActive: systemBackgroundActive)
-        let composed = renderer.compose(input, output: outputSize)
+        var composed = renderer.compose(input, output: outputSize)
+        if state.mirrorOutput {
+            composed = VirtualCameraRenderer.oriented(
+                composed, framing: VirtualCameraFraming(flipHorizontal: true))
+        }
         if referenceAt.map({ time - $0 >= Self.referenceInterval || time < $0 }) ?? true {
             referenceAt = time
             let small = renderer.cgImage(
@@ -259,6 +373,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         guard let buffer = makeBuffer() else { return nil }
         renderer.render(composed, into: buffer)
         lastLiveBuffer = buffer
+        lastLiveMirrored = state.mirrorOutput
         recordFrame(at: time)
         return buffer
     }
@@ -312,12 +427,31 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
 
     private func makePrivacyFrame() -> CVPixelBuffer? {
         guard state.privacy != .stopped else { return nil }
-        if state.privacy == .freeze, let lastLiveBuffer { return lastLiveBuffer }
-        let key = "\(state.privacy.rawValue)|\(state.privacyMessage)|\(outputSize)"
+        if state.privacy == .freeze, let lastLiveBuffer {
+            guard lastLiveMirrored != state.mirrorOutput else { return lastLiveBuffer }
+            guard let buffer = makeBuffer() else { return nil }
+            let image = VirtualCameraRenderer.oriented(
+                CIImage(cvPixelBuffer: lastLiveBuffer),
+                framing: VirtualCameraFraming(flipHorizontal: true))
+            renderer.render(image, into: buffer)
+            self.lastLiveBuffer = buffer
+            lastLiveMirrored = state.mirrorOutput
+            return buffer
+        }
+        let key =
+            "\(state.privacy.rawValue)|\(state.privacyMessage)|\(outputSize)|\(state.mirrorOutput)"
         if key == privacyKey, let privacyBuffer { return privacyBuffer }
-        let backdrop = lastLiveBuffer.map { CIImage(cvPixelBuffer: $0) }
-        let image = renderer.privacyImage(
+        let backdrop = lastLiveBuffer.map {
+            VirtualCameraRenderer.oriented(
+                CIImage(cvPixelBuffer: $0),
+                framing: VirtualCameraFraming(flipHorizontal: lastLiveMirrored))
+        }
+        var image = renderer.privacyImage(
             state.privacy, message: state.privacyMessage, backdrop: backdrop, output: outputSize)
+        if state.mirrorOutput {
+            image = VirtualCameraRenderer.oriented(
+                image, framing: VirtualCameraFraming(flipHorizontal: true))
+        }
         guard let buffer = makeBuffer() else { return nil }
         renderer.render(image, into: buffer)
         privacyBuffer = buffer
@@ -334,7 +468,7 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
             guard let self, self.running, !self.state.privacy.usesCamera, let output = self.output,
                 let frame = self.makePrivacyFrame()
             else { return }
-            output(frame)
+            self.emit(frame)
         }
         timer.resume()
         privacyTimer = timer

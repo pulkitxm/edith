@@ -183,7 +183,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
   expect(build["timeout-minutes"]).toBe(45);
   expect(build.if).toBeUndefined();
   expect(run.run).toBe(
-    `for batch in \${{ matrix.batches }}; do\n  timeout=480\n  if [ "$batch" = cli ]; then timeout=1200; fi\n  events="$RUNNER_TEMP/test-events-$batch.jsonl"\n  python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"\ndone\n`,
+    `for batch in \${{ matrix.batches }}; do\n  timeout=480\n  if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi\n  events="$RUNNER_TEMP/test-events-$batch.jsonl"\n  python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"\ndone\n`,
   );
   expect(job.strategy["fail-fast"]).toBe(false);
   expect(job.strategy["max-parallel"]).toBe(4);
@@ -202,7 +202,7 @@ test("Swift tests cache a successful build before bounded execution", () => {
     },
     {
       lane: "dashboard-app",
-      batches: "dashboard extensions files database-ui app",
+      batches: "dashboard extensions files database-ui studio time-lapse app",
     },
   ]);
   expect(run["working-directory"]).toBe(build["working-directory"]);

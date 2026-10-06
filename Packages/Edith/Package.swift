@@ -18,6 +18,7 @@ let products: [Product] = [
 ]
 
 let dependencies: [Package.Dependency] = [
+    .package(path: "../MeetingVoice"),
     .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.19.0"),
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
@@ -137,7 +138,10 @@ let targets: [Target] = [
     ),
     .target(
         name: "EdithKit",
-        dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport"],
+        dependencies: [
+            "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport",
+            .product(name: "MeetingVoice", package: "MeetingVoice"),
+        ],
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),

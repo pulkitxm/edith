@@ -6,6 +6,9 @@ import Foundation
 import UniformTypeIdentifiers
 
 enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
+    case audio
+    case voice
+    case devices
     case frame
     case look
     case background
@@ -21,6 +24,9 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "Background"
         case .overlays: "Overlays"
         case .output: "Output"
+        case .audio: "Sounds"
+        case .voice: "Voice"
+        case .devices: "Audio devices"
         }
     }
 
@@ -31,6 +37,9 @@ enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
         case .background: "person.crop.rectangle"
         case .overlays: "text.below.photo"
         case .output: "video.badge.checkmark"
+        case .audio: "waveform"
+        case .voice: "person.wave.2"
+        case .devices: "mic"
         }
     }
 }
@@ -59,14 +68,28 @@ final class VirtualCameraPageModel: ObservableObject {
     @Published private(set) var previewFailure: String?
     @Published var tab: VirtualCameraInspectorTab = .frame {
         didSet {
+            defaults.set(tab.rawValue, forKey: "virtualCameraInspectorSection")
+            expandedInspectorSections.insert(tab)
             guard tab == .look, let reference = previewReference, reference !== thumbnailSource
             else { return }
             updateLookThumbnails(from: reference)
         }
     }
+    @Published private(set) var expandedInspectorSections: Set<VirtualCameraInspectorTab> = [.audio]
+    {
+        didSet {
+            var storedSections: [String] = []
+            for section in VirtualCameraInspectorTab.allCases
+            where expandedInspectorSections.contains(section) {
+                storedSections.append(section.rawValue)
+            }
+            defaults.set(storedSections, forKey: "virtualCameraInspectorExpandedSections")
+        }
+    }
     @Published var showsGrid = false
     @Published private(set) var lookThumbnails: [VirtualCameraLookPreset: CGImage] = [:]
     @Published var errorMessage: String?
+    @Published var audioPending = false
 
     let display = VirtualCameraPreviewDisplay()
     let extensionManager: VirtualCameraExtensionManager
@@ -82,6 +105,7 @@ final class VirtualCameraPageModel: ObservableObject {
     private let previewBusQueue = DispatchQueue(
         label: "com.pulkit.edith.camera.preview-demand", qos: .utility)
     private var saveTimer: Timer?
+    private var awaitingHelperState: VirtualCameraState?
     private var statusToken: NSObjectProtocol?
     private var stateToken: NSObjectProtocol?
     private var statusTask: Task<Void, Never>?
@@ -109,6 +133,17 @@ final class VirtualCameraPageModel: ObservableObject {
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
+        var restoredSections: Set<VirtualCameraInspectorTab> = [.audio]
+        if let storedSections = defaults.stringArray(
+            forKey: "virtualCameraInspectorExpandedSections")
+        {
+            restoredSections = []
+            for value in storedSections {
+                if let section = VirtualCameraInspectorTab(rawValue: value) {
+                    restoredSections.insert(section)
+                }
+            }
+        }
         self.defaults = defaults
         self.state = state
         self.pipeline = pipeline
@@ -118,12 +153,25 @@ final class VirtualCameraPageModel: ObservableObject {
         self.sourceProvider = sourceProvider
         self.previewBus = previewBus
         self.cameraAccess = accessProvider()
+        self.tab =
+            VirtualCameraInspectorTab(
+                rawValue: defaults.string(forKey: "virtualCameraInspectorSection") ?? "audio")
+            ?? .audio
+        self.expandedInspectorSections = restoredSections
         display.onAvailabilityChanged = { [weak self] available in
             self?.hasPreviewFrame = available
             if available {
                 self?.previewFailure = nil
                 self?.previewStartedAt = nil
             }
+        }
+    }
+
+    func setInspectorExpanded(_ section: VirtualCameraInspectorTab, _ expanded: Bool) {
+        if expanded {
+            tab = section
+        } else {
+            expandedInspectorSections.remove(section)
         }
     }
 
@@ -134,8 +182,11 @@ final class VirtualCameraPageModel: ObservableObject {
         case helper
     }
 
+    var needsCameraAccess: Bool { state.media.kind == .camera && cameraAccess != .authorized }
+
     var hasNoCameraSource: Bool {
-        sourcesLoaded && cameraAccess == .authorized && sources.isEmpty && !hasPreviewFrame
+        state.media.kind == .camera && sourcesLoaded && cameraAccess == .authorized
+            && sources.isEmpty && !hasPreviewFrame
             && !(snapshot?.live == true && helperReachable)
             && !(snapshot == nil && statusPending)
             && state.privacy == .live
@@ -143,11 +194,15 @@ final class VirtualCameraPageModel: ObservableObject {
 
     var previewLoadingTitle: String? {
         guard state.privacy != .stopped, !hasNoCameraSource, previewFailure == nil,
-            cameraAccess == .authorized || snapshot?.live == true, !hasPreviewFrame
+            !needsCameraAccess || snapshot?.live == true, !hasPreviewFrame
         else { return nil }
         if !sourcesLoaded { return "Finding cameras" }
         if previewFeed == .pending { return "Connecting to Edith Bar" }
-        return "Starting camera"
+        switch state.media.kind {
+        case .camera: return "Starting camera"
+        case .video: return "Starting video"
+        case .screen: return "Starting screen capture"
+        }
     }
 
     var showsHelperPreview: Bool { previewFeed == .helper }
@@ -175,6 +230,7 @@ final class VirtualCameraPageModel: ObservableObject {
 
     var statusHeadline: String {
         if state.privacy == .stopped { return "Stopped" }
+        if state.media.kind == .video, !meetingPlaying { return "Paused" }
         if let snapshot, helperReachable { return snapshot.headline }
         if statusPending || helperReachable { return "Checking Edith Bar" }
         return "Edith Bar is not answering"
@@ -261,7 +317,9 @@ final class VirtualCameraPageModel: ObservableObject {
             previewStatistics = statistics
         }
         refreshPreviewHealth()
-        if tab == .look, let reference = previewReference, reference !== thumbnailSource {
+        if expandedInspectorSections.contains(.look), let reference = previewReference,
+            reference !== thumbnailSource
+        {
             updateLookThumbnails(from: reference)
         }
         let access = accessProvider()
@@ -318,7 +376,12 @@ final class VirtualCameraPageModel: ObservableObject {
         statusPending = false
         if snapshot != decoded { snapshot = decoded }
         helperReachable = true
-        if saveTimer == nil { reloadState() }
+        if saveTimer == nil,
+            awaitingHelperState == nil || awaitingHelperState == decoded.state
+        {
+            awaitingHelperState = nil
+            reloadState(decoded.state)
+        }
         if visible { syncPreviewFeed() }
     }
 
@@ -343,6 +406,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func reloadState(_ announced: VirtualCameraState? = nil) {
+        if announced != nil { awaitingHelperState = nil }
         let stored = announced ?? VirtualCameraStore.load(defaults)
         guard stored != state else { return }
         state = stored
@@ -409,7 +473,9 @@ final class VirtualCameraPageModel: ObservableObject {
                         self.pipelineGeneration == generation
                     else { return }
                     self.helperReference = reference
-                    if self.tab == .look { self.updateLookThumbnails(from: reference) }
+                    if self.expandedInspectorSections.contains(.look) {
+                        self.updateLookThumbnails(from: reference)
+                    }
                 }
             }
         }
@@ -428,7 +494,9 @@ final class VirtualCameraPageModel: ObservableObject {
 
     private func startLocalPreview() {
         cameraAccess = accessProvider()
-        guard visible, cameraAccess == .authorized, previewFeed != .local else { return }
+        guard visible, (cameraAccess == .authorized || state.media.kind != .camera),
+            previewFeed != .local
+        else { return }
         guard let pipeline else {
             preparePipeline()
             return
@@ -527,6 +595,7 @@ final class VirtualCameraPageModel: ObservableObject {
         saveTimer = nil
         guard VirtualCameraStore.load(defaults) != state else { return }
         VirtualCameraStore.save(state, to: defaults)
+        if visible { awaitingHelperState = state }
         VirtualCameraStore.announceChange(from: "window", state: state)
     }
 
@@ -570,7 +639,11 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func selectSource(_ source: VirtualCameraSource) {
-        update { $0.sourceID = source.id }
+        update {
+            $0.sourceID = source.id
+            $0.media = VirtualCameraMedia()
+            $0.privacy = .live
+        }
     }
 
     func apply(_ scene: VirtualCameraScene) {
@@ -624,6 +697,10 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func pause(_ mode: VirtualCameraPrivacy) {
+        guard mode != .stopped || snapshot?.recordingPath == nil else {
+            errorMessage = "Stop the recording before stopping the camera."
+            return
+        }
         update { $0.privacy = mode }
         flushSave()
     }

@@ -47,7 +47,15 @@ public struct VirtualCameraBackgroundChange: Codable, Equatable, Sendable {
 
 public enum VirtualCameraRequest: Codable, Equatable, Sendable {
     case status
+    case audio(MeetingAudioRequest)
+    case sourceAudio(Bool)
     case retry
+    case screenSources
+    case recordStart(String)
+    case recordStop
+    case media(VirtualCameraMedia)
+    case playback(VirtualCameraPlayback)
+    case mirrorOutput(Bool)
     case selectSource(String)
     case zoom(Double)
     case frame(VirtualCameraFrameChange)
@@ -65,7 +73,7 @@ public enum VirtualCameraRequest: Codable, Equatable, Sendable {
     case moveScene(String, Int)
     case stepScene(Int)
 
-    public var changesState: Bool { self != .status }
+    public var changesState: Bool { self != .status && self != .screenSources }
 
     public var encoded: String? {
         guard let data = try? JSONEncoder().encode(self) else { return nil }
@@ -128,14 +136,39 @@ public enum VirtualCameraRequestReducer {
         }
     ) throws -> String {
         switch request {
-        case .status:
+        case .audio:
+            throw MeetingAudioLibrary.error("Audio requests require the running meeting mixer.")
+        case .sourceAudio(let enabled):
+            state.media.audioEnabled = enabled
+            return "Source audio \(enabled ? "on" : "off")."
+        case .status, .screenSources:
             return "Status"
+        case .recordStart, .recordStop:
+            return "Recording updated."
         case .retry:
             return "Restarting camera preview."
         case .selectSource(let query):
             let source = try resolveSource(query, in: sources)
             state.sourceID = source.id
+            state.media = VirtualCameraMedia()
+            state.privacy = .live
             return "Using \(source.name)."
+        case .media(let media):
+            if media.kind == .video {
+                guard let path = media.path, fileExists(path) else {
+                    throw VirtualCameraRequestError.missingFile(media.path ?? "a video file")
+                }
+            }
+            state.media = media
+            state.privacy = .live
+            return "Video source updated."
+        case .playback(let playback):
+            state.media.playback = playback
+            if playback == .playing { state.privacy = .live }
+            return "Video \(playback.rawValue)."
+        case .mirrorOutput(let mirrored):
+            state.mirrorOutput = mirrored
+            return "Output mirroring \(mirrored ? "on" : "off")."
         case .zoom(let value):
             guard value.isFinite, VirtualCameraFraming.zoomRange.contains(value) else {
                 throw VirtualCameraRequestError.zoomOutOfRange(value)

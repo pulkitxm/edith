@@ -83,6 +83,9 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
     public var sharpZoom: Bool
     public var mirrorPreview: Bool
     public var output: VirtualCameraOutput
+    public var media: VirtualCameraMedia
+    public var mirrorOutput: Bool
+    public var audio: MeetingAudioState
 
     public init(
         sourceID: String? = nil, composition: VirtualCameraComposition = VirtualCameraComposition(),
@@ -90,7 +93,9 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
         activeSceneID: UUID? = nil, privacy: VirtualCameraPrivacy = .live,
         privacyMessage: String = VirtualCameraState.defaultPrivacyMessage,
         transition: VirtualCameraTransition = .smooth, sharpZoom: Bool = true,
-        mirrorPreview: Bool = false, output: VirtualCameraOutput = .automatic
+        mirrorPreview: Bool = false, output: VirtualCameraOutput = .automatic,
+        media: VirtualCameraMedia = VirtualCameraMedia(), mirrorOutput: Bool = false,
+        audio: MeetingAudioState = MeetingAudioState()
     ) {
         self.sourceID = sourceID
         self.composition = composition
@@ -102,6 +107,9 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
         self.sharpZoom = sharpZoom
         self.mirrorPreview = mirrorPreview
         self.output = output
+        self.media = media
+        self.mirrorOutput = mirrorOutput
+        self.audio = audio
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,7 +133,12 @@ public struct VirtualCameraState: Codable, Equatable, Sendable {
             mirrorPreview: (try? container.decodeIfPresent(Bool.self, forKey: .mirrorPreview))
                 ?? fallback.mirrorPreview,
             output: (try? container.decodeIfPresent(VirtualCameraOutput.self, forKey: .output))
-                ?? fallback.output)
+                ?? fallback.output,
+            media: try container.decodeIfPresent(VirtualCameraMedia.self, forKey: .media)
+                ?? fallback.media,
+            mirrorOutput: try container.decodeIfPresent(Bool.self, forKey: .mirrorOutput) ?? false,
+            audio: try container.decodeIfPresent(MeetingAudioState.self, forKey: .audio)
+                ?? MeetingAudioState())
         self = sanitized()
     }
 

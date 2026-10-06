@@ -269,7 +269,7 @@ jobs:
           - lane: usage-media
             batches: usage attention companion browser media
           - lane: dashboard-app
-            batches: dashboard extensions files database-ui app
+            batches: dashboard extensions files database-ui studio time-lapse app
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -330,7 +330,7 @@ jobs:
         run: |
           for batch in ${{ matrix.batches }}; do
             timeout=480
-            if [ "$batch" = cli ]; then timeout=1200; fi
+            if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi
             events="$RUNNER_TEMP/test-events-$batch.jsonl"
             python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"
           done
