@@ -35,7 +35,7 @@ def sample_group(processes):
             continue
         print(f"Capturing stalled test process {pid}", flush=True)
         try:
-            subprocess.run(["sample", str(pid), "3", "-file", "/dev/stdout"], timeout=20)
+            subprocess.run(["sample", str(pid), "1", "10", "-file", "/dev/stdout"], timeout=120)
         except subprocess.TimeoutExpired:
             print("Stack capture timed out", file=sys.stderr, flush=True)
 
