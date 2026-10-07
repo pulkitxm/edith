@@ -44,6 +44,32 @@ it, so `ed np --json` and `ed music --player spotify` both work.
 
 ## Players
 
+The Music page also offers **Local music**, **Spotify**, and **YouTube Music**.
+
+For Spotify, choose **Connect Spotify** and finish signing in in your browser.
+Playback streams inside Edith and requires Spotify Premium. Choose **Connect
+library** to authorize catalog and library access in a second browser sign-in.
+This uses a separate PKCE grant for the same Spotify account. Both grants stay
+in Keychain, and **Disconnect Spotify** removes them.
+
+The Spotify workspace has Home and Search navigation, a library sidebar for
+playlists, Liked Songs, albums, artists and podcasts, and collection pages with
+artwork and song lists. Search finds songs, artists, albums, playlists and
+podcasts. Play collections or individual songs, save music to your library,
+create playlists, and add songs to the queue from their menus. The queue panel
+shows the current song and upcoming songs, with a Recent tab for listening
+history. Library and queue failures offer Retry while keeping loaded content.
+The bottom player provides previous, play/pause, next, seek, shuffle, repeat and
+volume controls. Compact windows open the library and queue in sheets. Spotify
+Connect can also send playback to Edith from another Spotify player.
+
+For YouTube Music, sign in in Chrome and connect that profile on the Music page.
+Only YouTube cookies are imported into a separate session, which Disconnect
+clears. The embedded player provides your library, search, and playback.
+Switching sources pauses the previous player. These streaming sessions use the
+Music page controls; the CLI players below still target the local library and
+the separate Spotify and Apple Music applications.
+
 There are exactly three players, and they are named `builtin`, `spotify` and
 `apple`. `builtin` is Edith's own library player, which lives in the menu bar
 app and shows up as `Edith` in human output.
@@ -105,8 +131,9 @@ always looks at all three.
 `start`, `seek`, `shuffle` and `repeat` always mean Edith's own player, because
 they drive the library queue rather than a generic transport.
 
-The command line, Music page, menu bar player, notch controls and media keys use
-the same transport requests. A request therefore keeps the same play, pause,
+For the local library, the command line, Music page, menu bar player, notch
+controls and media keys use the same transport requests. A request therefore
+keeps the same play, pause,
 stop, track, folder, seek, volume, shuffle and repeat semantics regardless of
 which surface sent it. Scripts can use the commands above noninteractively and
 add `--json` whenever they need stable structured output.

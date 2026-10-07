@@ -87,7 +87,7 @@ struct HomePage: View {
                         UsageSummaryCard(dark: dark)
                         RateLimitsDialsView(dark: dark, showsJumpLink: true)
                     }
-                    if musicEnabled { MusicCard(dark: dark) }
+                    if musicEnabled { HomeMusicCard(dark: dark) }
                     if codeStatsEnabled, dataSuiteEnabled {
                         CodeStatsHomeCard(dark: dark)
                     }
@@ -1005,9 +1005,15 @@ private struct UsageSummarySkeleton: View {
     }
 }
 
-private struct MusicCard: View {
+struct HomeMusicCard: View {
     let dark: Bool
     @State private var remote = MusicRemote.shared
+    @State private var accounts = MusicAccounts.shared
+
+    init(dark: Bool, accounts: MusicAccounts? = nil) {
+        self.dark = dark
+        _accounts = State(initialValue: accounts ?? .shared)
+    }
     @ObservedObject private var visibility = WindowVisibility.shared
     private var presenterState = PresenterState.shared
 
@@ -1032,28 +1038,86 @@ private struct MusicCard: View {
 
     var body: some View {
         PageCard(
-            title: "Music", note: remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks"
+            title: "Music",
+            note: accounts.selected == .local
+                ? (remote.tracks.isEmpty ? "" : "\(remote.tracks.count) tracks")
+                : accounts.selected.title
         ) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-                if let track = remote.current {
-                    nowPlaying(track)
-                    Divider().opacity(0.4)
-                }
-                if remote.tracks.isEmpty {
-                    Text("Drop audio files into your music folder to play them here.")
-                        .font(.system(size: UIScale.pt(12.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
-                } else {
-                    ForEach(upNext) { track in
-                        trackRow(track)
+                if accounts.selected == .local {
+                    if let track = remote.current {
+                        nowPlaying(track)
+                        Divider().opacity(0.4)
                     }
+                    if remote.tracks.isEmpty {
+                        Text("Drop audio files into your music folder to play them here.")
+                            .font(.system(size: UIScale.pt(12.5)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                            .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
+                    } else {
+                        ForEach(upNext) { track in
+                            trackRow(track)
+                        }
+                    }
+                } else {
+                    streaming
                 }
                 jumpLink("Open Music", to: .music, dark: dark)
             }
         }
         .onAppear {
             if automaticActionsEnabled { remote.start() }
+        }
+    }
+
+    @ViewBuilder private var streaming: some View {
+        if accounts.selected == .spotify, accounts.spotify.connected {
+            HStack(spacing: UIScale.pt(10)) {
+                MusicStreamingArtwork(url: accounts.spotify.artworkURL)
+                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                    Text(
+                        accounts.spotify.title.isEmpty ? "Nothing playing" : accounts.spotify.title
+                    )
+                    .font(.edithText(.headline)).lineLimit(1).presenterBlur(.music)
+                    Text(accounts.spotify.artist.isEmpty ? "Spotify" : accounts.spotify.artist)
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        .lineLimit(1).presenterBlur(.music)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    accounts.spotify.send(["action": "toggle"])
+                } label: {
+                    Image(systemName: accounts.spotify.playing ? "pause.fill" : "play.fill")
+                        .font(.system(size: UIScale.pt(15))).foregroundStyle(theme)
+                }
+                .buttonStyle(.edith(.toolbar))
+                .accessibilityLabel("Play or pause Spotify")
+                Button {
+                    accounts.spotify.send(["action": "next"])
+                } label: {
+                    Image(systemName: "forward.fill")
+                        .font(.system(size: UIScale.pt(12))).foregroundStyle(theme)
+                }
+                .buttonStyle(.edith(.toolbar))
+                .accessibilityLabel("Next Spotify track")
+            }
+        } else {
+            HStack(spacing: UIScale.pt(10)) {
+                Image(systemName: accounts.selected.symbol)
+                    .font(.edithText(.title2)).foregroundStyle(theme)
+                    .frame(width: UIScale.pt(40), height: UIScale.pt(40))
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text(accounts.selected.title).font(.edithText(.headline))
+                    Text(
+                        accounts.youtubeConnected && accounts.selected == .youtubeMusic
+                            ? "Your player is ready in Music."
+                            : "Connect your account in Music to start listening."
+                    )
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 

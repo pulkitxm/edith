@@ -2243,6 +2243,9 @@ private struct MusicRows: View {
             tools: [.youtubeDownloader, .ffmpeg, .deno], extensionEnabled: enabled)
 
         Section {
+            LabeledContent("Streaming accounts") {
+                Button("Connect in Music") { SectionWindow.open(.music) }
+            }
             LabeledContent("Music folder") {
                 HStack {
                     Button("Choose folder...") { chooseLibrary() }
