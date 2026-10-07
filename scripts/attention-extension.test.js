@@ -280,7 +280,7 @@ test("page signals and media from the content script are credited to the tab", a
     tabs: 1,
   });
   const watching = f.sent.at(-1);
-  expect(watching.presence).toBe("active");
+  expect(watching.presence).toBe("idle");
   expect(watching.tags.passive).toBe("video");
   expect(watching.tags.channel).toBe("Swift");
 });

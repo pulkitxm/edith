@@ -99,6 +99,27 @@ import Testing
         #expect(result.entities.first?.name == "example.com")
     }
 
+    @Test(arguments: [AttentionPresence.idle, .locked])
+    func nativeAwayStateCannotBeOverriddenByBrowserActivity(presence: AttentionPresence) {
+        var foreground = dia(start: 0, duration: 120, title: "Example video")
+        foreground.presence = presence
+        let events = [
+            foreground,
+            page(
+                start: 0, duration: 120, domain: "video.example", title: "Example video",
+                profile: "Work"),
+            dia(start: 120, duration: 60, title: "Example video"),
+            page(
+                start: 120, duration: 60, domain: "video.example", title: "Example video",
+                profile: "Work"),
+        ]
+        let result = summary(events, seconds: 180)
+        #expect(result.activeDuration == 60)
+        #expect(result.idleDuration == 120)
+        #expect(result.entities.first?.duration == 60)
+        #expect(result.spans.reduce(0) { $0 + $1.duration } == 60)
+    }
+
     @Test func truncatedWindowTitlesStillCorroborateTheForegroundPage() {
         let window = AttentionTitleCorrelation.normalized("Personal: Divv Saxena on…")
         let front = AttentionTitleCorrelation.normalized(

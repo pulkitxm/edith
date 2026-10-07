@@ -146,9 +146,8 @@ async function observe(settings, now) {
   const tags = { ...urlTags(tab.url), ...(page.tags || {}) }
   const group = await groupTitle(tab)
   if (group) tags.group = group
-  let presence = idle === "active" ? "active" : idle === "locked" ? "locked" : "idle"
+  const presence = idle === "active" ? "active" : idle === "locked" ? "locked" : "idle"
   if (presence === "idle" && (media.some(item => item.playing && item.kind === "video") || tab.audible)) {
-    presence = "active"
     tags.passive = media.some(item => item.kind === "video") ? "video" : "audio"
   }
   const observation = {
