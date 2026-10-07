@@ -119,6 +119,7 @@ import Testing
                 editable: true), size: CGSize(width: 700, height: 500))
         let view = try #require(controls.textView)
         let window = TestWindowHost.window(contentRect: host.bounds)
+        window.isReleasedWhenClosed = false
         window.contentView = host
         window.makeFirstResponder(view)
         defer { window.close() }

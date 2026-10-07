@@ -9,6 +9,7 @@ final class LaTeXModel {
     var source = ""
     var original: LaTeXSource?
     var review: LaTeXReview?
+    var pdfPreview: Data?
     var log = ""
     var buildGeneration = UUID()
     var message: String?
@@ -45,6 +46,7 @@ final class LaTeXModel {
         source = ""
         original = nil
         review = nil
+        pdfPreview = nil
         log = ""
         message = nil
         await reload()
@@ -88,6 +90,7 @@ final class LaTeXModel {
         original = content
         source = content.text
         review = nil
+        pdfPreview = nil
         log = ""
         message = nil
         load.setContent()
@@ -144,9 +147,22 @@ final class LaTeXModel {
             var submitted = prepared
             submitted.pullRequest = number
             try self.replace(submitted)
+            self.pdfPreview = nil
             self.original = try await self.service.load(submitted)
             self.message = "Pull request #\(number) saved. GitHub will compile the PDF."
             self.review = try await self.service.review(submitted)
+        }
+    }
+
+    func refreshPDF() {
+        guard let project = selected, !dirty else { return }
+        perform {
+            self.pdfPreview = try await self.service.previewPDF(project)
+            self.buildGeneration = UUID()
+            self.message =
+                self.pdfPreview == nil
+                ? "No PDF for this revision yet. Check the GitHub build, then refresh."
+                : "PDF loaded from GitHub."
         }
     }
 

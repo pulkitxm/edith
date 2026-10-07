@@ -37,7 +37,8 @@ The repository compiler uses a full TeX Live environment with pdfLaTeX. Local
 pdfLaTeX compilation needs latexmk and a local TeX Live installation on PATH.
 
 GitHub Actions compiles the document on pull requests and pushes and uploads the
-PDF as a run artifact. Open Builds & PDF artifacts to download it from GitHub.
+PDF as a run artifact. Select Refresh PDF to view the current revision in memory, or open Builds &
+PDF artifacts on GitHub. PDF previews never write repository artifacts to disk.
 Use Review in Quinjet to see the live PR, patch, and checks without cloning.
 Merge options offer a squash merge with branch deletion or a squash merge after
 required checks pass. Branch protections remain enforced. Refresh or reload to

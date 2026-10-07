@@ -47,7 +47,9 @@ struct LaTeXPage: View {
         .edithSheet(isPresented: $showingReview) {
             LaTeXReviewSheet(model: model).frame(minWidth: 520, idealWidth: 780, minHeight: 480)
         }
-        .onChange(of: model.selectedID) { _, id in if id == nil { editing = false } }
+        .onChange(of: model.selectedID) { _, id in
+            inspector = "PDF"; if id == nil { editing = false }
+        }
     }
 
     private var projectsPage: some View {
@@ -165,16 +167,14 @@ struct LaTeXPage: View {
             }
             if model.original != nil {
                 if compact {
-                    VStack(spacing: 0) {
-                        editor.frame(maxHeight: .infinity)
-                        Divider()
-                        result(project).frame(maxHeight: .infinity)
+                    VSplitView {
+                        editor.frame(minHeight: UIScale.pt(180))
+                        result(project).frame(minHeight: UIScale.pt(160))
                     }
                 } else {
-                    HStack(spacing: 0) {
-                        editor.frame(maxWidth: .infinity, maxHeight: .infinity)
-                        Divider()
-                        result(project).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    HSplitView {
+                        editor.frame(minWidth: UIScale.pt(220))
+                        result(project).frame(minWidth: UIScale.pt(220))
                     }
                 }
             } else if model.load.isRunning {
@@ -313,38 +313,72 @@ struct LaTeXPage: View {
                 } else {
                     ContentUnavailableView(
                         "Ready to compile", systemImage: "doc.richtext",
-                        description: Text("Save & compile creates a PDF beside your source file."))
+                        description: Text("Save & compile creates a PDF beside your source file.")
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }.padding(UIScale.pt(16))
         } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                    PageSectionHeader(
-                        "GitHub build", subtitle: "Source, review, and PDF builds stay on GitHub.")
-                    Label("1. Edit your source", systemImage: "pencil")
-                    Label("2. Create or update a pull request", systemImage: "arrow.triangle.pull")
-                    Label(
-                        "3. Review with Quinjet and squash merge", systemImage: "checkmark.circle")
-                    Text(
-                        "The pull request adds a compiler workflow. GitHub Actions compiles your document and attaches a PDF artifact to the run."
-                    )
-                    .font(.edithText(.subheadline)).foregroundStyle(.secondary)
-                    if let review = model.review {
-                        LaTeXChecks(review: review)
-                        if review.pullRequest.state == "OPEN" {
-                            LaTeXMergeOptions(model: model)
-                        }
+            VStack(spacing: UIScale.pt(12)) {
+                EdithSegmentedPicker(
+                    "Output", selection: $inspector, options: ["PDF", "Build & review"],
+                    label: { $0 })
+                if inspector == "PDF" {
+                    HStack {
+                        Text("GitHub PDF").font(.edithText(.headline))
+                        Spacer()
+                        Button("Refresh PDF") { model.refreshPDF() }.disabled(
+                            model.busy || model.dirty)
+                    }
+                    if let data = model.pdfPreview {
+                        LaTeXPDFPane(data: data, generation: model.buildGeneration)
+                    } else {
+                        ContentUnavailableView(
+                            "GitHub build", systemImage: "doc.richtext",
+                            description: Text(
+                                "Create a pull request, wait for the PDF build, then refresh this preview."
+                            )
+                        ).frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                     Link(
                         "Builds & PDF artifacts",
                         destination: URL(
                             string: "https://github.com/\(project.repository)/actions")!)
-                    Text(
-                        "No repository clone is created. Repository edits stay in memory until you submit them."
-                    )
-                    .font(.edithText(.caption)).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(20))
-            }
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+                            PageSectionHeader(
+                                "GitHub build",
+                                subtitle: "Source, review, and PDF builds stay on GitHub.")
+                            Label("1. Edit your source", systemImage: "pencil")
+                            Label(
+                                "2. Create or update a pull request",
+                                systemImage: "arrow.triangle.pull")
+                            Label(
+                                "3. Review with Quinjet and squash merge",
+                                systemImage: "checkmark.circle")
+                            Text(
+                                "The pull request adds a compiler workflow. GitHub Actions compiles your document and attaches a PDF artifact to the run."
+                            )
+                            .font(.edithText(.subheadline)).foregroundStyle(.secondary)
+                            if let review = model.review {
+                                LaTeXChecks(review: review)
+                                if review.pullRequest.state == "OPEN" {
+                                    LaTeXMergeOptions(model: model)
+                                }
+                            }
+                            Link(
+                                "Builds & PDF artifacts",
+                                destination: URL(
+                                    string: "https://github.com/\(project.repository)/actions")!)
+                            Text(
+                                "No repository clone is created. Repository edits stay in memory until you submit them."
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(20))
+                    }
+                }
+            }.padding(UIScale.pt(16))
         }
     }
 }

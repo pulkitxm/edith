@@ -74,9 +74,12 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         guard let view = scroll.documentView as? NSTextView else { return }
         let changed =
             view.string != text || context.coordinator.parent.dark != dark
-            || context.coordinator.fontSize != controls.fontSize
+            || context.coordinator.fontSize != UIScale.pt(controls.fontSize)
         context.coordinator.parent = self
-        context.coordinator.fontSize = controls.fontSize
+        context.coordinator.fontSize = UIScale.pt(controls.fontSize)
+        scroll.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        scroll.verticalRulerView?.ruleThickness = UIScale.pt(48)
+        view.textContainerInset = NSSize(width: UIScale.pt(12), height: UIScale.pt(12))
         view.isEditable = editable
         let font = NSFont.monospacedSystemFont(
             ofSize: UIScale.pt(controls.fontSize), weight: .regular)
@@ -177,6 +180,14 @@ struct LaTeXSourceEditor: NSViewRepresentable {
 }
 
 final class LaTeXLineRuler: NSRulerView {
+    override func draw(_ dirtyRect: NSRect) {
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(rect: bounds).addClip()
+        NSColor.controlBackgroundColor.setFill()
+        bounds.fill()
+        drawHashMarksAndLabels(in: bounds)
+        NSGraphicsContext.restoreGraphicsState()
+    }
     override func drawHashMarksAndLabels(in rect: NSRect) {
         guard let view = clientView as? NSTextView, let layout = view.layoutManager,
             let container = view.textContainer

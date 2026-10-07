@@ -19,9 +19,16 @@ final class LaTeXPDFControls {
 }
 
 struct LaTeXPDFPane: View {
-    let url: URL
+    let url: URL?
+    let data: Data?
     let generation: UUID
     @State private var controls = LaTeXPDFControls()
+    init(url: URL, generation: UUID) {
+        self.url = url; data = nil; self.generation = generation
+    }
+    init(data: Data, generation: UUID) {
+        url = nil; self.data = data; self.generation = generation
+    }
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
             ViewThatFits(in: .horizontal) {
@@ -32,17 +39,19 @@ struct LaTeXPDFPane: View {
                     navigation; zoom
                 }
             }
-            LaTeXPDFView(url: url, generation: generation, controls: controls)
-            HStack {
-                Button("Open PDF") { NSWorkspace.shared.open(url) }
-                Spacer()
-                Button("Save PDF as…") {
-                    let panel = NSSavePanel()
-                    panel.nameFieldStringValue = url.lastPathComponent
-                    if panel.runModal() == .OK, let destination = panel.url {
-                        do {
-                            try Data(contentsOf: url).write(to: destination, options: .atomic)
-                        } catch { NSAlert(error: error).runModal() }
+            LaTeXPDFView(url: url, data: data, generation: generation, controls: controls)
+            if let url {
+                HStack {
+                    Button("Open PDF") { NSWorkspace.shared.open(url) }
+                    Spacer()
+                    Button("Save PDF as…") {
+                        let panel = NSSavePanel()
+                        panel.nameFieldStringValue = url.lastPathComponent
+                        if panel.runModal() == .OK, let destination = panel.url {
+                            do {
+                                try Data(contentsOf: url).write(to: destination, options: .atomic)
+                            } catch { NSAlert(error: error).runModal() }
+                        }
                     }
                 }
             }
@@ -89,7 +98,8 @@ struct LaTeXPDFPane: View {
 }
 
 private struct LaTeXPDFView: NSViewRepresentable {
-    let url: URL
+    let url: URL?
+    let data: Data?
     let generation: UUID
     let controls: LaTeXPDFControls
     func makeCoordinator() -> Coordinator { Coordinator(controls) }
@@ -101,10 +111,10 @@ private struct LaTeXPDFView: NSViewRepresentable {
         return view
     }
     func updateNSView(_ view: PDFView, context: Context) {
-        let key = "\(url.path):\(generation)"
+        let key = "\(url?.path ?? "github"):\(generation)"
         guard view.identifier?.rawValue != key else { return }
         view.identifier = NSUserInterfaceItemIdentifier(key)
-        view.document = PDFDocument(url: url)
+        view.document = data.flatMap(PDFDocument.init(data:)) ?? url.flatMap(PDFDocument.init(url:))
         Task { @MainActor in controls.update() }
     }
     @MainActor final class Coordinator {

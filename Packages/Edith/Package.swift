@@ -37,6 +37,7 @@ let dependencies: [Package.Dependency] = [
         url: "https://github.com/vapor/mysql-nio.git",
         revision: "a9378d6ed22899b7df72894719cc3df51a37fb18"),
     .package(path: "../EdithStudio"),
+    .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19"),
 ]
 
 let shippedSwiftSettings: [SwiftSetting] = [
@@ -140,6 +141,7 @@ let targets: [Target] = [
         name: "EdithKit",
         dependencies: [
             "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport",
+            .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             .product(name: "MeetingVoice", package: "MeetingVoice"),
         ],
         resources: [

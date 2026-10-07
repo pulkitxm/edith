@@ -1,4 +1,5 @@
 import Foundation
+import ZIPFoundation
 
 public struct LaTeXService: Sendable {
     public typealias Execute = @Sendable (String, [String], Data?, URL?) async throws -> Data
@@ -15,7 +16,7 @@ public struct LaTeXService: Sendable {
                 executableURL: executable, arguments: arguments,
                 environment: CLIToolEnvironment.sanitized(), currentDirectoryURL: directory,
                 timeout: ["tectonic", "latexmk"].contains(tool) ? 300 : 60,
-                maximumOutputBytes: 4_194_304,
+                maximumOutputBytes: 20_971_520,
                 standardInputData: input, terminatesProcessGroup: true)
         ) { _ in }
         guard result.terminationStatus == 0 else {
@@ -108,6 +109,62 @@ public struct LaTeXService: Sendable {
             throw LaTeXError.message("Compilation finished without producing a PDF.")
         }
         return String(decoding: output, as: UTF8.self)
+    }
+
+    public func previewPDF(_ project: LaTeXProject) async throws -> Data? {
+        try project.validate()
+        guard project.location == .github else {
+            throw LaTeXError.message("Local PDFs are read from disk.")
+        }
+        let sha = try await branchSHA(project, branch: project.reviewBranch ?? project.baseBranch)
+        let response = try await run(
+            "gh",
+            [
+                "api", "--method", "GET", "repos/\(project.repository)/actions/artifacts", "-f",
+                "name=latex-\(project.id.uuidString.lowercased())", "-f", "per_page=100",
+            ])
+        let artifacts = try JSONDecoder().decode(Artifacts.self, from: response).artifacts
+        guard
+            let artifact = artifacts.first(where: { !$0.expired && $0.workflow_run.head_sha == sha }
+            )
+        else { return nil }
+        let limit = 20_971_520
+        guard artifact.size_in_bytes <= limit else {
+            throw LaTeXError.message(
+                "This PDF is too large to preview. Open the artifact on GitHub.")
+        }
+        let bytes = try await run(
+            "gh", ["api", "repos/\(project.repository)/actions/artifacts/\(artifact.id)/zip"])
+        let archive = try Archive(data: bytes, accessMode: .read)
+        guard
+            let entry = archive.first(where: {
+                $0.type == .file
+                    && URL(fileURLWithPath: $0.path).lastPathComponent
+                        == project.pdfURL.lastPathComponent
+            }), entry.uncompressedSize <= limit
+        else { throw LaTeXError.message("The build artifact does not contain the expected PDF.") }
+        var pdf = Data()
+        let checksum = try archive.extract(entry) { chunk in
+            guard pdf.count + chunk.count <= limit else {
+                throw LaTeXError.message("The PDF exceeds the preview limit.")
+            }
+            pdf.append(chunk)
+        }
+        guard checksum == entry.checksum, pdf.starts(with: Data("%PDF-".utf8)) else {
+            throw LaTeXError.message("The PDF artifact is damaged. Rebuild it on GitHub.")
+        }
+        return pdf
+    }
+
+    private struct Artifacts: Decodable {
+        let artifacts: [Artifact]
+        struct Artifact: Decodable {
+            let id: Int
+            let expired: Bool
+            let size_in_bytes: Int
+            let workflow_run: Run
+            struct Run: Decodable { let head_sha: String }
+        }
     }
 
     public func submit(_ project: LaTeXProject, text: String, original: LaTeXSource) async throws

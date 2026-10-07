@@ -212,7 +212,7 @@ public enum ExtensionLifecycleCatalog {
             prerequisites: [
                 instruction(
                     "tools", "Install project tools",
-                    "Local projects need Tectonic. Repository projects need authenticated GitHub CLI, Quinjet, and Pukbot."
+                    "Local projects need Tectonic or latexmk with TeX Live. Repository projects need authenticated GitHub CLI, Quinjet, and Pukbot."
                 )
             ],
             examples: ["ed extensions enable latex", "ed app reveal latex"],

@@ -164,6 +164,49 @@ import Testing
         }
     }
 
+    @Test func repositoryPDFUsesCurrentRevisionAndNeverCreatesFiles() async throws {
+        let calls = LaTeXCalls()
+        let service = LaTeXService { tool, args, input, directory in
+            #expect(tool == "gh" && input == nil && directory == nil)
+            await calls.record(args)
+            if args.contains(where: { $0.contains("git/ref") }) {
+                return Data(#"{"object":{"sha":"current"}}"#.utf8)
+            }
+            if args.contains(where: { $0.hasSuffix("/zip") }) {
+                #expect(args.last?.contains("/2/zip") == true)
+                return Data(
+                    base64Encoded:
+                        "UEsDBBQAAAAIAK0bSF1BbHXDIgAAACAAAAAIAAAAbWFpbi5wZGZTDXBx0zXUM+cqrswryUgtyUzWLShKLctMLedSVXX1dwMAUEsBAhQDFAAAAAgArRtIXUFsdcMiAAAAIAAAAAgAAAAAAAAAAAAAAIABAAAAAG1haW4ucGRmUEsFBgAAAAABAAEANgAAAEgAAAAAAA=="
+                )!
+            }
+            return Data(
+                #"{"artifacts":[{"id":1,"expired":false,"size_in_bytes":100,"workflow_run":{"head_sha":"old"}},{"id":2,"expired":false,"size_in_bytes":100,"workflow_run":{"head_sha":"current"}}]}"#
+                    .utf8)
+        }
+        let pdf = try await service.previewPDF(project())
+        #expect(pdf == Data("%PDF-1.7\nsynthetic-preview\n%%EOF".utf8))
+        #expect(await calls.values.count == 3)
+    }
+
+    @Test func repositoryPDFWaitsForCurrentRevisionAndRejectsOversizedArtifacts() async throws {
+        for (revision, size) in [("old", 100), ("current", 30_000_000)] {
+            let service = LaTeXService { _, args, _, _ in
+                #expect(!args.contains(where: { $0.hasSuffix("/zip") }))
+                if args.contains(where: { $0.contains("git/ref") }) {
+                    return Data(#"{"object":{"sha":"current"}}"#.utf8)
+                }
+                return Data(
+                    "{\"artifacts\":[{\"id\":1,\"expired\":false,\"size_in_bytes\":\(size),\"workflow_run\":{\"head_sha\":\"\(revision)\"}}]}"
+                        .utf8)
+            }
+            if revision == "old" {
+                #expect(try await service.previewPDF(project()) == nil)
+            } else {
+                await #expect(throws: LaTeXError.self) { try await service.previewPDF(project()) }
+            }
+        }
+    }
+
     private func project() -> LaTeXProject {
         LaTeXProject(
             name: "Paper", location: .github, sourcePath: "main.tex", repository: "octocat/paper",
