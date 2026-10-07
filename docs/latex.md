@@ -24,7 +24,7 @@ and compile. The PDF pane has page navigation, zoom, fit, and Save PDF as.
 
 ## Repository documents
 
-Install GitHub CLI, Quinjet, and Pukbot, then authenticate with `gh auth login`.
+Install GitHub CLI and Pukbot, then authenticate with `gh auth login`.
 The account needs permission to push branches and add GitHub Actions workflows.
 Use `owner/repository` and a relative path such as `papers/main.tex`.
 
@@ -44,7 +44,9 @@ pdfLaTeX compilation needs latexmk and a local TeX Live installation on PATH.
 GitHub Actions compiles the document on pull requests and pushes and uploads the
 PDF as a run artifact. Select Refresh PDF to view the current revision in memory, or open Builds &
 PDF artifacts on GitHub. PDF previews never write repository artifacts to disk.
-Use Review in Quinjet to see the live PR, patch, and checks without cloning.
+Use Review in Quinjet for changed files, highlighted unified or split diffs,
+file filtering, checks, and merge controls. The native review screen reads GitHub
+directly and keeps its data in memory, so it works without a checkout.
 Merge options offer a squash merge with branch deletion or a squash merge after
 required checks pass. Branch protections remain enforced. Refresh or reload to
 see updated checks and completed merges. A new edit after a completed PR starts
@@ -78,3 +80,14 @@ apply with `--yes`, saving and compiling locally or submitting a GitHub PR.
 `compile`, `preview`, `review`, `merge`, and `remove` complete the same flow.
 See the [CLI reference](cli/latex/README.md). The Edith LaTeX Edit plugin skill
 teaches this workflow and can be installed from Plugins or `ed skills install`.
+
+## Preview
+
+These captures use synthetic documents and mocked GitHub responses. The local
+PDF was compiled in the running app.
+
+![Project library](latex/projects.png)
+
+![Source editor and compiled PDF](latex/editor.png)
+
+![Native Quinjet pull request review](latex/review.png)
