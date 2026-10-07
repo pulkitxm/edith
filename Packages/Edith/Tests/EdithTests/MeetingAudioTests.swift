@@ -6,31 +6,83 @@ import Testing
 
 @Suite(.serialized)
 struct MeetingAudioTests {
-    @Test func starterSoundsContainDistinctPlayableAudio() throws {
-        var signatures = Set<Int>()
+    @Test func starterSoundsLoadDistinctLeveledBundledRecordings() throws {
+        var recordings = Set<Data>()
         for sound in MeetingSound.allCases {
-            let buffer = try sound.render()
-            #expect(buffer.format.sampleRate == 48000)
-            #expect(buffer.frameLength == AVAudioFrameCount(sound.duration * 48000))
-            let channel = try #require(buffer.floatChannelData?[0])
-            var energy = 0.0
-            for frame in 0..<Int(buffer.frameLength) {
-                #expect(channel[frame].isFinite)
-                #expect(abs(channel[frame]) <= 0.9)
-                energy += Double(channel[frame] * channel[frame])
-            }
-            let rms = sqrt(energy / Double(buffer.frameLength))
-            #expect(rms > 0.01)
-            signatures.insert(Int(energy * 1000))
             let clip = try MeetingAudioLibrary.clip(sound.identifier, in: MeetingAudioState())
             #expect(clip.id == sound.id)
-            #expect(try sound.clip().id == clip.id)
+            #expect(try sound.clip() == clip)
             #expect(!clip.speech)
             #expect(clip.name == sound.name)
-            let file = try AVAudioFile(forReading: URL(fileURLWithPath: clip.path))
-            #expect(file.length == Int64(buffer.frameLength))
+            #expect(clip.path.contains("Edith_EdithKit.bundle/"))
+            #expect(!clip.path.hasPrefix(MeetingAudioLibrary.directory.path))
+            let url = URL(fileURLWithPath: clip.path)
+            recordings.insert(try Data(contentsOf: url))
+            let file = try AVAudioFile(forReading: url)
+            #expect(file.processingFormat.sampleRate == 48000)
+            #expect(file.processingFormat.channelCount == 2)
+            #expect(file.length >= 9600)
+            #expect(file.length <= 480000)
+            let buffer = try #require(
+                AVAudioPCMBuffer(
+                    pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))
+            )
+            try file.read(into: buffer)
+            #expect(Int64(buffer.frameLength) == file.length)
+            for index in 0..<Int(buffer.format.channelCount) {
+                let channel = try #require(buffer.floatChannelData?[index])
+                var energy = 0.0
+                var peak: Float = 0
+                for frame in 0..<Int(buffer.frameLength) {
+                    peak = max(peak, abs(channel[frame]))
+                    energy += Double(channel[frame] * channel[frame])
+                }
+                #expect(energy.isFinite)
+                #expect(peak < 0.71)
+                #expect(sqrt(energy / Double(buffer.frameLength)) > 0.01)
+            }
         }
-        #expect(signatures.count == MeetingSound.allCases.count)
+        #expect(recordings.count == MeetingSound.allCases.count)
+    }
+
+    @Test func bundledSoundsRenderThroughTheMeetingOutputMixer() throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2))
+        for sound in MeetingSound.allCases {
+            let clip = try sound.clip()
+            let file = try AVAudioFile(forReading: URL(fileURLWithPath: clip.path))
+            let engine = AVAudioEngine()
+            let player = AVAudioPlayerNode()
+            let effects = MeetingVoiceEffects()
+            engine.attach(player)
+            engine.attach(effects.limiter)
+            engine.connect(player, to: engine.mainMixerNode, format: file.processingFormat)
+            engine.connect(engine.mainMixerNode, to: effects.limiter, format: format)
+            engine.connect(effects.limiter, to: engine.outputNode, format: format)
+            try engine.enableManualRenderingMode(.offline, format: format, maximumFrameCount: 1024)
+            player.scheduleSegment(
+                file, startingFrame: 0, frameCount: AVAudioFrameCount(file.length), at: nil)
+            try engine.start()
+            player.play()
+            defer { engine.stop() }
+            let output = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1024))
+            var energy = 0.0
+            var peak: Float = 0
+            var count = 0
+            for _ in 0..<Int((file.length + 4800 + 1023) / 1024) {
+                #expect(try engine.renderOffline(1024, to: output) == .success)
+                for index in 0..<2 {
+                    let channel = try #require(output.floatChannelData?[index])
+                    for frame in 0..<Int(output.frameLength) {
+                        energy += Double(channel[frame] * channel[frame])
+                        peak = max(peak, abs(channel[frame]))
+                        count += 1
+                    }
+                }
+            }
+            #expect(energy.isFinite)
+            #expect(sqrt(energy / Double(max(count, 1))) > 0.01)
+            #expect(peak < 0.9)
+        }
     }
 
     @Test func invalidUploadsLeaveTheLibraryUnchanged() async throws {
