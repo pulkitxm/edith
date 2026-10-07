@@ -272,4 +272,77 @@ describe("Claude Code cloud receipts", () => {
       }),
     ).rejects.toThrow("identity");
   });
+  test("keeps the largest streamed receipt and preserves cache lifetimes", () => {
+    const larger = receipt("stream");
+    larger.message.usage.cache_creation_input_tokens = 50;
+    larger.message.usage.cache_creation = {
+      ephemeral_5m_input_tokens: 20,
+      ephemeral_1h_input_tokens: 30,
+    };
+    const rows = claudeCloudReceipts([larger, receipt("stream")], "session");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].message.usage.cache_creation).toEqual({
+      ephemeral_5m_input_tokens: 20,
+      ephemeral_1h_input_tokens: 30,
+    });
+    larger.message.usage.cache_creation.ephemeral_1h_input_tokens = 40;
+    expect(() => claudeCloudReceipts([larger], "session")).toThrow("totals");
+  });
+
+  test("reuses unchanged sessions and excludes resumed receipts even when the provider is unavailable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-cache-test-"));
+    const cache = join(root, "cache", "receipts.json");
+    const fetcher = async (url) =>
+      url.pathname.endsWith("/sessions")
+        ? reply({
+            data: [{ id: "cloud", last_event_at: "2026-10-01T12:00:00Z" }],
+          })
+        : reply({ data: [receipt("resumed"), receipt("web-only")] });
+    try {
+      await collectClaudeCloud("synthetic", join(root, "first"), {
+        cache,
+        fetcher,
+      });
+      const saved = await readFile(cache, "utf8");
+      expect(saved).not.toContain("content");
+      expect(saved).not.toContain("synthetic");
+      let calls = 0;
+      await collectClaudeCloud("synthetic", join(root, "second"), {
+        cache,
+        fetcher: async (url) => {
+          calls++;
+          if (!url.pathname.endsWith("/sessions"))
+            throw new Error("unchanged session was fetched");
+          return fetcher(url);
+        },
+      });
+      expect(calls).toBe(1);
+      const notices = [];
+      const result = await collectClaudeCloud(
+        "synthetic",
+        join(root, "offline"),
+        {
+          cache,
+          local: new Set([claudeReceiptIdentity(receipt("resumed"))]),
+          fetcher: async () => reply({}, 401),
+          notice: (message) => notices.push(message),
+        },
+      );
+      expect(result.receipts).toBe(1);
+      expect(notices).toHaveLength(1);
+      const remaining = await readFile(
+        join(root, "offline", "projects", "cloud", "cloud.jsonl"),
+        "utf8",
+      );
+      expect(remaining).not.toContain("resumed");
+      await expect(
+        collectClaudeCloud("different-account", join(root, "other"), {
+          cache,
+          fetcher: async () => reply({}, 401),
+        }),
+      ).rejects.toThrow("HTTP 401");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
