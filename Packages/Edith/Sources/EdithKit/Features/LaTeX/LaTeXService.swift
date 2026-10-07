@@ -212,7 +212,7 @@ public struct LaTeXService: Sendable {
                     run: |
                       mkdir -p "$RUNNER_TEMP/latex-output"
                       cd "$(dirname "$TEX_SOURCE")"
-                  tectonic -X compile --untrusted --keep-logs --outdir "$RUNNER_TEMP/latex-output" "$(basename "$TEX_SOURCE")"
+                      tectonic -X compile --untrusted --keep-logs --outdir "$RUNNER_TEMP/latex-output" "$(basename "$TEX_SOURCE")"
                   - uses: actions/upload-artifact@v4
                     with:
                       name: latex-\(project.id.uuidString.lowercased())

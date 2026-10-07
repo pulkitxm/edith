@@ -18,7 +18,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "studio", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
+                "studio", "latex", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
                 "calendar", "virtualCamera",
                 "database", "attention", "seoAudit", "codeStats",
             ])

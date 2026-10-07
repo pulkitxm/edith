@@ -220,7 +220,8 @@ public enum ExtensionLifecycleCatalog {
             recovery: [
                 instruction(
                     "retry", "Retry loading",
-                    "Check the source path and GitHub authentication, then retry.")
+                    "Check the source path and GitHub authentication, then retry.",
+                    "ed app reveal latex")
             ],
             verification: [
                 instruction(
