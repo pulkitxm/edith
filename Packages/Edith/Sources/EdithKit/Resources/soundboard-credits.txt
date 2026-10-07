@@ -6,6 +6,8 @@ https://creativecommons.org/publicdomain/zero/1.0/
 The source high-quality MP3 previews (Freesound) and original Ogg files
 (Kenney and OpenGameArt) were converted to 48 kHz stereo 16-bit PCM WAV.
 Levels were adjusted toward -17 dBFS active RMS with peaks capped at -3 dBFS.
+Thunder was additionally processed with FFmpeg loudnorm at -18 LUFS,
+-3 dBTP and 7 LU loudness range to bring up its rumble.
 Each clip has a 3 ms fade-in and a 25 ms fade-out. Applause and thunder
 have 400 ms fade-outs. Short clips use a fade-out of at most 10% of their length.
 
