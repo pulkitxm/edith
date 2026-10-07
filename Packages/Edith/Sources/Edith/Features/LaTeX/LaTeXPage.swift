@@ -12,6 +12,7 @@ struct LaTeXPage: View {
     @State private var adding = false
     @State private var showingReview = false
     @State private var inspector = "PDF"
+    @State private var editorControls = LaTeXEditorControls()
     private let providedModel: LaTeXModel?
     init(model: LaTeXModel? = nil, opensEditor: Bool = false) {
         providedModel = model
@@ -23,13 +24,15 @@ struct LaTeXPage: View {
         Group {
             if editing, let project = model.selected {
                 PageWorkspace {
-                    PageHeader("LaTeX editor") {
-                        Button {
-                            editing = false
-                        } label: {
-                            Label("Back to projects", systemImage: "chevron.left")
-                        }.disabled(model.dirty || model.busy)
-                    }
+                    PageHeader(
+                        "LaTeX editor",
+                        trailing: {
+                            Button {
+                                editing = false
+                            } label: {
+                                Label("Back to projects", systemImage: "chevron.left")
+                            }.disabled(model.dirty || model.busy)
+                        })
                 } content: {
                     workspace(project)
                 }
@@ -162,14 +165,16 @@ struct LaTeXPage: View {
             }
             if model.original != nil {
                 if compact {
-                    VSplitView {
-                        editor.frame(minHeight: UIScale.pt(180))
-                        result(project).frame(minHeight: UIScale.pt(160))
+                    VStack(spacing: 0) {
+                        editor.frame(maxHeight: .infinity)
+                        Divider()
+                        result(project).frame(maxHeight: .infinity)
                     }
                 } else {
-                    HSplitView {
-                        editor.frame(minWidth: UIScale.pt(220))
-                        result(project).frame(minWidth: UIScale.pt(220))
+                    HStack(spacing: 0) {
+                        editor.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        Divider()
+                        result(project).frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
             } else if model.load.isRunning {
@@ -188,6 +193,8 @@ struct LaTeXPage: View {
                 if project.location == .disk {
                     Button("Save & compile") { model.saveAndCompile() }
                         .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.return, modifiers: .command)
+                        .help("Save and compile (⌘Return)")
                         .disabled(model.original == nil || model.busy || model.load.isRunning)
                 } else {
                     Button(
@@ -228,14 +235,63 @@ struct LaTeXPage: View {
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            PageSectionHeader("Source", subtitle: "UTF-8 · LaTeX")
-            TextEditor(text: Binding(get: { model.source }, set: { model.source = $0 }))
-                .font(.system(size: UIScale.pt(13), design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .disabled(model.busy || model.load.isRunning)
-                .accessibilityLabel("LaTeX source")
-        }.padding(UIScale.pt(16))
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            PageSectionHeader(
+                "Source",
+                subtitle: model.selected.map {
+                    URL(fileURLWithPath: $0.sourcePath).lastPathComponent
+                })
+            ScrollView(.horizontal) {
+                HStack(spacing: UIScale.pt(8)) {
+                    Button {
+                        editorControls.undo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .help("Undo (⌘Z)").disabled(!editorControls.canUndo)
+                    Button {
+                        editorControls.redo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                    }
+                    .help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
+                    Button {
+                        editorControls.find()
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .help("Find in source (⌘F)")
+                    Toggle("Wrap", isOn: $editorControls.wrapsLines).toggleStyle(.button)
+                    Button {
+                        editorControls.fontSize = max(10, editorControls.fontSize - 1)
+                    } label: {
+                        Image(systemName: "textformat.size.smaller")
+                    }
+                    .help("Smaller editor text")
+                    Button {
+                        editorControls.fontSize = min(24, editorControls.fontSize + 1)
+                    } label: {
+                        Image(systemName: "textformat.size.larger")
+                    }
+                    .help("Larger editor text")
+                }.disabled(model.busy || model.load.isRunning)
+            }.scrollIndicators(.hidden).frame(height: UIScale.pt(28))
+            LaTeXSourceEditor(
+                text: Binding(get: { model.source }, set: { model.source = $0 }),
+                controls: editorControls, dark: scheme == .dark,
+                editable: !model.busy && !model.load.isRunning
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack {
+                Text("LaTeX · UTF-8 · \(model.selected?.compiler.title ?? "")").font(
+                    .edithText(.caption)
+                ).foregroundStyle(.secondary)
+                Spacer()
+                Text("Ln \(editorControls.line), Col \(editorControls.column)").font(
+                    .edithText(.caption)
+                ).monospacedDigit().foregroundStyle(.secondary)
+            }
+        }.padding(UIScale.pt(12))
     }
 
     @ViewBuilder private func result(_ project: LaTeXProject) -> some View {
@@ -253,8 +309,7 @@ struct LaTeXPage: View {
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
                 } else if FileManager.default.fileExists(atPath: project.pdfURL.path) {
-                    LaTeXPDF(url: project.pdfURL, generation: model.buildGeneration)
-                    Button("Open PDF") { NSWorkspace.shared.open(project.pdfURL) }
+                    LaTeXPDFPane(url: project.pdfURL, generation: model.buildGeneration)
                 } else {
                     ContentUnavailableView(
                         "Ready to compile", systemImage: "doc.richtext",
@@ -271,7 +326,7 @@ struct LaTeXPage: View {
                     Label(
                         "3. Review with Quinjet and squash merge", systemImage: "checkmark.circle")
                     Text(
-                        "The pull request adds a Tectonic workflow. GitHub Actions compiles your document and attaches a PDF artifact to the run."
+                        "The pull request adds a compiler workflow. GitHub Actions compiles your document and attaches a PDF artifact to the run."
                     )
                     .font(.edithText(.subheadline)).foregroundStyle(.secondary)
                     if let review = model.review {
@@ -291,22 +346,6 @@ struct LaTeXPage: View {
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(20))
             }
         }
-    }
-}
-
-private struct LaTeXPDF: NSViewRepresentable {
-    let url: URL
-    let generation: UUID
-    func makeNSView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.autoScales = true
-        return view
-    }
-    func updateNSView(_ view: PDFView, context: Context) {
-        let key = "\(url.path):\(generation)"
-        guard view.identifier?.rawValue != key else { return }
-        view.identifier = NSUserInterfaceItemIdentifier(key)
-        view.document = PDFDocument(url: url)
     }
 }
 
@@ -345,10 +384,12 @@ private struct LaTeXReviewSheet: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         PageWorkspace {
-            PageHeader("Quinjet review") {
-                Button("Refresh") { model.refreshReview() }.disabled(model.busy)
-                Button("Done") { dismiss() }
-            }
+            PageHeader(
+                "Quinjet review",
+                trailing: {
+                    Button("Refresh") { model.refreshReview() }.disabled(model.busy)
+                    Button("Done") { dismiss() }
+                })
         } content: {
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 if let review = model.review {

@@ -14,7 +14,8 @@ public struct LaTeXService: Sendable {
             CLICommandRequest(
                 executableURL: executable, arguments: arguments,
                 environment: CLIToolEnvironment.sanitized(), currentDirectoryURL: directory,
-                timeout: tool == "tectonic" ? 300 : 60, maximumOutputBytes: 4_194_304,
+                timeout: ["tectonic", "latexmk"].contains(tool) ? 300 : 60,
+                maximumOutputBytes: 4_194_304,
                 standardInputData: input, terminatesProcessGroup: true)
         ) { _ in }
         guard result.terminationStatus == 0 else {
@@ -93,11 +94,16 @@ public struct LaTeXService: Sendable {
         }
         let source = URL(fileURLWithPath: project.sourcePath)
         let output = try await run(
-            "tectonic",
-            [
-                "-X", "compile", "--untrusted", "--keep-logs", "--outdir",
-                source.deletingLastPathComponent().path, source.path,
-            ], directory: source.deletingLastPathComponent())
+            project.compiler == .tectonic ? "tectonic" : "latexmk",
+            project.compiler == .tectonic
+                ? [
+                    "-X", "compile", "--untrusted", "--keep-logs", "--outdir",
+                    source.deletingLastPathComponent().path, source.path,
+                ]
+                : [
+                    "-norc", "-pdf", "-no-shell-escape", "-file-line-error", "-halt-on-error",
+                    "-interaction=nonstopmode", source.path,
+                ], directory: source.deletingLastPathComponent())
         guard FileManager.default.fileExists(atPath: project.pdfURL.path) else {
             throw LaTeXError.message("Compilation finished without producing a PDF.")
         }
@@ -189,6 +195,35 @@ public struct LaTeXService: Sendable {
 
     public static func workflow(_ project: LaTeXProject) -> String {
         let source = project.sourcePath.replacingOccurrences(of: "'", with: "''")
+        let compile: String
+        let artifact: String
+        if project.compiler == .pdfLatex {
+            compile = """
+                - uses: xu-cheng/latex-action@v4
+                  with:
+                    root_file: '\(source)'
+                    work_in_root_file_dir: true
+                    args: '-norc -pdf -no-shell-escape -file-line-error -halt-on-error -interaction=nonstopmode'
+                """
+            artifact = "'\(String(source.dropLast(4))).pdf'"
+        } else {
+            compile = """
+                - uses: wtfjoke/setup-tectonic@v3
+                  with:
+                    github-token: ${{ secrets.GITHUB_TOKEN }}
+                - name: Compile PDF
+                  env:
+                    TEX_SOURCE: '\(source)'
+                  run: |
+                    mkdir -p "$RUNNER_TEMP/latex-output"
+                    cd "$(dirname "$TEX_SOURCE")"
+                    tectonic -X compile --untrusted --keep-logs --outdir "$RUNNER_TEMP/latex-output" "$(basename "$TEX_SOURCE")"
+                """
+            artifact = "${{ runner.temp }}/latex-output/*.pdf"
+        }
+        let steps = compile.split(separator: "\n", omittingEmptySubsequences: false).map {
+            "      " + $0
+        }.joined(separator: "\n")
         return """
             name: LaTeX PDF
             on:
@@ -203,20 +238,11 @@ public struct LaTeXService: Sendable {
                 timeout-minutes: 10
                 steps:
                   - uses: actions/checkout@v4
-                  - uses: wtfjoke/setup-tectonic@v3
-                    with:
-                      github-token: ${{ secrets.GITHUB_TOKEN }}
-                  - name: Compile PDF
-                    env:
-                      TEX_SOURCE: '\(source)'
-                    run: |
-                      mkdir -p "$RUNNER_TEMP/latex-output"
-                      cd "$(dirname "$TEX_SOURCE")"
-                      tectonic -X compile --untrusted --keep-logs --outdir "$RUNNER_TEMP/latex-output" "$(basename "$TEX_SOURCE")"
+            \(steps)
                   - uses: actions/upload-artifact@v4
                     with:
                       name: latex-\(project.id.uuidString.lowercased())
-                      path: ${{ runner.temp }}/latex-output/*.pdf
+                      path: \(artifact)
                       if-no-files-found: error
             """ + "\n"
     }

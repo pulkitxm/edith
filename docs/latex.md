@@ -14,6 +14,9 @@ its source, and select Save & compile. The source stays on disk and the PDF is
 written beside it. The output pane shows the PDF or build log. Compilation runs
 from the source directory so relative includes and assets resolve normally.
 Edith refuses to save over source changes made by another editor.
+The source editor includes LaTeX syntax colors, line numbers, undo and redo,
+inline find, line wrapping, and text size controls. Use Command-Return to save
+and compile. The PDF pane has page navigation, zoom, fit, and Save PDF as.
 
 ## Repository documents
 
@@ -23,11 +26,15 @@ Use `owner/repository` and a relative path such as `papers/main.tex`.
 
 Edit the source and select Create pull request. Edith creates a branch from the
 commit that supplied your source and commits the edited source plus a dedicated
-Tectonic workflow through Pukbot. Subsequent edits update the same open PR.
+compiler workflow through Pukbot. Subsequent edits update the same open PR.
 Repository sources remain in memory until submitted. Only project pointers and
 PR identifiers are saved locally. No repository checkout or local PDF is made.
 If submission fails after creating the branch or PR, retry reconnects the
 existing remote work. Source conflicts are reported instead of overwritten.
+
+Choose pdfLaTeX for documents using pdfTeX commands such as `\pdfgentounicode`.
+The repository compiler uses a full TeX Live environment with pdfLaTeX. Local
+pdfLaTeX compilation needs latexmk and a local TeX Live installation on PATH.
 
 GitHub Actions compiles the document on pull requests and pushes and uploads the
 PDF as a run artifact. Open Builds & PDF artifacts to download it from GitHub.

@@ -7,10 +7,17 @@ public enum LaTeXLocation: String, Codable, CaseIterable, Sendable {
     public var title: String { self == .disk ? "On disk" : "GitHub repository" }
 }
 
+public enum LaTeXCompiler: String, Codable, CaseIterable, Sendable {
+    case tectonic
+    case pdfLatex
+    public var title: String { self == .tectonic ? "Tectonic" : "pdfLaTeX" }
+}
+
 public struct LaTeXProject: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var location: LaTeXLocation
+    public var compiler: LaTeXCompiler
     public var sourcePath: String
     public var repository: String
     public var baseBranch: String
@@ -19,12 +26,14 @@ public struct LaTeXProject: Identifiable, Codable, Equatable, Sendable {
 
     public init(
         id: UUID = UUID(), name: String, location: LaTeXLocation, sourcePath: String,
+        compiler: LaTeXCompiler = .tectonic,
         repository: String = "", baseBranch: String = "", reviewBranch: String? = nil,
         pullRequest: Int? = nil
     ) {
         self.id = id
         self.name = name
         self.location = location
+        self.compiler = compiler
         self.sourcePath = sourcePath
         self.repository = repository
         self.baseBranch = baseBranch

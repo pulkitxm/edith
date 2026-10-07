@@ -147,6 +147,23 @@ import Testing
         #expect(!yaml.contains("pull_request_target"))
     }
 
+    @Test func pdfLatexWorkflowUsesSourceDirectoryAndDisablesShellEscape() throws {
+        var repo = project()
+        repo.sourcePath = "resume/resume.tex"
+        repo.compiler = .pdfLatex
+        let yaml = LaTeXService.workflow(repo)
+        #expect(yaml.contains("root_file: 'resume/resume.tex'"))
+        #expect(yaml.contains("work_in_root_file_dir: true"))
+        #expect(yaml.contains("-norc -pdf -no-shell-escape"))
+        #expect(yaml.contains("path: 'resume/resume.pdf'"))
+        for compiler in LaTeXCompiler.allCases {
+            repo.compiler = compiler
+            try Data(LaTeXService.workflow(repo).utf8).write(
+                to: FileManager.default.temporaryDirectory.appendingPathComponent(
+                    "latex-\(compiler.rawValue).yml"))
+        }
+    }
+
     private func project() -> LaTeXProject {
         LaTeXProject(
             name: "Paper", location: .github, sourcePath: "main.tex", repository: "octocat/paper",

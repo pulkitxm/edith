@@ -8,6 +8,7 @@ struct LaTeXAddProject: View {
     let onAdded: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var location = LaTeXLocation.disk
+    @State private var compiler = LaTeXCompiler.tectonic
     @State private var name = ""
     @State private var sourcePath = ""
     @State private var repository = ""
@@ -17,9 +18,11 @@ struct LaTeXAddProject: View {
 
     var body: some View {
         PageScaffold(width: .readable) {
-            PageHeader("Add LaTeX project") {
-                Button("Cancel") { dismiss() }.disabled(busy)
-            }
+            PageHeader(
+                "Add LaTeX project",
+                trailing: {
+                    Button("Cancel") { dismiss() }.disabled(busy)
+                })
         } content: {
             EdithSegmentedPicker(
                 "Storage", selection: $location, options: LaTeXLocation.allCases,
@@ -28,7 +31,12 @@ struct LaTeXAddProject: View {
             .disabled(busy)
             .onChange(of: location) { _, _ in
                 sourcePath = ""; error = nil
+                compiler = location == .github ? .pdfLatex : .tectonic
             }
+            EdithSegmentedPicker(
+                "Compiler", selection: $compiler, options: LaTeXCompiler.allCases,
+                label: { $0.title }
+            ).disabled(busy)
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 field("Project name", placeholder: "Research paper", text: $name)
                 if location == .github {
@@ -65,7 +73,7 @@ struct LaTeXAddProject: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .frame(width: UIScale.pt(520), height: UIScale.pt(470))
+        .frame(width: UIScale.pt(520), height: UIScale.pt(510))
         .transientPresentation(
             dismissible: !busy && name.isEmpty && sourcePath.isEmpty && repository.isEmpty)
     }
@@ -101,6 +109,7 @@ struct LaTeXAddProject: View {
                         name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                         location: location,
                         sourcePath: sourcePath.trimmingCharacters(in: .whitespacesAndNewlines),
+                        compiler: compiler,
                         repository: repository.trimmingCharacters(in: .whitespacesAndNewlines),
                         baseBranch: branch.trimmingCharacters(in: .whitespacesAndNewlines)))
                 onAdded()

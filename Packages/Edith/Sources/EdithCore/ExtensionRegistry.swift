@@ -254,7 +254,7 @@ public enum ExtensionRegistry {
             subtitle: "Compile local documents or edit GitHub sources with pull request review.",
             symbolName: "doc.richtext", suite: .media, host: .window, featured: false,
             defaultsKey: "tabLaTeXEnabled", requiredCapabilities: [.localMediaEditing],
-            optionalToolIDs: ["tectonic", "gh", "quinjet", "pukbot"]),
+            optionalToolIDs: ["tectonic", "latexmk", "gh", "quinjet", "pukbot"]),
         ExtensionRegistryEntry(
             id: "timeLapse", title: "Screen Recorder",
             subtitle: "Record displays or windows with audio, or capture a compact time-lapse.",

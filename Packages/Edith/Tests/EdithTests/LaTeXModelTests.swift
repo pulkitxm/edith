@@ -100,6 +100,40 @@ import Testing
         try capture(host, name: "latex-repository")
     }
 
+    @Test func syntaxColorsPreserveNativeUndoAndText() async throws {
+        let source = Self.sample
+        let result = try #require(
+            await SyntaxHighlighting.shared.highlight(text: source, language: "latex", dark: true))
+        #expect(result.string == source)
+        let command = result.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
+        let plainRange = (source as NSString).range(of: "Every useful")
+        let plain =
+            result.attribute(.foregroundColor, at: plainRange.location, effectiveRange: nil)
+            as? NSColor
+        #expect(command != plain)
+        let controls = LaTeXEditorControls()
+        var text = source
+        let host = try auditHost(
+            LaTeXSourceEditor(
+                text: Binding(get: { text }, set: { text = $0 }), controls: controls, dark: true,
+                editable: true), size: CGSize(width: 700, height: 500))
+        let view = try #require(controls.textView)
+        let window = TestWindowHost.window(contentRect: host.bounds)
+        window.contentView = host
+        window.makeFirstResponder(view)
+        defer { window.close() }
+        view.setSelectedRange(NSRange(location: 0, length: 0))
+        view.insertText("Added ", replacementRange: view.selectedRange())
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(text.hasPrefix("Added "))
+        #expect(view.undoManager?.canUndo == true)
+        controls.undo()
+        #expect(view.string == source)
+        controls.redo()
+        #expect(view.string.hasPrefix("Added "))
+        _ = host
+    }
+
     private func directory() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -117,7 +151,7 @@ import Testing
         try png.write(to: root.appendingPathComponent("\(name).png"))
     }
 
-    private static let sample = #"""
+    nonisolated private static let sample = #"""
         \documentclass{article}
         \title{A Small Guide to Big Ideas}
         \author{Northstar Research}
