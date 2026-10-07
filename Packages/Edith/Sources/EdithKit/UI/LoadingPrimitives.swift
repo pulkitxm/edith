@@ -141,7 +141,7 @@ public struct ContentStatusView: View {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: UIScale.pt(8)) { actions }
                 VStack(spacing: UIScale.pt(8)) { actions }
-            }
+            }.fixedSize(horizontal: false, vertical: true)
         }
         .padding(UIScale.pt(24))
         .frame(maxWidth: .infinity, minHeight: UIScale.pt(220))

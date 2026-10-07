@@ -19,6 +19,30 @@ const areaPatterns = new Map(
 
 const matchesArea = (area, path) => areaPatterns.get(area)?.test(path) ?? false;
 
+test("Spotify catalog changes run native and locked Rust checks", () => {
+  for (const path of [
+    "apps/music-player/src/catalog.rs",
+    "apps/music-player/Cargo.toml",
+    "apps/music-player/Cargo.lock",
+  ]) {
+    expect(matchesArea("music_player", path)).toBe(true);
+    expect(matchesArea("swift", path)).toBe(true);
+  }
+  expect(matchesArea("music_player", "docs/music.md")).toBe(false);
+  const job = ciJobs["music-player"];
+  expect(job.needs).toBe("changes");
+  expect(job.if).toBe("needs.changes.outputs.music_player == 'true'");
+  expect(job["runs-on"]).toBe("macos-26");
+  const checks = job.steps.find(
+    (step) => step["working-directory"] === "apps/music-player",
+  );
+  expect(checks.run).toContain("cargo +stable fmt --check");
+  expect(checks.run).toContain(
+    "cargo +stable clippy --locked --all-targets -- -D warnings",
+  );
+  expect(checks.run).toContain("cargo +stable test --locked");
+});
+
 const pushPaths = (workflow) => {
   const push = workflow.slice(
     workflow.indexOf("  push:"),
@@ -174,13 +198,13 @@ test("Swift tests cache a successful build before bounded execution", () => {
   const build = steps.find((step) => step.name === "Build tests");
   const save = steps.find((step) => step.name === "Save compiled tests");
   const run = steps.find((step) => step.name === "Tests");
-  expect(job["timeout-minutes"]).toBe(60);
+  expect(job["timeout-minutes"]).toBe(90);
   expect(restore.uses).toBe("./.github/actions/cache-swift");
   expect(restore.with.variant).toBe("tests-debug");
   expect(isolation.run).toBe("python3 -B scripts/test-swift-test-isolation.py");
   expect(build.run).toBe("./test.sh --build-only");
   expect(build["working-directory"]).toBe("Packages/Edith");
-  expect(build["timeout-minutes"]).toBe(30);
+  expect(build["timeout-minutes"]).toBe(45);
   expect(build.if).toBeUndefined();
   expect(run.run).toBe(
     `for batch in \${{ matrix.batches }}; do\n  timeout=480\n  if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi\n  events="$RUNNER_TEMP/test-events-$batch.jsonl"\n  python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"\ndone\n`,

@@ -3,11 +3,11 @@ import CryptoKit
 import Foundation
 import Security
 
-enum ChromeSafeStorageError: Error, Equatable, LocalizedError {
+public enum ChromeSafeStorageError: Error, Equatable, LocalizedError {
     case keychainDenied(OSStatus)
     case keychainMissing
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .keychainDenied:
             "Keychain access to Chrome Safe Storage was not allowed."
@@ -17,14 +17,14 @@ enum ChromeSafeStorageError: Error, Equatable, LocalizedError {
     }
 }
 
-struct ChromeCookieKey: Sendable, Equatable {
-    let bytes: [UInt8]
+public struct ChromeCookieKey: Sendable, Equatable {
+    public let bytes: [UInt8]
 
-    init(bytes: [UInt8]) {
+    public init(bytes: [UInt8]) {
         self.bytes = bytes
     }
 
-    init(passphrase: String) {
+    public init(passphrase: String) {
         var key = [UInt8](repeating: 0, count: kCCKeySizeAES128)
         let salt = Array("saltysalt".utf8)
         let password = Array(passphrase.utf8)
@@ -42,13 +42,13 @@ struct ChromeCookieKey: Sendable, Equatable {
     }
 }
 
-enum ChromeSafeStorage {
-    static let service = "Chrome Safe Storage"
-    static let account = "Chrome"
+public enum ChromeSafeStorage {
+    public static let service = "Chrome Safe Storage"
+    public static let account = "Chrome"
     private static let versionPrefix = Array("v10".utf8)
     private static let initializationVector = [UInt8](repeating: 0x20, count: kCCBlockSizeAES128)
 
-    static func keychainKey() throws -> ChromeCookieKey {
+    public static func keychainKey() throws -> ChromeCookieKey {
         var result: CFTypeRef?
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -65,7 +65,7 @@ enum ChromeSafeStorage {
         return ChromeCookieKey(passphrase: passphrase)
     }
 
-    static func decrypt(
+    public static func decrypt(
         _ blob: Data, key: ChromeCookieKey, host: String, hashPrefixed: Bool
     ) -> String? {
         let bytes = [UInt8](blob)
@@ -82,7 +82,7 @@ enum ChromeSafeStorage {
         return String(bytes: plain, encoding: .utf8)
     }
 
-    static func encrypt(_ value: String, key: ChromeCookieKey, host: String?) -> Data? {
+    public static func encrypt(_ value: String, key: ChromeCookieKey, host: String?) -> Data? {
         var plain = [UInt8]()
         if let host { plain += Array(SHA256.hash(data: Data(host.utf8))) }
         plain += Array(value.utf8)

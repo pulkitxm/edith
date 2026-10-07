@@ -49,7 +49,7 @@ final class EmojiPanelModel {
     @ObservationIgnored private var sectionOffsetByID: [String: Int] = [:]
     @ObservationIgnored private var renderedCounts: [String: Int] = [:]
     @ObservationIgnored private var generation: UInt64 = 0
-    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
 
     init(catalog: EmojiCatalog, frequent: [Emoji], search: Search? = nil) {
         self.catalog = catalog

@@ -1,37 +1,48 @@
 import EdithCore
 import Foundation
 
-struct ChromeProfile: Identifiable, Equatable, Hashable, Sendable {
-    let directory: String
-    let name: String
-    let email: String?
-    let pictureURL: URL?
-    let colorARGB: UInt32?
+public struct ChromeProfile: Identifiable, Equatable, Hashable, Sendable {
+    public init(
+        directory: String, name: String, email: String?, pictureURL: URL?, colorARGB: UInt32?
+    ) {
+        self.directory = directory
+        self.name = name
+        self.email = email
+        self.pictureURL = pictureURL
+        self.colorARGB = colorARGB
+    }
+    public let directory: String
+    public let name: String
+    public let email: String?
+    public let pictureURL: URL?
+    public let colorARGB: UInt32?
 
-    var id: String { directory }
+    public var id: String { directory }
 
-    var initials: String {
+    public var initials: String {
         let words = name.split(whereSeparator: { $0 == " " || $0 == "." || $0 == "_" })
         let letters = words.prefix(2).compactMap(\.first).map { String($0).uppercased() }
         return letters.isEmpty ? "?" : letters.joined()
     }
 }
 
-struct ChromeUserData: Equatable, Sendable {
-    let root: URL
+public struct ChromeUserData: Equatable, Sendable {
+    public init(root: URL) { self.root = root }
+    public let root: URL
 
-    static let standardRoot = FileManager.default.homeDirectoryForCurrentUser
+    public static let standardRoot = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/Google/Chrome", isDirectory: true)
 
-    static let standard = ChromeUserData(root: standardRoot)
+    public static let standard = ChromeUserData(root: standardRoot)
 
-    var localStateURL: URL { root.appendingPathComponent("Local State") }
+    public var localStateURL: URL { root.appendingPathComponent("Local State") }
 
-    func directory(for profile: ChromeProfile) -> URL {
+    public func directory(for profile: ChromeProfile) -> URL {
         root.appendingPathComponent(profile.directory, isDirectory: true)
     }
 
-    func cookiesURL(for profile: ChromeProfile, fileManager: FileManager = .default) -> URL? {
+    public func cookiesURL(for profile: ChromeProfile, fileManager: FileManager = .default) -> URL?
+    {
         let base = directory(for: profile)
         let candidates = [
             base.appendingPathComponent("Network/Cookies"), base.appendingPathComponent("Cookies"),
@@ -40,11 +51,11 @@ struct ChromeUserData: Equatable, Sendable {
         return existing.max { modified($0, fileManager) < modified($1, fileManager) }
     }
 
-    func localStorageURL(for profile: ChromeProfile) -> URL {
+    public func localStorageURL(for profile: ChromeProfile) -> URL {
         directory(for: profile).appendingPathComponent("Local Storage/leveldb", isDirectory: true)
     }
 
-    func profiles(fileManager: FileManager = .default) throws -> [ChromeProfile] {
+    public func profiles(fileManager: FileManager = .default) throws -> [ChromeProfile] {
         guard fileManager.fileExists(atPath: localStateURL.path) else { return [] }
         let data = try Data(contentsOf: localStateURL)
         return ChromeProfileParser.profiles(
@@ -58,8 +69,10 @@ struct ChromeUserData: Equatable, Sendable {
     }
 }
 
-enum ChromeProfileParser {
-    static func profiles(localState: Data, root: URL, exists: (URL) -> Bool) -> [ChromeProfile] {
+public enum ChromeProfileParser {
+    public static func profiles(localState: Data, root: URL, exists: (URL) -> Bool)
+        -> [ChromeProfile]
+    {
         guard
             let object = try? JSONSerialization.jsonObject(with: localState) as? [String: Any],
             let profile = object["profile"] as? [String: Any],
@@ -82,7 +95,7 @@ enum ChromeProfileParser {
         }
     }
 
-    static func displayName(_ info: [String: Any], directory: String) -> String {
+    public static func displayName(_ info: [String: Any], directory: String) -> String {
         let name = nonEmpty(info["name"])
         let given = nonEmpty(info["gaia_given_name"])
         let full = nonEmpty(info["gaia_name"])
