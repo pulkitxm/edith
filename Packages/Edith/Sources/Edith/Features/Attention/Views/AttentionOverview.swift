@@ -9,13 +9,6 @@ struct AttentionOverview: View {
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
-            Toggle(
-                "Exclude idle time",
-                isOn: Binding(
-                    get: { model.settings.excludeIdleTime },
-                    set: { model.setExcludeIdleTime($0) })
-            )
-            .toggleStyle(.switch)
             Text(
                 "App breakdowns and productivity show active use. Idle and locked time are kept separately."
             )
@@ -88,9 +81,9 @@ struct AttentionHeadline: View {
             AttentionTile(
                 label: "Screen time",
                 value: AttentionFormat.duration(
-                    summary.screenTime(excludingIdle: model.settings.excludeIdleTime)),
+                    summary.screenTime(excludingIdle: model.excludeIdleTime)),
                 detail:
-                    model.settings.excludeIdleTime
+                    model.excludeIdleTime
                     ? "idle and locked time excluded" : "includes idle and locked time",
                 tint: quiet, symbol: "clock")
             AttentionTile(

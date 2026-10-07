@@ -311,7 +311,7 @@ private enum AttentionSyntheticWeek {
             width: 760)
     }
 
-    @Test func idleTimeFilterPersistsAndRendersSeparateTotals() async throws {
+    @Test func idleTimeFilterChangesReportWithoutSavingSettings() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("AttentionIdleFixture.\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -333,8 +333,8 @@ private enum AttentionSyntheticWeek {
         let model = AttentionPageModel(repository: repository)
         model.select(.yesterday)
         await model.waitForReload()
-        #expect(model.settings.excludeIdleTime)
-        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 3_600)
+        #expect(model.excludeIdleTime)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 3_600)
         #expect(model.summary.idleDuration == 9_000)
         let output = ProcessInfo.processInfo.environment["EDITH_ATTENTION_EVIDENCE_DIR"].map {
             URL(fileURLWithPath: $0, isDirectory: true)
@@ -357,10 +357,12 @@ private enum AttentionSyntheticWeek {
                 width: 760, scheme: .light, scale: 1.25)
             model.section = .overview
         }
-        model.setExcludeIdleTime(false)
+        model.excludeIdleTime = false
         await model.waitForReload()
-        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 12_600)
-        #expect(repository.loadSettings().excludeIdleTime == false)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 12_600)
+        #expect(repository.loadSettings() == model.settings)
+        #expect(model.message == nil)
+        #expect(!model.pending)
         #expect(model.summary.entities.first?.duration == 3_600)
         if let output {
             try await render(
@@ -370,10 +372,10 @@ private enum AttentionSyntheticWeek {
         let reopened = AttentionPageModel(repository: repository)
         reopened.select(.yesterday)
         await reopened.waitForReload()
-        #expect(reopened.settings.excludeIdleTime == false)
-        model.setExcludeIdleTime(true)
+        #expect(reopened.excludeIdleTime)
+        model.excludeIdleTime = true
         await model.waitForReload()
-        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 3_600)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 3_600)
         #expect(model.summary.entities.first?.duration == 3_600)
     }
 

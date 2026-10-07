@@ -46,6 +46,7 @@ final class AttentionPageModel {
     }
     private(set) var period = AttentionPeriod()
     private(set) var window = AttentionTimeWindow.all
+    var excludeIdleTime = true
     var settings = AttentionSettings()
     private(set) var summary: AttentionSummary
     private(set) var dayRibbon: [AttentionRibbonBlock] = []
@@ -359,11 +360,6 @@ final class AttentionPageModel {
         settings.browserTrackingEnabled = browserTracking
         saveSettings()
         section = .overview
-    }
-
-    func setExcludeIdleTime(_ excluded: Bool) {
-        settings.excludeIdleTime = excluded
-        saveSettings()
     }
 
     func setAttentionEnabled(_ enabled: Bool) {

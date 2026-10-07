@@ -40,9 +40,8 @@ struct AttentionSettingsView: View {
                     Text("Detailed").tag(AttentionPrivacyLevel.detailed)
                 }
                 Toggle("Store window and page titles", isOn: $model.settings.windowTitlesEnabled)
-                Toggle("Exclude idle time from screen time", isOn: $model.settings.excludeIdleTime)
                 Text(
-                    "Screen time can include or exclude idle and locked time. App breakdowns and productivity always use active time. Changes to the idle threshold apply to future activity."
+                    "Changes to the idle threshold apply to future activity."
                 )
                 .font(.edithText(.caption))
                 .foregroundStyle(.secondary)

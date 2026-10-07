@@ -250,7 +250,7 @@ import Testing
         #expect(result.idleDuration == 100)
     }
 
-    @Test func screenTimeCanExcludeAwayTimeWithoutChangingActiveBreakdowns() throws {
+    @Test func screenTimeCanExcludeAwayTimeWithoutChangingActiveBreakdowns() {
         var away = app("com.apple.dt.Xcode", "Xcode", at: 60, for: 3_600)
         away.presence = .idle
         let events = [app("com.apple.dt.Xcode", "Xcode", at: 0, for: 60), away]
@@ -259,12 +259,7 @@ import Testing
         #expect(result.screenTime(excludingIdle: false) == 3_660)
         #expect(result.entities.first?.duration == 60)
         #expect(result.idleDuration == 3_600)
-        var settings = AttentionSettings()
-        #expect(settings.excludeIdleTime)
-        settings.excludeIdleTime = false
-        let saved = try JSONEncoder().encode(settings)
-        #expect(
-            try JSONDecoder().decode(AttentionSettings.self, from: saved).excludeIdleTime == false)
+
     }
 
     @Test func daysAndHoursSplitIntervalsAtBoundaries() {
@@ -301,7 +296,6 @@ import Testing
         #expect(settings.categories.contains { $0.id == "agents" })
         #expect(settings.rules.first?.keywords == [])
         #expect(settings.agentTrackingEnabled)
-        #expect(settings.excludeIdleTime)
     }
 
     @Test func sameNamedUserAndCatalogRulesShareOneEntity() {

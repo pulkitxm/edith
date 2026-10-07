@@ -147,6 +147,7 @@ private struct AttentionPeriodControl: View {
                 .frame(width: UIScale.pt(280))
             }
             AttentionWindowMenu(model: model)
+            AttentionIdleMenu(model: model)
             Divider().frame(height: UIScale.pt(18)).padding(.horizontal, UIScale.pt(4))
             Button {
                 model.step(-1)
@@ -191,6 +192,41 @@ private struct AttentionPeriodControl: View {
         }
         .buttonStyle(.edith(.borderless))
         .fixedSize()
+    }
+}
+
+private struct AttentionIdleMenu: View {
+    @Bindable var model: AttentionPageModel
+
+    var body: some View {
+        Menu {
+            Button {
+                model.excludeIdleTime = true
+            } label: {
+                if model.excludeIdleTime {
+                    Label("Exclude idle time", systemImage: "checkmark")
+                } else {
+                    Text("Exclude idle time")
+                }
+            }
+            Button {
+                model.excludeIdleTime = false
+            } label: {
+                if model.excludeIdleTime {
+                    Text("Include idle time")
+                } else {
+                    Label("Include idle time", systemImage: "checkmark")
+                }
+            }
+        } label: {
+            Label(
+                model.excludeIdleTime ? "Exclude idle" : "Include idle",
+                systemImage: "moon.zzz")
+        }
+        .menuStyle(.button)
+        .buttonStyle(.edith(model.excludeIdleTime ? .primary : .secondary))
+        .fixedSize()
+        .help("Filter screen time with or without idle and locked periods")
     }
 }
 
