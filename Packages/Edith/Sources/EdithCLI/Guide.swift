@@ -37,7 +37,7 @@ public enum Guide {
           `ed attention`, `ed clipboard`, `ed shelf`, `ed color`, `ed emoji`,
           `ed bifrost`, `ed presenter`, `ed lid-awake`, `ed camera`,
           `ed download`, `ed cleaner`, `ed brew`, `ed maintenance`, `ed tools`.
-        - Usage and projects: `ed usage`, `ed quinjet`, `ed herdr`, `ed studio`,
+        - Usage and projects: `ed usage`, `ed quinjet`, `ed herdr`, `ed studio`, `ed latex`,
           `ed docs`, `ed guide`.
         - Other machines: `ed machines`, plus `ed <machine> <command...>` for a
           remote shell.

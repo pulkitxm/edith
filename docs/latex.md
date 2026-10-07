@@ -68,3 +68,13 @@ are never written to browser storage. To rebuild the bundled editor, run
 `bun run --cwd tools/latex-editor build`. Verify the committed bundle with
 `bun run --cwd tools/latex-editor check`. Dependency licenses ship beside the
 editor assets.
+
+## Command line
+
+Use `ed latex ls --json` to discover projects and `ed latex read PROJECT --json`
+to read source with a revision token. `write` accepts raw UTF-8 stdin; `edit`
+accepts checked literal replacements as JSON stdin. Both preview first and
+apply with `--yes`, saving and compiling locally or submitting a GitHub PR.
+`compile`, `preview`, `review`, `merge`, and `remove` complete the same flow.
+See the [CLI reference](cli/latex/README.md). The Edith LaTeX Edit plugin skill
+teaches this workflow and can be installed from Plugins or `ed skills install`.
