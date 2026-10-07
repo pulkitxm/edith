@@ -348,7 +348,7 @@ public enum UsageHistory {
         let rawCloud = cloud.flatMap(decode)
         let normalizedLocal = rawLocal.map(normalized)
         let normalizedCloud = rawCloud.map(normalized)
-        guard let l = normalizedLocal else {
+        guard var l = normalizedLocal else {
             guard let c = normalizedCloud,
                 let protected = protectingRetainedHistory(c, inputs: [c])
             else { return nil }
@@ -360,7 +360,14 @@ public enum UsageHistory {
             return oneSided(
                 original: local, raw: rawLocal, normalized: pruningUnusedMachineSources(protected))
         }
-        let c = removingReplacedMachines(from: cloudDocument, active: l)
+        if let localTime = cloudSnapshotDate(l["generatedAt"]),
+            let cloudTime = cloudSnapshotDate(cloudDocument["generatedAt"]),
+            cloudTime > localTime
+        {
+            l = removingCollectedCloudSources(from: l, active: cloudDocument)
+        }
+        let c = removingCollectedCloudSources(
+            from: removingReplacedMachines(from: cloudDocument, active: l), active: l)
 
         var mergedByPeriod: [String: [String: Any]] = [:]
         for day in daily(c) {
@@ -456,7 +463,8 @@ public enum UsageHistory {
         guard let previous else {
             return merge(local: fresh, cloud: nil)
         }
-        guard var old = decode(previous) else { return nil }
+        guard let previousDocument = decode(previous) else { return nil }
+        var old = removingCollectedCloudSources(from: previousDocument, active: incoming)
         guard var retained = retainedBlocks(old, incoming) else { return nil }
         let incomingDays = Dictionary(
             daily(incoming).compactMap { day in
@@ -663,6 +671,47 @@ public enum UsageHistory {
     }
 
     private static let legacyCloudSource = "cc-cloud"
+
+    private static func removingCollectedCloudSources(
+        from document: [String: Any], active: [String: Any]
+    ) -> [String: Any] {
+        guard let activeTime = cloudSnapshotDate(active["generatedAt"]),
+            let previousTime = cloudSnapshotDate(document["generatedAt"]),
+            activeTime >= previousTime
+        else { return document }
+        let collected = Set(strings(active["cloudSourcesCollected"]))
+            .intersection(["codex-cloud", "claude-cloud"])
+        guard !collected.isEmpty else { return document }
+        var filtered = document
+        filtered["sources"] = strings(document["sources"]).filter { !collected.contains($0) }
+        filtered["defaultSources"] = strings(document["defaultSources"])
+            .filter { !collected.contains($0) }
+        filtered["sourceMeta"] = (document["sourceMeta"] as? [String: Any] ?? [:])
+            .filter { !collected.contains($0.key) }
+        filtered["sessions"] = (document["sessions"] as? [[String: Any]] ?? []).filter {
+            !collected.contains($0["source"] as? String ?? "")
+        }
+        let days = daily(document).map { day in
+            filteringMachineDay(day) { !collected.contains($0) }
+        }
+        filtered["daily"] = days
+        filtered["totals"] = totals(of: days)
+        if var retention = document["historyRetention"] as? [String: Any] {
+            retention["blocks"] = (retention["blocks"] as? [[String: Any]] ?? []).filter {
+                !collected.contains($0["source"] as? String ?? "")
+            }
+            filtered["historyRetention"] = retention
+        }
+        return filtered
+    }
+
+    private static func cloudSnapshotDate(_ value: Any?) -> Date? {
+        guard let timestamp = value as? String else { return nil }
+        let parser = ISO8601DateFormatter()
+        if let date = parser.date(from: timestamp) { return date }
+        parser.formatOptions.insert(.withFractionalSeconds)
+        return parser.date(from: timestamp)
+    }
 
     private struct MachineHistory {
         var host = ""

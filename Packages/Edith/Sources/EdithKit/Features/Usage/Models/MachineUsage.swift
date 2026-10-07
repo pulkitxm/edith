@@ -450,7 +450,7 @@ public enum MachineUsageCollector {
         home: String, platform: RemoteMachinePlatform = .linux
     ) -> String {
         guard platform == .windows else {
-            return "bash -s -- \(ShellQuote.quote(outputDirectory(home: home)))"
+            return "EDITH_USAGE_CLOUD=0 bash -s -- \(ShellQuote.quote(outputDirectory(home: home)))"
         }
         return PowerShell.command(
             """
@@ -465,7 +465,7 @@ public enum MachineUsageCollector {
                 [Console]::Error.Write('Git Bash is required to collect agent usage on Windows.')
                 exit 127
             }
-            & $gitBash -lc 'bash -s -- "$HOME/.cache/edith/usage"'
+            & $gitBash -lc 'EDITH_USAGE_CLOUD=0 bash -s -- "$HOME/.cache/edith/usage"'
             exit $LASTEXITCODE
             """)
     }

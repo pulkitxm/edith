@@ -7,6 +7,7 @@ import Testing
     @Test(arguments: [
         ("usage-billing-archive.mjs", "BILLING_ARCHIVE_SCRIPT"),
         ("usage-session-input.mjs", "SESSION_INPUT_SCRIPT"),
+        ("usage-cloud.mjs", "CLOUD_USAGE_SCRIPT"),
     ])
     func remotePayloadCreatesItsExactBundledRuntime(name: String, variable: String) async throws {
         let script = try #require(UsageCollector.script())

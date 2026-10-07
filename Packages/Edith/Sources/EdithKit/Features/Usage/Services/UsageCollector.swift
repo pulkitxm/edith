@@ -14,6 +14,7 @@ public enum UsageCollector {
         for (variable, name, delimiter) in [
             ("BILLING_ARCHIVE_SCRIPT", "usage-billing-archive.mjs", "EDITH_BILLING_RUNTIME"),
             ("SESSION_INPUT_SCRIPT", "usage-session-input.mjs", "EDITH_SESSION_RUNTIME"),
+            ("CLOUD_USAGE_SCRIPT", "usage-cloud.mjs", "EDITH_CLOUD_RUNTIME"),
         ] {
             guard
                 let runtimeURL = BundledResources.locate(name, in: BundledResources.kitBundleName),

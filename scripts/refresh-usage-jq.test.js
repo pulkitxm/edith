@@ -119,6 +119,9 @@ function runCollectorFixture({
   missingExistingUsage = false,
   mutateMachineBeforeFleet = false,
   lateMachineJSON,
+  cloudDaily,
+  claudeCloudDaily,
+  failCloud = false,
 }) {
   const root = mkdtempSync(join(tmpdir(), "edith-refresh-usage-"));
   const home = join(root, "home");
@@ -128,6 +131,13 @@ function runCollectorFixture({
   const ccusage = join(cache, ".ccusage", "node_modules", ".bin");
   mkdirSync(bin, { recursive: true });
   mkdirSync(ccusage, { recursive: true });
+  const cloudFeed = join(root, "cloud.json");
+  const claudeCloudFeed = join(root, "claude-cloud.json");
+  writeFileSync(cloudFeed, JSON.stringify(cloudDaily ?? { daily: [] }));
+  writeFileSync(
+    claudeCloudFeed,
+    JSON.stringify(claudeCloudDaily ?? { daily: [] }),
+  );
   mkdirSync(output, { recursive: true });
   let deletedCwd = join(root, "deleted-worktree");
   if (deletedWorktreeBaseRepository) {
@@ -231,6 +241,10 @@ function runCollectorFixture({
     `#!/bin/sh
 case "\${1:-}" in
   */usage-billing-archive.mjs|*/usage-session-input.mjs) exec "$REAL_BUN" "$@" ;;
+  */usage-cloud.mjs)
+    [ "\${FAIL_CLOUD:-0}" = "1" ] && { printf 'Cloud request failed (HTTP 401).\\n' >&2; exit 1; }
+    [ "$2" != "codex" ] || cp "$CLOUD_FEED" "$3"
+    exit 0 ;;
   *) export CCUSAGE_BUN_RUNTIME=1; exec "$@" ;;
 esac
 `,
@@ -255,7 +269,9 @@ if [ "\${1:-}" = "--version" ]; then
     *) printf 'ccusage 20.0.19\\n' ;;
   esac
 elif [ "\${2:-}" = "daily" ]; then
-  if [ "\${1:-}" = "claude" ] && [ "\${FAIL_CLAUDE_DAILY:-0}" = "1" ]; then
+  if [ "\${CLAUDE_CONFIG_DIR##*/}" = "claude-cloud" ]; then
+    cat "$CLAUDE_CLOUD_FEED"
+  elif [ "\${1:-}" = "claude" ] && [ "\${FAIL_CLAUDE_DAILY:-0}" = "1" ]; then
     exit 72
   elif [ "\${1:-}" = "claude" ] && [ "\${MALFORMED_CLAUDE_DAILY:-0}" = "1" ]; then
     printf '{"daily":'
@@ -349,6 +365,11 @@ cp "$LATE_MACHINE" "$ORIGINAL_MACHINE"
       ...lateMachine,
       HOME: home,
       EDITH_CACHE_DIR: cache,
+      EDITH_USAGE_CLOUD:
+        cloudDaily || claudeCloudDaily || failCloud ? "1" : "0",
+      CLOUD_FEED: cloudFeed,
+      CLAUDE_CLOUD_FEED: claudeCloudFeed,
+      FAIL_CLOUD: failCloud ? "1" : "0",
       FAKE_LOCAL_USAGE: hasLocalUsage ? "1" : "0",
       FAIL_CLAUDE_DAILY: failClaudeDaily ? "1" : "0",
       REJECT_ONLINE_PRICING: rejectOnlinePricing ? "1" : "0",
@@ -2758,6 +2779,107 @@ describe("collector failure handling", () => {
     expect(result.stdout).toContain("detail assembly failed");
     expect(result.output).toBe(result.existing);
   }, 15_000);
+});
+
+describe("cloud collector integration", () => {
+  const daily = (modelName, inputTokens, outputTokens, cost) => ({
+    daily: [
+      {
+        date: "2026-08-07",
+        modelBreakdowns: [
+          {
+            modelName,
+            inputTokens,
+            outputTokens,
+            cost,
+            cacheCreationTokens: 0,
+            cacheReadTokens: 0,
+          },
+        ],
+      },
+    ],
+  });
+
+  test("includes both cloud providers in canonical totals without inventing repository detail", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: true,
+      cloudDaily: daily("unattributed-cloud-model", 100, 50, 1),
+      claudeCloudDaily: daily("sonnet", 40, 10, 2),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const report = JSON.parse(result.output);
+    expect(report.sources).toEqual(["cli", "codex-cloud", "claude-cloud"]);
+    expect(report.defaultSources).toEqual(report.sources);
+    expect(report.totals.cost).toBe(4);
+    expect(report.totals.tokens).toBe(201);
+    expect(report.totals.bySource["codex-cloud"]).toEqual({
+      cost: 1,
+      tokens: 150,
+    });
+    expect(report.totals.bySource["claude-cloud"]).toEqual({
+      cost: 2,
+      tokens: 50,
+    });
+    expect(report.daily[0].projects).toEqual([]);
+    expect(jqExit(VALIDATE, result.output)).toBe(0);
+  }, 15_000);
+
+  test("reports cloud-only history on a machine without local sessions", () => {
+    const result = runCollectorFixture({
+      hasLocalUsage: false,
+      cloudDaily: daily("unattributed-cloud-model", 100, 50, 1),
+    });
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    expect(JSON.parse(result.output).totals.tokens).toBe(150);
+  }, 15_000);
+
+  test("complete cloud refreshes replace corrected totals and remove emptied sources", () => {
+    const first = runCollectorFixture({
+      hasLocalUsage: false,
+      cloudDaily: daily("unattributed-cloud-model", 100, 50, 1),
+      claudeCloudDaily: daily("sonnet", 40, 10, 2),
+    });
+    expect(first.exitCode, first.stdout + first.stderr).toBe(0);
+    const reduced = runCollectorFixture({
+      hasLocalUsage: false,
+      cloudDaily: daily("unattributed-cloud-model", 10, 5, 0.1),
+      claudeCloudDaily: { daily: [] },
+      existingUsage: first.output,
+    });
+    expect(reduced.exitCode, reduced.stdout + reduced.stderr).toBe(0);
+    const report = JSON.parse(reduced.output);
+    expect(report.totals.tokens).toBe(15);
+    expect(report.sources).toEqual(["codex-cloud"]);
+    expect(report.historyRetention.blocks).toEqual([]);
+    const empty = runCollectorFixture({
+      hasLocalUsage: false,
+      cloudDaily: { daily: [] },
+      claudeCloudDaily: { daily: [] },
+      existingUsage: reduced.output,
+    });
+    expect(empty.exitCode, empty.stdout + empty.stderr).toBe(0);
+    expect(JSON.parse(empty.output).totals.tokens).toBe(0);
+    expect(JSON.parse(empty.output).sources).toEqual([]);
+  }, 30_000);
+
+  test("retains collected cloud history through later authentication failures", () => {
+    const first = runCollectorFixture({
+      hasLocalUsage: true,
+      cloudDaily: daily("unattributed-cloud-model", 100, 50, 1),
+    });
+    expect(first.exitCode, first.stdout + first.stderr).toBe(0);
+    const failed = runCollectorFixture({
+      hasLocalUsage: true,
+      failCloud: true,
+      existingUsage: first.output,
+    });
+    expect(failed.exitCode, failed.stdout + failed.stderr).toBe(0);
+    expect(failed.stdout).toContain("cloud unavailable");
+    expect(JSON.parse(failed.output).totals.bySource["codex-cloud"]).toEqual({
+      cost: 1,
+      tokens: 150,
+    });
+  }, 30_000);
 });
 
 describe("collector configuration", () => {
