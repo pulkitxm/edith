@@ -536,6 +536,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
     public var trackingEnabled: Bool
     public var browserTrackingEnabled: Bool
     public var idleThreshold: TimeInterval
+    public var excludeIdleTime: Bool
     public var privacyLevel: AttentionPrivacyLevel
     public var windowTitlesEnabled: Bool
     public var iCloudBackupEnabled: Bool
@@ -553,7 +554,8 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
     public init(
         isEnabled: Bool = false, trackingEnabled: Bool = false,
         browserTrackingEnabled: Bool = false,
-        idleThreshold: TimeInterval = 300, privacyLevel: AttentionPrivacyLevel = .detailed,
+        idleThreshold: TimeInterval = 300, excludeIdleTime: Bool = true,
+        privacyLevel: AttentionPrivacyLevel = .detailed,
         windowTitlesEnabled: Bool = true, iCloudBackupEnabled: Bool = false,
         serverPort: UInt16 = 52728, serverToken: String = UUID().uuidString,
         categories: [AttentionCategory] = AttentionCatalog.categories,
@@ -566,6 +568,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         self.trackingEnabled = trackingEnabled
         self.browserTrackingEnabled = browserTrackingEnabled
         self.idleThreshold = idleThreshold
+        self.excludeIdleTime = excludeIdleTime
         self.privacyLevel = privacyLevel
         self.windowTitlesEnabled = windowTitlesEnabled
         self.iCloudBackupEnabled = iCloudBackupEnabled
@@ -587,6 +590,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
         case trackingEnabled
         case browserTrackingEnabled
         case idleThreshold
+        case excludeIdleTime
         case privacyLevel
         case windowTitlesEnabled
         case iCloudBackupEnabled
@@ -610,6 +614,7 @@ public struct AttentionSettings: Codable, Equatable, Sendable {
             try container.decodeIfPresent(Bool.self, forKey: .isEnabled)
             ?? (trackingEnabled || browserTrackingEnabled)
         idleThreshold = try container.decode(TimeInterval.self, forKey: .idleThreshold)
+        excludeIdleTime = try container.decodeIfPresent(Bool.self, forKey: .excludeIdleTime) ?? true
         privacyLevel = try container.decode(AttentionPrivacyLevel.self, forKey: .privacyLevel)
         windowTitlesEnabled = try container.decode(Bool.self, forKey: .windowTitlesEnabled)
         iCloudBackupEnabled = try container.decode(Bool.self, forKey: .iCloudBackupEnabled)

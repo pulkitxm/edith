@@ -305,6 +305,60 @@ private enum AttentionSyntheticWeek {
             width: 760)
     }
 
+    @Test func idleTimeFilterPersistsAndRendersSeparateTotals() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AttentionIdleFixture.\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = AttentionRepository(root: root)
+        let yesterday = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-86_400)
+        let start = yesterday.addingTimeInterval(9 * 3_600)
+        try repository.saveSettings(AttentionSettings(isEnabled: true, trackingEnabled: true))
+        for (offset, duration, presence) in [
+            (0.0, 3_600.0, AttentionPresence.active),
+            (3_600.0, 7_200.0, .idle),
+            (10_800.0, 1_800.0, .locked),
+        ] {
+            try repository.append(
+                AttentionEvent(
+                    startedAt: start.addingTimeInterval(offset), duration: duration,
+                    source: .application, presence: presence, appName: "TextEdit",
+                    bundleID: "com.apple.TextEdit", windowTitle: "Sample notes"), pulseTime: 0)
+        }
+        let model = AttentionPageModel(repository: repository)
+        model.select(.yesterday)
+        await model.waitForReload()
+        #expect(model.settings.excludeIdleTime)
+        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 3_600)
+        #expect(model.summary.idleDuration == 9_000)
+        let output = ProcessInfo.processInfo.environment["EDITH_ATTENTION_EVIDENCE_DIR"].map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        }
+        if let output {
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try render(
+                model, height: 950, to: output.appendingPathComponent("idle-excluded.png"),
+                width: 1_200)
+        }
+        model.setExcludeIdleTime(false)
+        await model.waitForReload()
+        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 12_600)
+        #expect(repository.loadSettings().excludeIdleTime == false)
+        #expect(model.summary.entities.first?.duration == 3_600)
+        if let output {
+            try render(
+                model, height: 950, to: output.appendingPathComponent("idle-included.png"),
+                width: 1_200)
+        }
+        let reopened = AttentionPageModel(repository: repository)
+        reopened.select(.yesterday)
+        await reopened.waitForReload()
+        #expect(reopened.settings.excludeIdleTime == false)
+        model.setExcludeIdleTime(true)
+        await model.waitForReload()
+        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 3_600)
+        #expect(model.summary.entities.first?.duration == 3_600)
+    }
+
     private func render(
         _ model: AttentionPageModel, height: CGFloat, to output: URL, width: CGFloat = 1440,
         scheme: ColorScheme = .dark
