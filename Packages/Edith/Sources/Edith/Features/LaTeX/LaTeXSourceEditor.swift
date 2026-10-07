@@ -5,7 +5,7 @@ import SwiftUI
 
 @MainActor @Observable
 final class LaTeXEditorControls {
-    var fontSize = 13.0
+    var fontSize = 15.0
     var wrapsLines = true
     var line = 1
     var column = 1
@@ -41,7 +41,7 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         let container = NSTextContainer(
             containerSize: NSSize(width: 500, height: CGFloat.greatestFiniteMagnitude))
         layout.addTextContainer(container)
-        let view = NSTextView(frame: .zero, textContainer: container)
+        let view = LaTeXTextView(frame: .zero, textContainer: container)
         view.isVerticallyResizable = true
         view.maxSize = NSSize(
             width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -56,7 +56,8 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         view.isAutomaticSpellingCorrectionEnabled = false
         view.isContinuousSpellCheckingEnabled = false
         view.textContainerInset = NSSize(width: UIScale.pt(12), height: UIScale.pt(12))
-        view.drawsBackground = false
+        view.drawsBackground = true
+        view.backgroundColor = .textBackgroundColor
         view.setAccessibilityLabel("LaTeX source")
         view.delegate = context.coordinator
         scroll.drawsBackground = false
@@ -87,9 +88,11 @@ struct LaTeXSourceEditor: NSViewRepresentable {
             view.font = font
             view.textColor = dark ? .white : .black
         }
-        view.typingAttributes = [
-            .font: font, .foregroundColor: dark ? NSColor.white : NSColor.black,
-        ]
+        if changed {
+            view.typingAttributes = [
+                .font: font, .foregroundColor: dark ? NSColor.white : NSColor.black,
+            ]
+        }
         view.isHorizontallyResizable = !controls.wrapsLines
         view.autoresizingMask = controls.wrapsLines ? [.width] : []
         view.textContainer?.widthTracksTextView = controls.wrapsLines
@@ -151,7 +154,6 @@ struct LaTeXSourceEditor: NSViewRepresentable {
             view?.enclosingScrollView?.verticalRulerView?.needsDisplay = true
             let source = parent.text
             let dark = parent.dark
-            let size = UIScale.pt(parent.controls.fontSize)
             highlight = Task {
                 do { try await Task.sleep(for: .milliseconds(120)) } catch { return }
                 let result = await SyntaxHighlighting.shared.highlight(
@@ -159,23 +161,35 @@ struct LaTeXSourceEditor: NSViewRepresentable {
                 guard !Task.isCancelled, let view, view.string == source,
                     let storage = view.textStorage
                 else { return }
-                storage.beginEditing()
+                guard let layout = view.layoutManager, result?.string == source else { return }
                 let range = NSRange(location: 0, length: storage.length)
-                storage.setAttributes(
-                    [
-                        .font: NSFont.monospacedSystemFont(ofSize: size, weight: .regular),
-                        .foregroundColor: dark ? NSColor.white : NSColor.black,
-                    ], range: range)
+                layout.removeTemporaryAttribute(.foregroundColor, forCharacterRange: range)
                 result?.enumerateAttribute(.foregroundColor, in: range) { color, range, _ in
                     if let color {
-                        storage.addAttribute(.foregroundColor, value: color, range: range)
+                        layout.addTemporaryAttribute(
+                            .foregroundColor, value: color, forCharacterRange: range)
                     }
                 }
-                storage.endEditing()
                 updatePosition()
                 view.enclosingScrollView?.verticalRulerView?.needsDisplay = true
             }
         }
+    }
+}
+
+final class LaTeXTextView: NSTextView {
+    override func insertTab(_ sender: Any?) {
+        insertText("    ", replacementRange: selectedRange())
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        let source = string as NSString
+        let selection = selectedRange()
+        let line = source.lineRange(for: NSRange(location: selection.location, length: 0))
+        let prefix = source.substring(
+            with: NSRange(location: line.location, length: selection.location - line.location))
+        let indentation = String(prefix.prefix { $0 == " " || $0 == "\t" })
+        insertText("\n" + indentation, replacementRange: selection)
     }
 }
 

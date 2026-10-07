@@ -15,7 +15,9 @@ written beside it. The output pane shows the PDF or build log. Compilation runs
 from the source directory so relative includes and assets resolve normally.
 Edith refuses to save over source changes made by another editor.
 The source editor includes LaTeX syntax colors, line numbers, undo and redo,
-inline find, line wrapping, and text size controls. Use Command-Return to save
+inline find, line wrapping, and text size controls. Tab inserts spaces and Return
+keeps the current indentation. Save status occupies a fixed strip so typing does
+not move the editor or PDF pane. Use Command-Return to save
 and compile. The PDF pane has page navigation, zoom, fit, and Save PDF as.
 
 ## Repository documents

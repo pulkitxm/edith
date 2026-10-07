@@ -24,15 +24,7 @@ struct LaTeXPage: View {
         Group {
             if editing, let project = model.selected {
                 PageWorkspace {
-                    PageHeader(
-                        "LaTeX editor",
-                        trailing: {
-                            Button {
-                                editing = false
-                            } label: {
-                                Label("Back to projects", systemImage: "chevron.left")
-                            }.disabled(model.dirty || model.busy)
-                        })
+                    controls(project)
                 } content: {
                     workspace(project)
                 }
@@ -140,31 +132,32 @@ struct LaTeXPage: View {
 
     private func workspace(_ project: LaTeXProject) -> some View {
         VStack(spacing: 0) {
-            controls(project)
-            if model.dirty {
-                HStack {
-                    Label("Unsaved changes", systemImage: "circle.fill")
-                        .font(.edithText(.caption)).foregroundStyle(.orange)
-                    Spacer()
-                    Button("Discard edits") { model.discard() }.disabled(model.busy)
-                }.pageGutter(compact).padding(.bottom, UIScale.pt(8))
-            }
-            if let message = model.message ?? model.load.errorMessage {
-                HStack {
-                    Text(message).font(.edithText(.caption)).textSelection(.enabled)
-                    Spacer()
-                    if model.load.errorMessage != nil {
-                        Button("Retry") { Task { await model.reload() } }.disabled(model.dirty)
-                    }
-                }.pageGutter(compact).padding(.bottom, UIScale.pt(10))
-            }
-            if model.load.isRunning || model.busy {
-                HStack {
+            HStack(spacing: UIScale.pt(10)) {
+                if model.busy || model.load.isRunning {
                     LoadingIndicator()
-                    Text(model.busy ? "Working on your document…" : "Loading source…")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                }.padding(UIScale.pt(8))
+                    Text(model.busy ? "Working…" : "Loading source…")
+                } else if model.dirty {
+                    Label("Unsaved changes", systemImage: "circle.fill")
+                        .foregroundStyle(.orange)
+                } else {
+                    Label("Saved", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                }
+                if let message = model.message ?? model.load.errorMessage {
+                    Text(message).foregroundStyle(.secondary).lineLimit(1).help(message)
+                }
+                Spacer(minLength: 0)
+                if model.dirty {
+                    Button("Discard edits") { model.discard() }.disabled(model.busy)
+                }
+                if model.load.errorMessage != nil {
+                    Button("Retry") { Task { await model.reload() } }.disabled(model.dirty)
+                }
             }
+            .font(.edithText(.caption))
+            .frame(height: UIScale.pt(32))
+            .pageGutter(compact)
+            Divider()
             if model.original != nil {
                 if compact {
                     VSplitView {
@@ -190,6 +183,11 @@ struct LaTeXPage: View {
     private func controls(_ project: LaTeXProject) -> some View {
         PageHeader(project.name) {
             HStack(spacing: UIScale.pt(8)) {
+                Button {
+                    editing = false
+                } label: {
+                    Label("Projects", systemImage: "chevron.left")
+                }.disabled(model.dirty || model.busy)
                 if project.location == .disk {
                     Button("Save & compile") { model.saveAndCompile() }
                         .buttonStyle(.borderedProminent)
@@ -235,47 +233,57 @@ struct LaTeXPage: View {
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            PageSectionHeader(
-                "Source",
-                subtitle: model.selected.map {
-                    URL(fileURLWithPath: $0.sourcePath).lastPathComponent
-                })
-            ScrollView(.horizontal) {
-                HStack(spacing: UIScale.pt(8)) {
-                    Button {
-                        editorControls.undo()
-                    } label: {
-                        Image(systemName: "arrow.uturn.backward")
-                    }
-                    .help("Undo (⌘Z)").disabled(!editorControls.canUndo)
-                    Button {
-                        editorControls.redo()
-                    } label: {
-                        Image(systemName: "arrow.uturn.forward")
-                    }
-                    .help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
-                    Button {
-                        editorControls.find()
-                    } label: {
-                        Image(systemName: "magnifyingglass")
-                    }
-                    .help("Find in source (⌘F)")
-                    Toggle("Wrap", isOn: $editorControls.wrapsLines).toggleStyle(.button)
-                    Button {
-                        editorControls.fontSize = max(10, editorControls.fontSize - 1)
-                    } label: {
-                        Image(systemName: "textformat.size.smaller")
-                    }
-                    .help("Smaller editor text")
-                    Button {
-                        editorControls.fontSize = min(24, editorControls.fontSize + 1)
-                    } label: {
-                        Image(systemName: "textformat.size.larger")
-                    }
-                    .help("Larger editor text")
-                }.disabled(model.busy || model.load.isRunning)
-            }.scrollIndicators(.hidden).frame(height: UIScale.pt(28))
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: UIScale.pt(12)) {
+                Label(
+                    model.selected.map { URL(fileURLWithPath: $0.sourcePath).lastPathComponent }
+                        ?? "Source", systemImage: "doc.text"
+                )
+                .font(.edithText(.subheadline))
+                .fixedSize()
+                Spacer(minLength: 0)
+                ScrollView(.horizontal) {
+                    HStack(spacing: UIScale.pt(8)) {
+                        Button {
+                            editorControls.undo()
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .help("Undo (⌘Z)").disabled(!editorControls.canUndo)
+                        Button {
+                            editorControls.redo()
+                        } label: {
+                            Image(systemName: "arrow.uturn.forward")
+                        }
+                        .help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
+                        Button {
+                            editorControls.find()
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .help("Find in source (⌘F)")
+                        .keyboardShortcut("f", modifiers: .command)
+                        Toggle("Wrap", isOn: $editorControls.wrapsLines).toggleStyle(.button)
+                        Button {
+                            editorControls.fontSize = max(10, editorControls.fontSize - 1)
+                        } label: {
+                            Image(systemName: "textformat.size.smaller")
+                        }
+                        .help("Smaller editor text")
+                        Button {
+                            editorControls.fontSize = min(24, editorControls.fontSize + 1)
+                        } label: {
+                            Image(systemName: "textformat.size.larger")
+                        }
+                        .help("Larger editor text")
+                    }.disabled(model.busy || model.load.isRunning)
+                }.scrollIndicators(.hidden).frame(maxWidth: UIScale.pt(260))
+            }
+            .buttonStyle(.borderless)
+            .tint(.primary)
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(40))
+            Divider()
             LaTeXSourceEditor(
                 text: Binding(get: { model.source }, set: { model.source = $0 }),
                 controls: editorControls, dark: scheme == .dark,
@@ -291,7 +299,9 @@ struct LaTeXPage: View {
                     .edithText(.caption)
                 ).monospacedDigit().foregroundStyle(.secondary)
             }
-        }.padding(UIScale.pt(12))
+            .padding(.horizontal, UIScale.pt(12))
+            .frame(height: UIScale.pt(28))
+        }
     }
 
     @ViewBuilder private func result(_ project: LaTeXProject) -> some View {

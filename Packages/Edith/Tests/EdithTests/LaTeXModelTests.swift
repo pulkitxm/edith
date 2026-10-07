@@ -65,7 +65,7 @@ import Testing
                             \.colorScheme, scheme), size: size)
                 let text = try auditText(host)
                 #expect(text.contains("Save"))
-                #expect(text.contains("Source"))
+                #expect(text.contains("paper.tex"))
                 try capture(host, name: "latex-local-\(compact)-\(scheme)")
             }
         }
@@ -123,16 +123,58 @@ import Testing
         window.contentView = host
         window.makeFirstResponder(view)
         defer { window.close() }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(view.undoManager?.canUndo == false)
         view.setSelectedRange(NSRange(location: 0, length: 0))
         view.insertText("Added ", replacementRange: view.selectedRange())
         try await Task.sleep(for: .milliseconds(300))
         #expect(text.hasPrefix("Added "))
+        #expect(view.selectedRange() == NSRange(location: 6, length: 0))
         #expect(view.undoManager?.canUndo == true)
         controls.undo()
         #expect(view.string == source)
         controls.redo()
         #expect(view.string.hasPrefix("Added "))
         _ = host
+    }
+
+    @Test func editingKeepsWorkspaceGeometryAndIndentationStable() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("paper.tex")
+        try Data("    Equation".utf8).write(to: file)
+        let model = LaTeXModel(
+            store: LaTeXProjectStore(url: root.appendingPathComponent("projects.json")))
+        try await model.add(
+            LaTeXProject(name: "Research paper", location: .disk, sourcePath: file.path))
+        let host = try auditHost(
+            LaTeXPage(model: model, opensEditor: true), size: CGSize(width: 1100, height: 800))
+        func editor(in view: NSView) -> LaTeXTextView? {
+            if let text = view as? LaTeXTextView { return text }
+            return view.subviews.lazy.compactMap { editor(in: $0) }.first
+        }
+        let view = try #require(editor(in: host))
+        let window = TestWindowHost.window(contentRect: host.bounds)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeFirstResponder(view)
+        defer { window.close() }
+        try await Task.sleep(for: .milliseconds(300))
+        host.layoutSubtreeIfNeeded()
+        let before = view.enclosingScrollView!.convert(view.enclosingScrollView!.bounds, to: host)
+        view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
+        view.insertNewline(nil)
+        #expect(view.string == "    Equation\n    ")
+        view.insertTab(nil)
+        #expect(view.string == "    Equation\n        ")
+        try await Task.sleep(for: .milliseconds(300))
+        host.layoutSubtreeIfNeeded()
+        let after = view.enclosingScrollView!.convert(view.enclosingScrollView!.bounds, to: host)
+        #expect(before == after)
+        #expect(model.dirty)
+        let caret = view.selectedRange()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(view.selectedRange() == caret)
     }
 
     private func directory() throws -> URL {
