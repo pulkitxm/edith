@@ -358,23 +358,47 @@ private enum AttentionSyntheticWeek {
             model.section = .overview
         }
         model.excludeIdleTime = false
-        await model.waitForReload()
+        #expect(!model.pending)
         #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 12_600)
         #expect(repository.loadSettings() == model.settings)
         #expect(model.message == nil)
-        #expect(!model.pending)
         #expect(model.summary.entities.first?.duration == 3_600)
         if let output {
             try await render(
                 model, height: 950, to: output.appendingPathComponent("idle-included.png"),
                 width: 1_200)
         }
+        model.reload()
+        await model.waitForReload()
+        #expect(!model.excludeIdleTime)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 12_600)
+        model.section = .timeline
+        await model.waitForReload()
+        #expect(!model.excludeIdleTime)
+        model.setHours(start: 10, end: 13)
+        await model.waitForReload()
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 9_000)
+        model.excludeIdleTime = true
+        #expect(!model.pending)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 0)
+        model.excludeIdleTime = false
+        model.setWindow(.all)
+        model.section = .overview
+        model.select(.today)
+        await model.waitForReload()
+        #expect(!model.excludeIdleTime)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 0)
+        model.select(.yesterday)
+        await model.waitForReload()
+        #expect(!model.excludeIdleTime)
+        #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 12_600)
+        #expect(model.message == nil)
         let reopened = AttentionPageModel(repository: repository)
         reopened.select(.yesterday)
         await reopened.waitForReload()
         #expect(reopened.excludeIdleTime)
         model.excludeIdleTime = true
-        await model.waitForReload()
+        #expect(!model.pending)
         #expect(model.summary.screenTime(excludingIdle: model.excludeIdleTime) == 3_600)
         #expect(model.summary.entities.first?.duration == 3_600)
     }
