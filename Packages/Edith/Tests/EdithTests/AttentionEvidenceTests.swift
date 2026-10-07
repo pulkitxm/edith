@@ -344,6 +344,18 @@ private enum AttentionSyntheticWeek {
             try await render(
                 model, height: 950, to: output.appendingPathComponent("idle-excluded.png"),
                 width: 1_200)
+            try await render(
+                model, height: 1_100, to: output.appendingPathComponent("idle-zoomed-light.png"),
+                width: 1_200, scheme: .light, scale: 1.25)
+            try await render(
+                model, height: 1_500, to: output.appendingPathComponent("idle-compact-light.png"),
+                width: 760, scheme: .light, scale: 1.25)
+            model.section = .settings
+            try await render(
+                model, height: 1_500,
+                to: output.appendingPathComponent("idle-settings-compact-light.png"),
+                width: 760, scheme: .light, scale: 1.25)
+            model.section = .overview
         }
         model.setExcludeIdleTime(false)
         await model.waitForReload()
@@ -367,8 +379,11 @@ private enum AttentionSyntheticWeek {
 
     private func render(
         _ model: AttentionPageModel, height: CGFloat, to output: URL, width: CGFloat = 1440,
-        scheme: ColorScheme = .dark
+        scheme: ColorScheme = .dark, scale: Double = 1
     ) async throws {
+        let previousScale = UIScale.current
+        UIScale.apply(scale)
+        defer { UIScale.apply(previousScale) }
         let host = NSHostingView(
             rootView: AttentionPage(model: model)
                 .environment(\.colorScheme, scheme)

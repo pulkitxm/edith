@@ -44,7 +44,7 @@ struct AttentionSettingsView: View {
                 Text(
                     "Screen time can include or exclude idle and locked time. App breakdowns and productivity always use active time. Changes to the idle threshold apply to future activity."
                 )
-                .font(.system(size: UIScale.pt(11)))
+                .font(.edithText(.caption))
                 .foregroundStyle(.secondary)
                 HStack {
                     Picker("Idle after", selection: $model.settings.idleThreshold) {

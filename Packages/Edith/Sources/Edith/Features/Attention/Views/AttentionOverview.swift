@@ -19,7 +19,7 @@ struct AttentionOverview: View {
             Text(
                 "App breakdowns and productivity show active use. Idle and locked time are kept separately."
             )
-            .font(.system(size: UIScale.pt(11)))
+            .font(.edithText(.caption))
             .foregroundStyle(.secondary)
             AttentionHeadline(model: model)
             AttentionAllocationPanel(model: model)
