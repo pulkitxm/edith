@@ -264,43 +264,49 @@ private enum AttentionSyntheticWeek {
         #expect(model.summary.activeDuration > 6 * 3_600)
         #expect(!model.summary.agents.isEmpty)
         model.selectedEntityID = model.summary.entities.first { $0.domain == "youtube.com" }?.id
-        try render(model, height: 1_300, to: output.appendingPathComponent("overview-day.png"))
+        try await render(
+            model, height: 1_300, to: output.appendingPathComponent("overview-day.png"))
 
-        try render(
+        try await render(
             model, height: 1_300, to: output.appendingPathComponent("overview-light.png"),
             scheme: .light)
-        try render(
+        try await render(
             model, height: 2_200, to: output.appendingPathComponent("overview-narrow.png"),
             width: 760)
         model.section = .timeline
         await model.waitForReload()
-        try render(model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
+        try await render(
+            model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionDimension.title
         await model.waitForReload()
-        try render(model, height: 1_100, to: output.appendingPathComponent("explorer-titles.png"))
+        try await render(
+            model, height: 1_100, to: output.appendingPathComponent("explorer-titles.png"))
 
         model.section = .overview
         await model.waitForReload()
         model.selectRange(from: days[6], to: yesterday)
         await model.waitForReload()
-        try render(model, height: 2_340, to: output.appendingPathComponent("overview-week.png"))
+        try await render(
+            model, height: 2_340, to: output.appendingPathComponent("overview-week.png"))
 
         model.section = .agents
         await model.waitForReload()
-        try render(model, height: 1_240, to: output.appendingPathComponent("agents-week.png"))
+        try await render(model, height: 1_240, to: output.appendingPathComponent("agents-week.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionTag.repository
         await model.waitForReload()
-        try render(model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
+        try await render(
+            model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
 
         model.section = .overview
         model.select(.allTime)
         await model.waitForReload()
-        try render(model, height: 1_500, to: output.appendingPathComponent("overview-all-time.png"))
-        try render(
+        try await render(
+            model, height: 1_500, to: output.appendingPathComponent("overview-all-time.png"))
+        try await render(
             model, height: 2_200, to: output.appendingPathComponent("all-time-narrow.png"),
             width: 760)
     }
@@ -335,7 +341,7 @@ private enum AttentionSyntheticWeek {
         }
         if let output {
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-            try render(
+            try await render(
                 model, height: 950, to: output.appendingPathComponent("idle-excluded.png"),
                 width: 1_200)
         }
@@ -345,7 +351,7 @@ private enum AttentionSyntheticWeek {
         #expect(repository.loadSettings().excludeIdleTime == false)
         #expect(model.summary.entities.first?.duration == 3_600)
         if let output {
-            try render(
+            try await render(
                 model, height: 950, to: output.appendingPathComponent("idle-included.png"),
                 width: 1_200)
         }
@@ -362,7 +368,7 @@ private enum AttentionSyntheticWeek {
     private func render(
         _ model: AttentionPageModel, height: CGFloat, to output: URL, width: CGFloat = 1440,
         scheme: ColorScheme = .dark
-    ) throws {
+    ) async throws {
         let host = NSHostingView(
             rootView: AttentionPage(model: model)
                 .environment(\.colorScheme, scheme)
@@ -380,7 +386,8 @@ private enum AttentionSyntheticWeek {
             window.layoutIfNeeded()
             host.layoutSubtreeIfNeeded()
             host.displayIfNeeded()
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.4))
+            try await Task.sleep(for: .milliseconds(400))
+            await model.waitForReload()
         }
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
