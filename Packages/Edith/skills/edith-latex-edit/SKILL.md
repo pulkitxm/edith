@@ -58,7 +58,7 @@ before the next edit and use the compiler error to make a focused correction.
 Tectonic must be installed locally; pdfLaTeX uses latexmk and TeX Live.
 
 Repository builds run automatically after submission. Use `ed latex review
-PROJECT --json` for the PR, diff, and checks through Quinjet. Use `ed latex
+PROJECT --json` for the PR, diff, and checks used by the native Quinjet review screen. Use `ed latex
 preview PROJECT --json` to check PDF availability for the current revision.
 Add `--data --json` to receive base64 PDF bytes in memory for inspection.
 An unavailable artifact is not proof of a successful build. Inspect checks and

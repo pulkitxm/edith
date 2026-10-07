@@ -3,11 +3,11 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 const root = new URL(".", import.meta.url);
-const output = new URL("../../Packages/Edith/Sources/EdithKit/LaTeXEditor/editor.js", root);
+const directory = new URL("../../Packages/Edith/Sources/EdithKit/LaTeXEditor/", root);
 const result = await build({
   absWorkingDir: fileURLToPath(root),
-  entryPoints: ["src/editor.js"],
-  outfile: fileURLToPath(output),
+  entryPoints: ["src/editor.js", "src/review.js"],
+  outdir: fileURLToPath(directory),
   bundle: true,
   minify: true,
   format: "iife",
@@ -15,11 +15,12 @@ const result = await build({
   legalComments: "inline",
   write: false,
 });
-const contents = result.outputFiles[0].contents;
-if (process.argv.includes("--check")) {
-  if (!Buffer.from(contents).equals(await readFile(output))) {
-    throw new Error("The bundled LaTeX editor is stale. Run bun run build in tools/latex-editor.");
+for (const file of result.outputFiles) {
+  if (process.argv.includes("--check")) {
+    if (!Buffer.from(file.contents).equals(await readFile(file.path))) {
+      throw new Error("The bundled LaTeX workspace is stale. Run bun run build in tools/latex-editor.");
+    }
+  } else {
+    await writeFile(file.path, file.contents);
   }
-} else {
-  await writeFile(output, contents);
 }

@@ -104,7 +104,7 @@ import Testing
         }
     }
 
-    @Test func quinjetReviewUsesRepositoryOnlyAndMergeUsesPukbot() async throws {
+    @Test func reviewNeedsNoCheckoutAndMergeUsesPukbot() async throws {
         var repo = project()
         repo.pullRequest = 42
         let service = LaTeXService { tool, args, _, directory in
@@ -116,15 +116,11 @@ import Testing
                 #expect(!args.contains("--admin"))
                 return Data()
             }
-            #expect(tool == "quinjet")
+            #expect(tool == "gh")
             switch args[1] {
             case "view":
                 return Data(
-                    #"{"pullRequest":{"number":42,"title":"Paper","state":"OPEN","url":"https://github.com/octocat/paper/pull/42","headOid":"commit-1","mergeable":"MERGEABLE"}}"#
-                        .utf8)
-            case "checks":
-                return Data(
-                    #"{"checks":[{"name":"compile","workflow":"LaTeX PDF","status":"passed","link":"https://github.com/octocat/paper/actions/runs/1"}]}"#
+                    #"{"number":42,"title":"Paper","state":"OPEN","url":"https://github.com/octocat/paper/pull/42","headRefOid":"commit-1","mergeable":"MERGEABLE","statusCheckRollup":[{"name":"compile","workflowName":"LaTeX PDF","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://github.com/octocat/paper/actions/runs/1"},{"context":"legacy","state":"FAILURE","targetUrl":"https://example.com/check"},{"name":"queued","status":"QUEUED"}]}"#
                         .utf8)
             default:
                 #expect(!args.contains("--json"))
@@ -133,7 +129,7 @@ import Testing
         }
         let review = try await service.review(repo)
         #expect(review.diff == "+New source")
-        #expect(review.checks.first?.status == "passed")
+        #expect(review.checks.map(\.status) == ["passed", "failed", "pending"])
         try await service.merge(repo, automatically: true)
     }
 

@@ -349,9 +349,9 @@ struct LaTeXCompileCommand: AsyncParsableCommand {
 struct LaTeXReviewCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "review",
-        abstract: "Read the current pull request, patch, and checks through Quinjet.",
+        abstract: "Read the pull request, patch, and checks for native Quinjet review.",
         discussion:
-            "Reads the repository pull request through Quinjet without changing GitHub or cloning. Example: ed latex review PROJECT --json"
+            "Reads GitHub data for native Quinjet review without changing GitHub or cloning. Example: ed latex review PROJECT --json"
     )
     @OptionGroup var options: LaTeXTargetOptions
     func run() async throws {

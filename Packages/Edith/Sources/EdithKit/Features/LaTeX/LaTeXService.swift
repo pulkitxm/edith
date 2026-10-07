@@ -228,14 +228,22 @@ public struct LaTeXService: Sendable {
         guard let number = project.pullRequest else {
             throw LaTeXError.message("Create a pull request first.")
         }
-        let arguments = [String(number), "--repo", project.repository, "--refresh", "--json"]
-        let metadata = try await run("quinjet", ["pr", "view"] + arguments)
-        let pr = try JSONDecoder().decode(ReviewSnapshot.self, from: metadata).pullRequest
-        let diff = try await run("quinjet", ["pr", "diff"] + arguments.filter { $0 != "--json" })
-        let checks = try await run("quinjet", ["pr", "checks"] + arguments)
+        let arguments = [String(number), "--repo", project.repository]
+        let metadata = try await run(
+            "gh",
+            ["pr", "view"] + arguments + [
+                "--json",
+                "number,title,state,url,headRefOid,mergeable,statusCheckRollup",
+            ])
+        let snapshot = try JSONDecoder().decode(GitHubReview.self, from: metadata)
+        let diff = try await run("gh", ["pr", "diff"] + arguments)
         return LaTeXReview(
-            pullRequest: pr, diff: String(decoding: diff, as: UTF8.self),
-            checks: try JSONDecoder().decode(CheckSnapshot.self, from: checks).checks)
+            pullRequest: LaTeXPullRequest(
+                number: snapshot.number, title: snapshot.title,
+                state: snapshot.state, url: snapshot.url, headOid: snapshot.headRefOid,
+                mergeable: snapshot.mergeable),
+            diff: String(decoding: diff, as: UTF8.self),
+            checks: snapshot.statusCheckRollup.map { $0.check })
     }
 
     public func merge(_ project: LaTeXProject, automatically: Bool) async throws {
@@ -336,8 +344,29 @@ public struct LaTeXService: Sendable {
         )!
     }
 
-    private struct ReviewSnapshot: Decodable { let pullRequest: LaTeXPullRequest }
-    private struct CheckSnapshot: Decodable { let checks: [LaTeXCheck] }
+    private struct GitHubReview: Decodable {
+        let number: Int
+        let title, state, url, headRefOid, mergeable: String
+        let statusCheckRollup: [GitHubCheck]
+    }
+
+    private struct GitHubCheck: Decodable {
+        let name, context, workflowName, status, conclusion, state, detailsUrl, targetUrl: String?
+        var check: LaTeXCheck {
+            let outcome = (conclusion ?? state ?? status ?? "pending").lowercased()
+            let status: String
+            switch outcome {
+            case "success": status = "passed"
+            case "failure", "error", "timed_out", "cancelled", "action_required", "startup_failure":
+                status = "failed"
+            case "neutral", "skipped": status = "skipped"
+            default: status = "pending"
+            }
+            return LaTeXCheck(
+                name: name ?? context ?? "Check", workflow: workflowName ?? "GitHub",
+                status: status, link: detailsUrl ?? targetUrl ?? "")
+        }
+    }
     private struct Repository: Decodable { let default_branch: String }
     private struct Branch: Decodable {
         struct Object: Decodable { let sha: String }

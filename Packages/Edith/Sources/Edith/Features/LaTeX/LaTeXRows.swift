@@ -12,6 +12,6 @@ struct LaTeXRows: View {
             .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
         CLIToolStatusSection(
-            tools: [.tectonic, .latexmk, .githubCLI, .quinjet, .pukbot], extensionEnabled: true)
+            tools: [.tectonic, .latexmk, .githubCLI, .pukbot], extensionEnabled: true)
     }
 }

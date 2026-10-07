@@ -3,7 +3,7 @@
 The LaTeX editor's project library and compiler are available directly through
 `ed`, without a running app or background agent. Disk projects save source and
 PDF artifacts beside the file. Repository projects use GitHub reads, Pukbot
-writes, GitHub Actions builds, and Quinjet review, without a local clone.
+writes, GitHub Actions builds, and native Quinjet review, without a local clone.
 
 ## Commands
 
@@ -17,7 +17,7 @@ writes, GitHub Actions builds, and Quinjet review, without a local clone.
 | `ed latex edit PROJECT --revision REVISION --json` | Preview literal replacements supplied as JSON stdin. |
 | `ed latex compile PROJECT --json` | Compile the saved disk source and report the PDF path and log. |
 | `ed latex preview PROJECT --json` | Check PDF availability for the current revision. |
-| `ed latex review PROJECT --json` | PR metadata, diff, and checks from Quinjet. |
+| `ed latex review PROJECT --json` | PR metadata, diff, and checks for native Quinjet review. |
 | `ed latex merge PROJECT --json` | Preview a squash merge with branch deletion. |
 | `ed latex remove PROJECT --json` | Preview removing a library pointer, preserving its source. |
 

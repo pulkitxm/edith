@@ -23,7 +23,9 @@ struct LaTeXPage: View {
 
     var body: some View {
         Group {
-            if editing, let project = model.selected {
+            if showingReview {
+                LaTeXReviewWorkspace(model: model, onClose: { showingReview = false })
+            } else if editing, let project = model.selected {
                 PageWorkspace {
                     controls(project)
                 } content: {
@@ -36,9 +38,6 @@ struct LaTeXPage: View {
         .pageTask { await model.start() }
         .edithSheet(isPresented: $adding, dismissible: nil) {
             LaTeXAddProject(model: model, onAdded: { editing = true })
-        }
-        .edithSheet(isPresented: $showingReview) {
-            LaTeXReviewSheet(model: model).frame(minWidth: 520, idealWidth: 780, minHeight: 480)
         }
         .onChange(of: model.selectedID) { _, id in
             inspector = "PDF"; if id == nil { editing = false }
@@ -449,34 +448,115 @@ private struct LaTeXChecks: View {
     }
 }
 
-private struct LaTeXReviewSheet: View {
+private struct LaTeXReviewWorkspace: View {
     let model: LaTeXModel
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    @State private var tab = "Changes"
+    @State private var format = "Unified"
     var body: some View {
         PageWorkspace {
-            PageHeader(
-                "Quinjet review",
-                trailing: {
-                    Button("Refresh") { model.refreshReview() }.disabled(model.busy)
-                    Button("Done") { dismiss() }
-                })
-        } content: {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
-                if let review = model.review {
-                    HStack {
-                        LaTeXChecks(review: review)
-                        Spacer()
-                        if review.pullRequest.state == "OPEN" { LaTeXMergeOptions(model: model) }
-                    }
-                    ScrollView([.horizontal, .vertical]) {
-                        Text(review.diff).font(.system(size: UIScale.pt(12), design: .monospaced))
-                            .textSelection(.enabled)
-                    }
-                } else {
-                    Text(model.message ?? "Loading pull request with Quinjet…")
-                        .font(.edithText(.subheadline))
+            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                PageSectionHeader("Quinjet review", subtitle: model.selected?.repository ?? "") {
+                    Button("Refresh", systemImage: "arrow.clockwise") { model.refreshReview() }
+                        .disabled(model.busy)
+                    if model.review?.pullRequest.state == "OPEN" { LaTeXMergeOptions(model: model) }
+                    Button("Back to editor", systemImage: "chevron.left", action: onClose)
                 }
-            }.padding(UIScale.pt(20))
+                if let review = model.review {
+                    HStack(alignment: .top, spacing: UIScale.pt(12)) {
+                        Text(review.pullRequest.state.capitalized)
+                            .font(.edithText(.caption).weight(.semibold))
+                            .foregroundStyle(
+                                review.pullRequest.state == "OPEN" ? Color.green : .secondary
+                            )
+                            .padding(.horizontal, UIScale.pt(10)).padding(.vertical, UIScale.pt(5))
+                            .background(.quaternary, in: Capsule())
+                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                            Text("#\(review.pullRequest.number) · \(review.pullRequest.title)")
+                                .font(.edithText(.headline)).textSelection(.enabled)
+                            Text(
+                                "\(model.selected?.reviewBranch ?? "Review branch") → \(model.selected?.baseBranch ?? "Base branch")"
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let url = URL(string: review.pullRequest.url), url.scheme == "https" {
+                            Link("GitHub", destination: url).font(.edithText(.subheadline))
+                        }
+                    }
+                    HStack {
+                        EdithSegmentedPicker(
+                            "Review", selection: $tab, options: ["Changes", "Checks"], label: { $0 }
+                        ).frame(width: UIScale.pt(240))
+                        Spacer()
+                        if tab == "Changes" {
+                            EdithSegmentedPicker(
+                                "Diff layout", selection: $format, options: ["Unified", "Split"],
+                                label: { $0 }
+                            ).frame(width: UIScale.pt(180))
+                            Button("Copy patch", systemImage: "doc.on.doc") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(review.diff, forType: .string)
+                            }
+                        }
+                    }
+                }
+                if let message = model.message {
+                    Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
+            }.padding(UIScale.pt(16))
+            Divider()
+        } content: {
+            if let review = model.review {
+                if tab == "Changes" {
+                    QuinjetDiffView(
+                        patch: review.diff, split: format == "Split", dark: scheme == .dark)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                            PageSectionHeader(
+                                "Checks",
+                                subtitle: "\(review.checks.count) checks for this revision")
+                            if review.checks.isEmpty {
+                                Text("No checks reported for this pull request.").foregroundStyle(
+                                    .secondary)
+                            }
+                            ForEach(Array(review.checks.enumerated()), id: \.offset) { _, check in
+                                HStack(spacing: UIScale.pt(12)) {
+                                    Image(
+                                        systemName: check.status == "passed"
+                                            ? "checkmark.circle.fill"
+                                            : check.status == "failed"
+                                                ? "xmark.circle.fill" : "clock"
+                                    )
+                                    .foregroundStyle(
+                                        check.status == "passed"
+                                            ? Color.green
+                                            : check.status == "failed" ? .red : .secondary)
+                                    VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                        Text(check.name).font(.edithText(.headline))
+                                        Text("\(check.workflow) · \(check.status)").font(
+                                            .edithText(.caption)
+                                        ).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if let url = URL(string: check.link), url.scheme == "https" {
+                                        Link("View run", destination: url)
+                                    }
+                                }.padding(UIScale.pt(14)).background(
+                                    .quaternary, in: RoundedRectangle(cornerRadius: UIScale.pt(8)))
+                            }
+                        }.padding(UIScale.pt(20))
+                    }
+                }
+            } else {
+                PageLoading(
+                    state: model.busy ? .loading : .empty,
+                    title: "Pull request review", message: model.message ?? "Loading review…",
+                    layout: .cards, retry: { model.refreshReview() }
+                ) { EmptyView() }
+            }
         }
     }
 }
