@@ -128,7 +128,7 @@ struct SpotifySongList: View {
                     Text("Album").frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Image(systemName: "clock").frame(width: UIScale.pt(44))
-                Color.clear.frame(width: UIScale.pt(24), height: 1)
+                Color.clear.frame(width: UIScale.pt(24), height: UIScale.pt(1))
             }
             .font(.edithText(.caption)).foregroundStyle(.secondary)
             .padding(.horizontal, UIScale.pt(12)).padding(.vertical, UIScale.pt(10))

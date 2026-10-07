@@ -264,51 +264,126 @@ private enum AttentionSyntheticWeek {
         #expect(model.summary.activeDuration > 6 * 3_600)
         #expect(!model.summary.agents.isEmpty)
         model.selectedEntityID = model.summary.entities.first { $0.domain == "youtube.com" }?.id
-        try render(model, height: 1_300, to: output.appendingPathComponent("overview-day.png"))
+        try await render(
+            model, height: 1_300, to: output.appendingPathComponent("overview-day.png"))
 
-        try render(
+        try await render(
             model, height: 1_300, to: output.appendingPathComponent("overview-light.png"),
             scheme: .light)
-        try render(
+        try await render(
             model, height: 2_200, to: output.appendingPathComponent("overview-narrow.png"),
             width: 760)
         model.section = .timeline
         await model.waitForReload()
-        try render(model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
+        try await render(
+            model, height: 1_500, to: output.appendingPathComponent("timeline-day.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionDimension.title
         await model.waitForReload()
-        try render(model, height: 1_100, to: output.appendingPathComponent("explorer-titles.png"))
+        try await render(
+            model, height: 1_100, to: output.appendingPathComponent("explorer-titles.png"))
 
         model.section = .overview
         await model.waitForReload()
         model.selectRange(from: days[6], to: yesterday)
         await model.waitForReload()
-        try render(model, height: 2_340, to: output.appendingPathComponent("overview-week.png"))
+        try await render(
+            model, height: 2_340, to: output.appendingPathComponent("overview-week.png"))
 
         model.section = .agents
         await model.waitForReload()
-        try render(model, height: 1_240, to: output.appendingPathComponent("agents-week.png"))
+        try await render(model, height: 1_240, to: output.appendingPathComponent("agents-week.png"))
 
         model.section = .breakdown
         model.breakdownDimension = AttentionTag.repository
         await model.waitForReload()
-        try render(model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
+        try await render(
+            model, height: 700, to: output.appendingPathComponent("breakdown-repo.png"))
 
         model.section = .overview
         model.select(.allTime)
         await model.waitForReload()
-        try render(model, height: 1_500, to: output.appendingPathComponent("overview-all-time.png"))
-        try render(
+        try await render(
+            model, height: 1_500, to: output.appendingPathComponent("overview-all-time.png"))
+        try await render(
             model, height: 2_200, to: output.appendingPathComponent("all-time-narrow.png"),
             width: 760)
     }
 
+    @Test func idleTimeFilterPersistsAndRendersSeparateTotals() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AttentionIdleFixture.\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = AttentionRepository(root: root)
+        let yesterday = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-86_400)
+        let start = yesterday.addingTimeInterval(9 * 3_600)
+        try repository.saveSettings(AttentionSettings(isEnabled: true, trackingEnabled: true))
+        for (offset, duration, presence) in [
+            (0.0, 3_600.0, AttentionPresence.active),
+            (3_600.0, 7_200.0, .idle),
+            (10_800.0, 1_800.0, .locked),
+        ] {
+            try repository.append(
+                AttentionEvent(
+                    startedAt: start.addingTimeInterval(offset), duration: duration,
+                    source: .application, presence: presence, appName: "TextEdit",
+                    bundleID: "com.apple.TextEdit", windowTitle: "Sample notes"), pulseTime: 0)
+        }
+        let model = AttentionPageModel(repository: repository)
+        model.select(.yesterday)
+        await model.waitForReload()
+        #expect(model.settings.excludeIdleTime)
+        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 3_600)
+        #expect(model.summary.idleDuration == 9_000)
+        let output = ProcessInfo.processInfo.environment["EDITH_ATTENTION_EVIDENCE_DIR"].map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        }
+        if let output {
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try await render(
+                model, height: 950, to: output.appendingPathComponent("idle-excluded.png"),
+                width: 1_200)
+            try await render(
+                model, height: 1_100, to: output.appendingPathComponent("idle-zoomed-light.png"),
+                width: 1_200, scheme: .light, scale: 1.25)
+            try await render(
+                model, height: 1_500, to: output.appendingPathComponent("idle-compact-light.png"),
+                width: 760, scheme: .light, scale: 1.25)
+            model.section = .settings
+            try await render(
+                model, height: 1_500,
+                to: output.appendingPathComponent("idle-settings-compact-light.png"),
+                width: 760, scheme: .light, scale: 1.25)
+            model.section = .overview
+        }
+        model.setExcludeIdleTime(false)
+        await model.waitForReload()
+        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 12_600)
+        #expect(repository.loadSettings().excludeIdleTime == false)
+        #expect(model.summary.entities.first?.duration == 3_600)
+        if let output {
+            try await render(
+                model, height: 950, to: output.appendingPathComponent("idle-included.png"),
+                width: 1_200)
+        }
+        let reopened = AttentionPageModel(repository: repository)
+        reopened.select(.yesterday)
+        await reopened.waitForReload()
+        #expect(reopened.settings.excludeIdleTime == false)
+        model.setExcludeIdleTime(true)
+        await model.waitForReload()
+        #expect(model.summary.screenTime(excludingIdle: model.settings.excludeIdleTime) == 3_600)
+        #expect(model.summary.entities.first?.duration == 3_600)
+    }
+
     private func render(
         _ model: AttentionPageModel, height: CGFloat, to output: URL, width: CGFloat = 1440,
-        scheme: ColorScheme = .dark
-    ) throws {
+        scheme: ColorScheme = .dark, scale: Double = 1
+    ) async throws {
+        let previousScale = UIScale.current
+        UIScale.apply(scale)
+        defer { UIScale.apply(previousScale) }
         let host = NSHostingView(
             rootView: AttentionPage(model: model)
                 .environment(\.colorScheme, scheme)
@@ -326,7 +401,8 @@ private enum AttentionSyntheticWeek {
             window.layoutIfNeeded()
             host.layoutSubtreeIfNeeded()
             host.displayIfNeeded()
-            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.4))
+            try await Task.sleep(for: .milliseconds(400))
+            await model.waitForReload()
         }
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)

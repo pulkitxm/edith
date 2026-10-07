@@ -141,6 +141,7 @@ extension AttentionAnalyzer {
         guard let claimed else { return foreground }
         guard let foreground else { return claimed }
         let front = candidates[foreground]
+        guard front.presence == .active else { return foreground }
         guard AttentionBrowserIdentity.isBrowser(bundleID: front.bundleID, appName: front.appName)
         else { return foreground }
         guard let contested else { return claimed }

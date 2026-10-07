@@ -480,6 +480,10 @@ public struct AttentionSummary: Codable, Equatable, Sendable {
         self.previous = previous
     }
 
+    public func screenTime(excludingIdle: Bool) -> TimeInterval {
+        activeDuration + (excludingIdle ? 0 : idleDuration)
+    }
+
     public func duration(_ level: AttentionProductivity) -> TimeInterval {
         AttentionLevels.duration(levels, level)
     }

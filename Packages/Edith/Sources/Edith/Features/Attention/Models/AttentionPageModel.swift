@@ -361,6 +361,11 @@ final class AttentionPageModel {
         section = .overview
     }
 
+    func setExcludeIdleTime(_ excluded: Bool) {
+        settings.excludeIdleTime = excluded
+        saveSettings()
+    }
+
     func setAttentionEnabled(_ enabled: Bool) {
         settings.isEnabled = enabled
         saveSettings()
