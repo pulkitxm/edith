@@ -11,7 +11,7 @@ public struct LaTeXService: Sendable {
         guard let executable = CLIToolEnvironment.executable(named: tool) else {
             throw LaTeXError.message("\(tool) is missing. Install it in Extensions, then retry.")
         }
-        let result = try await CLICommandRunner.run(
+        let result = try await CLICommandRunner.runLocal(
             CLICommandRequest(
                 executableURL: executable, arguments: arguments,
                 environment: CLIToolEnvironment.sanitized(), currentDirectoryURL: directory,
