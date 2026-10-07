@@ -210,6 +210,8 @@ public struct ExtensionLifecycleProbe: Sendable {
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
         "lidAwake": Policy(
             requiresHelper: true, requiresMachine: false, toolRule: .all, adapter: true),
+        "latex": Policy(
+            requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "studio": Policy(
             requiresHelper: false, requiresMachine: false, toolRule: .all, adapter: true),
         "timeLapse": Policy(

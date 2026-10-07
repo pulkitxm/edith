@@ -49,7 +49,15 @@ public struct LaTeXService: Sendable {
             return LaTeXSource(text: text, revision: data.base64EncodedString())
         }
         let base = try await branchSHA(project, branch: project.baseBranch)
-        let ref = project.reviewBranch ?? base
+        var ref = base
+        if let branch = project.reviewBranch {
+            do { ref = try await branchSHA(project, branch: branch) } catch let error as LaTeXError
+            {
+                guard error.localizedDescription.contains("404"), project.pullRequest == nil else {
+                    throw error
+                }
+            }
+        }
         let data = try await run(
             "gh",
             [
@@ -203,7 +211,8 @@ public struct LaTeXService: Sendable {
                       TEX_SOURCE: '\(source)'
                     run: |
                       mkdir -p "$RUNNER_TEMP/latex-output"
-                      tectonic -X compile --untrusted --keep-logs --outdir "$RUNNER_TEMP/latex-output" "$TEX_SOURCE"
+                      cd "$(dirname "$TEX_SOURCE")"
+                  tectonic -X compile --untrusted --keep-logs --outdir "$RUNNER_TEMP/latex-output" "$(basename "$TEX_SOURCE")"
                   - uses: actions/upload-artifact@v4
                     with:
                       name: latex-\(project.id.uuidString.lowercased())

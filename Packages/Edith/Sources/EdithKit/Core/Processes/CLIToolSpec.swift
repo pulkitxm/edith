@@ -137,6 +137,21 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
                 "Install with `brew install --cask codex` or `npm install -g @openai/codex`."
         ))
 
+    public static let tectonic = CLIToolSpec(
+        id: "tectonic", displayName: "Tectonic",
+        why: "Compiles local LaTeX sources into PDFs.",
+        presenceStrategy: .executable(name: "tectonic", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "tectonic"], instruction: "Install with brew install tectonic."))
+
+    public static let pukbot = CLIToolSpec(
+        id: "pukbot", displayName: "Pukbot",
+        why: "Saves LaTeX source changes and manages GitHub pull requests.",
+        presenceStrategy: .executable(name: "pukbot", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "pulkitxm/tap/pukbot"],
+            instruction: "Install with brew install pulkitxm/tap/pukbot."))
+
     public static let quinjet = CLIToolSpec(
         id: "quinjet", displayName: "Quinjet",
         why: "Powers local pull request review and live workspace changes.",

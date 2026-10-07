@@ -72,7 +72,8 @@ public enum ExtensionLiveAdapters {
         "keepAwake", "lidAwake",
         "systemStats", "micMute", "bifrost", "clipboard", "emoji", "colorPicker",
         "keystrokeHighlight",
-        "focusDim", "windowSweaters", "presenter", "studio", "timeLapse", "music", "downloads",
+        "focusDim", "windowSweaters", "presenter", "studio", "latex", "timeLapse", "music",
+        "downloads",
         "notchShelf",
         "audioMixer", "calendar", "virtualCamera",
         "attention", "seoAudit", "codeStats",
@@ -129,6 +130,7 @@ public enum ExtensionLiveAdapters {
         case "systemStats": systemStatsReadiness()
         case "micMute": microphoneReadiness()
         case "lidAwake": lidAwakeReadiness()
+        case "latex": .ready("Add a local source or GitHub repository in the LaTeX window.")
         case "studio": .ready("Drop files into Studio in the Edith window to edit or convert them.")
         case "timeLapse":
             .ready(

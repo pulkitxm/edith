@@ -60,8 +60,8 @@ import Testing
             await calls.record([tool] + args)
             if tool == "pukbot" {
                 #expect(args == ["apply", "--input", "-", "--json"])
-                let json = try #require(
-                    JSONSerialization.jsonObject(with: try #require(input)) as? [String: Any])
+                let data = try #require(input)
+                let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
                 #expect(json["operation"] as? String == "commit_create")
                 let files = try #require(json["files"] as? [[String: String]])
                 #expect(files[0]["content"] == "New source")

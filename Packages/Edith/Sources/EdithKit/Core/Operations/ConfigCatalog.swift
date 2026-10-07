@@ -718,6 +718,10 @@ public enum ConfigCatalog {
 
     private static let codeStats: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Tabs.latexEnabled, .bool, group: "latex",
+            summary: "LaTeX extension: compile documents on disk or through GitHub pull requests.",
+            fallback: .bool(false)),
+        SettingDefinition(
             AppStorageKeys.Tabs.codeStatsEnabled, .bool, group: "codestats",
             summary: "Code Stats extension: mirror GitHub repositories and chart your own commits.",
             fallback: .bool(false)),

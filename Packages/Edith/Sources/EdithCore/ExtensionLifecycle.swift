@@ -199,6 +199,35 @@ public enum ExtensionLifecycleCatalog {
 
     public static let allDescriptors: [ExtensionLifecycleDescriptor] = [
         descriptor(
+            "latex", "Compile local LaTeX documents or review repository changes on GitHub.",
+            workflows: [
+                instruction(
+                    "project", "Add a project",
+                    "Choose a local .tex file or a repository and source path."),
+                instruction(
+                    "compile", "Compile and review",
+                    "Compile local PDFs, or submit repository edits for Quinjet review and squash merge."
+                ),
+            ],
+            prerequisites: [
+                instruction(
+                    "tools", "Install project tools",
+                    "Local projects need Tectonic. Repository projects need authenticated GitHub CLI, Quinjet, and Pukbot."
+                )
+            ],
+            examples: ["ed extensions enable latex", "ed app reveal latex"],
+            docs: [documentation("guide", "LaTeX guide", "docs/latex.md")],
+            recovery: [
+                instruction(
+                    "retry", "Retry loading",
+                    "Check the source path and GitHub authentication, then retry.")
+            ],
+            verification: [
+                instruction(
+                    "verify", "Verify LaTeX", "Inspect the extension tools.",
+                    "ed extensions verify latex --json")
+            ]),
+        descriptor(
             "blitztree", "Explore allocated disk space using Edith's built-in native scanner.",
             workflows: [
                 instruction(

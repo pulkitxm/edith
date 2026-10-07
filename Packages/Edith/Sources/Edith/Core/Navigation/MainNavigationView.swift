@@ -367,6 +367,8 @@ struct MainWindowView: View {
         var usageEnabled = false
     @AppStorage(AppStorageKeys.Tabs.herdrEnabled, store: SharedDefaults.store) private
         var herdrEnabled = false
+    @AppStorage(AppStorageKeys.Tabs.latexEnabled, store: SharedDefaults.store) private
+        var latexEnabled = false
     @AppStorage(AppStorageKeys.Tabs.quinjetEnabled, store: SharedDefaults.store) private
         var quinjetEnabled = false
     @AppStorage(AppStorageKeys.Tabs.seoAuditEnabled, store: SharedDefaults.store) private
@@ -882,7 +884,8 @@ struct MainWindowView: View {
 
     private var extensionSelectionToken: [Bool] {
         [
-            usageEnabled, herdrEnabled, quinjetEnabled, companionEnabled, pluginsEnabled,
+            usageEnabled, herdrEnabled, quinjetEnabled, latexEnabled, companionEnabled,
+            pluginsEnabled,
             appMaintenanceEnabled, blitzTreeEnabled,
             homebrewEnabled, cleanerEnabled, systemEnabled, keepAwakeEnabled, musicEnabled,
             calendarEnabled,
