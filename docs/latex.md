@@ -14,10 +14,12 @@ its source, and select Save & compile. The source stays on disk and the PDF is
 written beside it. The output pane shows the PDF or build log. Compilation runs
 from the source directory so relative includes and assets resolve normally.
 Edith refuses to save over source changes made by another editor.
-The source editor includes LaTeX syntax colors, line numbers, undo and redo,
-inline find, line wrapping, and text size controls. Tab inserts spaces and Return
-keeps the current indentation. Save status occupies a fixed strip so typing does
-not move the editor or PDF pane. Use Command-Return to save
+The source editor includes LaTeX syntax colors, line numbers, command completion,
+bracket matching, undo and redo, and inline search and replace. Tab indents and
+Shift-Tab outdents. Insert LaTeX adds formatting, sections, equations, and lists.
+Editor options control wrapping and text size. Layout switches between a split
+workspace, source only, and PDF only. Save status occupies a fixed strip so typing
+does not move the editor or PDF pane. Use Command-S to save
 and compile. The PDF pane has page navigation, zoom, fit, and Save PDF as.
 
 ## Repository documents
@@ -26,7 +28,8 @@ Install GitHub CLI, Quinjet, and Pukbot, then authenticate with `gh auth login`.
 The account needs permission to push branches and add GitHub Actions workflows.
 Use `owner/repository` and a relative path such as `papers/main.tex`.
 
-Edit the source and select Create pull request. Edith creates a branch from the
+Edit the source and select Create pull request, or press Command-S to save and
+compile through GitHub. Edith creates a branch from the
 commit that supplied your source and commits the edited source plus a dedicated
 compiler workflow through Pukbot. Subsequent edits update the same open PR.
 Repository sources remain in memory until submitted. Only project pointers and
@@ -55,3 +58,13 @@ ed extensions enable latex
 ed app reveal latex
 ed tools install tectonic
 ```
+
+## Editor assets
+
+The CodeMirror editor ships inside the app and works offline. Its WebKit view
+uses a nonpersistent data store and blocks network requests. Repository drafts
+are never written to browser storage. To rebuild the bundled editor, run
+`bun install --cwd tools/latex-editor --frozen-lockfile`, then
+`bun run --cwd tools/latex-editor build`. Verify the committed bundle with
+`bun run --cwd tools/latex-editor check`. Dependency licenses ship beside the
+editor assets.

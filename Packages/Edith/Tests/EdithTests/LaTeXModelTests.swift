@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
+import WebKit
 
 @testable import Edith
 @testable import EdithKit
@@ -100,84 +101,156 @@ import Testing
         try capture(host, name: "latex-repository")
     }
 
-    @Test func syntaxColorsPreserveNativeUndoAndText() async throws {
-        let source = Self.sample
-        let result = try #require(
-            await SyntaxHighlighting.shared.highlight(text: source, language: "latex", dark: true))
-        #expect(result.string == source)
-        let command = result.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
-        let plainRange = (source as NSString).range(of: "Every useful")
-        let plain =
-            result.attribute(.foregroundColor, at: plainRange.location, effectiveRange: nil)
-            as? NSColor
-        #expect(command != plain)
+    @Test func bundledEditorPreservesHistorySelectionSearchAndSave() async throws {
+        var text = Self.sample
+        var saves = 0
         let controls = LaTeXEditorControls()
-        var text = source
         let host = try auditHost(
             LaTeXSourceEditor(
                 text: Binding(get: { text }, set: { text = $0 }), controls: controls, dark: true,
-                editable: true), size: CGSize(width: 700, height: 500))
-        let view = try #require(controls.textView)
+                editable: true, onSave: { saves += 1 }), size: CGSize(width: 700, height: 500))
         let window = TestWindowHost.window(contentRect: host.bounds)
         window.isReleasedWhenClosed = false
         window.contentView = host
-        window.makeFirstResponder(view)
         defer { window.close() }
-        try await Task.sleep(for: .milliseconds(300))
-        #expect(view.undoManager?.canUndo == false)
-        view.setSelectedRange(NSRange(location: 0, length: 0))
-        view.insertText("Added ", replacementRange: view.selectedRange())
+        let view = try #require(controls.webView)
+        try await waitForEditor(controls)
+        #expect(!controls.canUndo)
+        let colored =
+            try await view.callAsyncJavaScript(
+                "return document.querySelectorAll('.cm-line span').length > 0",
+                arguments: [:], in: nil, contentWorld: .page) as? Bool
+        #expect(colored == true)
+        _ = try await view.callAsyncJavaScript(
+            "window.edithEditor.command('focus'); document.execCommand('insertText', false, inserted)",
+            arguments: ["inserted": "Added "], in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(300))
         #expect(text.hasPrefix("Added "))
-        #expect(view.selectedRange() == NSRange(location: 6, length: 0))
-        #expect(view.undoManager?.canUndo == true)
+        #expect(controls.canUndo)
+        #expect(controls.column == 7)
+        _ = try await view.callAsyncJavaScript(
+            "for (const character of input) { document.execCommand('insertText', false, character); await new Promise(resolve => setTimeout(resolve, 5)); }",
+            arguments: ["input": "rapid typing "], in: nil, contentWorld: .page)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(text.hasPrefix("Added rapid typing "))
+        let edited = text
+        controls.fontSize = 16
+        controls.wrapsLines = false
+        try await Task.sleep(for: .milliseconds(200))
         controls.undo()
-        #expect(view.string == source)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(text != edited)
+        #expect(text.hasSuffix(Self.sample))
+        #expect(controls.canRedo)
         controls.redo()
-        #expect(view.string.hasPrefix("Added "))
-        _ = host
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(text == edited)
+        controls.find()
+        try await Task.sleep(for: .milliseconds(200))
+        let finding =
+            try await view.callAsyncJavaScript(
+                "return document.querySelector('.cm-search input[name=search]') !== null",
+                arguments: [:], in: nil, contentWorld: .page) as? Bool
+        #expect(finding == true)
+        _ = try await view.callAsyncJavaScript(
+            "window.edithEditor.command('closeFind'); window.edithEditor.command('focus'); document.querySelector('.cm-content').dispatchEvent(new KeyboardEvent('keydown', {key:'s', code:'KeyS', metaKey:true, bubbles:true, cancelable:true}))",
+            arguments: [:], in: nil, contentWorld: .page)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(saves == 1)
     }
 
-    @Test func editingKeepsWorkspaceGeometryAndIndentationStable() async throws {
+    @Test func typingKeepsWorkspaceAndWrappedViewportStable() async throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("paper.tex")
-        try Data("    Equation".utf8).write(to: file)
+        try Data(Self.sample.utf8).write(to: file)
         let model = LaTeXModel(
             store: LaTeXProjectStore(url: root.appendingPathComponent("projects.json")))
         try await model.add(
             LaTeXProject(name: "Research paper", location: .disk, sourcePath: file.path))
         let host = try auditHost(
             LaTeXPage(model: model, opensEditor: true), size: CGSize(width: 1100, height: 800))
-        func editor(in view: NSView) -> LaTeXTextView? {
-            if let text = view as? LaTeXTextView { return text }
+        func editor(in view: NSView) -> WKWebView? {
+            if let text = view as? WKWebView { return text }
             return view.subviews.lazy.compactMap { editor(in: $0) }.first
         }
         let view = try #require(editor(in: host))
         let window = TestWindowHost.window(contentRect: host.bounds)
         window.isReleasedWhenClosed = false
         window.contentView = host
-        window.makeFirstResponder(view)
         defer { window.close() }
+        for _ in 0..<50 {
+            if (try? await view.callAsyncJavaScript(
+                "return document.querySelector('.cm-content') !== null", arguments: [:], in: nil,
+                contentWorld: .page) as? Bool) == true
+            {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        host.layoutSubtreeIfNeeded()
+        let before = view.convert(view.bounds, to: host)
+        let wrapWidth =
+            try await view.callAsyncJavaScript(
+                "return document.querySelector('.cm-content').clientWidth", arguments: [:], in: nil,
+                contentWorld: .page) as? Double
+        _ = try await view.callAsyncJavaScript(
+            "window.edithEditor.command('focus'); document.execCommand('insertText', false, 'Updated ')",
+            arguments: [:], in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(300))
         host.layoutSubtreeIfNeeded()
-        let before = view.enclosingScrollView!.convert(view.enclosingScrollView!.bounds, to: host)
-        let wrapWidth = try #require(view.textContainer).containerSize.width
-        view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
-        view.insertNewline(nil)
-        #expect(view.string == "    Equation\n    ")
-        view.insertTab(nil)
-        #expect(view.string == "    Equation\n        ")
-        try await Task.sleep(for: .milliseconds(300))
-        host.layoutSubtreeIfNeeded()
-        let after = view.enclosingScrollView!.convert(view.enclosingScrollView!.bounds, to: host)
-        #expect(before == after)
-        #expect(view.textContainer?.containerSize.width == wrapWidth)
-        #expect(wrapWidth <= view.bounds.width - 2 * view.textContainerInset.width)
+        #expect(before == view.convert(view.bounds, to: host))
+        let afterWidth =
+            try await view.callAsyncJavaScript(
+                "return document.querySelector('.cm-content').clientWidth", arguments: [:], in: nil,
+                contentWorld: .page) as? Double
+        #expect(wrapWidth == afterWidth)
+        #expect(model.source.hasPrefix("Updated "))
         #expect(model.dirty)
-        let caret = view.selectedRange()
+    }
+
+    @Test func editorReattachmentKeepsDraftSelectionAndHistory() async throws {
+        var text = Self.sample
+        let controls = LaTeXEditorControls()
+        func content() -> LaTeXSourceEditor {
+            LaTeXSourceEditor(
+                text: Binding(get: { text }, set: { text = $0 }), controls: controls,
+                dark: false, editable: true, documentID: "paper")
+        }
+        var first: NSHostingView<AnyView>? = try auditHost(
+            content(), size: CGSize(width: 700, height: 500))
+        let window = TestWindowHost.window(contentRect: first!.bounds)
+        window.isReleasedWhenClosed = false
+        window.contentView = first
+        defer { window.close() }
+        try await waitForEditor(controls)
+        let view = try #require(controls.webView)
+        _ = try await view.callAsyncJavaScript(
+            "window.edithEditor.command('focus'); document.execCommand('insertText', false, 'Draft ')",
+            arguments: [:], in: nil, contentWorld: .page)
         try await Task.sleep(for: .milliseconds(200))
-        #expect(view.selectedRange() == caret)
+        #expect(text.hasPrefix("Draft "))
+        let column = controls.column
+        window.contentView = nil
+        first = nil
+        try await Task.sleep(for: .milliseconds(100))
+        let second = try auditHost(content(), size: CGSize(width: 900, height: 500))
+        window.contentView = second
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(controls.webView === view)
+        #expect(controls.column == column)
+        #expect(controls.canUndo)
+        controls.undo()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(text == Self.sample)
+    }
+
+    private func waitForEditor(_ controls: LaTeXEditorControls) async throws {
+        for _ in 0..<50 {
+            if controls.ready { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(controls.ready)
     }
 
     private func directory() throws -> URL {

@@ -15,6 +15,7 @@ final class LaTeXModel {
     var message: String?
     var busy = false
     let load = ContentLoad()
+    let editorControls = LaTeXEditorControls()
     private let service: LaTeXService
     private let store: LaTeXProjectStore
     private var operation: Task<Void, Never>?

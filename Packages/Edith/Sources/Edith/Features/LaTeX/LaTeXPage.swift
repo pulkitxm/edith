@@ -12,13 +12,14 @@ struct LaTeXPage: View {
     @State private var adding = false
     @State private var showingReview = false
     @State private var inspector = "PDF"
-    @State private var editorControls = LaTeXEditorControls()
+    @State private var layout = "Split"
     private let providedModel: LaTeXModel?
     init(model: LaTeXModel? = nil, opensEditor: Bool = false) {
         providedModel = model
         _editing = State(initialValue: opensEditor)
     }
     private var model: LaTeXModel { providedModel ?? owner?.latex ?? fallback.latex }
+    private var editorControls: LaTeXEditorControls { model.editorControls }
 
     var body: some View {
         Group {
@@ -159,7 +160,11 @@ struct LaTeXPage: View {
             .pageGutter(compact)
             Divider()
             if model.original != nil {
-                if compact {
+                if layout == "Source" {
+                    editor
+                } else if layout == "PDF" {
+                    result(project)
+                } else if compact {
                     VSplitView {
                         editor.frame(minHeight: UIScale.pt(180))
                         result(project).frame(minHeight: UIScale.pt(160))
@@ -180,8 +185,17 @@ struct LaTeXPage: View {
         }
     }
 
+    private func save() {
+        if model.selected?.location == .disk { model.saveAndCompile() } else { model.submit() }
+    }
+
     private func controls(_ project: LaTeXProject) -> some View {
-        PageHeader(project.name) {
+        PageSectionHeader(
+            project.name,
+            subtitle: project.location == .disk
+                ? project.sourcePath
+                : "\(project.repository) · \(project.baseBranch) · \(project.sourcePath)"
+        ) {
             HStack(spacing: UIScale.pt(8)) {
                 Button {
                     editing = false
@@ -191,15 +205,19 @@ struct LaTeXPage: View {
                 if project.location == .disk {
                     Button("Save & compile") { model.saveAndCompile() }
                         .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.return, modifiers: .command)
-                        .help("Save and compile (⌘Return)")
+                        .keyboardShortcut("s", modifiers: .command)
+                        .help("Save and compile (⌘S)")
                         .disabled(model.original == nil || model.busy || model.load.isRunning)
                 } else {
                     Button(
                         project.pullRequest == nil ? "Create pull request" : "Update pull request"
                     ) {
                         model.submit()
-                    }.buttonStyle(.borderedProminent).disabled(!model.canSubmit)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("s", modifiers: .command)
+                    .help("Save to the pull request and compile on GitHub (⌘S)")
+                    .disabled(!model.canSubmit)
                     if project.pullRequest != nil {
                         Button("Review in Quinjet") {
                             showingReview = true
@@ -207,6 +225,15 @@ struct LaTeXPage: View {
                         }.disabled(model.busy)
                     }
                 }
+                Menu {
+                    Picker("Layout", selection: $layout) {
+                        Text("Source & PDF").tag("Split")
+                        Text("Source only").tag("Source")
+                        Text("PDF only").tag("PDF")
+                    }
+                } label: {
+                    Image(systemName: "rectangle.split.2x1")
+                }.help("Editor layout").accessibilityLabel("Editor layout")
                 Menu {
                     Button("Reload source") { Task { await model.reload() } }
                     if project.location == .disk {
@@ -222,18 +249,14 @@ struct LaTeXPage: View {
                 }
                 .disabled(model.dirty || model.busy || model.load.isRunning)
             }
-        } accessory: {
-            Text(
-                project.location == .disk
-                    ? project.sourcePath
-                    : "\(project.repository) · \(project.baseBranch) · \(project.sourcePath)"
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary).textSelection(.enabled)
         }
+        .pageGutter(compact)
+        .padding(.vertical, UIScale.pt(14))
     }
 
     private var editor: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        @Bindable var editorControls = model.editorControls
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: UIScale.pt(12)) {
                 Label(
                     model.selected.map { URL(fileURLWithPath: $0.sourcePath).lastPathComponent }
@@ -242,42 +265,43 @@ struct LaTeXPage: View {
                 .font(.edithText(.subheadline))
                 .fixedSize()
                 Spacer(minLength: 0)
-                ScrollView(.horizontal) {
-                    HStack(spacing: UIScale.pt(8)) {
-                        Button {
-                            editorControls.undo()
-                        } label: {
-                            Image(systemName: "arrow.uturn.backward")
+                HStack(spacing: UIScale.pt(12)) {
+                    Button {
+                        editorControls.undo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }.help("Undo (⌘Z)").disabled(!editorControls.canUndo)
+                    Button {
+                        editorControls.redo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                    }.help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
+                    Divider().frame(height: UIScale.pt(16))
+                    Button {
+                        editorControls.find()
+                    } label: {
+                        Label("Find", systemImage: "magnifyingglass")
+                    }.help("Find and replace (⌘F)").keyboardShortcut("f", modifiers: .command)
+                    Menu {
+                        Button("Bold (⌘B)") { editorControls.command("bold") }
+                        Button("Italic (⌘I)") { editorControls.command("italic") }
+                        Button("Section") { editorControls.command("section") }
+                        Button("Equation") { editorControls.command("equation") }
+                        Button("List") { editorControls.command("list") }
+                    } label: {
+                        Image(systemName: "textformat")
+                    }.help("Insert LaTeX").accessibilityLabel("Insert LaTeX")
+                    Menu {
+                        Toggle("Wrap lines", isOn: $editorControls.wrapsLines)
+                        Picker("Text size", selection: $editorControls.fontSize) {
+                            ForEach([12, 13, 14, 15, 16, 18, 20], id: \.self) { size in
+                                Text("\(size) pt").tag(Double(size))
+                            }
                         }
-                        .help("Undo (⌘Z)").disabled(!editorControls.canUndo)
-                        Button {
-                            editorControls.redo()
-                        } label: {
-                            Image(systemName: "arrow.uturn.forward")
-                        }
-                        .help("Redo (⇧⌘Z)").disabled(!editorControls.canRedo)
-                        Button {
-                            editorControls.find()
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
-                        .help("Find in source (⌘F)")
-                        .keyboardShortcut("f", modifiers: .command)
-                        Toggle("Wrap", isOn: $editorControls.wrapsLines).toggleStyle(.button)
-                        Button {
-                            editorControls.fontSize = max(10, editorControls.fontSize - 1)
-                        } label: {
-                            Image(systemName: "textformat.size.smaller")
-                        }
-                        .help("Smaller editor text")
-                        Button {
-                            editorControls.fontSize = min(24, editorControls.fontSize + 1)
-                        } label: {
-                            Image(systemName: "textformat.size.larger")
-                        }
-                        .help("Larger editor text")
-                    }.disabled(model.busy || model.load.isRunning)
-                }.scrollIndicators(.hidden).frame(maxWidth: UIScale.pt(260))
+                    } label: {
+                        Image(systemName: "slider.horizontal.3")
+                    }.help("Editor options").accessibilityLabel("Editor options")
+                }.disabled(model.busy || model.load.isRunning)
             }
             .buttonStyle(.borderless)
             .tint(.primary)
@@ -287,7 +311,9 @@ struct LaTeXPage: View {
             LaTeXSourceEditor(
                 text: Binding(get: { model.source }, set: { model.source = $0 }),
                 controls: editorControls, dark: scheme == .dark,
-                editable: !model.busy && !model.load.isRunning
+                editable: !model.busy && !model.load.isRunning,
+                documentID: model.selectedID?.uuidString ?? "",
+                onSave: { save() }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             HStack {

@@ -147,6 +147,7 @@ let targets: [Target] = [
         resources: [
             .process("Resources"),
             .copy("ChromeExtension"),
+            .copy("LaTeXEditor"),
         ],
         swiftSettings: [.swiftLanguageMode(.v5)]
     ),
