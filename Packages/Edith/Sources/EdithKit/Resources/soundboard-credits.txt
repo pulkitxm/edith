@@ -1,0 +1,73 @@
+Soundboard recordings
+
+All sounds are distributed under CC0 1.0 Universal.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+The source high-quality MP3 previews (Freesound) and original Ogg files
+(Kenney and OpenGameArt) were converted to 48 kHz stereo 16-bit PCM WAV.
+Levels were adjusted toward -17 dBFS active RMS with peaks capped at -3 dBFS.
+Each clip has a 3 ms fade-in and a 25 ms fade-out. Applause and thunder
+have 400 ms fade-outs. Short clips use a fade-out of at most 10% of their length.
+
+soundboard-chime.wav: Chime Notification by Jofae
+https://freesound.org/people/Jofae/sounds/380482/
+Source: https://cdn.freesound.org/previews/380/380482_6512973-hq.mp3
+Edit: start 0 s, duration 0.324 s, gain -0.60 dB
+
+soundboard-success.wav: Interface Sounds: confirmation_002 by Kenney
+https://kenney.nl/assets/interface-sounds
+Source: confirmation_002.ogg
+Edit: start 0 s, duration 0.539 s, gain -1.75 dB
+
+soundboard-airhorn.wav: DJ airhorn sound by pfranzen
+https://freesound.org/people/pfranzen/sounds/528807/
+Source: https://cdn.freesound.org/previews/528/528807_3482490-hq.mp3
+Edit: start 0 s, duration 2.009 s, gain +1.85 dB
+
+soundboard-applause.wav: Applause 3.aif by lchapman1980
+https://freesound.org/people/lchapman1980/sounds/439894/
+Source: https://cdn.freesound.org/previews/439/439894_2896196-hq.mp3
+Edit: start 0 s, duration 6.0 s, gain -2.39 dB
+
+soundboard-thunder.wav: Thunderclap by Fission9
+https://freesound.org/people/Fission9/sounds/534023/
+Source: https://cdn.freesound.org/previews/534/534023_9395330-hq.mp3
+Edit: start 0.45 s, duration 6.5 s, gain -2.72 dB
+
+soundboard-drumroll.wav: drumroll.aif by Heigh-hoo
+https://freesound.org/people/Heigh-hoo/sounds/19433/
+Source: https://cdn.freesound.org/previews/19/19433_21830-hq.mp3
+Edit: start 0 s, duration 6.242 s, gain +3.40 dB
+
+soundboard-rimshot.wav: Ba Dum Tss! (classic edition) by DJczyszy
+https://freesound.org/people/DJczyszy/sounds/431811/
+Source: https://cdn.freesound.org/previews/431/431811_1975664-hq.mp3
+Edit: start 0 s, duration 2.7 s, gain -4.55 dB
+
+soundboard-scratch.wav: Record Scratch #1 by musicvision31
+https://freesound.org/people/musicvision31/sounds/431774/
+Source: https://cdn.freesound.org/previews/431/431774_817038-hq.mp3
+Edit: start 0.4 s, duration 1.15 s, gain -5.13 dB
+
+soundboard-pop.wav: Bubble Pop.wav by OGMeek
+https://freesound.org/people/OGMeek/sounds/59978/
+Source: https://cdn.freesound.org/previews/59/59978_764147-hq.mp3
+Edit: start 0 s, duration 0.5 s, gain +2.07 dB
+
+soundboard-countdown.wav: Race Start Countdown by kheetor
+https://opengameart.org/content/race-start-countdown
+Source: https://opengameart.org/sites/default/files/countdown.ogg
+Edit: start 0 s, duration 4.254 s, gain +1.00 dB
+
+soundboard-whoosh.wav: whoosh.wav by anagar
+https://freesound.org/people/anagar/sounds/267950/
+Source: https://cdn.freesound.org/previews/267/267950_2198771-hq.mp3
+Edit: start 0 s, duration 0.757 s, gain +15.01 dB
+
+soundboard-error.wav: Interface Sounds: error_006 by Kenney
+https://kenney.nl/assets/interface-sounds
+Source: error_006.ogg
+Edit: start 0 s, duration 0.5 s, gain -1.21 dB
+
+DJ airhorn sound is an edit of Airhorn by jacksonacademyashmore, also CC0.
+https://freesound.org/people/jacksonacademyashmore/sounds/414208/
