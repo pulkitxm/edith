@@ -162,6 +162,7 @@ import Testing
         try await Task.sleep(for: .milliseconds(300))
         host.layoutSubtreeIfNeeded()
         let before = view.enclosingScrollView!.convert(view.enclosingScrollView!.bounds, to: host)
+        let wrapWidth = try #require(view.textContainer).containerSize.width
         view.setSelectedRange(NSRange(location: (view.string as NSString).length, length: 0))
         view.insertNewline(nil)
         #expect(view.string == "    Equation\n    ")
@@ -171,6 +172,8 @@ import Testing
         host.layoutSubtreeIfNeeded()
         let after = view.enclosingScrollView!.convert(view.enclosingScrollView!.bounds, to: host)
         #expect(before == after)
+        #expect(view.textContainer?.containerSize.width == wrapWidth)
+        #expect(wrapWidth <= view.bounds.width - 2 * view.textContainerInset.width)
         #expect(model.dirty)
         let caret = view.selectedRange()
         try await Task.sleep(for: .milliseconds(200))

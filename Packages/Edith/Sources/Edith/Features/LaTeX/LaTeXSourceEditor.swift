@@ -96,9 +96,10 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         view.isHorizontallyResizable = !controls.wrapsLines
         view.autoresizingMask = controls.wrapsLines ? [.width] : []
         view.textContainer?.widthTracksTextView = controls.wrapsLines
-        view.textContainer?.containerSize = NSSize(
-            width: controls.wrapsLines ? scroll.contentSize.width : CGFloat.greatestFiniteMagnitude,
-            height: CGFloat.greatestFiniteMagnitude)
+        if !controls.wrapsLines {
+            view.textContainer?.containerSize = NSSize(
+                width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        }
         scroll.hasHorizontalScroller = !controls.wrapsLines
         if view.string != text {
             view.string = text
