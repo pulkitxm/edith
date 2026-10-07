@@ -93,6 +93,9 @@ describe("Codex cloud usage", () => {
       { text_output_tokens: 0.1 },
       { text_total_tokens: 500 },
       { credits: null },
+      { credits: true },
+      { credits: " " },
+      { credits: [] },
       { credits: -1 },
       { cost_usd: "NaN" },
     ])

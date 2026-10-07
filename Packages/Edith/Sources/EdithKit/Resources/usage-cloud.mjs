@@ -27,7 +27,10 @@ function tokens(value) {
 }
 
 function amount(value) {
-  if (value === null || value === undefined || value === "")
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && value.trim() === "")
+  )
     throw new Error("Cloud cost is missing.");
   const number = Number(value);
   if (!Number.isFinite(number) || number < 0)
@@ -116,9 +119,26 @@ async function request(url, headers, fetcher) {
   });
   if (!response.ok)
     throw new Error(`Cloud request failed (HTTP ${response.status}).`);
-  const body = await response.text();
-  if (body.length > 32 * 1024 * 1024)
-    throw new Error("Cloud response is too large.");
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Cloud response body is missing.");
+  const decoder = new TextDecoder();
+  let body = "";
+  let bytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > 32 * 1024 * 1024) {
+        await reader.cancel();
+        throw new Error("Cloud response is too large.");
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+    body += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
   try {
     return JSON.parse(body);
   } catch {
@@ -332,7 +352,6 @@ async function fetchClaudeCloud(token, { fetcher, organization, cached }) {
       }
       const events = [];
       let cursor;
-      cursor = undefined;
       for (let page = 0; ; page++) {
         if (page >= 100)
           throw new Error("Cloud event pagination limit reached.");
