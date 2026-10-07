@@ -102,8 +102,8 @@ Without it the window actions do nothing and a snippet is only copied.
 ed permissions request accessibility
 ```
 
-The five destructive system actions — log out, restart, shut down, empty trash
-and quit all apps — raise a confirmation before anything happens.
+The five destructive system actions, log out, restart, shut down, empty trash
+and quit all apps, raise a confirmation before anything happens.
 
 ### Quicklinks, snippets and commands
 
