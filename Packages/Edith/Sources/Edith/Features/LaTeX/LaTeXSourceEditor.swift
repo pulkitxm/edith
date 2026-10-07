@@ -110,7 +110,8 @@ struct LaTeXSourceEditor: NSViewRepresentable {
                 "fontSize": UIScale.pt(parent.controls.fontSize),
                 "wrapsLines": parent.controls.wrapsLines, "documentID": parent.documentID,
             ]
-            if parent.text != lastDocumentText || parent.documentID != lastDocumentID {
+            let focuses = parent.documentID != lastDocumentID
+            if parent.text != lastDocumentText || focuses {
                 revision += 1
                 options["text"] = parent.text
                 lastDocumentText = parent.text
@@ -126,6 +127,10 @@ struct LaTeXSourceEditor: NSViewRepresentable {
             view.callAsyncJavaScript(
                 "window.edithEditor.configure(options)", arguments: ["options": options], in: nil,
                 in: .page, completionHandler: nil)
+            if focuses {
+                view.window?.makeFirstResponder(view)
+                parent.controls.command("focus")
+            }
         }
 
         func userContentController(

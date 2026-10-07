@@ -171,7 +171,7 @@ struct LaTeXPage: View {
                     }
                 } else {
                     HSplitView {
-                        editor.frame(minWidth: UIScale.pt(220))
+                        editor.frame(minWidth: UIScale.pt(280))
                         result(project).frame(minWidth: UIScale.pt(220))
                     }
                 }
@@ -263,7 +263,7 @@ struct LaTeXPage: View {
                         ?? "Source", systemImage: "doc.text"
                 )
                 .font(.edithText(.subheadline))
-                .fixedSize()
+                .lineLimit(1).truncationMode(.middle)
                 Spacer(minLength: 0)
                 HStack(spacing: UIScale.pt(12)) {
                     Button {
