@@ -52,12 +52,12 @@ let package = Package(
     name: "ExtensionHost",
     platforms: [.macOS(.v14)],
     products: [.library(name: "EdithShared", type: .dynamic, targets: ["EdithShared"])],
-    dependencies: [.package(path: ${JSON.stringify(sdk)}), .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")],
+    dependencies: [.package(path: ${JSON.stringify(sdk)})],
     targets: [
         .target(name: "EdithCore", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithCameraSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithLidAwakeSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(name: "EdithKit", dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport", .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace"), .product(name: "ZIPFoundation", package: "ZIPFoundation")], resources: [.process("Resources"), .copy("ChromeExtension"), .copy("LaTeXEditor")], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "EdithKit", dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport", .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace")], resources: [.process("Resources"), .copy("ChromeExtension"), .copy("LaTeXEditor")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithShared", dependencies: ["EdithKit", "EdithCore", "EdithCameraSupport", "EdithLidAwakeSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "PresenterExtension", dependencies: ["EdithKit"], path: "Presenter", swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "PresenterExtensionTests", dependencies: ["PresenterExtension", "EdithKit"], path: "PresenterTests", swiftSettings: [.swiftLanguageMode(.v5)])

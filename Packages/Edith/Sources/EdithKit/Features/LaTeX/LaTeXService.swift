@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+import ExtensionMarketplace
 
 public struct LaTeXService: Sendable {
     public typealias Execute = @Sendable (String, [String], Data?, URL?) async throws -> Data
@@ -173,22 +173,17 @@ public struct LaTeXService: Sendable {
         }
         let bytes = try await run(
             "gh", ["api", "repos/\(project.repository)/actions/artifacts/\(artifact.id)/zip"])
-        let archive = try Archive(data: bytes, accessMode: .read)
-        guard
-            let entry = archive.first(where: {
-                $0.type == .file
-                    && URL(fileURLWithPath: $0.path).lastPathComponent
-                        == project.pdfURL.lastPathComponent
-            }), entry.uncompressedSize <= limit
-        else { throw LaTeXError.message("The build artifact does not contain the expected PDF.") }
-        var pdf = Data()
-        let checksum = try archive.extract(entry) { chunk in
-            guard pdf.count + chunk.count <= limit else {
-                throw LaTeXError.message("The PDF exceeds the preview limit.")
-            }
-            pdf.append(chunk)
+        let extracted: Data?
+        do {
+            extracted = try ArchiveFileReader.read(
+                named: project.pdfURL.lastPathComponent, from: bytes, maximumBytes: limit)
+        } catch {
+            throw LaTeXError.message("The PDF artifact is damaged. Rebuild it on GitHub.")
         }
-        guard checksum == entry.checksum, pdf.starts(with: Data("%PDF-".utf8)) else {
+        guard let pdf = extracted else {
+            throw LaTeXError.message("The build artifact does not contain the expected PDF.")
+        }
+        guard pdf.starts(with: Data("%PDF-".utf8)) else {
             throw LaTeXError.message("The PDF artifact is damaged. Rebuild it on GitHub.")
         }
         return pdf
