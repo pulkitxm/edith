@@ -81,9 +81,6 @@ public struct SurfaceShelf<Content: View>: View {
                                     in: RoundedRectangle(
                                         cornerRadius: UIScale.pt(layout.cornerRadius))
                                 )
-                                .onDrop(of: [SurfaceDrag.type], isTargeted: nil) {
-                                    SurfaceDrag.accept($0, perform: add)
-                                }
                         }
                     }
                     .padding(UIScale.pt(2))
@@ -96,6 +93,9 @@ public struct SurfaceShelf<Content: View>: View {
                         ) + 4)
                 )
                 .coordinateSpace(name: "surfaceShelf")
+                .onDrop(
+                    of: [SurfaceDrag.type], delegate: SurfaceShelfDrop(enabled: editing, add: add)
+                )
                 .scrollIndicators(.hidden)
                 .onChange(of: selected) { _, value in
                     if let value { focused = value }
@@ -144,6 +144,22 @@ public struct SurfaceShelf<Content: View>: View {
         guard layout.visible.indices.contains(destination) else { return }
         focused = layout.visible[destination].id
         withAnimation(.easeInOut(duration: 0.2)) { reader.scrollTo(focused, anchor: .leading) }
+    }
+}
+
+private struct SurfaceShelfDrop: DropDelegate {
+    let enabled: Bool
+    let add: @MainActor (SurfaceWidget) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        enabled && info.hasItemsConforming(to: [SurfaceDrag.type])
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .copy) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard enabled else { return false }
+        return SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type]), perform: add)
     }
 }
 

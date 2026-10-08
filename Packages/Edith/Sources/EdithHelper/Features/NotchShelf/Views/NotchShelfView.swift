@@ -217,6 +217,18 @@ struct NotchShelfContentView: View {
                     }
             }
             if controller.activeTab == .home {
+                if controller.layoutEditing {
+                    Button {
+                        surfaceLayouts.undo(.notch)
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }.disabled(!surfaceLayouts.canUndo(.notch)).help("Undo layout change")
+                    Button {
+                        surfaceLayouts.redo(.notch)
+                    } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                    }.disabled(!surfaceLayouts.canRedo(.notch)).help("Redo layout change")
+                }
                 Button {
                     controller.layoutEditing.toggle()
                 } label: {

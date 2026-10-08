@@ -381,7 +381,9 @@ struct SurfaceEditorPane: View {
                 }.help("Preview the actual canvas width")
             }
             if target == .home { Toggle("Live content", isOn: $livePreview) }
-            Toggle("Single column", isOn: $previewCompact)
+            if target != .notch || !layout.notchHorizontal {
+                Toggle("Single column", isOn: $previewCompact)
+            }
         }
         .toggleStyle(.switch).font(.edithText(.caption))
     }
