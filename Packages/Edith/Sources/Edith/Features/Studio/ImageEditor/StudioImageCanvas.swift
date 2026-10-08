@@ -43,7 +43,8 @@ struct StudioImageCanvas: View {
                 .overlay {
                     CanvasPointerSurface(
                         onChanged: { dragChanged($0, in: rect) },
-                        onEnded: { dragEnded($0, in: rect) })
+                        onEnded: { dragEnded($0, in: rect) },
+                        onKeyDown: editor.handleCanvasKey)
                 }
                 .onContinuousHover { phase in
                     switch phase {
@@ -85,6 +86,7 @@ struct StudioImageCanvas: View {
                             })
                     )
                     .textFieldStyle(.roundedBorder)
+                    .font(.edithText(.body))
                     .frame(maxWidth: UIScale.pt(300))
                 } else {
                     TextField(
@@ -94,20 +96,21 @@ struct StudioImageCanvas: View {
                             set: { value in editor.updateSelected { $0.name = value } })
                     )
                     .textFieldStyle(.roundedBorder)
+                    .font(.edithText(.body))
                     .frame(maxWidth: UIScale.pt(240))
                 }
                 Button("Duplicate", systemImage: "plus.square.on.square") {
-                    var copied: UUID?
-                    editor.edit { copied = $0.duplicateLayer(selected.id) }
-                    editor.selectLayer(copied)
+                    editor.duplicateSelected()
                 }
                 .labelStyle(.iconOnly)
-                .help("Duplicate layer")
+                .help("Duplicate layer (⌘D)")
+                .accessibilityLabel("Duplicate selected layer")
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     editor.deleteSelected()
                 }
                 .labelStyle(.iconOnly)
-                .help("Delete layer")
+                .help("Delete layer (Delete)")
+                .accessibilityLabel("Delete selected layer")
             }
             .buttonStyle(.edith(.iconOnly))
             .padding(UIScale.pt(10))

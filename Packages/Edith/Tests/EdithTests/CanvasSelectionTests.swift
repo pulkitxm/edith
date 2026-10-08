@@ -97,6 +97,90 @@ import Testing
         #expect(editor.selected == original)
     }
 
+    @Test func keyboardManipulationUsesCanvasFocusAndLeavesTextEditingLocal() async throws {
+        let root = try StudioTestFiles.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let url = root.appendingPathComponent("Sample artwork.png")
+        try StudioTestFiles.image(url, width: 800, height: 400)
+        let editor = StudioImageEditorModel(url: url)
+        editor.load()
+        defer { editor.close() }
+        for _ in 0..<100 {
+            if editor.preview != nil { break }
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        editor.addText(text: "Sample caption")
+        let original = try #require(editor.selected)
+        let host = NSHostingView(rootView: StudioImageCanvas(editor: editor))
+        host.frame = NSRect(x: 0, y: 0, width: 800, height: 500)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        let image = ImageEditGeometry.fittedRect(
+            content: editor.canvasSize,
+            in: host.bounds.insetBy(dx: 24, dy: 24))
+        let frame = ImageEditGeometry.viewRect(for: original.frame, in: image)
+        try await drag(host, window: window, from: CGPoint(x: frame.midX, y: frame.midY), by: .zero)
+        #expect(window.firstResponder is CanvasPointerView)
+        try sendKey(124, characters: "", window: window)
+        #expect(
+            abs((editor.selected?.frame.x ?? 0) - original.frame.x - 1 / editor.canvasSize.width)
+                < 0.00001)
+        try sendKey(125, characters: "", modifiers: .shift, window: window)
+        #expect(
+            abs((editor.selected?.frame.y ?? 0) - original.frame.y - 10 / editor.canvasSize.height)
+                < 0.00001)
+        try sendKey(6, characters: "z", modifiers: .command, window: window)
+        #expect(editor.selected?.frame.y == original.frame.y)
+        try sendKey(6, characters: "z", modifiers: .command, window: window)
+        #expect(editor.selected == original)
+        try sendKey(2, characters: "d", modifiers: .command, window: window)
+        #expect(editor.document.layers.count == 2)
+        #expect(editor.selected?.id != original.id)
+        try sendKey(51, characters: "\u{7F}", window: window)
+        #expect(editor.document.layers.count == 1)
+        try sendKey(6, characters: "z", modifiers: .command, window: window)
+        #expect(editor.document.layers.count == 2)
+        editor.selectLayer(original.id)
+        try await Task.sleep(for: .milliseconds(100))
+        host.layoutSubtreeIfNeeded()
+        let field = try #require(
+            canvasDescendants(host).compactMap { $0 as? NSTextField }.first { $0.isEditable })
+        #expect(window.makeFirstResponder(field))
+        let text = try #require(field.currentEditor() as? NSTextView)
+        text.selectAll(nil)
+        try sendKey(51, characters: "\u{7F}", window: window)
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(editor.document.layers.count == 2)
+        #expect(text.string.isEmpty)
+        if case let .text(style) = editor.selected?.content {
+            #expect(style.text.isEmpty)
+        } else {
+            Issue.record("The selected layer must remain a text layer")
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
+    private func sendKey(
+        _ code: UInt16, characters: String,
+        modifiers: NSEvent.ModifierFlags = [], window: NSWindow
+    ) throws {
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero,
+                modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber, context: nil, characters: characters,
+                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+        window.sendEvent(event)
+    }
+
+    private func canvasDescendants(_ view: NSView) -> [NSView] {
+        view.subviews + view.subviews.flatMap { canvasDescendants($0) }
+    }
+
     @Test func videoOverlaySelectsMovesAndResizesFromEveryCorner() async throws {
         let original = CGRect(x: 0.2, y: 0.3, width: 0.4, height: 0.2)
         let display = CGRect(x: 0, y: 0, width: 800, height: 500)

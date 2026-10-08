@@ -394,6 +394,52 @@ final class StudioImageEditorModel {
         edit { $0.updateLayer(selectedLayer, change) }
     }
 
+    func duplicateSelected() {
+        guard let selectedLayer else { return }
+        var copied: UUID?
+        edit { copied = $0.duplicateLayer(selectedLayer) }
+        selectLayer(copied)
+    }
+
+    func handleCanvasKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let character = event.charactersIgnoringModifiers?.lowercased()
+        if modifiers == .command, character == "d", selected != nil {
+            duplicateSelected()
+            return true
+        }
+        if character == "z", modifiers == .command || modifiers == [.command, .shift] {
+            if modifiers.contains(.shift) { redo() } else { undo() }
+            return true
+        }
+        guard modifiers.isEmpty || modifiers == .shift else { return false }
+        if event.keyCode == 53 {
+            guard selectedLayer != nil || panel != .select else { return false }
+            selectedLayer = nil
+            panel = .select
+            return true
+        }
+        guard let selected, !selected.isHidden, panel == .select else { return false }
+        if event.keyCode == 51 || event.keyCode == 117 {
+            deleteSelected()
+            return true
+        }
+        let offset: CGPoint
+        switch event.keyCode {
+        case 123: offset = CGPoint(x: -1, y: 0)
+        case 124: offset = CGPoint(x: 1, y: 0)
+        case 125: offset = CGPoint(x: 0, y: 1)
+        case 126: offset = CGPoint(x: 0, y: -1)
+        default: return false
+        }
+        let step = modifiers.contains(.shift) ? 10.0 : 1.0
+        updateSelected { layer in
+            layer.frame.x += offset.x * step / max(1, canvasSize.width)
+            layer.frame.y += offset.y * step / max(1, canvasSize.height)
+        }
+        return true
+    }
+
     func deleteSelected() {
         guard let selectedLayer else { return }
         edit { $0.removeLayer(selectedLayer) }
