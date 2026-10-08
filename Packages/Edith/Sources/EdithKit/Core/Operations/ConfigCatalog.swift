@@ -154,6 +154,9 @@ public enum ConfigCatalog {
             AppStorageKeys.General.homeClockZones, .csv, group: "appearance",
             summary: "Comma separated time zone identifiers shown on the Home clocks."),
         SettingDefinition(
+            AppStorageKeys.Surfaces.profiles, .string, group: "appearance",
+            summary: "Named Home and Notch layout profiles."),
+        SettingDefinition(
             SurfaceTarget.home.key, .string, group: "appearance",
             summary: "Home widget layout and configuration."),
         SettingDefinition(

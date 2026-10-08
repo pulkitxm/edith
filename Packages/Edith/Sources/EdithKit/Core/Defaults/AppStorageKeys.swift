@@ -2,6 +2,7 @@ import Foundation
 
 public enum AppStorageKeys {
     public enum Surfaces {
+        public static let profiles = "surfaceLayoutProfiles"
         public static let editorTarget = "surfaceEditorTarget"
         public static let editorWidget = "surfaceEditorWidget"
         public static let agentActivity = "agentActivityProviders"

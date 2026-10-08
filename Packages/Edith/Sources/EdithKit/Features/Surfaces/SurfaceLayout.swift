@@ -219,6 +219,9 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
 }
 
 public struct SurfaceLayout: Codable, Equatable, Sendable {
+    public static let maximumColumns = 192
+    public static let maximumRow = 100_000
+    public static let maximumTiles = 200
     public var tiles: [SurfaceTile]
     public var tabOrder: [String] = SurfaceNotchTab.allCases.map(\.rawValue)
     public var hiddenTabs: [String] = []
@@ -264,21 +267,27 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
 
     public func normalized() -> Self {
         var seen = Set<String>()
-        let columns = min(48, max(4, columns))
+        let columns = min(Self.maximumColumns, max(4, columns))
         var result = Self(
-            tiles: tiles.filter { seen.insert($0.id).inserted }.map {
+            tiles: tiles.prefix(Self.maximumTiles).filter { seen.insert($0.id).inserted }.map {
                 var tile = $0
                 tile.title = String(tile.title.prefix(64))
                 tile.focusMinutes = min(180, max(1, tile.focusMinutes))
                 tile.days = [7, 30, 90].contains(tile.days) ? tile.days : 30
                 tile.span = min(columns, max(1, tile.span))
                 tile.column = tile.column.map { min(columns - tile.span, max(0, $0)) }
-                tile.row = tile.row.map { min(1000, max(0, $0)) }
-                tile.height = tile.height.map { min(1200, max(64, $0)) }
+                tile.row = tile.row.map { min(Self.maximumRow, max(0, $0)) }
+                tile.height = tile.height.flatMap { $0.isFinite ? min(1200, max(64, $0)) : nil }
                 tile.itemLimit = min(20, max(1, tile.itemLimit))
-                tile.paddingOverride = tile.paddingOverride.map { min(48, max(0, $0)) }
-                tile.cornerOverride = tile.cornerOverride.map { min(48, max(0, $0)) }
-                tile.shelfWidth = tile.shelfWidth.map { min(760, max(160, $0)) }
+                tile.paddingOverride = tile.paddingOverride.flatMap {
+                    $0.isFinite ? min(48, max(0, $0)) : nil
+                }
+                tile.cornerOverride = tile.cornerOverride.flatMap {
+                    $0.isFinite ? min(48, max(0, $0)) : nil
+                }
+                tile.shelfWidth = tile.shelfWidth.flatMap {
+                    $0.isFinite ? min(760, max(160, $0)) : nil
+                }
                 tile.sourceIDs = tile.sourceIDs.map {
                     Set($0.sorted().prefix(100).map { String($0.prefix(512)) })
                 }
@@ -293,17 +302,18 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
                 return tile
             })
         result.columns = columns
-        result.gap = min(32, max(0, gap))
-        result.padding = min(32, max(0, padding))
-        result.cornerRadius = min(32, max(0, cornerRadius))
-        result.rowHeight = min(32, max(1, rowHeight))
-        result.notchCardWidth = min(520, max(180, notchCardWidth))
+        result.gap = gap.isFinite ? min(32, max(0, gap)) : 12
+        result.padding = padding.isFinite ? min(32, max(0, padding)) : 16
+        result.cornerRadius = cornerRadius.isFinite ? min(32, max(0, cornerRadius)) : 14
+        result.rowHeight = rowHeight.isFinite ? min(32, max(1, rowHeight)) : 8
+        result.notchCardWidth = notchCardWidth.isFinite ? min(520, max(180, notchCardWidth)) : 280
         result.notchHorizontal = notchHorizontal
-        result.notchWidth = min(1200, max(440, notchWidth))
-        result.notchShelfHeight = min(600, max(160, notchShelfHeight))
+        result.notchWidth = notchWidth.isFinite ? min(1200, max(440, notchWidth)) : 580
+        result.notchShelfHeight =
+            notchShelfHeight.isFinite ? min(600, max(160, notchShelfHeight)) : 240
         result.notchLeadingGlance = notchLeadingGlance
         result.notchTrailingGlance = notchTrailingGlance
-        result.notchWingWidth = min(140, max(42, notchWingWidth))
+        result.notchWingWidth = notchWingWidth.isFinite ? min(140, max(42, notchWingWidth)) : 76
         result.notchIncludeSubagents = notchIncludeSubagents
         result.notchAgentSources = notchAgentSources.map {
             Set($0.sorted().prefix(100).map { String($0.prefix(512)) })
@@ -339,6 +349,31 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
         String(data: (try? JSONEncoder().encode(normalized())) ?? Data(), encoding: .utf8) ?? ""
     }
 
+    public mutating func resampleGrid(
+        columns requestedColumns: Int? = nil, snap requestedSnap: Double? = nil
+    ) {
+        let previous = normalized()
+        let nextColumns = min(Self.maximumColumns, max(4, requestedColumns ?? previous.columns))
+        let snap = requestedSnap ?? previous.rowHeight
+        let nextSnap = snap.isFinite ? min(32, max(1, snap)) : previous.rowHeight
+        let scale = Double(nextColumns) / Double(previous.columns)
+        self = previous
+        columns = nextColumns
+        rowHeight = nextSnap
+        for index in tiles.indices {
+            tiles[index].span = min(
+                nextColumns, max(1, Int((Double(tiles[index].span) * scale).rounded())))
+            tiles[index].column = tiles[index].column.map {
+                min(nextColumns - tiles[index].span, max(0, Int((Double($0) * scale).rounded())))
+            }
+            tiles[index].row = tiles[index].row.map {
+                min(
+                    Self.maximumRow,
+                    max(0, Int((Double($0) * previous.rowHeight / nextSnap).rounded())))
+            }
+        }
+    }
+
     public mutating func arrangeAutomatically() {
         for index in tiles.indices where !tiles[index].locked {
             tiles[index].column = nil
@@ -359,7 +394,9 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     @discardableResult
     public mutating func add(_ widget: SurfaceWidget, column: Int? = nil, row: Int? = nil) -> String
     {
+        guard tiles.count < Self.maximumTiles else { return tiles.last?.id ?? widget.rawValue }
         var tile = SurfaceTile(widget)
+        tile.span = max(1, columns / 2)
         if tiles.contains(where: { $0.id == tile.id }) { tile.instanceID = UUID().uuidString }
         tile.column = column
         tile.row = row
@@ -369,7 +406,8 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
 
     @discardableResult
     public mutating func duplicate(_ id: String) -> String? {
-        guard let index = tiles.firstIndex(where: { $0.id == id }) else { return nil }
+        guard tiles.count < Self.maximumTiles, let index = tiles.firstIndex(where: { $0.id == id })
+        else { return nil }
         var copy = tiles[index]
         copy.instanceID = UUID().uuidString
         copy.column = nil
@@ -452,9 +490,9 @@ public enum SurfaceGridPacking {
     public static func pack(
         tiles: [SurfaceTile], columns: Int, heights: [Double], rowHeight: Double, gap: Double
     ) -> [SurfaceGridPlacement] {
-        let columns = max(1, columns)
-        let unit = max(1, rowHeight)
-        let spacing = Int(ceil(gap / unit))
+        let columns = min(SurfaceLayout.maximumColumns, max(1, columns))
+        let unit = rowHeight.isFinite ? min(32, max(1, rowHeight)) : 8
+        let spacing = Int(ceil((gap.isFinite ? min(32, max(0, gap)) : 12) / unit))
         var placed: [SurfaceGridPlacement] = []
         let ordered = tiles.enumerated().sorted { left, right in
             func priority(_ tile: SurfaceTile) -> Int {
@@ -469,9 +507,10 @@ public enum SurfaceGridPacking {
         for (index, tile) in ordered {
             let span = min(columns, max(1, tile.span))
             let height = tile.height ?? (heights.indices.contains(index) ? heights[index] : 100)
-            let rows = max(1, Int(ceil(height / unit))) + spacing
+            let safeHeight = height.isFinite ? min(10_000, max(1, height)) : 100
+            let rows = max(1, Int(ceil(safeHeight / unit))) + spacing
             let start = min(columns - span, max(0, tile.column ?? 0))
-            var row = max(0, tile.row ?? 0)
+            var row = min(SurfaceLayout.maximumRow, max(0, tile.row ?? 0))
             var candidate = SurfaceGridPlacement(column: start, row: row, span: span, rows: rows)
             while true {
                 let options = tile.column == nil ? Array(0...(columns - span)) : [start]
@@ -484,7 +523,12 @@ public enum SurfaceGridPacking {
                         column: column, row: row, span: span, rows: rows)
                     break
                 }
-                row += 1
+                let blocked = placed.filter { other in
+                    other.row + other.rows > row && other.row < row + rows
+                        && (tile.column == nil
+                            || (start < other.column + other.span && start + span > other.column))
+                }
+                row = blocked.map { $0.row + $0.rows }.min() ?? (row + 1)
             }
             placed.append(candidate)
             positions[index] = candidate

@@ -39,6 +39,9 @@ public struct SurfaceCanvas<Content: View>: View {
     let content: (SurfaceTile) -> Content
     @State private var width: CGFloat = 600
     @State private var frames: [String: CGRect] = [:]
+    @State private var dropWidget: SurfaceWidget?
+    @State private var dropPoint: CGPoint?
+    @State private var dropIdentity: UUID?
 
     public init(
         layout: SurfaceLayout, singleColumn: Bool, editing: Bool = false, selected: String? = nil,
@@ -51,7 +54,7 @@ public struct SurfaceCanvas<Content: View>: View {
         placeAt: ((SurfaceWidget, Int, Int) -> Void)? = nil,
         @ViewBuilder content: @escaping (SurfaceTile) -> Content
     ) {
-        self.layout = layout
+        self.layout = layout.normalized()
         self.singleColumn = singleColumn
         self.editing = editing
         self.selected = selected
@@ -89,27 +92,65 @@ public struct SurfaceCanvas<Content: View>: View {
                     }
                 }
             }
+            .frame(minHeight: editing ? UIScale.pt(240) : nil, alignment: .top)
             .coordinateSpace(name: "surfaceCanvas")
             .onDrop(
                 of: [SurfaceDrag.type],
-                delegate: SurfaceGridDrop(enabled: editing) { widget, point in
+                delegate: SurfaceGridDrop(
+                    enabled: editing && layout.tiles.count < SurfaceLayout.maximumTiles,
+                    widget: $dropWidget, point: $dropPoint,
+                    identity: $dropIdentity
+                ) { widget, point in
+                    if singleColumn {
+                        let anchor = layout.visible.first {
+                            (frames[$0.id]?.midY ?? .infinity) * UIScale.current > point.y
+                        }?.id
+                        place(widget, anchor)
+                        return
+                    }
                     let pitch = (width + UIScale.pt(layout.gap)) / CGFloat(layout.columns)
                     let column = max(0, min(layout.columns - 1, Int(point.x / pitch)))
                     let row = max(0, Int((point.y / UIScale.pt(layout.rowHeight)).rounded()))
                     if let placeAt { placeAt(widget, column, row) } else { place(widget, nil) }
                 }
             )
+            .overlay(alignment: .topLeading) {
+                if editing, let widget = dropWidget, let point = dropPoint {
+                    let frame = dropFrame(widget, at: point)
+                    RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
+                        .fill(Color.accentColor.opacity(0.15))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
+                                .strokeBorder(
+                                    Color.accentColor,
+                                    style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                        }
+                        .overlay(alignment: .topLeading) {
+                            Label("Add " + widget.title, systemImage: "plus.circle.fill")
+                                .font(.edithText(.caption)).padding(UIScale.pt(8))
+                                .background(
+                                    .regularMaterial,
+                                    in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+                        }
+                        .frame(width: frame.width, height: frame.height)
+                        .offset(x: frame.minX, y: frame.minY)
+                        .allowsHitTesting(false)
+                }
+            }
             .background {
                 if editing, !singleColumn {
                     Canvas { context, size in
-                        let pitch = (size.width + UIScale.pt(layout.gap)) / CGFloat(layout.columns)
+                        let pitch = max(
+                            0.01, (size.width + UIScale.pt(layout.gap)) / CGFloat(layout.columns))
                         var lines = Path()
-                        for column in 0...layout.columns {
+                        for column in stride(
+                            from: 0, through: layout.columns, by: max(1, Int(ceil(8 / pitch))))
+                        {
                             let x = CGFloat(column) * pitch
                             lines.move(to: CGPoint(x: x, y: 0))
                             lines.addLine(to: CGPoint(x: x, y: size.height))
                         }
-                        let unit = UIScale.pt(layout.rowHeight)
+                        let unit = max(8, UIScale.pt(layout.rowHeight))
                         for row in 0...Int(size.height / unit) {
                             let y = CGFloat(row) * unit
                             lines.move(to: CGPoint(x: 0, y: y))
@@ -137,21 +178,82 @@ public struct SurfaceCanvas<Content: View>: View {
             width = $0
         }
     }
+    private func dropFrame(_ widget: SurfaceWidget, at point: CGPoint) -> CGRect {
+        if singleColumn {
+            let anchor = layout.visible.first {
+                (frames[$0.id]?.midY ?? .infinity) * UIScale.current > point.y
+            }
+            let y = anchor.flatMap { frames[$0.id]?.minY } ?? frames.values.map(\.maxY).max() ?? 0
+            return CGRect(x: 0, y: y * UIScale.current, width: width, height: UIScale.pt(48))
+        }
+        let pitch = max(0.01, (width + UIScale.pt(layout.gap)) / CGFloat(layout.columns))
+        var preview = layout
+        let column = max(0, min(layout.columns - 1, Int(point.x / pitch)))
+        let row = max(
+            0,
+            min(SurfaceLayout.maximumRow, Int((point.y / UIScale.pt(layout.rowHeight)).rounded())))
+        let id = preview.add(widget, column: column, row: row)
+        preview = preview.normalized()
+        let tiles = preview.visible
+        let heights = tiles.map { $0.id == id ? 180 : Double(frames[$0.id]?.height ?? 100) }
+        let measuredTiles = tiles.map { tile in
+            var measured = tile
+            measured.height = nil
+            return measured
+        }
+        let positions = SurfaceGridPacking.pack(
+            tiles: measuredTiles, columns: preview.columns, heights: heights,
+            rowHeight: preview.rowHeight,
+            gap: preview.gap)
+        guard let index = tiles.firstIndex(where: { $0.id == id }),
+            positions.indices.contains(index)
+        else { return .zero }
+        let position = positions[index]
+        return CGRect(
+            x: CGFloat(position.column) * pitch,
+            y: CGFloat(position.row) * UIScale.pt(layout.rowHeight),
+            width: max(1, CGFloat(position.span) * pitch - UIScale.pt(layout.gap)),
+            height: max(
+                1, CGFloat(position.rows) * UIScale.pt(layout.rowHeight) - UIScale.pt(layout.gap)))
+    }
+
 }
 
 private struct SurfaceGridDrop: DropDelegate {
     let enabled: Bool
+    @Binding var widget: SurfaceWidget?
+    @Binding var point: CGPoint?
+    @Binding var identity: UUID?
     let place: @MainActor (SurfaceWidget, CGPoint) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
         enabled && info.hasItemsConforming(to: [SurfaceDrag.type])
     }
-    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .copy) }
-    func performDrop(info: DropInfo) -> Bool {
-        guard enabled else { return false }
-        let point = info.location
-        return SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type])) { place($0, point) }
+    func dropEntered(info: DropInfo) {
+        guard enabled else { return }
+        let token = UUID()
+        identity = token
+        point = info.location
+        SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type])) { value in
+            guard identity == token else { return }
+            widget = value
+        }
     }
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard enabled else { return DropProposal(operation: .forbidden) }
+        point = info.location
+        return DropProposal(operation: .copy)
+    }
+    func dropExited(info: DropInfo) { clear() }
+    func performDrop(info: DropInfo) -> Bool {
+        guard enabled else { clear(); return false }
+        let location = info.location
+        clear()
+        return SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type])) {
+            place($0, location)
+        }
+    }
+    private func clear() { widget = nil; point = nil; identity = nil }
 }
 
 public struct SurfaceGridLayout: Layout {
@@ -159,7 +261,7 @@ public struct SurfaceGridLayout: Layout {
     let singleColumn: Bool
 
     public init(layout: SurfaceLayout, singleColumn: Bool) {
-        self.layout = layout
+        self.layout = layout.normalized()
         self.singleColumn = singleColumn
     }
 
@@ -238,8 +340,14 @@ private struct SurfaceCanvasTile<Content: View>: View {
     @State private var sizing = CGSize.zero
     @State private var gestureFrame: CGRect?
     @State private var contentHeight: CGFloat = 100
+    @State private var gestureContentHeight: CGFloat?
 
     private var pitch: CGFloat { (canvasWidth + UIScale.pt(layout.gap)) / CGFloat(layout.columns) }
+
+    private func resizedHeight(_ delta: CGFloat) -> Double {
+        let points = Double(((gestureContentHeight ?? contentHeight) + delta) / UIScale.current)
+        return min(1200, max(64, (points / layout.rowHeight).rounded() * layout.rowHeight))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
@@ -330,9 +438,25 @@ private struct SurfaceCanvasTile<Content: View>: View {
                                 .onChanged {
                                     if gestureFrame == nil {
                                         gestureFrame = frame
+                                        gestureContentHeight = contentHeight
                                         select()
                                     }
-                                    sizing = $0.translation
+                                    let origin = gestureFrame ?? frame
+                                    let column = Int((origin.minX / pitch).rounded())
+                                    let span = min(
+                                        layout.columns - column,
+                                        max(
+                                            1,
+                                            Int(
+                                                ((origin.width + UIScale.pt(layout.gap)
+                                                    + $0.translation.width) / pitch).rounded())))
+                                    sizing = CGSize(
+                                        width: singleColumn
+                                            ? 0
+                                            : CGFloat(span) * pitch - UIScale.pt(layout.gap)
+                                                - origin.width,
+                                        height: UIScale.pt(resizedHeight($0.translation.height))
+                                            - (gestureContentHeight ?? contentHeight))
                                 }
                                 .onEnded { drag in
                                     var next = tile
@@ -355,13 +479,10 @@ private struct SurfaceCanvasTile<Content: View>: View {
                                                 (origin.minY / UIScale.pt(layout.rowHeight))
                                                     .rounded())
                                     }
-                                    next.height = max(
-                                        64,
-                                        Double(
-                                            (contentHeight + drag.translation.height)
-                                                / UIScale.current))
+                                    next.height = resizedHeight(drag.translation.height)
                                     sizing = .zero
                                     gestureFrame = nil
+                                    gestureContentHeight = nil
                                     configure(next)
                                 }
                         )
@@ -373,6 +494,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 .padding(.horizontal, UIScale.pt(10)).padding(.bottom, UIScale.pt(6))
             }
         }
+        .onTapGesture { if editing { select() } }
         .onGeometryChange(for: CGRect.self) {
             $0.frame(in: .named("surfaceCanvas"))
         } action: {
@@ -413,7 +535,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                         )
                     } else {
                         Text(
-                            "\(Int((frame.width + sizing.width) / UIScale.current)) × \(Int((contentHeight + sizing.height) / UIScale.current)) pt"
+                            "\(Int((frame.width + sizing.width) / UIScale.current)) × \(Int(((gestureContentHeight ?? contentHeight) + sizing.height) / UIScale.current)) pt"
                         )
                     }
                 }

@@ -38,8 +38,12 @@ struct HomePage: View {
                 layout: layout, singleColumn: compact, editing: editing,
                 selected: selectedTile,
                 select: { selectedTile = $0 },
-                place: { widget, _ in
-                    layoutStore.update(.home) { selectedTile = $0.add(widget) }
+                place: { widget, anchor in
+                    layoutStore.update(.home) { layout in
+                        let id = layout.add(widget)
+                        if let anchor { layout.move(id, before: anchor) }
+                        selectedTile = id
+                    }
                 },
                 inspect: { MainApp.openSurfaceEditor(.home, tileID: $0) },
                 reorder: { id, anchor in layoutStore.update(.home) { $0.move(id, before: anchor) }

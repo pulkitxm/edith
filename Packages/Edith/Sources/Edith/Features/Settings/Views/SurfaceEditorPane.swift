@@ -24,6 +24,10 @@ struct SurfaceEditorPane: View {
     @State private var glancesExpanded = true
     @State private var libraryVisible = true
     @State private var inspectorVisible = true
+    @State private var profilesExpanded = false
+    @State private var profileName = ""
+    @State private var renamingProfile: UUID?
+    @State private var renamedProfile = ""
     @State private var layoutError: String?
     @State private var sourceChoices: [SurfaceSourceChoice] = []
     @State private var sourceLoad = ContentLoad()
@@ -114,6 +118,7 @@ struct SurfaceEditorPane: View {
                 Text(layoutError).font(.edithText(.caption)).foregroundStyle(.red)
             }
             canvasSettings
+            savedLayouts
             Text(
                 "Drag widgets onto the grid. Move with the title handle and resize with the corner. Use the inspector for precise values. Changes appear immediately."
             )
@@ -121,17 +126,118 @@ struct SurfaceEditorPane: View {
         }
     }
 
+    private var savedLayouts: some View {
+        DisclosureGroup("Saved layouts", isExpanded: $profilesExpanded) {
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                HStack {
+                    TextField("Layout name", text: $profileName).textFieldStyle(.roundedBorder)
+                    Button("Save current") {
+                        if store.saveProfile(profileName, target: target) {
+                            profileName = ""
+                            layoutError = nil
+                        } else {
+                            layoutError =
+                                "Choose a unique layout name. Each surface supports 20 saved layouts, up to 1 MB in total."
+                        }
+                    }.disabled(profileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                if !store.profiles(target).isEmpty {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                            ForEach(store.profiles(target)) { profile in
+                                HStack {
+                                    if renamingProfile == profile.id {
+                                        TextField("Rename layout", text: $renamedProfile)
+                                            .textFieldStyle(
+                                                .roundedBorder)
+                                        Button("Save name") {
+                                            if store.renameProfile(profile.id, name: renamedProfile)
+                                            {
+                                                renamingProfile = nil
+                                                layoutError = nil
+                                            } else {
+                                                layoutError =
+                                                    "Choose a unique, nonempty layout name."
+                                            }
+                                        }
+                                        Button("Cancel") { renamingProfile = nil }
+                                    } else {
+                                        Text(profile.name).lineLimit(1)
+                                        Spacer()
+                                        Button("Apply") {
+                                            store.applyProfile(profile.id); selected = nil
+                                        }
+                                        Menu {
+                                            Button("Update from current layout") {
+                                                if !store.saveProfile(
+                                                    profile.name, target: target,
+                                                    replacing: profile.id)
+                                                {
+                                                    layoutError =
+                                                        "This saved layout exceeds the 1 MB storage limit."
+                                                }
+                                            }
+                                            Button("Rename") {
+                                                renamingProfile = profile.id;
+                                                renamedProfile = profile.name
+                                            }
+                                            Button("Delete") { store.removeProfile(profile.id) }
+                                        } label: {
+                                            Image(systemName: "ellipsis")
+                                        }
+                                        .help("Manage " + profile.name)
+                                    }
+                                }
+                            }
+                        }
+                    }.frame(height: UIScale.pt(min(180, Double(store.profiles(target).count) * 36)))
+                }
+                if store.canRestoreProfile(target) {
+                    Button("Restore deleted layout") {
+                        if !store.restoreProfile(target) {
+                            layoutError =
+                                "Rename the conflicting layout or remove a saved layout before restoring."
+                        }
+                    }
+                }
+                Text("Home and Notch have separate saved layouts. Applying a layout can be undone.")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }.padding(.top, UIScale.pt(8))
+        }.font(.edithText(.callout))
+    }
+
     private var canvasSettings: some View {
         DisclosureGroup("Canvas geometry", isExpanded: $geometryExpanded) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Stepper(
-                    "Grid: \(layout.columns) columns", value: canvasSetting(\.columns), in: 4...48)
+                    "Grid: \(layout.columns) columns",
+                    value: Binding(
+                        get: { layout.columns },
+                        set: { value in store.update(target) { $0.resampleGrid(columns: value) } }),
+                    in: 4...SurfaceLayout.maximumColumns)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: UIScale.pt(100)))]) {
                     numberField("Gap (pt)", value: canvasSetting(\.gap))
                     numberField("Padding (pt)", value: canvasSetting(\.padding))
                     numberField("Corners (pt)", value: canvasSetting(\.cornerRadius))
-                    numberField("Snap (pt)", value: canvasSetting(\.rowHeight))
+                    numberField(
+                        "Snap (pt)",
+                        value: Binding(
+                            get: { layout.rowHeight },
+                            set: { value in store.update(target) { $0.resampleGrid(snap: value) } })
+                    )
                 }
+                HStack {
+                    Button("Balanced grid") {
+                        store.update(target) { $0.resampleGrid(columns: 24, snap: 8) }
+                    }
+                    Button("Fine grid") {
+                        store.update(target) { $0.resampleGrid(columns: 192, snap: 1) }
+                    }
+                }.buttonStyle(.edith(.secondary))
+                Text(
+                    "Changing the grid preserves widget proportions and vertical positions. Fine mode snaps vertically to one point."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
                 if target == .notch {
                     Toggle("Horizontal widget shelf", isOn: canvasSetting(\.notchHorizontal))
                     numberField("Shelf card width (pt)", value: canvasSetting(\.notchCardWidth))
@@ -206,8 +312,9 @@ struct SurfaceEditorPane: View {
                 }
                 Button("Paste layout") {
                     guard let text = NSPasteboard.general.string(forType: .string),
-                        let data = text.data(using: .utf8),
-                        let imported = try? JSONDecoder().decode(SurfaceLayout.self, from: data)
+                        let data = text.data(using: .utf8), data.count <= 1_048_576,
+                        let imported = try? JSONDecoder().decode(SurfaceLayout.self, from: data),
+                        imported.tiles.count <= SurfaceLayout.maximumTiles
                     else {
                         layoutError = "The clipboard does not contain a valid surface layout."
                         return
@@ -359,8 +466,12 @@ struct SurfaceEditorPane: View {
             SurfaceCanvas(
                 layout: layout, singleColumn: compact || previewCompact,
                 editing: true, selected: selected, select: { selected = $0 },
-                place: { widget, _ in
-                    store.update(target) { selected = $0.add(widget) }
+                place: { widget, anchor in
+                    store.update(target) { layout in
+                        let id = layout.add(widget)
+                        if let anchor { layout.move(id, before: anchor) }
+                        selected = id
+                    }
                 },
                 measured: { id, frame in
                     if tileFrames[id] != frame { tileFrames[id] = frame }
@@ -602,6 +713,27 @@ struct SurfaceEditorPane: View {
                         Stepper(
                             "Width: \(tile.span) / \(layout.columns) columns",
                             value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
+                        numberField(
+                            "Grid width at this canvas (pt)",
+                            value: Binding(
+                                get: {
+                                    Double(selection?.span ?? tile.span)
+                                        * (canvasWidth + layout.gap) / Double(layout.columns)
+                                        - layout.gap
+                                },
+                                set: { value in
+                                    guard value.isFinite else { return }
+                                    let pitch = (canvasWidth + layout.gap) / Double(layout.columns)
+                                    edit(tile.id) {
+                                        $0.span = min(
+                                            layout.columns,
+                                            max(
+                                                1,
+                                                Int(
+                                                    ((min(10_000, max(1, value)) + layout.gap)
+                                                        / max(0.01, pitch)).rounded())))
+                                    }
+                                }))
                     }
                     Toggle(
                         "Automatic height",
@@ -628,6 +760,43 @@ struct SurfaceEditorPane: View {
                                     }
                                 }))
                         if tile.column != nil || tile.row != nil {
+                            numberField(
+                                "Horizontal position (pt)",
+                                value: Binding(
+                                    get: {
+                                        Double(selection?.column ?? 0) * (canvasWidth + layout.gap)
+                                            / Double(layout.columns)
+                                    },
+                                    set: { value in
+                                        guard value.isFinite else { return }
+                                        let pitch =
+                                            (canvasWidth + layout.gap) / Double(layout.columns)
+                                        edit(tile.id) {
+                                            $0.column = min(
+                                                layout.columns - $0.span,
+                                                max(
+                                                    0,
+                                                    Int(
+                                                        (min(10_000, max(0, value))
+                                                            / max(0.01, pitch)).rounded())))
+                                        }
+                                    }))
+                            numberField(
+                                "Vertical position (pt)",
+                                value: Binding(
+                                    get: { Double(selection?.row ?? 0) * layout.rowHeight },
+                                    set: { value in
+                                        guard value.isFinite else { return }
+                                        edit(tile.id) {
+                                            $0.row = min(
+                                                SurfaceLayout.maximumRow,
+                                                max(
+                                                    0,
+                                                    Int(
+                                                        (min(1_000_000, max(0, value))
+                                                            / layout.rowHeight).rounded())))
+                                        }
+                                    }))
                             Stepper(
                                 "Column: \(tile.column ?? 0)",
                                 value: Binding(
@@ -639,7 +808,7 @@ struct SurfaceEditorPane: View {
                                 value: Binding(
                                     get: { selection?.row ?? 0 },
                                     set: { value in edit(tile.id) { $0.row = value } }),
-                                in: 0...1000)
+                                in: 0...SurfaceLayout.maximumRow)
                         }
                         nudgeControls(tile).disabled(tile.locked)
                     }
