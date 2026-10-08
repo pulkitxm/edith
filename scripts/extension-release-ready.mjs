@@ -1,6 +1,7 @@
 import { createPublicKey, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { writeHostABI } from "./extension-host-abi.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
 
 export function verifyCatalog(envelope, publicKey) {
@@ -43,6 +44,7 @@ export function missingPackages(expected, catalog) {
 }
 
 export async function expectedPackages(root) {
+  await writeHostABI(root);
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
   );

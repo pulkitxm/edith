@@ -185,6 +185,8 @@ fi
 TEAM_ID=""
 [ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
 
+node scripts/extension-host-abi.mjs --write
+
 DERIVED=build
 python3 scripts/approve-package-plugins.py
 for BUILD_SCHEME in EdithAgentRuntime EdithDatabaseRuntime EdithMain; do

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export async function hostABI(root = process.cwd()) {
   const files = [];
@@ -28,6 +29,7 @@ export async function hostABI(root = process.cwd()) {
   await visit("Packages/ExtensionMarketplace/Sources/ExtensionMarketplace");
   files.push(
     "Packages/Edith/Package.swift",
+    "Packages/ExtensionMarketplace/Package.swift",
     "scripts/link-shared-framework.py",
     "scripts/extension-host-build.mjs",
   );
@@ -39,24 +41,50 @@ export async function hostABI(root = process.cwd()) {
   return `host-${hash.digest("hex").slice(0, 24)}`;
 }
 
-if (import.meta.main) {
-  const abi = await hostABI();
-  const configuration =
-    "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift";
+export async function writeHostABI(root = process.cwd()) {
+  const abi = await hostABI(root);
+  const configuration = resolve(
+    root,
+    "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+  );
   const source = await readFile(configuration, "utf8");
-  const manifestPath = "Extensions/manifest.json";
+  const manifestPath = resolve(root, "Extensions/manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  if (process.argv.includes("--write")) {
-    await writeFile(
-      configuration,
-      source.replace(
-        /public static let hostABI = "[^"]+"/,
-        `public static let hostABI = "${abi}"`,
-      ),
-    );
+  const nextSource = source.replace(
+    /public static let hostABI = "[^"]+"/,
+    `public static let hostABI = "${abi}"`,
+  );
+  if (
+    source === nextSource &&
+    !source.includes(`public static let hostABI = "${abi}"`)
+  )
+    throw new Error("Missing host ABI declaration");
+  if (source !== nextSource) await writeFile(configuration, nextSource);
+  if (manifest.some((entry) => entry.hostABI !== abi)) {
     for (const entry of manifest) entry.hostABI = abi;
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  } else if (
+  }
+  return abi;
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  const root = resolve(process.argv[3] ?? process.cwd());
+  const abi = await hostABI(root);
+  const source = await readFile(
+    resolve(
+      root,
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+    ),
+    "utf8",
+  );
+  const manifest = JSON.parse(
+    await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
+  );
+  if (process.argv.includes("--write")) await writeHostABI(root);
+  else if (
     !source.includes(`public static let hostABI = "${abi}"`) ||
     manifest.some((entry) => entry.hostABI !== abi)
   ) {

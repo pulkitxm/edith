@@ -2,7 +2,7 @@ import Foundation
 
 public enum MarketplaceConfiguration {
     public static let repository = "pulkitxm/edith"
-    public static let hostABI = "host-ce32223e8da3c3557bb65cfa"
+    public static let hostABI = "host-f84cd4a71a8fc8b56097782f"
     public static let publicKey = Data(
         base64Encoded: "ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=")!
     public static let catalogURL = URL(

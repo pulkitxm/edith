@@ -48,9 +48,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --write
       - run: bun install --frozen-lockfile
-      - run: bun scripts/extension-host-abi.mjs --check
-      - run: bun test scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
+      - run: bun test scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
       - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
       - run: swift test --package-path Extensions --build-system native --jobs 2
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
@@ -67,6 +67,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --write
       - name: Compare with the last trusted catalog
         id: plan
         run: |
@@ -103,6 +104,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --write
       - run: bun scripts/extension-host-build.mjs
       - run: swift test --package-path build/extension-host --build-system native --jobs 2
       - name: Exercise downloaded helper lifecycles with isolated preferences
@@ -135,6 +137,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --write
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         if: needs.plan.outputs.host == 'true'
         with:
@@ -209,6 +212,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-abi.mjs --write
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: extension-*

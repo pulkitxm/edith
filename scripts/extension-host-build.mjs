@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { hostABI } from "./extension-host-abi.mjs";
+import { writeHostABI } from "./extension-host-abi.mjs";
 
 export async function buildHostInterfaces(root = process.cwd()) {
   const directory = resolve(root, "build/extension-host");
-  const abi = await hostABI(root);
+  const abi = await writeHostABI(root);
   const marker = resolve(directory, "host-abi");
   const products = resolve(directory, ".build/release");
   await rm(resolve(directory, "Presenter"), { recursive: true, force: true });
