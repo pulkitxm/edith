@@ -11,6 +11,7 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
     case packageNotInstalled
     case packageBusy
     case invalidBundle
+    case dependencyInUse
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +24,8 @@ public enum MarketplaceError: Error, Equatable, LocalizedError, Sendable {
         case .packageNotInstalled: "Download this extension before enabling it."
         case .packageBusy: "An operation is already running for this extension."
         case .invalidBundle: "The extension bundle could not be loaded."
+        case .dependencyInUse:
+            "Another installed extension needs this package. Remove that extension first."
         }
     }
 }
@@ -73,6 +76,10 @@ public struct ExtensionPackage: Codable, Equatable, Identifiable, Sendable {
 
     public func validate(repository: String) throws {
         guard Self.validComponent(id), Self.validComponent(version), Self.validComponent(hostABI),
+            version.split(separator: ".", omittingEmptySubsequences: false).count == 3,
+            version.split(separator: ".").allSatisfy({
+                !$0.isEmpty && $0.allSatisfy({ $0.isASCII && $0.isNumber })
+            }),
             architecture == "arm64" || architecture == "x86_64", minimumSystemVersion >= 14,
             downloadBytes > 0, downloadBytes <= 512 * 1024 * 1024,
             installedBytes > 0, installedBytes <= 1024 * 1024 * 1024,
