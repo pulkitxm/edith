@@ -46,6 +46,8 @@ public enum IPC {
             "com.pulkit.edith.requestBifrostReindex")
         public static let bifrostIndexChanged = IPC.scopedName(
             "com.pulkit.edith.bifrostIndexChanged")
+        public static let requestMicrophoneMute = IPC.scopedName(
+            "com.pulkit.edith.requestMicrophoneMute")
         public static let requestEmojiPanel = IPC.scopedName(
             "com.pulkit.edith.requestEmojiPanel")
         public static let requestEmojiInsert = IPC.scopedName(

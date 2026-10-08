@@ -25,6 +25,8 @@ struct SurfaceEditorPane: View {
     @State private var libraryVisible = true
     @State private var inspectorVisible = true
     @State private var layoutError: String?
+    @State private var sourceChoices: [SurfaceSourceChoice] = []
+    @State private var sourceLoad = ContentLoad()
     @State private var tileFrames: [String: CGRect] = [:]
     @State private var canvasWidth = 600.0
     @Environment(\.compactLayout) private var compact
@@ -78,6 +80,18 @@ struct SurfaceEditorPane: View {
         .pageTask(id: livePreview, active: livePreview && target == .home) {
             await dashboard.restoreCachedHomeUsage()
             await dashboard.load()
+        }
+        .pageTask(id: selectedRaw) {
+            sourceChoices = []
+            guard var tile = selection, tile.widget.supportsSourceFilters,
+                tile.widget.sourceChoices.isEmpty, tile.widget.available(in: SharedDefaults.store)
+            else { return }
+            tile.sourceIDs = nil
+            let queryTile = tile
+            await sourceLoad.perform(
+                operation: {
+                    try await SurfaceExtensionClient.shared.snapshot(queryTile)
+                }, apply: { sourceChoices = $0.sources })
         }
         .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
         { _ in store.reload() }
@@ -662,6 +676,7 @@ struct SurfaceEditorPane: View {
                             }))
                 }
                 if tile.widget == .agents { agentFilters(tile) }
+                if tile.widget.supportsSourceFilters { extensionSources(tile) }
                 if tile.widget == .focus {
                     Stepper(
                         "Focus duration: \(tile.focusMinutes) minutes",
@@ -684,6 +699,44 @@ struct SurfaceEditorPane: View {
         .padding(UIScale.pt(16))
         .background(
             Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+    }
+
+    private func extensionSources(_ tile: SurfaceTile) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("Sources").font(.edithText(.headline))
+            Toggle(
+                "All sources",
+                isOn: Binding(
+                    get: { selection?.sourceIDs == nil },
+                    set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
+            if tile.sourceIDs != nil {
+                let choices =
+                    tile.widget.sourceChoices.isEmpty ? sourceChoices : tile.widget.sourceChoices
+                ForEach(choices) { choice in
+                    Toggle(
+                        choice.title,
+                        isOn: Binding(
+                            get: { selection?.sourceIDs?.contains(choice.id) == true },
+                            set: { enabled in
+                                edit(tile.id) {
+                                    if enabled {
+                                        $0.sourceIDs?.insert(choice.id)
+                                    } else {
+                                        $0.sourceIDs?.remove(choice.id)
+                                    }
+                                }
+                            }))
+                }
+                if choices.isEmpty {
+                    Text(sourceLoad.errorMessage ?? "No sources available yet.")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
+                if tile.sourceIDs?.isEmpty == true {
+                    Text("Select sources to show data in this widget.")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private var agentProviderChoices: [(id: String, title: String)] {

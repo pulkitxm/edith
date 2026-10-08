@@ -417,6 +417,7 @@ extension SurfaceWidget {
                 ("tool", "Latest tool and command"), ("model", "Model name"),
                 ("elapsed", "Session elapsed time"), ("source", "Source and last signal"),
             ]
+        case .ability, .machines, .desk, .media: extensionFields
         default: []
         }
     }

@@ -11,7 +11,6 @@ public struct SurfaceIntegrationCard: View {
     @State private var error: String?
     @State private var loading = true
     @State private var retry = 0
-    @State private var machines: [Machine] = []
     @Environment(\.surfacePresentation) private var presentation
     private let repository: AttentionRepository
 
@@ -26,7 +25,13 @@ public struct SurfaceIntegrationCard: View {
     }
 
     @ViewBuilder public var body: some View {
-        if tile.widget == .agents { AgentActivityCard(tile: tile, active: active) } else { card }
+        if tile.widget == .agents {
+            AgentActivityCard(tile: tile, active: active)
+        } else if tile.widget.usesExtensionCard {
+            SurfaceExtensionCard(tile: tile, active: active, open: open)
+        } else {
+            card
+        }
     }
 
     private var card: some View {
@@ -149,23 +154,6 @@ public struct SurfaceIntegrationCard: View {
                     Button("Start focus") { startFocus() }.buttonStyle(.edith(.secondary))
                 }
             }
-        case .machines:
-            metric("Registered", "\(machines.count)")
-            if !tile.dense {
-                ForEach(Array(machines.prefix(3)), id: \.id) { machine in
-                    Button(machine.name) { open("machines") }.font(.edithText(.caption))
-                }
-            }
-            if machines.isEmpty { Button("Add a machine") { open("machines") } }
-        case .desk:
-            shortcuts([("Clipboard", "desk"), ("Desk tools", "desk")])
-            Button("Pick a color") { IPC.post(IPC.Name.requestColorPick) }
-                .font(.edithText(.caption))
-        case .media:
-            shortcuts([
-                ("Music", "music"), ("Downloads", "downloads"), ("Studio", "studio"),
-                ("Camera", "virtualCamera"),
-            ])
         case .databases:
             Text("Browse connections, run queries, and inspect tables.").font(.edithText(.caption))
                 .foregroundStyle(.secondary)
@@ -183,15 +171,6 @@ public struct SurfaceIntegrationCard: View {
             Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
-    private func shortcuts(_ items: [(String, String)]) -> some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading) {
-            ForEach(items, id: \.0) { item in
-                Button(item.0) { open(item.1) }.font(.edithText(.caption)).buttonStyle(
-                    .edith(.secondary))
-            }
-        }
-    }
-
     private func refresh() async {
         let request = load.begin()
         defer { if Task.isCancelled { load.cancel(request) } }
@@ -213,7 +192,6 @@ public struct SurfaceIntegrationCard: View {
                 guard load.isCurrent(request) else { return }
                 report = next
             case .focus: focus = repository.activeFocus()
-            case .machines: machines = MachineRegistry.machines()
             default: break
             }
             error = nil
