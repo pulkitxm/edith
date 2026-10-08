@@ -3,20 +3,42 @@ import ExtensionMarketplace
 import Foundation
 
 public enum MarketplaceServices {
-    public static let downloadableIDs: Set<String> = ["keepAwake"]
+    public static let downloadableIDs: Set<String> = ["keepAwake", "audioMixer"]
     public static var store: ExtensionPackageStore {
         ExtensionPackageStore(
             root: AppDirectories.current.configuration.appendingPathComponent("Extensions"))
     }
 
     public static var catalogClient: ExtensionCatalogClient {
-        .live(cache: store.root.appendingPathComponent("catalog.json"))
+        let preview =
+            AppBuildIdentity.isDevelopment
+            ? ProcessInfo.processInfo.environment["EDITH_EXTENSION_CATALOG_URL"].flatMap(
+                URL.init(string:))
+            : nil
+        return .live(
+            cache: store.root.appendingPathComponent("catalog.json"),
+            url: preview ?? MarketplaceConfiguration.catalogURL)
     }
 
     public static func installedPackage(id: String) -> ExtensionPackage? {
         guard (try? store.pendingRemovals().contains(id)) != true else { return nil }
         return try? store.installedPackage(
             id: id, hostABI: MarketplaceConfiguration.hostABI, architecture: "arm64")
+    }
+
+    public static func ensureInstalled(id: String) async throws {
+        guard downloadableIDs.contains(id) else { return }
+        guard try !store.pendingRemovals().contains(id) else {
+            throw MarketplaceError.packageBusy
+        }
+        if installedPackage(id: id) != nil { return }
+        let catalog = try await catalogClient.refresh().catalog
+        _ = try await installer.install(
+            catalog.installationPlan(
+                for: id, hostABI: MarketplaceConfiguration.hostABI,
+                architecture: "arm64",
+                systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
+            repository: MarketplaceConfiguration.repository)
     }
 
     @MainActor public static let helperRuntime = ExtensionBundleRuntime(

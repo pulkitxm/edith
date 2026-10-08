@@ -249,7 +249,8 @@ for source in "$HELPER"/Contents/Frameworks/*.framework; do
     rm -rf "$source"
   fi
 done
-rm -rf "$APP/Contents/Frameworks/onnxruntime.framework" "$HELPER/Contents/Frameworks/onnxruntime.framework"
+rm -rf "$APP/Contents/Frameworks/onnxruntime.framework" "$HELPER/Contents/Frameworks/onnxruntime.framework" \
+  "$APP/Contents/Frameworks/MeetingVoice.framework" "$HELPER/Contents/Frameworks/MeetingVoice.framework"
 rmdir "$HELPER/Contents/Frameworks" 2>/dev/null || true
 
 mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
