@@ -413,6 +413,7 @@ import Testing
             ("micMute", "MicMuteRows", "enabled", "ExtensionsPane.swift"),
             ("lidAwake", "LidAwakeRows", "enabled", "LidAwakeRows.swift"),
             ("studio", "StudioRows", "enabled", "ExtensionsPane.swift"),
+            ("latex", "LaTeXRows", "enabled", "../../LaTeX/LaTeXRows.swift"),
             ("timeLapse", "TimeLapseRows", "enabled", "ExtensionsPane.swift"),
             ("music", "MusicRows", "enabled", "ExtensionsPane.swift"),
             ("calendar", "CalendarRows", "enabled", "ExtensionsPane.swift"),

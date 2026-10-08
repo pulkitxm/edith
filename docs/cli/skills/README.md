@@ -1,6 +1,6 @@
 # `ed skills`
 
-`ed skills` is the Edith skill library as a command: the three skills that ship
+`ed skills` is the Edith skill library as a command: the four skills that ship
 with the app, the Markdown behind each one, and the install the Plugins page
 runs into the agents already on this Mac.
 

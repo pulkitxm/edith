@@ -75,6 +75,10 @@ import Testing
         "ed camera extension remove",
         "ed camera scene delete",
         "ed studio workflow rm",
+        "ed latex write",
+        "ed latex edit",
+        "ed latex merge",
+        "ed latex remove",
     ]
 
     static func nodes(

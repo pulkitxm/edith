@@ -3,8 +3,10 @@
 Plugins lives in the Agents suite. Enable it from Extensions or run
 `ed extensions enable plugins`.
 
-The library contains three Edith skills:
+The library contains four Edith skills:
 
+- **Edith LaTeX Edit** reads source, applies checked edits, compiles PDFs, and
+  reviews GitHub pull requests through the `ed` CLI.
 - **Edith Remote Work** discovers remote projects and performs their work through
   the `ed` CLI.
 - **Edith Video Edit** assembles original media into editable native projects,

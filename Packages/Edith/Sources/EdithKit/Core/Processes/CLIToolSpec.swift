@@ -137,6 +137,30 @@ public struct CLIToolSpec: Identifiable, Equatable, Sendable {
                 "Install with `brew install --cask codex` or `npm install -g @openai/codex`."
         ))
 
+    public static let latexmk = CLIToolSpec(
+        id: "latexmk", displayName: "latexmk / TeX Live",
+        why: "Compiles pdfLaTeX documents, including sources with pdfTeX-specific commands.",
+        presenceStrategy: .executable(name: "latexmk", versionArguments: ["-v"]),
+        installStrategy: .manual(
+            instruction:
+                "Install MacTeX from https://tug.org/mactex, then make /Library/TeX/texbin available on PATH."
+        ))
+
+    public static let tectonic = CLIToolSpec(
+        id: "tectonic", displayName: "Tectonic",
+        why: "Compiles local LaTeX sources into PDFs.",
+        presenceStrategy: .executable(name: "tectonic", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "tectonic"], instruction: "Install with brew install tectonic."))
+
+    public static let pukbot = CLIToolSpec(
+        id: "pukbot", displayName: "Pukbot",
+        why: "Saves LaTeX source changes and manages GitHub pull requests.",
+        presenceStrategy: .executable(name: "pukbot", versionArguments: ["--version"]),
+        installStrategy: .homebrew(
+            arguments: ["install", "pulkitxm/tap/pukbot"],
+            instruction: "Install with brew install pulkitxm/tap/pukbot."))
+
     public static let quinjet = CLIToolSpec(
         id: "quinjet", displayName: "Quinjet",
         why: "Powers local pull request review and live workspace changes.",
@@ -249,7 +273,8 @@ public enum CLIToolEnvironment {
             home.appendingPathComponent(".local/bin").path,
             home.appendingPathComponent(".cargo/bin").path,
             home.appendingPathComponent(".nvm/current/bin").path,
-            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+            "/opt/homebrew/bin", "/usr/local/bin", "/Library/TeX/texbin", "/usr/bin", "/bin",
+            "/usr/sbin", "/sbin",
         ]
         let nvmRoot = home.appendingPathComponent(".nvm/versions/node")
         if let versions = try? fileManager.contentsOfDirectory(

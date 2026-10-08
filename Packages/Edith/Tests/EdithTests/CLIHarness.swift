@@ -193,6 +193,11 @@ final class CLIWorld: @unchecked Sendable {
         ClipboardPaths.root = sandbox
         AttentionPaths.root = sandbox
         AttentionCLIEnvironment.eventSink = nil
+        LaTeXCLIEnvironment.store = LaTeXProjectStore(
+            url: sandbox.appendingPathComponent("latex-projects.json"))
+        LaTeXCLIEnvironment.service = LaTeXService { _, _, _, _ in
+            throw CLIFailure.unavailable("LaTeX tools are disabled in tests")
+        }
         MachinePaths.root = sandbox
         ShelfIndex.root = sandbox.appendingPathComponent("Shelf")
         let historyURL = sandbox.appendingPathComponent("update-checks.json")
@@ -428,6 +433,7 @@ final class CLIWorld: @unchecked Sendable {
         pasteboard.clearContents()
         AttentionCLIEnvironment.eventSink = AgentAttentionSink()
         CLIEnvironment.reset()
+        LaTeXCLIEnvironment.reset()
         AttentionPaths.root = AppData.supportDir
     }
 }

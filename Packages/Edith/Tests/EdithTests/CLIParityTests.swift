@@ -63,6 +63,15 @@ enum UIParity {
 
     static let auditedCapabilities: [UICapability] = [
         UICapability(
+            "LaTeX library", "add a document",
+            ["latex", "add", "--name", "Paper", "--file", "/tmp/paper.tex"]),
+        UICapability(
+            "LaTeX editor", "edit source",
+            ["latex", "edit", "00000000-0000-0000-0000-000000000000", "--revision", "revision"]),
+        UICapability(
+            "LaTeX library", "remove a project pointer",
+            ["latex", "remove", "00000000-0000-0000-0000-000000000000", "--yes"]),
+        UICapability(
             "Settings", "change any preference the panes write", ["config", "set", "theme", "dim"]),
         UICapability(
             "Settings", "put a preference back to its default", ["config", "unset", "theme"]),
@@ -412,6 +421,9 @@ enum UIParity {
         UserInterfaceActionCatalog.actions.map(UICapability.init) + legacyCapabilities
 
     static let expectedLegacyLabels: Set<String> = [
+        "ed latex add --name Paper --file /tmp/paper.tex",
+        "ed latex edit 00000000-0000-0000-0000-000000000000 --revision revision",
+        "ed latex remove 00000000-0000-0000-0000-000000000000 --yes",
         "ed attention categories set app:com.example.App focus",
         "ed companion episode abc --open",
         "ed companion ingest /tmp/note.md",

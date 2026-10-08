@@ -3,12 +3,20 @@ import SwiftUI
 @MainActor
 final class WindowSessionOwner: ObservableObject {
     let acceptsCommandVideo: Bool
+    private var storedLaTeX: LaTeXModel?
     private var storedStudio: StudioModel?
     private var storedQuinjet: QuinjetPageModel?
     private var storedCapture: CompanionCaptureModel?
 
     init(acceptsCommandVideo: Bool = true) {
         self.acceptsCommandVideo = acceptsCommandVideo
+    }
+
+    var latex: LaTeXModel {
+        if let storedLaTeX { return storedLaTeX }
+        let model = LaTeXModel()
+        storedLaTeX = model
+        return model
     }
 
     var studio: StudioModel {

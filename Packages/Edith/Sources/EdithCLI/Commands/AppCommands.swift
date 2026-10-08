@@ -778,7 +778,7 @@ struct AppRevealCommand: AsyncParsableCommand {
         discussion: """
             Bring a main-window section forward, and a tab inside it when you pass --tab.
             Reads the section id or a full route such as companion/chat. Changes which window and tab are visible. --list reads the sidebar names and does not change the window.
-            Section ids: home, machines, docs, agents, dashboard, herdr, quinjet, companion, plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, downloads, music, calendar, virtualCamera, data, database, attention, seoAudit, codeStats, extensions, settings, about.
+            Section ids: home, machines, docs, agents, dashboard, herdr, quinjet, companion, plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, latex, downloads, music, calendar, virtualCamera, data, database, attention, seoAudit, codeStats, extensions, settings, about.
 
             ed app reveal companion --tab chat
             ed app reveal companion/chat
@@ -790,7 +790,7 @@ struct AppRevealCommand: AsyncParsableCommand {
             "The section to show, or a full route such as companion/chat.",
             discussion:
                 "One of home, machines, docs, agents, dashboard, herdr, quinjet, companion, "
-                + "plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, "
+                + "plugins, appMaintenance, blitztree, system, runningApps, desk, media, studio, latex, "
                 + "downloads, music, calendar, virtualCamera, data, database, attention, seoAudit, "
                 + "codeStats, extensions, settings, about."))
     var section: String?

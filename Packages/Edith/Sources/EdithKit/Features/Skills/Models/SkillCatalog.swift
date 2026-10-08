@@ -43,6 +43,12 @@ public enum EdithSkillLibrary {
             detail:
                 "Render native projects at the requested quality, inspect frames and contact sheets, and verify delivery properties and media dependencies.",
             symbol: "checkmark.rectangle.stack"),
+        EdithSkill(
+            id: "edith-latex-edit", name: "Edith LaTeX Edit",
+            summary: "Edit source, compile PDFs, and review changes through ed.",
+            detail:
+                "Manage disk and GitHub LaTeX projects, apply revision-checked edits, compile PDFs, and review pull requests with Quinjet.",
+            symbol: "doc.text"),
     ]
 }
 

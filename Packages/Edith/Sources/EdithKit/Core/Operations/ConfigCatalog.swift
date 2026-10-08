@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database", "codestats",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music", "studio", "calendar", "virtualCamera",
+        "music", "studio", "latex", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",
@@ -717,6 +717,10 @@ public enum ConfigCatalog {
     ]
 
     private static let codeStats: [SettingDefinition] = [
+        SettingDefinition(
+            AppStorageKeys.Tabs.latexEnabled, .bool, group: "latex",
+            summary: "LaTeX extension: compile documents on disk or through GitHub pull requests.",
+            fallback: .bool(false)),
         SettingDefinition(
             AppStorageKeys.Tabs.codeStatsEnabled, .bool, group: "codestats",
             summary: "Code Stats extension: mirror GitHub repositories and chart your own commits.",

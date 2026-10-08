@@ -31,6 +31,7 @@ import Testing
         "presenterEnabled",
         "tabMusicEnabled",
         "tabStudioEnabled",
+        "tabLaTeXEnabled",
         "tabTimeLapseEnabled",
         "downloadsEnabled",
         "notchShelfEnabled",
@@ -56,7 +57,7 @@ import Testing
                 "system", "keepAwake", "lidAwake", "systemStats", "micMute",
                 "bifrost", "clipboard", "emoji", "colorPicker", "keystrokeHighlight",
                 "focusDim", "windowSweaters", "presenter",
-                "studio", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
+                "studio", "latex", "timeLapse", "music", "downloads", "notchShelf", "audioMixer",
                 "calendar", "virtualCamera",
                 "database", "attention", "seoAudit", "codeStats",
             ])
@@ -372,6 +373,7 @@ import Testing
             "attention": [],
             "seoAudit": [],
             "codeStats": [],
+            "latex": [],
         ]
         let optional: [String: [ExtensionPermission]] = [
             "usage": [.notifications],
@@ -408,6 +410,7 @@ import Testing
             "attention": [],
             "seoAudit": [],
             "codeStats": [],
+            "latex": [],
         ]
 
         let identifiers = Set(ExtensionRegistry.entries.map(\.id))

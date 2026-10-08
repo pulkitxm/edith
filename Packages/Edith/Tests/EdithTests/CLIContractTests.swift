@@ -26,6 +26,20 @@ struct JSONCase {
 enum JSONContract {
     static let cases: [JSONCase] = [
         JSONCase("ed guide", ["guide", "--json"]),
+        JSONCase("ed latex ls", ["latex", "ls", "--json"]),
+        JSONCase(
+            "ed latex add",
+            ["latex", "add", "--name", "Paper", "--file", "/nonexistent/paper.tex", "--json"]),
+        JSONCase("ed latex read", ["latex", "read", "missing", "--json"]),
+        JSONCase(
+            "ed latex write", ["latex", "write", "missing", "--revision", "revision", "--json"]),
+        JSONCase(
+            "ed latex edit", ["latex", "edit", "missing", "--revision", "revision", "--json"]),
+        JSONCase("ed latex compile", ["latex", "compile", "missing", "--json"]),
+        JSONCase("ed latex review", ["latex", "review", "missing", "--json"]),
+        JSONCase("ed latex preview", ["latex", "preview", "missing", "--json"]),
+        JSONCase("ed latex merge", ["latex", "merge", "missing", "--json"]),
+        JSONCase("ed latex remove", ["latex", "remove", "missing", "--json"]),
         JSONCase("ed version", ["version", "--json"]),
         JSONCase("ed status", ["status", "--json"]),
         JSONCase("ed brew status", ["brew", "status", "--json"]),

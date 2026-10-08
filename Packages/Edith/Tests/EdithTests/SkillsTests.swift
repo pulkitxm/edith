@@ -160,7 +160,7 @@ import Testing
     @Test func libraryContainsTheBundledGitHubSkills() {
         #expect(
             EdithSkillLibrary.skills.map(\.id) == [
-                "edith-remote-work", "edith-video-edit", "edith-video-delivery",
+                "edith-remote-work", "edith-video-edit", "edith-video-delivery", "edith-latex-edit",
             ])
         #expect(
             skill.sourceURL.absoluteString

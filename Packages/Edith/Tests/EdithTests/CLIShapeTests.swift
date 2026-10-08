@@ -234,6 +234,7 @@ enum CommandCrawler {
             "ed machines services", "ed apps",
             "ed agent", "ed agent tasks", "ed agent schedule", "ed mcp", "ed tools", "ed download",
             "ed studio",
+            "ed latex",
             "ed studio edit", "ed studio edit audio", "ed studio edit markers",
             "ed studio edit media", "ed studio library",
             "ed studio edit captions",

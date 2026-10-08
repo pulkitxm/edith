@@ -144,6 +144,29 @@ public enum CommandTree {
     typealias Spec = CommandSpec
 
     static let specs: [String: Spec] = [
+        "ed latex": Spec(options: common),
+        "ed latex ls": Spec(options: common),
+        "ed latex add": Spec(
+            options: common + ["--name", "--file", "--repo", "--source", "--branch", "--compiler"],
+            optionValues: [
+                "--name": .free, "--file": .localPath, "--repo": .free, "--source": .free,
+                "--branch": .free, "--compiler": .free,
+            ]),
+        "ed latex read": Spec(options: common, arguments: [.free]),
+        "ed latex write": Spec(
+            options: common + ["--revision", "--yes"], optionValues: ["--revision": .free],
+            arguments: [.free], destructivePolicy: .previewThenYes),
+        "ed latex edit": Spec(
+            options: common + ["--revision", "--yes"], optionValues: ["--revision": .free],
+            arguments: [.free], destructivePolicy: .previewThenYes),
+        "ed latex compile": Spec(options: common, arguments: [.free]),
+        "ed latex review": Spec(options: common, arguments: [.free]),
+        "ed latex preview": Spec(options: common + ["--data"], arguments: [.free]),
+        "ed latex merge": Spec(
+            options: common + ["--auto", "--yes"], arguments: [.free],
+            destructivePolicy: .previewThenYes),
+        "ed latex remove": Spec(
+            options: common + ["--yes"], arguments: [.free], destructivePolicy: .previewThenYes),
         "ed": Spec(options: ["--help", "--version"]),
         "ed guide": Spec(options: ["--json"], arguments: [.guideTopic]),
         "ed docs ls": Spec(
