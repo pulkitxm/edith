@@ -77,7 +77,7 @@ import Testing
             let element = try #require(
                 elements.first {
                     ($0 as AnyObject).accessibilityRole?() == .button
-                        && ($0 as AnyObject).accessibilityLabel?() == label
+                        && nativeAccessibilityMatches($0, label: label)
                 })
             let frame = try #require((element as AnyObject).accessibilityFrame?())
             #expect(frame.width > 0 && frame.height > 0)
@@ -103,6 +103,74 @@ import Testing
                 to: output.appendingPathComponent(
                     "skills-\(compact ? "compact" : "regular")-\(scheme == .dark ? "dark" : "light").png"
                 ))
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
+    @Test(arguments: [320.0, 680.0, 1280.0], [ColorScheme.light, .dark])
+    func videoEditorKeepsToolbarActionsInsideTheViewport(width: Double, scheme: ColorScheme)
+        async throws
+    {
+        _ = TestWindowHost.application
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let oldAttributes = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, oldAttributes) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
+        let previous = UIScale.current
+        UIScale.apply(width < 900 ? 1.6 : 1)
+        defer { UIScale.apply(previous) }
+        let model = VideoEditorModel()
+        model.project = VideoProject.create(title: "Sample video")
+        defer { model.close() }
+        let host = NSHostingView(
+            rootView: VideoEditorPage(model: model, retained: true)
+                .environment(\.compactLayout, width < 900)
+                .environment(\.colorScheme, scheme)
+                .environment(\.automaticViewActionsEnabled, false)
+                .environment(\.windowVisible, false))
+        host.sizingOptions = []
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 900)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(180))
+        host.layoutSubtreeIfNeeded()
+        let elements = accessibilityElements(host)
+        let viewport = window.convertToScreen(host.convert(host.bounds, to: nil))
+        #expect(abs(host.bounds.height - 900) < 2)
+        for label in [
+            "Media", "Inspector", "Editor actions", "Projects", "Add media", "Export video",
+        ] {
+            let control = try #require(
+                elements.first {
+                    nativeAccessibilityMatches($0, label: label)
+                        && (($0 as AnyObject).accessibilityRole?() == .button
+                            || ($0 as AnyObject).accessibilityRole?() == .popUpButton
+                            || ($0 as AnyObject).accessibilityRole?() == .menuButton)
+                }, "\(label)")
+            let frame = try #require((control as AnyObject).accessibilityFrame?(), "\(label)")
+            #expect(frame.width > 0 && frame.height > 0, "\(label)")
+            #expect(viewport.insetBy(dx: -1, dy: -1).contains(frame), "\(label)")
+        }
+        if let directory = ProcessInfo.processInfo.environment["EDITH_TEST_EVIDENCE_DIR"],
+            width >= 680
+        {
+            let output = URL(fileURLWithPath: directory, isDirectory: true)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try png.write(
+                to: output.appendingPathComponent(
+                    "video-editor-\(Int(width))-\(scheme == .dark ? "dark" : "light").png"))
         }
         #expect(!TestWindowHost.isExposedOnDesktop(window))
     }

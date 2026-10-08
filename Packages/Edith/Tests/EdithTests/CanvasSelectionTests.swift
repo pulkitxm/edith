@@ -149,7 +149,17 @@ import Testing
         host.layoutSubtreeIfNeeded()
         let field = try #require(
             canvasDescendants(host).compactMap { $0 as? NSTextField }.first { $0.isEditable })
-        #expect(window.makeFirstResponder(field))
+        let point = field.convert(CGPoint(x: field.bounds.midX, y: field.bounds.midY), to: nil)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try #require(
+                NSEvent.mouseEvent(
+                    with: type, location: point,
+                    modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0,
+                    clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0))
+            window.sendEvent(event)
+        }
+        #expect(window.firstResponder is NSTextView)
         let text = try #require(field.currentEditor() as? NSTextView)
         text.selectAll(nil)
         try sendKey(51, characters: "\u{7F}", window: window)
