@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 final class WindowSessionOwner: ObservableObject {
     let acceptsCommandVideo: Bool
+    let scrollPositions = PageScrollPositions()
     private var storedAttention: AttentionPageModel?
     private var storedCodeStats: CodeStatsModel?
     private var storedLaTeX: LaTeXModel?
