@@ -228,3 +228,47 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
             url: fixture.store.root.appendingPathComponent(".operation.lock"), exclusive: true)
     }
 }
+
+@Test func pruningRetainsRollbackAndEveryPackageStillInUse() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let first = try fixture.archive("1.0.0")
+    let second = try fixture.archive("1.1.0")
+    let third = try fixture.archive("1.2.0")
+    let fourth = try fixture.archive("1.3.0")
+    let installer = fixture.installer(
+        archives: Dictionary(
+            uniqueKeysWithValues: [first, second, third, fourth].map { ($0.0.downloadURL, $0.1) }))
+    for item in [first, second, third, fourth] {
+        _ = try await installer.install([item.0], repository: "example/app")
+    }
+    let lease = try fixture.store.lease(first.0)
+    try fixture.store.prune()
+    #expect(
+        try fixture.store.installedPackages().map(\.version).sorted() == [
+            "1.0.0", "1.2.0", "1.3.0",
+        ])
+    lease.close()
+    try fixture.store.prune()
+    #expect(try fixture.store.installedPackages().map(\.version).sorted() == ["1.2.0", "1.3.0"])
+    #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: first.0).path))
+    #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: second.0).path))
+}
+
+@Test func removalWaitsForTheLoadedProcessAndCompletesOnNextLaunch() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (package, archive) = try fixture.archive()
+    _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
+        [package], repository: "example/app")
+    let lease = try fixture.store.lease(package)
+    #expect(try fixture.store.requestRemoval(id: package.id) == false)
+    #expect(try fixture.store.pendingRemovals() == [package.id])
+    try fixture.store.completePendingRemovals()
+    #expect(try fixture.store.installedPackages() == [package])
+    lease.close()
+    try fixture.store.completePendingRemovals()
+    #expect(try fixture.store.installedPackages().isEmpty)
+    #expect(try fixture.store.pendingRemovals().isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: package).path))
+}

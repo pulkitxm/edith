@@ -201,6 +201,31 @@ public actor ExtensionPackageInstaller {
 }
 
 public enum ExtensionCodeSignature {
+    public static func teamIdentifier() -> String? {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else {
+            return nil
+        }
+        var information: CFDictionary?
+        guard
+            SecCodeCopySigningInformation(
+                staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information)
+                == errSecSuccess, let information = information as? [String: Any]
+        else { return nil }
+        return information[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+
+    public static func verifyDevelopment(_ url: URL) throws {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+            SecStaticCodeCheckValidity(
+                code, SecCSFlags(rawValue: kSecCSStrictValidate | kSecCSCheckNestedCode), nil)
+                == errSecSuccess
+        else { throw MarketplaceError.invalidSignature }
+    }
+
     public static func verify(_ bundle: URL, teamIdentifier: String) throws {
         guard !teamIdentifier.isEmpty,
             teamIdentifier.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) })
