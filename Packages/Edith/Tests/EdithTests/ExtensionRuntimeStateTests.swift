@@ -614,6 +614,7 @@ import Testing
                 UIScale.apply(zoom)
                 let host = NSHostingView(
                     rootView: HomePage()
+                        .environment(\.compactLayout, width == 420)
                         .environment(\.automaticViewActionsEnabled, false)
                         .environment(\.terminalLaunchEnabled, false)
                         .environment(\.windowVisible, false)
