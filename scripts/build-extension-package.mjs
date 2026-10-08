@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
 
@@ -9,23 +9,45 @@ export async function buildExtensionPackage({
   id,
   output,
   development = false,
+  version,
+  tagOverride,
 }) {
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  const releaseVersion = version ?? definition.version;
   const identity = process.env.EXTENSION_SIGN_IDENTITY;
   if (!development && (!identity || identity === "-"))
     throw new Error("A release signing identity is required");
   const fingerprint = await extensionFingerprint(root, definition, definitions);
-  const tag = `extensions/${id}/${fingerprint.slice(0, 20)}`;
+  const tag = tagOverride ?? `extensions/${id}/${fingerprint.slice(0, 20)}`;
   const target = resolve(output ?? resolve(root, "dist/extensions"));
   const staging = resolve(target, ".staging", id);
   await rm(staging, { recursive: true, force: true });
   await mkdir(staging, { recursive: true });
   const payload = resolve(staging, id);
   await mkdir(payload);
+  if (definition.nativePackage) {
+    execFileSync(
+      "swift",
+      [
+        "build",
+        "--package-path",
+        resolve(root, definition.nativePackage),
+        "--build-system",
+        "native",
+        "--configuration",
+        "release",
+        "--jobs",
+        "2",
+        "--product",
+        definition.nativeProduct,
+      ],
+      { stdio: "inherit" },
+    );
+  }
   for (const [role, sources] of Object.entries(definition.roles)) {
     if (!["app", "helper", "agent", "cli"].includes(role))
       throw new Error(`Unknown host role ${role}`);
@@ -33,6 +55,53 @@ export async function buildExtensionPackage({
     const contents = resolve(bundle, "Contents");
     await mkdir(resolve(contents, "MacOS"), { recursive: true });
     const executable = resolve(contents, "MacOS", "Runtime");
+    const nativeFlags = [];
+    if (definition.nativePackage) {
+      const libraryName = `lib${definition.nativeProduct}.dylib`;
+      const frameworks = resolve(contents, "Frameworks");
+      await mkdir(frameworks);
+      const resources = resolve(contents, "Resources");
+      await mkdir(resources);
+      await copyFile(
+        resolve(
+          root,
+          definition.nativePackage,
+          ".build/artifacts/onnxruntime-swift-package-manager/onnxruntime/LICENSE",
+        ),
+        resolve(resources, "onnxruntime-LICENSE"),
+      );
+      const library = resolve(frameworks, libraryName);
+      await copyFile(
+        resolve(root, definition.nativePackage, ".build/release", libraryName),
+        library,
+      );
+      execFileSync("install_name_tool", [
+        "-id",
+        `@rpath/${libraryName}`,
+        library,
+      ]);
+      execFileSync("strip", ["-rSTx", library]);
+      execFileSync(
+        "codesign",
+        [
+          "--force",
+          "--sign",
+          development ? "-" : identity,
+          ...(development ? [] : ["--options", "runtime", "--timestamp"]),
+          library,
+        ],
+        { stdio: "inherit" },
+      );
+      nativeFlags.push(
+        "-L",
+        frameworks,
+        `-l${definition.nativeProduct}`,
+        "-Xlinker",
+        "-rpath",
+        "-Xlinker",
+        "@loader_path/../Frameworks",
+      );
+    }
     execFileSync(
       "xcrun",
       [
@@ -46,6 +115,11 @@ export async function buildExtensionPackage({
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}.0`,
         ...sources.map((path) => resolve(root, path)),
+        ...nativeFlags,
+        "-Xlinker",
+        "-install_name",
+        "-Xlinker",
+        `@rpath/EdithExtension_${id}_${role}`,
         "-o",
         executable,
       ],
@@ -56,8 +130,8 @@ export async function buildExtensionPackage({
       CFBundleName: id,
       CFBundlePackageType: "BNDL",
       CFBundleExecutable: "Runtime",
-      CFBundleShortVersionString: definition.version,
-      CFBundleVersion: definition.version,
+      CFBundleShortVersionString: releaseVersion,
+      CFBundleVersion: releaseVersion,
       EdithHostABI: definition.hostABI,
     };
     const infoJSON = resolve(staging, `${role}-info.json`);
@@ -68,7 +142,7 @@ export async function buildExtensionPackage({
       infoJSON,
       resolve(contents, "Info.plist"),
     ]);
-    execFileSync("strip", ["-S", executable]);
+    execFileSync("strip", ["-rSTx", executable]);
     const symbols = execFileSync("nm", ["-g", executable], {
       encoding: "utf8",
     });
@@ -86,7 +160,7 @@ export async function buildExtensionPackage({
   }
   const payloadManifest = {
     id,
-    version: definition.version,
+    version: releaseVersion,
     hostABI: definition.hostABI,
     architecture: "arm64",
     dependencies: definition.dependencies,
@@ -113,10 +187,11 @@ export async function buildExtensionPackage({
   const packageRecord = {
     ...payloadManifest,
     minimumSystemVersion: definition.minimumSystemVersion,
-    downloadURL: `https://github.com/${repository}/releases/download/${tag}/${id}.zip`,
+    downloadURL: `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${id}.zip`,
     sha256: createHash("sha256").update(bytes).digest("hex"),
     downloadBytes: bytes.length,
     installedBytes: summary.installedBytes,
+    sourceFingerprint: fingerprint,
   };
   await writeFile(
     resolve(target, `${id}.json`),
@@ -135,6 +210,8 @@ if (import.meta.main) {
   if (!id) throw new Error("Supply an extension id");
   const result = await buildExtensionPackage({
     id,
+    version: process.env.EXTENSION_VERSION,
+    tagOverride: process.env.EXTENSION_RELEASE_TAG,
     output: process.env.EXTENSION_OUTPUT,
     development: process.argv.includes("--development"),
   });

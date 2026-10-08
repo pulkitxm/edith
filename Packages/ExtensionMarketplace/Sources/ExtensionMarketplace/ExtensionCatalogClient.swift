@@ -21,9 +21,11 @@ public actor ExtensionCatalogClient {
         self.fetch = fetch
     }
 
-    public static func live(cache: URL) -> ExtensionCatalogClient {
+    public static func live(cache: URL, url: URL = MarketplaceConfiguration.catalogURL)
+        -> ExtensionCatalogClient
+    {
         ExtensionCatalogClient(
-            url: MarketplaceConfiguration.catalogURL, publicKey: MarketplaceConfiguration.publicKey,
+            url: url, publicKey: MarketplaceConfiguration.publicKey,
             repository: MarketplaceConfiguration.repository, cache: cache
         ) { url in
             var request = URLRequest(

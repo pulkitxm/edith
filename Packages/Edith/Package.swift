@@ -18,7 +18,6 @@ let products: [Product] = [
 ]
 
 let dependencies: [Package.Dependency] = [
-    .package(path: "../MeetingVoice"),
     .package(path: "../ExtensionMarketplace"),
     .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     .package(url: "https://github.com/migueldeicaza/SwiftTerm", exact: "1.19.0"),
@@ -144,7 +143,6 @@ let targets: [Target] = [
             "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport",
             .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace"),
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
-            .product(name: "MeetingVoice", package: "MeetingVoice"),
         ],
         resources: [
             .process("Resources"),

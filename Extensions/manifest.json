@@ -4,9 +4,39 @@
     "version": "1.0.0",
     "hostABI": "runtime-1",
     "minimumSystemVersion": 14,
-    "roles": {"helper": ["Extensions/keepAwake/KeepAwakeStore.swift", "Extensions/keepAwake/Runtime.swift"]},
-    "inputs": ["Extensions/keepAwake"],
-    "sharedInputs": ["scripts/build-extension-package.mjs"],
+    "roles": {
+      "helper": [
+        "Extensions/keepAwake/KeepAwakeStore.swift",
+        "Extensions/keepAwake/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/keepAwake"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "audioMixer",
+    "version": "1.0.0",
+    "hostABI": "runtime-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "app": [
+        "Extensions/audioMixer/Runtime.swift"
+      ]
+    },
+    "nativePackage": "Packages/MeetingVoice",
+    "nativeProduct": "MeetingVoice",
+    "inputs": [
+      "Extensions/audioMixer",
+      "Packages/MeetingVoice"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs"
+    ],
     "dependencies": []
   }
 ]
