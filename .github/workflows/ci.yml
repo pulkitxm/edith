@@ -728,6 +728,9 @@ jobs:
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
 
+      - name: Wait for compatible extension releases
+        run: node release-source/scripts/extension-release-ready.mjs release-source
+
       - name: Commit and tag the release
         id: release_state
         if: env.REBUILD == ''
