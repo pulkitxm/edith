@@ -72,6 +72,17 @@ export async function extensionFingerprint(root, definition, definitions) {
       return;
     }
     for (const entry of entries) {
+      if (
+        [
+          ".build",
+          ".git",
+          ".swiftpm",
+          "node_modules",
+          "dist",
+          "build",
+        ].includes(entry.name)
+      )
+        continue;
       if (entry.isSymbolicLink()) throw new Error("Symlink in extension input");
       await collect(`${path}/${entry.name}`);
     }

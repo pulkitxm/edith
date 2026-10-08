@@ -1,0 +1,142 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { extensionFingerprint } from "./extension-release-plan.mjs";
+
+export async function buildExtensionPackage({
+  root = process.cwd(),
+  id,
+  output,
+  development = false,
+}) {
+  const definitions = JSON.parse(
+    await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
+  );
+  const definition = definitions.find((entry) => entry.id === id);
+  if (!definition) throw new Error(`Unknown extension ${id}`);
+  const identity = process.env.EXTENSION_SIGN_IDENTITY;
+  if (!development && (!identity || identity === "-"))
+    throw new Error("A release signing identity is required");
+  const fingerprint = await extensionFingerprint(root, definition, definitions);
+  const tag = `extensions/${id}/${fingerprint.slice(0, 20)}`;
+  const target = resolve(output ?? resolve(root, "dist/extensions"));
+  const staging = resolve(target, ".staging", id);
+  await rm(staging, { recursive: true, force: true });
+  await mkdir(staging, { recursive: true });
+  const payload = resolve(staging, id);
+  await mkdir(payload);
+  for (const [role, sources] of Object.entries(definition.roles)) {
+    if (!["app", "helper", "agent", "cli"].includes(role))
+      throw new Error(`Unknown host role ${role}`);
+    const bundle = resolve(payload, `${role}.bundle`);
+    const contents = resolve(bundle, "Contents");
+    await mkdir(resolve(contents, "MacOS"), { recursive: true });
+    const executable = resolve(contents, "MacOS", "Runtime");
+    execFileSync(
+      "xcrun",
+      [
+        "swiftc",
+        "-emit-library",
+        "-parse-as-library",
+        "-Osize",
+        "-whole-module-optimization",
+        "-module-name",
+        `EdithExtension_${id}_${role}`,
+        "-target",
+        `arm64-apple-macos${definition.minimumSystemVersion}.0`,
+        ...sources.map((path) => resolve(root, path)),
+        "-o",
+        executable,
+      ],
+      { stdio: "inherit" },
+    );
+    const info = {
+      CFBundleIdentifier: `com.pulkit.edith.extensions.${id}.${role}`,
+      CFBundleName: id,
+      CFBundlePackageType: "BNDL",
+      CFBundleExecutable: "Runtime",
+      CFBundleShortVersionString: definition.version,
+      CFBundleVersion: definition.version,
+      EdithHostABI: definition.hostABI,
+    };
+    const infoJSON = resolve(staging, `${role}-info.json`);
+    await writeFile(infoJSON, JSON.stringify(info));
+    execFileSync("python3", [
+      "-c",
+      "import json,plistlib,sys; plistlib.dump(json.load(open(sys.argv[1])),open(sys.argv[2],'wb'),fmt=plistlib.FMT_BINARY)",
+      infoJSON,
+      resolve(contents, "Info.plist"),
+    ]);
+    execFileSync("strip", ["-S", executable]);
+    const symbols = execFileSync("nm", ["-g", executable], {
+      encoding: "utf8",
+    });
+    if (!symbols.includes(" T _edith_extension_create"))
+      throw new Error("Extension entry point was not exported");
+    const flags = development ? [] : ["--options", "runtime", "--timestamp"];
+    execFileSync(
+      "codesign",
+      ["--force", "--sign", development ? "-" : identity, ...flags, bundle],
+      { stdio: "inherit" },
+    );
+    execFileSync("codesign", ["--verify", "--strict", bundle], {
+      stdio: "inherit",
+    });
+  }
+  const payloadManifest = {
+    id,
+    version: definition.version,
+    hostABI: definition.hostABI,
+    architecture: "arm64",
+    dependencies: definition.dependencies,
+  };
+  await writeFile(
+    resolve(payload, "package.json"),
+    JSON.stringify(payloadManifest),
+  );
+  const archive = resolve(target, `${id}.zip`);
+  const summary = JSON.parse(
+    execFileSync(
+      "python3",
+      [
+        "-c",
+        "import json,pathlib,sys,zipfile; root=pathlib.Path(sys.argv[1]); files=sorted(p for p in root.rglob('*') if p.is_file()); z=zipfile.ZipFile(sys.argv[2],'w',zipfile.ZIP_DEFLATED,compresslevel=9); [(z.write(p,p.relative_to(root.parent))) for p in files]; z.close(); print(json.dumps({'installedBytes':sum(p.stat().st_size for p in files)}))",
+        payload,
+        archive,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  const bytes = await readFile(archive);
+  const repository = process.env.GITHUB_REPOSITORY ?? "pulkitxm/edith";
+  const packageRecord = {
+    ...payloadManifest,
+    minimumSystemVersion: definition.minimumSystemVersion,
+    downloadURL: `https://github.com/${repository}/releases/download/${tag}/${id}.zip`,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    downloadBytes: bytes.length,
+    installedBytes: summary.installedBytes,
+  };
+  await writeFile(
+    resolve(target, `${id}.json`),
+    `${JSON.stringify(packageRecord, null, 2)}\n`,
+  );
+  await writeFile(
+    resolve(target, `${id}.zip.sha256`),
+    `${packageRecord.sha256}  ${id}.zip\n`,
+  );
+  await rm(staging, { recursive: true, force: true });
+  return { ...packageRecord, fingerprint, tag };
+}
+
+if (import.meta.main) {
+  const id = process.argv[2];
+  if (!id) throw new Error("Supply an extension id");
+  const result = await buildExtensionPackage({
+    id,
+    output: process.env.EXTENSION_OUTPUT,
+    development: process.argv.includes("--development"),
+  });
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}

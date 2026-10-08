@@ -1,0 +1,12 @@
+[
+  {
+    "id": "keepAwake",
+    "version": "1.0.0",
+    "hostABI": "runtime-1",
+    "minimumSystemVersion": 14,
+    "roles": {"helper": ["Extensions/keepAwake/KeepAwakeStore.swift", "Extensions/keepAwake/Runtime.swift"]},
+    "inputs": ["Extensions/keepAwake"],
+    "sharedInputs": ["scripts/build-extension-package.mjs"],
+    "dependencies": []
+  }
+]
