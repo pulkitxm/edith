@@ -398,6 +398,22 @@ private struct NotchHomeTab: View {
                         }
                         layout.tiles[index].size = size
                     }
+                },
+                configure: { tile in
+                    layoutStore.update(.notch) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        else { return }
+                        layout.position(tile)
+                    }
+                },
+                placeAt: { widget, column, row in
+                    layoutStore.update(.notch) { layout in
+                        layout.place(widget)
+                        guard let index = layout.tiles.firstIndex(where: { $0.widget == widget })
+                        else { return }
+                        layout.tiles[index].column = column
+                        layout.tiles[index].row = row
+                    }
                 }
             ) { tile in
                 VStack(alignment: .leading, spacing: 5) {
@@ -434,13 +450,15 @@ private struct NotchHomeTab: View {
                         }
                     }
                     Button("Open widget editor") {
-                        controller.collapseNow(); MainApp.openSurfaceEditor(.notch)
+                        controller.collapseNow()
+                        MainApp.openSurfaceEditor(.notch)
                     }
                 }
             }
             if layoutStore.notch.visible.isEmpty, !controller.layoutEditing {
                 Button("Add widgets") {
-                    controller.collapseNow(); MainApp.openSurfaceEditor(.notch)
+                    controller.collapseNow()
+                    MainApp.openSurfaceEditor(.notch)
                 }
                 .padding(20)
             }
@@ -476,11 +494,13 @@ private struct NotchHomeTab: View {
                     Text(event.start.formatted(.dateTime.hour().minute())).font(.system(size: 11))
                         .foregroundStyle(.secondary)
                     Button("Open Calendar") {
-                        controller.collapseNow(); MainApp.open(section: "calendar")
+                        controller.collapseNow()
+                        MainApp.open(section: "calendar")
                     }
                 } else {
                     Button("Open Calendar") {
-                        controller.collapseNow(); MainApp.open(section: "calendar")
+                        controller.collapseNow()
+                        MainApp.open(section: "calendar")
                     }
                 }
             }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
@@ -505,7 +525,8 @@ private struct NotchHomeTab: View {
 
     private func integration(_ tile: SurfaceTile) -> some View {
         SurfaceIntegrationCard(tile: tile) { section in
-            controller.collapseNow(); MainApp.open(section: section)
+            controller.collapseNow()
+            MainApp.open(section: section)
         }
     }
 
@@ -630,7 +651,7 @@ private struct NotchHomeTab: View {
     }
 }
 
-fileprivate struct NotchNowPlayingCard: View {
+private struct NotchNowPlayingCard: View {
     var controller: NotchShelfController
     let track: NotchNowPlaying
     private var presenterState = PresenterState.shared

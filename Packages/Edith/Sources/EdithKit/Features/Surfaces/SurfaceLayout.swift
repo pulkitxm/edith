@@ -121,6 +121,7 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var itemLimit = 5
     public var dense = false
     public var accent = true
+    public var hiddenFields: Set<String> = []
     public var id: String { widget.rawValue }
     public var displayTitle: String {
         let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -132,6 +133,8 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
         self.size = size
         span = size == .wide ? 24 : size == .compact ? 6 : 12
     }
+
+    public func shows(_ field: String) -> Bool { !hiddenFields.contains(field) }
 }
 
 public struct SurfaceLayout: Codable, Equatable, Sendable {
@@ -154,11 +157,17 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
             ? [.clocks, .actions, .activity, .calendar, .usage, .limits, .music, .codeStats]
             : [.music, .limits, .actions]
         return Self(
-            tiles: widgets.map {
-                SurfaceTile(
-                    $0,
-                    size: $0 == .activity || $0 == .actions || (target == .home && $0 == .clocks)
-                        ? .wide : .regular)
+            tiles: widgets.map { widget in
+                var tile = SurfaceTile(widget)
+                if target == .home {
+                    tile.span =
+                        switch widget {
+                        case .clocks, .calendar, .codeStats: 8
+                        case .actions, .usage: 16
+                        default: 12
+                        }
+                }
+                return tile
             })
     }
 
@@ -184,6 +193,7 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
         result.cornerRadius = min(32, max(0, cornerRadius))
         result.rowHeight = min(32, max(1, rowHeight))
         result.notchCardWidth = min(520, max(180, notchCardWidth))
+        result.notchHorizontal = notchHorizontal
         let known = SurfaceNotchTab.allCases.map(\.rawValue)
         var seenTabs = Set<String>()
         result.tabOrder = (tabOrder + known).filter {
@@ -233,6 +243,49 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
             tiles[index].row = nil
         }
     }
+
+    public mutating func position(_ tile: SurfaceTile) {
+        tiles.removeAll { $0.id == tile.id }
+        tiles.insert(tile, at: 0)
+    }
+}
+
+extension SurfaceWidget {
+    public var fields: [(String, String)] {
+        switch self {
+        case .clocks: [("faces", "Clock faces"), ("offsets", "Time differences")]
+        case .actions: [("icons", "Control icons"), ("descriptions", "Control descriptions")]
+        case .usage:
+            [
+                ("today", "Today's totals"), ("week", "Weekly totals"), ("tokens", "Token counts"),
+                ("chart", "Daily cost chart"), ("models", "Model breakdown"),
+            ]
+        case .limits:
+            [
+                ("session", "Session limits"), ("weekly", "Weekly limits"),
+                ("additional", "Additional model limits"), ("remaining", "Remaining capacity"),
+                ("resets", "Reset countdowns"), ("account", "Account details"),
+                ("updated", "Last update"),
+            ]
+        case .music:
+            [
+                ("artwork", "Album artwork"), ("artist", "Artist name"),
+                ("queue", "Upcoming tracks"), ("progress", "Playback time"),
+            ]
+        case .calendar: [("time", "Meeting times"), ("join", "Join meeting controls")]
+        case .codeStats, .github:
+            [
+                ("commits", "Commit totals"), ("lines", "Authored lines"),
+                ("streak", "Current streak"), ("repositories", "Repository breakdown"),
+            ]
+        case .agents:
+            [
+                ("running", "Working count"), ("waiting", "Needs attention count"),
+                ("total", "Total count"), ("sessions", "Session list"),
+            ]
+        default: []
+        }
+    }
 }
 
 public struct SurfaceGridPlacement: Equatable, Sendable {
@@ -272,10 +325,12 @@ public enum SurfaceGridPacking {
             while true {
                 let options = tile.column == nil ? Array(0...(columns - span)) : [start]
                 if let column = options.first(where: { column in
-                    let frame = SurfaceGridPlacement(column: column, row: row, span: span, rows: rows)
+                    let frame = SurfaceGridPlacement(
+                        column: column, row: row, span: span, rows: rows)
                     return !placed.contains { frame.overlaps($0) }
                 }) {
-                    candidate = SurfaceGridPlacement(column: column, row: row, span: span, rows: rows)
+                    candidate = SurfaceGridPlacement(
+                        column: column, row: row, span: span, rows: rows)
                     break
                 }
                 row += 1

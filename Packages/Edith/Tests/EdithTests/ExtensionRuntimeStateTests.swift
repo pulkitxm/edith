@@ -560,7 +560,7 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         let card = try Self.viewDeclaration("QuickActionsCard", in: source)
-        #expect(card.contains(".adaptive(minimum: UIScale.pt("))
+        #expect(card.contains(".flexible(minimum: 0)"))
         #expect(card.contains("LazyVGrid(columns: columns"))
         #expect(card.contains("Button(action: action)"))
         for feature in [
@@ -655,6 +655,10 @@ import Testing
                 }
                 if width == 420 {
                     #expect(Set(actionFrames.map { Int($0.midY.rounded()) }).count > 1)
+                } else {
+                    let coverage = actionFrames.reduce(CGRect.null) { $0.union($1) }
+                    let allocatedWidth = (viewport.width - UIScale.pt(32)) * 16 / 24
+                    #expect(coverage.width > allocatedWidth - UIScale.pt(48))
                 }
                 #expect(!TestWindowHost.isExposedOnDesktop(window))
             }

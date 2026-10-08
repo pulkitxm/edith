@@ -13,6 +13,7 @@ public struct SurfaceIntegrationCard: View {
     @State private var loading = true
     @State private var retry = 0
     @State private var machines: [Machine] = []
+    @Environment(\.surfacePresentation) private var presentation
     private let repository: AttentionRepository
 
     public init(
@@ -27,17 +28,25 @@ public struct SurfaceIntegrationCard: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            HStack {
-                Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-                Button {
-                    open(tile.widget.destination)
-                } label: {
-                    Image(systemName: "arrow.up.right")
+            if tile.showTitle || tile.showActions {
+                HStack {
+                    if tile.showTitle {
+                        Label(tile.displayTitle, systemImage: tile.widget.icon).font(
+                            .edithText(.headline)
+                        )
+                        .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    if tile.showActions {
+                        Button {
+                            open(tile.widget.destination)
+                        } label: {
+                            Image(systemName: "arrow.up.right")
+                        }
+                        .buttonStyle(.edith(.borderless)).help("Open \(tile.widget.title)")
+                        .accessibilityLabel("Open \(tile.widget.title)")
+                    }
                 }
-                .buttonStyle(.edith(.borderless)).help("Open \(tile.widget.title)")
-                .accessibilityLabel("Open \(tile.widget.title)")
             }
             if let error {
                 Text(error).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(3)
@@ -49,12 +58,18 @@ public struct SurfaceIntegrationCard: View {
                 LoadingIndicator()
             }
         }
-        .padding(UIScale.pt(14)).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(UIScale.pt(presentation?.padding ?? (tile.dense ? 10 : 14))).frame(
+            maxWidth: .infinity, alignment: .leading
+        )
         .background(
-            Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: UIScale.pt(12))
+            Color.secondary.opacity(0.08),
+            in: RoundedRectangle(cornerRadius: UIScale.pt(presentation?.cornerRadius ?? 12))
         )
         .task(id: "\(active):\(tile.widget.id):\(tile.days):\(retry)") {
-            guard active else { loading = false; return }
+            guard active else {
+                loading = false
+                return
+            }
             repeat {
                 await refresh()
                 do { try await Task.sleep(for: .seconds(30)) } catch { return }
@@ -81,15 +96,15 @@ public struct SurfaceIntegrationCard: View {
                 let agents = sessions.hosts.flatMap(\.agents)
                 let blocked = agents.filter { $0.status == .blocked }.count
                 HStack {
-                    metric("Working", "\(sessions.working)")
-                    metric("Needs you", "\(blocked)")
-                    metric("Total", "\(sessions.total)")
+                    if tile.shows("running") { metric("Working", "\(sessions.working)") }
+                    if tile.shows("waiting") { metric("Needs you", "\(blocked)") }
+                    if tile.shows("total") { metric("Total", "\(sessions.total)") }
                 }
-                if tile.size != .compact {
+                if tile.showDetails, tile.shows("sessions") {
                     ForEach(
                         Array(
                             agents.sorted { $0.status == .blocked && $1.status != .blocked }.prefix(
-                                3))
+                                tile.itemLimit))
                     ) { agent in
                         HStack {
                             Circle().fill(agent.status == .blocked ? Color.orange : .green).frame(
@@ -110,16 +125,21 @@ public struct SurfaceIntegrationCard: View {
         case .codeStats, .github:
             if let report {
                 HStack {
-                    metric("Commits", "\(report.totals.commits)")
-                    metric("Lines", CodeStatsNumberFormat.compact(report.totals.authored))
-                    metric("Streak", "\(report.totals.currentStreak)d")
+                    if tile.shows("commits") { metric("Commits", "\(report.totals.commits)") }
+                    if tile.shows("lines") {
+                        metric("Lines", CodeStatsNumberFormat.compact(report.totals.authored))
+                    }
+                    if tile.shows("streak") { metric("Streak", "\(report.totals.currentStreak)d") }
                 }
-                if tile.size != .compact {
+                if tile.showDetails, tile.shows("repositories") {
                     Text("Last \(tile.days) days · \(report.totals.repositories) repositories")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
-                    ForEach(Array(report.repositories.prefix(2)), id: \.repository) { repo in
+                    ForEach(Array(report.repositories.prefix(tile.itemLimit)), id: \.repository) {
+                        repo in
                         HStack {
-                            Text(repo.repository).lineLimit(1); Spacer(); Text("\(repo.commits)")
+                            Text(repo.repository).lineLimit(1)
+                            Spacer()
+                            Text("\(repo.commits)")
                         }
                         .font(.edithText(.caption)).presenterCover(.usage)
                     }

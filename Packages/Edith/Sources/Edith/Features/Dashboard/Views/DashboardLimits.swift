@@ -11,6 +11,8 @@ struct RateLimitsDialsView: View {
         LimitRing.defaultWarnPercent
     @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
         LimitRing.defaultCriticalPercent
+    @Environment(\.surfacePresentation) private var presentation
+    @State private var latestProviders: [LimitProvider: LimitsHistory.Latest] = [:]
     @State private var point: LimitPoint?
     @State private var allowance: GrokAllowance?
     @State private var latestLimits: LimitsTopicSnapshot?
@@ -38,6 +40,7 @@ struct RateLimitsDialsView: View {
         reloadJob = Task {
             await reloadLoad.perform(operation: { await LimitsHistory.loadLatestProviders() }) {
                 latest in
+                latestProviders = latest
                 let found = LimitProvider.allCases.filter { latest[$0] != nil }
                 providers = found
                 let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
@@ -55,67 +58,79 @@ struct RateLimitsDialsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             HStack(alignment: .firstTextBaseline) {
-                ProviderSwitchButton(
-                    selection: Binding(get: { selected }, set: { selected = $0 }),
-                    providers: providers, color: DashSkin.ink(dark), size: 16)
-                Text("Rate limits").font(DashSkin.heading(18)).foregroundStyle(DashSkin.ink(dark))
+                if !showsJumpLink {
+                    ProviderSwitchButton(
+                        selection: Binding(get: { selected }, set: { selected = $0 }),
+                        providers: providers, color: DashSkin.ink(dark), size: 16)
+                }
+                if presentation?.tile.showTitle != false {
+                    Text(presentation?.tile.displayTitle ?? "Rate limits")
+                        .font(DashSkin.heading(18)).foregroundStyle(DashSkin.ink(dark))
+                }
                 Spacer()
                 Text(limitCaption)
                     .font(.system(size: UIScale.pt(11.5)))
                     .foregroundStyle(DashSkin.inkFaint(dark))
                 LimitsRefreshButton(dark: dark) { reload() }
             }
-            HStack(spacing: UIScale.pt(24)) {
-                if selected == .cursor {
-                    dial("CURSOR MODELS", pct: point?.s, reset: point?.sessionReset)
-                    dial("OTHER MODELS", pct: point?.w, reset: point?.weekReset)
-                } else if selected == .grok {
-                    dial(
-                        GrokPeriod.title(allowance?.period).uppercased(), pct: point?.w,
-                        reset: point?.weekReset)
-                } else {
-                    dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
-                    dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            if selected == .grok, let allowance,
-                !allowance.summary.isEmpty || allowance.extraLine != nil
-            {
-                VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    if !allowance.summary.isEmpty {
-                        Text(allowance.summary)
-                    }
-                    if let extra = allowance.extraLine {
-                        Text(extra)
-                    }
-                }
-                .font(.system(size: UIScale.pt(11.5)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if let point {
-                Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
-                    .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
-            }
-            if let error = latestLimits?.providers.first(where: { $0.provider == selected })?.error
-            {
-                Text(error)
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-            }
             if showsJumpLink {
+                providerOverview
+            } else {
+                HStack(spacing: UIScale.pt(24)) {
+                    if selected == .cursor {
+                        dial("CURSOR MODELS", pct: point?.s, reset: point?.sessionReset)
+                        dial("OTHER MODELS", pct: point?.w, reset: point?.weekReset)
+                    } else if selected == .grok {
+                        dial(
+                            GrokPeriod.title(allowance?.period).uppercased(), pct: point?.w,
+                            reset: point?.weekReset)
+                    } else {
+                        dial("SESSION (5H)", pct: point?.s, reset: point?.sessionReset)
+                        dial("WEEKLY", pct: point?.w, reset: point?.weekReset)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                if selected == .grok, let allowance,
+                    !allowance.summary.isEmpty || allowance.extraLine != nil
+                {
+                    VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                        if !allowance.summary.isEmpty {
+                            Text(allowance.summary)
+                        }
+                        if let extra = allowance.extraLine {
+                            Text(extra)
+                        }
+                    }
+                    .font(.system(size: UIScale.pt(11.5)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if let point {
+                    Text("As of \(point.date.formatted(.dateTime.month().day().hour().minute()))")
+                        .font(DashSkin.mono(10)).foregroundStyle(DashSkin.inkFaint(dark))
+                }
+                if let error = latestLimits?.providers.first(where: { $0.provider == selected })?
+                    .error
+                {
+                    Text(error)
+                        .font(.system(size: UIScale.pt(11)))
+                        .foregroundStyle(DashSkin.inkSoft(dark))
+                }
+            }
+            if showsJumpLink, presentation?.tile.showActions != false {
                 JumpLink(title: "Open Agent Usage", destination: .dashboard, dark: dark)
             }
         }
         .padding(
             EdgeInsets(
-                top: UIScale.pt(16), leading: UIScale.pt(16),
-                bottom: UIScale.pt(14), trailing: UIScale.pt(16))
+                top: UIScale.pt(presentation?.padding ?? 16),
+                leading: UIScale.pt(presentation?.padding ?? 16),
+                bottom: UIScale.pt(presentation?.padding ?? 14),
+                trailing: UIScale.pt(presentation?.padding ?? 16))
         )
         .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
         .widgetBar(
-            cornerRadius: 16,
+            cornerRadius: presentation?.cornerRadius ?? 16,
             fill: DashSkin.paper2(dark),
             stroke: DashSkin.line(dark),
             shadow: .black.opacity(dark ? 0.32 : 0.05)
@@ -145,7 +160,107 @@ struct RateLimitsDialsView: View {
         }
     }
 
+    @ViewBuilder private var providerOverview: some View {
+        if providers.isEmpty {
+            Text("Connect a provider in Agent Usage to see its limits.")
+                .font(.edithText(.callout)).foregroundStyle(.secondary)
+        } else {
+            SurfaceFittedGrid(count: providers.count, minimum: 240) {
+                ForEach(providers) { provider in
+                    if let latest = latestProviders[provider] {
+                        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                            HStack(spacing: UIScale.pt(6)) {
+                                ProviderLogoView(provider).frame(
+                                    width: UIScale.pt(14), height: UIScale.pt(14))
+                                Text(provider.label).font(.edithText(.headline))
+                                Spacer(minLength: 0)
+                                if let tier = latest.grok?.tier,
+                                    presentation?.tile.showDetails != false,
+                                    presentation?.tile.shows("account") != false
+                                {
+                                    Text(tier).font(.edithText(.caption)).foregroundStyle(
+                                        .secondary)
+                                }
+                            }
+                            if let session = latest.session,
+                                presentation?.tile.shows("session") != false
+                            {
+                                quotaRow(
+                                    provider == .cursor ? "Cursor models" : "Session (5h)",
+                                    window: session)
+                            }
+                            if let week = latest.week, presentation?.tile.shows("weekly") != false {
+                                quotaRow(
+                                    provider == .cursor
+                                        ? "Other models"
+                                        : provider == .grok
+                                            ? GrokPeriod.title(latest.grok?.period) : "Weekly",
+                                    window: week)
+                            }
+                            if let fable = latest.fable,
+                                presentation?.tile.shows("additional") != false
+                            {
+                                quotaRow("Additional models", window: fable)
+                            }
+                            if presentation?.tile.showDetails != false {
+                                if let extra = latest.grok?.extraLine,
+                                    presentation?.tile.shows("account") != false
+                                {
+                                    Text(extra).font(.edithText(.caption)).foregroundStyle(
+                                        .secondary)
+                                }
+                                if presentation?.tile.shows("updated") != false {
+                                    Text(
+                                        "Updated \(latest.date.formatted(.relative(presentation: .numeric)))"
+                                    )
+                                    .font(.edithText(.caption2)).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .padding(UIScale.pt(presentation?.tile.dense == true ? 8 : 12))
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .background(
+                            Color.secondary.opacity(0.06),
+                            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+                    }
+                }
+            }
+        }
+    }
+
+    private func quotaRow(_ label: String, window: LimitWindow) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            HStack {
+                Text(label).font(.edithText(.caption))
+                Spacer(minLength: 0)
+                Text("\(Int(window.percent))% used").font(.edithText(.caption)).monospacedDigit()
+            }
+            GeometryReader { proxy in
+                Capsule().fill(Color.secondary.opacity(0.15))
+                    .overlay(alignment: .leading) {
+                        Capsule().fill(
+                            presentation?.tile.accent == false
+                                ? .secondary : color(for: window.percent)
+                        )
+                        .frame(width: proxy.size.width * max(0, min(1, window.percent / 100)))
+                    }
+            }.frame(height: UIScale.pt(5))
+            if presentation?.tile.showDetails != false {
+                HStack {
+                    if presentation?.tile.shows("remaining") != false {
+                        Text("\(max(0, 100 - Int(window.percent)))% remaining")
+                    }
+                    Spacer(minLength: 0)
+                    if let reset = window.resetsAt, presentation?.tile.shows("resets") != false {
+                        Text(resetText(reset))
+                    }
+                }.font(.edithText(.caption2)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var limitCaption: String {
+        if showsJumpLink { return "\(providers.count) connected" }
         if selected == .cursor { return "billing cycle" }
         if selected == .grok { return GrokPeriod.title(allowance?.period).lowercased() }
         return "session · weekly"

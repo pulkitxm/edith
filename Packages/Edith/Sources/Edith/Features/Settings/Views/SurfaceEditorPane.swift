@@ -56,14 +56,59 @@ struct SurfaceEditorPane: View {
                     history
                 }
                 VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-                    targetPicker; history
+                    targetPicker
+                    history
                 }
             }
+            canvasSettings
             Text(
-                "Drag widgets from the library. Drop on a widget to insert before it. Drag the corner to resize. Changes appear immediately."
+                "Drag widgets onto the grid. Move with the title handle and resize with the corner. Use the inspector for precise values. Changes appear immediately."
             )
             .font(.edithText(.callout)).foregroundStyle(.secondary)
         }
+    }
+
+    private var canvasSettings: some View {
+        DisclosureGroup("Canvas geometry") {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                Stepper(
+                    "Grid: \(layout.columns) columns", value: canvasSetting(\.columns), in: 4...48)
+                HStack {
+                    numberField("Gap (pt)", value: canvasSetting(\.gap))
+                    numberField("Padding (pt)", value: canvasSetting(\.padding))
+                    numberField("Corners (pt)", value: canvasSetting(\.cornerRadius))
+                    numberField("Snap (pt)", value: canvasSetting(\.rowHeight))
+                }
+                if target == .notch {
+                    Toggle("Horizontal widget shelf", isOn: canvasSetting(\.notchHorizontal))
+                    numberField("Shelf card width (pt)", value: canvasSetting(\.notchCardWidth))
+                }
+                Button("Pack widgets automatically") {
+                    store.update(target) { $0.arrangeAutomatically() }
+                }
+                .buttonStyle(.edith(.secondary))
+            }
+            .padding(.top, UIScale.pt(8))
+        }
+        .font(.edithText(.callout))
+    }
+
+    private func numberField(_ title: String, value: Binding<Double>) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
+            TextField(title, value: value, format: .number.precision(.fractionLength(0...1)))
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private func canvasSetting<Value>(_ key: WritableKeyPath<SurfaceLayout, Value>) -> Binding<
+        Value
+    > {
+        Binding(
+            get: { layout[keyPath: key] },
+            set: { value in
+                store.update(target) { $0[keyPath: key] = value }
+            })
     }
 
     private var targetPicker: some View {
@@ -72,7 +117,8 @@ struct SurfaceEditorPane: View {
             selection: Binding(
                 get: { target },
                 set: {
-                    selected = nil; targetRaw = $0.rawValue
+                    selected = nil
+                    targetRaw = $0.rawValue
                 }),
             options: SurfaceTarget.allCases, label: { $0.title }
         )
@@ -169,17 +215,20 @@ struct SurfaceEditorPane: View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             ViewThatFits(in: .horizontal) {
                 HStack {
-                    previewTitle; Spacer(); previewToggle
+                    previewTitle
+                    Spacer()
+                    previewToggle
                 }
                 VStack(alignment: .leading) {
-                    previewTitle; previewToggle
+                    previewTitle
+                    previewToggle
                 }
             }
             if target == .notch {
                 HStack {
-                    Spacer();
+                    Spacer()
                     RoundedRectangle(cornerRadius: UIScale.pt(8)).fill(.black).frame(
-                        width: UIScale.pt(150), height: UIScale.pt(28));
+                        width: UIScale.pt(150), height: UIScale.pt(28))
                     Spacer()
                 }
             }
@@ -187,9 +236,20 @@ struct SurfaceEditorPane: View {
                 layout: layout, singleColumn: compact || previewCompact,
                 editing: true, selected: selected, select: { selected = $0 },
                 place: { widget, anchor in
-                    store.update(target) { $0.place(widget, before: anchor) }; selected = widget.id
+                    store.update(target) { $0.place(widget, before: anchor) }
+                    selected = widget.id
                 },
-                resize: { id, size in edit(id) { $0.size = size } }
+                resize: { id, size in edit(id) { $0.size = size } },
+                configure: { tile in store.update(target) { $0.position(tile) } },
+                placeAt: { widget, column, row in
+                    store.update(target) { layout in
+                        layout.place(widget)
+                        guard let index = layout.tiles.firstIndex(where: { $0.widget == widget })
+                        else { return }
+                        layout.tiles[index].column = column
+                        layout.tiles[index].row = row
+                    }
+                }
             ) { tile in
                 SurfaceWidgetPreview(tile: tile, notch: target == .notch)
             }
@@ -281,9 +341,69 @@ struct SurfaceEditorPane: View {
             if let tile = selection {
                 TextField("Display title", text: setting(tile.id, \.title, fallback: ""))
                     .textFieldStyle(.roundedBorder)
-                EdithSegmentedPicker(
-                    "Size", selection: setting(tile.id, \.size, fallback: .regular),
-                    options: SurfaceWidgetSize.allCases, label: { $0.title })
+                Stepper(
+                    "Width: \(tile.span) / \(layout.columns) columns",
+                    value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
+                Toggle(
+                    "Automatic height",
+                    isOn: Binding(
+                        get: { selection?.height == nil },
+                        set: { automatic in edit(tile.id) { $0.height = automatic ? nil : 200 } }))
+                if let height = tile.height {
+                    numberField(
+                        "Height (pt)",
+                        value: Binding(
+                            get: { selection?.height ?? height },
+                            set: { value in edit(tile.id) { $0.height = value } }))
+                }
+                Toggle(
+                    "Automatic placement",
+                    isOn: Binding(
+                        get: { selection?.column == nil && selection?.row == nil },
+                        set: { automatic in
+                            edit(tile.id) {
+                                $0.column = automatic ? nil : 0
+                                $0.row = automatic ? nil : 0
+                            }
+                        }))
+                if tile.column != nil || tile.row != nil {
+                    Stepper(
+                        "Column: \(tile.column ?? 0)",
+                        value: Binding(
+                            get: { selection?.column ?? 0 },
+                            set: { value in edit(tile.id) { $0.column = value } }),
+                        in: 0...max(0, layout.columns - tile.span))
+                    Stepper(
+                        "Vertical position: \(Int(Double(tile.row ?? 0) * layout.rowHeight)) pt",
+                        value: Binding(
+                            get: { selection?.row ?? 0 },
+                            set: { value in edit(tile.id) { $0.row = value } }), in: 0...1000)
+                }
+                Divider()
+                Text("Content").font(.edithText(.headline))
+                Toggle("Show title", isOn: setting(tile.id, \.showTitle, fallback: true))
+                Toggle("Show details", isOn: setting(tile.id, \.showDetails, fallback: true))
+                Toggle("Show actions", isOn: setting(tile.id, \.showActions, fallback: true))
+                Toggle("Dense content", isOn: setting(tile.id, \.dense, fallback: false))
+                Toggle("Accent color", isOn: setting(tile.id, \.accent, fallback: true))
+                Stepper(
+                    "Visible items: \(tile.itemLimit)",
+                    value: setting(tile.id, \.itemLimit, fallback: 5), in: 1...20)
+                ForEach(tile.widget.fields, id: \.0) { field in
+                    Toggle(
+                        field.1,
+                        isOn: Binding(
+                            get: { selection?.shows(field.0) ?? true },
+                            set: { visible in
+                                edit(tile.id) {
+                                    if visible {
+                                        $0.hiddenFields.remove(field.0)
+                                    } else {
+                                        $0.hiddenFields.insert(field.0)
+                                    }
+                                }
+                            }))
+                }
                 if tile.widget == .focus {
                     Stepper(
                         "Focus duration: \(tile.focusMinutes) minutes",
@@ -313,10 +433,12 @@ struct SurfaceEditorPane: View {
             layout.tiles.first?.id == tile.id)
         Button("Move later") { move(tile, offset: 1) }.disabled(layout.tiles.last?.id == tile.id)
         Button("Hide") {
-            edit(tile.id) { $0.hidden = true }; selected = nil
+            edit(tile.id) { $0.hidden = true }
+            selected = nil
         }
         Button("Remove", role: .destructive) {
-            store.update(target) { $0.tiles.removeAll { $0.id == tile.id } }; selected = nil
+            store.update(target) { $0.tiles.removeAll { $0.id == tile.id } }
+            selected = nil
         }
     }
 
@@ -398,7 +520,8 @@ private struct SurfaceWidgetPreview: View {
             sampleMetrics([("Local", "09:41"), ("London", "05:11")])
         case .calendar:
             HStack {
-                Text("10:00").monospacedDigit(); Text("Sample design review").lineLimit(1)
+                Text("10:00").monospacedDigit()
+                Text("Sample design review").lineLimit(1)
             }
             .font(.edithText(.callout))
         case .actions, .desk, .media:

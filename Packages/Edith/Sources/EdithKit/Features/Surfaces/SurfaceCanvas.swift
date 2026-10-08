@@ -30,13 +30,18 @@ public struct SurfaceCanvas<Content: View>: View {
     let select: (String) -> Void
     let place: (SurfaceWidget, String?) -> Void
     let resize: (String, SurfaceWidgetSize) -> Void
+    let configure: (SurfaceTile) -> Void
+    let placeAt: ((SurfaceWidget, Int, Int) -> Void)?
     let content: (SurfaceTile) -> Content
+    @State private var width: CGFloat = 600
 
     public init(
         layout: SurfaceLayout, singleColumn: Bool, editing: Bool = false, selected: String? = nil,
         select: @escaping (String) -> Void = { _ in },
         place: @escaping (SurfaceWidget, String?) -> Void = { _, _ in },
         resize: @escaping (String, SurfaceWidgetSize) -> Void = { _, _ in },
+        configure: @escaping (SurfaceTile) -> Void = { _ in },
+        placeAt: ((SurfaceWidget, Int, Int) -> Void)? = nil,
         @ViewBuilder content: @escaping (SurfaceTile) -> Content
     ) {
         self.layout = layout
@@ -46,137 +51,285 @@ public struct SurfaceCanvas<Content: View>: View {
         self.select = select
         self.place = place
         self.resize = resize
+        self.configure = configure
+        self.placeAt = placeAt
         self.content = content
     }
 
     public var body: some View {
-        VStack(spacing: UIScale.pt(12)) {
-            ForEach(Array(layout.rows(singleColumn: singleColumn).enumerated()), id: \.offset) {
-                _, row in
-                HStack(alignment: .top, spacing: UIScale.pt(12)) {
-                    ForEach(row) { tile in
-                        SurfaceCanvasTile(
-                            tile: tile, editing: editing, selected: selected == tile.id,
-                            select: { select(tile.id) }, place: { place($0, tile.id) },
-                            resize: { resize(tile.id, $0) }
-                        ) { content(tile) }
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
+        VStack(spacing: UIScale.pt(layout.gap)) {
+            SurfaceGridLayout(layout: layout, singleColumn: singleColumn) {
+                ForEach(layout.visible) { tile in
+                    SurfaceCanvasTile(
+                        tile: tile, layout: layout, canvasWidth: width,
+                        editing: editing, selected: selected == tile.id,
+                        select: { select(tile.id) }, configure: configure
+                    ) {
+                        content(tile).environment(
+                            \.surfacePresentation, SurfacePresentation(tile: tile, layout: layout))
                     }
-                    if row.count == 1, !singleColumn, !row[0].size.spansRow {
-                        Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+                }
+            }
+            .coordinateSpace(name: "surfaceCanvas")
+            .onDrop(
+                of: [.text],
+                delegate: SurfaceGridDrop(enabled: editing) { widget, point in
+                    let pitch = (width + UIScale.pt(layout.gap)) / CGFloat(layout.columns)
+                    let column = max(0, min(layout.columns - 1, Int(point.x / pitch)))
+                    let row = max(0, Int((point.y / UIScale.pt(layout.rowHeight)).rounded()))
+                    if let placeAt { placeAt(widget, column, row) } else { place(widget, nil) }
+                }
+            )
+            .background {
+                if editing, !singleColumn {
+                    Canvas { context, size in
+                        let pitch = (size.width + UIScale.pt(layout.gap)) / CGFloat(layout.columns)
+                        var lines = Path()
+                        for column in 0...layout.columns {
+                            let x = CGFloat(column) * pitch
+                            lines.move(to: CGPoint(x: x, y: 0))
+                            lines.addLine(to: CGPoint(x: x, y: size.height))
+                        }
+                        let unit = UIScale.pt(layout.rowHeight)
+                        for row in 0...Int(size.height / unit) {
+                            let y = CGFloat(row) * unit
+                            lines.move(to: CGPoint(x: 0, y: y))
+                            lines.addLine(to: CGPoint(x: size.width, y: y))
+                        }
+                        context.stroke(lines, with: .color(.secondary.opacity(0.1)), lineWidth: 0.5)
                     }
                 }
             }
             if editing {
-                SurfaceDropWell(empty: layout.visible.isEmpty) { place($0, nil) }
+                Label("Drop a widget to add it", systemImage: "plus.circle")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity).padding(UIScale.pt(20))
+                    .background(
+                        Color.accentColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 10)
+                    )
+                    .onDrop(of: [.text], isTargeted: nil) {
+                        SurfaceDrag.accept($0) { place($0, nil) }
+                    }
             }
+        }
+        .onGeometryChange(for: CGFloat.self) {
+            $0.size.width
+        } action: {
+            width = $0
+        }
+    }
+}
+
+private struct SurfaceGridDrop: DropDelegate {
+    let enabled: Bool
+    let place: @MainActor (SurfaceWidget, CGPoint) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool { enabled && info.hasItemsConforming(to: [.text]) }
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .copy) }
+    func performDrop(info: DropInfo) -> Bool {
+        guard enabled else { return false }
+        let point = info.location
+        return SurfaceDrag.accept(info.itemProviders(for: [.text])) { place($0, point) }
+    }
+}
+
+public struct SurfaceGridLayout: Layout {
+    let layout: SurfaceLayout
+    let singleColumn: Bool
+
+    public init(layout: SurfaceLayout, singleColumn: Bool) {
+        self.layout = layout
+        self.singleColumn = singleColumn
+    }
+
+    public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ())
+        -> CGSize
+    {
+        let width = proposal.width ?? 600
+        let frames = frames(width: width, subviews: subviews)
+        return CGSize(width: width, height: frames.map(\.maxY).max() ?? 0)
+    }
+
+    public func placeSubviews(
+        in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+    ) {
+        let frames = frames(width: bounds.width, subviews: subviews)
+        for (view, frame) in zip(subviews, frames) {
+            view.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: frame.width, height: frame.height))
+        }
+    }
+
+    private func frames(width: CGFloat, subviews: Subviews) -> [CGRect] {
+        let gap = UIScale.pt(layout.gap)
+        if singleColumn {
+            var y: CGFloat = 0
+            return subviews.map { view in
+                let height = view.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+                defer { y += height + gap }
+                return CGRect(x: 0, y: y, width: width, height: height)
+            }
+        }
+        let pitch = (width + gap) / CGFloat(layout.columns)
+        let tiles = layout.visible
+        let heights = zip(subviews, tiles).map { view, tile in
+            Double(
+                view.sizeThatFits(
+                    ProposedViewSize(
+                        width: max(1, CGFloat(tile.span) * pitch - gap), height: nil)
+                ).height / UIScale.current)
+        }
+        let frames = SurfaceGridPacking.pack(
+            tiles: tiles, columns: layout.columns, heights: heights,
+            rowHeight: layout.rowHeight, gap: layout.gap)
+        return frames.map { frame in
+            CGRect(
+                x: CGFloat(frame.column) * pitch,
+                y: CGFloat(frame.row) * UIScale.pt(layout.rowHeight),
+                width: max(1, CGFloat(frame.span) * pitch - gap),
+                height: max(1, CGFloat(frame.rows) * UIScale.pt(layout.rowHeight) - gap))
         }
     }
 }
 
 private struct SurfaceCanvasTile<Content: View>: View {
     let tile: SurfaceTile
+    let layout: SurfaceLayout
+    let canvasWidth: CGFloat
     let editing: Bool
     let selected: Bool
     let select: () -> Void
-    let place: (SurfaceWidget) -> Void
-    let resize: (SurfaceWidgetSize) -> Void
+    let configure: (SurfaceTile) -> Void
     @ViewBuilder let content: () -> Content
-    @State private var targeted = false
-    @State private var resizing = false
+    @State private var frame = CGRect.zero
+    @State private var movement = CGSize.zero
+    @State private var sizing = CGSize.zero
+    @State private var gestureFrame: CGRect?
+
+    private var pitch: CGFloat { (canvasWidth + UIScale.pt(layout.gap)) / CGFloat(layout.columns) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if editing {
                 HStack {
                     Image(systemName: "line.3.horizontal")
-                        .onDrag { SurfaceDrag.provider(tile.widget) }
-                        .help("Drag to move \(tile.displayTitle)")
-                        .accessibilityLabel("Move \(tile.displayTitle)")
                     Text(tile.displayTitle).lineLimit(1)
                     Spacer(minLength: 0)
-                    Text(tile.size.title).foregroundStyle(.secondary)
+                    Text("\(tile.span)/\(layout.columns)").foregroundStyle(.secondary)
                 }
                 .font(.edithText(.caption))
                 .padding(.horizontal, UIScale.pt(10)).padding(.top, UIScale.pt(8))
                 .contentShape(Rectangle())
                 .onTapGesture(perform: select)
+                .gesture(
+                    DragGesture(minimumDistance: 3)
+                        .onChanged { drag in
+                            if gestureFrame == nil {
+                                gestureFrame = frame
+                                select()
+                            }
+                            movement = CGSize(
+                                width: (drag.translation.width / pitch).rounded() * pitch,
+                                height: (drag.translation.height / UIScale.pt(layout.rowHeight))
+                                    .rounded() * UIScale.pt(layout.rowHeight))
+                        }
+                        .onEnded { drag in
+                            var next = tile
+                            let origin = gestureFrame ?? frame
+                            next.column = min(
+                                layout.columns - tile.span,
+                                max(
+                                    0,
+                                    Int(((origin.minX + drag.translation.width) / pitch).rounded()))
+                            )
+                            next.row = max(
+                                0,
+                                Int(
+                                    ((origin.minY + drag.translation.height)
+                                        / UIScale.pt(layout.rowHeight)).rounded()))
+                            movement = .zero
+                            gestureFrame = nil
+                            configure(next)
+                        }
+                )
+                .help("Drag to position on the grid")
             }
-            content().allowsHitTesting(!editing)
+            if tile.height != nil {
+                ScrollView { content().allowsHitTesting(!editing) }
+            } else {
+                content().allowsHitTesting(!editing)
+            }
             if editing {
                 HStack {
                     Button("Configure", action: select).font(.edithText(.caption))
                     Spacer()
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.edithText(.caption)).foregroundStyle(
-                            resizing ? Color.accentColor : .secondary
-                        )
+                        .font(.edithText(.caption)).foregroundStyle(Color.accentColor)
                         .frame(width: UIScale.pt(28), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                         .gesture(
-                            DragGesture(minimumDistance: 4)
-                                .onChanged { _ in resizing = true }
-                                .onEnded { drag in
-                                    resizing = false
-                                    if abs(drag.translation.width) > 35 {
-                                        resize(drag.translation.width > 0 ? .wide : .regular)
-                                    } else if abs(drag.translation.height) > 20 {
-                                        resize(drag.translation.height > 0 ? .regular : .compact)
+                            DragGesture(minimumDistance: 3)
+                                .onChanged {
+                                    if gestureFrame == nil {
+                                        gestureFrame = frame
+                                        select()
                                     }
+                                    sizing = $0.translation
+                                }
+                                .onEnded { drag in
+                                    var next = tile
+                                    let origin = gestureFrame ?? frame
+                                    next.span = min(
+                                        layout.columns,
+                                        max(
+                                            1,
+                                            Int(
+                                                ((origin.width + UIScale.pt(layout.gap)
+                                                    + drag.translation.width) / pitch).rounded())))
+                                    next.height = max(
+                                        64,
+                                        Double(
+                                            (origin.height + drag.translation.height)
+                                                / UIScale.current))
+                                    sizing = .zero
+                                    gestureFrame = nil
+                                    configure(next)
                                 }
                         )
-                        .help(
-                            "Drag right for full width, left for half width, up for compact, down for regular"
-                        )
+                        .help("Drag to resize width and height")
                 }
                 .padding(.horizontal, UIScale.pt(10)).padding(.bottom, UIScale.pt(6))
             }
         }
+        .onGeometryChange(for: CGRect.self) {
+            $0.frame(in: .named("surfaceCanvas"))
+        } action: {
+            frame = $0
+        }
         .background {
             if editing {
-                RoundedRectangle(cornerRadius: UIScale.pt(12)).fill(
-                    Color.accentColor.opacity(selected ? 0.08 : 0.025))
+                RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
+                    .fill(Color.accentColor.opacity(selected ? 0.08 : 0.025))
             }
         }
-        .overlay {
+        .overlay(alignment: .topLeading) {
             if editing {
-                RoundedRectangle(cornerRadius: UIScale.pt(12))
+                RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
                     .strokeBorder(
-                        targeted || selected ? Color.accentColor : Color.secondary.opacity(0.25),
-                        lineWidth: targeted ? 3 : 1
+                        selected ? Color.accentColor : Color.secondary.opacity(0.25),
+                        lineWidth: selected ? 2 : 1
+                    )
+                    .frame(
+                        width: max(40, frame.width + sizing.width),
+                        height: max(40, frame.height + sizing.height)
                     )
                     .allowsHitTesting(false)
             }
         }
-        .overlay(alignment: .top) {
-            if targeted { Capsule().fill(Color.accentColor).frame(height: 4).offset(y: -6) }
-        }
-        .onDrop(of: [.text], isTargeted: $targeted) { providers in
-            editing && SurfaceDrag.accept(providers, perform: place)
-        }
-    }
-}
-
-private struct SurfaceDropWell: View {
-    let empty: Bool
-    let place: (SurfaceWidget) -> Void
-    @State private var targeted = false
-    var body: some View {
-        Label(
-            empty ? "Drop your first widget here" : "Drop here to add at the end",
-            systemImage: "plus.circle"
-        )
-        .font(.edithText(.caption)).foregroundStyle(targeted ? Color.accentColor : .secondary)
-        .frame(maxWidth: .infinity).padding(UIScale.pt(empty ? 32 : 16))
-        .background(
-            Color.accentColor.opacity(targeted ? 0.1 : 0.025),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(12))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
-                Color.secondary.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-        )
-        .onDrop(of: [.text], isTargeted: $targeted) { SurfaceDrag.accept($0, perform: place) }
+        .offset(movement)
+        .zIndex(movement == .zero && sizing == .zero ? 0 : 1)
     }
 }
 

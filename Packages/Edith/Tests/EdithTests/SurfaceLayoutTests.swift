@@ -46,6 +46,7 @@ struct SurfaceLayoutTests {
         layout.gap = -10
         layout.padding = 200
         layout.rowHeight = 0
+        layout.notchHorizontal = false
         layout.tiles[0].span = 100
         layout.tiles[0].height = 1
         layout.tiles[0].showDetails = false
@@ -55,6 +56,7 @@ struct SurfaceLayoutTests {
         #expect(clean.gap == 0 && clean.padding == 32 && clean.rowHeight == 1)
         #expect(clean.tiles[0].height == 64 && clean.tiles[0].itemLimit == 20)
         #expect(!clean.tiles[0].showDetails)
+        #expect(!clean.notchHorizontal)
         #expect(SurfaceLayout.decode(clean.encoded, target: .home) == clean)
         layout.tiles[0].column = 0
         layout.tiles[0].row = 10
