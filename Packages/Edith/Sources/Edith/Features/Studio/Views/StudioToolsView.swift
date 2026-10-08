@@ -49,7 +49,7 @@ struct StudioToolsView: View {
         let tools = StudioToolCatalogQuery.tools(filter: filter, query: model.toolQuery)
         let groups = StudioToolGrouping.byGroup(tools)
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 let controls =
                     compact
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(10)))
