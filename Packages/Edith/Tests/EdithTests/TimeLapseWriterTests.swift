@@ -496,6 +496,29 @@ import Testing
         }
     }
 
+    @Test func pitchMeasurementPreservesToneAcrossSilentIntervals() throws {
+        let directory = temporaryDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("tone.wav")
+        try continuousAudio(at: source, seconds: 1)
+        let file = try AVAudioFile(forReading: source)
+        let buffer = try #require(
+            AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 48000))
+        try file.read(into: buffer)
+        let channels = try #require(buffer.floatChannelData)
+        for channel in 0..<Int(buffer.format.channelCount) {
+            for index in 12000..<36000 { channels[channel][index] = 0 }
+        }
+        let interrupted = directory.appendingPathComponent("interrupted.wav")
+        do {
+            let output = try AVAudioFile(
+                forWriting: interrupted, settings: file.fileFormat.settings)
+            try output.write(from: buffer)
+        }
+        #expect(abs(try audioFrequency(at: interrupted) - 440) < 40)
+    }
+
     private func audioFrequency(at url: URL) throws -> Double {
         let file = try AVAudioFile(forReading: url)
         let buffer = try #require(
@@ -515,10 +538,9 @@ import Testing
             }
             offset += Int(buffer.frameLength)
         }
-        let first = try #require(crossings.first)
-        let last = try #require(crossings.last)
-        #expect(crossings.count > 10)
-        return Double(crossings.count - 1) * file.processingFormat.sampleRate / Double(last - first)
+        try #require(crossings.count > 10)
+        let periods = zip(crossings.dropFirst(), crossings).map { $0.0 - $0.1 }.sorted()
+        return file.processingFormat.sampleRate / Double(periods[periods.count / 2])
     }
 
     private func audioHasSignal(_ asset: AVAsset) async throws -> Bool {
