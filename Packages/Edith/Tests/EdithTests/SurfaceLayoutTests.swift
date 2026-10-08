@@ -48,6 +48,21 @@ struct SurfaceLayoutTests {
         #expect(layout.visible.last?.widget == .music)
     }
 
+    @MainActor @Test func titlesPreserveSpacesWhileTypingAndUseCleanDisplayLabels() throws {
+        let domain = "test.surface-title.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let store = SurfaceLayoutStore(defaults: defaults)
+        for character in "Deep work " {
+            store.update(.home) { $0.tiles[0].title.append(character) }
+        }
+        #expect(store.home.tiles[0].title == "Deep work ")
+        #expect(store.home.tiles[0].displayTitle == "Deep work")
+        #expect(SurfaceLayoutStore(defaults: defaults).home.tiles[0].title == "Deep work ")
+        store.update(.home) { $0.tiles[0].title = "   " }
+        #expect(store.home.tiles[0].displayTitle == SurfaceWidget.clocks.title)
+    }
+
     @Test func rowsHonorOrderWideTilesAndHiddenTiles() {
         var hidden = SurfaceTile(.calendar)
         hidden.hidden = true

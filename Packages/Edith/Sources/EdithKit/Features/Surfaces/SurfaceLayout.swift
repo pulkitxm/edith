@@ -112,7 +112,10 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var focusMinutes = 25
     public var days = 30
     public var id: String { widget.rawValue }
-    public var displayTitle: String { title.isEmpty ? widget.title : title }
+    public var displayTitle: String {
+        let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return label.isEmpty ? widget.title : label
+    }
 
     public init(_ widget: SurfaceWidget, size: SurfaceWidgetSize = .regular) {
         self.widget = widget
@@ -146,8 +149,7 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
         var result = Self(
             tiles: tiles.filter { seen.insert($0.widget).inserted }.map {
                 var tile = $0
-                tile.title = String(
-                    tile.title.trimmingCharacters(in: .whitespacesAndNewlines).prefix(64))
+                tile.title = String(tile.title.prefix(64))
                 tile.focusMinutes = min(180, max(1, tile.focusMinutes))
                 tile.days = [7, 30, 90].contains(tile.days) ? tile.days : 30
                 return tile
