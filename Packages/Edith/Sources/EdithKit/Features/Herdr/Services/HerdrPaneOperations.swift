@@ -32,6 +32,18 @@ public enum HerdrPaneCloseCommand {
 public enum HerdrPaneOperations {
     private static let timeout: TimeInterval = 10
 
+    public static func terminalID(
+        session: String, pane: String, on machine: Machine?
+    ) async throws -> String {
+        let output = try await HerdrCommand.run(
+            HerdrSessionCommand.scoped(["pane", "get", pane], session: session),
+            timeout: timeout, on: machine)
+        guard let terminalID = HerdrListParser.terminalID(from: output, pane: pane) else {
+            throw HerdrCommandError.malformedResponse
+        }
+        return terminalID
+    }
+
     public static func state(
         session: String, pane: String, on machine: Machine?
     ) async throws -> HerdrPaneState {

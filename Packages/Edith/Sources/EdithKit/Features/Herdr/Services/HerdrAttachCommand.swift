@@ -27,6 +27,20 @@ public enum HerdrAttachCommand {
     }
 }
 
+public enum HerdrTerminalAttachCommand {
+    public static func arguments(session: String, terminalID: String) -> [String] {
+        ["--session", session, "terminal", "attach", terminalID, "--takeover"]
+    }
+
+    public static func remoteShellLine(
+        session: String, terminalID: String, platform: RemoteMachinePlatform = .linux
+    ) -> String {
+        remoteHerdrCommand(
+            arguments: arguments(session: session, terminalID: terminalID), platform: platform,
+            interactive: true)
+    }
+}
+
 public enum HerdrTerminalControlCommand {
     public static func arguments(session: String, pane: String) -> [String] {
         [
