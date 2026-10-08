@@ -19,6 +19,24 @@ import Testing
         return (model, agent)
     }
 
+    @Test func selectionSurvivesPageRecreationAndRefresh() async {
+        let (model, agent) = await model()
+        let defaults = UserDefaults(suiteName: "test.edith.persisted-filters.\(UUID())")!
+        let first = CodeStatsModel(service: agent.service, defaults: defaults)
+        await first.select(.all)
+        await first.toggleRepository("octo/app")
+        await first.updateFilter { $0.includeBulk = true }
+        let restored = CodeStatsModel(service: agent.service, defaults: defaults)
+        #expect(restored.range == .all)
+        #expect(restored.filter.repositories == ["octo/app"])
+        #expect(restored.filter.includeBulk)
+        await restored.refresh()
+        #expect(restored.filter == first.filter)
+        await restored.resetFilter()
+        #expect(CodeStatsModel(service: agent.service, defaults: defaults).filter == .default)
+        #expect(model.table != nil)
+    }
+
     @Test func factTableDrivesTheReportWithoutPresetReports() async {
         let (model, agent) = await model()
         #expect(model.table != nil)

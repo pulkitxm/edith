@@ -23,6 +23,20 @@ import Testing
         #expect(first.capture.note == "synthetic draft")
     }
 
+    @Test func analyticsRetainTheirReportsAndNavigationWithinOneWindow() {
+        let first = WindowSessionOwner()
+        let second = WindowSessionOwner()
+        let attention = first.attention
+        let codeStats = first.codeStats
+        attention.section = .timeline
+        #expect(first.attention === attention)
+        #expect(first.codeStats === codeStats)
+        #expect(first.attention.section == .timeline)
+        #expect(second.attention !== attention)
+        #expect(second.codeStats !== codeStats)
+        #expect(second.attention.section == .overview)
+    }
+
     @Test func bridgeTargetsFocusedHostAndPreservesSurvivingAttachments() {
         let bridge = QuinjetSessionBridge()
         let first = WindowSessionOwner()

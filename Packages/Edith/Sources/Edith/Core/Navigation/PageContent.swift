@@ -4,6 +4,7 @@ import SwiftUI
 struct PageContent: View {
     let destination: MainDestination
     let updater: UpdaterModel
+    @Environment(\.windowSessionOwner) private var sessions
 
     init(_ destination: MainDestination, updater: UpdaterModel) {
         self.destination = destination
@@ -36,9 +37,9 @@ struct PageContent: View {
         case .virtualCamera: VirtualCameraPage()
         case .data: SuiteLandingPage(suite: SuiteRegistry.suite(.data))
         case .database: DatabasePage()
-        case .attention: AttentionPage()
+        case .attention: AttentionPage(model: sessions?.attention)
         case .seoAudit: SEOAuditPage()
-        case .codeStats: CodeStatsPage()
+        case .codeStats: CodeStatsPage(model: sessions?.codeStats)
         case .extensions: ExtensionsPane()
         case .settings: SettingsPane(updater: updater)
         case .about: AboutPane()

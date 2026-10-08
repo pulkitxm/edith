@@ -352,89 +352,67 @@ private struct CodeStatsRepositoryTable: View {
     let dark: Bool
     @Environment(\.codeStatsActions) private var actions
     @State private var sort = CodeStatsRepositorySort.commits
-    @State private var expanded = false
-
-    private static let collapsedCount = 12
-
     var body: some View {
         let sorted = rows[sort] ?? []
         PageCard(
             title: "Repositories",
             note: CodeStatsNumberFormat.grouped(sorted.count) + " with your commits"
         ) {
-            Grid(
-                alignment: .leading, horizontalSpacing: UIScale.pt(14),
-                verticalSpacing: UIScale.pt(7)
-            ) {
-                GridRow {
-                    Text("Repository").gridColumnAlignment(.leading)
-                    header(.commits)
-                    header(.lines)
-                    Text("Language")
-                    header(.lastActive)
+            HStack {
+                Text("Filter a repository with its filter button.")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+                Spacer()
+                Picker("Sort", selection: $sort) {
+                    ForEach([CodeStatsRepositorySort.commits, .lines, .lastActive], id: \.self) {
+                        Text($0.title).tag($0)
+                    }
                 }
-                .font(DashSkin.mono(10))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-                Divider()
-                ForEach(
-                    sorted.prefix(expanded ? sorted.count : Self.collapsedCount), id: \.repository
-                ) { row in
-                    GridRow {
+                .fixedSize()
+            }
+            Table(sorted) {
+                SwiftUI.TableColumn("Repository") { row in
+                    HStack(spacing: UIScale.pt(8)) {
+                        Text(row.repository).lineLimit(1).truncationMode(.middle)
+                            .help(row.repository)
+                        Spacer(minLength: 0)
                         Button {
                             actions.toggleRepository(row.repository)
                         } label: {
-                            HStack(spacing: UIScale.pt(4)) {
-                                if actions.selectedRepositories.contains(row.repository) {
-                                    Image(systemName: "line.3.horizontal.decrease.circle.fill")
-                                        .foregroundStyle(DashSkin.accent(dark))
-                                }
-                                Text(row.repository)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            .font(.system(size: UIScale.pt(12), weight: .medium))
-                            .foregroundStyle(DashSkin.ink(dark))
+                            Image(
+                                systemName: actions.selectedRepositories.contains(row.repository)
+                                    ? "line.3.horizontal.decrease.circle.fill"
+                                    : "line.3.horizontal.decrease.circle")
                         }
                         .buttonStyle(.edith(.borderless))
-                        .help("Filter the page to this repository")
-                        .contextMenu {
-                            Button("Show only " + row.repository) {
-                                actions.toggleRepository(row.repository)
-                            }
-                            Button("Exclude " + row.repository) {
-                                actions.excludeRepository(row.repository)
-                            }
-                        }
-                        Text(CodeStatsNumberFormat.grouped(row.commits)).gridColumnAlignment(
-                            .trailing)
-                        Text(CodeStatsNumberFormat.compact(row.counts.authored))
-                            .gridColumnAlignment(.trailing)
-                        Text(row.topLanguage ?? "-")
-                        Text(row.lastDay)
+                        .accessibilityLabel("Toggle filter for " + row.repository)
+                        .help("Toggle filter for " + row.repository)
                     }
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .monospacedDigit()
+                    .contextMenu {
+                        Button("Toggle filter for " + row.repository) {
+                            actions.toggleRepository(row.repository)
+                        }
+                        Button("Exclude " + row.repository) {
+                            actions.excludeRepository(row.repository)
+                        }
+                    }
                 }
+                .width(min: UIScale.pt(180), ideal: UIScale.pt(280))
+                SwiftUI.TableColumn("Commits") { row in
+                    Text(CodeStatsNumberFormat.grouped(row.commits)).monospacedDigit()
+                }
+                .width(UIScale.pt(85))
+                SwiftUI.TableColumn("Lines") { row in
+                    Text(CodeStatsNumberFormat.compact(row.counts.authored)).monospacedDigit()
+                }
+                .width(UIScale.pt(85))
+                SwiftUI.TableColumn("Language") { row in Text(row.topLanguage ?? "-") }
+                    .width(UIScale.pt(100))
+                SwiftUI.TableColumn("Last active") { row in Text(row.lastDay).monospacedDigit() }
+                    .width(UIScale.pt(100))
             }
-            if sorted.count > Self.collapsedCount {
-                Button(expanded ? "Show fewer" : "Show all \(sorted.count)") { expanded.toggle() }
-                    .buttonStyle(.edith(.borderless))
-            }
+            .tableStyle(.inset)
+            .frame(height: UIScale.pt(min(420, max(100, Double(sorted.count) * 30 + 32))))
+            .accessibilityLabel("Repository activity")
         }
-    }
-
-    private func header(_ column: CodeStatsRepositorySort) -> some View {
-        Button {
-            sort = column
-        } label: {
-            HStack(spacing: UIScale.pt(3)) {
-                Text(column.title.uppercased())
-                if sort == column { Image(systemName: "chevron.down") }
-            }
-        }
-        .buttonStyle(.edith(.borderless))
-        .foregroundStyle(sort == column ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-        .accessibilityLabel("Sort by \(column.title)")
     }
 }
