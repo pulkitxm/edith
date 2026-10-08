@@ -29,10 +29,10 @@ struct MachineProcessesTab: View {
                     .padding(.bottom, UIScale.pt(8))
             }
         } content: {
-            PageLoading(
+            LoadingContainer(
                 state: model.loading.state,
                 message: model.loading.errorMessage ?? "Waiting for a process sample.",
-                layout: .editor, refreshing: model.loading.isRefreshing
+                refreshing: model.loading.isRefreshing
             ) {
                 GeometryReader { geometry in
                     Table(model.rows, selection: $model.selectedPID, columnCustomization: $columns)
@@ -90,6 +90,8 @@ struct MachineProcessesTab: View {
                         if model.rows.isEmpty { ContentUnavailableView.search(text: model.query) }
                     }
                 }
+            } placeholder: {
+                MachineProcessRowsSkeleton(showsActions: !session.isLocal)
             }
             .padding(.horizontal, PageMetrics.gutter(compact))
             .padding(.bottom, UIScale.pt(12))
