@@ -149,6 +149,12 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.General.homeClockZones, .csv, group: "appearance",
             summary: "Comma separated time zone identifiers shown on the Home clocks."),
+        SettingDefinition(
+            SurfaceTarget.home.key, .string, group: "appearance",
+            summary: "Home widget layout and configuration."),
+        SettingDefinition(
+            SurfaceTarget.notch.key, .string, group: "appearance",
+            summary: "Notch widget layout and configuration."),
     ]
 
     private static let panel: [SettingDefinition] = [

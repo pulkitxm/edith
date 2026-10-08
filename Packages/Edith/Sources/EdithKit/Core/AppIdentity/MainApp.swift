@@ -21,6 +21,16 @@ public enum MainApp {
         openDashboard()
     }
 
+    public static func openSurfaceEditor(_ target: SurfaceTarget, widget: SurfaceWidget? = nil) {
+        SharedDefaults.store.set(target.rawValue, forKey: AppStorageKeys.Surfaces.editorTarget)
+        if let widget {
+            SharedDefaults.store.set(widget.id, forKey: AppStorageKeys.Surfaces.editorWidget)
+        } else {
+            SharedDefaults.store.removeObject(forKey: AppStorageKeys.Surfaces.editorWidget)
+        }
+        openSettings(tab: "surfaces")
+    }
+
     public static func openSettings(tab: String? = nil) {
         if let tab { SharedDefaults.store.set(tab, forKey: AppStorageKeys.General.settingsTab) }
         open(section: "settings")

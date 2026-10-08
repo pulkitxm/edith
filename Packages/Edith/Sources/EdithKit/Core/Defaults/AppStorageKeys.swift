@@ -1,6 +1,11 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Surfaces {
+        public static let editorTarget = "surfaceEditorTarget"
+        public static let editorWidget = "surfaceEditorWidget"
+    }
+
     public enum Suites {
         public static let agents = "suiteAgentsEnabled"
         public static let maintenance = "suiteMaintenanceEnabled"
