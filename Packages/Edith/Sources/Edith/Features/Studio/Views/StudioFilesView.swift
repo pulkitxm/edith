@@ -9,7 +9,7 @@ struct StudioFilesView: View {
     @Environment(\.compactLayout) private var compact
 
     private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 222, maximum: 280, spacing: 14)
+        PageMetrics.cardColumns(compact, minimum: 222, spacing: 14)
     }
 
     var body: some View {
@@ -22,7 +22,7 @@ struct StudioFilesView: View {
         } else {
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
                         StudioFileFilters(model: model)
                         if model.visibleFiles.isEmpty {
                             ContentUnavailableView {
