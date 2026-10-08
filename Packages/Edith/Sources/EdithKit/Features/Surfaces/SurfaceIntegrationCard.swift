@@ -86,7 +86,7 @@ public struct SurfaceIntegrationCard: View {
                         "Total cost", String(format: "$%.2f", Double(usage.totalCostCents) / 100))
                     metric("Days", "\(usage.days)")
                 }.presenterCover(.usage)
-                if tile.size != .compact {
+                if !tile.dense {
                     Text("Updated \(usage.refreshedAt.formatted(.dateTime.hour().minute()))")
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
@@ -163,7 +163,7 @@ public struct SurfaceIntegrationCard: View {
                         Spacer()
                         Button("Finish") { finishFocus() }.buttonStyle(.edith(.secondary))
                     }
-                    if tile.size != .compact {
+                    if !tile.dense {
                         Text(focus.name.isEmpty ? "Deep work" : focus.name).font(
                             .edithText(.caption)
                         ).lineLimit(1)
@@ -178,7 +178,7 @@ public struct SurfaceIntegrationCard: View {
             }
         case .machines:
             metric("Registered", "\(machines.count)")
-            if tile.size != .compact {
+            if !tile.dense {
                 ForEach(Array(machines.prefix(3)), id: \.id) { machine in
                     Button(machine.name) { open("machines") }.font(.edithText(.caption))
                 }

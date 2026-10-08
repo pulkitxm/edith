@@ -98,15 +98,10 @@ public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable
     }
 }
 
-public enum SurfaceWidgetSize: String, Codable, CaseIterable, Sendable {
-    case compact, regular, wide
-    public var title: String { rawValue.capitalized }
-    public var spansRow: Bool { self == .wide }
-}
-
 public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var widget: SurfaceWidget
-    public var size: SurfaceWidgetSize = .regular
+    public var instanceID: String
+    public var locked = false
     public var title = ""
     public var hidden = false
     public var focusMinutes = 25
@@ -122,16 +117,17 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var dense = false
     public var accent = true
     public var hiddenFields: Set<String> = []
-    public var id: String { widget.rawValue }
+    public var paddingOverride: Double?
+    public var cornerOverride: Double?
+    public var id: String { instanceID }
     public var displayTitle: String {
         let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
         return label.isEmpty ? widget.title : label
     }
 
-    public init(_ widget: SurfaceWidget, size: SurfaceWidgetSize = .regular) {
+    public init(_ widget: SurfaceWidget) {
         self.widget = widget
-        self.size = size
-        span = size == .wide ? 24 : size == .compact ? 6 : 12
+        instanceID = widget.rawValue
     }
 
     public func shows(_ field: String) -> Bool { !hiddenFields.contains(field) }
@@ -160,6 +156,7 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
             tiles: widgets.map { widget in
                 var tile = SurfaceTile(widget)
                 if target == .home {
+                    tile.dense = widget == .clocks
                     tile.span =
                         switch widget {
                         case .clocks, .calendar, .codeStats: 8
@@ -172,10 +169,10 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     }
 
     public func normalized() -> Self {
-        var seen = Set<SurfaceWidget>()
+        var seen = Set<String>()
         let columns = min(48, max(4, columns))
         var result = Self(
-            tiles: tiles.filter { seen.insert($0.widget).inserted }.map {
+            tiles: tiles.filter { seen.insert($0.id).inserted }.map {
                 var tile = $0
                 tile.title = String(tile.title.prefix(64))
                 tile.focusMinutes = min(180, max(1, tile.focusMinutes))
@@ -185,6 +182,8 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
                 tile.row = tile.row.map { min(1000, max(0, $0)) }
                 tile.height = tile.height.map { min(1200, max(64, $0)) }
                 tile.itemLimit = min(20, max(1, tile.itemLimit))
+                tile.paddingOverride = tile.paddingOverride.map { min(48, max(0, $0)) }
+                tile.cornerOverride = tile.cornerOverride.map { min(48, max(0, $0)) }
                 return tile
             })
         result.columns = columns
@@ -204,26 +203,12 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     }
 
     public mutating func place(_ widget: SurfaceWidget, before anchor: String? = nil) {
-        guard anchor != widget.rawValue else { return }
         var tile = tiles.first { $0.widget == widget } ?? SurfaceTile(widget)
         tile.hidden = false
-        tiles.removeAll { $0.widget == widget }
+        guard anchor != tile.id else { return }
+        tiles.removeAll { $0.id == tile.id }
         let index = anchor.flatMap { id in tiles.firstIndex { $0.id == id } } ?? tiles.endIndex
         tiles.insert(tile, at: index)
-    }
-
-    public func rows(singleColumn: Bool) -> [[SurfaceTile]] {
-        var rows: [[SurfaceTile]] = []
-        for tile in visible {
-            if !singleColumn, !tile.size.spansRow, let last = rows.last,
-                last.count == 1, !last[0].size.spansRow
-            {
-                rows[rows.count - 1].append(tile)
-            } else {
-                rows.append([tile])
-            }
-        }
-        return rows
     }
 
     public static func decode(_ raw: String?, target: SurfaceTarget) -> Self {
@@ -238,10 +223,41 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     }
 
     public mutating func arrangeAutomatically() {
-        for index in tiles.indices {
+        for index in tiles.indices where !tiles[index].locked {
             tiles[index].column = nil
             tiles[index].row = nil
         }
+    }
+
+    public mutating func move(_ id: String, before anchor: String?) {
+        guard anchor != id, let index = tiles.firstIndex(where: { $0.id == id }) else { return }
+        let tile = tiles.remove(at: index)
+        let destination =
+            anchor.flatMap { anchor in tiles.firstIndex { $0.id == anchor } } ?? tiles.endIndex
+        tiles.insert(tile, at: destination)
+    }
+
+    @discardableResult
+    public mutating func add(_ widget: SurfaceWidget, column: Int? = nil, row: Int? = nil) -> String
+    {
+        var tile = SurfaceTile(widget)
+        if tiles.contains(where: { $0.id == tile.id }) { tile.instanceID = UUID().uuidString }
+        tile.column = column
+        tile.row = row
+        if column != nil || row != nil { position(tile) } else { tiles.append(tile) }
+        return tile.id
+    }
+
+    @discardableResult
+    public mutating func duplicate(_ id: String) -> String? {
+        guard let index = tiles.firstIndex(where: { $0.id == id }) else { return nil }
+        var copy = tiles[index]
+        copy.instanceID = UUID().uuidString
+        copy.column = nil
+        copy.row = nil
+        copy.locked = false
+        tiles.insert(copy, at: index + 1)
+        return copy.id
     }
 
     public mutating func position(_ tile: SurfaceTile) {
@@ -315,7 +331,17 @@ public enum SurfaceGridPacking {
         let unit = max(1, rowHeight)
         let spacing = Int(ceil(gap / unit))
         var placed: [SurfaceGridPlacement] = []
-        for (index, tile) in tiles.enumerated() {
+        let ordered = tiles.enumerated().sorted { left, right in
+            func priority(_ tile: SurfaceTile) -> Int {
+                tile.locked ? 2 : (tile.column != nil || tile.row != nil ? 1 : 0)
+            }
+            let leftPriority = priority(left.element)
+            let rightPriority = priority(right.element)
+            return leftPriority == rightPriority
+                ? left.offset < right.offset : leftPriority > rightPriority
+        }
+        var positions: [Int: SurfaceGridPlacement] = [:]
+        for (index, tile) in ordered {
             let span = min(columns, max(1, tile.span))
             let height = tile.height ?? (heights.indices.contains(index) ? heights[index] : 100)
             let rows = max(1, Int(ceil(height / unit))) + spacing
@@ -336,7 +362,8 @@ public enum SurfaceGridPacking {
                 row += 1
             }
             placed.append(candidate)
+            positions[index] = candidate
         }
-        return placed
+        return tiles.indices.compactMap { positions[$0] }
     }
 }

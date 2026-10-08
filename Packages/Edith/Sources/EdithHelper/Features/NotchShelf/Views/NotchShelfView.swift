@@ -388,16 +388,14 @@ private struct NotchHomeTab: View {
                 layout: layoutStore.notch, singleColumn: false,
                 editing: controller.layoutEditing, selected: selectedTile,
                 select: { selectedTile = $0 },
-                place: { widget, anchor in
-                    layoutStore.update(.notch) { $0.place(widget, before: anchor) }
+                place: { widget, _ in
+                    layoutStore.update(.notch) { selectedTile = $0.add(widget) }
                 },
-                resize: { id, size in
-                    layoutStore.update(.notch) { layout in
-                        guard let index = layout.tiles.firstIndex(where: { $0.id == id }) else {
-                            return
-                        }
-                        layout.tiles[index].size = size
-                    }
+                inspect: { id in
+                    controller.collapseNow()
+                    MainApp.openSurfaceEditor(.notch, tileID: id)
+                },
+                reorder: { id, anchor in layoutStore.update(.notch) { $0.move(id, before: anchor) }
                 },
                 configure: { tile in
                     layoutStore.update(.notch) { layout in
@@ -408,11 +406,7 @@ private struct NotchHomeTab: View {
                 },
                 placeAt: { widget, column, row in
                     layoutStore.update(.notch) { layout in
-                        layout.place(widget)
-                        guard let index = layout.tiles.firstIndex(where: { $0.widget == widget })
-                        else { return }
-                        layout.tiles[index].column = column
-                        layout.tiles[index].row = row
+                        selectedTile = layout.add(widget, column: column, row: row)
                     }
                 }
             ) { tile in
@@ -426,21 +420,17 @@ private struct NotchHomeTab: View {
                 .contextMenu {
                     Button("Move to top") {
                         layoutStore.update(.notch) {
-                            $0.place(tile.widget, before: $0.tiles.first?.id)
+                            $0.position(tile)
                         }
                     }
-                    ForEach(SurfaceWidgetSize.allCases, id: \.self) { size in
-                        Button(size.title) {
-                            layoutStore.update(.notch) { layout in
-                                guard
-                                    let index = layout.tiles.firstIndex(where: {
-                                        $0.id == tile.id
-                                    })
-                                else { return }
-                                layout.tiles[index].size = size
-                            }
+                    Button(tile.locked ? "Unlock layout" : "Lock layout") {
+                        layoutStore.update(.notch) { layout in
+                            guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                            else { return }
+                            layout.tiles[index].locked.toggle()
                         }
                     }
+                    Button("Duplicate") { layoutStore.update(.notch) { $0.duplicate(tile.id) } }
                     Button("Hide") {
                         layoutStore.update(.notch) { layout in
                             guard
@@ -451,7 +441,7 @@ private struct NotchHomeTab: View {
                     }
                     Button("Open widget editor") {
                         controller.collapseNow()
-                        MainApp.openSurfaceEditor(.notch)
+                        MainApp.openSurfaceEditor(.notch, tileID: tile.id)
                     }
                 }
             }
@@ -474,13 +464,13 @@ private struct NotchHomeTab: View {
         case .music:
             if let track = controller.nowPlaying {
                 NotchNowPlayingCard(controller: controller, track: track).frame(
-                    minHeight: tile.size == .compact ? 62 : 92)
+                    minHeight: tile.dense ? 62 : 92)
             } else {
-                emptyMusicCard.frame(height: tile.size == .compact ? 62 : 92)
+                emptyMusicCard.frame(height: tile.dense ? 62 : 92)
             }
         case .limits:
             if let usage = controller.usageStore {
-                ringsCard(usage).frame(height: tile.size == .compact ? 80 : 106)
+                ringsCard(usage).frame(height: tile.dense ? 80 : 106)
             } else {
                 integration(tile)
             }
@@ -513,7 +503,7 @@ private struct NotchHomeTab: View {
                     Text(context.date.formatted(.dateTime.hour().minute().second())).font(
                         .system(size: 22, weight: .medium)
                     ).monospacedDigit()
-                    if tile.size != .compact {
+                    if !tile.dense {
                         Text(TimeZone.current.identifier).font(.system(size: 10)).foregroundStyle(
                             .secondary)
                     }

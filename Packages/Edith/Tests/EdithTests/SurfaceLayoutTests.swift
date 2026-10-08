@@ -40,6 +40,23 @@ struct SurfaceLayoutTests {
         }
     }
 
+    @Test func lockedCardsKeepTheirPositionWhenAnotherCardMovesIntoTheirSpace() {
+        var locked = SurfaceTile(.music)
+        locked.locked = true
+        locked.column = 4
+        locked.row = 3
+        locked.span = 8
+        var moved = SurfaceTile(.calendar)
+        moved.column = 4
+        moved.row = 3
+        moved.span = 8
+        let frames = SurfaceGridPacking.pack(
+            tiles: [moved, locked], columns: 24, heights: [80, 80], rowHeight: 8, gap: 0)
+        #expect(frames[1].column == 4 && frames[1].row == 3)
+        #expect(frames[0].row >= 13)
+        #expect(!frames[0].overlaps(frames[1]))
+    }
+
     @Test func gridSettingsAndContentChoicesPersistAndNormalize() {
         var layout = SurfaceLayout.standard(.home)
         layout.columns = 0
@@ -123,20 +140,31 @@ struct SurfaceLayoutTests {
         #expect(store.home.tiles[0].displayTitle == SurfaceWidget.clocks.title)
     }
 
-    @Test func rowsHonorOrderWideTilesAndHiddenTiles() {
-        var hidden = SurfaceTile(.calendar)
-        hidden.hidden = true
-        let layout = SurfaceLayout(tiles: [
-            .init(.music), .init(.limits), .init(.actions, size: .wide), hidden, .init(.focus),
-        ])
-        #expect(
-            layout.rows(singleColumn: false).map { $0.map(\.widget) } == [
-                [.music, .limits], [.actions], [.focus],
-            ])
-        #expect(
-            layout.rows(singleColumn: true).map { $0.map(\.widget) } == [
-                [.music], [.limits], [.actions], [.focus],
-            ])
+    @Test func duplicateWidgetsKeepIndependentConfigurationAndIdentity() throws {
+        var layout = SurfaceLayout(tiles: [.init(.focus)])
+        layout.tiles[0].focusMinutes = 45
+        layout.tiles[0].column = 4
+        layout.tiles[0].row = 10
+        layout.tiles[0].locked = true
+        let duplicated = layout.duplicate(layout.tiles[0].id)
+        let duplicateID = try #require(duplicated)
+        #expect(duplicateID != layout.tiles[0].id)
+        #expect(layout.tiles[1].focusMinutes == 45)
+        #expect(layout.tiles[1].column == nil && layout.tiles[1].row == nil)
+        #expect(!layout.tiles[1].locked)
+        layout.tiles[1].focusMinutes = 15
+        layout.move(duplicateID, before: layout.tiles[0].id)
+        #expect(layout.tiles[0].id == duplicateID)
+        layout.move(duplicateID, before: nil)
+        #expect(layout.normalized().tiles.count == 2)
+        #expect(layout.tiles[0].focusMinutes == 45)
+        #expect(SurfaceLayout.decode(layout.encoded, target: .home) == layout)
+        layout.arrangeAutomatically()
+        #expect(layout.tiles[0].column == 4 && layout.tiles[0].row == 10)
+        let added = layout.add(.focus, column: 2, row: 3)
+        #expect(layout.tiles.first?.id == added)
+        #expect(layout.tiles.count == 3)
+        #expect(layout.tiles.first?.column == 2 && layout.tiles.first?.row == 3)
     }
 
     @MainActor @Test func historyAndExternalChangesStayIndependentAcrossSurfaces() throws {

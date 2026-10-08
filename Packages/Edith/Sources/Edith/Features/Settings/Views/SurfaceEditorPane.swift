@@ -1,8 +1,10 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
 struct SurfaceEditorPane: View {
     @State private var store = SurfaceLayoutStore.shared
+    @State private var dashboard = DashboardModel.shared
     @AppStorage(AppStorageKeys.Surfaces.editorTarget, store: SharedDefaults.store) private
         var targetRaw = "home"
     private var target: SurfaceTarget { SurfaceTarget(rawValue: targetRaw) ?? .home }
@@ -14,6 +16,14 @@ struct SurfaceEditorPane: View {
     }
     @State private var query = ""
     @State private var previewCompact = false
+    @State private var previewWidth: Double?
+    @State private var livePreview = true
+    @State private var geometryExpanded = false
+    @State private var libraryVisible = true
+    @State private var inspectorVisible = true
+    @State private var layoutError: String?
+    @State private var tileFrames: [String: CGRect] = [:]
+    @State private var canvasWidth = 600.0
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
@@ -21,28 +31,51 @@ struct SurfaceEditorPane: View {
     private var selection: SurfaceTile? { layout.tiles.first { $0.id == selected } }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
-                toolbar
-                if compact {
-                    ScrollView { library }.frame(height: UIScale.pt(240))
-                    if selection != nil { inspector }
-                    canvas
-                    if target == .notch { notchTabs }
-                } else {
-                    HStack(alignment: .top, spacing: UIScale.pt(18)) {
-                        ScrollView { library }.frame(
-                            width: UIScale.pt(210), height: UIScale.pt(650))
+        PageWorkspace {
+            toolbar
+                .padding(.horizontal, PageMetrics.gutter(compact))
+                .padding(.vertical, UIScale.pt(12))
+            Divider()
+        } content: {
+            if compact {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                        if libraryVisible { ScrollView { library }.frame(height: UIScale.pt(220)) }
+                        canvas
+                        if inspectorVisible, selection != nil { inspector }
+                        if target == .notch { notchTabs }
+                    }
+                    .padding(PageMetrics.gutter(compact))
+                }
+            } else {
+                HStack(alignment: .top, spacing: 0) {
+                    if libraryVisible {
+                        ScrollView { library.padding(UIScale.pt(12)) }
+                            .frame(width: UIScale.pt(220))
+                        Divider()
+                    }
+                    ScrollView(previewWidth == nil ? .vertical : [.horizontal, .vertical]) {
                         VStack(spacing: UIScale.pt(18)) {
                             canvas
                             if target == .notch { notchTabs }
-                        }.frame(maxWidth: .infinity)
-                        if selection != nil { inspector.frame(width: UIScale.pt(230)) }
+                        }
+                        .frame(width: previewWidth.map { CGFloat(UIScale.pt($0)) })
+                        .padding(UIScale.pt(16))
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if inspectorVisible, selection != nil {
+                        Divider()
+                        ScrollView { inspector.padding(UIScale.pt(12)) }
+                            .frame(width: UIScale.pt(260))
                     }
                 }
-            }.padding(PageMetrics.gutter(compact))
+            }
         }
         .id(target)
+        .pageTask(id: livePreview, active: livePreview && target == .home) {
+            await dashboard.restoreCachedHomeUsage()
+            await dashboard.load()
+        }
         .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
         { _ in store.reload() }
     }
@@ -60,6 +93,9 @@ struct SurfaceEditorPane: View {
                     history
                 }
             }
+            if let layoutError {
+                Text(layoutError).font(.edithText(.caption)).foregroundStyle(.red)
+            }
             canvasSettings
             Text(
                 "Drag widgets onto the grid. Move with the title handle and resize with the corner. Use the inspector for precise values. Changes appear immediately."
@@ -69,11 +105,11 @@ struct SurfaceEditorPane: View {
     }
 
     private var canvasSettings: some View {
-        DisclosureGroup("Canvas geometry") {
+        DisclosureGroup("Canvas geometry", isExpanded: $geometryExpanded) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Stepper(
                     "Grid: \(layout.columns) columns", value: canvasSetting(\.columns), in: 4...48)
-                HStack {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: UIScale.pt(100)))]) {
                     numberField("Gap (pt)", value: canvasSetting(\.gap))
                     numberField("Padding (pt)", value: canvasSetting(\.padding))
                     numberField("Corners (pt)", value: canvasSetting(\.cornerRadius))
@@ -141,6 +177,30 @@ struct SurfaceEditorPane: View {
             }
             .disabled(!store.canRedo(target))
             .keyboardShortcut("z", modifiers: [.command, .shift])
+            Menu {
+                Toggle("Widget library", isOn: $libraryVisible)
+                Toggle("Widget inspector", isOn: $inspectorVisible)
+                Divider()
+                Button("Copy layout") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(layout.encoded, forType: .string)
+                }
+                Button("Paste layout") {
+                    guard let text = NSPasteboard.general.string(forType: .string),
+                        let data = text.data(using: .utf8),
+                        let imported = try? JSONDecoder().decode(SurfaceLayout.self, from: data)
+                    else {
+                        layoutError = "The clipboard does not contain a valid surface layout."
+                        return
+                    }
+                    store.update(target) { $0 = imported }
+                    selected = nil
+                    layoutError = nil
+                }
+            } label: {
+                Image(systemName: "sidebar.left")
+            }
+            .help("Workspace panels and layout sharing")
             Menu("Presets") {
                 Button("Default layout") { store.update(target) { $0 = .standard(target) } }
                 Button("Developer") {
@@ -181,15 +241,12 @@ struct SurfaceEditorPane: View {
                     }
                     Spacer(minLength: 0)
                     Button {
-                        store.update(target) { $0.place(widget) }
-                        selected = widget.id
+                        store.update(target) { selected = $0.add(widget) }
+                        inspectorVisible = true
                     } label: {
-                        Image(
-                            systemName: layout.tiles.contains { $0.widget == widget }
-                                ? "checkmark" : "plus")
+                        Image(systemName: "plus")
                     }
                     .buttonStyle(.edith(.borderless))
-                    .disabled(layout.tiles.contains { $0.widget == widget })
                     .help("Add \(widget.title)")
                     .accessibilityLabel("Add \(widget.title)")
                 }
@@ -235,23 +292,41 @@ struct SurfaceEditorPane: View {
             SurfaceCanvas(
                 layout: layout, singleColumn: compact || previewCompact,
                 editing: true, selected: selected, select: { selected = $0 },
-                place: { widget, anchor in
-                    store.update(target) { $0.place(widget, before: anchor) }
-                    selected = widget.id
+                place: { widget, _ in
+                    store.update(target) { selected = $0.add(widget) }
                 },
-                resize: { id, size in edit(id) { $0.size = size } },
-                configure: { tile in store.update(target) { $0.position(tile) } },
+                measured: { id, frame in
+                    if tileFrames[id] != frame { tileFrames[id] = frame }
+                },
+                reorder: { id, anchor in store.update(target) { $0.move(id, before: anchor) } },
+                configure: { tile in
+                    store.update(target) { layout in
+                        if compact || previewCompact,
+                            let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        {
+                            layout.tiles[index] = tile
+                        } else {
+                            layout.position(tile)
+                        }
+                    }
+                },
                 placeAt: { widget, column, row in
                     store.update(target) { layout in
-                        layout.place(widget)
-                        guard let index = layout.tiles.firstIndex(where: { $0.widget == widget })
-                        else { return }
-                        layout.tiles[index].column = column
-                        layout.tiles[index].row = row
+                        selected = layout.add(widget, column: column, row: row)
                     }
                 }
             ) { tile in
-                SurfaceWidgetPreview(tile: tile, notch: target == .notch)
+                if livePreview, target == .home {
+                    HomeSurfaceWidget(tile: tile)
+                        .environment(\.compactLayout, compact || previewCompact)
+                } else {
+                    SurfaceWidgetPreview(tile: tile, notch: target == .notch)
+                }
+            }
+            .onGeometryChange(for: Double.self) {
+                $0.size.width / UIScale.current
+            } action: {
+                canvasWidth = $0
             }
             .padding(UIScale.pt(12))
             .background(
@@ -260,8 +335,12 @@ struct SurfaceEditorPane: View {
             )
             .environment(\.colorScheme, target == .notch ? .dark : scheme)
             .frame(maxWidth: target == .notch ? UIScale.pt(580) : .infinity)
-            Text("Preview uses sample content. Your widgets use live data when available.")
-                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            Text(
+                livePreview && target == .home
+                    ? "Live content. Controls are paused while editing."
+                    : "Sample content. Edit the Notch itself to preview live widgets."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -273,8 +352,22 @@ struct SurfaceEditorPane: View {
         .font(.edithText(.headline))
     }
     private var previewToggle: some View {
-        Toggle("Single column", isOn: $previewCompact).toggleStyle(.switch).font(
-            .edithText(.caption))
+        HStack {
+            if !compact, target == .home {
+                Menu(previewWidth.map { "\(Int($0)) pt" } ?? "Fit") {
+                    Button("Fit workspace") { previewWidth = nil }
+                    ForEach([420.0, 900, 1200, 1440, 1920], id: \.self) { width in
+                        Button("\(Int(width)) pt") {
+                            previewWidth = width
+                            previewCompact = width == 420
+                        }
+                    }
+                }.help("Preview the actual canvas width")
+            }
+            if target == .home { Toggle("Live content", isOn: $livePreview) }
+            Toggle("Single column", isOn: $previewCompact)
+        }
+        .toggleStyle(.switch).font(.edithText(.caption))
     }
 
     private var notchTabs: some View {
@@ -339,51 +432,76 @@ struct SurfaceEditorPane: View {
                     "Close inspector")
             }
             if let tile = selection {
-                TextField("Display title", text: setting(tile.id, \.title, fallback: ""))
-                    .textFieldStyle(.roundedBorder)
-                Stepper(
-                    "Width: \(tile.span) / \(layout.columns) columns",
-                    value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
                 Toggle(
-                    "Automatic height",
+                    "Lock layout",
                     isOn: Binding(
-                        get: { selection?.height == nil },
-                        set: { automatic in edit(tile.id) { $0.height = automatic ? nil : 200 } }))
-                if let height = tile.height {
-                    numberField(
-                        "Height (pt)",
-                        value: Binding(
-                            get: { selection?.height ?? height },
-                            set: { value in edit(tile.id) { $0.height = value } }))
-                }
-                Toggle(
-                    "Automatic placement",
-                    isOn: Binding(
-                        get: { selection?.column == nil && selection?.row == nil },
-                        set: { automatic in
+                        get: { selection?.locked ?? false },
+                        set: { locked in
                             edit(tile.id) {
-                                $0.column = automatic ? nil : 0
-                                $0.row = automatic ? nil : 0
+                                $0.locked = locked
+                                if locked {
+                                    let origin = tileFrames[tile.id] ?? .zero
+                                    let pitch = (canvasWidth + layout.gap) / Double(layout.columns)
+                                    $0.column = Int((origin.minX / pitch).rounded())
+                                    $0.row = Int((origin.minY / layout.rowHeight).rounded())
+                                }
                             }
                         }))
-                if tile.column != nil || tile.row != nil {
+                TextField("Display title", text: setting(tile.id, \.title, fallback: ""))
+                    .textFieldStyle(.roundedBorder)
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
                     Stepper(
-                        "Column: \(tile.column ?? 0)",
-                        value: Binding(
-                            get: { selection?.column ?? 0 },
-                            set: { value in edit(tile.id) { $0.column = value } }),
-                        in: 0...max(0, layout.columns - tile.span))
-                    Stepper(
-                        "Vertical position: \(Int(Double(tile.row ?? 0) * layout.rowHeight)) pt",
-                        value: Binding(
-                            get: { selection?.row ?? 0 },
-                            set: { value in edit(tile.id) { $0.row = value } }), in: 0...1000)
-                }
+                        "Width: \(tile.span) / \(layout.columns) columns",
+                        value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
+                    Toggle(
+                        "Automatic height",
+                        isOn: Binding(
+                            get: { selection?.height == nil },
+                            set: { automatic in edit(tile.id) { $0.height = automatic ? nil : 200 }
+                            }))
+                    if let height = tile.height {
+                        numberField(
+                            "Height (pt)",
+                            value: Binding(
+                                get: { selection?.height ?? height },
+                                set: { value in edit(tile.id) { $0.height = value } }))
+                    }
+                    Toggle(
+                        "Automatic placement",
+                        isOn: Binding(
+                            get: { selection?.column == nil && selection?.row == nil },
+                            set: { automatic in
+                                edit(tile.id) {
+                                    $0.column = automatic ? nil : 0
+                                    $0.row = automatic ? nil : 0
+                                }
+                            }))
+                    if tile.column != nil || tile.row != nil {
+                        Stepper(
+                            "Column: \(tile.column ?? 0)",
+                            value: Binding(
+                                get: { selection?.column ?? 0 },
+                                set: { value in edit(tile.id) { $0.column = value } }),
+                            in: 0...max(0, layout.columns - tile.span))
+                        Stepper(
+                            "Vertical position: \(Int(Double(tile.row ?? 0) * layout.rowHeight)) pt",
+                            value: Binding(
+                                get: { selection?.row ?? 0 },
+                                set: { value in edit(tile.id) { $0.row = value } }), in: 0...1000)
+                    }
+                    nudgeControls(tile).disabled(tile.locked)
+                }.disabled(tile.locked)
                 Divider()
                 Text("Content").font(.edithText(.headline))
                 Toggle("Show title", isOn: setting(tile.id, \.showTitle, fallback: true))
                 Toggle("Show details", isOn: setting(tile.id, \.showDetails, fallback: true))
                 Toggle("Show actions", isOn: setting(tile.id, \.showActions, fallback: true))
+                overrideField(
+                    "Custom padding", id: tile.id, key: \.paddingOverride, inherited: layout.padding
+                )
+                overrideField(
+                    "Custom corners", id: tile.id, key: \.cornerOverride,
+                    inherited: layout.cornerRadius)
                 Toggle("Dense content", isOn: setting(tile.id, \.dense, fallback: false))
                 Toggle("Accent color", isOn: setting(tile.id, \.accent, fallback: true))
                 Stepper(
@@ -429,6 +547,9 @@ struct SurfaceEditorPane: View {
     }
 
     @ViewBuilder private func widgetActions(_ tile: SurfaceTile) -> some View {
+        Button("Duplicate") {
+            store.update(target) { selected = $0.duplicate(tile.id) }
+        }
         Button("Move earlier") { move(tile, offset: -1) }.disabled(
             layout.tiles.first?.id == tile.id)
         Button("Move later") { move(tile, offset: 1) }.disabled(layout.tiles.last?.id == tile.id)
@@ -440,6 +561,56 @@ struct SurfaceEditorPane: View {
             store.update(target) { $0.tiles.removeAll { $0.id == tile.id } }
             selected = nil
         }
+    }
+
+    private func overrideField(
+        _ title: String, id: String, key: WritableKeyPath<SurfaceTile, Double?>, inherited: Double
+    ) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            Toggle(
+                title,
+                isOn: Binding(
+                    get: { selection?[keyPath: key] != nil },
+                    set: { custom in edit(id) { $0[keyPath: key] = custom ? inherited : nil } }))
+            if selection?[keyPath: key] != nil {
+                numberField(
+                    "Points",
+                    value: Binding(
+                        get: { selection?[keyPath: key] ?? inherited },
+                        set: { value in edit(id) { $0[keyPath: key] = value } }))
+            }
+        }
+    }
+
+    private func nudgeControls(_ tile: SurfaceTile) -> some View {
+        HStack {
+            nudgeButton("Move left", icon: "arrow.left", key: .leftArrow, column: -1, row: 0)
+            nudgeButton("Move up", icon: "arrow.up", key: .upArrow, column: 0, row: -1)
+            nudgeButton("Move down", icon: "arrow.down", key: .downArrow, column: 0, row: 1)
+            nudgeButton("Move right", icon: "arrow.right", key: .rightArrow, column: 1, row: 0)
+        }.buttonStyle(.edith(.secondary))
+    }
+
+    private func nudgeButton(
+        _ title: String, icon: String, key: KeyEquivalent, column: Int, row: Int
+    ) -> some View {
+        Button {
+            guard var tile = selection, !tile.locked else { return }
+            let origin = tileFrames[tile.id] ?? .zero
+            let pitch = (canvasWidth + layout.gap) / Double(layout.columns)
+            tile.column = max(
+                0,
+                min(
+                    layout.columns - tile.span,
+                    (tile.column ?? Int((origin.minX / pitch).rounded())) + column))
+            tile.row = max(0, (tile.row ?? Int((origin.minY / layout.rowHeight).rounded())) + row)
+            store.update(target) { $0.position(tile) }
+        } label: {
+            Image(systemName: icon)
+        }
+        .help(title + " (Option + arrow)")
+        .accessibilityLabel(title)
+        .keyboardShortcut(key, modifiers: .option)
     }
 
     private func move(_ tile: SurfaceTile, offset: Int) {
@@ -470,16 +641,20 @@ private struct SurfaceWidgetPreview: View {
     let notch: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
-            Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))
-            if tile.size != .compact {
+            if tile.showTitle {
+                Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))
+            }
+            if tile.showDetails, !tile.dense {
                 Text(tile.widget.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             previewContent
         }
-        .padding(UIScale.pt(14)).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(UIScale.pt(tile.paddingOverride ?? (tile.dense ? 10 : 14))).frame(
+            maxWidth: .infinity, alignment: .leading
+        )
         .background(
             Color.secondary.opacity(notch ? 0.13 : 0.07),
-            in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
+            in: RoundedRectangle(cornerRadius: UIScale.pt(tile.cornerOverride ?? 14)))
     }
     @ViewBuilder private var previewContent: some View {
         switch tile.widget {
@@ -500,8 +675,8 @@ private struct SurfaceWidgetPreview: View {
             }
         case .limits:
             HStack(spacing: UIScale.pt(24)) {
-                sampleRing("5h", 63)
-                sampleRing("7d", 34)
+                if tile.shows("session") { sampleQuota("Session", 63) }
+                if tile.shows("weekly") { sampleQuota("Weekly", 34) }
             }.frame(maxWidth: .infinity)
         case .codeStats, .github:
             sampleMetrics([("Commits", "128"), ("Lines", "12.4k"), ("Streak", "7d")])
@@ -556,17 +731,18 @@ private struct SurfaceWidgetPreview: View {
             }
         }
     }
-    private func sampleRing(_ title: String, _ percent: Double) -> some View {
-        VStack(spacing: UIScale.pt(4)) {
-            ZStack {
-                Circle().stroke(Color.secondary.opacity(0.2), lineWidth: UIScale.pt(4))
-                Circle().trim(from: 0, to: percent / 100).stroke(
-                    Color.accentColor, style: StrokeStyle(lineWidth: UIScale.pt(4), lineCap: .round)
-                ).rotationEffect(.degrees(-90))
-                Text("\(Int(percent))%").font(.edithText(.caption)).monospacedDigit()
-            }.frame(width: UIScale.pt(48), height: UIScale.pt(48))
-            Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
-        }
+    private func sampleQuota(_ title: String, _ percent: Double) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+            HStack {
+                Text(title).font(.edithText(.caption))
+                Spacer(minLength: 0)
+                Text("\(Int(percent))% used").font(.edithText(.caption)).monospacedDigit()
+            }
+            ProgressView(value: percent, total: 100).tint(
+                tile.accent ? Color.accentColor : .secondary)
+            if tile.showDetails, tile.shows("resets") {
+                Text("Resets in 2h 14m").font(.edithText(.caption2)).foregroundStyle(.secondary)
+            }
+        }.frame(maxWidth: .infinity)
     }
-
 }

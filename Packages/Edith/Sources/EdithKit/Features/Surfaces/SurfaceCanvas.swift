@@ -29,17 +29,22 @@ public struct SurfaceCanvas<Content: View>: View {
     let selected: String?
     let select: (String) -> Void
     let place: (SurfaceWidget, String?) -> Void
-    let resize: (String, SurfaceWidgetSize) -> Void
+    let inspect: ((String) -> Void)?
+    let measured: (String, CGRect) -> Void
+    let reorder: (String, String?) -> Void
     let configure: (SurfaceTile) -> Void
     let placeAt: ((SurfaceWidget, Int, Int) -> Void)?
     let content: (SurfaceTile) -> Content
     @State private var width: CGFloat = 600
+    @State private var frames: [String: CGRect] = [:]
 
     public init(
         layout: SurfaceLayout, singleColumn: Bool, editing: Bool = false, selected: String? = nil,
         select: @escaping (String) -> Void = { _ in },
         place: @escaping (SurfaceWidget, String?) -> Void = { _, _ in },
-        resize: @escaping (String, SurfaceWidgetSize) -> Void = { _, _ in },
+        inspect: ((String) -> Void)? = nil,
+        measured: @escaping (String, CGRect) -> Void = { _, _ in },
+        reorder: @escaping (String, String?) -> Void = { _, _ in },
         configure: @escaping (SurfaceTile) -> Void = { _ in },
         placeAt: ((SurfaceWidget, Int, Int) -> Void)? = nil,
         @ViewBuilder content: @escaping (SurfaceTile) -> Content
@@ -50,7 +55,9 @@ public struct SurfaceCanvas<Content: View>: View {
         self.selected = selected
         self.select = select
         self.place = place
-        self.resize = resize
+        self.inspect = inspect
+        self.measured = measured
+        self.reorder = reorder
         self.configure = configure
         self.placeAt = placeAt
         self.content = content
@@ -61,9 +68,19 @@ public struct SurfaceCanvas<Content: View>: View {
             SurfaceGridLayout(layout: layout, singleColumn: singleColumn) {
                 ForEach(layout.visible) { tile in
                     SurfaceCanvasTile(
-                        tile: tile, layout: layout, canvasWidth: width,
+                        tile: tile, layout: layout, canvasWidth: width, singleColumn: singleColumn,
                         editing: editing, selected: selected == tile.id,
-                        select: { select(tile.id) }, configure: configure
+                        select: { select(tile.id) }, inspect: { (inspect ?? select)(tile.id) },
+                        measured: { frame in
+                            if frames[tile.id] != frame { frames[tile.id] = frame }
+                            measured(tile.id, frame)
+                        },
+                        reorder: { y in
+                            let anchor = frames.filter { $0.key != tile.id && $0.value.midY > y }
+                                .min { $0.value.minY < $1.value.minY }?.key
+                            reorder(tile.id, anchor)
+                        },
+                        configure: configure
                     ) {
                         content(tile).environment(
                             \.surfacePresentation, SurfacePresentation(tile: tile, layout: layout))
@@ -181,8 +198,13 @@ public struct SurfaceGridLayout: Layout {
                         width: max(1, CGFloat(tile.span) * pitch - gap), height: nil)
                 ).height / UIScale.current)
         }
+        let measuredTiles = tiles.map { tile in
+            var measured = tile
+            measured.height = nil
+            return measured
+        }
         let frames = SurfaceGridPacking.pack(
-            tiles: tiles, columns: layout.columns, heights: heights,
+            tiles: measuredTiles, columns: layout.columns, heights: heights,
             rowHeight: layout.rowHeight, gap: layout.gap)
         return frames.map { frame in
             CGRect(
@@ -198,15 +220,20 @@ private struct SurfaceCanvasTile<Content: View>: View {
     let tile: SurfaceTile
     let layout: SurfaceLayout
     let canvasWidth: CGFloat
+    let singleColumn: Bool
     let editing: Bool
     let selected: Bool
     let select: () -> Void
+    let inspect: () -> Void
+    let measured: (CGRect) -> Void
+    let reorder: (Double) -> Void
     let configure: (SurfaceTile) -> Void
     @ViewBuilder let content: () -> Content
     @State private var frame = CGRect.zero
     @State private var movement = CGSize.zero
     @State private var sizing = CGSize.zero
     @State private var gestureFrame: CGRect?
+    @State private var contentHeight: CGFloat = 100
 
     private var pitch: CGFloat { (canvasWidth + UIScale.pt(layout.gap)) / CGFloat(layout.columns) }
 
@@ -214,7 +241,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if editing {
                 HStack {
-                    Image(systemName: "line.3.horizontal")
+                    Image(systemName: tile.locked ? "lock.fill" : "line.3.horizontal")
                     Text(tile.displayTitle).lineLimit(1)
                     Spacer(minLength: 0)
                     Text("\(tile.span)/\(layout.columns)").foregroundStyle(.secondary)
@@ -224,16 +251,27 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: select)
                 .gesture(
-                    DragGesture(minimumDistance: 3)
+                    DragGesture(minimumDistance: tile.locked ? .infinity : 3)
                         .onChanged { drag in
                             if gestureFrame == nil {
                                 gestureFrame = frame
                                 select()
                             }
+                            let origin = gestureFrame ?? frame
+                            let column = min(
+                                layout.columns - tile.span,
+                                max(
+                                    0,
+                                    Int(((origin.minX + drag.translation.width) / pitch).rounded()))
+                            )
+                            let row = max(
+                                0,
+                                Int(
+                                    ((origin.minY + drag.translation.height)
+                                        / UIScale.pt(layout.rowHeight)).rounded()))
                             movement = CGSize(
-                                width: (drag.translation.width / pitch).rounded() * pitch,
-                                height: (drag.translation.height / UIScale.pt(layout.rowHeight))
-                                    .rounded() * UIScale.pt(layout.rowHeight))
+                                width: singleColumn ? 0 : CGFloat(column) * pitch - origin.minX,
+                                height: CGFloat(row) * UIScale.pt(layout.rowHeight) - origin.minY)
                         }
                         .onEnded { drag in
                             var next = tile
@@ -251,26 +289,40 @@ private struct SurfaceCanvasTile<Content: View>: View {
                                         / UIScale.pt(layout.rowHeight)).rounded()))
                             movement = .zero
                             gestureFrame = nil
-                            configure(next)
+                            if singleColumn {
+                                reorder(
+                                    Double(
+                                        (origin.midY + drag.translation.height) / UIScale.current))
+                            } else {
+                                configure(next)
+                            }
                         }
                 )
                 .help("Drag to position on the grid")
             }
-            if tile.height != nil {
-                ScrollView { content().allowsHitTesting(!editing) }
-            } else {
-                content().allowsHitTesting(!editing)
+            Group {
+                if let height = tile.height {
+                    ScrollView { content().allowsHitTesting(!editing) }
+                        .frame(height: UIScale.pt(height))
+                } else {
+                    content().allowsHitTesting(!editing)
+                }
+            }
+            .onGeometryChange(for: CGFloat.self) {
+                $0.size.height
+            } action: {
+                contentHeight = $0
             }
             if editing {
                 HStack {
-                    Button("Configure", action: select).font(.edithText(.caption))
+                    Button("Configure", action: inspect).font(.edithText(.caption))
                     Spacer()
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.edithText(.caption)).foregroundStyle(Color.accentColor)
                         .frame(width: UIScale.pt(28), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                         .gesture(
-                            DragGesture(minimumDistance: 3)
+                            DragGesture(minimumDistance: tile.locked ? .infinity : 3)
                                 .onChanged {
                                     if gestureFrame == nil {
                                         gestureFrame = frame
@@ -282,23 +334,37 @@ private struct SurfaceCanvasTile<Content: View>: View {
                                     var next = tile
                                     let origin = gestureFrame ?? frame
                                     next.span = min(
-                                        layout.columns,
+                                        layout.columns - Int((origin.minX / pitch).rounded()),
                                         max(
                                             1,
                                             Int(
                                                 ((origin.width + UIScale.pt(layout.gap)
                                                     + drag.translation.width) / pitch).rounded())))
+                                    if singleColumn {
+                                        next.span = tile.span
+                                    } else {
+                                        next.column =
+                                            tile.column ?? Int((origin.minX / pitch).rounded())
+                                        next.row =
+                                            tile.row
+                                            ?? Int(
+                                                (origin.minY / UIScale.pt(layout.rowHeight))
+                                                    .rounded())
+                                    }
                                     next.height = max(
                                         64,
                                         Double(
-                                            (origin.height + drag.translation.height)
+                                            (contentHeight + drag.translation.height)
                                                 / UIScale.current))
                                     sizing = .zero
                                     gestureFrame = nil
                                     configure(next)
                                 }
                         )
-                        .help("Drag to resize width and height")
+                        .help(
+                            tile.locked
+                                ? "Unlock this widget to resize" : "Drag to resize width and height"
+                        )
                 }
                 .padding(.horizontal, UIScale.pt(10)).padding(.bottom, UIScale.pt(6))
             }
@@ -307,6 +373,12 @@ private struct SurfaceCanvasTile<Content: View>: View {
             $0.frame(in: .named("surfaceCanvas"))
         } action: {
             frame = $0
+            if movement == .zero, sizing == .zero {
+                measured(
+                    CGRect(
+                        x: $0.minX / UIScale.current, y: $0.minY / UIScale.current,
+                        width: $0.width / UIScale.current, height: $0.height / UIScale.current))
+            }
         }
         .background {
             if editing {
@@ -326,6 +398,26 @@ private struct SurfaceCanvasTile<Content: View>: View {
                         height: max(40, frame.height + sizing.height)
                     )
                     .allowsHitTesting(false)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if editing, movement != .zero || sizing != .zero {
+                VStack(alignment: .trailing, spacing: UIScale.pt(3)) {
+                    if movement != .zero {
+                        Text(
+                            "Column \(Int(((gestureFrame ?? frame).minX + movement.width) / pitch)) · \(Int(((gestureFrame ?? frame).minY + movement.height) / UIScale.current)) pt"
+                        )
+                    } else {
+                        Text(
+                            "\(Int((frame.width + sizing.width) / UIScale.current)) × \(Int((contentHeight + sizing.height) / UIScale.current)) pt"
+                        )
+                    }
+                }
+                .font(.edithText(.caption)).monospacedDigit()
+                .padding(UIScale.pt(6))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+                .offset(y: -UIScale.pt(30))
+                .allowsHitTesting(false)
             }
         }
         .offset(movement)

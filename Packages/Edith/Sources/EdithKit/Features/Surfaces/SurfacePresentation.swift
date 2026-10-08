@@ -7,8 +7,8 @@ public struct SurfacePresentation: Equatable, Sendable {
 
     public init(tile: SurfaceTile, layout: SurfaceLayout) {
         self.tile = tile
-        padding = tile.dense ? min(10, layout.padding) : layout.padding
-        cornerRadius = layout.cornerRadius
+        padding = tile.paddingOverride ?? (tile.dense ? min(10, layout.padding) : layout.padding)
+        cornerRadius = tile.cornerOverride ?? layout.cornerRadius
     }
 }
 

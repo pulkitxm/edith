@@ -1,5 +1,5 @@
-import EdithCore
 import AppKit
+import EdithCore
 
 @MainActor
 public enum MainApp {
@@ -21,10 +21,10 @@ public enum MainApp {
         openDashboard()
     }
 
-    public static func openSurfaceEditor(_ target: SurfaceTarget, widget: SurfaceWidget? = nil) {
+    public static func openSurfaceEditor(_ target: SurfaceTarget, tileID: String? = nil) {
         SharedDefaults.store.set(target.rawValue, forKey: AppStorageKeys.Surfaces.editorTarget)
-        if let widget {
-            SharedDefaults.store.set(widget.id, forKey: AppStorageKeys.Surfaces.editorWidget)
+        if let tileID {
+            SharedDefaults.store.set(tileID, forKey: AppStorageKeys.Surfaces.editorWidget)
         } else {
             SharedDefaults.store.removeObject(forKey: AppStorageKeys.Surfaces.editorWidget)
         }

@@ -9,6 +9,10 @@ import Testing
 @MainActor
 @Suite(.serialized) struct SurfaceEditorRenderingTests {
     @Test func editorRendersInBothAppearancesAndCompactZoomedWindows() throws {
+        let defaults = SharedDefaults.store
+        let previousSelection = defaults.string(forKey: AppStorageKeys.Surfaces.editorWidget)
+        defaults.set(SurfaceWidget.clocks.id, forKey: AppStorageKeys.Surfaces.editorWidget)
+        defer { defaults.set(previousSelection, forKey: AppStorageKeys.Surfaces.editorWidget) }
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
         for dark in [true, false] {

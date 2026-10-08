@@ -37,38 +37,26 @@ struct HomePage: View {
             SurfaceCanvas(
                 layout: layout, singleColumn: compact, editing: editing,
                 selected: selectedTile,
-                select: {
-                    selectedTile = $0
-                    MainApp.openSurfaceEditor(.home, widget: SurfaceWidget(rawValue: $0))
+                select: { selectedTile = $0 },
+                place: { widget, _ in
+                    layoutStore.update(.home) { selectedTile = $0.add(widget) }
                 },
-                place: { widget, anchor in
-                    layoutStore.update(.home) { $0.place(widget, before: anchor) }
-                },
-                resize: { id, size in
-                    layoutStore.update(.home) { layout in
-                        guard let index = layout.tiles.firstIndex(where: { $0.id == id }) else {
-                            return
-                        }
-                        layout.tiles[index].size = size
-                    }
+                inspect: { MainApp.openSurfaceEditor(.home, tileID: $0) },
+                reorder: { id, anchor in layoutStore.update(.home) { $0.move(id, before: anchor) }
                 },
                 configure: { tile in
                     layoutStore.update(.home) { layout in
                         guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
                         else { return }
-                        layout.position(tile)
+                        if compact { layout.tiles[index] = tile } else { layout.position(tile) }
                     }
                 },
                 placeAt: { widget, column, row in
                     layoutStore.update(.home) { layout in
-                        layout.place(widget)
-                        guard let index = layout.tiles.firstIndex(where: { $0.widget == widget })
-                        else { return }
-                        layout.tiles[index].column = column
-                        layout.tiles[index].row = row
+                        selectedTile = layout.add(widget, column: column, row: row)
                     }
                 }
-            ) { tile in homeWidget(tile) }
+            ) { tile in HomeSurfaceWidget(tile: tile) }
             if layout.visible.isEmpty, !editing {
                 ContentUnavailableView(
                     "Make yourself at home", systemImage: "rectangle.3.group",
@@ -85,7 +73,38 @@ struct HomePage: View {
         .pageTask(cancel: model.endObserving) { model.beginObserving() }
     }
 
-    @ViewBuilder private func homeWidget(_ tile: SurfaceTile) -> some View {
+    private var background: some View {
+        DashSkin.paper(dark)
+            .overlay(alignment: .topTrailing) {
+                RadialGradient(
+                    colors: [DashSkin.accent(dark).opacity(0.08), .clear], center: .topTrailing,
+                    startRadius: 0, endRadius: 620
+                )
+                .ignoresSafeArea(edges: .vertical)
+            }
+            .overlay(alignment: .bottomLeading) {
+                RadialGradient(
+                    colors: [DashPalette.slate(dark).opacity(0.06), .clear],
+                    center: .bottomLeading, startRadius: 0, endRadius: 520
+                )
+                .ignoresSafeArea(edges: .vertical)
+            }
+            .ignoresSafeArea(edges: .vertical)
+    }
+}
+
+struct HomeSurfaceWidget: View {
+    let tile: SurfaceTile
+    @State private var model = DashboardModel.shared
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney = true
+    private var dark: Bool { scheme == .dark }
+    private var blurMoney: Bool { PresenterState.shared.active && presenterBlurMoney }
+
+    @ViewBuilder var body: some View {
         if !tile.widget.available(in: SharedDefaults.store) {
             PageCard(title: tile.displayTitle) {
                 Text("Enable this integration in Extensions.").font(.edithText(.callout))
@@ -119,32 +138,14 @@ struct HomePage: View {
                         open: { MainApp.open(section: $0) })
                 }
             }
-            .environment(\.compactLayout, compact || tile.size == .compact)
+            .environment(\.compactLayout, compact || tile.dense)
         }
     }
 
-    private var background: some View {
-        DashSkin.paper(dark)
-            .overlay(alignment: .topTrailing) {
-                RadialGradient(
-                    colors: [DashSkin.accent(dark).opacity(0.08), .clear], center: .topTrailing,
-                    startRadius: 0, endRadius: 620
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .overlay(alignment: .bottomLeading) {
-                RadialGradient(
-                    colors: [DashPalette.slate(dark).opacity(0.06), .clear],
-                    center: .bottomLeading, startRadius: 0, endRadius: 520
-                )
-                .ignoresSafeArea(edges: .vertical)
-            }
-            .ignoresSafeArea(edges: .vertical)
-    }
 }
 
 enum HomeMath {
-    static let maxZones = 2
+    static let maxZones = 12
 
     static let zoneSuggestions = [
         "Europe/London", "Europe/Berlin", "Asia/Kolkata", "Asia/Tokyo", "Asia/Singapore",
@@ -306,17 +307,24 @@ private struct WorldClocksCard: View {
         zonesRaw.split(separator: ",").map(String.init).filter { TimeZone(identifier: $0) != nil }
     }
 
+    private var visibleZones: [String] {
+        Array(zoneIDs.prefix(max(0, (presentation?.tile.itemLimit ?? 5) - 1)))
+    }
+    private var canAdd: Bool {
+        zoneIDs.count < HomeMath.maxZones && presentation?.tile.showActions != false
+    }
+
     var body: some View {
         PageCard(title: "World clocks", note: "hover a clock to remove") {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 SurfaceFittedGrid(
-                    count: zoneIDs.count + 1 + (zoneIDs.count < HomeMath.maxZones ? 1 : 0),
-                    minimum: compact ? 92 : 128, gap: 16
+                    count: visibleZones.count + 1 + (canAdd ? 1 : 0),
+                    minimum: compact ? 76 : 104, gap: 16
                 ) {
                     ClockTile(
                         date: context.date, zone: TimeZone.current, label: "Local", dark: dark,
                         onRemove: nil)
-                    ForEach(zoneIDs, id: \.self) { id in
+                    ForEach(visibleZones, id: \.self) { id in
                         ClockTile(
                             date: context.date, zone: TimeZone(identifier: id)!,
                             label: HomeMath.cityName(id), dark: dark
@@ -324,7 +332,7 @@ private struct WorldClocksCard: View {
                             remove(id)
                         }
                     }
-                    if zoneIDs.count < HomeMath.maxZones {
+                    if canAdd {
                         addButton
                     }
                 }
@@ -360,7 +368,9 @@ private struct WorldClocksCard: View {
                         DashSkin.lineStrong(dark),
                         style: StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 3])
                     )
-                    .frame(width: compact ? 64 : 96, height: compact ? 64 : 96)
+                    .frame(
+                        width: UIScale.pt(compact ? 64 : 96), height: UIScale.pt(compact ? 64 : 96)
+                    )
                     .overlay {
                         Image(systemName: "plus")
                             .font(.system(size: UIScale.pt(24), weight: .light))
@@ -422,8 +432,8 @@ private struct ClockTile: View {
     @Environment(\.compactLayout) private var compact
     @State private var hovering = false
 
-    private var faceSize: CGFloat { compact ? 64 : 96 }
-    private var tileWidth: CGFloat { compact ? 92 : 112 }
+    private var faceSize: CGFloat { UIScale.pt(compact ? 64 : 96) }
+    private var tileWidth: CGFloat { compact ? 76 : 104 }
 
     private var offsetLabel: String {
         HomeMath.offsetLabel(
@@ -612,6 +622,14 @@ private struct QuickActionsCard: View {
 
     var body: some View {
         PageCard(title: "Quick actions") {
+            if actionCount == 0 {
+                Text("Enable desk and system controls in Extensions.")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                if presentation?.tile.showActions != false {
+                    Button("Choose controls") { MainApp.open(section: "extensions") }
+                        .buttonStyle(.edith(.secondary))
+                }
+            }
             LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
                 if systemEnabled {
                     tile(
