@@ -6,7 +6,12 @@ struct SurfaceEditorPane: View {
     @AppStorage(AppStorageKeys.Surfaces.editorTarget, store: SharedDefaults.store) private
         var targetRaw = "home"
     private var target: SurfaceTarget { SurfaceTarget(rawValue: targetRaw) ?? .home }
-    @State private var selected: String?
+    @AppStorage(AppStorageKeys.Surfaces.editorWidget, store: SharedDefaults.store) private
+        var selectedRaw = ""
+    private var selected: String? {
+        get { selectedRaw.isEmpty ? nil : selectedRaw }
+        nonmutating set { selectedRaw = newValue ?? "" }
+    }
     @State private var query = ""
     @State private var previewCompact = false
     @Environment(\.compactLayout) private var compact
@@ -38,10 +43,6 @@ struct SurfaceEditorPane: View {
             }.padding(PageMetrics.gutter(compact))
         }
         .id(target)
-        .onAppear {
-            selected = SharedDefaults.store.string(forKey: AppStorageKeys.Surfaces.editorWidget)
-        }
-        .onChange(of: target) { _, _ in selected = nil }
         .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
         { _ in store.reload() }
     }
@@ -67,7 +68,12 @@ struct SurfaceEditorPane: View {
 
     private var targetPicker: some View {
         EdithSegmentedPicker(
-            "Surface", selection: Binding(get: { target }, set: { targetRaw = $0.rawValue }),
+            "Surface",
+            selection: Binding(
+                get: { target },
+                set: {
+                    selected = nil; targetRaw = $0.rawValue
+                }),
             options: SurfaceTarget.allCases, label: { $0.title }
         )
         .frame(width: UIScale.pt(200))
