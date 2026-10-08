@@ -1,7 +1,6 @@
 import CryptoKit
 import Foundation
 import Testing
-import ZIPFoundation
 @testable import ExtensionMarketplace
 
 struct PackageFixture {

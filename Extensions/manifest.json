@@ -2,7 +2,7 @@
   {
     "id": "keepAwake",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -21,7 +21,7 @@
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -41,7 +41,7 @@
   {
     "id": "focusDim",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -66,7 +66,7 @@
   {
     "id": "windowSweaters",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -97,7 +97,7 @@
   {
     "id": "micMute",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -126,7 +126,7 @@
   {
     "id": "keystrokeHighlight",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -152,7 +152,7 @@
   {
     "id": "presenter",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -183,7 +183,7 @@
   {
     "id": "colorPicker",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -208,7 +208,7 @@
   {
     "id": "systemStats",
     "version": "1.0.0",
-    "hostABI": "host-e5880c1a771c585d767206d5",
+    "hostABI": "host-bd6d7e602a2e3a7075232d69",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
