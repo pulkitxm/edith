@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
@@ -97,34 +96,66 @@ export async function extensionFingerprint(root, definition, definitions) {
   return digest.digest("hex");
 }
 
+export async function planUnpublishedExtensions(
+  root,
+  definitions,
+  publishedPackages,
+) {
+  const result = [];
+  for (const definition of definitions) {
+    const fingerprint = await extensionFingerprint(
+      root,
+      definition,
+      definitions,
+    );
+    const prior = publishedPackages
+      .filter(
+        (entry) =>
+          entry.id === definition.id &&
+          entry.hostABI === definition.hostABI &&
+          entry.architecture === "arm64",
+      )
+      .sort((a, b) =>
+        a.version.localeCompare(b.version, undefined, { numeric: true }),
+      )
+      .at(-1);
+    if (prior?.sourceFingerprint === fingerprint) continue;
+    let version = definition.version;
+    if (
+      prior &&
+      version.localeCompare(prior.version, undefined, { numeric: true }) <= 0
+    ) {
+      const parts = prior.version.split(".").map(Number);
+      if (
+        parts.length !== 3 ||
+        parts.some((part) => !Number.isSafeInteger(part) || part < 0)
+      )
+        throw new Error("Invalid published version");
+      parts[2] += 1;
+      version = parts.join(".");
+    }
+    result.push({
+      id: definition.id,
+      fingerprint,
+      version,
+      tag: `extensions/${definition.id}/${fingerprint.slice(0, 20)}`,
+    });
+  }
+  return result;
+}
+
 if (import.meta.main) {
   const root = process.cwd();
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  const base = process.argv[2];
-  if (!base) throw new Error("Supply the base commit for change detection");
-  const changes = execFileSync(
-    "git",
-    ["diff", "--name-only", "-z", base, "HEAD"],
-    { encoding: "utf8" },
-  )
-    .split("\0")
-    .filter(Boolean);
-  const selected = planExtensionBuilds(definitions, changes);
-  const include = await Promise.all(
-    selected.map(async (definition) => {
-      const fingerprint = await extensionFingerprint(
-        root,
-        definition,
-        definitions,
-      );
-      return {
-        id: definition.id,
-        fingerprint,
-        tag: `extensions/${definition.id}/${fingerprint.slice(0, 20)}`,
-      };
-    }),
+  const publishedFile = process.argv[2];
+  if (!publishedFile) throw new Error("Supply the verified published catalog");
+  const published = JSON.parse(await readFile(publishedFile, "utf8"));
+  const include = await planUnpublishedExtensions(
+    root,
+    definitions,
+    published.packages,
   );
   process.stdout.write(`${JSON.stringify({ include })}\n`);
 }

@@ -134,3 +134,56 @@ describe("independent extension releases", () => {
     }
   });
 });
+
+test("publication resumes from released fingerprints after skipped workflow runs", async () => {
+  const { planUnpublishedExtensions } = await import(
+    "./extension-release-plan.mjs"
+  );
+  const root = await mkdtemp(join(tmpdir(), "extension-publication-"));
+  const definition = {
+    id: "calendar",
+    version: "1.0.0",
+    hostABI: "runtime-1",
+    inputs: ["Extensions/calendar"],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  try {
+    await mkdir(join(root, "Extensions/calendar"), { recursive: true });
+    await writeFile(join(root, "Extensions/calendar/Runtime.swift"), "first");
+    const initial = await planUnpublishedExtensions(root, [definition], []);
+    expect(initial[0].version).toBe("1.0.0");
+    const published = [
+      {
+        id: "calendar",
+        version: "1.0.0",
+        hostABI: "runtime-1",
+        architecture: "arm64",
+        sourceFingerprint: initial[0].fingerprint,
+      },
+    ];
+    expect(
+      await planUnpublishedExtensions(root, [definition], published),
+    ).toEqual([]);
+    await mkdir(join(root, "Extensions/calendar/.build"));
+    await writeFile(
+      join(root, "Extensions/calendar/.build/ignored.o"),
+      "compiler output",
+    );
+    expect(
+      await planUnpublishedExtensions(root, [definition], published),
+    ).toEqual([]);
+    await writeFile(join(root, "Extensions/calendar/Runtime.swift"), "second");
+    await writeFile(join(root, "Extensions/calendar/Runtime.swift"), "third");
+    const pending = await planUnpublishedExtensions(
+      root,
+      [definition],
+      published,
+    );
+    expect(pending[0].version).toBe("1.0.1");
+    expect(pending[0].fingerprint).not.toBe(initial[0].fingerprint);
+    expect(pending[0].tag).not.toBe(initial[0].tag);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
