@@ -49,7 +49,13 @@ struct HerdrNewAgentPopup: View {
                 .disabled(model.launching)
         }
         .frame(width: PresentationMetrics.width(440), height: PresentationMetrics.height(380))
-        .transientPresentation(dismissible: !model.launching)
+        .transientPresentation(
+            dismissible: !model.launching,
+            onEscape: {
+                if !model.back() { dismiss() }
+                fieldFocused = true
+            }
+        )
         .onAppear { fieldFocused = true }
         .onChange(of: model.step) { _, step in
             selectionIndex = 0
@@ -99,7 +105,6 @@ struct HerdrNewAgentPopup: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.edith(.iconOnly))
-            .keyboardShortcut(.cancelAction)
             .disabled(model.launching)
             .accessibilityLabel("Close new agent")
         }
