@@ -203,7 +203,7 @@ import Testing
         #expect(!sheet.contains("This extension is available throughout Edith."))
         #expect(!sheet.contains("Enable this extension to use its controls and workflows."))
         #expect(!sheet.contains(".disabled(!enabled)"))
-        #expect(sheet.contains("disabled: marketplace.downloadingID == entry.id"))
+        #expect(sheet.contains("marketplace.downloadingID != nil"))
         #expect(sheet.contains("entry.defaultsKey == LidAwakeState.enabledKey"))
         #expect(!sheet.contains(".disabled(lidAwakeOperations.applying)"))
         #expect(sheet.contains("Button(\"Set up required tools...\")"))
