@@ -6,6 +6,35 @@ import Testing
 
 @MainActor
 @Suite struct HerdrSpaceWindowModelTests {
+    @Test func removingAnAgentKeepsItsSplitTerminalsAndOtherTabs() throws {
+        let model = makeModel()
+        let tab = try #require(model.selectedTab)
+        tab.split(.right)
+        let focused = try #require(tab.focusedPane)
+        let terminal = try #require(tab.content(for: focused)).holder
+        let other = model.tabs[1]
+
+        model.removeAgent(localAgent.id)
+
+        #expect(model.tabs.count == 2)
+        #expect(tab.agentID == nil)
+        #expect(tab.title == "Terminal")
+        #expect(tab.paneCount == 1)
+        #expect(tab.holders.contains { $0 === terminal })
+        #expect(model.tabs[1] === other)
+    }
+
+    @Test func removingTheLastAgentLeavesNoStaleTab() {
+        let model = HerdrSpaceWindowModel(
+            space: HerdrAgentSpace(id: "sample", title: "Sample", agents: [localAgent]),
+            store: makeStore())
+
+        model.removeAgent(localAgent.id)
+
+        #expect(model.tabs.isEmpty)
+        #expect(model.selected == nil)
+    }
+
     @Test func anEmptySpaceStartsWithOneLocalTerminal() {
         let model = HerdrSpaceWindowModel(
             space: HerdrAgentSpace(id: "empty", title: "empty", agents: []),

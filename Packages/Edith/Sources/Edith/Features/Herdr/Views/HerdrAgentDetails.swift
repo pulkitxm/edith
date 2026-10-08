@@ -66,7 +66,7 @@ struct HerdrAgentDetails: View {
     private var agent: HerdrAgent { tab.agent }
     private var command: String { HerdrAttachCommand.line(for: agent) }
 
-    var body: some View { sidebar }
+    var body: some View { sidebar.herdrAgentContextMenu(agent, store: store) }
 
     private var sidebar: some View {
         VStack(spacing: 0) {

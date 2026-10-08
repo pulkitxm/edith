@@ -144,6 +144,7 @@ struct HerdrPaneHeader: View {
     private var dark: Bool { scheme == .dark }
     private var agent: HerdrAgent { session.agent }
     private var zoomed: Bool { tab.zoomed == session.id }
+    @State private var actions = HerdrAgentActions()
 
     var body: some View {
         HStack(spacing: UIScale.pt(6)) {
@@ -195,7 +196,12 @@ struct HerdrPaneHeader: View {
         .background(focused ? DashSkin.accent(dark).opacity(0.1) : DashSkin.paper2(dark))
         .contentShape(Rectangle())
         .herdrDraggable(.agent(agent), simultaneous: true)
-        .contextMenu { menuItems }
+        .contextMenu {
+            HerdrAgentMenu(agent: agent, store: store, actions: actions)
+            Divider()
+            menuItems
+        }
+        .modifier(HerdrAgentActionDialogs(actions: actions, store: store))
     }
 
     @ViewBuilder
@@ -230,6 +236,8 @@ struct HerdrPaneHeader: View {
 
     private var menu: some View {
         Menu {
+            HerdrAgentMenu(agent: agent, store: store, actions: actions)
+            Divider()
             menuItems
         } label: {
             Image(systemName: "ellipsis")
@@ -250,11 +258,6 @@ struct HerdrPaneHeader: View {
                 store.toggleZoom(session.id)
             }
         }
-        Button("Move to New Tab") {
-            withAnimation(store.layoutAnimation) {
-                store.moveToNewTab(session.id)
-            }
-        }
         let others = tab.agentIDs.filter { $0 != session.id }.compactMap(store.session)
         if !others.isEmpty {
             Menu("Swap With") {
@@ -268,7 +271,7 @@ struct HerdrPaneHeader: View {
             }
         }
         Divider()
-        Button("Close", role: .destructive) {
+        Button("Close Pane") {
             withAnimation(store.layoutAnimation) {
                 store.close(session.id)
             }

@@ -15,6 +15,23 @@ import Testing
         #expect(local.session.isEmpty)
     }
 
+    @Test func namedSessionsHaveDistinctTerminalsAndLaunchTheCorrectSession() {
+        let local = HerdrHostSnapshot.local(herdrPresent: true)
+        let first = HerdrMachineTerminal.agent(for: local, session: "first")
+        let second = HerdrMachineTerminal.agent(for: local, session: "second")
+        #expect(first.id != second.id)
+        #expect(first.id != HerdrMachineTerminal.agent(for: local).id)
+        #expect(HerdrMachineTerminal.arguments(for: first) == ["--session", "first"])
+        #expect(
+            HerdrMachineTerminal.agent(for: local, session: "default").id
+                == HerdrMachineTerminal.agent(for: local).id)
+        let remote = HerdrMachineTerminal.agent(for: host, session: "work session")
+        #expect(
+            HerdrMachineTerminal.arguments(for: remote)
+                == ["--remote", "tuf-wired", "--session", "work session"])
+        #expect(HerdrMachineTerminal.line(for: remote).contains("'work session'"))
+    }
+
     @Test func theLocalTerminalJustRunsHerdr() {
         let local = HerdrMachineTerminal.agent(for: .local(herdrPresent: true))
         #expect(HerdrMachineTerminal.arguments(for: local).isEmpty)

@@ -7,11 +7,12 @@ public enum HerdrAttachCommand {
         guard !agent.machineIsLocal, let target = agent.sshTarget, !target.isEmpty else {
             return attach
         }
-        return "ssh -tt \(target) -- \(attach)"
+        return "ssh -tt \(ShellQuote.quote(target)) -- \(attach)"
     }
 
     public static func herdrLine(session: String, pane: String) -> String {
-        "herdr --session \(session) agent attach \(pane) --takeover"
+        (["herdr"] + arguments(session: session, pane: pane)).map(ShellQuote.quote).joined(
+            separator: " ")
     }
 
     public static func remoteShellLine(

@@ -102,6 +102,7 @@ private struct HerdrDetachedView: View {
             if let tab = store.detachedTab(id: agentID) {
                 HerdrSessionView(store: store, tab: tab, launchEnabled: launchEnabled)
                     .environment(\.terminalLaunchEnabled, launchEnabled)
+                    .herdrAgentContextMenu(tab.agent, store: store)
             }
         }
         .agentTopic(.sessions, as: SessionsSnapshot.self) { store.adopt($0) }

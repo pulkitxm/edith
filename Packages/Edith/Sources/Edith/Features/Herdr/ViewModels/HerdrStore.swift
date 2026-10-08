@@ -90,7 +90,7 @@ final class HerdrStore {
             TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
         ) -> Void
 
-    static let shared = HerdrStore()
+    static let shared = HerdrStore(workspacePresenter: { MainWindow.showHerdr() })
     static let boardID = "board"
 
     var hosts: [HerdrHostSnapshot] = [] {
@@ -249,7 +249,9 @@ final class HerdrStore {
     private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
     private(set) var agentStartupMessages: [String: String] = [:]
     @ObservationIgnored private var agentStartupTasks: [String: Task<Void, Never>] = [:]
+    private let agentFocuser: @Sendable (String, String, Machine?) async throws -> Void
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
+    private let workspacePresenter: @MainActor () -> Void
     private let machinesProvider: () -> [Machine]
     private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
@@ -290,12 +292,16 @@ final class HerdrStore {
             {
                 try await HerdrPaneOperations.terminalID(session: $0, pane: $1, on: $2)
             },
+        agentFocuser: @escaping @Sendable (String, String, Machine?) async throws -> Void = {
+            try await HerdrPaneOperations.focusAgent(session: $0, pane: $1, on: $2)
+        },
         machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
         },
         terminalPanels: HerdrTerminalPanels? = nil,
-        messaging: HerdrMessaging? = nil
+        messaging: HerdrMessaging? = nil,
+        workspacePresenter: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
         sidebarAgentOrder = HerdrSidebarOrder(
@@ -310,6 +316,8 @@ final class HerdrStore {
         self.newAgentPaneCreator = newAgentPaneCreator
         self.agentStarter = agentStarter
         self.terminalIDResolver = terminalIDResolver
+        self.agentFocuser = agentFocuser
+        self.workspacePresenter = workspacePresenter
         self.machinesProvider = machinesProvider
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
@@ -707,7 +715,7 @@ final class HerdrStore {
     private func machine(for agent: HerdrAgent) -> Machine? {
         agent.machineIsLocal
             ? nil
-            : MachineRegistry.machines().first { $0.id.uuidString == agent.machineID }
+            : machinesProvider().first { $0.id.uuidString == agent.machineID }
     }
 
     func session(_ agentID: String) -> HerdrOpenTab? {
@@ -738,6 +746,23 @@ final class HerdrStore {
     func open(_ agent: HerdrAgent) {
         open(agent, showing: nil)
     }
+
+    func openInHerdrTerminal(_ agent: HerdrAgent) async throws {
+        guard !agent.isTerminal, let host = hosts.first(where: { $0.id == agent.machineID }) else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
+        let machine = machine(for: agent)
+        guard agent.machineIsLocal || machine != nil else {
+            throw HerdrQuinjetError.machineUnavailable
+        }
+        try await agentFocuser(agent.session, agent.pane, machine)
+        let terminal = HerdrMachineTerminal.agent(for: host, session: agent.session)
+        if HerdrAgentWindow.raise(terminal.id) { return }
+        open(terminal)
+        revealWorkspaceWindow()
+    }
+
+    func revealWorkspaceWindow() { workspacePresenter() }
 
     func openInNewTab(_ agent: HerdrAgent) {
         open(agent)
@@ -1947,7 +1972,8 @@ final class HerdrStore {
                 let connection = try await connection(for: machine)
                 if await connection.remotePlatform == .windows {
                     return HerdrMachineTerminal.windowsLaunchRequest(
-                        connection: connection, environment: environment)
+                        connection: connection, environment: environment, session: tab.agent.session
+                    )
                 }
             }
             return HerdrMachineTerminal.launchRequest(

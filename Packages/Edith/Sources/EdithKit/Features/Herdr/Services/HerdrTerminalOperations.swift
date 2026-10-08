@@ -5,23 +5,27 @@ public enum HerdrMachineTerminal {
 
     public static func id(machineID: String) -> String { "\(machineID)|terminal" }
 
-    public static func agent(for host: HerdrHostSnapshot) -> HerdrAgent {
-        HerdrAgent(
-            id: id(machineID: host.id), machineID: host.id, machineName: host.name,
-            machineIsLocal: host.isLocal, sshTarget: host.sshTarget, session: "",
-            pane: "", kind: HerdrKind.terminalLabel, status: .unknown, title: title,
+    public static func agent(for host: HerdrHostSnapshot, session: String = "") -> HerdrAgent {
+        let session = session == "default" ? "" : session
+        return HerdrAgent(
+            id: id(machineID: host.id) + (session.isEmpty ? "" : "|\(session)"), machineID: host.id,
+            machineName: host.name,
+            machineIsLocal: host.isLocal, sshTarget: host.sshTarget, session: session,
+            pane: "", kind: HerdrKind.terminalLabel, status: .unknown,
+            title: session.isEmpty ? title : "\(title) · \(session)",
             workspace: "", cwd: "", category: .terminal)
     }
 
     public static func arguments(for agent: HerdrAgent) -> [String] {
+        let session = agent.session.isEmpty ? [] : ["--session", agent.session]
         guard !agent.machineIsLocal, let target = agent.sshTarget, !target.isEmpty else {
-            return []
+            return session
         }
-        return ["--remote", target]
+        return ["--remote", target] + session
     }
 
     public static func line(for agent: HerdrAgent) -> String {
-        (["herdr"] + arguments(for: agent)).joined(separator: " ")
+        (["herdr"] + arguments(for: agent)).map(ShellQuote.quote).joined(separator: " ")
     }
 
     public static func shellLine(for agent: HerdrAgent) -> String {
@@ -56,13 +60,14 @@ public enum HerdrMachineTerminal {
     }
 
     public static func windowsLaunchRequest(
-        connection: SSHConnection, environment: [String]
+        connection: SSHConnection, environment: [String], session: String = ""
     ) -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
             arguments: connection.terminalArguments(
                 remoteCommand: remoteHerdrCommand(
-                    arguments: [], platform: .windows, interactive: true)),
+                    arguments: session.isEmpty ? [] : ["--session", session],
+                    platform: .windows, interactive: true)),
             environment: unnested(environment + connection.terminalEnvironment()))
     }
 }

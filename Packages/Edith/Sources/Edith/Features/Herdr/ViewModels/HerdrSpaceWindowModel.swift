@@ -161,6 +161,17 @@ final class HerdrSpaceTabModel: Identifiable {
         return true
     }
 
+    func removeAgent(_ id: String) -> Bool {
+        for pane in layout.root.panes {
+            guard content(for: pane)?.agent?.id == id else { continue }
+            for tab in pane.tabs { contents.removeValue(forKey: tab.id)?.stop() }
+            guard layout.paneCount > 1 else { return false }
+            layout.closePane(pane.id)
+        }
+        refreshTitle()
+        return true
+    }
+
     @discardableResult
     func cyclePane(backwards: Bool) -> Bool {
         let panes = layout.root.panes
@@ -207,6 +218,7 @@ final class HerdrSpaceTabModel: Identifiable {
             title = agent.agent.title
             return
         }
+        title = "Terminal"
     }
 }
 
@@ -314,6 +326,13 @@ final class HerdrSpaceWindowModel {
         guard number >= 1, number <= 9, !tabs.isEmpty else { return false }
         selected = tabs[min(number - 1, tabs.count - 1)].id
         return true
+    }
+
+    func removeAgent(_ id: String) {
+        for tab in tabs.filter({ $0.agentID == id }) {
+            if !tab.removeAgent(id) { tabs.removeAll { $0.id == tab.id } }
+        }
+        if !tabs.contains(where: { $0.id == selected }) { selected = tabs.first?.id }
     }
 
     @discardableResult
