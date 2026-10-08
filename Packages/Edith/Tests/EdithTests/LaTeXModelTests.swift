@@ -411,6 +411,52 @@ import WebKit
         }
     }
 
+    @Test func completionMenuOwnsItsWheelScrolling() async throws {
+        var text = (1...120).map { "\\section{Section \($0)}" }.joined(separator: "\n")
+        let controls = LaTeXEditorControls()
+        let host = try auditHost(
+            LaTeXSourceEditor(
+                text: Binding(get: { text }, set: { text = $0 }), controls: controls,
+                dark: false, editable: true), size: CGSize(width: 700, height: 400))
+        let window = TestWindowHost.window(contentRect: host.bounds)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.close() }
+        try await waitForEditor(controls)
+        let view = try #require(controls.webView)
+        _ = try await view.callAsyncJavaScript(
+            "window.edithEditor.command('focus'); document.execCommand('insertText', false, inserted); document.querySelector('.cm-content').dispatchEvent(new KeyboardEvent('keydown', {key:' ',code:'Space',ctrlKey:true,bubbles:true,cancelable:true}));",
+            arguments: ["inserted": "\\"], in: nil, contentWorld: .page)
+        func menu() async throws -> [String: Double]? {
+            try await view.callAsyncJavaScript(
+                "const list = document.querySelector('.cm-tooltip-autocomplete ul'); if (!list || list.scrollHeight <= list.clientHeight) return null; Object.assign(list.parentElement.style, {position:'fixed',left:'40px',top:'40px'}); const r = list.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2,top:list.scrollTop,source:document.querySelector('.cm-scroller').scrollTop};",
+                arguments: [:], in: nil, contentWorld: .page) as? [String: Double]
+        }
+        var before: [String: Double]?
+        for _ in 0..<100 {
+            before = try await menu()
+            if before != nil { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let position = try #require(before)
+        try sendWheel(
+            view, window: window,
+            point: NSPoint(
+                x: position["x"]!,
+                y: view.isFlipped ? position["y"]! : view.bounds.height - position["y"]!),
+            direction: -1)
+        var after: [String: Double]?
+        for _ in 0..<100 {
+            after = try await menu()
+            if let after, after["top"]! > position["top"]! { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let result = try #require(after)
+        #expect(result["top"]! > position["top"]!)
+        #expect(result["source"] == position["source"])
+    }
+
     private func scrollEditor(_ view: WKWebView, window: NSWindow) async throws -> [String: Double]
     {
         func metrics() async throws -> [String: Double] {
@@ -427,7 +473,23 @@ import WebKit
                 ? after["top"]! > before["top"]! && after["left"]! > before["left"]!
                 : after["top"]! < before["top"]! && after["left"]! < before["left"]!
         }
-        let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+        try sendWheel(
+            view, window: window,
+            point: NSPoint(x: view.bounds.midX, y: view.bounds.midY), direction: direction)
+        var after = before
+        for _ in 0..<100 {
+            after = try await metrics()
+            if moved(after) { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(moved(after))
+        return after
+    }
+
+    private func sendWheel(
+        _ view: WKWebView, window: NSWindow, point: NSPoint, direction: Int32
+    ) throws {
+        let windowPoint = view.convert(point, to: nil)
         let cgEvent = try #require(
             CGEvent(
                 scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: direction * 700,
@@ -441,17 +503,9 @@ import WebKit
         let event = try #require(
             decoder.decodeObject(forKey: NSKeyedArchiveRootObjectKey) as? EditorWheelEvent)
         event.target = window
-        event.point = point
+        event.point = windowPoint
         event.number = window.windowNumber
         NSApp.sendEvent(event)
-        var after = before
-        for _ in 0..<100 {
-            after = try await metrics()
-            if moved(after) { break }
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        #expect(moved(after))
-        return after
     }
 
     @objc(EdithEditorWheelEvent) private final class EditorWheelEvent: NSEvent {
