@@ -56,7 +56,7 @@ private actor AppServicesCallProbe {
             AppStorageKeys.General.preventSleep, AppStorageKeys.Tabs.calendarEnabled,
         ]
         let saved = keys.map { defaults.object(forKey: $0) }
-        let services = AppServices()
+        let services = AppServices(keepAwakeFactory: { TestKeepAwakeService(defaults: defaults) })
         defer {
             services.keepAwake?.shutdown()
             services.system?.shutdown()
@@ -294,4 +294,23 @@ private actor AppServicesCallProbe {
             defaults.removeObject(forKey: key)
         }
     }
+}
+
+@MainActor
+private final class TestKeepAwakeService: KeepAwakeService {
+    private let defaults: UserDefaults
+    private(set) var preventingSleep = false
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
+        syncPreventSleep()
+    }
+
+    func syncPreventSleep() {
+        preventingSleep =
+            defaults.bool(forKey: AppStorageKeys.General.keepAwakeEnabled)
+            && defaults.bool(forKey: AppStorageKeys.General.preventSleep)
+    }
+
+    func shutdown() { preventingSleep = false }
 }

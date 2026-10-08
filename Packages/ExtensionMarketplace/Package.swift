@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "ExtensionMarketplace",
     platforms: [.macOS(.v14)],
-    products: [.library(name: "ExtensionMarketplace", targets: ["ExtensionMarketplace"])],
+    products: [.library(name: "ExtensionMarketplace", type: .dynamic, targets: ["ExtensionMarketplace"])],
     dependencies: [.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")],
     targets: [
         .target(
