@@ -2,7 +2,7 @@
   {
     "id": "keepAwake",
     "version": "1.0.0",
-    "hostABI": "runtime-1",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -21,7 +21,7 @@
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "runtime-1",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -37,5 +37,205 @@
       "scripts/build-extension-package.mjs"
     ],
     "dependencies": []
+  },
+  {
+    "id": "focusDim",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/focusDim/Helper/Services/FocusDimEngine.swift",
+        "Extensions/focusDim/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/focusDim"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
+  },
+  {
+    "id": "windowSweaters",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/windowSweaters/Helper/Services/SkyLight.swift",
+        "Extensions/windowSweaters/Helper/Services/SweaterBorder.swift",
+        "Extensions/windowSweaters/Helper/Services/SweaterEngine.swift",
+        "Extensions/windowSweaters/Helper/Services/SweaterReconciler.swift",
+        "Extensions/windowSweaters/Helper/Services/SweaterRuntimeSettings.swift",
+        "Extensions/windowSweaters/Helper/Services/SweaterWindowServer.swift",
+        "Extensions/windowSweaters/Helper/Services/SweaterWindowTracker.swift",
+        "Extensions/windowSweaters/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/windowSweaters"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
+  },
+  {
+    "id": "micMute",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/micMute/Helper/Services/MicMuteEngine.swift",
+        "Extensions/micMute/Runtime.swift",
+        "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemMenu.swift",
+        "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemPanel.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/micMute"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport",
+      "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemMenu.swift",
+      "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemPanel.swift"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
+  },
+  {
+    "id": "keystrokeHighlight",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/keystrokeHighlight/Helper/Services/KeystrokeHighlightRuntime.swift",
+        "Extensions/keystrokeHighlight/Helper/Views/KeystrokeHighlightOverlay.swift",
+        "Extensions/keystrokeHighlight/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/keystrokeHighlight"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
+  },
+  {
+    "id": "presenter",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/presenter/Helper/Models/PresenterDebouncer.swift",
+        "Extensions/presenter/Helper/Models/PresenterRules.swift",
+        "Extensions/presenter/Helper/Models/PresenterSignals.swift",
+        "Extensions/presenter/Helper/Services/PresenterDetector.swift",
+        "Extensions/presenter/Helper/Services/PresenterJevCheck.swift",
+        "Extensions/presenter/Helper/Services/PresenterPauseGate.swift",
+        "Extensions/presenter/Helper/Services/PresenterScanner.swift",
+        "Extensions/presenter/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/presenter"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
+  },
+  {
+    "id": "colorPicker",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/colorPicker/Helper/ViewModels/ColorPickerStore.swift",
+        "Extensions/colorPicker/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/colorPicker"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
+  },
+  {
+    "id": "systemStats",
+    "version": "1.0.0",
+    "hostABI": "host-ce32223e8da3c3557bb65cfa",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/systemStats/Helper/SystemStatsStatusItem.swift",
+        "Extensions/systemStats/Runtime.swift",
+        "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemMenu.swift",
+        "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemPanel.swift",
+        "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemSizing.swift",
+        "Packages/Edith/Sources/EdithHelper/Core/Navigation/MenuBarTintMode.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/systemStats"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/extension-host-build.mjs",
+      "Packages/Edith/Sources/EdithKit",
+      "Packages/Edith/Sources/EdithCore",
+      "Packages/Edith/Sources/EdithCameraSupport",
+      "Packages/Edith/Sources/EdithLidAwakeSupport",
+      "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemMenu.swift",
+      "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemPanel.swift",
+      "Packages/Edith/Sources/EdithHelper/Core/Navigation/StatusItemSizing.swift",
+      "Packages/Edith/Sources/EdithHelper/Core/Navigation/MenuBarTintMode.swift"
+    ],
+    "dependencies": [],
+    "usesHostFramework": true
   }
 ]

@@ -36,7 +36,7 @@ import Testing
         _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
             [package], repository: "pulkitxm/edith")
         let runtime = ExtensionBundleRuntime(
-            store: fixture.store, role: .helper, hostABI: "runtime-1",
+            store: fixture.store, role: .helper, hostABI: package.hostABI,
             verify: { bundle in
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")

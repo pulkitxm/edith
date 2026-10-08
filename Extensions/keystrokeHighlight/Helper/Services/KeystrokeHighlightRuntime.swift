@@ -78,7 +78,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
             guard type == .keyDown, !IsSecureEventInputEnabled() else {
                 return Unmanaged.passUnretained(event)
             }
-            guard let labels = KeystrokeHighlightRuntime.labels(from: event) else {
+            guard let labels = KeystrokeEventLabelReader.labels(from: event) else {
                 return Unmanaged.passUnretained(event)
             }
             Task { @MainActor in
@@ -172,31 +172,4 @@ final class KeystrokeHighlightRuntime: FeatureModule {
         SharedDefaults.store.set(error, forKey: AppStorageKeys.KeystrokeHighlight.runtimeError)
     }
 
-    nonisolated static func labels(from event: CGEvent) -> [String]? {
-        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
-        let characters = NSEvent(cgEvent: event)?.charactersIgnoringModifiers
-        return KeystrokeLabelResolver.labels(
-            keyCode: keyCode, characters: characters,
-            unmodifiedCharacters: unmodifiedCharacters(keyCode: keyCode),
-            modifiers: modifiers(from: event.flags))
-    }
-
-    nonisolated static func modifiers(from flags: CGEventFlags) -> KeystrokeModifiers {
-        var modifiers: KeystrokeModifiers = []
-        if flags.contains(.maskControl) { modifiers.insert(.control) }
-        if flags.contains(.maskAlternate) { modifiers.insert(.option) }
-        if flags.contains(.maskShift) { modifiers.insert(.shift) }
-        if flags.contains(.maskCommand) { modifiers.insert(.command) }
-        if flags.contains(.maskSecondaryFn) { modifiers.insert(.function) }
-        return modifiers
-    }
-
-    private nonisolated static func unmodifiedCharacters(keyCode: UInt16) -> String? {
-        guard
-            let event = CGEvent(
-                keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: true)
-        else { return nil }
-        event.flags = []
-        return NSEvent(cgEvent: event)?.charactersIgnoringModifiers
-    }
 }

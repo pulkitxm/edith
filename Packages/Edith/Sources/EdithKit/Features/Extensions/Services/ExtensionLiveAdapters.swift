@@ -99,7 +99,17 @@ public enum ExtensionLiveAdapters {
             CLIToolEnvironment.executable(named: $0)
         }
     ) async -> ExtensionAdapterReadiness? {
-        switch id {
+        if MarketplaceServices.downloadableIDs.contains(id) {
+            guard MarketplaceServices.installedPackage(id: id) != nil else {
+                return .uninstalled("Download this extension from Extensions before enabling it.")
+            }
+            if let failure = defaults.string(forKey: "extension.\(id).runtimeError"),
+                !failure.isEmpty
+            {
+                return .failed(failure)
+            }
+        }
+        return switch id {
         case "blitztree":
             .ready("The built-in disk scanner is ready. Choose a folder in BlitzTree.")
         case "plugins":

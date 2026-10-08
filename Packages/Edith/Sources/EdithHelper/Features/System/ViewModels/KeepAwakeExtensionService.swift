@@ -16,7 +16,15 @@ final class KeepAwakeExtensionService: KeepAwakeService {
 
     static func make() -> KeepAwakeExtensionService? {
         guard MarketplaceServices.installedPackage(id: "keepAwake") != nil else { return nil }
-        return try? KeepAwakeExtensionService(runtime: MarketplaceServices.helperRuntime)
+        do {
+            let service = try KeepAwakeExtensionService(runtime: MarketplaceServices.helperRuntime)
+            SharedDefaults.store.removeObject(forKey: "extension.keepAwake.runtimeError")
+            return service
+        } catch {
+            SharedDefaults.store.set(
+                error.localizedDescription, forKey: "extension.keepAwake.runtimeError")
+            return nil
+        }
     }
 
     init(runtime: ExtensionBundleRuntime) throws {

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
 
 export async function buildExtensionPackage({
@@ -29,6 +30,9 @@ export async function buildExtensionPackage({
   await mkdir(staging, { recursive: true });
   const payload = resolve(staging, id);
   await mkdir(payload);
+  const hostProducts = definition.usesHostFramework
+    ? (process.env.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
+    : undefined;
   if (definition.nativePackage) {
     execFileSync(
       "swift",
@@ -116,6 +120,17 @@ export async function buildExtensionPackage({
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}.0`,
         ...sources.map((path) => resolve(root, path)),
+        ...(hostProducts
+          ? [
+              "-swift-version",
+              "5",
+              "-I",
+              resolve(hostProducts, "Modules"),
+              "-L",
+              hostProducts,
+              "-lEdithShared",
+            ]
+          : []),
         ...nativeFlags,
         "-Xlinker",
         "-install_name",
@@ -126,6 +141,22 @@ export async function buildExtensionPackage({
       ],
       { stdio: "inherit" },
     );
+    if (hostProducts) {
+      const dependencies = execFileSync("otool", ["-L", executable], {
+        encoding: "utf8",
+      });
+      const shared = dependencies
+        .split("\n")
+        .map((line) => line.trim().split(" ")[0])
+        .find((path) => path.endsWith("/libEdithShared.dylib"));
+      if (!shared) throw new Error("Missing host framework linkage");
+      execFileSync("install_name_tool", [
+        "-change",
+        shared,
+        "@rpath/EdithShared.framework/Versions/A/EdithShared",
+        executable,
+      ]);
+    }
     const info = {
       CFBundleIdentifier: `com.pulkit.edith.extensions.${id}.${role}`,
       CFBundleName: id,

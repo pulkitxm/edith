@@ -2,7 +2,7 @@ import EdithKit
 import Foundation
 import Testing
 
-@testable import EdithHelper
+@testable import PresenterExtension
 
 final class PresenterBox<Value>: @unchecked Sendable {
     private let lock = NSLock()

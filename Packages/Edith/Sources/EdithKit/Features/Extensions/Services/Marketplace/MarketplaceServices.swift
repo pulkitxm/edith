@@ -3,7 +3,10 @@ import ExtensionMarketplace
 import Foundation
 
 public enum MarketplaceServices {
-    public static let downloadableIDs: Set<String> = ["keepAwake", "audioMixer"]
+    public static let downloadableIDs: Set<String> = [
+        "keepAwake", "audioMixer", "focusDim", "windowSweaters", "micMute", "keystrokeHighlight",
+        "presenter", "colorPicker", "systemStats",
+    ]
     public static var store: ExtensionPackageStore {
         ExtensionPackageStore(
             root: AppDirectories.current.configuration.appendingPathComponent("Extensions"))

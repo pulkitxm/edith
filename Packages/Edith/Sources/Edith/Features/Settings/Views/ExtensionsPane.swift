@@ -261,6 +261,19 @@ struct ExtensionsPane: View {
     private func setSuiteEnabled(_ newValue: Bool, for suite: SuiteDescriptor) {
         SuiteEnablement.setEnabled(newValue, suite: suite.id)
         ExtensionMutationCenter.application.environment.announceChange()
+        if newValue {
+            Task {
+                for entry in ExtensionRegistry.entries
+                where entry.suite == suite.id && entry.isSelected(in: SharedDefaults.store)
+                    && MarketplaceServices.downloadableIDs.contains(entry.id)
+                    && marketplace.installedPackage(for: entry.id) == nil
+                {
+                    if await marketplace.download(id: entry.id) {
+                        ExtensionMutationCenter.application.environment.announceChange()
+                    }
+                }
+            }
+        }
     }
 
     private var gridColumns: [GridItem] {

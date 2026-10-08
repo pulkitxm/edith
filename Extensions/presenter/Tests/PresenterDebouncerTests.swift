@@ -1,5 +1,5 @@
 import Testing
-@testable import EdithHelper
+@testable import PresenterExtension
 
 @Suite struct PresenterDebouncerTests {
     @Test func turnsOnAtFirstHit() {

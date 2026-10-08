@@ -67,7 +67,7 @@ final class NotchShelfController: FeatureModule {
     var activeTab: NotchTab = .home
     private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
-    private weak var colorPickerStore: ColorPickerStore?
+    private weak var colorPickerStore: DownloadedHelperService?
     private(set) var canPickColor = false
     private weak var lidAwakeEngine: LidAwakeEngine?
     private(set) var canToggleLidAwake = false
@@ -962,7 +962,7 @@ final class NotchShelfController: FeatureModule {
         if isExpanded { syncFrames() }
     }
 
-    func attachColorPicker(_ store: ColorPickerStore?) {
+    func attachColorPicker(_ store: DownloadedHelperService?) {
         colorPickerStore = store
         canPickColor = store != nil
     }

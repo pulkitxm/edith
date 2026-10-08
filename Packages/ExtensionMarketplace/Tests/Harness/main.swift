@@ -71,7 +71,8 @@ struct MarketplaceHarness {
             let catalog = try await client.refresh().catalog
             _ = try await installer.install(
                 catalog.installationPlan(
-                    for: operation == "voice" ? "audioMixer" : "keepAwake", hostABI: "runtime-1",
+                    for: operation == "voice" ? "audioMixer" : "keepAwake",
+                    hostABI: MarketplaceConfiguration.hostABI,
                     architecture: "arm64",
                     systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
                 repository: "pulkitxm/edith")
@@ -79,7 +80,8 @@ struct MarketplaceHarness {
         if operation == "voice" {
             let library = try ExtensionNativeLibrary.load(
                 id: "audioMixer", store: store,
-                hostABI: "runtime-1", verify: ExtensionCodeSignature.verifyDevelopment)
+                hostABI: MarketplaceConfiguration.hostABI,
+                verify: ExtensionCodeSignature.verifyDevelopment)
             typealias Create =
                 @convention(c) (
                     UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafeMutablePointer<CChar>?, Int
@@ -96,7 +98,7 @@ struct MarketplaceHarness {
             return
         }
         let runtime = ExtensionBundleRuntime(
-            store: store, role: .helper, hostABI: "runtime-1",
+            store: store, role: .helper, hostABI: MarketplaceConfiguration.hostABI,
             verify: ExtensionCodeSignature.verifyDevelopment)
         try runtime.start(id: "keepAwake", context: ["defaultsSuite": suite])
         let initial = try runtime.snapshot(id: "keepAwake")!
@@ -104,7 +106,8 @@ struct MarketplaceHarness {
             let catalog = try await client.refresh().catalog
             _ = try await installer.install(
                 catalog.installationPlan(
-                    for: operation == "voice" ? "audioMixer" : "keepAwake", hostABI: "runtime-1",
+                    for: operation == "voice" ? "audioMixer" : "keepAwake",
+                    hostABI: MarketplaceConfiguration.hostABI,
                     architecture: "arm64",
                     systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
                 repository: "pulkitxm/edith")
@@ -120,7 +123,8 @@ struct MarketplaceHarness {
             "loadedVersion": initial.version, "activeAfterStop": final.active,
             "restartRequired": final.restartRequired,
             "installedVersion": try store.installedPackage(
-                id: "keepAwake", hostABI: "runtime-1", architecture: "arm64")!.version,
+                id: "keepAwake", hostABI: MarketplaceConfiguration.hostABI, architecture: "arm64")!
+                .version,
         ]
         print(
             String(
