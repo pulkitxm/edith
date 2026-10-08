@@ -3,6 +3,7 @@ import SwiftUI
 public struct AgentActivityCard: View {
     private let tile: SurfaceTile
     private let active: Bool
+    private let allApprovals: Bool
     private let fixture: AgentActivitySnapshot?
     private let fixtureTerminals: SessionsSnapshot?
     @State private var monitor: AgentActivityMonitor
@@ -10,10 +11,12 @@ public struct AgentActivityCard: View {
 
     @MainActor public init(
         tile: SurfaceTile, active: Bool = true, activity: AgentActivitySnapshot? = nil,
-        terminals: SessionsSnapshot? = nil, monitor: AgentActivityMonitor? = nil
+        terminals: SessionsSnapshot? = nil, monitor: AgentActivityMonitor? = nil,
+        allApprovals: Bool = false
     ) {
         self.tile = tile
         self.active = active
+        self.allApprovals = allApprovals
         fixture = activity
         fixtureTerminals = terminals
         _monitor = State(initialValue: monitor ?? .shared)
@@ -28,6 +31,10 @@ public struct AgentActivityCard: View {
             activity: snapshot, terminals: terminals,
             tile: tile, now: fixture?.refreshedAt ?? monitor.now,
             observedAt: fixture == nil ? monitor.observedAt : [:])
+    }
+
+    private var approvals: [AgentApprovalRequest] {
+        allApprovals ? snapshot.approvals : presentation.approvals
     }
 
     public var body: some View {
@@ -56,14 +63,14 @@ public struct AgentActivityCard: View {
                 LoadingIndicator()
             } else {
                 metrics
-                if tile.shows("approvals"), !presentation.approvals.isEmpty {
-                    ForEach(Array(presentation.approvals.prefix(tile.itemLimit))) { request in
+                if tile.shows("approvals"), !approvals.isEmpty {
+                    ForEach(Array(approvals.prefix(tile.itemLimit))) { request in
                         AgentApprovalCard(
                             request: request, monitor: monitor, dense: tile.dense,
                             showsActions: tile.showActions && fixture == nil)
                     }
-                    if presentation.approvals.count > tile.itemLimit {
-                        Button("View all \(presentation.approvals.count) requests") {
+                    if approvals.count > tile.itemLimit {
+                        Button("View all \(approvals.count) requests") {
                             MainApp.openSettings(tab: "agentActivity")
                         }
                         .font(.edithText(.caption)).buttonStyle(.edith(.borderless))
@@ -72,7 +79,7 @@ public struct AgentActivityCard: View {
                 if tile.showDetails, tile.shows("sessions") {
                     ForEach(Array(presentation.rows.prefix(tile.itemLimit))) { row in session(row) }
                 }
-                if presentation.rows.isEmpty && presentation.approvals.isEmpty {
+                if presentation.rows.isEmpty && approvals.isEmpty {
                     Text(emptyMessage).font(.edithText(.caption)).foregroundStyle(.secondary)
                     if tile.showActions && !snapshot.settings.enabled {
                         Button("Connect an agent") { MainApp.openSettings(tab: "agentActivity") }
@@ -116,7 +123,10 @@ public struct AgentActivityCard: View {
             if tile.shows("waiting") { metric("Needs you", presentation.waiting, color: .orange) }
             if tile.shows("total") { metric("Active", presentation.active, color: .secondary) }
             if tile.shows("stuck") {
-                if snapshot.settings.monitorTerminalAttention {
+                if snapshot.settings.monitorTerminalAttention
+                    || (fixture == nil
+                        && AgentAttentionSettings(defaults: SharedDefaults.store).stuckMonitoring)
+                {
                     metric("Stuck", presentation.stuck, color: .red)
                 } else {
                     VStack(alignment: .leading, spacing: 3) {
@@ -232,6 +242,7 @@ public struct AgentApprovalCard: View {
                     + URL(fileURLWithPath: request.project).lastPathComponent
             )
             .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+            .presenterCover(.agents)
             ScrollView {
                 VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                     ForEach(input.fields) { field in

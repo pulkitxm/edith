@@ -1,13 +1,14 @@
 import Foundation
 
-public enum SurfaceNotchTab: String, CaseIterable, Equatable {
-    case home, browser, files, clipboard, audio, camera
+public enum SurfaceNotchTab: String, CaseIterable, Equatable, Sendable {
+    case home, agents, browser, files, clipboard, audio, camera
 
     public static func visible(
         clipboardEnabled: Bool, audioMixerEnabled: Bool, applicationAudioSupported: Bool,
-        browserEnabled: Bool = false
+        browserEnabled: Bool = false, agentsEnabled: Bool = false
     ) -> [SurfaceNotchTab] {
         var tabs: [SurfaceNotchTab] = [.home]
+        if agentsEnabled { tabs.append(.agents) }
         if browserEnabled { tabs.append(.browser) }
         tabs.append(.files)
         if clipboardEnabled { tabs.append(.clipboard) }
@@ -23,7 +24,8 @@ public enum SurfaceNotchTab: String, CaseIterable, Equatable {
                 forKey: AppStorageKeys.Notch.audioMixerEnabled),
             applicationAudioSupported: PlatformCapabilities.macOS.state(for: .applicationAudio)
                 .isSupported,
-            browserEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.browserEnabled))
+            browserEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.browserEnabled),
+            agentsEnabled: true)
         let layout = SurfaceLayout.decode(
             SharedDefaults.store.string(forKey: SurfaceTarget.notch.key), target: .notch)
         return layout.tabOrder.compactMap(Self.init(rawValue:)).filter {
@@ -40,6 +42,7 @@ public enum SurfaceNotchTab: String, CaseIterable, Equatable {
     public var title: String {
         switch self {
         case .home: "Home"
+        case .agents: "Agents"
         case .browser: "Browser"
         case .files: "Files"
         case .clipboard: "Clipboard"
@@ -51,6 +54,7 @@ public enum SurfaceNotchTab: String, CaseIterable, Equatable {
     public var icon: String {
         switch self {
         case .home: "house.fill"
+        case .agents: "terminal.fill"
         case .browser: "globe"
         case .files: "folder.fill"
         case .clipboard: "doc.on.clipboard"

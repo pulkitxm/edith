@@ -19,6 +19,7 @@ struct SurfaceEditorPane: View {
     @State private var previewWidth: Double?
     @State private var livePreview = true
     @State private var geometryExpanded = false
+    @State private var glancesExpanded = true
     @State private var libraryVisible = true
     @State private var inspectorVisible = true
     @State private var layoutError: String?
@@ -284,12 +285,7 @@ struct SurfaceEditorPane: View {
                 }
             }
             if target == .notch {
-                HStack {
-                    Spacer()
-                    RoundedRectangle(cornerRadius: UIScale.pt(8)).fill(.black).frame(
-                        width: UIScale.pt(150), height: UIScale.pt(28))
-                    Spacer()
-                }
+                collapsedPreview
             }
             previewCanvas
                 .onGeometryChange(for: Double.self) {
@@ -310,6 +306,7 @@ struct SurfaceEditorPane: View {
                     : "Sample content. Edit the Notch itself to preview live widgets."
             )
             .font(.edithText(.caption)).foregroundStyle(.secondary)
+            if target == .notch { glanceSettings }
         }
     }
 
@@ -358,6 +355,99 @@ struct SurfaceEditorPane: View {
                 }
             }
         }
+    }
+
+    private var collapsedPreview: some View {
+        let now = Date()
+        let sessions = (0..<4).map { index in
+            AgentActivitySession(
+                event: AgentActivityEvent(
+                    provider: .codex,
+                    sessionID: "preview-\(index)", eventName: "UserPromptSubmit",
+                    phase: index == 3 ? .waiting : .working, project: "/tmp/demo", receivedAt: now))
+        }
+        let context = SurfaceGlanceContext(
+            agents: AgentActivityPresentation(
+                activity: AgentActivitySnapshot(sessions: sessions, refreshedAt: now), now: now),
+            observing: true, monitoringStalls: true, hasMusic: true, playingMusic: true,
+            files: 3, now: now, focus: AttentionFocusSession(name: "Focus", plannedDuration: 1500),
+            quotaRemaining: 62, nextMeeting: now.addingTimeInterval(1200))
+        let left = context.resolve(layout.notchLeadingGlance, leading: true)
+        let right = context.resolve(layout.notchTrailingGlance, leading: false)
+        let width = left == nil && right == nil ? 0 : layout.notchWingWidth
+        return HStack(spacing: 0) {
+            glancePreview(left, width: width)
+            Color.black.frame(width: UIScale.pt(150), height: UIScale.pt(28))
+            glancePreview(right, width: width)
+        }
+        .background(
+            .black, in: UnevenRoundedRectangle(bottomLeadingRadius: 12, bottomTrailingRadius: 12)
+        )
+        .frame(maxWidth: .infinity)
+    }
+
+    private func glancePreview(_ glance: SurfaceGlance?, width: Double) -> some View {
+        HStack(spacing: UIScale.pt(5)) {
+            if let glance {
+                SurfaceGlanceLabel(glance)
+            }
+        }
+        .font(.edithText(.caption)).foregroundStyle(.white.opacity(0.85))
+        .frame(width: UIScale.pt(width), height: UIScale.pt(28))
+    }
+
+    private var glanceSettings: some View {
+        DisclosureGroup("Collapsed Notch", isExpanded: $glancesExpanded) {
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                Text(
+                    "Choose what each side shows. The center stays clear for the hardware camera cutout."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                Picker("Left indicator", selection: canvasSetting(\.notchLeadingGlance)) {
+                    ForEach(SurfaceGlanceSource.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.menu)
+                Picker("Right indicator", selection: canvasSetting(\.notchTrailingGlance)) {
+                    ForEach(SurfaceGlanceSource.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.menu)
+                numberField("Indicator width (pt)", value: canvasSetting(\.notchWingWidth))
+                Toggle("Include subagents in counts", isOn: canvasSetting(\.notchIncludeSubagents))
+                Toggle(
+                    "All agent providers",
+                    isOn: Binding(
+                        get: { layout.notchAgentSources == nil },
+                        set: { all in store.update(.notch) { $0.notchAgentSources = all ? nil : [] }
+                        }))
+                if layout.notchAgentSources != nil {
+                    ForEach(agentProviderChoices, id: \.id) { provider in
+                        Toggle(
+                            provider.title,
+                            isOn: Binding(
+                                get: { layout.notchAgentSources?.contains(provider.id) == true },
+                                set: { enabled in
+                                    store.update(.notch) {
+                                        if enabled {
+                                            $0.notchAgentSources?.insert(provider.id)
+                                        } else {
+                                            $0.notchAgentSources?.remove(provider.id)
+                                        }
+                                    }
+                                }))
+                    }
+                }
+                Toggle(
+                    "Prioritize permissions when opening Notch",
+                    isOn: canvasSetting(\.notchPrioritizePermissions))
+                Toggle(
+                    "Open Notch automatically for new permissions",
+                    isOn: canvasSetting(\.notchExpandPermissions))
+                Text(
+                    "Provider filters apply to session counts and lists. The Agents view keeps every pending permission reachable."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }.padding(.top, UIScale.pt(8))
+        }.padding(UIScale.pt(16))
+            .background(
+                Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
     }
 
     private var previewTitle: some View {

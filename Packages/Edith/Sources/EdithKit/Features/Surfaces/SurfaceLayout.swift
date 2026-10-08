@@ -151,6 +151,13 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     public var notchHorizontal = true
     public var notchWidth = 580.0
     public var notchShelfHeight = 240.0
+    public var notchLeadingGlance = SurfaceGlanceSource.automatic
+    public var notchTrailingGlance = SurfaceGlanceSource.automatic
+    public var notchWingWidth = 76.0
+    public var notchIncludeSubagents = true
+    public var notchAgentSources: Set<String>?
+    public var notchPrioritizePermissions = true
+    public var notchExpandPermissions = false
     public var visible: [SurfaceTile] { tiles.filter { !$0.hidden } }
     public init(tiles: [SurfaceTile]) { self.tiles = tiles }
 
@@ -209,6 +216,15 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
         result.notchHorizontal = notchHorizontal
         result.notchWidth = min(1200, max(440, notchWidth))
         result.notchShelfHeight = min(600, max(160, notchShelfHeight))
+        result.notchLeadingGlance = notchLeadingGlance
+        result.notchTrailingGlance = notchTrailingGlance
+        result.notchWingWidth = min(140, max(42, notchWingWidth))
+        result.notchIncludeSubagents = notchIncludeSubagents
+        result.notchAgentSources = notchAgentSources.map {
+            Set($0.sorted().prefix(100).map { String($0.prefix(512)) })
+        }
+        result.notchPrioritizePermissions = notchPrioritizePermissions
+        result.notchExpandPermissions = notchExpandPermissions
         let known = SurfaceNotchTab.allCases.map(\.rawValue)
         var seenTabs = Set<String>()
         result.tabOrder = (tabOrder + known).filter {

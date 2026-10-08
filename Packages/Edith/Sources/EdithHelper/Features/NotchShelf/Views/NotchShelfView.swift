@@ -34,6 +34,7 @@ struct NotchShelfContentView: View {
             .animation(glide, value: controller.currentAlert)
             .animation(glide, value: controller.activeTab)
             .animation(glide, value: controller.nowPlaying == nil)
+            .animation(glide, value: controller.glanceWingWidth)
             .animation(glide, value: isHovering)
             .onReceive(
                 DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged)
@@ -66,7 +67,7 @@ struct NotchShelfContentView: View {
                 .transition(reduceMotion ? .opacity : alertHandoff)
         } else {
             let size = NotchGeometry.collapsedSize(
-                base: collapsedBase, hasLiveActivity: controller.nowPlaying != nil)
+                base: collapsedBase, wingWidth: controller.glanceWingWidth)
             collapsed
                 .frame(width: size.width, height: size.height)
                 .transition(collapsedTransition)
@@ -81,7 +82,7 @@ struct NotchShelfContentView: View {
         if isExpanded { return expandedShape }
         if isBuiltin, controller.currentAlert != nil { return NotchGeometry.alertDropSize }
         return NotchGeometry.collapsedSize(
-            base: collapsedBase, hasLiveActivity: controller.nowPlaying != nil)
+            base: collapsedBase, wingWidth: controller.glanceWingWidth)
     }
 
     private var alertHandoff: AnyTransition {
@@ -152,17 +153,51 @@ struct NotchShelfContentView: View {
             removal: .opacity.animation(.easeOut(duration: 0.1)))
     }
 
-    @ViewBuilder private var collapsed: some View {
-        if let track = controller.nowPlaying {
-            NotchMusicWings(controller: controller, track: track)
-        } else if !controller.items.isEmpty {
-            HStack(spacing: 3) {
-                Image(systemName: "tray.full.fill")
-                    .font(.system(size: 8.5, weight: .semibold))
-                Text("\(controller.items.count)")
-                    .font(.system(size: 9, weight: .semibold))
+    private var collapsed: some View {
+        HStack(spacing: 0) {
+            glance(controller.leadingGlance, leading: true)
+            Spacer(minLength: 0)
+            glance(controller.trailingGlance, leading: false)
+        }
+    }
+
+    @ViewBuilder private func glance(_ value: SurfaceGlance?, leading: Bool) -> some View {
+        if let value {
+            Button {
+                if value.source == .music && !leading {
+                    controller.nowPlayingPlayPause()
+                } else {
+                    controller.openGlance(value, on: displayID)
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    if value.source == .music {
+                        if leading, let artwork = controller.nowPlayingArtwork {
+                            Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                                .frame(width: 20, height: 20)
+                                .clipShape(RoundedRectangle(cornerRadius: 4)).presenterCover(.music)
+                        } else {
+                            PlaybackWave(
+                                playing: controller.nowPlaying?.isPlaying == true,
+                                color: .white.opacity(0.85), barCount: 4
+                            ).frame(width: 20)
+                        }
+                    } else {
+                        SurfaceGlanceLabel(value)
+                    }
+                }
+                .foregroundStyle(
+                    value.urgency == 2
+                        ? Color.red : value.urgency == 1 ? .orange : .white.opacity(0.85)
+                )
+                .frame(width: controller.glanceWingWidth, height: collapsedBase.height)
+                .contentShape(Rectangle())
             }
-            .foregroundStyle(.white.opacity(0.7))
+            .buttonStyle(.edith(.borderless))
+            .help(value.detail + (value.value.isEmpty ? "" : ": " + value.value))
+            .accessibilityLabel(value.detail + ", " + value.value)
+        } else {
+            Color.clear.frame(width: controller.glanceWingWidth, height: collapsedBase.height)
         }
     }
 
@@ -270,6 +305,12 @@ struct NotchShelfContentView: View {
                     .font(.system(size: 11.5, weight: .medium))
                 Text(tab.title)
                     .font(.system(size: 11, weight: .semibold)).fixedSize()
+                if tab == .agents, !controller.agentActivity.activity.approvals.isEmpty {
+                    Text("\(controller.agentActivity.activity.approvals.count)")
+                        .font(.edithText(.caption2)).monospacedDigit()
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.orange.opacity(active ? 0.25 : 0.3), in: Capsule())
+                }
             }
             .padding(.horizontal, 10)
             .frame(height: 24)
@@ -304,18 +345,34 @@ struct NotchShelfContentView: View {
 
     private var visibleTabs: [NotchTab] {
         _ = surfaceLayouts.notch
-        return NotchTab.currentVisible
+        return controller.visibleTabs
     }
 
     @ViewBuilder private var tabContent: some View {
         switch controller.activeTab {
         case .home: NotchHomeTab(controller: controller)
+        case .agents:
+            ScrollView {
+                AgentActivityCard(
+                    tile: agentTile, monitor: controller.agentActivity, allApprovals: true
+                )
+                .padding(.horizontal, 12).padding(.bottom, 12)
+            }
         case .browser: EmptyView()
         case .files: filesCanvas
         case .clipboard: NotchClipboardTab(controller: controller)
         case .audio: NotchAudioTab()
         case .camera: NotchCameraTab()
         }
+    }
+
+    private var agentTile: SurfaceTile {
+        var tile = SurfaceTile(.agents)
+        tile.itemLimit = 20
+        tile.sourceIDs = surfaceLayouts.notch.notchAgentSources
+        tile.includeSubagents = surfaceLayouts.notch.notchIncludeSubagents
+        tile.dense = true
+        return tile
     }
 
     private var filesCanvas: some View {
@@ -1112,59 +1169,6 @@ extension Color {
             red: Double((value >> 16) & 0xff) / 255,
             green: Double((value >> 8) & 0xff) / 255,
             blue: Double(value & 0xff) / 255)
-    }
-}
-
-private struct NotchMusicWings: View {
-    var controller: NotchShelfController
-    let track: NotchNowPlaying
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: 0) {
-            artwork
-                .frame(width: NotchGeometry.musicWingWidth)
-            Spacer(minLength: 0)
-            PlaybackWave(playing: track.isPlaying, color: .white.opacity(0.85), barCount: 4)
-                .frame(width: NotchGeometry.musicWingWidth)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var sourceKey: String { String(describing: track.source) }
-
-    private var artwork: some View {
-        ZStack {
-            wingIcon
-                .id(sourceKey)
-                .transition(
-                    reduceMotion
-                        ? .opacity
-                        : .asymmetric(
-                            insertion: .move(edge: .bottom).combined(with: .opacity),
-                            removal: .opacity))
-        }
-        .animation(
-            reduceMotion
-                ? .easeInOut(duration: 0.2) : .spring(response: 0.5, dampingFraction: 0.9),
-            value: sourceKey
-        )
-        .clipped()
-    }
-
-    @ViewBuilder private var wingIcon: some View {
-        if let image = controller.nowPlayingArtwork {
-            Image(nsImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(width: 20, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                .presenterCover(.music)
-        } else {
-            Image(systemName: "music.note")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.8))
-        }
     }
 }
 

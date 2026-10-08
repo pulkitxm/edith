@@ -33,6 +33,7 @@ enum NotchGeometry {
                                         layout.visible.compactMap(\.height).max() ?? 0)))) + 48
                             + (editing ? 58 : 0)))
                     : 310
+            case .agents: 360
             case .browser: 0
             case .files: 210
             case .clipboard: 260
@@ -107,6 +108,10 @@ enum NotchGeometry {
     static func collapsedSize(base: CGSize, hasLiveActivity: Bool) -> CGSize {
         guard hasLiveActivity else { return base }
         return CGSize(width: base.width + 2 * musicWingWidth, height: base.height)
+    }
+
+    static func collapsedSize(base: CGSize, wingWidth: CGFloat) -> CGSize {
+        CGSize(width: base.width + 2 * max(0, wingWidth), height: base.height)
     }
 
     static func proximity(
