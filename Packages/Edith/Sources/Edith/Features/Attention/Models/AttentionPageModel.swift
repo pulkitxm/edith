@@ -60,7 +60,14 @@ final class AttentionPageModel {
     var message: String?
     var errorMessage: String?
     var selectedEntityID: String?
-    var breakdownDimension = AttentionDimension.entity
+    var breakdownDimension = AttentionDimension.entity {
+        didSet { if breakdownDimension != oldValue { refilterBreakdown() } }
+    }
+    var breakdownSort = AttentionBreakdownSort.time {
+        didSet { if breakdownSort != oldValue { refilterBreakdown() } }
+    }
+    private(set) var breakdown = AttentionBreakdownProjection()
+    let breakdownLoad = ContentLoad()
     private(set) var levelFilter: AttentionProductivity?
     private(set) var sphereFilter: AttentionSphere?
     private(set) var categoryFilter: String?
@@ -79,6 +86,7 @@ final class AttentionPageModel {
     private var reloadTask: Task<Void, Never>?
     private var loadedParts: Set<AttentionSummaryPart> = []
     private var timelineTask: Task<Void, Never>?
+    private var breakdownTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
 
     init(repository: AttentionRepository = AttentionRepository()) {
@@ -202,6 +210,7 @@ final class AttentionPageModel {
     func waitForReload() async {
         await reloadTask?.value
         await timelineTask?.value
+        await breakdownTask?.value
     }
 
     func cancelLoading() {
@@ -211,6 +220,9 @@ final class AttentionPageModel {
         timelineTask = nil
         searchTask?.cancel()
         searchTask = nil
+        breakdownTask?.cancel()
+        breakdownTask = nil
+        breakdownLoad.cancel()
         loading.cancel()
     }
 
@@ -234,6 +246,7 @@ final class AttentionPageModel {
         hasStoredEvents = state.hasStoredEvents
         extensionInstalled = state.extensionInstalled
         loadedParts = parts
+        if state.derived != nil { refilterBreakdown() }
         loading.complete(generation)
         errorMessage = nil
     }
@@ -312,7 +325,26 @@ final class AttentionPageModel {
             level: levelFilter, sphere: sphereFilter, category: categoryFilter, search: search)
     }
 
+    private func refilterBreakdown() {
+        guard loadedParts.contains(.breakdown) else { return }
+        breakdownTask?.cancel()
+        let summary = summary
+        let dimension = breakdownDimension
+        let filter = spanFilter
+        let sort = breakdownSort
+        breakdownTask = Task { [weak self] in
+            guard let self else { return }
+            await self.breakdownLoad.perform(operation: {
+                AttentionBreakdownProjection(
+                    summary: summary, dimension: dimension, filter: filter, sort: sort)
+            }) { result in
+                self.breakdown = result
+            }
+        }
+    }
+
     private func refilterTimeline() {
+        refilterBreakdown()
         timelineTask?.cancel()
         guard loadedParts.contains(.timeline) else { return }
         let summary = summary

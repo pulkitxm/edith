@@ -13,7 +13,7 @@ struct AttentionPage: View {
     }
 
     var body: some View {
-        PageScaffold {
+        PageScaffold(pinnedHeader: true) {
             PageHeader(
                 title: { Text("Attention") },
                 trailing: {
@@ -23,9 +23,7 @@ struct AttentionPage: View {
                     if !model.needsSetup {
                         AttentionSectionBar(model: model)
                         if model.section.usesPeriod {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                AttentionPeriodControl(model: model)
-                            }
+                            AttentionPeriodControl(model: model)
                         }
                     }
                 })
@@ -95,7 +93,7 @@ private struct AttentionPeriodControl: View {
 
     var body: some View {
         let dark = scheme == .dark
-        HStack(spacing: UIScale.pt(6)) {
+        WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(8)) {
             ForEach(
                 compact
                     ? [AttentionRangePreset.today, .allTime] : [.today, .last7, .last30, .allTime],
@@ -148,29 +146,30 @@ private struct AttentionPeriodControl: View {
             }
             AttentionWindowMenu(model: model)
             AttentionIdleMenu(model: model)
-            Divider().frame(height: UIScale.pt(18)).padding(.horizontal, UIScale.pt(4))
-            Button {
-                model.step(-1)
-            } label: {
-                Image(systemName: "chevron.left")
+            HStack(spacing: UIScale.pt(6)) {
+                Button {
+                    model.step(-1)
+                } label: {
+                    Image(systemName: "chevron.left")
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .disabled(!model.canStepBackward)
+                .help("Previous period")
+                Text(model.period.title())
+                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                    .frame(minWidth: UIScale.pt(96))
+                Button {
+                    model.step(1)
+                } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.edith(.iconOnly))
+                .disabled(!model.canStepForward)
+                .help("Next period")
             }
-            .buttonStyle(.edith(.iconOnly))
-            .disabled(!model.canStepBackward)
-            .help("Previous period")
-            Text(model.period.title())
-                .font(.system(size: UIScale.pt(12.5), weight: .semibold))
-                .foregroundStyle(DashSkin.ink(dark))
-                .frame(minWidth: UIScale.pt(96))
-            Button {
-                model.step(1)
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .buttonStyle(.edith(.iconOnly))
-            .disabled(!model.canStepForward)
-            .help("Next period")
+            .fixedSize()
         }
-        .fixedSize(horizontal: true, vertical: true)
     }
 
     private func chip(_ title: String, active: Bool, dark: Bool, action: @escaping () -> Void)
