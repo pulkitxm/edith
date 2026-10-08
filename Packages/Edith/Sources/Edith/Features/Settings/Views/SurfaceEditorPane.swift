@@ -15,6 +15,8 @@ struct SurfaceEditorPane: View {
         nonmutating set { selectedRaw = newValue ?? "" }
     }
     @State private var query = ""
+    @State private var libraryCategory = ExtensionMarketplaceCategory.all
+    @State private var enabledOnly = false
     @State private var previewCompact = false
     @State private var previewWidth: Double?
     @State private var livePreview = true
@@ -222,15 +224,35 @@ struct SurfaceEditorPane: View {
         selected = nil
     }
 
+    private var libraryWidgets: [SurfaceWidget] {
+        SurfaceWidget.allCases.filter { widget in
+            let matchesQuery =
+                query.isEmpty
+                || (widget.title + " " + widget.summary)
+                    .localizedCaseInsensitiveContains(query)
+            let matchesSuite = libraryCategory.suite == nil || widget.suite == libraryCategory.suite
+            return matchesQuery && matchesSuite
+                && (!enabledOnly || widget.available(in: SharedDefaults.store))
+        }
+    }
+
     private var library: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(12)) {
             Text("Widget library").font(.edithText(.headline))
             SearchField(placeholder: "Find widgets", text: $query)
-            ForEach(
-                SurfaceWidget.allCases.filter {
-                    query.isEmpty || ($0.title + $0.summary).localizedCaseInsensitiveContains(query)
+            Picker("Category", selection: $libraryCategory) {
+                ForEach(ExtensionMarketplaceCategory.allCases, id: \.self) { category in
+                    Text(category.rawValue).tag(category)
                 }
-            ) { widget in
+            }
+            Toggle("Enabled only", isOn: $enabledOnly)
+            Text("\(libraryWidgets.count) widgets").font(.edithText(.caption)).foregroundStyle(
+                .secondary)
+            if libraryWidgets.isEmpty {
+                Text("No widgets match these filters.").font(.edithText(.caption)).foregroundStyle(
+                    .secondary)
+            }
+            ForEach(libraryWidgets) { widget in
                 HStack(alignment: .top, spacing: UIScale.pt(10)) {
                     Image(systemName: widget.icon).foregroundStyle(Color.accentColor).frame(
                         width: UIScale.pt(20))
@@ -890,6 +912,9 @@ private struct SurfaceWidgetPreview: View {
                             in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
                 }
             }
+        case .ability:
+            Label(tile.widget.summary, systemImage: tile.widget.icon)
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
         case .databases, .machines:
             Label(
                 tile.widget == .databases ? "Open database workspace" : "3 registered machines",

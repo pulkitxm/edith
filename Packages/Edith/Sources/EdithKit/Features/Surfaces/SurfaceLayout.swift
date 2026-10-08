@@ -7,9 +7,78 @@ public enum SurfaceTarget: String, Codable, CaseIterable, Identifiable, Sendable
     public var key: String { "surfaceGrid.\(rawValue)" }
 }
 
-public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum SurfaceWidget: Codable, RawRepresentable, CaseIterable, Hashable, Identifiable, Sendable
+{
     case clocks, actions, activity, usage, limits, music, calendar, codeStats
     case agents, focus, databases, machines, desk, media, github
+    case ability(String)
+
+    public static let core: [Self] = [
+        .clocks, .actions, .activity, .usage, .limits, .music, .calendar, .codeStats,
+        .agents, .focus, .databases, .machines, .desk, .media, .github,
+    ]
+    public static var allCases: [Self] {
+        core
+            + ExtensionRegistry.entries.filter { !representedAbilities.contains($0.id) }
+            .map { .ability($0.id) }
+    }
+    private static let representedAbilities: Set<String> = [
+        "usage", "herdr", "music", "calendar", "codeStats", "database",
+    ]
+    public var rawValue: String {
+        switch self {
+        case .ability(let id): "extension:" + id
+        default: String(describing: self)
+        }
+    }
+    public init?(rawValue: String) {
+        if let value = Self.core.first(where: { $0.rawValue == rawValue }) {
+            self = value
+        } else if rawValue.hasPrefix("extension:"),
+            ExtensionRegistry.entry(String(rawValue.dropFirst(10))) != nil
+        {
+            self = .ability(String(rawValue.dropFirst(10)))
+        } else {
+            return nil
+        }
+    }
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        guard let value = Self(rawValue: raw) else {
+            throw DecodingError.dataCorruptedError(
+                in: container, debugDescription: "Unknown widget")
+        }
+        self = value
+    }
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
+    public var registryEntry: ExtensionRegistryEntry? {
+        switch self {
+        case .ability(let id): ExtensionRegistry.entry(id)
+        case .activity, .usage, .limits: ExtensionRegistry.entry("usage")
+        case .agents: ExtensionRegistry.entry("herdr")
+        case .music: ExtensionRegistry.entry("music")
+        case .calendar: ExtensionRegistry.entry("calendar")
+        case .codeStats: ExtensionRegistry.entry("codeStats")
+        case .databases: ExtensionRegistry.entry("database")
+        default: nil
+        }
+    }
+    public var suite: SuiteID? {
+        if let entry = registryEntry { return entry.suite }
+        return switch self {
+        case .github: .agents
+        case .focus: .data
+        case .machines: .system
+        case .desk, .clocks: .desk
+        case .media: .media
+        case .actions: .system
+        default: nil
+        }
+    }
 
     public var id: String { rawValue }
     public var title: String {
@@ -29,6 +98,7 @@ public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable
         case .desk: "Desk tools"
         case .media: "Media tools"
         case .github: "GitHub activity"
+        case .ability: registryEntry?.title ?? "Extension"
         }
     }
     public var icon: String {
@@ -48,6 +118,7 @@ public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable
         case .desk: "square.grid.2x2"
         case .media: "play.rectangle"
         case .github: "point.3.connected.trianglepath.dotted"
+        case .ability: registryEntry?.symbolName ?? "puzzlepiece.extension"
         }
     }
     public var summary: String {
@@ -66,7 +137,8 @@ public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable
         case .machines: "Registered machines and fleet access."
         case .desk: "Clipboard, color picker, and file tools."
         case .media: "Recording, downloads, camera, and music."
-        case .github: "Commit activity from your code stats mirror."
+        case .github: "Pull requests, reviews, and checks from GitHub."
+        case .ability: registryEntry?.subtitle ?? ""
         }
     }
     public var destination: String {
@@ -75,13 +147,15 @@ public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable
         case .activity, .usage, .limits: "dashboard"
         case .music: "music"
         case .calendar: "calendar"
-        case .codeStats, .github: "codeStats"
+        case .codeStats: "codeStats"
+        case .github: "quinjet"
         case .agents: "herdr"
         case .focus: "attention"
         case .databases: "database"
         case .machines: "machines"
         case .desk: "desk"
         case .media: "media"
+        case .ability(let id): id
         }
     }
     public var gate: String? {
@@ -89,12 +163,17 @@ public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable
         case .activity, .usage, .limits: AppStorageKeys.Tabs.usageEnabled
         case .music: AppStorageKeys.Tabs.musicEnabled
         case .calendar: AppStorageKeys.Tabs.calendarEnabled
-        case .codeStats, .github: AppStorageKeys.Tabs.codeStatsEnabled
+        case .codeStats: AppStorageKeys.Tabs.codeStatsEnabled
+        case .ability: registryEntry?.defaultsKey
+        case .databases: AppStorageKeys.Tabs.databaseEnabled
         default: nil
         }
     }
     public func available(in defaults: UserDefaults) -> Bool {
-        gate.map { defaults.bool(forKey: $0) } ?? true
+        guard gate.map({ defaults.bool(forKey: $0) }) ?? true else { return false }
+        return registryEntry?.requires.allSatisfy { id in
+            ExtensionRegistry.entry(id).map { defaults.bool(forKey: $0.defaultsKey) } ?? false
+        } ?? true
     }
 }
 
