@@ -549,6 +549,7 @@ struct SurfaceEditorPane: View {
                                 }
                             }))
                 }
+                if tile.widget == .agents { agentFilters(tile) }
                 if tile.widget == .focus {
                     Stepper(
                         "Focus duration: \(tile.focusMinutes) minutes",
@@ -571,6 +572,65 @@ struct SurfaceEditorPane: View {
         .padding(UIScale.pt(16))
         .background(
             Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+    }
+
+    private var agentProviderChoices: [(id: String, title: String)] {
+        HerdrKind.filterLabels.map { title in
+            (AgentActivityProvider.terminalKind(title)?.rawValue ?? title.lowercased(), title)
+        }
+    }
+
+    private func agentFilters(_ tile: SurfaceTile) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("Providers").font(.edithText(.headline))
+            Toggle(
+                "All providers",
+                isOn: Binding(
+                    get: { selection?.sourceIDs == nil },
+                    set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
+            if tile.sourceIDs != nil {
+                ForEach(agentProviderChoices, id: \.id) { provider in
+                    Toggle(
+                        provider.title,
+                        isOn: Binding(
+                            get: { selection?.sourceIDs?.contains(provider.id) == true },
+                            set: { enabled in
+                                edit(tile.id) {
+                                    if enabled {
+                                        $0.sourceIDs?.insert(provider.id)
+                                    } else {
+                                        $0.sourceIDs?.remove(provider.id)
+                                    }
+                                }
+                            }))
+                }
+            }
+            Text("Session states").font(.edithText(.headline))
+            Toggle(
+                "All states",
+                isOn: Binding(
+                    get: { selection?.agentPhases == nil },
+                    set: { all in edit(tile.id) { $0.agentPhases = all ? nil : [] } }))
+            if tile.agentPhases != nil {
+                ForEach(AgentActivityPhase.allCases.filter { $0 != .ended }, id: \.rawValue) {
+                    phase in
+                    Toggle(
+                        phase.title,
+                        isOn: Binding(
+                            get: { selection?.agentPhases?.contains(phase.rawValue) == true },
+                            set: { enabled in
+                                edit(tile.id) {
+                                    if enabled {
+                                        $0.agentPhases?.insert(phase.rawValue)
+                                    } else {
+                                        $0.agentPhases?.remove(phase.rawValue)
+                                    }
+                                }
+                            }))
+                }
+            }
+            Toggle("Include subagents", isOn: setting(tile.id, \.includeSubagents, fallback: true))
+        }
     }
 
     @ViewBuilder private func widgetActions(_ tile: SurfaceTile) -> some View {

@@ -6,7 +6,6 @@ public struct SurfaceIntegrationCard: View {
     let open: (String) -> Void
     @State private var usage: UsageTopicSnapshot?
     @State private var load = ContentLoad()
-    @State private var sessions: SessionsSnapshot?
     @State private var report: CodeStatsReport?
     @State private var focus: AttentionFocusSession?
     @State private var error: String?
@@ -26,7 +25,11 @@ public struct SurfaceIntegrationCard: View {
         self.open = open
     }
 
-    public var body: some View {
+    @ViewBuilder public var body: some View {
+        if tile.widget == .agents { AgentActivityCard(tile: tile, active: active) } else { card }
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             if tile.showTitle || tile.showActions {
                 HStack {
@@ -91,37 +94,7 @@ public struct SurfaceIntegrationCard: View {
                         .font(.edithText(.caption)).foregroundStyle(.secondary)
                 }
             }
-        case .agents:
-            if let sessions {
-                let agents = sessions.hosts.flatMap(\.agents)
-                let blocked = agents.filter { $0.status == .blocked }.count
-                HStack {
-                    if tile.shows("running") { metric("Working", "\(sessions.working)") }
-                    if tile.shows("waiting") { metric("Needs you", "\(blocked)") }
-                    if tile.shows("total") { metric("Total", "\(sessions.total)") }
-                }
-                if tile.showDetails, tile.shows("sessions") {
-                    ForEach(
-                        Array(
-                            agents.sorted { $0.status == .blocked && $1.status != .blocked }.prefix(
-                                tile.itemLimit))
-                    ) { agent in
-                        HStack {
-                            Circle().fill(agent.status == .blocked ? Color.orange : .green).frame(
-                                width: 6, height: 6)
-                            Text(agent.workspace).lineLimit(1)
-                            Spacer(minLength: 0)
-                            Text(agent.status.title).foregroundStyle(.secondary)
-                        }.font(.edithText(.caption)).presenterCover(.usage)
-                    }
-                }
-                if agents.isEmpty {
-                    Text("No active sessions").font(.edithText(.caption)).foregroundStyle(
-                        .secondary)
-                }
-            } else {
-                Text("Open Agents to connect your sessions.").font(.edithText(.caption))
-            }
+        case .agents: EmptyView()
         case .codeStats, .github:
             if let report {
                 HStack {
@@ -234,11 +207,7 @@ public struct SurfaceIntegrationCard: View {
                         domain: "SurfaceUsage", code: 1,
                         userInfo: [NSLocalizedDescriptionKey: failure])
                 }
-            case .agents:
-                let next = try await AgentClient.shared.snapshotAsync(
-                    SessionsSnapshot.self, topic: .sessions)
-                guard load.isCurrent(request) else { return }
-                sessions = next
+            case .agents: break
             case .codeStats, .github:
                 let next = try await CodeStatsAgentClient().report(.days(tile.days))
                 guard load.isCurrent(request) else { return }
