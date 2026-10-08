@@ -62,7 +62,10 @@ public final class ExtensionBundleRuntime {
         let instance = try load(id: id)
         guard !instance.active else { return }
         let response = try execute(instance, operation: "start", context: context)
-        guard response["ok"] as? Bool == true else { throw MarketplaceError.invalidBundle }
+        guard response["ok"] as? Bool == true else {
+            _ = try? execute(instance, operation: "stop", context: [:])
+            throw MarketplaceError.invalidBundle
+        }
         instance.active = true
     }
 

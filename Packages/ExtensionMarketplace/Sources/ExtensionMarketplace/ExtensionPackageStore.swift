@@ -64,6 +64,49 @@ public struct ExtensionPackageStore: Sendable {
         return !removed.isEmpty
     }
 
+    public func pendingRemovals() throws -> Set<String> {
+        let file = root.appendingPathComponent("pending-removals.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+        let ids = try JSONDecoder().decode(Set<String>.self, from: Data(contentsOf: file))
+        guard ids.allSatisfy(ExtensionPackage.validComponent) else {
+            throw MarketplaceError.invalidCatalog
+        }
+        return ids
+    }
+
+    public func requestRemoval(id: String) throws -> Bool {
+        do {
+            _ = try remove(id: id)
+            try updatePendingRemoval(id: id, pending: false)
+            return true
+        } catch MarketplaceError.packageBusy {
+            guard ExtensionPackage.validComponent(id) else { throw MarketplaceError.invalidCatalog }
+            try updatePendingRemoval(id: id, pending: true)
+            return false
+        }
+    }
+
+    public func completePendingRemovals() throws {
+        for id in try pendingRemovals().sorted() {
+            do {
+                _ = try remove(id: id)
+                try updatePendingRemoval(id: id, pending: false)
+            } catch MarketplaceError.packageBusy {
+                continue
+            }
+        }
+    }
+
+    private func updatePendingRemoval(id: String, pending: Bool) throws {
+        let file = root.appendingPathComponent("pending-removals.json")
+        let operation = try PackageFileLock(
+            url: file.appendingPathExtension("lock"), exclusive: true)
+        defer { operation.close() }
+        var ids = try pendingRemovals()
+        if pending { ids.insert(id) } else { ids.remove(id) }
+        try JSONEncoder().encode(ids.sorted()).write(to: file, options: .atomic)
+    }
+
     public func leaseURL(for package: ExtensionPackage) -> URL {
         root.appendingPathComponent(".leases").appendingPathComponent(
             "\(package.id)-\(package.hostABI)-\(package.architecture)-\(package.version).lock")
@@ -71,6 +114,31 @@ public struct ExtensionPackageStore: Sendable {
 
     public func lease(_ package: ExtensionPackage) throws -> PackageFileLock {
         try PackageFileLock(url: leaseURL(for: package), exclusive: false)
+    }
+
+    public func prune() throws {
+        let operation = try PackageFileLock(
+            url: root.appendingPathComponent(".operation.lock"), exclusive: true)
+        defer { operation.close() }
+        let packages = try installedPackages()
+        let groups = Dictionary(grouping: packages) { "\($0.id)/\($0.hostABI)/\($0.architecture)" }
+        var retained = packages
+        for group in groups.values {
+            let ordered = group.sorted {
+                $0.version.compare($1.version, options: .numeric) == .orderedDescending
+            }
+            for package in ordered.dropFirst(2) {
+                guard let lease = try? PackageFileLock(url: leaseURL(for: package), exclusive: true)
+                else { continue }
+                defer { lease.close() }
+                let directory = directory(for: package)
+                if FileManager.default.fileExists(atPath: directory.path) {
+                    try FileManager.default.removeItem(at: directory)
+                }
+                retained.removeAll { $0 == package }
+            }
+        }
+        try commit(retained)
     }
 
     public func diskBytes() -> Int64 {
