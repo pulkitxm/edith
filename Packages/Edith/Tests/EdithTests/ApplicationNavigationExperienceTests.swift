@@ -148,13 +148,17 @@ import Testing
         #expect(abs(host.bounds.height - 900) < 2)
         for label in [
             "Media", "Inspector", "Editor actions", "Projects", "Add media", "Export video",
+            "Previous frame", "Play or pause", "Next frame", "Loop playback",
+            "Playback position", "Split", "Delete", "Snap", "Fit", "Timeline scale",
         ] {
             let control = try #require(
                 elements.first {
                     nativeAccessibilityMatches($0, label: label)
                         && (($0 as AnyObject).accessibilityRole?() == .button
                             || ($0 as AnyObject).accessibilityRole?() == .popUpButton
-                            || ($0 as AnyObject).accessibilityRole?() == .menuButton)
+                            || ($0 as AnyObject).accessibilityRole?() == .menuButton
+                            || ($0 as AnyObject).accessibilityRole?() == .slider
+                            || ($0 as AnyObject).accessibilityRole?() == .checkBox)
                 }, "\(label)")
             let frame = try #require((control as AnyObject).accessibilityFrame?(), "\(label)")
             #expect(frame.width > 0 && frame.height > 0, "\(label)")
