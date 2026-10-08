@@ -1,19 +1,21 @@
 import AppKit
+import EdithKit
 import SwiftUI
 
 struct SidebarMaterial: View {
+    @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         Group {
             if reduceTransparency {
-                Color(nsColor: .windowBackgroundColor)
+                DashSkin.paper(scheme == .dark)
             } else {
                 SidebarVisualEffect()
             }
         }
         .overlay(alignment: .trailing) {
-            Color(nsColor: .separatorColor).frame(width: 1)
+            DashSkin.line(scheme == .dark).frame(width: 1)
         }
         .allowsHitTesting(false)
     }
