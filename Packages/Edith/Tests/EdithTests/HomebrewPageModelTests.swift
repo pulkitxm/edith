@@ -69,6 +69,23 @@ private func waitForHomebrewModel(
         #expect(!model.isCancelling)
     }
 
+    @Test func cancellationReachesOperationsInEveryWindowEvenAfterAnIdleWindowOpens() async {
+        let client = HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return CLICommandResult(terminationStatus: 0, output: "")
+        }
+        let first = HomebrewPageModel(client: client)
+        let second = HomebrewPageModel(client: client)
+        let package = HomebrewPackage(kind: .formula, name: "sample", displayName: "Sample")
+        first.perform(.install, package: package, query: "", kind: .formula)
+        second.perform(.install, package: package, query: "", kind: .formula)
+        let idle = HomebrewPageModel(client: client)
+        #expect(HomebrewCancellation.cancel())
+        #expect(await waitForHomebrewModel { !first.isBusy && !second.isBusy })
+        #expect(!idle.isBusy)
+        #expect(!HomebrewCancellation.cancel())
+    }
+
     @Test func reenteringDiscoveryRetainsSearchAndResults() async {
         let recorder = CLIHomebrewModelRecorder()
         let model = HomebrewPageModel(client: Self.client(recorder: recorder))

@@ -15,6 +15,7 @@ final class WindowSessionOwner: ObservableObject {
     private var storedMaintenance: AppMaintenanceModel?
     private var storedHomebrew: HomebrewPageModel?
     private var storedBlitzTree: BlitzTreeModel?
+    private var storedProcesses: [UUID: MachineProcessListModel] = [:]
 
     init(acceptsCommandVideo: Bool = true) {
         self.acceptsCommandVideo = acceptsCommandVideo
@@ -97,7 +98,15 @@ final class WindowSessionOwner: ObservableObject {
         return model
     }
 
+    func processes(for machineID: UUID) -> MachineProcessListModel {
+        if let model = storedProcesses[machineID] { return model }
+        let model = MachineProcessListModel()
+        storedProcesses[machineID] = model
+        return model
+    }
+
     deinit {
+        for model in storedProcesses.values { Task { @MainActor in model.loading.cancel() } }
         if let model = storedAttention { Task { @MainActor in model.cancelLoading() } }
         if let model = storedCodeStats { Task { @MainActor in model.cancelLoading() } }
         if let model = storedStudio { Task { @MainActor in model.closeEditors() } }
