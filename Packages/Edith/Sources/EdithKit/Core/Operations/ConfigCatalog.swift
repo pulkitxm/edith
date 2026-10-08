@@ -89,6 +89,10 @@ public enum ConfigCatalog {
 
     private static let agent: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Surfaces.agentActivity, .string, group: "agent",
+            summary: "Provider observation and explicit approval controls for agent surfaces.",
+            fallback: .string(AgentActivitySettings().encoded)),
+        SettingDefinition(
             AgentSettingsKeys.pauseAmbientOnBattery, .bool, group: "agent",
             summary: "Pause the agent's ambient jobs while this Mac is on battery.",
             fallback: .bool(false)),

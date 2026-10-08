@@ -4,6 +4,7 @@ public enum AppStorageKeys {
     public enum Surfaces {
         public static let editorTarget = "surfaceEditorTarget"
         public static let editorWidget = "surfaceEditorWidget"
+        public static let agentActivity = "agentActivityProviders"
     }
 
     public enum Suites {

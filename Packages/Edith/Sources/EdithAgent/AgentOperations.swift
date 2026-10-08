@@ -33,6 +33,7 @@ public enum AgentOperations {
             await AgentSessionSearch.shared.flush()
         }
         await registerHooks(on: runtime)
+        await AgentActivityService().register(on: runtime)
         if let scheduler {
             await registerUsage(on: runtime, scheduler: scheduler)
             await runtime.register(operation: CompanionBackgroundOperation.refresh) { _ in
