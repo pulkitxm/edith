@@ -37,6 +37,32 @@ import Testing
         #expect(second.attention.section == .overview)
     }
 
+    @Test func extensionWorkspacesRetainDraftsFiltersAndSelections() {
+        let first = WindowSessionOwner()
+        let second = WindowSessionOwner()
+        first.companion.chat.draft = "Plan a sample launch"
+        first.database.connections.searchText = "sample database"
+        first.database.connections.favoritesOnly = true
+        first.maintenance.query = "sample editor"
+        first.homebrew.query = "sample package"
+        first.homebrew.mode = .search
+        first.blitzTree.list = .files
+        first.blitzTree.rings = true
+
+        #expect(first.companion === first.companion)
+        #expect(first.database === first.database)
+        #expect(first.companion.chat.draft == "Plan a sample launch")
+        #expect(first.database.connections.favoritesOnly)
+        #expect(first.maintenance.query == "sample editor")
+        #expect(first.homebrew.mode == .search)
+        #expect(first.blitzTree.list == .files)
+        #expect(second.companion.chat.draft.isEmpty)
+        #expect(second.database.connections.searchText.isEmpty)
+        #expect(!second.database.connections.favoritesOnly)
+        #expect(second.maintenance.query.isEmpty)
+        #expect(second.blitzTree.list == .children)
+    }
+
     @Test func bridgeTargetsFocusedHostAndPreservesSurvivingAttachments() {
         let bridge = QuinjetSessionBridge()
         let first = WindowSessionOwner()
