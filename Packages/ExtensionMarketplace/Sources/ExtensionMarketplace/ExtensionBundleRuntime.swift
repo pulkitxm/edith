@@ -114,6 +114,7 @@ public final class ExtensionBundleRuntime {
     }
 
     private func load(id: String) throws -> Loaded {
+        guard try !store.pendingRemovals().contains(id) else { throw MarketplaceError.packageBusy }
         if let instance = loaded[id] { return instance }
         guard !failedLoads.contains(id) else { throw MarketplaceError.invalidBundle }
         guard

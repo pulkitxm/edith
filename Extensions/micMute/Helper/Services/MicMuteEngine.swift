@@ -24,7 +24,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
 
     func shutdown() {
         panel.close()
-        MicHotKey.unregister()
+        HotKeyRegistrar.clear(HotKeyCatalog.micMute)
         if muted { apply(false) }
         if let listener = deviceListListener {
             var address = Self.deviceListAddress
@@ -39,7 +39,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     func toggle() { setMuted(!muted) }
 
     func syncSettings() {
-        MicHotKey.register()
+        HotKeyRegistrar.install(HotKeyCatalog.micMute) { [weak self] in self?.toggle() }
         updateStatusItemPresence()
     }
 

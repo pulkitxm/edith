@@ -5,6 +5,13 @@ on:
     paths:
       - 'Extensions/**'
       - 'Packages/ExtensionMarketplace/**'
+      - 'Packages/Edith/Sources/EdithKit/**'
+      - 'Packages/Edith/Sources/EdithCore/**'
+      - 'Packages/Edith/Sources/EdithShared/**'
+      - 'Packages/Edith/Sources/EdithCameraSupport/**'
+      - 'Packages/Edith/Sources/EdithLidAwakeSupport/**'
+      - 'Packages/Edith/Package.swift'
+      - 'scripts/link-shared-framework.py'
       - 'scripts/*extension*'
       - '.github/workflows/extensions.yml'
   push:
@@ -12,6 +19,13 @@ on:
     paths:
       - 'Extensions/**'
       - 'Packages/ExtensionMarketplace/**'
+      - 'Packages/Edith/Sources/EdithKit/**'
+      - 'Packages/Edith/Sources/EdithCore/**'
+      - 'Packages/Edith/Sources/EdithShared/**'
+      - 'Packages/Edith/Sources/EdithCameraSupport/**'
+      - 'Packages/Edith/Sources/EdithLidAwakeSupport/**'
+      - 'Packages/Edith/Package.swift'
+      - 'scripts/link-shared-framework.py'
       - 'scripts/*extension*'
       - '.github/workflows/extensions.yml'
   workflow_dispatch:
@@ -35,6 +49,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun install --frozen-lockfile
+      - run: bun scripts/extension-host-abi.mjs --check
       - run: bun test scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
       - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
       - run: swift test --package-path Extensions --build-system native --jobs 2
@@ -42,11 +57,11 @@ jobs:
       - run: bun scripts/test-extension-marketplace.mjs
 
   plan:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: macos-26
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       changed: ${{ steps.plan.outputs.changed }}
+      host: ${{ steps.plan.outputs.host }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -66,8 +81,11 @@ jobs:
             exit 1
           fi
           bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
-          echo "matrix=$(cat dist/extensions/plan.json)" >> "$GITHUB_OUTPUT"
-          echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')" >> "$GITHUB_OUTPUT"
+          {
+            echo "matrix=$(cat dist/extensions/plan.json)"
+            echo "host=$(bun -e 'const selected=JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include; const definitions=JSON.parse(await Bun.file("Extensions/manifest.json").text()); console.log(selected.some(entry=>definitions.find(item=>item.id===entry.id)?.usesHostFramework))')"
+            echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')"
+          } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: extension-plan
@@ -76,9 +94,36 @@ jobs:
             dist/extensions/plan.json
           retention-days: 7
 
+  host:
+    needs: [plan]
+    if: needs.plan.outputs.host == 'true'
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun scripts/extension-host-build.mjs
+      - run: swift test --package-path build/extension-host --build-system native --jobs 2
+      - name: Exercise downloaded helper lifecycles with isolated preferences
+        env:
+          EXTENSION_HOST_PRODUCTS: ${{ github.workspace }}/build/extension-host/.build/release
+        run: bun scripts/test-extension-helpers.mjs local/fixtures/Edith.app --host-fixture
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: host-interfaces
+          include-hidden-files: true
+          path: |
+            build/extension-host/.build/release/Modules
+            build/extension-host/.build/release/*.dylib
+          retention-days: 1
+
   build:
-    needs: [tests, plan]
-    if: needs.plan.outputs.changed == 'true'
+    needs: [tests, plan, host]
+    if: >-
+      !cancelled() && needs.tests.result == 'success'
+      && needs.plan.outputs.changed == 'true'
+      && contains(fromJSON('["success","skipped"]'), needs.host.result)
     env:
       HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
     strategy:
@@ -90,7 +135,13 @@ jobs:
         with:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        if: needs.plan.outputs.host == 'true'
+        with:
+          name: host-interfaces
+          path: dist/host-interfaces
       - name: Import the release signing certificate
+        if: github.event_name != 'pull_request'
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -115,9 +166,16 @@ jobs:
         env:
           EXTENSION_ID: ${{ matrix.id }}
           EXTENSION_VERSION: ${{ matrix.version }}
-        run: bun scripts/build-extension-package.mjs "$EXTENSION_ID"
+          EXTENSION_HOST_PRODUCTS: ${{ github.workspace }}/dist/host-interfaces
+          DEVELOPMENT: ${{ github.event_name == 'pull_request' }}
+        run: |
+          if [ "$DEVELOPMENT" = true ]; then
+            bun scripts/build-extension-package.mjs "$EXTENSION_ID" --development
+          else
+            bun scripts/build-extension-package.mjs "$EXTENSION_ID"
+          fi
       - name: Notarize the downloaded package
-        if: ${{ env.HAS_NOTARY == 'true' }}
+        if: ${{ github.event_name != 'pull_request' && env.HAS_NOTARY == 'true' }}
         env:
           EXTENSION_ID: ${{ matrix.id }}
           NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
@@ -141,7 +199,7 @@ jobs:
 
   publish:
     needs: [plan, build]
-    if: needs.plan.outputs.changed == 'true'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.plan.outputs.changed == 'true'
     runs-on: macos-26
     env:
       GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}

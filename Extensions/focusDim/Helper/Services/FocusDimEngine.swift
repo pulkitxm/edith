@@ -41,7 +41,10 @@ final class FocusDimEngine: FeatureModule {
     private var repositionGeneration = 0
 
     init() {
-        FocusDimHotKey.register()
+        HotKeyRegistrar.install(HotKeyCatalog.focusDim) {
+            FocusDimState.setActive(!FocusDimState.isActive())
+            IPC.post(IPC.Name.settingsChanged)
+        }
         loadSettings()
         rebuildOverlays()
         reposition(animateIn: true)
@@ -67,7 +70,7 @@ final class FocusDimEngine: FeatureModule {
     }
 
     func shutdown() {
-        FocusDimHotKey.unregister()
+        HotKeyRegistrar.clear(HotKeyCatalog.focusDim)
         repositionGeneration += 1
         repositionTask?.cancel()
         repositionTask = nil
@@ -92,7 +95,10 @@ final class FocusDimEngine: FeatureModule {
     }
 
     func applySettings() {
-        FocusDimHotKey.register()
+        HotKeyRegistrar.install(HotKeyCatalog.focusDim) {
+            FocusDimState.setActive(!FocusDimState.isActive())
+            IPC.post(IPC.Name.settingsChanged)
+        }
         let previousMode = displayMode
         loadSettings()
         guard FocusDimState.isActive(), CGPreflightScreenCaptureAccess() else {
