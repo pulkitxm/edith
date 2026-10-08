@@ -28,11 +28,10 @@
         "Extensions/audioMixer/Runtime.swift"
       ]
     },
-    "nativePackage": "Packages/MeetingVoice",
+    "nativePackage": "Extensions/audioMixer/NativeRuntime",
     "nativeProduct": "MeetingVoice",
     "inputs": [
-      "Extensions/audioMixer",
-      "Packages/MeetingVoice"
+      "Extensions/audioMixer"
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs"

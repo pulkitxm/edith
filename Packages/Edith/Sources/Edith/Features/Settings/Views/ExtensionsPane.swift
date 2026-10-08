@@ -42,7 +42,7 @@ struct ExtensionEnablementStorage: DynamicProperty {
 }
 
 struct ExtensionsPane: View {
-    @State private var marketplace = MarketplaceModel()
+    @State private var marketplace = MarketplaceModel.shared
     @State private var query = ""
     @State private var category = ExtensionMarketplaceCategory.all
     @State private var selectedEntry: ExtensionRegistryEntry?
@@ -151,6 +151,16 @@ struct ExtensionsPane: View {
                 }
             }
             Spacer()
+            Toggle(
+                "Update enabled extensions automatically",
+                isOn: Binding(
+                    get: {
+                        SharedDefaults.store.object(forKey: "extensionAutomaticUpdates") as? Bool
+                            ?? true
+                    },
+                    set: { SharedDefaults.store.set($0, forKey: "extensionAutomaticUpdates") })
+            )
+            .toggleStyle(.checkbox)
             Button("Check for updates") { Task { await marketplace.refresh() } }
                 .disabled(marketplace.refreshing)
         }
@@ -225,7 +235,11 @@ struct ExtensionsPane: View {
                                     marketplace: marketplace,
                                     download: {
                                         Task {
-                                            if await marketplace.download(id: entry.id) {
+                                            let firstInstall =
+                                                marketplace.installedPackage(for: entry.id) == nil
+                                            if await marketplace.download(id: entry.id),
+                                                firstInstall
+                                            {
                                                 setEnabled(true, for: entry)
                                             }
                                         }
@@ -600,7 +614,7 @@ struct ExtensionSettingsSheet: View {
     let coordinator: ExtensionModalCoordinator
     let enableOnAppear: Bool
     @State private var startedEnableFlow = false
-    @State private var marketplace = MarketplaceModel()
+    @State private var marketplace = MarketplaceModel.shared
     @Environment(\.dismiss) private var dismiss
     @ExtensionEnablementStorage private var enabled: Bool
     @State private var grantedPermissions: [ExtensionPermission: Bool]

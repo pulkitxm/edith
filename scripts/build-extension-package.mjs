@@ -42,6 +42,7 @@ export async function buildExtensionPackage({
         "release",
         "--jobs",
         "2",
+        "--force-resolved-versions",
         "--product",
         definition.nativeProduct,
       ],
