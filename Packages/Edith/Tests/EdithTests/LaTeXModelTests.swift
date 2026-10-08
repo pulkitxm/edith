@@ -318,8 +318,13 @@ import WebKit
         window.isReleasedWhenClosed = false
         window.contentView = first
         defer { window.close() }
+        let loadingView = controls.webView
+        window.contentView = nil
+        first = try auditHost(content(), size: CGSize(width: 700, height: 500))
+        window.contentView = first
         try await waitForEditor(controls)
         let view = try #require(controls.webView)
+        #expect(view === loadingView)
         _ = try await view.callAsyncJavaScript(
             "window.edithEditor.command('focus'); document.execCommand('insertText', false, 'Draft ')",
             arguments: [:], in: nil, contentWorld: .page)
@@ -348,12 +353,20 @@ import WebKit
         }.joined(separator: "\n")
         let file = root.appendingPathComponent("paper.tex")
         try Data(source.utf8).write(to: file)
+        let pdf = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+            .dataWithPDF(inside: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let service = LaTeXService { tool, _, _, _ in
+            #expect(tool == "tectonic")
+            try pdf.write(to: file.deletingPathExtension().appendingPathExtension("pdf"))
+            return Data("PDF compiled".utf8)
+        }
         let model = LaTeXModel(
+            service: service,
             store: LaTeXProjectStore(url: root.appendingPathComponent("projects.json")))
         try await model.add(LaTeXProject(name: "Paper", location: .disk, sourcePath: file.path))
         let controls = model.editorControls
         controls.wrapsLines = false
-        let host = try auditHost(
+        var host = try auditHost(
             LaTeXPage(model: model, opensEditor: true), size: CGSize(width: 1100, height: 800))
         let window = TestWindowHost.window(contentRect: host.bounds)
         window.isReleasedWhenClosed = false
@@ -361,13 +374,64 @@ import WebKit
         window.orderFront(nil)
         defer { window.close() }
         try await waitForEditor(controls)
-        try await Task.sleep(for: .milliseconds(200))
         let view = try #require(controls.webView)
+        var metrics = try await scrollEditor(view, window: window)
+        for _ in 0..<2 {
+            let generation = model.buildGeneration
+            model.saveAndCompile()
+            try await waitUntil { !model.busy && model.buildGeneration != generation }
+            #expect(model.message == "PDF compiled on disk.")
+            host.layoutSubtreeIfNeeded()
+            metrics = try await scrollEditor(view, window: window)
+        }
+        window.contentView = nil
+        host = try auditHost(
+            LaTeXPage(model: model, opensEditor: true), size: CGSize(width: 1000, height: 700))
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        #expect(controls.webView === view)
+        metrics = try await scrollEditor(view, window: window)
+        #expect(metrics["height"]! > 0)
+        #expect(metrics["height"]! <= 800)
+        #expect(metrics["content"]! > metrics["height"]!)
+        #expect(metrics["page"] == 0)
+        #expect(model.source == source)
+        #expect(!model.dirty)
+        #expect(controls.line == 1)
+        if let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_EVIDENCE_DIR"] {
+            let configuration = WKSnapshotConfiguration()
+            configuration.afterScreenUpdates = false
+            let image = try await view.takeSnapshot(configuration: configuration)
+            let tiff = try #require(image.tiffRepresentation)
+            let bitmap = try #require(NSBitmapImageRep(data: tiff))
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+            try png.write(
+                to: URL(fileURLWithPath: path).appendingPathComponent("latex-scrolled-source.png"))
+        }
+    }
+
+    private func scrollEditor(_ view: WKWebView, window: NSWindow) async throws -> [String: Double]
+    {
+        func metrics() async throws -> [String: Double] {
+            let result =
+                try await view.callAsyncJavaScript(
+                    "const s = document.querySelector('.cm-scroller'); return {height:s.clientHeight, content:s.scrollHeight, top:s.scrollTop, left:s.scrollLeft, page:document.documentElement.scrollTop};",
+                    arguments: [:], in: nil, contentWorld: .page) as? [String: Double]
+            return try #require(result)
+        }
+        let before = try await metrics()
+        let direction: Int32 = before["top"]! > 0 && before["left"]! > 0 ? 1 : -1
+        func moved(_ after: [String: Double]) -> Bool {
+            direction < 0
+                ? after["top"]! > before["top"]! && after["left"]! > before["left"]!
+                : after["top"]! < before["top"]! && after["left"]! < before["left"]!
+        }
         let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
         let cgEvent = try #require(
             CGEvent(
-                scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: -700,
-                wheel2: -120, wheel3: 0))
+                scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: direction * 700,
+                wheel2: direction * 120, wheel3: 0))
         let wheel = try #require(NSEvent(cgEvent: cgEvent))
         let encoded = try NSKeyedArchiver.archivedData(
             withRootObject: wheel, requiringSecureCoding: false)
@@ -380,31 +444,14 @@ import WebKit
         event.point = point
         event.number = window.windowNumber
         NSApp.sendEvent(event)
-        try await Task.sleep(for: .milliseconds(300))
-        let result =
-            try await view.callAsyncJavaScript(
-                "const s = document.querySelector('.cm-scroller'); return {height:s.clientHeight, content:s.scrollHeight, top:s.scrollTop, left:s.scrollLeft, page:document.documentElement.scrollTop};",
-                arguments: [:], in: nil, contentWorld: .page) as? [String: Double]
-        let metrics = try #require(result)
-        #expect(metrics["height"]! <= 800)
-        #expect(metrics["content"]! > metrics["height"]!)
-        #expect(metrics["top"]! > 0)
-        #expect(metrics["page"] == 0)
-        #expect(model.source == source)
-        #expect(!model.dirty)
-        #expect(controls.line == 1)
-        #expect(metrics["left"]! > 0)
-        if let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_EVIDENCE_DIR"] {
-            let configuration = WKSnapshotConfiguration()
-            configuration.afterScreenUpdates = false
-            let image = try await view.takeSnapshot(configuration: configuration)
-            let tiff = try #require(image.tiffRepresentation)
-            let bitmap = try #require(NSBitmapImageRep(data: tiff))
-            let png = try #require(bitmap.representation(using: .png, properties: [:]))
-            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
-            try png.write(
-                to: URL(fileURLWithPath: path).appendingPathComponent("latex-scrolled-source.png"))
+        var after = before
+        for _ in 0..<100 {
+            after = try await metrics()
+            if moved(after) { break }
+            try await Task.sleep(for: .milliseconds(50))
         }
+        #expect(moved(after))
+        return after
     }
 
     @objc(EdithEditorWheelEvent) private final class EditorWheelEvent: NSEvent {
@@ -426,11 +473,17 @@ import WebKit
     }
 
     private func waitForEditor(_ controls: LaTeXEditorControls) async throws {
-        for _ in 0..<50 {
-            if controls.ready { return }
+        for _ in 0..<100 {
+            if controls.ready, let view = controls.webView,
+                (try? await view.callAsyncJavaScript(
+                    "const s = document.querySelector('.cm-scroller'); return s !== null && s.clientHeight > 0",
+                    arguments: [:], in: nil, contentWorld: .page) as? Bool) == true
+            {
+                return
+            }
             try await Task.sleep(for: .milliseconds(100))
         }
-        #expect(controls.ready)
+        Issue.record("The editor did not finish laying out its scroll viewport.")
     }
 
     private func directory() throws -> URL {

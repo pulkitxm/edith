@@ -2,8 +2,10 @@ import WebKit
 
 final class EditorWebView: WKWebView {
     private var wheelMonitor: Any?
+    private let scrollSelector: String?
 
-    init() {
+    init(scrollSelector: String? = nil) {
+        self.scrollSelector = scrollSelector
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         super.init(frame: .zero, configuration: configuration)
@@ -19,9 +21,19 @@ final class EditorWebView: WKWebView {
         wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) {
             [weak self] event in
             guard let self, event.window === self.window, !self.isHiddenOrHasHiddenAncestor,
-                self.bounds.contains(self.convert(event.locationInWindow, from: nil))
+                self.visibleRect.contains(self.convert(event.locationInWindow, from: nil))
             else { return event }
-            self.scrollWheel(with: event)
+            if let selector = self.scrollSelector {
+                let scale = event.hasPreciseScrollingDeltas ? 1.0 : 40.0
+                self.callAsyncJavaScript(
+                    "document.querySelector(selector)?.scrollBy({left:x, top:y, behavior:'instant'})",
+                    arguments: [
+                        "selector": selector, "x": -event.scrollingDeltaX * scale,
+                        "y": -event.scrollingDeltaY * scale,
+                    ], in: nil, in: .page, completionHandler: nil)
+            } else {
+                self.scrollWheel(with: event)
+            }
             return nil
         }
     }

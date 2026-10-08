@@ -41,7 +41,7 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         if let retained = controls.webView {
             view = retained
         } else {
-            view = EditorWebView()
+            view = EditorWebView(scrollSelector: ".cm-scroller")
             controls.webView = view
         }
         view.configuration.userContentController.removeScriptMessageHandler(forName: "latexEditor")
@@ -52,7 +52,7 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         context.coordinator.view = view
         if controls.ready {
             context.coordinator.configure()
-        } else if let url = LaTeXEditorResources.url {
+        } else if view.url == nil, !view.isLoading, let url = LaTeXEditorResources.url {
             view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
         }
         return view
