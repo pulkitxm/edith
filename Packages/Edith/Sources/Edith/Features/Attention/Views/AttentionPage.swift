@@ -13,7 +13,7 @@ struct AttentionPage: View {
     }
 
     var body: some View {
-        PageScaffold(pinnedHeader: true) {
+        PageScaffold(pinnedHeader: true, scrollIdentity: model.section.rawValue) {
             PageHeader(
                 title: { Text("Attention") },
                 trailing: {

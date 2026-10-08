@@ -87,6 +87,7 @@ import Testing
                     .environment(\.colorScheme, scheme)
                     .environment(\.automaticViewActionsEnabled, false)
                     .environment(\.loadingAnimationsEnabled, false))
+            host.sizingOptions = []
             host.frame = NSRect(x: 0, y: 0, width: compact ? 680 : 1280, height: 900)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host
@@ -95,6 +96,7 @@ import Testing
             defer { window.orderOut(nil) }
             try await Task.sleep(for: .milliseconds(200))
             host.layoutSubtreeIfNeeded()
+            #expect(abs(host.bounds.height - 900) < 2)
             let table = try #require(table(in: host))
             #expect(table.numberOfRows == 10_000)
             let visible = table.tableColumns.indices.filter { !table.tableColumns[$0].isHidden }

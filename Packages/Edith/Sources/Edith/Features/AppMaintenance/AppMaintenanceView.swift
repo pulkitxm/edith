@@ -661,49 +661,49 @@ struct AppMaintenanceView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                     if section.usesApplicationInventory {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: UIScale.pt(10)) {
-                                Button {
-                                    showingUpdateSettings.toggle()
-                                } label: {
-                                    Image(systemName: "gearshape")
-                                }
-                                .help("Update settings")
-                                .popover(isPresented: $showingUpdateSettings) { updateSettings }
-                                Menu {
-                                    Picker("Destination", selection: $installDestinationRaw) {
-                                        ForEach(
-                                            AppMaintenanceInstallDestination.allCases,
-                                            id: \.rawValue
-                                        ) {
-                                            destination in
-                                            Text(destination.title).tag(destination.rawValue)
-                                        }
-                                    }
-                                } label: {
-                                    Label(installDestination.title, systemImage: "folder")
-                                }
-                                if model.checkingUpdates {
-                                    Text("Checking updates")
-                                        .font(.system(size: UIScale.pt(12)))
-                                        .foregroundStyle(.secondary)
-                                }
-                                Button {
-                                    showingDiskImagePicker = true
-                                } label: {
-                                    Label(
-                                        "Install Disk Image",
-                                        systemImage: "externaldrive.badge.plus")
-                                }
-                                .disabled(model.phase != .ready)
-                                Button {
-                                    model.refresh(interval: updateRefreshInterval)
-                                } label: {
-                                    Label("Refresh", systemImage: "arrow.clockwise")
-                                }
-                                .disabled(model.phase != .ready)
-                                .buttonStyle(.edith(.secondary))
+                        WrapHStack(spacing: UIScale.pt(10), lineSpacing: UIScale.pt(8)) {
+                            Button {
+                                showingUpdateSettings.toggle()
+                            } label: {
+                                Image(systemName: "gearshape")
                             }
+                            .buttonStyle(.edith(.iconOnly))
+                            .accessibilityLabel("Update settings")
+                            .help("Update settings")
+                            .popover(isPresented: $showingUpdateSettings) { updateSettings }
+                            Menu {
+                                Picker("Destination", selection: $installDestinationRaw) {
+                                    ForEach(
+                                        AppMaintenanceInstallDestination.allCases,
+                                        id: \.rawValue
+                                    ) {
+                                        destination in
+                                        Text(destination.title).tag(destination.rawValue)
+                                    }
+                                }
+                            } label: {
+                                Label(installDestination.title, systemImage: "folder")
+                            }
+                            if model.checkingUpdates {
+                                Text("Checking updates")
+                                    .font(.system(size: UIScale.pt(12)))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Button {
+                                showingDiskImagePicker = true
+                            } label: {
+                                Label(
+                                    "Install Disk Image",
+                                    systemImage: "externaldrive.badge.plus")
+                            }
+                            .disabled(model.phase != .ready)
+                            Button {
+                                model.refresh(interval: updateRefreshInterval)
+                            } label: {
+                                Label("Refresh", systemImage: "arrow.clockwise")
+                            }
+                            .disabled(model.phase != .ready)
+                            .buttonStyle(.edith(.secondary))
                         }
                     }
                 }
@@ -760,8 +760,7 @@ struct AppMaintenanceView: View {
 
     private var removalInventory: some View {
         VStack(spacing: 0) {
-            TextField("Search applications", text: $model.query)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search applications", text: $model.query)
                 .padding(UIScale.pt(12))
             Divider()
             if filteredApplications.isEmpty {
@@ -800,8 +799,7 @@ struct AppMaintenanceView: View {
 
     private var updateInventory: some View {
         VStack(spacing: 0) {
-            TextField("Search updates", text: $model.query)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search updates", text: $model.query)
                 .padding(UIScale.pt(12))
             Divider()
             if filteredUpdates.isEmpty {

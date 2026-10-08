@@ -33,6 +33,7 @@ struct StudioPage: View {
     private var model: StudioModel { suppliedModel ?? sessionOwner?.studio ?? storage.model }
     @State private var dropTargeted = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     @MainActor init(model: StudioModel? = nil) {
@@ -66,15 +67,21 @@ struct StudioPage: View {
                 if let notice = model.notice {
                     StudioToast(text: notice)
                         .padding(.bottom, UIScale.pt(18))
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(
+                            reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity)
+                        )
                         .task(id: notice) {
                             try? await Task.sleep(for: .seconds(2.4))
                             if model.notice == notice { model.notice = nil }
                         }
                 }
             }
-            .animation(.easeOut(duration: 0.18), value: model.notice)
-            .animation(.easeOut(duration: 0.12), value: dropTargeted)
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: model.notice
+            )
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: dropTargeted
+            )
             .alert(
                 "Studio",
                 isPresented: Binding(
@@ -185,6 +192,7 @@ struct StudioPage: View {
 
 struct StudioDropOverlay: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -209,6 +217,7 @@ struct StudioDropOverlay: View {
 struct StudioHome: View {
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
 
     var body: some View {

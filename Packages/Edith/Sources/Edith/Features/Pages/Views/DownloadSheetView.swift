@@ -9,6 +9,7 @@ struct DownloadSheet: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
     @State private var urlText = ""
     @State private var filenamePrefix = ""
     @State private var logItem: YoutubeDownloader.DownloadItem?
@@ -222,9 +223,8 @@ struct DownloadSheet: View {
                     }
                 }
             }
-            .frame(maxWidth: UIScale.pt(860), alignment: .leading)
-            .padding(UIScale.pt(22))
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .pageContent(compact)
         }
         .edithSheet(item: $logItem) { item in
             logSheet(item)

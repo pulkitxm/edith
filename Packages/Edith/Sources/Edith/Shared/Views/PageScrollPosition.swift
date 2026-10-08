@@ -119,3 +119,20 @@ final class PageScrollPositionView: NSView {
         restoring = false
     }
 }
+
+private struct RetainedPageScrollPosition: ViewModifier {
+    let key: String
+    @Environment(\.windowSessionOwner) private var owner
+
+    func body(content: Content) -> some View {
+        content.background {
+            if let owner { PageScrollPosition(positions: owner.scrollPositions, key: key) }
+        }
+    }
+}
+
+extension View {
+    func pageScrollPosition(_ key: String) -> some View {
+        modifier(RetainedPageScrollPosition(key: key))
+    }
+}

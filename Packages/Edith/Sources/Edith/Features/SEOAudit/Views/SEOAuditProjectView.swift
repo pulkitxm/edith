@@ -10,7 +10,6 @@ struct SEOAuditProjectView: View {
     @State private var expandedPages = Set<UUID>()
     @State private var confirmsDeletion = false
     @State private var pageSelectionPresented = false
-    @State private var backHovered = false
 
     private var dark: Bool { scheme == .dark }
     private var project: SEOAuditProject {
@@ -63,53 +62,28 @@ struct SEOAuditProjectView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: UIScale.pt(12)) {
-            Button(action: model.closeProject) {
-                Image(systemName: "chevron.left")
-                    .frame(width: UIScale.pt(30), height: UIScale.pt(30))
-            }
-            .buttonStyle(.edith(.toolbar))
-            .background(
-                backHovered ? DashSkin.paper2(dark) : .clear,
-                in: RoundedRectangle(cornerRadius: UIScale.pt(8))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                    .strokeBorder(
-                        backHovered ? DashSkin.accent(dark).opacity(0.45) : .clear,
-                        lineWidth: UIScale.pt(1))
-            )
-            .onHover { backHovered = $0 }
-            .animation(.easeOut(duration: 0.14), value: backHovered)
-            .help(model.isRunning ? "View projects while this audit continues" : "Back to projects")
-            VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                Text(project.name)
-                    .font(.system(size: UIScale.pt(16), weight: .semibold))
-                Text(project.baseURL)
-                    .font(DashSkin.mono(10))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
+        PageSectionHeader(project.name, subtitle: project.baseURL) {
+            Button("Projects", systemImage: "chevron.left", action: model.closeProject)
+                .buttonStyle(.edith(.secondary))
+                .help(
+                    model.isRunning
+                        ? "View projects while this audit continues" : "Back to projects")
             if model.isRunning {
                 Button("Stop", role: .destructive, action: model.cancel)
             } else {
-                Button(action: model.leaveForNewProject) {
-                    Label("New project", systemImage: "plus")
-                }
-                .buttonStyle(.edith(.secondary))
+                Button("New project", systemImage: "plus", action: model.leaveForNewProject)
+                    .buttonStyle(.edith(.secondary))
             }
             Menu {
                 Button("Delete Project", role: .destructive) { confirmsDeletion = true }
             } label: {
                 Image(systemName: "ellipsis")
-                    .frame(width: UIScale.pt(24), height: UIScale.pt(24))
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
+            .menuStyle(.borderlessButton).fixedSize()
+            .accessibilityLabel("Project actions")
             .disabled(model.isRunning)
         }
-        .padding(.horizontal, PageMetrics.gutter(compact))
+        .pageGutter(compact)
         .padding(.vertical, UIScale.pt(14))
     }
 
@@ -128,7 +102,7 @@ struct SEOAuditProjectView: View {
                 "Issues", model.selectedRun.map { String($0.issueCount) } ?? "0",
                 "across all pages", "exclamationmark.triangle")
             metric(
-                "Average", model.selectedRun?.averageScore.map(String.init) ?? "—",
+                "Average", model.selectedRun?.averageScore.map(String.init) ?? "-",
                 "Lighthouse score", "gauge.with.needle")
             metric(
                 "Runs", String(project.runs.count), "saved locally",
