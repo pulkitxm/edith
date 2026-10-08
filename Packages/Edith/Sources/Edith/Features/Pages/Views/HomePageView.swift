@@ -11,6 +11,7 @@ struct HomePage: View {
         true
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
+    @Environment(\.surfaceSampleContent) private var sampleContent
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -24,7 +25,9 @@ struct HomePage: View {
 
     private var layout: SurfaceLayout {
         var layout = layoutStore.home
-        if !editing, SharedDefaults.store.string(forKey: SurfaceTarget.home.key) == nil {
+        if !editing, !sampleContent,
+            SharedDefaults.store.string(forKey: SurfaceTarget.home.key) == nil
+        {
             layout.tiles.removeAll { !$0.widget.available(in: SharedDefaults.store) }
         }
         return layout
@@ -70,11 +73,11 @@ struct HomePage: View {
         .navigationTitle("Home")
         .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
         { _ in layoutStore.reload() }
-        .pageTask(id: usageEnabled, active: usageEnabled) {
+        .pageTask(id: usageEnabled, active: usageEnabled && !sampleContent) {
             await model.restoreCachedHomeUsage()
             await model.load()
         }
-        .pageTask(cancel: model.endObserving) { model.beginObserving() }
+        .pageTask(active: !sampleContent, cancel: model.endObserving) { model.beginObserving() }
     }
 
     private var background: some View {
@@ -100,6 +103,7 @@ struct HomePage: View {
 struct HomeSurfaceWidget: View {
     let tile: SurfaceTile
     @State private var model = DashboardModel.shared
+    @Environment(\.surfaceSampleContent) private var sampleContent
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
@@ -109,7 +113,9 @@ struct HomeSurfaceWidget: View {
     private var blurMoney: Bool { PresenterState.shared.active && presenterBlurMoney }
 
     @ViewBuilder var body: some View {
-        if !tile.widget.available(in: SharedDefaults.store) {
+        if !tile.widget.available(in: SharedDefaults.store)
+            && !(sampleContent && (tile.widget.usesExtensionCard || tile.widget == .agents))
+        {
             PageCard(title: tile.displayTitle) {
                 Text("Enable this integration in Extensions.").font(.edithText(.callout))
                     .foregroundStyle(.secondary)
@@ -212,8 +218,10 @@ private struct HomeHeader: View {
     @Binding var editing: Bool
     @Environment(\.compactLayout) private var compact
     @ObservedObject private var visibility = WindowVisibility.shared
+    @Environment(\.surfaceSampleContent) private var sampleContent
 
     private var firstName: String {
+        if sampleContent { return "Alex" }
         let full = NSFullUserName()
         let name = full.isEmpty ? NSUserName() : full
         return name.split(separator: " ").first.map(String.init) ?? name

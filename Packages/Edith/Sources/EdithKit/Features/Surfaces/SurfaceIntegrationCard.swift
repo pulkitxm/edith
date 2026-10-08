@@ -12,6 +12,7 @@ public struct SurfaceIntegrationCard: View {
     @State private var loading = true
     @State private var retry = 0
     @Environment(\.surfacePresentation) private var presentation
+    @Environment(\.surfaceSampleContent) private var sampleContent
     private let repository: AttentionRepository
 
     public init(
@@ -26,9 +27,13 @@ public struct SurfaceIntegrationCard: View {
 
     @ViewBuilder public var body: some View {
         if tile.widget == .agents {
-            AgentActivityCard(tile: tile, active: active)
+            AgentActivityCard(
+                tile: tile, active: active,
+                activity: sampleContent ? SurfaceSampleData.agents() : nil)
         } else if tile.widget.usesExtensionCard {
-            SurfaceExtensionCard(tile: tile, active: active, open: open)
+            SurfaceExtensionCard(
+                tile: tile, active: active,
+                fixture: sampleContent ? SurfaceSampleData.snapshot(tile) : nil, open: open)
         } else {
             card
         }

@@ -51,7 +51,7 @@ struct SurfaceEditorPane: View {
                     VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                         if libraryVisible { ScrollView { library }.frame(height: UIScale.pt(220)) }
                         canvas
-                        if inspectorVisible, selection != nil { inspector }
+                        if inspectorVisible { inspector }
                         if target == .notch { notchTabs }
                     }
                     .padding(PageMetrics.gutter(compact))
@@ -85,12 +85,17 @@ struct SurfaceEditorPane: View {
             await dashboard.restoreCachedHomeUsage()
             await dashboard.load()
         }
-        .pageTask(id: selectedRaw) {
+        .pageTask(id: "\(selectedRaw):\(livePreview):\(targetRaw)") {
             sourceChoices = []
             guard var tile = selection, tile.widget.supportsSourceFilters,
-                tile.widget.sourceChoices.isEmpty, tile.widget.available(in: SharedDefaults.store)
+                tile.widget.sourceChoices.isEmpty
             else { return }
             tile.sourceIDs = nil
+            if !livePreview || target == .notch {
+                sourceChoices = SurfaceSampleData.snapshot(tile).sources
+                return
+            }
+            guard tile.widget.available(in: SharedDefaults.store) else { return }
             let queryTile = tile
             await sourceLoad.perform(
                 operation: {
@@ -686,6 +691,14 @@ struct SurfaceEditorPane: View {
                 .buttonStyle(.edith(.borderless)).help("Close inspector").accessibilityLabel(
                     "Close inspector")
             }
+            if selection == nil {
+                Label("Select a widget", systemImage: "cursorarrow.click")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                Text(
+                    "Click a widget or drag its handle. Its position, size, data, and appearance controls appear here."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
             if let tile = selection {
                 Toggle(
                     "Lock layout",
@@ -1090,7 +1103,18 @@ struct SurfaceEditorPane: View {
 private struct SurfaceWidgetPreview: View {
     let tile: SurfaceTile
     let notch: Bool
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if tile.widget.usesExtensionCard {
+            SurfaceExtensionCard(
+                tile: tile, active: false, fixture: SurfaceSampleData.snapshot(tile), open: { _ in }
+            )
+        } else if tile.widget == .agents {
+            AgentActivityCard(tile: tile, active: false, activity: SurfaceSampleData.agents())
+        } else {
+            corePreview
+        }
+    }
+    private var corePreview: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {
             if tile.showTitle {
                 Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))

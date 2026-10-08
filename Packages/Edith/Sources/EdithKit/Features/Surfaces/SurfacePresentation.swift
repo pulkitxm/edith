@@ -14,6 +14,7 @@ public struct SurfacePresentation: Equatable, Sendable {
 
 extension EnvironmentValues {
     @Entry public var surfacePresentation: SurfacePresentation?
+    @Entry public var surfaceSampleContent = false
 }
 
 public struct SurfaceFittedGrid<Content: View>: View {

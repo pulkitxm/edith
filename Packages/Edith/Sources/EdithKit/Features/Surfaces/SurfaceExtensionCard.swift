@@ -5,6 +5,7 @@ public struct SurfaceExtensionCard: View {
     let tile: SurfaceTile
     let active: Bool
     let open: (String) -> Void
+    private let fixture: SurfaceExtensionSnapshot?
     @State private var snapshot: SurfaceExtensionSnapshot?
     @State private var load = ContentLoad()
     @State private var retry = 0
@@ -13,8 +14,12 @@ public struct SurfaceExtensionCard: View {
     @State private var acting = false
     @Environment(\.surfacePresentation) private var presentation
 
-    public init(tile: SurfaceTile, active: Bool = true, open: @escaping (String) -> Void) {
-        self.tile = tile; self.active = active; self.open = open
+    public init(
+        tile: SurfaceTile, active: Bool = true, fixture: SurfaceExtensionSnapshot? = nil,
+        open: @escaping (String) -> Void
+    ) {
+        self.tile = tile; self.active = active; self.open = open; self.fixture = fixture
+        _snapshot = State(initialValue: fixture)
     }
     public var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(tile.dense ? 8 : 12)) {
@@ -32,18 +37,21 @@ public struct SurfaceExtensionCard: View {
                             Image(systemName: "arrow.clockwise")
                         }
                         .help("Refresh widget").accessibilityLabel("Refresh " + tile.displayTitle)
+                        .disabled(fixture != nil)
                         Button {
                             open(tile.widget.destination)
                         } label: {
                             Image(systemName: "arrow.up.right")
                         }
                         .help("Open " + tile.widget.title).accessibilityLabel(
-                            "Open " + tile.widget.title)
+                            "Open " + tile.widget.title
+                        )
+                        .disabled(fixture != nil)
                     }
                 }.buttonStyle(.edith(.borderless))
             }
-            if let snapshot {
-                data(snapshot).presenterCover(privacy)
+            if let value = fixture ?? snapshot {
+                data(value).presenterCover(privacy)
             } else if load.isRunning {
                 LoadingIndicator()
             } else if !active {
@@ -66,7 +74,7 @@ public struct SurfaceExtensionCard: View {
             id: SurfaceExtensionRefreshKey(
                 active: active, request: SurfaceExtensionRequestKey(tile), retry: retry)
         ) {
-            guard active || retry > 0 else { return }
+            guard fixture == nil, active || retry > 0 else { return }
             var force = retry > 0
             repeat {
                 await refresh(force: force)
@@ -155,7 +163,7 @@ public struct SurfaceExtensionCard: View {
             VStack(alignment: .leading, spacing: UIScale.pt(6)) {
                 ForEach(items) { actionButton($0) }
             }
-        }.disabled(acting)
+        }.disabled(acting || fixture != nil)
     }
     private func actionButton(_ item: SurfaceRowAction) -> some View {
         Button {
