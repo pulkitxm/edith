@@ -1,10 +1,9 @@
 import AppKit
-import EdithKit
 import Foundation
 import IOKit.pwr_mgt
 import Testing
 
-@testable import EdithHelper
+@testable import KeepAwakeExtension
 
 @MainActor
 private final class KeepAwakeTestWorld {
@@ -20,8 +19,8 @@ private final class KeepAwakeTestWorld {
 
     init(enabled: Bool = true, requested: Bool = true) {
         defaults = UserDefaults(suiteName: suite)!
-        defaults.set(enabled, forKey: AppStorageKeys.General.keepAwakeEnabled)
-        defaults.set(requested, forKey: AppStorageKeys.General.preventSleep)
+        defaults.set(enabled, forKey: "keepAwakeEnabled")
+        defaults.set(requested, forKey: "preventSleep")
     }
 
     func start(interval: TimeInterval = 30) -> KeepAwakeStore {
@@ -62,7 +61,7 @@ private final class KeepAwakeTestWorld {
         let original = world.start()
         #expect(original.preventingSleep)
         original.shutdown()
-        #expect(world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+        #expect(world.defaults.bool(forKey: "preventSleep"))
         #expect(world.activeAssertions.isEmpty)
 
         let restarted = world.start()
@@ -83,13 +82,13 @@ private final class KeepAwakeTestWorld {
         let world = KeepAwakeTestWorld(requested: false)
         defer { world.finish() }
         let store = world.start()
-        world.defaults.set(true, forKey: AppStorageKeys.General.preventSleep)
+        world.defaults.set(true, forKey: "preventSleep")
         world.notifications.post(name: UserDefaults.didChangeNotification, object: world.defaults)
         for _ in 0..<50 { await Task.yield() }
         #expect(store.preventingSleep)
         #expect(world.activeAssertions.count == 1)
 
-        world.defaults.set(false, forKey: AppStorageKeys.General.preventSleep)
+        world.defaults.set(false, forKey: "preventSleep")
         world.notifications.post(name: UserDefaults.didChangeNotification, object: world.defaults)
         for _ in 0..<50 { await Task.yield() }
         #expect(!store.preventingSleep)
@@ -127,14 +126,14 @@ private final class KeepAwakeTestWorld {
         try await Task.sleep(for: .milliseconds(100))
         #expect(store.preventingSleep)
         #expect(world.creations == 2)
-        #expect(world.defaults.bool(forKey: AppStorageKeys.General.preventSleep))
+        #expect(world.defaults.bool(forKey: "preventSleep"))
     }
 
     @Test func disablingExtensionReleasesRequestedProtection() {
         let world = KeepAwakeTestWorld()
         defer { world.finish() }
         let store = world.start()
-        world.defaults.set(false, forKey: AppStorageKeys.General.keepAwakeEnabled)
+        world.defaults.set(false, forKey: "keepAwakeEnabled")
         store.syncPreventSleep()
         #expect(!store.preventingSleep)
         #expect(world.activeAssertions.isEmpty)

@@ -196,6 +196,8 @@ def main():
         symlinks=True,
     )
     merge(derived, config, app, release == '1')
+    marketplace = app_path / 'Contents/Frameworks/ExtensionMarketplace.framework/Versions/A/ExtensionMarketplace'
+    drop_build_rpaths(marketplace)
     for binary in (app_path / 'Contents/MacOS/Edith', pathlib.Path(helper), pathlib.Path(agent)):
         retarget(binary)
         drop_build_rpaths(binary)

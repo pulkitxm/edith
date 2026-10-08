@@ -237,6 +237,7 @@ rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 mkdir -p "$APP/Contents/Frameworks"
+ditto "$DERIVED/Build/Products/$CONFIG/PackageFrameworks/ExtensionMarketplace.framework" "$APP/Contents/Frameworks/ExtensionMarketplace.framework"
 for source in "$HELPER"/Contents/Frameworks/*.framework; do
   [ -d "$source" ] || continue
   destination="$APP/Contents/Frameworks/$(basename "$source")"

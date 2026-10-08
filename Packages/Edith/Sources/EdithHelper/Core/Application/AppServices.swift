@@ -7,7 +7,7 @@ final class AppServices {
     private(set) var usage: UsageStore?
     private(set) var music: MusicPlayer?
     private(set) var system: SystemStore?
-    private(set) var keepAwake: KeepAwakeStore?
+    private(set) var keepAwake: (any KeepAwakeService)?
     private(set) var calendar: CalendarStore?
     private(set) var notchShelf: NotchShelfController?
     private(set) var notchBrowser: NotchBrowserStore?
@@ -28,12 +28,17 @@ final class AppServices {
     private let lidAwakeOrphanRestorer: @MainActor @Sendable () async -> LidAwakeOutcome
     private var lidAwakeRestorationError: String?
     private var terminating = false
+    private let keepAwakeFactory: @MainActor () -> (any KeepAwakeService)?
 
     init(
+        keepAwakeFactory: @escaping @MainActor () -> (any KeepAwakeService)? = {
+            KeepAwakeExtensionService.make()
+        },
         lidAwakeOrphanRestorer: @escaping @MainActor @Sendable () async -> LidAwakeOutcome = {
             await LidAwakeEngine.restoreOrphanedState()
         }
     ) {
+        self.keepAwakeFactory = keepAwakeFactory
         self.lidAwakeOrphanRestorer = lidAwakeOrphanRestorer
     }
 
@@ -71,6 +76,8 @@ final class AppServices {
     }
 
     func start() {
+        try? MarketplaceServices.store.completePendingRemovals()
+        try? MarketplaceServices.store.prune()
         startup.start([
             StartupPhase(name: "helper.services.media") { [weak self] in
                 self?.reconcileMediaServices()
@@ -235,7 +242,7 @@ final class AppServices {
             system = nil
         }
         let keepAwakeOn = Self.extensionEnabled(AppStorageKeys.General.keepAwakeEnabled)
-        if keepAwakeOn, keepAwake == nil { keepAwake = KeepAwakeStore() }
+        if keepAwakeOn, keepAwake == nil { keepAwake = keepAwakeFactory() }
         if !keepAwakeOn, let store = keepAwake {
             store.shutdown()
             keepAwake = nil
