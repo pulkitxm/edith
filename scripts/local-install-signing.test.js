@@ -39,6 +39,7 @@ function fixture() {
     'printf "worktree %s\\n" "$EDITH_FIXTURE_PRIMARY"',
   );
   executable(join(bin, "python3"), "exit 0");
+  executable(join(bin, "node"), "exit 0");
   executable(join(bin, "codesign"), "exit 0");
   executable(join(bin, "find"), "exit 0");
   executable(
