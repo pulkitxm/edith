@@ -80,7 +80,6 @@ final class SheetDismissalView: NSView {
         if event.type == .keyDown {
             return (dismissOnEscape || onEscape != nil) && event.keyCode == 53
                 && event.window === sheet
-                && NSApp.keyWindow === sheet
                 && event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
         }
         guard event.type == .leftMouseDown, event.window === parent else { return false }
