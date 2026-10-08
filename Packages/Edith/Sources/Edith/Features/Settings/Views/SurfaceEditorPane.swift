@@ -37,6 +37,7 @@ struct SurfaceEditorPane: View {
                 }
             }.padding(PageMetrics.gutter(compact))
         }
+        .id(target)
         .onAppear {
             selected = SharedDefaults.store.string(forKey: AppStorageKeys.Surfaces.editorWidget)
         }
