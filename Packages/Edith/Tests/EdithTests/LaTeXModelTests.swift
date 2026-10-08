@@ -245,6 +245,83 @@ import WebKit
         #expect(text == Self.sample)
     }
 
+    @Test func longSourceScrollsInsideItsWorkspace() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = (1...250).map {
+            "\\section{Section \($0)} " + String(repeating: "paper ", count: 100)
+        }.joined(separator: "\n")
+        let file = root.appendingPathComponent("paper.tex")
+        try Data(source.utf8).write(to: file)
+        let model = LaTeXModel(
+            store: LaTeXProjectStore(url: root.appendingPathComponent("projects.json")))
+        try await model.add(LaTeXProject(name: "Paper", location: .disk, sourcePath: file.path))
+        let controls = model.editorControls
+        controls.wrapsLines = false
+        let host = try auditHost(
+            LaTeXPage(model: model, opensEditor: true), size: CGSize(width: 1100, height: 800))
+        let window = TestWindowHost.window(contentRect: host.bounds)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.close() }
+        try await waitForEditor(controls)
+        try await Task.sleep(for: .milliseconds(200))
+        let view = try #require(controls.webView)
+        let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+        let cgEvent = try #require(
+            CGEvent(
+                scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: -700,
+                wheel2: -120, wheel3: 0))
+        let wheel = try #require(NSEvent(cgEvent: cgEvent))
+        let encoded = try NSKeyedArchiver.archivedData(
+            withRootObject: wheel, requiringSecureCoding: false)
+        let decoder = try NSKeyedUnarchiver(forReadingFrom: encoded)
+        decoder.requiresSecureCoding = false
+        decoder.setClass(EditorWheelEvent.self, forClassName: NSStringFromClass(type(of: wheel)))
+        let event = try #require(
+            decoder.decodeObject(forKey: NSKeyedArchiveRootObjectKey) as? EditorWheelEvent)
+        event.target = window
+        event.point = point
+        event.number = window.windowNumber
+        NSApp.sendEvent(event)
+        try await Task.sleep(for: .milliseconds(300))
+        let result =
+            try await view.callAsyncJavaScript(
+                "const s = document.querySelector('.cm-scroller'); return {height:s.clientHeight, content:s.scrollHeight, top:s.scrollTop, left:s.scrollLeft, page:document.documentElement.scrollTop};",
+                arguments: [:], in: nil, contentWorld: .page) as? [String: Double]
+        let metrics = try #require(result)
+        #expect(metrics["height"]! <= 800)
+        #expect(metrics["content"]! > metrics["height"]!)
+        #expect(metrics["top"]! > 0)
+        #expect(metrics["page"] == 0)
+        #expect(model.source == source)
+        #expect(!model.dirty)
+        #expect(controls.line == 1)
+        #expect(metrics["left"]! > 0)
+        if let path = ProcessInfo.processInfo.environment["EDITH_EXTENSION_EVIDENCE_DIR"] {
+            let configuration = WKSnapshotConfiguration()
+            configuration.afterScreenUpdates = false
+            let image = try await view.takeSnapshot(configuration: configuration)
+            let tiff = try #require(image.tiffRepresentation)
+            let bitmap = try #require(NSBitmapImageRep(data: tiff))
+            let png = try #require(bitmap.representation(using: .png, properties: [:]))
+            try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+            try png.write(
+                to: URL(fileURLWithPath: path).appendingPathComponent("latex-scrolled-source.png"))
+        }
+    }
+
+    @objc(EdithEditorWheelEvent) private final class EditorWheelEvent: NSEvent {
+        var target: NSWindow?
+        var point = NSPoint.zero
+        var number = 0
+        required init?(coder: NSCoder) { super.init(coder: coder) }
+        override var window: NSWindow? { target }
+        override var windowNumber: Int { number }
+        override var locationInWindow: NSPoint { point }
+    }
+
     private func waitForEditor(_ controls: LaTeXEditorControls) async throws {
         for _ in 0..<50 {
             if controls.ready { return }
