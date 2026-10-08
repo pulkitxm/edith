@@ -7,6 +7,7 @@ struct HerdrLayoutPopover: View {
     let hideAgents: Bool
 
     @Environment(\.colorScheme) private var scheme
+    @State private var actions = HerdrAgentActions()
     @State private var naming = false
     @State private var layoutName = ""
 
@@ -38,6 +39,7 @@ struct HerdrLayoutPopover: View {
         }
         .padding(UIScale.pt(14))
         .frame(width: UIScale.pt(348))
+        .modifier(HerdrAgentActionDialogs(actions: actions, store: store))
     }
 
     private var arrangements: some View {
@@ -137,6 +139,9 @@ struct HerdrLayoutPopover: View {
                             store: store, tab: other, hideAgents: hideAgents, dark: dark)
                     }
                     .buttonStyle(.edith(.borderless))
+                    .herdrAgentContextMenu(
+                        agents: other.agentIDs.compactMap { store.session($0)?.agent }, store: store
+                    ) { EmptyView() }
                     .help("Bring this tab in beside the current agents")
                 }
                 HStack(spacing: UIScale.pt(8)) {
@@ -150,7 +155,11 @@ struct HerdrLayoutPopover: View {
                     if !candidates.isEmpty {
                         Menu("Add Agent") {
                             ForEach(candidates) { agent in
-                                Button(hideAgents ? agent.kind : agent.title) {
+                                Menu {
+                                    HerdrAgentMenu(agent: agent, store: store, actions: actions)
+                                } label: {
+                                    Text(hideAgents ? agent.kind : agent.title)
+                                } primaryAction: {
                                     perform { store.open(agent, beside: .right) }
                                 }
                             }

@@ -79,6 +79,13 @@ enum HerdrSpaceWindow {
         return true
     }
 
+    static func removeAgent(_ id: String) {
+        for entry in Array(entries.values) {
+            entry.model.removeAgent(id)
+            if entry.model.tabs.isEmpty { entry.window.performClose(nil) }
+        }
+    }
+
     static func open(space: HerdrAgentSpace, store: HerdrStore, launchEnabled: Bool) {
         store.usage.record(space.agents.map { ["space", $0.machineID, $0.workspace] })
         if raise(space.id) { return }
@@ -363,6 +370,9 @@ struct HerdrSpaceView: View {
             fill: selected ? DashSkin.paper(dark) : Color.clear,
             stroke: selected ? DashSkin.accent(dark).opacity(0.6) : DashSkin.line(dark)
         )
+        .herdrAgentContextMenu(
+            agents: tab.agentTab.map { [$0.agent] } ?? [], store: store
+        ) { EmptyView() }
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
@@ -569,7 +579,9 @@ private struct HerdrSpacePaneView: View {
                         store: store, tab: agent, launchEnabled: launchEnabled,
                         presented: active, wantsFocus: focused,
                         onFocus: { tab.focus(pane.id) },
-                        onSetView: { tab.setAgentView($0) })
+                        onSetView: { tab.setAgentView($0) }
+                    )
+                    .herdrAgentContextMenu(agent.agent, store: store)
                 case let .terminal(holder):
                     HerdrSpaceTerminalView(
                         target: target, holder: holder, machines: machines,
