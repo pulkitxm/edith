@@ -4,7 +4,7 @@ import Foundation
 import ImageIO
 import PDFKit
 import UniformTypeIdentifiers
-import ZIPFoundation
+import ExtensionMarketplace
 
 @testable import EdithStudio
 

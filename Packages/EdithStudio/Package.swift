@@ -8,12 +8,12 @@ let package = Package(
         .library(name: "EdithStudio", targets: ["EdithStudio"])
     ],
     dependencies: [
-        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")
+        .package(path: "../ExtensionMarketplace")
     ],
     targets: [
         .target(
             name: "EdithStudio",
-            dependencies: [.product(name: "ZIPFoundation", package: "ZIPFoundation")],
+            dependencies: [.product(name: "ExtensionMarketplace", package: "ExtensionMarketplace")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
