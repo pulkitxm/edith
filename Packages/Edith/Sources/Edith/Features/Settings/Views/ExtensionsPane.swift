@@ -515,7 +515,7 @@ private struct ExtensionMarketplaceCard: View {
                 {
                     Button(action: download) {
                         if marketplace.downloadingID == entry.id {
-                            ProgressView().controlSize(.small)
+                            LoadingIndicator("Downloading")
                         } else {
                             Text("Download").font(.edithText(.caption))
                         }
