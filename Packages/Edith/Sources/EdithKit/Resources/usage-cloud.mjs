@@ -18,6 +18,7 @@ const cloudClients = new Set([
 ]);
 const usdPerCredit = 0.04;
 const firstCloudDay = "2025-05-16";
+const receiptCacheVersion = 2;
 const collectionDeadline = AbortSignal.timeout(90_000);
 
 function tokens(value) {
@@ -193,11 +194,11 @@ export function claudeReceiptIdentity(value) {
   if (
     (row?.type !== undefined && row.type !== "assistant") ||
     !message?.usage ||
-    !message.id ||
-    !row.requestId
+    typeof message.id !== "string" ||
+    !message.id
   )
     return null;
-  return JSON.stringify([message.id, row.requestId]);
+  return message.id;
 }
 
 export function claudeCloudReceipts(events, sessionID, local = new Set()) {
@@ -402,7 +403,9 @@ export async function collectClaudeCloud(
     .digest("hex");
   const saved = cache ? await jsonFile(cache) : null;
   const cached =
-    saved?.account === account && Array.isArray(saved.sessions)
+    saved?.version === receiptCacheVersion &&
+    saved.account === account &&
+    Array.isArray(saved.sessions)
       ? saved.sessions
       : null;
   let records;
@@ -412,7 +415,7 @@ export async function collectClaudeCloud(
       await mkdir(join(cache, ".."), { recursive: true, mode: 0o700 });
       await writeFile(
         `${cache}.pending`,
-        JSON.stringify({ account, sessions: records }),
+        JSON.stringify({ version: receiptCacheVersion, account, sessions: records }),
         { mode: 0o600 },
       );
       await rename(`${cache}.pending`, cache);
