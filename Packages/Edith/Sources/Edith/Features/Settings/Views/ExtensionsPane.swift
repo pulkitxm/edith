@@ -41,8 +41,8 @@ struct ExtensionEnablementStorage: DynamicProperty {
 }
 
 struct ExtensionsPane: View {
-    @State private var query = ""
-    @State private var category = ExtensionMarketplaceCategory.all
+    @State private var model: ExtensionCatalogModel
+    @Environment(\.windowSessionOwner) private var sessions
     @State private var selectedEntry: ExtensionRegistryEntry?
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @State private var permissionRequest: ExtensionPermissionRequest?
@@ -55,6 +55,10 @@ struct ExtensionsPane: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+
+    init(model: ExtensionCatalogModel? = nil) {
+        _model = State(initialValue: model ?? ExtensionCatalogModel())
+    }
 
     private var theme: Color { themeColor(themeName) }
 
@@ -71,15 +75,21 @@ struct ExtensionsPane: View {
                 ScrollView {
                     extensionGrid
                         .pageContent(compact)
+                        .background {
+                            if let sessions {
+                                PageScrollPosition(
+                                    positions: sessions.scrollPositions, key: "extensions/catalog")
+                            }
+                        }
                 }
-                .scrollIndicators(.never)
+                .scrollIndicators(.automatic)
                 .onAppear {
                     if automaticActionsEnabled { handleDeepLink(using: proxy) }
                 }
             }
         }
         .navigationTitle("Extensions")
-        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: model.category)
         .onChange(of: grantedPermissions) {
             enableRequestedExtensionIfReady()
         }
@@ -126,33 +136,20 @@ struct ExtensionsPane: View {
     }
 
     private var searchField: some View {
-        SearchField(placeholder: "Search extensions", text: $query, typeAhead: true)
+        @Bindable var model = model
+        return SearchField(placeholder: "Search extensions", text: $model.query, typeAhead: true)
     }
 
     private var categoryRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: UIScale.pt(8)) {
-                ForEach(ExtensionMarketplaceCategory.allCases, id: \.self) { item in
-                    Button {
-                        withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                            category = item
-                        }
-                    } label: {
-                        Text(item.rawValue)
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    }
-                    .buttonStyle(
-                        EdithButtonStyle(.selection, selected: category == item, tint: theme)
-                    )
-                }
-            }
-        }
-        .scrollIndicators(.never)
+        @Bindable var model = model
+        return PageTabPicker(
+            title: "Extension category", selection: $model.category,
+            options: ExtensionMarketplaceCategory.allCases, label: { $0.rawValue })
     }
 
     private var filteredEntries: [ExtensionRegistryEntry] {
         ExtensionMarketplaceFilter.filter(
-            entries: inspectionCenter.list().map(\.entry), query: query, category: category)
+            entries: ExtensionRegistry.entries, query: model.query, category: model.category)
     }
 
     private var visibleSuites: [(suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry])] {
@@ -166,7 +163,8 @@ struct ExtensionsPane: View {
     @ViewBuilder
     private var extensionGrid: some View {
         if filteredEntries.isEmpty {
-            let state = ExtensionMarketplaceFilter.emptyState(query: query, category: category)
+            let state = ExtensionMarketplaceFilter.emptyState(
+                query: model.query, category: model.category)
             ContentUnavailableView {
                 Label(state.title, systemImage: "magnifyingglass")
             } description: {
@@ -222,8 +220,8 @@ struct ExtensionsPane: View {
             let entry = ExtensionRegistry.entries.first(where: { $0.id == id })
         else { return }
         SharedDefaults.store.removeObject(forKey: "extensionsExpand")
-        query = ""
-        category = .all
+        model.query = ""
+        model.category = .all
         DispatchQueue.main.async {
             withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
                 proxy.scrollTo(entry.id, anchor: .center)

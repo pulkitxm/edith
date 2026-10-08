@@ -26,7 +26,7 @@ struct PageContent: View {
             case .appMaintenance: AppMaintenanceView(model: sessions?.maintenance)
             case .blitztree: BlitzTreePage(model: sessions?.blitzTree)
             case .system: SuiteLandingPage(suite: SuiteRegistry.suite(.system))
-            case .runningApps: SystemPage()
+            case .runningApps: SystemPage(model: sessions?.runningApps)
             case .desk: SuiteLandingPage(suite: SuiteRegistry.suite(.desk))
             case .media: SuiteLandingPage(suite: SuiteRegistry.suite(.media))
             case .studio: StudioPage()
@@ -41,7 +41,7 @@ struct PageContent: View {
             case .attention: AttentionPage(model: sessions?.attention)
             case .seoAudit: SEOAuditPage()
             case .codeStats: CodeStatsPage(model: sessions?.codeStats)
-            case .extensions: ExtensionsPane()
+            case .extensions: ExtensionsPane(model: sessions?.extensions)
             case .settings: SettingsPane(updater: updater)
             case .about: AboutPane()
             }
