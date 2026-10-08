@@ -24,10 +24,17 @@ public enum SurfaceDrag {
     }
 }
 
+public struct SurfaceLibraryPreview: Equatable {
+    public let widget: SurfaceWidget
+    public let point: CGPoint
+    public init(widget: SurfaceWidget, point: CGPoint) { self.widget = widget; self.point = point }
+}
+
 public struct SurfaceCanvas<Content: View>: View {
     let layout: SurfaceLayout
     let singleColumn: Bool
     let editing: Bool
+    let libraryPreview: SurfaceLibraryPreview?
     let selected: String?
     let select: (String) -> Void
     let place: (SurfaceWidget, String?) -> Void
@@ -45,6 +52,7 @@ public struct SurfaceCanvas<Content: View>: View {
 
     public init(
         layout: SurfaceLayout, singleColumn: Bool, editing: Bool = false, selected: String? = nil,
+        libraryPreview: SurfaceLibraryPreview? = nil,
         select: @escaping (String) -> Void = { _ in },
         place: @escaping (SurfaceWidget, String?) -> Void = { _, _ in },
         inspect: ((String) -> Void)? = nil,
@@ -57,6 +65,7 @@ public struct SurfaceCanvas<Content: View>: View {
         self.layout = layout.normalized()
         self.singleColumn = singleColumn
         self.editing = editing
+        self.libraryPreview = libraryPreview
         self.selected = selected
         self.select = select
         self.place = place
@@ -115,7 +124,9 @@ public struct SurfaceCanvas<Content: View>: View {
                 }
             )
             .overlay(alignment: .topLeading) {
-                if editing, let widget = dropWidget, let point = dropPoint {
+                if editing, let widget = libraryPreview?.widget ?? dropWidget,
+                    let point = libraryPreview?.point ?? dropPoint
+                {
                     let frame = dropFrame(widget, at: point)
                     RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))
                         .fill(Color.accentColor.opacity(0.15))

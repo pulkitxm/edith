@@ -69,6 +69,7 @@ import Testing
         }
         .environment(\.surfaceSampleContent, true)
         .environment(\.colorScheme, .dark)
+        .background(Color.black)
         let data = try render(shelf, size: CGSize(width: 580, height: 360), dark: true)
         #expect(data.count > 10_000)
         try save(data, name: "shelf-sample-cards.png")

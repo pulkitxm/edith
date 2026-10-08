@@ -33,6 +33,9 @@ struct SurfaceEditorPane: View {
     @State private var sourceLoad = ContentLoad()
     @State private var tileFrames: [String: CGRect] = [:]
     @State private var canvasWidth = 600.0
+    @State private var libraryDrag: SurfaceLibraryPreview?
+    @State private var canvasGlobalFrame = CGRect.zero
+    @State private var canvasViewport = CGRect.zero
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
 
@@ -55,6 +58,11 @@ struct SurfaceEditorPane: View {
                         if target == .notch { notchTabs }
                     }
                     .padding(PageMetrics.gutter(compact))
+                }
+                .onGeometryChange(for: CGRect.self) {
+                    $0.frame(in: .global)
+                } action: {
+                    canvasViewport = $0
                 }
             } else {
                 HStack(alignment: .top, spacing: 0) {
@@ -381,7 +389,12 @@ struct SurfaceEditorPane: View {
             ForEach(libraryWidgets) { widget in
                 HStack(alignment: .top, spacing: UIScale.pt(10)) {
                     Image(systemName: widget.icon).foregroundStyle(Color.accentColor).frame(
-                        width: UIScale.pt(20))
+                        width: UIScale.pt(20), height: UIScale.pt(28)
+                    )
+                    .contentShape(Rectangle())
+                    .help("Drag " + widget.title + " onto the canvas")
+                    .accessibilityLabel("Drag " + widget.title)
+                    .highPriorityGesture(libraryGesture(widget))
                     VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                         Text(widget.title).font(.edithText(.callout))
                         Text(widget.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
@@ -436,6 +449,23 @@ struct SurfaceEditorPane: View {
                 collapsedPreview
             }
             previewCanvas
+                .onGeometryChange(for: CGRect.self) {
+                    $0.frame(in: .global)
+                } action: {
+                    canvasGlobalFrame = $0
+                }
+                .overlay {
+                    if target == .notch, layout.notchHorizontal, localLibraryPreview != nil {
+                        RoundedRectangle(cornerRadius: UIScale.pt(12)).strokeBorder(
+                            Color.accentColor, lineWidth: 2
+                        )
+                        .overlay(alignment: .bottomTrailing) {
+                            Text("Add " + (libraryDrag?.widget.title ?? "widget"))
+                                .font(.edithText(.caption)).padding(UIScale.pt(8))
+                                .background(.regularMaterial, in: Capsule())
+                        }.allowsHitTesting(false)
+                    }
+                }
                 .onGeometryChange(for: Double.self) {
                     $0.size.width / UIScale.current
                 } action: {
@@ -470,7 +500,8 @@ struct SurfaceEditorPane: View {
         } else {
             SurfaceCanvas(
                 layout: layout, singleColumn: compact || previewCompact,
-                editing: true, selected: selected, select: { selected = $0 },
+                editing: true, selected: selected, libraryPreview: localLibraryPreview,
+                select: { selected = $0 },
                 place: { widget, anchor in
                     store.update(target) { layout in
                         let id = layout.add(widget)
@@ -507,6 +538,50 @@ struct SurfaceEditorPane: View {
                 }
             }
         }
+    }
+
+    private var localLibraryPreview: SurfaceLibraryPreview? {
+        guard let drag = libraryDrag,
+            canvasGlobalFrame.intersection(canvasViewport).contains(drag.point)
+        else { return nil }
+        return .init(
+            widget: drag.widget,
+            point: CGPoint(
+                x: drag.point.x - canvasGlobalFrame.minX, y: drag.point.y - canvasGlobalFrame.minY))
+    }
+
+    private func libraryGesture(_ widget: SurfaceWidget) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in libraryDrag = .init(widget: widget, point: value.location) }
+            .onEnded { value in
+                libraryDrag = .init(widget: widget, point: value.location)
+                defer { libraryDrag = nil }
+                guard let preview = localLibraryPreview else { return }
+                store.update(target) { layout in
+                    if target == .notch && layout.notchHorizontal {
+                        selected = layout.add(widget)
+                    } else if compact || previewCompact {
+                        let anchor = layout.visible.first {
+                            (tileFrames[$0.id]?.midY ?? .infinity) * UIScale.current
+                                > preview.point.y
+                        }?.id
+                        let id = layout.add(widget)
+                        if let anchor { layout.move(id, before: anchor) }
+                        selected = id
+                    } else {
+                        let pitch = max(0.01, (canvasWidth + layout.gap) / Double(layout.columns))
+                        let column = max(
+                            0,
+                            min(layout.columns - 1, Int(preview.point.x / UIScale.current / pitch)))
+                        let row = max(
+                            0,
+                            min(
+                                SurfaceLayout.maximumRow,
+                                Int((preview.point.y / UIScale.pt(layout.rowHeight)).rounded())))
+                        selected = layout.add(widget, column: column, row: row)
+                    }
+                }
+            }
     }
 
     private var collapsedPreview: some View {
