@@ -11,16 +11,29 @@ enum HomebrewPageMode: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-enum HomebrewCancellation {
-    private static var handler: (() -> Bool)?
+private final class HomebrewOperationOwner {
+    weak var model: HomebrewPageModel?
 
-    static func register(_ handler: @escaping () -> Bool) {
-        self.handler = handler
+    init(_ model: HomebrewPageModel) { self.model = model }
+}
+
+@MainActor
+enum HomebrewCancellation {
+    private static var owners: [HomebrewOperationOwner] = []
+
+    static func register(_ model: HomebrewPageModel) {
+        owners.removeAll { $0.model == nil }
+        owners.append(HomebrewOperationOwner(model))
     }
 
     @discardableResult
     static func cancel() -> Bool {
-        handler?() ?? false
+        owners.removeAll { $0.model == nil }
+        var cancelled = false
+        for owner in owners {
+            if owner.model?.cancel() == true { cancelled = true }
+        }
+        return cancelled
     }
 }
 
@@ -29,6 +42,9 @@ enum HomebrewCancellation {
 final class HomebrewPageModel {
     var mode = HomebrewPageMode.installed
     var query = ""
+    var installedQuery = ""
+    var updatesOnly = false
+    var selectedPackageID: String?
     var packages: [HomebrewPackage] = []
     var status: HomebrewStatus?
     let loading = ContentLoad()
@@ -53,7 +69,7 @@ final class HomebrewPageModel {
     ) {
         self.client = client
         self.store = store
-        HomebrewCancellation.register { [weak self] in self?.cancel() ?? false }
+        HomebrewCancellation.register(self)
     }
 
     var updateCount: Int { packages.count(where: \.outdated) }
