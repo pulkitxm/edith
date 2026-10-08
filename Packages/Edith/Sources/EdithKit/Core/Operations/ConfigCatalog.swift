@@ -50,7 +50,7 @@ public enum ConfigCatalog {
         "budget",
         "dashboard", "database", "codestats",
         "machines", "herdr", "quinjet", "companion", "finder", "system", "homebrew", "cleaner",
-        "music", "studio", "calendar", "virtualCamera",
+        "music", "studio", "latex", "calendar", "virtualCamera",
         "clipboard", "keystrokes",
         "notch", "focusdim", "presenter", "sweaters", "colorpicker", "emoji", "bifrost",
         "micmute",

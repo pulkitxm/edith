@@ -237,7 +237,7 @@ import Testing
     @Test func tabsLoadTheirOwnPartsAndFiltersRunOffTheMainPath() async throws {
         let fixture = fixture()
         defer { fixture.cleanup() }
-        let now = Date()
+        let now = Calendar.current.startOfDay(for: Date()).addingTimeInterval(-3600)
         try fixture.repository.saveSettings(
             AttentionSettings(isEnabled: true, trackingEnabled: true))
         for (offset, app) in [
@@ -246,10 +246,11 @@ import Testing
         .enumerated() {
             try fixture.repository.append(
                 AttentionEvent(
-                    startedAt: now.addingTimeInterval(Double(-600 + offset * 300)), duration: 240,
+                    startedAt: now.addingTimeInterval(Double(-600 + offset * 300)), duration: Double(240 - offset * 30),
                     source: .application, appName: app.1, bundleID: app.0))
         }
         let model = AttentionPageModel(repository: fixture.repository)
+        model.setPeriod(AttentionPeriod(.today, now: now))
         model.reload()
         await model.waitForReload()
         #expect(model.timeline.isEmpty)

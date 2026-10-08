@@ -237,9 +237,9 @@ rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 ln -s ../../../../../Resources/Edith_EdithKit.bundle \
   "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
 mkdir -p "$APP/Contents/Frameworks"
-for framework in EdithShared EdithKit EdithCore EdithCameraSupport EdithLidAwakeSupport MeetingVoice; do
-  source="$HELPER/Contents/Frameworks/$framework.framework"
-  destination="$APP/Contents/Frameworks/$framework.framework"
+for source in "$HELPER"/Contents/Frameworks/*.framework; do
+  [ -d "$source" ] || continue
+  destination="$APP/Contents/Frameworks/$(basename "$source")"
   if [ -d "$source" ] && [ ! -d "$destination" ]; then
     mv "$source" "$destination"
   else
