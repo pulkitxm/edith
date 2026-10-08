@@ -89,14 +89,19 @@ test alone establishes that a screen draws, not that its controls are reachable.
 Exercise native events, viewport restoration, focus, final-row access, and
 selection across refresh and re-entry.
 
-`ApplicationListExperienceTests` loads 10,000 process and package rows, reaches
-the final row, and verifies that native row views remain bounded. Projection
-tests cover stable ordering, full-result search, cancellation and supersession.
+`ApplicationListExperienceTests` loads 10,000 rows each for processes, packages,
+agent groups, and agent sessions. It reaches the final row and verifies fewer
+than 100 native row views in each fixed viewport, including compact layouts at
+1.6 zoom. Projection tests cover stable ordering, full-result search, cancellation and supersession.
 `PageScrollPositionTests` exercises destination and section re-entry using the
 native scroll view, including shorter content. Shared control tests cover
 disabled pointer actions, keyboard search, focus, compact headers, zoom and
-presentation ownership. `UISmokeTests` renders every main destination at regular
-and compact widths in both appearances.
+presentation ownership. `ApplicationNavigationExperienceTests` verifies selected
+tab visibility, native skill action bounds and clicks, and video toolbar bounds
+at narrow widths. `CanvasSelectionTests` exercises pointer movement, all resize
+corners, keyboard positioning, duplicate and delete, undo, and local text editing.
+`UISmokeTests` renders every main destination at regular and compact widths in
+both appearances.
 
 Timing comparisons require the same machine, build, synthetic workload, and
 power conditions. Keep raw measurements local until sanitized. Final visual

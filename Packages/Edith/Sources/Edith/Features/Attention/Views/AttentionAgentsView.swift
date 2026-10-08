@@ -78,111 +78,110 @@ struct AttentionAgentsView: View {
     }
 }
 
-private struct AttentionAgentTable: View {
+struct AttentionAgentTable: View {
     let totals: [AttentionAgentTotal]
     let color: Color
-    @Environment(\.colorScheme) private var scheme
+    @State private var columns = TableColumnCustomization<AttentionAgentTotal>()
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        let dark = scheme == .dark
-        let top = totals.map(\.working).max() ?? 1
-        VStack(spacing: UIScale.pt(8)) {
-            HStack {
-                Text("").frame(maxWidth: .infinity, alignment: .leading)
-                header("Working")
-                header("Waiting")
-                header("You")
-                header("Sessions")
-            }
-            .foregroundStyle(DashSkin.inkFaint(dark))
-            ForEach(totals.prefix(12)) { total in
-                VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                    HStack {
-                        Text(total.key)
-                            .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                            .foregroundStyle(DashSkin.ink(dark))
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        cell(AttentionFormat.duration(total.working), dark)
-                        cell(AttentionFormat.duration(total.blocked), dark)
-                        cell(AttentionFormat.duration(total.attended), dark)
-                        cell("\(total.sessions)", dark)
-                    }
-                    GeometryReader { geometry in
-                        Capsule().fill(color)
-                            .frame(width: max(2, geometry.size.width * total.working / max(top, 1)))
-                    }
-                    .frame(height: UIScale.pt(4))
+        let peak = totals.reduce(1) { max($0, $1.working) }
+        GeometryReader { geometry in
+            Table(totals, columnCustomization: $columns) {
+                SwiftUI.TableColumn("Agent group") { total in
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        Text(total.key).font(.edithText(.body)).lineLimit(1).help(total.key)
+                        if compact {
+                            Text(
+                                "Waiting \(AttentionFormat.duration(total.blocked)) · You \(AttentionFormat.duration(total.attended)) · \(total.sessions) sessions"
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        GeometryReader { bar in
+                            Capsule().fill(color.opacity(0.8))
+                                .frame(
+                                    width: max(
+                                        2, bar.size.width * max(0, min(1, total.working / peak))))
+                        }.frame(height: UIScale.pt(4)).accessibilityHidden(true)
+                    }.padding(.vertical, UIScale.pt(4))
                 }
+                .width(
+                    PageMetrics.tableNameWidth(
+                        viewport: geometry.size.width,
+                        fixedWidth: compact ? 90 : 330, columnCount: compact ? 2 : 5))
+                SwiftUI.TableColumn("Working") { total in
+                    Text(AttentionFormat.duration(total.working)).monospacedDigit().foregroundStyle(
+                        color)
+                }.width(UIScale.pt(90))
+                SwiftUI.TableColumn("Waiting") { total in
+                    Text(AttentionFormat.duration(total.blocked)).monospacedDigit()
+                }.width(UIScale.pt(90)).customizationID("waiting")
+                    .defaultVisibility(compact ? .hidden : .visible)
+                SwiftUI.TableColumn("You") { total in
+                    Text(AttentionFormat.duration(total.attended)).monospacedDigit()
+                }.width(UIScale.pt(90)).customizationID("you")
+                    .defaultVisibility(compact ? .hidden : .visible)
+                SwiftUI.TableColumn("Sessions") { total in
+                    Text("\(total.sessions)").monospacedDigit()
+                }.width(UIScale.pt(60)).customizationID("sessions")
+                    .defaultVisibility(compact ? .hidden : .visible)
             }
-        }
-    }
-
-    private func header(_ text: String) -> some View {
-        Text(text.uppercased())
-            .font(DashSkin.mono(9.5)).tracking(UIScale.pt(1))
-            .frame(width: UIScale.pt(70), alignment: .trailing)
-    }
-
-    private func cell(_ text: String, _ dark: Bool) -> some View {
-        Text(text)
-            .font(.system(size: UIScale.pt(11.5)))
-            .monospacedDigit()
-            .foregroundStyle(DashSkin.inkSoft(dark))
-            .frame(width: UIScale.pt(70), alignment: .trailing)
+            .tableStyle(.inset)
+            .font(.edithText(.body))
+            .accessibilityLabel("All agent groups")
+        }.frame(height: attentionTableHeight(totals.count))
     }
 }
 
-private struct AttentionAgentSessions: View {
+struct AttentionAgentSessions: View {
     let sessions: [AttentionAgentSession]
-    @State private var limit = 20
-    @Environment(\.colorScheme) private var scheme
+    @State private var columns = TableColumnCustomization<AttentionAgentSession>()
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        let dark = scheme == .dark
-        AttentionPanel("Sessions", subtitle: "Every agent that worked in this period.") {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(sessions.prefix(limit).enumerated()), id: \.element.id) {
-                    index, session in
-                    if index > 0 { Divider().opacity(0.5) }
-                    HStack(spacing: UIScale.pt(12)) {
-                        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                            Text(session.title)
-                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                                .foregroundStyle(DashSkin.ink(dark))
-                                .lineLimit(1)
+        AttentionPanel("Sessions", subtitle: "\(sessions.count) sessions in this period.") {
+            GeometryReader { geometry in
+                Table(sessions, columnCustomization: $columns) {
+                    SwiftUI.TableColumn("Session") { session in
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            Text(session.title).font(.edithText(.body)).lineLimit(1).help(
+                                session.title)
                             Text(
                                 [session.kind, session.machine, session.project].compactMap { $0 }
                                     .joined(separator: " · ")
                             )
-                            .font(.system(size: UIScale.pt(10.5)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                            .lineLimit(1)
-                        }
-                        Spacer(minLength: UIScale.pt(8))
-                        VStack(alignment: .trailing, spacing: UIScale.pt(2)) {
-                            Text(AttentionFormat.duration(session.working))
-                                .font(.system(size: UIScale.pt(12), weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(DashSkin.ink(dark))
-                            Text(
-                                session.blocked > 0
-                                    ? "waited \(AttentionFormat.duration(session.blocked)) · \(AttentionFormat.time(session.lastSeen))"
-                                    : "last seen \(AttentionFormat.time(session.lastSeen))"
-                            )
-                            .font(.system(size: UIScale.pt(10)))
-                            .foregroundStyle(DashSkin.inkFaint(dark))
-                        }
-                    }
-                    .padding(.vertical, UIScale.pt(7))
+                            .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                            if compact {
+                                Text(
+                                    "Waiting \(AttentionFormat.duration(session.blocked)) · Last seen \(AttentionFormat.time(session.lastSeen))"
+                                )
+                                .font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }.padding(.vertical, UIScale.pt(4))
+                    }.width(
+                        PageMetrics.tableNameWidth(
+                            viewport: geometry.size.width,
+                            fixedWidth: compact ? 90 : 280, columnCount: compact ? 2 : 4))
+                    SwiftUI.TableColumn("Working") { session in
+                        Text(AttentionFormat.duration(session.working)).monospacedDigit()
+                    }.width(UIScale.pt(90))
+                    SwiftUI.TableColumn("Waiting") { session in
+                        Text(AttentionFormat.duration(session.blocked)).monospacedDigit()
+                    }.width(UIScale.pt(90)).customizationID("waiting")
+                        .defaultVisibility(compact ? .hidden : .visible)
+                    SwiftUI.TableColumn("Last seen") { session in
+                        Text(AttentionFormat.time(session.lastSeen)).monospacedDigit()
+                    }.width(UIScale.pt(100)).customizationID("lastSeen")
+                        .defaultVisibility(compact ? .hidden : .visible)
                 }
-                if sessions.count > limit {
-                    Button("Show \(min(20, sessions.count - limit)) more") { limit += 20 }
-                        .buttonStyle(.edith(.secondary))
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, UIScale.pt(6))
-                }
-            }
+                .tableStyle(.inset)
+                .font(.edithText(.body))
+                .accessibilityLabel("All agent sessions")
+            }.frame(height: attentionTableHeight(sessions.count))
         }
     }
+}
+
+private func attentionTableHeight(_ count: Int) -> CGFloat {
+    UIScale.pt(min(420, max(120, Double(count) * 62 + 32)))
 }
