@@ -4,6 +4,64 @@ import Testing
 @testable import EdithKit
 
 struct SurfaceLayoutTests {
+    @Test func packingFillsSpaceBelowShorterWidgetsAndRespectsExactPositions() {
+        let tiles = [SurfaceTile(.calendar), SurfaceTile(.usage), SurfaceTile(.music)]
+        let frames = SurfaceGridPacking.pack(
+            tiles: tiles, columns: 24, heights: [80, 240, 100], rowHeight: 8, gap: 8)
+        #expect(frames[0].column == 0 && frames[0].row == 0)
+        #expect(frames[1].column == 12 && frames[1].row == 0)
+        #expect(frames[2].column == 0 && frames[2].row == 11)
+        var pinned = SurfaceTile(.focus)
+        pinned.column = 3
+        pinned.row = 7
+        pinned.span = 6
+        let placed = SurfaceGridPacking.pack(
+            tiles: [pinned], columns: 24, heights: [80], rowHeight: 8, gap: 0)
+        #expect(placed == [.init(column: 3, row: 7, span: 6, rows: 10)])
+    }
+
+    @Test func packingNeverOverlapsAndUsesConfiguredHeight() {
+        var tiles = SurfaceWidget.allCases.map { SurfaceTile($0) }
+        for index in tiles.indices {
+            tiles[index].span = [5, 8, 12, 24][index % 4]
+            tiles[index].column = index % 2 == 0 ? 0 : nil
+            tiles[index].row = index % 2 == 0 ? 0 : nil
+        }
+        tiles[0].height = 144
+        let frames = SurfaceGridPacking.pack(
+            tiles: tiles, columns: 24, heights: Array(repeating: 72, count: tiles.count),
+            rowHeight: 8, gap: 8)
+        #expect(frames[0].rows == 19)
+        for index in frames.indices {
+            #expect(frames[index].column + frames[index].span <= 24)
+            for next in frames.indices where next > index {
+                #expect(!frames[index].overlaps(frames[next]))
+            }
+        }
+    }
+
+    @Test func gridSettingsAndContentChoicesPersistAndNormalize() {
+        var layout = SurfaceLayout.standard(.home)
+        layout.columns = 0
+        layout.gap = -10
+        layout.padding = 200
+        layout.rowHeight = 0
+        layout.tiles[0].span = 100
+        layout.tiles[0].height = 1
+        layout.tiles[0].showDetails = false
+        layout.tiles[0].itemLimit = 200
+        let clean = layout.normalized()
+        #expect(clean.columns == 4 && clean.tiles[0].span == 4)
+        #expect(clean.gap == 0 && clean.padding == 32 && clean.rowHeight == 1)
+        #expect(clean.tiles[0].height == 64 && clean.tiles[0].itemLimit == 20)
+        #expect(!clean.tiles[0].showDetails)
+        #expect(SurfaceLayout.decode(clean.encoded, target: .home) == clean)
+        layout.tiles[0].column = 0
+        layout.tiles[0].row = 10
+        layout.arrangeAutomatically()
+        #expect(layout.tiles.allSatisfy { $0.column == nil && $0.row == nil })
+    }
+
     @Test func placementPreservesConfigurationAndHasStableInsertion() {
         var layout = SurfaceLayout.standard(.home)
         layout.tiles[0].title = "Across the world"

@@ -4,7 +4,7 @@ public enum SurfaceTarget: String, Codable, CaseIterable, Identifiable, Sendable
     case home, notch
     public var id: String { rawValue }
     public var title: String { self == .home ? "Home" : "Notch" }
-    public var key: String { "surfaceLayout.\(rawValue)" }
+    public var key: String { "surfaceGrid.\(rawValue)" }
 }
 
 public enum SurfaceWidget: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -111,6 +111,16 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var hidden = false
     public var focusMinutes = 25
     public var days = 30
+    public var span = 12
+    public var column: Int?
+    public var row: Int?
+    public var height: Double?
+    public var showTitle = true
+    public var showDetails = true
+    public var showActions = true
+    public var itemLimit = 5
+    public var dense = false
+    public var accent = true
     public var id: String { widget.rawValue }
     public var displayTitle: String {
         let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -120,6 +130,7 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public init(_ widget: SurfaceWidget, size: SurfaceWidgetSize = .regular) {
         self.widget = widget
         self.size = size
+        span = size == .wide ? 24 : size == .compact ? 6 : 12
     }
 }
 
@@ -127,6 +138,13 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     public var tiles: [SurfaceTile]
     public var tabOrder: [String] = SurfaceNotchTab.allCases.map(\.rawValue)
     public var hiddenTabs: [String] = []
+    public var columns = 24
+    public var gap = 12.0
+    public var padding = 16.0
+    public var cornerRadius = 14.0
+    public var rowHeight = 8.0
+    public var notchCardWidth = 280.0
+    public var notchHorizontal = true
     public var visible: [SurfaceTile] { tiles.filter { !$0.hidden } }
     public init(tiles: [SurfaceTile]) { self.tiles = tiles }
 
@@ -146,14 +164,26 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
 
     public func normalized() -> Self {
         var seen = Set<SurfaceWidget>()
+        let columns = min(48, max(4, columns))
         var result = Self(
             tiles: tiles.filter { seen.insert($0.widget).inserted }.map {
                 var tile = $0
                 tile.title = String(tile.title.prefix(64))
                 tile.focusMinutes = min(180, max(1, tile.focusMinutes))
                 tile.days = [7, 30, 90].contains(tile.days) ? tile.days : 30
+                tile.span = min(columns, max(1, tile.span))
+                tile.column = tile.column.map { min(columns - tile.span, max(0, $0)) }
+                tile.row = tile.row.map { min(1000, max(0, $0)) }
+                tile.height = tile.height.map { min(1200, max(64, $0)) }
+                tile.itemLimit = min(20, max(1, tile.itemLimit))
                 return tile
             })
+        result.columns = columns
+        result.gap = min(32, max(0, gap))
+        result.padding = min(32, max(0, padding))
+        result.cornerRadius = min(32, max(0, cornerRadius))
+        result.rowHeight = min(32, max(1, rowHeight))
+        result.notchCardWidth = min(520, max(180, notchCardWidth))
         let known = SurfaceNotchTab.allCases.map(\.rawValue)
         var seenTabs = Set<String>()
         result.tabOrder = (tabOrder + known).filter {
@@ -195,5 +225,63 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
 
     public var encoded: String {
         String(data: (try? JSONEncoder().encode(normalized())) ?? Data(), encoding: .utf8) ?? ""
+    }
+
+    public mutating func arrangeAutomatically() {
+        for index in tiles.indices {
+            tiles[index].column = nil
+            tiles[index].row = nil
+        }
+    }
+}
+
+public struct SurfaceGridPlacement: Equatable, Sendable {
+    public let column: Int
+    public let row: Int
+    public let span: Int
+    public let rows: Int
+
+    public init(column: Int, row: Int, span: Int, rows: Int) {
+        self.column = column
+        self.row = row
+        self.span = span
+        self.rows = rows
+    }
+
+    public func overlaps(_ other: Self) -> Bool {
+        column < other.column + other.span && column + span > other.column
+            && row < other.row + other.rows && row + rows > other.row
+    }
+}
+
+public enum SurfaceGridPacking {
+    public static func pack(
+        tiles: [SurfaceTile], columns: Int, heights: [Double], rowHeight: Double, gap: Double
+    ) -> [SurfaceGridPlacement] {
+        let columns = max(1, columns)
+        let unit = max(1, rowHeight)
+        let spacing = Int(ceil(gap / unit))
+        var placed: [SurfaceGridPlacement] = []
+        for (index, tile) in tiles.enumerated() {
+            let span = min(columns, max(1, tile.span))
+            let height = tile.height ?? (heights.indices.contains(index) ? heights[index] : 100)
+            let rows = max(1, Int(ceil(height / unit))) + spacing
+            let start = min(columns - span, max(0, tile.column ?? 0))
+            var row = max(0, tile.row ?? 0)
+            var candidate = SurfaceGridPlacement(column: start, row: row, span: span, rows: rows)
+            while true {
+                let options = tile.column == nil ? Array(0...(columns - span)) : [start]
+                if let column = options.first(where: { column in
+                    let frame = SurfaceGridPlacement(column: column, row: row, span: span, rows: rows)
+                    return !placed.contains { frame.overlaps($0) }
+                }) {
+                    candidate = SurfaceGridPlacement(column: column, row: row, span: span, rows: rows)
+                    break
+                }
+                row += 1
+            }
+            placed.append(candidate)
+        }
+        return placed
     }
 }
