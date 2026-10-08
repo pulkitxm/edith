@@ -11,97 +11,120 @@ struct HomePage: View {
         true
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-        var musicEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.codeStatsEnabled, store: SharedDefaults.store) private
-        var codeStatsEnabled = false
-    @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
-        var dataSuiteEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
-        var calendarEnabled =
-        false
-    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
-        var keepAwakeEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-        var systemEnabled = false
-    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-        var presenterEnabled =
-        false
-    @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
-        var lidAwakeEnabled = false
-    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
-        var keystrokeHighlightEnabled = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var dark: Bool { scheme == .dark }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
+    @State private var layoutStore = SurfaceLayoutStore.shared
+    @State private var editing = false
+    @State private var selectedTile: String?
+
+    private var layout: SurfaceLayout {
+        var layout = layoutStore.home
+        if !editing, SharedDefaults.store.string(forKey: SurfaceTarget.home.key) == nil {
+            layout.tiles.removeAll { !$0.widget.available(in: SharedDefaults.store) }
+        }
+        return layout
+    }
+
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            HomeHeader(dark: dark)
+            VStack(spacing: UIScale.pt(10)) {
+                HomeHeader(dark: dark)
+                HStack {
+                    if editing {
+                        Text("Drag a handle to reorder. Resize with the corner.")
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button(editing ? "Done" : "Edit layout") { editing.toggle() }
+                        .buttonStyle(.edith(.secondary))
+                    Button("Widget editor") { MainApp.openSurfaceEditor(.home) }
+                        .buttonStyle(.edith(.secondary))
+                }
+            }
         } content: {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                    WorldClocksCard(dark: dark)
-                    if systemEnabled || keepAwakeEnabled || presenterEnabled
-                        || lidAwakeEnabled
-                        || keystrokeHighlightEnabled
-                    {
-                        QuickActionsCard(dark: dark)
+            SurfaceCanvas(
+                layout: layout, singleColumn: compact, editing: editing,
+                selected: selectedTile,
+                select: {
+                    selectedTile = $0;
+                    MainApp.openSurfaceEditor(.home, widget: SurfaceWidget(rawValue: $0))
+                },
+                place: { widget, anchor in
+                    layoutStore.update(.home) { $0.place(widget, before: anchor) }
+                },
+                resize: { id, size in
+                    layoutStore.update(.home) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == id }) else {
+                            return
+                        }
+                        layout.tiles[index].size = size
                     }
                 }
-                VStack(spacing: UIScale.pt(16)) {
-                    WorldClocksCard(dark: dark)
-                    if systemEnabled || keepAwakeEnabled || presenterEnabled
-                        || lidAwakeEnabled
-                        || keystrokeHighlightEnabled
-                    {
-                        QuickActionsCard(dark: dark)
-                    }
-                }
-            }
-            if usageEnabled {
-                if model.homeUsage.hasDays {
-                    PageCard(title: "Activity", note: "daily cost") {
-                        ActivityHeatmap(
-                            days: model.homeUsage.calendarDays,
-                            cuts: model.homeUsage.heatCuts,
-                            model: model, dark: dark, blur: blurMoney)
-                    }
-                } else if !model.loadAttempted {
-                    PageCard(title: "Activity", note: "daily cost") {
-                        ActivityHeatmapSkeleton()
-                    }
-                }
-            }
-            LazyVGrid(
-                columns: PageMetrics.cardColumns(compact, minimum: 340, spacing: 16),
-                alignment: .leading, spacing: UIScale.pt(16)
-            ) {
-                Group {
-                    if calendarEnabled { MeetingsCard(dark: dark) }
-                    if usageEnabled {
-                        UsageSummaryCard(dark: dark)
-                        RateLimitsDialsView(dark: dark, showsJumpLink: true)
-                    }
-                    if musicEnabled { HomeMusicCard(dark: dark) }
-                    if codeStatsEnabled, dataSuiteEnabled {
-                        CodeStatsHomeCard(dark: dark)
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .top)
+            ) { tile in homeWidget(tile) }
+            if layout.visible.isEmpty, !editing {
+                ContentUnavailableView(
+                    "Make yourself at home", systemImage: "rectangle.3.group",
+                    description: Text("Add widgets in the Home & Notch editor."))
             }
         }
         .navigationTitle("Home")
+        .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
+        { _ in layoutStore.reload() }
         .pageTask(id: usageEnabled, active: usageEnabled) {
             await model.restoreCachedHomeUsage()
             await model.load()
         }
-        .pageTask(cancel: model.endObserving) {
-            model.beginObserving()
+        .pageTask(cancel: model.endObserving) { model.beginObserving() }
+    }
+
+    @ViewBuilder private func homeWidget(_ tile: SurfaceTile) -> some View {
+        if !tile.widget.available(in: SharedDefaults.store) {
+            PageCard(title: tile.displayTitle) {
+                Text("Enable this integration in Extensions.").font(.edithText(.callout))
+                    .foregroundStyle(.secondary)
+                Button("Open Extensions") { MainApp.open(section: "extensions") }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                if !tile.title.isEmpty,
+                    ![
+                        SurfaceWidget.codeStats, .github, .agents, .focus, .databases, .machines,
+                        .desk, .media,
+                    ].contains(tile.widget)
+                {
+                    Text(tile.title).font(.edithText(.headline))
+                }
+                switch tile.widget {
+                case .clocks: WorldClocksCard(dark: dark)
+                case .actions: QuickActionsCard(dark: dark)
+                case .activity:
+                    PageCard(title: "Activity", note: "daily cost") {
+                        if model.homeUsage.hasDays {
+                            ActivityHeatmap(
+                                days: model.homeUsage.calendarDays, cuts: model.homeUsage.heatCuts,
+                                model: model, dark: dark, blur: blurMoney)
+                        } else if !model.loadAttempted {
+                            ActivityHeatmapSkeleton()
+                        } else {
+                            Text("No usage activity yet").foregroundStyle(.secondary)
+                        }
+                    }
+                case .calendar: MeetingsCard(dark: dark)
+                case .usage: UsageSummaryCard(dark: dark)
+                case .limits: RateLimitsDialsView(dark: dark, showsJumpLink: true)
+                case .music: HomeMusicCard(dark: dark)
+                case .codeStats, .github, .agents, .focus, .databases, .machines, .desk, .media:
+                    SurfaceIntegrationCard(
+                        tile: tile, active: automaticActionsEnabled,
+                        open: { MainApp.open(section: $0) })
+                }
+            }
+            .environment(\.compactLayout, compact || tile.size == .compact)
         }
     }
 

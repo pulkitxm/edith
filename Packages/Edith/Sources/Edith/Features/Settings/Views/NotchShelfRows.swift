@@ -50,6 +50,12 @@ struct NotchShelfRows: View {
 
     var body: some View {
         Group {
+            Section("Layout") {
+                Button("Customize Home & Notch") { MainApp.openSurfaceEditor(.notch) }
+                Text(
+                    "Arrange widgets, resize cards, and configure your Notch in the visual editor."
+                ).settingsCaption()
+            }
             Section {
                 Toggle(
                     "Open when dragging near the notch",
