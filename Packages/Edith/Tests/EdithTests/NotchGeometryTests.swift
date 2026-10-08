@@ -1,8 +1,24 @@
 import CoreGraphics
+import EdithKit
 import Testing
 @testable import EdithHelper
 
 @Suite struct NotchGeometryTests {
+    @Test func shelfGeometryTracksCustomDimensionsAndEditingChrome() {
+        var layout = SurfaceLayout.standard(.notch)
+        layout.notchWidth = 900
+        layout.notchShelfHeight = 300
+        let regular = NotchGeometry.expandedShapeSize(
+            tab: .home, hasMusic: false, notchHeight: 32, layout: layout)
+        let editing = NotchGeometry.expandedShapeSize(
+            tab: .home, hasMusic: false, notchHeight: 32, layout: layout, editing: true)
+        #expect(regular.width == 900)
+        #expect(regular.height > 300 + 32)
+        #expect(editing.height > regular.height)
+        #expect(editing.width == regular.width)
+        #expect(NotchGeometry.panelSize(forShape: editing).height > editing.height)
+    }
+
     @Test func usesRealNotchMathWhenAreasArePresent() {
         let size = NotchGeometry.collapsedSize(
             screenWidth: 1512, leftAreaWidth: 676, rightAreaWidth: 676, safeAreaTop: 32)

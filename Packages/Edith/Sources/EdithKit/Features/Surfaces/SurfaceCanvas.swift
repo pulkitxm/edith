@@ -2,19 +2,21 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public enum SurfaceDrag {
-    public static let prefix = "edith-surface:"
+    public static let type = UTType(exportedAs: "app.edith.surface-widget", conformingTo: .data)
     public static func provider(_ widget: SurfaceWidget) -> NSItemProvider {
-        NSItemProvider(object: (prefix + widget.id) as NSString)
+        NSItemProvider(item: Data(widget.rawValue.utf8) as NSData, typeIdentifier: type.identifier)
     }
     public static func accept(
         _ providers: [NSItemProvider], perform: @escaping @MainActor (SurfaceWidget) -> Void
     ) -> Bool {
-        guard let provider = providers.first, provider.canLoadObject(ofClass: NSString.self) else {
-            return false
-        }
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            guard let token = object as? String, token.hasPrefix(prefix),
-                let widget = SurfaceWidget(rawValue: String(token.dropFirst(prefix.count)))
+        guard
+            let provider = providers.first(where: {
+                $0.hasItemConformingToTypeIdentifier(type.identifier)
+            })
+        else { return false }
+        provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+            guard let data, data.count < 128, let token = String(data: data, encoding: .utf8),
+                let widget = SurfaceWidget(rawValue: token)
             else { return }
             Task { @MainActor in perform(widget) }
         }
@@ -89,7 +91,7 @@ public struct SurfaceCanvas<Content: View>: View {
             }
             .coordinateSpace(name: "surfaceCanvas")
             .onDrop(
-                of: [.text],
+                of: [SurfaceDrag.type],
                 delegate: SurfaceGridDrop(enabled: editing) { widget, point in
                     let pitch = (width + UIScale.pt(layout.gap)) / CGFloat(layout.columns)
                     let column = max(0, min(layout.columns - 1, Int(point.x / pitch)))
@@ -124,7 +126,7 @@ public struct SurfaceCanvas<Content: View>: View {
                     .background(
                         Color.accentColor.opacity(0.04), in: RoundedRectangle(cornerRadius: 10)
                     )
-                    .onDrop(of: [.text], isTargeted: nil) {
+                    .onDrop(of: [SurfaceDrag.type], isTargeted: nil) {
                         SurfaceDrag.accept($0) { place($0, nil) }
                     }
             }
@@ -141,12 +143,14 @@ private struct SurfaceGridDrop: DropDelegate {
     let enabled: Bool
     let place: @MainActor (SurfaceWidget, CGPoint) -> Void
 
-    func validateDrop(info: DropInfo) -> Bool { enabled && info.hasItemsConforming(to: [.text]) }
+    func validateDrop(info: DropInfo) -> Bool {
+        enabled && info.hasItemsConforming(to: [SurfaceDrag.type])
+    }
     func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .copy) }
     func performDrop(info: DropInfo) -> Bool {
         guard enabled else { return false }
         let point = info.location
-        return SurfaceDrag.accept(info.itemProviders(for: [.text])) { place($0, point) }
+        return SurfaceDrag.accept(info.itemProviders(for: [SurfaceDrag.type])) { place($0, point) }
     }
 }
 
@@ -426,16 +430,21 @@ private struct SurfaceCanvasTile<Content: View>: View {
 }
 
 public enum SurfaceTabDrag {
+    public static let type = UTType(exportedAs: "app.edith.notch-tab", conformingTo: .data)
+    public static func provider(_ raw: String) -> NSItemProvider {
+        NSItemProvider(item: Data(raw.utf8) as NSData, typeIdentifier: type.identifier)
+    }
     public static func accept(
         _ providers: [NSItemProvider], perform: @escaping @MainActor (String) -> Void
     ) -> Bool {
-        guard let provider = providers.first, provider.canLoadObject(ofClass: NSString.self) else {
-            return false
-        }
-        _ = provider.loadObject(ofClass: NSString.self) { object, _ in
-            let prefix = "edith-notch-tab:"
-            guard let token = object as? String, token.hasPrefix(prefix),
-                let tab = SurfaceNotchTab(rawValue: String(token.dropFirst(prefix.count)))
+        guard
+            let provider = providers.first(where: {
+                $0.hasItemConformingToTypeIdentifier(type.identifier)
+            })
+        else { return false }
+        provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
+            guard let data, data.count < 128, let token = String(data: data, encoding: .utf8),
+                let tab = SurfaceNotchTab(rawValue: token)
             else { return }
             Task { @MainActor in perform(tab.rawValue) }
         }

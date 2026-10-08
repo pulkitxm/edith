@@ -118,6 +118,8 @@ struct SurfaceEditorPane: View {
                 if target == .notch {
                     Toggle("Horizontal widget shelf", isOn: canvasSetting(\.notchHorizontal))
                     numberField("Shelf card width (pt)", value: canvasSetting(\.notchCardWidth))
+                    numberField("Expanded width (pt)", value: canvasSetting(\.notchWidth))
+                    numberField("Shelf height (pt)", value: canvasSetting(\.notchShelfHeight))
                 }
                 Button("Pack widgets automatically") {
                     store.update(target) { $0.arrangeAutomatically() }
@@ -289,6 +291,38 @@ struct SurfaceEditorPane: View {
                     Spacer()
                 }
             }
+            previewCanvas
+                .onGeometryChange(for: Double.self) {
+                    $0.size.width / UIScale.current
+                } action: {
+                    canvasWidth = $0
+                }
+                .padding(UIScale.pt(12))
+                .background(
+                    target == .notch ? Color.black : Color.secondary.opacity(0.035),
+                    in: RoundedRectangle(cornerRadius: UIScale.pt(target == .notch ? 22 : 14))
+                )
+                .environment(\.colorScheme, target == .notch ? .dark : scheme)
+                .frame(maxWidth: target == .notch ? UIScale.pt(layout.notchWidth) : .infinity)
+            Text(
+                livePreview && target == .home
+                    ? "Live content. Controls are paused while editing."
+                    : "Sample content. Edit the Notch itself to preview live widgets."
+            )
+            .font(.edithText(.caption)).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder private var previewCanvas: some View {
+        if target == .notch && layout.notchHorizontal {
+            SurfaceShelf(
+                layout: layout, editing: true, selected: selected,
+                select: { selected = $0 }, inspect: { selected = $0 },
+                reorder: { id, anchor in store.update(target) { $0.move(id, before: anchor) } },
+                configure: { tile in edit(tile.id) { $0 = tile } },
+                add: { widget in store.update(target) { selected = $0.add(widget) } }
+            ) { tile in SurfaceWidgetPreview(tile: tile, notch: true) }
+        } else {
             SurfaceCanvas(
                 layout: layout, singleColumn: compact || previewCompact,
                 editing: true, selected: selected, select: { selected = $0 },
@@ -323,24 +357,6 @@ struct SurfaceEditorPane: View {
                     SurfaceWidgetPreview(tile: tile, notch: target == .notch)
                 }
             }
-            .onGeometryChange(for: Double.self) {
-                $0.size.width / UIScale.current
-            } action: {
-                canvasWidth = $0
-            }
-            .padding(UIScale.pt(12))
-            .background(
-                target == .notch ? Color.black : Color.secondary.opacity(0.035),
-                in: RoundedRectangle(cornerRadius: UIScale.pt(target == .notch ? 22 : 14))
-            )
-            .environment(\.colorScheme, target == .notch ? .dark : scheme)
-            .frame(maxWidth: target == .notch ? UIScale.pt(580) : .infinity)
-            Text(
-                livePreview && target == .home
-                    ? "Live content. Controls are paused while editing."
-                    : "Sample content. Edit the Notch itself to preview live widgets."
-            )
-            .font(.edithText(.caption)).foregroundStyle(.secondary)
         }
     }
 
@@ -398,8 +414,8 @@ struct SurfaceEditorPane: View {
                         Color.secondary.opacity(0.05),
                         in: RoundedRectangle(cornerRadius: UIScale.pt(8))
                     )
-                    .onDrag { NSItemProvider(object: ("edith-notch-tab:" + raw) as NSString) }
-                    .onDrop(of: [.text], isTargeted: nil) { providers in
+                    .onDrag { SurfaceTabDrag.provider(raw) }
+                    .onDrop(of: [SurfaceTabDrag.type], isTargeted: nil) { providers in
                         SurfaceTabDrag.accept(providers) { source in
                             store.update(.notch) { layout in
                                 guard source != raw else { return }
@@ -439,7 +455,7 @@ struct SurfaceEditorPane: View {
                         set: { locked in
                             edit(tile.id) {
                                 $0.locked = locked
-                                if locked {
+                                if locked && (target != .notch || !layout.notchHorizontal) {
                                     let origin = tileFrames[tile.id] ?? .zero
                                     let pitch = (canvasWidth + layout.gap) / Double(layout.columns)
                                     $0.column = Int((origin.minX / pitch).rounded())
@@ -450,9 +466,15 @@ struct SurfaceEditorPane: View {
                 TextField("Display title", text: setting(tile.id, \.title, fallback: ""))
                     .textFieldStyle(.roundedBorder)
                 VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    Stepper(
-                        "Width: \(tile.span) / \(layout.columns) columns",
-                        value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
+                    if target == .notch && layout.notchHorizontal {
+                        overrideField(
+                            "Custom shelf width", id: tile.id, key: \.shelfWidth,
+                            inherited: layout.notchCardWidth)
+                    } else {
+                        Stepper(
+                            "Width: \(tile.span) / \(layout.columns) columns",
+                            value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
+                    }
                     Toggle(
                         "Automatic height",
                         isOn: Binding(
@@ -466,30 +488,33 @@ struct SurfaceEditorPane: View {
                                 get: { selection?.height ?? height },
                                 set: { value in edit(tile.id) { $0.height = value } }))
                     }
-                    Toggle(
-                        "Automatic placement",
-                        isOn: Binding(
-                            get: { selection?.column == nil && selection?.row == nil },
-                            set: { automatic in
-                                edit(tile.id) {
-                                    $0.column = automatic ? nil : 0
-                                    $0.row = automatic ? nil : 0
-                                }
-                            }))
-                    if tile.column != nil || tile.row != nil {
-                        Stepper(
-                            "Column: \(tile.column ?? 0)",
-                            value: Binding(
-                                get: { selection?.column ?? 0 },
-                                set: { value in edit(tile.id) { $0.column = value } }),
-                            in: 0...max(0, layout.columns - tile.span))
-                        Stepper(
-                            "Vertical position: \(Int(Double(tile.row ?? 0) * layout.rowHeight)) pt",
-                            value: Binding(
-                                get: { selection?.row ?? 0 },
-                                set: { value in edit(tile.id) { $0.row = value } }), in: 0...1000)
+                    if target != .notch || !layout.notchHorizontal {
+                        Toggle(
+                            "Automatic placement",
+                            isOn: Binding(
+                                get: { selection?.column == nil && selection?.row == nil },
+                                set: { automatic in
+                                    edit(tile.id) {
+                                        $0.column = automatic ? nil : 0
+                                        $0.row = automatic ? nil : 0
+                                    }
+                                }))
+                        if tile.column != nil || tile.row != nil {
+                            Stepper(
+                                "Column: \(tile.column ?? 0)",
+                                value: Binding(
+                                    get: { selection?.column ?? 0 },
+                                    set: { value in edit(tile.id) { $0.column = value } }),
+                                in: 0...max(0, layout.columns - tile.span))
+                            Stepper(
+                                "Vertical position: \(Int(Double(tile.row ?? 0) * layout.rowHeight)) pt",
+                                value: Binding(
+                                    get: { selection?.row ?? 0 },
+                                    set: { value in edit(tile.id) { $0.row = value } }),
+                                in: 0...1000)
+                        }
+                        nudgeControls(tile).disabled(tile.locked)
                     }
-                    nudgeControls(tile).disabled(tile.locked)
                 }.disabled(tile.locked)
                 Divider()
                 Text("Content").font(.edithText(.headline))
@@ -551,8 +576,9 @@ struct SurfaceEditorPane: View {
             store.update(target) { selected = $0.duplicate(tile.id) }
         }
         Button("Move earlier") { move(tile, offset: -1) }.disabled(
-            layout.tiles.first?.id == tile.id)
-        Button("Move later") { move(tile, offset: 1) }.disabled(layout.tiles.last?.id == tile.id)
+            tile.locked || layout.tiles.first?.id == tile.id)
+        Button("Move later") { move(tile, offset: 1) }.disabled(
+            tile.locked || layout.tiles.last?.id == tile.id)
         Button("Hide") {
             edit(tile.id) { $0.hidden = true }
             selected = nil

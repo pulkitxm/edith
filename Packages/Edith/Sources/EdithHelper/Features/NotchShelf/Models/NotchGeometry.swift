@@ -10,7 +10,10 @@ enum NotchGeometry {
 
     static func expandedShapeSize(
         tab: NotchTab, hasMusic: Bool, notchHeight: CGFloat,
-        browserSize: CGSize = NotchBrowserGeometry.defaultSize
+        browserSize: CGSize = NotchBrowserGeometry.defaultSize,
+        layout: SurfaceLayout = SurfaceLayout.decode(
+            SharedDefaults.store.string(forKey: SurfaceTarget.notch.key), target: .notch),
+        editing: Bool = false, homeHeight: CGFloat? = nil
     ) -> CGSize {
         if tab == .browser {
             return NotchBrowserGeometry.shapeSize(browser: browserSize, notchHeight: notchHeight)
@@ -18,15 +21,26 @@ enum NotchGeometry {
         let content: CGFloat =
             switch tab {
             case .home:
-                SharedDefaults.store.string(forKey: SurfaceTarget.notch.key) == nil
-                    ? (hasMusic ? 158 : 148) : 310
+                layout.notchHorizontal
+                    ? (homeHeight
+                        ?? (CGFloat(
+                            min(
+                                600,
+                                max(
+                                    160,
+                                    max(
+                                        layout.notchShelfHeight,
+                                        layout.visible.compactMap(\.height).max() ?? 0)))) + 48
+                            + (editing ? 58 : 0)))
+                    : 310
             case .browser: 0
             case .files: 210
             case .clipboard: 260
             case .audio: 162
             case .camera: 332
             }
-        return CGSize(width: expandedWidth, height: notchHeight + expandedHeaderBand + content)
+        return CGSize(
+            width: CGFloat(layout.notchWidth), height: notchHeight + expandedHeaderBand + content)
     }
 
     static func collapsedSize(

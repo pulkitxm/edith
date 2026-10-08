@@ -65,7 +65,10 @@ final class NotchShelfController: FeatureModule {
     private(set) var nowPlaying: NotchNowPlaying?
     private(set) var nowPlayingArtwork: NSImage?
     var activeTab: NotchTab = .home
-    var layoutEditing = false
+    var layoutEditing = false {
+        didSet { homeContentHeight = nil; updatePanelFrames() }
+    }
+    private var homeContentHeight: CGFloat?
     private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
     private weak var colorPickerStore: ColorPickerStore?
@@ -101,6 +104,7 @@ final class NotchShelfController: FeatureModule {
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var shelfOperationObserver: NSObjectProtocol?
+    private var surfaceSettingsObserver: NSObjectProtocol?
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
@@ -136,6 +140,9 @@ final class NotchShelfController: FeatureModule {
             })
         purgeExpired()
         rebuildPanels()
+        surfaceSettingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            self?.updatePanelFrames()
+        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -258,6 +265,8 @@ final class NotchShelfController: FeatureModule {
         spaceObserver = nil
         if let shelfOperationObserver { IPC.stopObserving(shelfOperationObserver) }
         shelfOperationObserver = nil
+        if let surfaceSettingsObserver { IPC.stopObserving(surfaceSettingsObserver) }
+        surfaceSettingsObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
         panelSettleWorkItem?.cancel()
@@ -441,9 +450,7 @@ final class NotchShelfController: FeatureModule {
     ) -> CGSize {
         let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
         if expanded {
-            return NotchGeometry.expandedShapeSize(
-                tab: activeTab, hasMusic: music, notchHeight: base.height,
-                browserSize: browserSize(on: id))
+            return expandedSize(on: id)
         }
         if alert != nil, id == builtinDisplayID { return NotchGeometry.alertDropSize }
         return NotchGeometry.collapsedSize(base: base, hasLiveActivity: music)
@@ -453,6 +460,26 @@ final class NotchShelfController: FeatureModule {
         shapeSize(
             for: id, expanded: expandedDisplay == id, alert: currentAlert,
             music: nowPlaying != nil)
+    }
+
+    func measureHomeContent(_ height: Double) {
+        let value = CGFloat(height) + 14
+        guard homeContentHeight.map({ abs($0 - value) >= 1 }) ?? true else { return }
+        homeContentHeight = value
+        updatePanelFrames()
+    }
+
+    func expandedSize(on id: CGDirectDisplayID) -> CGSize {
+        let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
+        let requested = NotchGeometry.expandedShapeSize(
+            tab: activeTab, hasMusic: nowPlaying != nil, notchHeight: base.height,
+            browserSize: browserSize(on: id), editing: layoutEditing, homeHeight: homeContentHeight)
+        guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
+            return requested
+        }
+        return CGSize(
+            width: min(requested.width, screen.frame.width - 48),
+            height: min(requested.height, screen.frame.height - 48))
     }
 
     private func applyExactFrame(_ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID) {
@@ -470,11 +497,13 @@ final class NotchShelfController: FeatureModule {
 
     private func panelShape(for id: CGDirectDisplayID) -> CGSize {
         let notchHeight = (collapsedSizes[id] ?? NotchGeometry.fallbackSize).height
-        return NotchGeometry.panelShape(
-            browserShape: browser.map { _ in
-                NotchBrowserGeometry.shapeSize(
-                    browser: browserSize(on: id), notchHeight: notchHeight)
-            })
+        return NotchGeometry.union(
+            expandedSize(on: id),
+            NotchGeometry.panelShape(
+                browserShape: browser.map { _ in
+                    NotchBrowserGeometry.shapeSize(
+                        browser: browserSize(on: id), notchHeight: notchHeight)
+                }))
     }
 
     func browserSize(on id: CGDirectDisplayID) -> CGSize {

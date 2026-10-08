@@ -119,6 +119,7 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var hiddenFields: Set<String> = []
     public var paddingOverride: Double?
     public var cornerOverride: Double?
+    public var shelfWidth: Double?
     public var id: String { instanceID }
     public var displayTitle: String {
         let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -144,6 +145,8 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     public var rowHeight = 8.0
     public var notchCardWidth = 280.0
     public var notchHorizontal = true
+    public var notchWidth = 580.0
+    public var notchShelfHeight = 240.0
     public var visible: [SurfaceTile] { tiles.filter { !$0.hidden } }
     public init(tiles: [SurfaceTile]) { self.tiles = tiles }
 
@@ -184,6 +187,7 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
                 tile.itemLimit = min(20, max(1, tile.itemLimit))
                 tile.paddingOverride = tile.paddingOverride.map { min(48, max(0, $0)) }
                 tile.cornerOverride = tile.cornerOverride.map { min(48, max(0, $0)) }
+                tile.shelfWidth = tile.shelfWidth.map { min(760, max(160, $0)) }
                 return tile
             })
         result.columns = columns
@@ -193,6 +197,8 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
         result.rowHeight = min(32, max(1, rowHeight))
         result.notchCardWidth = min(520, max(180, notchCardWidth))
         result.notchHorizontal = notchHorizontal
+        result.notchWidth = min(1200, max(440, notchWidth))
+        result.notchShelfHeight = min(600, max(160, notchShelfHeight))
         let known = SurfaceNotchTab.allCases.map(\.rawValue)
         var seenTabs = Set<String>()
         result.tabOrder = (tabOrder + known).filter {
@@ -230,7 +236,9 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     }
 
     public mutating func move(_ id: String, before anchor: String?) {
-        guard anchor != id, let index = tiles.firstIndex(where: { $0.id == id }) else { return }
+        guard anchor != id, let index = tiles.firstIndex(where: { $0.id == id }),
+            !tiles[index].locked
+        else { return }
         let tile = tiles.remove(at: index)
         let destination =
             anchor.flatMap { anchor in tiles.firstIndex { $0.id == anchor } } ?? tiles.endIndex

@@ -74,9 +74,7 @@ struct NotchShelfContentView: View {
     }
 
     private var expandedShape: CGSize {
-        NotchGeometry.expandedShapeSize(
-            tab: controller.activeTab, hasMusic: controller.nowPlaying != nil,
-            notchHeight: collapsedBase.height, browserSize: controller.browserSize(on: displayID))
+        controller.expandedSize(on: displayID)
     }
 
     private var shapeSize: CGSize {
@@ -206,10 +204,18 @@ struct NotchShelfContentView: View {
 
     private var header: some View {
         HStack(spacing: 4) {
-            ForEach(visibleTabs, id: \.self) { tab in
-                iconTab(tab)
+            ScrollViewReader { reader in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 4) {
+                        ForEach(visibleTabs, id: \.self) { tab in
+                            iconTab(tab).id(tab)
+                        }
+                    }
+                }.scrollIndicators(.hidden)
+                    .onChange(of: controller.activeTab) { _, tab in
+                        withAnimation(glide) { reader.scrollTo(tab, anchor: .center) }
+                    }
             }
-            Spacer(minLength: 0)
             if controller.activeTab == .home {
                 Button {
                     controller.layoutEditing.toggle()
@@ -250,14 +256,10 @@ struct NotchShelfContentView: View {
             HStack(spacing: 5) {
                 Image(systemName: tab.icon)
                     .font(.system(size: 11.5, weight: .medium))
-                if active {
-                    Text(tab.title)
-                        .font(.system(size: 11, weight: .semibold))
-                        .fixedSize()
-                        .transition(.opacity)
-                }
+                Text(tab.title)
+                    .font(.system(size: 11, weight: .semibold)).fixedSize()
             }
-            .padding(.horizontal, active ? 10 : 8)
+            .padding(.horizontal, 10)
             .frame(height: 24)
             .foregroundStyle(active ? Color.black : Color.white.opacity(0.65))
             .background {
@@ -273,8 +275,8 @@ struct NotchShelfContentView: View {
         }
         .buttonStyle(.edith(.borderless))
         .help(tab.title)
-        .onDrag { NSItemProvider(object: ("edith-notch-tab:" + tab.rawValue) as NSString) }
-        .onDrop(of: [.text], isTargeted: nil) { providers in
+        .onDrag { SurfaceTabDrag.provider(tab.rawValue) }
+        .onDrop(of: [SurfaceTabDrag.type], isTargeted: nil) { providers in
             SurfaceTabDrag.accept(providers) { source in
                 surfaceLayouts.update(.notch) { layout in
                     guard source != tab.rawValue else { return }
@@ -383,66 +385,39 @@ private struct NotchHomeTab: View {
     @State private var selectedTile: String?
 
     var body: some View {
-        ScrollView {
-            SurfaceCanvas(
-                layout: layoutStore.notch, singleColumn: false,
-                editing: controller.layoutEditing, selected: selectedTile,
-                select: { selectedTile = $0 },
-                place: { widget, _ in
-                    layoutStore.update(.notch) { selectedTile = $0.add(widget) }
-                },
-                inspect: { id in
-                    controller.collapseNow()
-                    MainApp.openSurfaceEditor(.notch, tileID: id)
-                },
-                reorder: { id, anchor in layoutStore.update(.notch) { $0.move(id, before: anchor) }
-                },
-                configure: { tile in
-                    layoutStore.update(.notch) { layout in
-                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                        else { return }
-                        layout.position(tile)
-                    }
-                },
-                placeAt: { widget, column, row in
-                    layoutStore.update(.notch) { layout in
-                        selectedTile = layout.add(widget, column: column, row: row)
-                    }
-                }
-            ) { tile in
-                VStack(alignment: .leading, spacing: 5) {
-                    if !tile.title.isEmpty {
-                        Text(tile.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(
-                            .white.opacity(0.7))
-                    }
-                    widget(tile)
-                }
-                .contextMenu {
-                    Button("Move to top") {
-                        layoutStore.update(.notch) {
-                            $0.position(tile)
+        Group {
+            if layoutStore.notch.notchHorizontal {
+                SurfaceShelf(
+                    layout: layoutStore.notch, editing: controller.layoutEditing,
+                    selected: selectedTile, select: { selectedTile = $0 },
+                    inspect: inspect,
+                    reorder: { id, anchor in
+                        layoutStore.update(.notch) { $0.move(id, before: anchor) }
+                    },
+                    configure: configure,
+                    add: { widget in layoutStore.update(.notch) { selectedTile = $0.add(widget) } },
+                    measuredHeight: controller.measureHomeContent
+                ) { tile in tileContent(tile) }
+            } else {
+                ScrollView {
+                    SurfaceCanvas(
+                        layout: layoutStore.notch, singleColumn: false,
+                        editing: controller.layoutEditing, selected: selectedTile,
+                        select: { selectedTile = $0 },
+                        place: { widget, _ in
+                            layoutStore.update(.notch) { selectedTile = $0.add(widget) }
+                        },
+                        inspect: inspect,
+                        reorder: { id, anchor in
+                            layoutStore.update(.notch) { $0.move(id, before: anchor) }
+                        },
+                        configure: { tile in layoutStore.update(.notch) { $0.position(tile) } },
+                        placeAt: { widget, column, row in
+                            layoutStore.update(.notch) {
+                                selectedTile = $0.add(widget, column: column, row: row)
+                            }
                         }
-                    }
-                    Button(tile.locked ? "Unlock layout" : "Lock layout") {
-                        layoutStore.update(.notch) { layout in
-                            guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                            else { return }
-                            layout.tiles[index].locked.toggle()
-                        }
-                    }
-                    Button("Duplicate") { layoutStore.update(.notch) { $0.duplicate(tile.id) } }
-                    Button("Hide") {
-                        layoutStore.update(.notch) { layout in
-                            guard
-                                let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                            else { return }
-                            layout.tiles[index].hidden = true
-                        }
-                    }
-                    Button("Open widget editor") {
-                        controller.collapseNow()
-                        MainApp.openSurfaceEditor(.notch, tileID: tile.id)
-                    }
+                    ) { tile in tileContent(tile) }
                 }
             }
             if layoutStore.notch.visible.isEmpty, !controller.layoutEditing {
@@ -457,6 +432,54 @@ private struct NotchHomeTab: View {
         .padding(.horizontal, 16).padding(.bottom, 14)
         .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
         { _ in layoutStore.reload() }
+    }
+
+    private func inspect(_ id: String) {
+        controller.collapseNow()
+        MainApp.openSurfaceEditor(.notch, tileID: id)
+    }
+
+    private func configure(_ tile: SurfaceTile) {
+        layoutStore.update(.notch) { layout in
+            guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id }) else { return }
+            layout.tiles[index] = tile
+        }
+    }
+
+    private func tileContent(_ tile: SurfaceTile) -> some View {
+
+        VStack(alignment: .leading, spacing: 5) {
+            if !tile.title.isEmpty {
+                Text(tile.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(
+                    .white.opacity(0.7))
+            }
+            widget(tile)
+        }
+        .contextMenu {
+            Button("Move to first") {
+                layoutStore.update(.notch) { $0.move(tile.id, before: $0.visible.first?.id) }
+            }.disabled(tile.locked)
+            Button(tile.locked ? "Unlock layout" : "Lock layout") {
+                layoutStore.update(.notch) { layout in
+                    guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                    else { return }
+                    layout.tiles[index].locked.toggle()
+                }
+            }
+            Button("Duplicate") { layoutStore.update(.notch) { $0.duplicate(tile.id) } }
+            Button("Hide") {
+                layoutStore.update(.notch) { layout in
+                    guard
+                        let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                    else { return }
+                    layout.tiles[index].hidden = true
+                }
+            }
+            Button("Open widget editor") {
+                controller.collapseNow()
+                MainApp.openSurfaceEditor(.notch, tileID: tile.id)
+            }
+        }
     }
 
     @ViewBuilder private func widget(_ tile: SurfaceTile) -> some View {

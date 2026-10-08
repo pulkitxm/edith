@@ -6,6 +6,48 @@ import Testing
 @MainActor @Suite(.serialized) struct SurfaceGridRenderingTests {
     @MainActor final class Frames {
         var values: [String: CGRect] = [:]
+        var shelfHeight = 0.0
+    }
+
+    @Test func shelfFitsShortContentAndRetainsExplicitScrollingHeight() async throws {
+        for explicit in [false, true] {
+            let frames = Frames()
+            var tile = SurfaceTile(.clocks)
+            tile.shelfWidth = 200
+            tile.height = explicit ? 220 : nil
+            var layout = SurfaceLayout(tiles: [tile])
+            layout.notchShelfHeight = 400
+            let host = NSHostingView(
+                rootView: SurfaceShelf(
+                    layout: layout, measuredHeight: { frames.shelfHeight = $0 }
+                ) { _ in
+                    Text("Sample clock").frame(maxWidth: .infinity).frame(height: 80)
+                        .onGeometryChange(for: CGRect.self) {
+                            $0.frame(in: .global)
+                        } action: {
+                            frames.values["clock"] = $0
+                        }
+                })
+            host.frame = CGRect(x: 0, y: 0, width: 580, height: 600)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            window.orderBack(nil)
+            defer { window.orderOut(nil) }
+            for _ in 0..<20 {
+                window.layoutIfNeeded()
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            let bounds = try #require(frames.values["clock"])
+            #expect(abs(bounds.width - 200) < 1)
+            if explicit {
+                #expect(frames.shelfHeight >= 220)
+                #expect(frames.shelfHeight < 300)
+            } else {
+                #expect(frames.shelfHeight >= 80)
+                #expect(frames.shelfHeight < 150)
+            }
+        }
     }
 
     @Test func nativeGridPacksBelowShortCardsWithoutOverlappingTallNeighbors() async throws {

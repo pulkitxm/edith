@@ -4,6 +4,23 @@ import Testing
 @testable import EdithKit
 
 struct SurfaceLayoutTests {
+    @MainActor final class TransferResult {
+        var widget: SurfaceWidget?
+    }
+
+    @MainActor @Test func widgetDragPreservesTypeAndRejectsUnrelatedDrops() async throws {
+        let result = TransferResult()
+        let text = NSItemProvider(object: "unrelated text" as NSString)
+        #expect(!SurfaceDrag.accept([text]) { _ in })
+        #expect(!SurfaceDrag.accept([SurfaceTabDrag.provider("home")]) { _ in })
+        #expect(!SurfaceTabDrag.accept([SurfaceDrag.provider(.agents)]) { _ in })
+        #expect(SurfaceDrag.accept([SurfaceDrag.provider(.agents)]) { result.widget = $0 })
+        for _ in 0..<20 where result.widget == nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(result.widget == .agents)
+    }
+
     @Test func packingFillsSpaceBelowShorterWidgetsAndRespectsExactPositions() {
         let tiles = [SurfaceTile(.calendar), SurfaceTile(.usage), SurfaceTile(.music)]
         let frames = SurfaceGridPacking.pack(

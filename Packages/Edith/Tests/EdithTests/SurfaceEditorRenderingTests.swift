@@ -65,9 +65,14 @@ import Testing
         {
             controller.expand(on: id)
             controller.layoutEditing = true
+            let view = NotchShelfContentView(controller: controller, displayID: id)
+            _ = try render(
+                view, size: NotchGeometry.panelSize(forShape: controller.expandedSize(on: id)),
+                dark: true)
             let data = try render(
-                NotchShelfContentView(controller: controller, displayID: id),
-                size: CGSize(width: 604, height: 412), dark: true)
+                view,
+                size: NotchGeometry.panelSize(forShape: controller.expandedSize(on: id)), dark: true
+            )
             #expect(data.count > 1000)
             try save(data, name: "notch-editor.png")
         }
