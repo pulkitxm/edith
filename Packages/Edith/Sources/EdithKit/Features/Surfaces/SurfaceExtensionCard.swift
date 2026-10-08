@@ -62,7 +62,10 @@ public struct SurfaceExtensionCard: View {
             Color.secondary.opacity(0.08),
             in: RoundedRectangle(cornerRadius: UIScale.pt(presentation?.cornerRadius ?? 12))
         )
-        .task(id: "\(active):\(tile.widget.rawValue):\(tile.sourceIDs?.sorted() ?? []):\(retry)") {
+        .task(
+            id: SurfaceExtensionRefreshKey(
+                active: active, request: SurfaceExtensionRequestKey(tile), retry: retry)
+        ) {
             guard active || retry > 0 else { return }
             var force = retry > 0
             repeat {

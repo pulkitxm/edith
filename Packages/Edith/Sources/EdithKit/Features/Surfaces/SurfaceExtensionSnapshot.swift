@@ -258,3 +258,19 @@ public enum SurfaceExtensionProjection {
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 }
+
+struct SurfaceExtensionRequestKey: Hashable {
+    let widget: String
+    let sources: Set<String>?
+    let content: Set<String>?
+    init(_ tile: SurfaceTile) {
+        widget = tile.widget.rawValue
+        sources = tile.sourceIDs
+        content = tile.contentKinds
+    }
+}
+struct SurfaceExtensionRefreshKey: Hashable {
+    let active: Bool
+    let request: SurfaceExtensionRequestKey
+    let retry: Int
+}

@@ -100,7 +100,7 @@ public struct SurfaceIntegrationCard: View {
                 }
             }
         case .agents: EmptyView()
-        case .codeStats, .github:
+        case .codeStats:
             if let report {
                 HStack {
                     if tile.shows("commits") { metric("Commits", "\(report.totals.commits)") }
@@ -154,10 +154,6 @@ public struct SurfaceIntegrationCard: View {
                     Button("Start focus") { startFocus() }.buttonStyle(.edith(.secondary))
                 }
             }
-        case .databases:
-            Text("Browse connections, run queries, and inspect tables.").font(.edithText(.caption))
-                .foregroundStyle(.secondary)
-            Button("Open database workspace") { open("database") }.buttonStyle(.edith(.secondary))
         default:
             Text(tile.widget.summary).font(.edithText(.caption)).foregroundStyle(.secondary)
             Button("Open \(tile.widget.title)") { open(tile.widget.destination) }.buttonStyle(
@@ -187,7 +183,7 @@ public struct SurfaceIntegrationCard: View {
                         userInfo: [NSLocalizedDescriptionKey: failure])
                 }
             case .agents: break
-            case .codeStats, .github:
+            case .codeStats:
                 let next = try await CodeStatsAgentClient().report(.days(tile.days))
                 guard load.isCurrent(request) else { return }
                 report = next

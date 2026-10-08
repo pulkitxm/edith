@@ -677,12 +677,13 @@ struct SurfaceEditorPane: View {
                 }
                 if tile.widget == .agents { agentFilters(tile) }
                 if tile.widget.supportsSourceFilters { extensionSources(tile) }
+                if !tile.widget.contentChoices.isEmpty { extensionContent(tile) }
                 if tile.widget == .focus {
                     Stepper(
                         "Focus duration: \(tile.focusMinutes) minutes",
                         value: setting(tile.id, \.focusMinutes, fallback: 25), in: 1...180)
                 }
-                if tile.widget == .codeStats || tile.widget == .github {
+                if tile.widget == .codeStats {
                     EdithSegmentedPicker(
                         "Period", selection: setting(tile.id, \.days, fallback: 30),
                         options: [7, 30, 90], label: { "\($0) days" })
@@ -699,6 +700,34 @@ struct SurfaceEditorPane: View {
         .padding(UIScale.pt(16))
         .background(
             Color.secondary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+    }
+
+    private func extensionContent(_ tile: SurfaceTile) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("Include").font(.edithText(.headline))
+            Toggle(
+                "All content",
+                isOn: Binding(
+                    get: { selection?.contentKinds == nil },
+                    set: { all in edit(tile.id) { $0.contentKinds = all ? nil : [] } }))
+            if tile.contentKinds != nil {
+                ForEach(tile.widget.contentChoices) { choice in
+                    Toggle(
+                        choice.title,
+                        isOn: Binding(
+                            get: { selection?.contentKinds?.contains(choice.id) == true },
+                            set: { enabled in
+                                edit(tile.id) {
+                                    if enabled {
+                                        $0.contentKinds?.insert(choice.id)
+                                    } else {
+                                        $0.contentKinds?.remove(choice.id)
+                                    }
+                                }
+                            }))
+                }
+            }
+        }
     }
 
     private func extensionSources(_ tile: SurfaceTile) -> some View {

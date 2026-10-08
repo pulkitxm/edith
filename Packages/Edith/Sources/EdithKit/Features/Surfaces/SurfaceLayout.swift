@@ -133,7 +133,7 @@ public enum SurfaceWidget: Codable, RawRepresentable, CaseIterable, Hashable, Id
         case .codeStats: "Commits, authored lines, and streaks."
         case .agents: "Working agents and sessions needing attention."
         case .focus: "Start and finish timed deep work sessions."
-        case .databases: "Open your database workspace."
+        case .databases: "Connections, saved queries, and recent operation outcomes."
         case .machines: "Registered machines and fleet access."
         case .desk: "Clipboard, color picker, and file tools."
         case .media: "Recording, downloads, camera, and music."
@@ -200,6 +200,7 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var cornerOverride: Double?
     public var shelfWidth: Double?
     public var sourceIDs: Set<String>?
+    public var contentKinds: Set<String>?
     public var agentPhases: Set<String>?
     public var includeSubagents = true
     public var id: String { instanceID }
@@ -280,6 +281,11 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
                 tile.shelfWidth = tile.shelfWidth.map { min(760, max(160, $0)) }
                 tile.sourceIDs = tile.sourceIDs.map {
                     Set($0.sorted().prefix(100).map { String($0.prefix(512)) })
+                }
+                tile.contentKinds = tile.contentKinds.map {
+                    Set(
+                        $0.filter { value in tile.widget.contentChoices.contains { $0.id == value }
+                        })
                 }
                 tile.agentPhases = tile.agentPhases.map {
                     Set($0.filter { AgentActivityPhase(rawValue: $0) != nil })
@@ -402,7 +408,7 @@ extension SurfaceWidget {
                 ("queue", "Upcoming tracks"), ("progress", "Playback time"),
             ]
         case .calendar: [("time", "Meeting times"), ("join", "Join meeting controls")]
-        case .codeStats, .github:
+        case .codeStats:
             [
                 ("commits", "Commit totals"), ("lines", "Authored lines"),
                 ("streak", "Current streak"), ("repositories", "Repository breakdown"),
@@ -417,7 +423,7 @@ extension SurfaceWidget {
                 ("tool", "Latest tool and command"), ("model", "Model name"),
                 ("elapsed", "Session elapsed time"), ("source", "Source and last signal"),
             ]
-        case .ability, .machines, .desk, .media: extensionFields
+        case .ability, .machines, .desk, .media, .github, .databases: extensionFields
         default: []
         }
     }

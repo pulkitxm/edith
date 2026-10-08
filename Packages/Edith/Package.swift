@@ -140,7 +140,7 @@ let targets: [Target] = [
     .target(
         name: "EdithKit",
         dependencies: [
-            "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport",
+            "EdithCore", "EdithDatabase", "EdithLidAwakeSupport", "EdithCameraSupport",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             .product(name: "MeetingVoice", package: "MeetingVoice"),
         ],

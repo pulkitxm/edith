@@ -5,15 +5,14 @@ public actor SurfaceExtensionClient {
     public static let shared = SurfaceExtensionClient()
     private let client: AgentClient
     private var previousCPU: CPUTicks?
-    private var cache: [String: (Date, SurfaceExtensionSnapshot)] = [:]
-    private var requests: [String: Task<SurfaceExtensionSnapshot, Error>] = [:]
+    private var cache: [SurfaceExtensionRequestKey: (Date, SurfaceExtensionSnapshot)] = [:]
+    private var requests: [SurfaceExtensionRequestKey: Task<SurfaceExtensionSnapshot, Error>] = [:]
     public init(client: AgentClient = .shared) { self.client = client }
 
     public func snapshot(_ tile: SurfaceTile, force: Bool = false) async throws
         -> SurfaceExtensionSnapshot
     {
-        let sources = tile.sourceIDs?.sorted().joined(separator: "|") ?? "*"
-        let key = tile.widget.rawValue + ":" + sources
+        let key = SurfaceExtensionRequestKey(tile)
         let interval = Self.interval(tile.widget)
         if !force, let cached = cache[key], Date().timeIntervalSince(cached.0) < interval {
             return cached.1
@@ -40,11 +39,24 @@ public actor SurfaceExtensionClient {
             return .init(message: "Enable this extension to show its data and controls.")
         }
         switch tile.widget {
+        case .github, .ability("quinjet"):
+            return try await SurfaceGitHubClient.live.snapshot(tile)
+        case .databases:
+            return try await SurfaceDatabaseClient().snapshot(tile)
         case .machines:
             return SurfaceExtensionProjection.machines(
                 try await client.snapshotAsync(MachineHealthSnapshot.self, topic: .machines),
                 tile: tile)
         case .desk, .ability("clipboard"), .ability("colorPicker"):
+            if tile.widget == .ability("colorPicker")
+                && !SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled)
+            {
+                return .init(
+                    actions: [.init("Pick color", "eyedropper", .pickColor)],
+                    message:
+                        "Pick a color from your screen. Enable Clipboard to include recent copied colors."
+                )
+            }
             if tile.widget == .desk
                 && !SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled)
             {
@@ -329,7 +341,8 @@ public actor SurfaceExtensionClient {
             return .init(
                 metrics: [
                     .init(
-                        "status", "Microphone", defaults.bool(forKey: "micMuted") ? "Muted" : "On")
+                        "status", "Microphone",
+                        defaults.bool(forKey: AppStorageKeys.Mic.muted) ? "Muted" : "On")
                 ],
                 actions: [.init("Toggle mute", "mic.slash", .muteMicrophone)], updatedAt: Date())
         }

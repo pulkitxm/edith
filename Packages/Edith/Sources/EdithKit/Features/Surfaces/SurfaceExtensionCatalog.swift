@@ -3,17 +3,34 @@ import Foundation
 extension SurfaceWidget {
     public var usesExtensionCard: Bool {
         switch self {
-        case .ability, .machines, .desk, .media: true
+        case .ability, .machines, .desk, .media, .github, .databases: true
         default: false
         }
     }
     public var supportsSourceFilters: Bool {
         switch self {
-        case .machines, .desk, .media, .ability("downloads"), .ability("clipboard"),
+        case .github, .ability("quinjet"), .databases, .machines, .desk, .media,
+            .ability("downloads"),
+            .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
             .ability("seoAudit"), .ability("latex"):
             true
         default: false
+        }
+    }
+    public var contentChoices: [SurfaceSourceChoice] {
+        switch self {
+        case .github, .ability("quinjet"):
+            [
+                .init("authored", "My pull requests"), .init("review", "Review requests"),
+                .init("assigned", "Assigned to me"),
+            ]
+        case .databases:
+            [
+                .init("connections", "Connections"), .init("queries", "Saved queries"),
+                .init("operations", "Recent operations"),
+            ]
+        default: []
         }
     }
     public var sourceChoices: [SurfaceSourceChoice] {
@@ -34,6 +51,16 @@ extension SurfaceWidget {
     public var extensionFields: [(String, String)] {
         let metrics: [(String, String)] =
             switch self {
+            case .github, .ability("quinjet"):
+                [
+                    ("pulls", "Pull request count"), ("review", "Review requests"),
+                    ("failed", "Failing checks"), ("approved", "Approved pull requests"),
+                ]
+            case .databases:
+                [
+                    ("connections", "Connection count"), ("queries", "Saved query count"),
+                    ("running", "Running operations"), ("failed", "Failed operations"),
+                ]
             case .media, .ability("downloads"):
                 [
                     ("running", "Downloading count"), ("queued", "Queued count"),

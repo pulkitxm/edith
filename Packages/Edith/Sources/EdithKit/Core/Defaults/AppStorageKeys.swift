@@ -265,6 +265,7 @@ public enum AppStorageKeys {
     }
 
     public enum Mic {
+        public static let muted = "micMuted"
         public static let muteEnabled = "micMuteEnabled"
         public static let muteInMenuBar = "micMuteInMenuBar"
     }
