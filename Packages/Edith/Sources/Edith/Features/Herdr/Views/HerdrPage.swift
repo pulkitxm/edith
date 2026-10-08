@@ -427,15 +427,17 @@ struct HerdrPage: View {
                 railToggle
                     .padding(.leading, PageMetrics.gutter(compact))
                 sessionFilterButton
-                ScrollView(.horizontal, showsIndicators: false) {
+                PageTabStrip(selection: store.selectedTab) {
                     HStack(spacing: UIScale.pt(6)) {
-                        tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
+                        tabButton(id: HerdrStore.boardID, title: "Board", closable: false).id(
+                            HerdrStore.boardID)
                         ForEach(store.tabs) { tab in
                             let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
                             tabButton(
                                 id: tab.id,
                                 title: agents.first?.title ?? "Agent",
-                                closable: true, agents: agents, blurTitle: hideAgents)
+                                closable: true, agents: agents, blurTitle: hideAgents
+                            ).id(tab.id)
                         }
                     }
                     .padding(.leading, 0)

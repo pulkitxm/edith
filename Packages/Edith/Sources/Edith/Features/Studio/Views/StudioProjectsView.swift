@@ -114,6 +114,7 @@ struct StudioProjectsView: View {
                 }
             }
             .pageContent(compact)
+            .pageScrollPosition("studio/projects")
         }
         .pageTask { model.refreshProjects() }
     }

@@ -103,8 +103,7 @@ struct AttentionFilterBar: View {
 
     @ViewBuilder private var search: some View {
         if showsSearch {
-            TextField("Search names and titles", text: $model.searchText)
-                .textFieldStyle(.roundedBorder)
+            SearchField(placeholder: "Search names and titles", text: $model.searchText)
                 .frame(maxWidth: UIScale.pt(360))
         } else {
             Spacer(minLength: 0)
@@ -149,7 +148,6 @@ struct AttentionTimelineView: View {
 private struct AttentionTimelineDayPanel: View {
     let model: AttentionPageModel
     let day: AttentionTimelineDay
-    @State private var limit = 40
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -166,16 +164,11 @@ private struct AttentionTimelineDayPanel: View {
                 AttentionEmpty(text: "Nothing matches the filters on this day")
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(Array(day.blocks.prefix(limit).enumerated()), id: \.element.id) {
+                    ForEach(Array(day.blocks.enumerated()), id: \.element.id) {
                         index, block in
                         if index > 0 { Divider().opacity(0.5) }
                         AttentionTimelineRow(model: model, block: block, dark: dark)
                     }
-                }
-                if day.blocks.count > limit {
-                    Button("Show \(min(40, day.blocks.count - limit)) more") { limit += 40 }
-                        .buttonStyle(.edith(.secondary))
-                        .frame(maxWidth: .infinity)
                 }
             }
         }

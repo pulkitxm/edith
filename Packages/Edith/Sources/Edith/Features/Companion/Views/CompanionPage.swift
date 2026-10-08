@@ -79,7 +79,6 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.windowVisible) private var windowVisible
     @State private var checkedSetup = false
-    @Namespace private var tabGlow
     @State private var refreshTick = 0
     @State private var visited: Set<CompanionTab> = []
     @State private var setupModel: CompanionSetupModel?
@@ -230,43 +229,13 @@ struct CompanionPage: View {
     }
 
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(4)) {
-                ForEach(CompanionTab.allCases) { item in
-                    Button {
-                        select(item)
-                    } label: {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Image(systemName: item.icon)
-                                .font(.system(size: UIScale.pt(11), weight: .medium))
-                            Text(item.title)
-                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, UIScale.pt(11))
-                        .padding(.vertical, UIScale.pt(6))
-                        .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-                        .background {
-                            if tab == item {
-                                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                    .fill(DashSkin.paper2(dark))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                            .strokeBorder(DashSkin.line(dark))
-                                    }
-                                    .matchedGeometryEffect(id: "companionTab", in: tabGlow)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .help(item.title)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, PageMetrics.gutter(compact))
-            .padding(.bottom, UIScale.pt(12))
-        }
+        PageTabPicker(
+            title: "Companion section",
+            selection: Binding(get: { tab }, set: select),
+            options: CompanionTab.allCases, label: { $0.title }
+        )
+        .pageGutter(compact)
+        .padding(.bottom, UIScale.pt(12))
     }
 
     private var screens: some View {

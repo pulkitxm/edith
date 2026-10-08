@@ -31,7 +31,7 @@ struct MachineDetailView: View {
 
     private var tabBar: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            PageTabStrip(selection: tab) {
                 HStack(spacing: UIScale.pt(4)) {
                     let items = MachineTab.tabs(
                         isLocal: session.isLocal, hasDocker: session.docker.isInstalled)
@@ -69,6 +69,7 @@ struct MachineDetailView: View {
                         }
                         .buttonStyle(.edith(.borderless))
                         .help("\(item.title) (⌘-click to open it in its own window)")
+                        .id(item)
                     }
                 }
             }
