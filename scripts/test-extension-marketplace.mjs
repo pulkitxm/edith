@@ -95,7 +95,7 @@ try {
     true,
   );
   process.stdout.write(
-    `${JSON.stringify({ install: "passed", updateInUse: "passed", restart: "passed", stop: "passed", deferredRemoval: "passed", nativeVoiceRuntime: "passed", packages: [...records, voice].map(({ version, downloadBytes, installedBytes }) => ({ version, downloadBytes, installedBytes })) }, null, 2)}\n`,
+    `${JSON.stringify({ install: "passed", updateInUse: "passed", restart: "passed", stop: "passed", deferredRemoval: "passed", nativeVoiceRuntime: "passed", packages: [...records, voice].map(({ id, version, downloadBytes, installedBytes }) => ({ id, version, downloadBytes, installedBytes })) }, null, 2)}\n`,
   );
 } finally {
   await rm(root, { recursive: true, force: true });

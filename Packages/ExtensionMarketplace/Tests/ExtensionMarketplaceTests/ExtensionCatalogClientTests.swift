@@ -54,3 +54,24 @@ import Testing
     await #expect(throws: MarketplaceError.invalidSignature) { try await unsafeClient.refresh() }
     #expect(try Data(contentsOf: cache) == current)
 }
+
+@Test func aNewSigningKeyRecoversThePreviousAppsCatalogCache() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let oldKey = Curve25519.Signing.PrivateKey()
+    let newKey = Curve25519.Signing.PrivateKey()
+    let payload = try JSONEncoder().encode(
+        ExtensionCatalog(revision: 3, packages: [fixturePackage()]))
+    let cache = fixture.directory.appendingPathComponent("catalog.json")
+    let old = try JSONEncoder().encode(
+        SignedExtensionCatalog(payload: payload, signature: oldKey.signature(for: payload)))
+    try old.write(to: cache)
+    let current = try JSONEncoder().encode(
+        SignedExtensionCatalog(payload: payload, signature: newKey.signature(for: payload)))
+    let client = ExtensionCatalogClient(
+        url: URL(string: "https://github.com/example/app/catalog")!,
+        publicKey: newKey.publicKey.rawRepresentation, repository: "example/app", cache: cache,
+        fetch: { _ in current })
+    #expect(try await client.refresh().catalog.revision == 3)
+    #expect(try Data(contentsOf: cache) == current)
+}

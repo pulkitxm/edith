@@ -6,6 +6,7 @@ import Observation
 @MainActor
 @Observable
 final class MarketplaceModel {
+    static let shared = MarketplaceModel()
     private(set) var catalog: ExtensionCatalog?
     private(set) var downloadingID: String?
     private(set) var progress = 0.0
@@ -20,6 +21,25 @@ final class MarketplaceModel {
 
     init() {
         reloadInstalled()
+    }
+
+    func updateEnabledExtensionsOnLaunch() async {
+        guard SharedDefaults.store.object(forKey: "extensionAutomaticUpdates") as? Bool ?? true
+        else { return }
+        let selected = ExtensionRegistry.entries.filter {
+            $0.isEnabled(in: SharedDefaults.store)
+                && MarketplaceServices.downloadableIDs.contains($0.id)
+        }
+        guard !selected.isEmpty else { return }
+        await refresh()
+        guard !offline else { return }
+        for entry in selected {
+            try? Task.checkCancellation()
+            if Task.isCancelled { return }
+            if installedPackage(for: entry.id) == nil || updateAvailable(for: entry.id) {
+                if await download(id: entry.id) { IPC.post(IPC.Name.settingsChanged) }
+            }
+        }
     }
 
     func refresh() async {
@@ -68,6 +88,7 @@ final class MarketplaceModel {
         defer { downloadingID = nil }
         if catalog == nil { await refresh() }
         do {
+            guard !pendingRemovals.contains(id) else { throw MarketplaceError.packageBusy }
             guard let catalog else { throw MarketplaceError.downloadFailed }
             let plan = try catalog.installationPlan(
                 for: id, hostABI: MarketplaceConfiguration.hostABI, architecture: "arm64",

@@ -45,7 +45,7 @@ public actor ExtensionCatalogClient {
     }
 
     public func refresh() async throws -> Result {
-        let previous = try cached()
+        let previous = try? cached()
         let data: Data
         do {
             data = try await fetch(url)
@@ -58,7 +58,7 @@ public actor ExtensionCatalogClient {
         let operation = try PackageFileLock(
             url: cache.appendingPathExtension("lock"), exclusive: true)
         defer { operation.close() }
-        let latest = try cached()
+        let latest = try? cached()
         let latestKnownRevision = max(previous?.revision ?? 0, latest?.revision ?? 0)
         let catalog = try decode(data, minimumRevision: latestKnownRevision)
         for known in [previous, latest].compactMap({ $0 })
