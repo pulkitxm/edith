@@ -41,7 +41,7 @@ public actor AgentActivityService {
         listener = { await runtime.hasSubscribers(topic: .agentActivity) }
         let service = self
         await runtime.register(operation: AgentActivityOperation.ingest) { payload in
-            guard payload.count <= AgentActivityParser.maximumInputBytes else {
+            guard payload.count <= AgentActivityParser.maximumEventBytes else {
                 throw AgentError(.refused, "The agent event is too large.")
             }
             let event = try AgentPayload.decode(AgentActivityEvent.self, from: payload)

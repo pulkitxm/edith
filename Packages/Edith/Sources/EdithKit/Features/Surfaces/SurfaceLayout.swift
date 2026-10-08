@@ -120,6 +120,9 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var paddingOverride: Double?
     public var cornerOverride: Double?
     public var shelfWidth: Double?
+    public var sourceIDs: Set<String>?
+    public var agentPhases: Set<String>?
+    public var includeSubagents = true
     public var id: String { instanceID }
     public var displayTitle: String {
         let label = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -129,6 +132,7 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public init(_ widget: SurfaceWidget) {
         self.widget = widget
         instanceID = widget.rawValue
+        if widget == .agents { hiddenFields = ["quiet", "errors", "subagents", "model", "source"] }
     }
 
     public func shows(_ field: String) -> Bool { !hiddenFields.contains(field) }
@@ -188,6 +192,12 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
                 tile.paddingOverride = tile.paddingOverride.map { min(48, max(0, $0)) }
                 tile.cornerOverride = tile.cornerOverride.map { min(48, max(0, $0)) }
                 tile.shelfWidth = tile.shelfWidth.map { min(760, max(160, $0)) }
+                tile.sourceIDs = tile.sourceIDs.map {
+                    Set($0.sorted().prefix(100).map { String($0.prefix(512)) })
+                }
+                tile.agentPhases = tile.agentPhases.map {
+                    Set($0.filter { AgentActivityPhase(rawValue: $0) != nil })
+                }
                 return tile
             })
         result.columns = columns
@@ -305,7 +315,12 @@ extension SurfaceWidget {
         case .agents:
             [
                 ("running", "Working count"), ("waiting", "Needs attention count"),
-                ("total", "Total count"), ("sessions", "Session list"),
+                ("total", "Active count"), ("stuck", "Confirmed stuck count"),
+                ("quiet", "No recent signal count"), ("errors", "Error count"),
+                ("subagents", "Subagent count"), ("sessions", "Session list"),
+                ("approvals", "Permission requests"), ("provider", "Provider names"),
+                ("tool", "Latest tool and command"), ("model", "Model name"),
+                ("elapsed", "Session elapsed time"), ("source", "Source and last signal"),
             ]
         default: []
         }

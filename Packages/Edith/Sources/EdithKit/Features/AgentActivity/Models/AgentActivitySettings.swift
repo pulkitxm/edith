@@ -12,10 +12,15 @@ public struct AgentActivityProviderSettings: Codable, Equatable, Sendable {
 public struct AgentActivitySettings: Codable, Equatable, Sendable {
     public var providers: [String: AgentActivityProviderSettings]
     public var quietMinutes: Int
+    public var monitorTerminalAttention: Bool
 
-    public init(providers: [String: AgentActivityProviderSettings] = [:], quietMinutes: Int = 10) {
+    public init(
+        providers: [String: AgentActivityProviderSettings] = [:], quietMinutes: Int = 10,
+        monitorTerminalAttention: Bool = false
+    ) {
         self.providers = providers
         self.quietMinutes = quietMinutes
+        self.monitorTerminalAttention = monitorTerminalAttention
     }
 
     public func configuration(_ provider: AgentActivityProvider) -> AgentActivityProviderSettings {

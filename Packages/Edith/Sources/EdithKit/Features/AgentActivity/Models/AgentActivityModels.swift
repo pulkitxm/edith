@@ -13,13 +13,14 @@ public enum AgentActivityProvider: String, Codable, CaseIterable, Identifiable, 
 }
 
 public enum AgentActivityPhase: String, Codable, CaseIterable, Sendable {
-    case idle, working, waiting, permission, finished, error, stuck, quiet, ended
+    case idle, working, waiting, permission, blocked, finished, error, stuck, quiet, ended
     public var title: String {
         switch self {
         case .idle: "Idle"
         case .working: "Working"
         case .waiting: "Needs an answer"
         case .permission: "Needs approval"
+        case .blocked: "Needs attention"
         case .finished: "Finished"
         case .error: "Error"
         case .stuck: "Stuck"
@@ -42,6 +43,7 @@ public struct AgentActivityEvent: Codable, Equatable, Sendable {
     public var detail: String?
     public var pane: String?
     public var permissionID: String?
+    public var permissionInput: String?
     public var permissionRequest = false
     public var receivedAt: Date
     public var identity: String { provider.rawValue + ":" + sessionID }
@@ -132,7 +134,8 @@ public struct AgentApprovalRequest: Codable, Equatable, Identifiable, Sendable {
         providerPermissionID = event.permissionID
         project = event.project
         tool = event.tool ?? "Tool"
-        detail = event.detail ?? "No additional request details were supplied."
+        detail =
+            event.permissionInput ?? event.detail ?? "No additional request details were supplied."
         createdAt = now
         expiresAt = now.addingTimeInterval(lifetime)
     }
@@ -184,6 +187,7 @@ public struct AgentActivitySnapshot: Codable, Equatable, Sendable {
 
 public enum AgentActivityParser {
     public static let maximumInputBytes = 131_072
+    public static let maximumEventBytes = 1_048_576
 
     public static func parse(
         _ data: Data, provider: AgentActivityProvider, pane: String? = nil, now: Date = Date()
@@ -237,6 +241,7 @@ public enum AgentActivityParser {
             name == "PermissionRequest" && event.tool != nil
             && root.keys.contains("tool_input")
         event.permissionID = string(root["tool_use_id"])
+        if event.permissionRequest { event.permissionInput = describeAll(root["tool_input"]) }
         return event
     }
 
@@ -279,6 +284,13 @@ public enum AgentActivityParser {
         event.permissionRequest =
             name == "permission.asked" && event.permissionID != nil
             && event.tool != nil
+        if event.permissionRequest {
+            event.permissionInput = describeAll([
+                "permission": properties["permission"] ?? NSNull(),
+                "patterns": properties["patterns"] ?? [],
+                "metadata": properties["metadata"] ?? [:],
+            ])
+        }
         event.pane = string(pane)
         return event
     }
@@ -290,14 +302,18 @@ public enum AgentActivityParser {
     }
 
     private static func describe(_ value: Any?) -> String? {
-        if let raw = string(value) { return raw }
-        if let fields = value as? [String: Any], let command = string(fields["command"]) {
+        if let raw = value as? String { return raw }
+        if let fields = value as? [String: Any], let command = fields["command"] as? String {
             return command
         }
-        guard let value, JSONSerialization.isValidJSONObject(value),
+        return describeAll(value)
+    }
+
+    private static func describeAll(_ value: Any?) -> String? {
+        guard let value,
             let data = try? JSONSerialization.data(
-                withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
+                withJSONObject: value, options: [.fragmentsAllowed, .prettyPrinted, .sortedKeys])
         else { return nil }
-        return String(String(data: data, encoding: .utf8)?.prefix(8192) ?? "")
+        return String(data: data, encoding: .utf8)
     }
 }
