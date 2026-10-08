@@ -65,6 +65,7 @@ final class NotchShelfController: FeatureModule {
     private(set) var nowPlaying: NotchNowPlaying?
     private(set) var nowPlayingArtwork: NSImage?
     var activeTab: NotchTab = .home
+    var layoutEditing = false
     private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
     private weak var colorPickerStore: ColorPickerStore?
@@ -590,7 +591,7 @@ final class NotchShelfController: FeatureModule {
                 allowMouse = NotchGeometry.expandedAcceptsPointer(
                     cursor, shapeFrame: shapeFrame(of: panel),
                     buttonPressed: NSEvent.pressedMouseButtons != 0,
-                    heldOpen: isSharing || browserHoldsOpen)
+                    heldOpen: isSharing || browserHoldsOpen || layoutEditing)
             } else if currentAlert != nil, id == builtinDisplayID {
                 allowMouse = shapeFrame(of: panel).contains(cursor)
             } else {
@@ -637,6 +638,7 @@ final class NotchShelfController: FeatureModule {
 
     func collapseNow() {
         guard isExpanded, !isSharing else { return }
+        layoutEditing = false
         expandedDisplay = nil
         selectedIDs = []
         gate.forceClosed()
@@ -689,7 +691,7 @@ final class NotchShelfController: FeatureModule {
         case .opened:
             if let gateDisplay { expand(on: gateDisplay) }
         case .closed:
-            if isSharing || browserHoldsOpen {
+            if isSharing || browserHoldsOpen || layoutEditing {
                 gate.forceOpen()
             } else {
                 collapseNow()

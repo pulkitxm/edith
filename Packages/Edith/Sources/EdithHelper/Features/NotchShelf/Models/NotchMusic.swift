@@ -1,58 +1,7 @@
 import EdithKit
 import Foundation
 
-enum NotchTab: String, CaseIterable, Equatable {
-    case home, browser, files, clipboard, audio, camera
-
-    static func visible(
-        clipboardEnabled: Bool, audioMixerEnabled: Bool, applicationAudioSupported: Bool,
-        browserEnabled: Bool = false
-    ) -> [NotchTab] {
-        var tabs: [NotchTab] = [.home]
-        if browserEnabled { tabs.append(.browser) }
-        tabs.append(.files)
-        if clipboardEnabled { tabs.append(.clipboard) }
-        if audioMixerEnabled, applicationAudioSupported { tabs.append(.audio) }
-        tabs.append(.camera)
-        return tabs
-    }
-
-    static var currentVisible: [NotchTab] {
-        visible(
-            clipboardEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Clipboard.enabled),
-            audioMixerEnabled: SharedDefaults.store.bool(
-                forKey: AppStorageKeys.Notch.audioMixerEnabled),
-            applicationAudioSupported: PlatformCapabilities.macOS.state(for: .applicationAudio)
-                .isSupported,
-            browserEnabled: SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.browserEnabled))
-    }
-
-    static func validSelection(_ selected: NotchTab, visible: [NotchTab]) -> NotchTab {
-        visible.contains(selected) ? selected : .home
-    }
-
-    var title: String {
-        switch self {
-        case .home: "Home"
-        case .browser: "Browser"
-        case .files: "Files"
-        case .clipboard: "Clipboard"
-        case .audio: "Audio"
-        case .camera: "Camera"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .home: "house.fill"
-        case .browser: "globe"
-        case .files: "folder.fill"
-        case .clipboard: "doc.on.clipboard"
-        case .audio: "slider.horizontal.3"
-        case .camera: "camera.fill"
-        }
-    }
-}
+typealias NotchTab = SurfaceNotchTab
 
 struct NotchNowPlaying: Equatable {
     enum Source: Equatable {

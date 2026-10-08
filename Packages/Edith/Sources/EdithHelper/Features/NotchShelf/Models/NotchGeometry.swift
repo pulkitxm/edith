@@ -1,4 +1,5 @@
 import CoreGraphics
+import EdithKit
 
 enum NotchGeometry {
     static let topFlareRadius: CGFloat = 6
@@ -16,7 +17,9 @@ enum NotchGeometry {
         }
         let content: CGFloat =
             switch tab {
-            case .home: hasMusic ? 158 : 148
+            case .home:
+                SharedDefaults.store.string(forKey: SurfaceTarget.notch.key) == nil
+                    ? (hasMusic ? 158 : 148) : 310
             case .browser: 0
             case .files: 210
             case .clipboard: 260

@@ -9,6 +9,7 @@ struct NotchShelfContentView: View {
     var collapsedBase: CGSize = NotchGeometry.fallbackSize
     var isBuiltin = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var surfaceLayouts = SurfaceLayoutStore.shared
     @Namespace private var tabPill
 
     private var isExpanded: Bool { controller.isExpanded(on: displayID) }
@@ -34,6 +35,9 @@ struct NotchShelfContentView: View {
             .animation(glide, value: controller.activeTab)
             .animation(glide, value: controller.nowPlaying == nil)
             .animation(glide, value: isHovering)
+            .onReceive(
+                DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged)
+            ) { _ in surfaceLayouts.reload() }
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let point):
@@ -206,9 +210,21 @@ struct NotchShelfContentView: View {
                 iconTab(tab)
             }
             Spacer(minLength: 0)
+            if controller.activeTab == .home {
+                Button {
+                    controller.layoutEditing.toggle()
+                } label: {
+                    Image(systemName: controller.layoutEditing ? "checkmark" : "pencil")
+                        .font(.system(size: 11.5)).foregroundStyle(.white.opacity(0.8))
+                        .frame(width: 28, height: 22)
+                        .background(Color.white.opacity(0.07), in: Capsule())
+                }
+                .buttonStyle(.edith(.borderless))
+                .help(controller.layoutEditing ? "Finish editing" : "Edit Notch layout")
+            }
             Button {
                 controller.collapseNow()
-                MainApp.openSettings()
+                MainApp.openSurfaceEditor(.notch)
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 11.5))
@@ -257,10 +273,24 @@ struct NotchShelfContentView: View {
         }
         .buttonStyle(.edith(.borderless))
         .help(tab.title)
+        .onDrag { NSItemProvider(object: ("edith-notch-tab:" + tab.rawValue) as NSString) }
+        .onDrop(of: [.text], isTargeted: nil) { providers in
+            SurfaceTabDrag.accept(providers) { source in
+                surfaceLayouts.update(.notch) { layout in
+                    guard source != tab.rawValue else { return }
+                    layout.tabOrder.removeAll { $0 == source }
+                    layout.tabOrder.insert(
+                        source,
+                        at: layout.tabOrder.firstIndex(of: tab.rawValue) ?? layout.tabOrder.endIndex
+                    )
+                }
+            }
+        }
     }
 
     private var visibleTabs: [NotchTab] {
-        NotchTab.currentVisible
+        _ = surfaceLayouts.notch
+        return NotchTab.currentVisible
     }
 
     @ViewBuilder private var tabContent: some View {
@@ -349,31 +379,134 @@ private struct NotchHomeTab: View {
             })
     }
 
+    @State private var layoutStore = SurfaceLayoutStore.shared
+    @State private var selectedTile: String?
+
     var body: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                if let track = controller.nowPlaying {
-                    NotchNowPlayingCard(controller: controller, track: track)
-                } else if showMusic, controller.usageStore != nil {
-                    emptyMusicCard
+        ScrollView {
+            SurfaceCanvas(
+                layout: layoutStore.notch, singleColumn: false,
+                editing: controller.layoutEditing, selected: selectedTile,
+                select: { selectedTile = $0 },
+                place: { widget, anchor in
+                    layoutStore.update(.notch) { $0.place(widget, before: anchor) }
+                },
+                resize: { id, size in
+                    layoutStore.update(.notch) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == id }) else {
+                            return
+                        }
+                        layout.tiles[index].size = size
+                    }
                 }
-                if let usage = controller.usageStore {
-                    ringsCard(usage)
+            ) { tile in
+                VStack(alignment: .leading, spacing: 5) {
+                    if !tile.title.isEmpty {
+                        Text(tile.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(
+                            .white.opacity(0.7))
+                    }
+                    widget(tile)
                 }
-                if controller.nowPlaying == nil, controller.usageStore == nil {
-                    Text("Nothing to show yet")
-                        .font(.system(size: 12)).foregroundStyle(.white.opacity(0.4))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contextMenu {
+                    Button("Move to top") {
+                        layoutStore.update(.notch) {
+                            $0.place(tile.widget, before: $0.tiles.first?.id)
+                        }
+                    }
+                    ForEach(SurfaceWidgetSize.allCases, id: \.self) { size in
+                        Button(size.title) {
+                            layoutStore.update(.notch) { layout in
+                                guard
+                                    let index = layout.tiles.firstIndex(where: {
+                                        $0.id == tile.id
+                                    })
+                                else { return }
+                                layout.tiles[index].size = size
+                            }
+                        }
+                    }
+                    Button("Hide") {
+                        layoutStore.update(.notch) { layout in
+                            guard
+                                let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                            else { return }
+                            layout.tiles[index].hidden = true
+                        }
+                    }
+                    Button("Open widget editor") {
+                        controller.collapseNow(); MainApp.openSurfaceEditor(.notch)
+                    }
                 }
             }
-            .frame(maxHeight: .infinity)
-            if systemEnabled || keepAwakeEnabled || presenterEnabled || controller.canPickColor
-                || controller.canToggleLidAwake
-            {
-                quickActions
+            if layoutStore.notch.visible.isEmpty, !controller.layoutEditing {
+                Button("Add widgets") {
+                    controller.collapseNow(); MainApp.openSurfaceEditor(.notch)
+                }
+                .padding(20)
             }
         }
+        .environment(\.colorScheme, .dark)
         .padding(.horizontal, 16).padding(.bottom, 14)
+        .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
+        { _ in layoutStore.reload() }
+    }
+
+    @ViewBuilder private func widget(_ tile: SurfaceTile) -> some View {
+        switch tile.widget {
+        case .music:
+            if let track = controller.nowPlaying {
+                NotchNowPlayingCard(controller: controller, track: track).frame(
+                    minHeight: tile.size == .compact ? 62 : 92)
+            } else {
+                emptyMusicCard.frame(height: tile.size == .compact ? 62 : 92)
+            }
+        case .limits:
+            if let usage = controller.usageStore {
+                ringsCard(usage).frame(height: tile.size == .compact ? 80 : 106)
+            } else {
+                integration(tile)
+            }
+        case .actions: quickActions
+        case .calendar:
+            VStack(alignment: .leading, spacing: 8) {
+                Label(tile.displayTitle, systemImage: "calendar").font(
+                    .system(size: 12, weight: .semibold))
+                if let event = controller.calendarStore?.events.first(where: { $0.end > Date() }) {
+                    Text(event.title).font(.system(size: 12)).lineLimit(1).presenterCover(.usage)
+                    Text(event.start.formatted(.dateTime.hour().minute())).font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Button("Open Calendar") {
+                        controller.collapseNow(); MainApp.open(section: "calendar")
+                    }
+                } else {
+                    Button("Open Calendar") {
+                        controller.collapseNow(); MainApp.open(section: "calendar")
+                    }
+                }
+            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        case .clocks:
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                VStack(alignment: .leading, spacing: 5) {
+                    Label(tile.displayTitle, systemImage: "clock").font(
+                        .system(size: 12, weight: .semibold))
+                    Text(context.date.formatted(.dateTime.hour().minute().second())).font(
+                        .system(size: 22, weight: .medium)
+                    ).monospacedDigit()
+                    if tile.size != .compact {
+                        Text(TimeZone.current.identifier).font(.system(size: 10)).foregroundStyle(
+                            .secondary)
+                    }
+                }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            }.background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        default: integration(tile)
+        }
+    }
+
+    private func integration(_ tile: SurfaceTile) -> some View {
+        SurfaceIntegrationCard(tile: tile) { section in
+            controller.collapseNow(); MainApp.open(section: section)
+        }
     }
 
     private var quickActions: some View {
@@ -491,7 +624,7 @@ private struct NotchHomeTab: View {
 
     private func ringsCard(_ usage: UsageStore) -> some View {
         NotchUsageRings(usage: usage)
-            .frame(width: 180)
+            .frame(maxWidth: .infinity)
             .frame(maxHeight: .infinity)
             .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
     }
