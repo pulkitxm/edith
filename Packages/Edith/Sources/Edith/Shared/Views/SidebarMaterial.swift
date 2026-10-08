@@ -15,7 +15,7 @@ struct SidebarMaterial: View {
             }
         }
         .overlay(alignment: .trailing) {
-            DashSkin.line(scheme == .dark).frame(width: 1)
+            DashSkin.line(scheme == .dark).frame(width: UIScale.pt(1))
         }
         .allowsHitTesting(false)
     }
