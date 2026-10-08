@@ -246,7 +246,8 @@ import Testing
         .enumerated() {
             try fixture.repository.append(
                 AttentionEvent(
-                    startedAt: now.addingTimeInterval(Double(-600 + offset * 300)), duration: Double(240 - offset * 30),
+                    startedAt: now.addingTimeInterval(Double(-600 + offset * 300)),
+                    duration: Double(240 - offset * 30),
                     source: .application, appName: app.1, bundleID: app.0))
         }
         let model = AttentionPageModel(repository: fixture.repository)

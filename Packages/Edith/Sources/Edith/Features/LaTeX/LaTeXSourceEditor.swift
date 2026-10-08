@@ -41,10 +41,7 @@ struct LaTeXSourceEditor: NSViewRepresentable {
         if let retained = controls.webView {
             view = retained
         } else {
-            let configuration = WKWebViewConfiguration()
-            configuration.websiteDataStore = .nonPersistent()
-            view = WKWebView(frame: .zero, configuration: configuration)
-            view.setValue(false, forKey: "drawsBackground")
+            view = EditorWebView()
             controls.webView = view
         }
         view.configuration.userContentController.removeScriptMessageHandler(forName: "latexEditor")

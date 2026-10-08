@@ -10,10 +10,7 @@ struct QuinjetDiffView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> WKWebView {
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .nonPersistent()
-        let view = WKWebView(frame: .zero, configuration: configuration)
-        view.setValue(false, forKey: "drawsBackground")
+        let view = EditorWebView()
         view.setAccessibilityLabel("Quinjet changed files and diff")
         view.navigationDelegate = context.coordinator
         context.coordinator.view = view
