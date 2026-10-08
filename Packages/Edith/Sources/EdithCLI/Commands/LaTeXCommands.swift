@@ -334,7 +334,7 @@ struct LaTeXCompileCommand: AsyncParsableCommand {
     @OptionGroup var options: LaTeXTargetOptions
     func run() async throws {
         try await execute {
-            let project = try LaTeXCLI.project(options.project)
+            let project = try await LaTeXCLI.current(options.project)
             if project.location == .github {
                 let build = try await LaTeXCLIEnvironment.service.rebuild(project)
                 if options.json {
@@ -408,7 +408,7 @@ struct LaTeXPreviewCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             guard !data || options.json else { throw CLIFailure.usage("--data requires --json") }
-            let project = try LaTeXCLI.project(options.project)
+            let project = try await LaTeXCLI.current(options.project)
             let bytes: Data?
             if project.location == .disk {
                 bytes =

@@ -212,7 +212,7 @@ struct LaTeXPage: View {
                         .disabled(model.original == nil || model.busy || model.load.isRunning)
                 } else {
                     Button(
-                        project.pullRequest == nil
+                        !model.hasRepositoryBuild
                             ? "Create pull request" : model.dirty ? "Save & compile" : "Recompile"
                     ) {
                         model.submit()
@@ -374,9 +374,14 @@ struct LaTeXPage: View {
                         LaTeXPDFPane(data: data, generation: model.buildGeneration)
                     } else {
                         ContentUnavailableView(
-                            "GitHub build", systemImage: "doc.richtext",
+                            model.buildingPDF
+                                ? "Building PDF"
+                                : model.hasRepositoryBuild ? "Ready to recompile" : "GitHub build",
+                            systemImage: "doc.richtext",
                             description: Text(
-                                "Create a pull request, wait for the PDF build, then refresh this preview."
+                                model.hasRepositoryBuild
+                                    ? "Recompile builds the saved revision on GitHub. The PDF opens here when it finishes."
+                                    : "Create a pull request to build this document on GitHub. The PDF opens here when it finishes."
                             )
                         ).frame(maxWidth: .infinity, maxHeight: .infinity)
                     }

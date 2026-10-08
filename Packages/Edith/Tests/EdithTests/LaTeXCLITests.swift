@@ -134,7 +134,7 @@ import Testing
         }
     }
 
-    @Test func repositoryCompileRebuildsSavedHeadThroughPukbot() async throws {
+    @Test func repositoryCompileRebuildsMergedHeadThroughPukbot() async throws {
         try await CLIProbe.inWorld { world in
             defer { LaTeXCLIEnvironment.reset() }
             let project = LaTeXProject(
@@ -151,8 +151,14 @@ import Testing
                         args == ["workflow", "rerun", "--repo", project.repository, "72", "--json"])
                     return Data()
                 }
+                if args.contains("view") {
+                    return Data(
+                        #"{"number":42,"title":"Paper","state":"MERGED","url":"https://github.com/northstar/paper/pull/42","headRefOid":"saved-head","mergeable":"MERGEABLE","statusCheckRollup":[]}"#
+                            .utf8)
+                }
+                if args.contains("diff") { return Data() }
                 if args.contains(where: { $0.contains("git/ref") }) {
-                    #expect(args.last?.contains("latex/paper") == true)
+                    #expect(args.last?.hasSuffix("/heads/main") == true)
                     return Data(#"{"object":{"sha":"saved-head"}}"#.utf8)
                 }
                 #expect(args.contains("head_sha=saved-head"))

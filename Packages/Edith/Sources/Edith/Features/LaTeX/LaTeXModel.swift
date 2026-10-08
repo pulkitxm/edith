@@ -15,6 +15,7 @@ final class LaTeXModel {
     var message: String?
     var busy = false
     var buildingPDF = false
+    var hasRepositoryBuild = false
     var buildURL: URL?
     let load = ContentLoad()
     let editorControls = LaTeXEditorControls()
@@ -46,10 +47,9 @@ final class LaTeXModel {
 
     func select(_ id: UUID) async {
         guard !dirty, !busy else { return }
-        pdfOperation?.cancel()
-        buildingPDF = false
-        buildURL = nil
+        stopFollowingBuild()
         selectedID = id
+        hasRepositoryBuild = false
         source = ""
         original = nil
         review = nil
@@ -61,6 +61,7 @@ final class LaTeXModel {
 
     func reload() async {
         guard let project = selected, !dirty, !busy else { return }
+        stopFollowingBuild()
         let request = load.begin(preservingContent: original != nil)
         do {
             var current = project
@@ -75,10 +76,16 @@ final class LaTeXModel {
             }
             let result = try await service.load(current)
             let preview = current.location == .github ? try? await service.previewPDF(current) : nil
+            var hasBuild =
+                current.location == .github && (current.pullRequest != nil || preview != nil)
+            if current.location == .github && !hasBuild {
+                hasBuild = (try? await service.build(current)) != nil
+            }
             guard load.isCurrent(request), selectedID == current.id else { return }
             source = result.text
             original = result
             pdfPreview = preview
+            hasRepositoryBuild = hasBuild
             load.complete(request)
         } catch { load.fail(request, error: error) }
     }
@@ -94,8 +101,10 @@ final class LaTeXModel {
         else { throw LaTeXError.message("That project is already in your library.") }
         let next = projects + [resolved]
         try store.save(next)
+        stopFollowingBuild()
         projects = next
         selectedID = resolved.id
+        hasRepositoryBuild = resolved.pullRequest != nil
         original = content
         source = content.text
         review = nil
@@ -112,8 +121,8 @@ final class LaTeXModel {
             try store.save(next)
             projects = next
             selectedID = nil
-            pdfOperation?.cancel()
-            buildingPDF = false
+            hasRepositoryBuild = false
+            stopFollowingBuild()
             source = ""
             original = nil
             review = nil
@@ -146,20 +155,28 @@ final class LaTeXModel {
     }
 
     func submit() {
-        guard var project = selected, let original, canSubmit else { return }
-        pdfOperation?.cancel()
-        buildingPDF = false
-        buildURL = nil
+        guard let project = selected, let original, canSubmit else { return }
+        stopFollowingBuild()
         let text = source
-        if project.reviewBranch == nil {
-            project.reviewBranch = "latex/\(UUID().uuidString.lowercased())"
-        }
-        let prepared = project
+        let rebuildSavedBase = project.pullRequest == nil && !dirty
         perform {
+            if rebuildSavedBase, try await self.service.build(project) != nil {
+                self.hasRepositoryBuild = true
+                _ = try await self.service.rebuild(project)
+                self.pdfPreview = nil
+                self.message = "Rebuilding PDF on GitHub."
+                self.followBuild(project)
+                return
+            }
+            var prepared = project
+            if prepared.reviewBranch == nil {
+                prepared.reviewBranch = "latex/\(UUID().uuidString.lowercased())"
+            }
             try self.replace(prepared)
             let number = try await self.service.submit(prepared, text: text, original: original)
             var submitted = prepared
             submitted.pullRequest = number
+            self.hasRepositoryBuild = true
             try self.replace(submitted)
             self.pdfPreview = nil
             self.original = try await self.service.load(submitted)
@@ -196,6 +213,7 @@ final class LaTeXModel {
                     if let build = try await self.service.build(project) {
                         guard !Task.isCancelled, self.selectedID == project.id else { return }
                         self.buildURL = URL(string: build.html_url)
+                        self.hasRepositoryBuild = true
                         if build.status == "completed" {
                             guard build.conclusion == "success" else {
                                 self.buildingPDF = false
@@ -227,6 +245,13 @@ final class LaTeXModel {
         }
     }
 
+    private func stopFollowingBuild() {
+        pdfOperation?.cancel()
+        pdfOperation = nil
+        buildingPDF = false
+        buildURL = nil
+    }
+
     func merge(automatically: Bool) {
         guard let project = selected, !dirty else { return }
         perform {
@@ -236,6 +261,7 @@ final class LaTeXModel {
                 ? "Squash merge scheduled after required checks pass."
                 : "Pull request squash merged."
             if !automatically {
+                self.stopFollowingBuild()
                 var finished = project
                 finished.reviewBranch = nil
                 finished.pullRequest = nil
@@ -243,6 +269,8 @@ final class LaTeXModel {
                 let content = try await self.service.load(finished)
                 self.original = content
                 self.source = content.text
+                self.pdfPreview = nil
+                self.followBuild(finished)
             }
             self.review = try await self.service.review(project)
         }

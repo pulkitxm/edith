@@ -56,7 +56,7 @@ with a null `pdfPath`. A running build is reused; a completed build is rerun
 through Pukbot. Use `preview` after the build succeeds.
 
 `preview --data --json` returns base64 PDF bytes. Repository previews stay in
-memory and only return artifacts matching the current PR head. Pending or
+memory and only return artifacts matching the current branch head. Pending or
 failed builds may have no artifact. Disk preview reports `pdfPath`; repository
 preview always reports a null path.
 

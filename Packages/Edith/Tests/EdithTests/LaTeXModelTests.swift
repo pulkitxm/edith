@@ -199,6 +199,7 @@ import WebKit
                         "UEsDBBQAAAAIAK0bSF1BbHXDIgAAACAAAAAIAAAAbWFpbi5wZGZTDXBx0zXUM+cqrswryUgtyUzWLShKLctMLedSVXX1dwMAUEsBAhQDFAAAAAgArRtIXUFsdcMiAAAAIAAAAAgAAAAAAAAAAAAAAIABAAAAAG1haW4ucGRmUEsFBgAAAAABAAEANgAAAEgAAAAAAA=="
                 )!
             }
+            if await calls.hideArtifact { return Data(#"{"artifacts":[]}"#.utf8) }
             return Data(
                 #"{"artifacts":[{"id":2,"expired":false,"size_in_bytes":100,"workflow_run":{"id":72,"head_sha":"current"}}]}"#
                     .utf8)
@@ -234,6 +235,23 @@ import WebKit
         #expect(!model.busy && !model.buildingPDF && !model.dirty)
         #expect(model.pdfPreview == Data("%PDF-1.7\nsynthetic-preview\n%%EOF".utf8))
         #expect(try store.load() == [project])
+        await calls.expireArtifact()
+        var base = project
+        base.pullRequest = nil
+        base.reviewBranch = nil
+        try store.save([base])
+        let baseModel = LaTeXModel(service: service, store: store)
+        await baseModel.start()
+        await baseModel.select(base.id)
+        #expect(baseModel.pdfPreview == nil && baseModel.hasRepositoryBuild)
+        let baseHost = try auditHost(
+            LaTeXPage(model: baseModel, opensEditor: true), size: CGSize(width: 1100, height: 800))
+        #expect(try auditText(baseHost).contains("Recompile"))
+        baseModel.submit()
+        try await waitUntil { baseModel.message == "PDF compiled on GitHub." }
+        #expect(await calls.count == 2)
+        #expect(try store.load() == [base])
+        #expect(baseModel.source == "Hello" && !baseModel.dirty)
     }
 
     @Test func typingKeepsWorkspaceAndWrappedViewportStable() async throws {
@@ -446,5 +464,7 @@ import WebKit
 
 private actor LaTeXBuildCalls {
     var count = 0
-    func record() { count += 1 }
+    var hideArtifact = false
+    func record() { count += 1; hideArtifact = false }
+    func expireArtifact() { hideArtifact = true }
 }
