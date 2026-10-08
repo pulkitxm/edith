@@ -3,6 +3,8 @@ import SwiftUI
 @MainActor
 final class WindowSessionOwner: ObservableObject {
     let acceptsCommandVideo: Bool
+    private var storedAttention: AttentionPageModel?
+    private var storedCodeStats: CodeStatsModel?
     private var storedLaTeX: LaTeXModel?
     private var storedStudio: StudioModel?
     private var storedQuinjet: QuinjetPageModel?
@@ -10,6 +12,20 @@ final class WindowSessionOwner: ObservableObject {
 
     init(acceptsCommandVideo: Bool = true) {
         self.acceptsCommandVideo = acceptsCommandVideo
+    }
+
+    var attention: AttentionPageModel {
+        if let storedAttention { return storedAttention }
+        let model = AttentionPageModel()
+        storedAttention = model
+        return model
+    }
+
+    var codeStats: CodeStatsModel {
+        if let storedCodeStats { return storedCodeStats }
+        let model = CodeStatsModel()
+        storedCodeStats = model
+        return model
     }
 
     var latex: LaTeXModel {
@@ -41,6 +57,8 @@ final class WindowSessionOwner: ObservableObject {
     }
 
     deinit {
+        if let model = storedAttention { Task { @MainActor in model.cancelLoading() } }
+        if let model = storedCodeStats { Task { @MainActor in model.cancelLoading() } }
         if let model = storedStudio { Task { @MainActor in model.closeEditors() } }
         if let model = storedQuinjet { Task { @MainActor in model.stopAll() } }
     }

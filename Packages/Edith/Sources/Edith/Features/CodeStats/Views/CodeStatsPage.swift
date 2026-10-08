@@ -15,8 +15,16 @@ struct CodeStatsPage: View {
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
-        PageScaffold {
-            CodeStatsHeader(model: model)
+        PageScaffold(pinnedHeader: true) {
+            VStack(spacing: 0) {
+                CodeStatsHeader(model: model)
+                if model.table != nil {
+                    CodeStatsFilterBar(model: model, dark: dark)
+                        .pageGutter(compact)
+                        .padding(.bottom, UIScale.pt(12))
+                }
+                Divider()
+            }
         } content: {
             if model.report != nil, let error = model.statusLoad.errorMessage {
                 PageNotice(
@@ -69,9 +77,7 @@ struct CodeStatsPage: View {
         case .unavailable:
             EmptyView()
         case .content:
-            if model.table != nil {
-                CodeStatsFilterBar(model: model, dark: dark)
-            } else {
+            if model.table == nil {
                 CodeStatsRangePicker(range: model.range) { range in
                     Task { await model.select(range) }
                 }
@@ -96,7 +102,7 @@ struct CodeStatsPage: View {
     }
 
     private func sections(_ report: CodeStatsReport) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+        LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsReportSections(report: report, projection: model.projection, dark: dark)
             if model.table != nil {
                 CodeStatsRepositoryStripCard(explorer: model.explorer, dark: dark)
@@ -134,7 +140,7 @@ struct CodeStatsReportSections: View {
     let dark: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
+        LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.cardSpacing)) {
             CodeStatsKPIGrid(report: report, dark: dark)
             CodeStatsHeatmapCard(weeks: projection.heatWeeks, dark: dark)
             CodeStatsTrendCard(projection: projection, dark: dark)

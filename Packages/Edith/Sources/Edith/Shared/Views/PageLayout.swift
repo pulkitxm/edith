@@ -61,7 +61,8 @@ struct PageScaffold<Header: View, Content: View>: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !pinnedHeader { header() }
-                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing))
+                    {
                         content()
                     }
                     .pageContent(compact, width: width)
