@@ -42,8 +42,11 @@ The repository compiler uses a full TeX Live environment with pdfLaTeX. Local
 pdfLaTeX compilation needs latexmk and a local TeX Live installation on PATH.
 
 GitHub Actions compiles the document on pull requests and pushes and uploads the
-PDF as a run artifact. Select Refresh PDF to view the current revision in memory, or open Builds &
-PDF artifacts on GitHub. PDF previews never write repository artifacts to disk.
+PDF as a run artifact. Command-S saves edits and compiles, or recompiles the
+already saved revision. Recompile does the same from the toolbar. The editor
+loads an existing PDF when opened and loads the new PDF when its build finishes.
+Build status and View PDF build show progress or compiler failures. Refresh PDF
+retries preview loading; Builds & PDF artifacts opens GitHub. PDF previews never write repository artifacts to disk.
 Use Review in Quinjet for changed files, highlighted unified or split diffs,
 file filtering, checks, and merge controls. The native review screen reads GitHub
 directly and keeps its data in memory, so it works without a checkout.

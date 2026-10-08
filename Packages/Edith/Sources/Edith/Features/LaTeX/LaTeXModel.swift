@@ -14,11 +14,14 @@ final class LaTeXModel {
     var buildGeneration = UUID()
     var message: String?
     var busy = false
+    var buildingPDF = false
+    var buildURL: URL?
     let load = ContentLoad()
     let editorControls = LaTeXEditorControls()
     private let service: LaTeXService
     private let store: LaTeXProjectStore
     private var operation: Task<Void, Never>?
+    private var pdfOperation: Task<Void, Never>?
 
     init(service: LaTeXService = .live, store: LaTeXProjectStore = LaTeXProjectStore()) {
         self.service = service
@@ -29,7 +32,7 @@ final class LaTeXModel {
     var dirty: Bool { original != nil && source != original?.text }
     var canSubmit: Bool {
         guard let selected else { return false }
-        return original != nil && (dirty || selected.pullRequest == nil) && !busy && !load.isRunning
+        return original != nil && selected.location == .github && !busy && !load.isRunning
     }
 
     func start() async {
@@ -43,6 +46,9 @@ final class LaTeXModel {
 
     func select(_ id: UUID) async {
         guard !dirty, !busy else { return }
+        pdfOperation?.cancel()
+        buildingPDF = false
+        buildURL = nil
         selectedID = id
         source = ""
         original = nil
@@ -68,9 +74,11 @@ final class LaTeXModel {
                 review = latest
             }
             let result = try await service.load(current)
+            let preview = current.location == .github ? try? await service.previewPDF(current) : nil
             guard load.isCurrent(request), selectedID == current.id else { return }
             source = result.text
             original = result
+            pdfPreview = preview
             load.complete(request)
         } catch { load.fail(request, error: error) }
     }
@@ -104,6 +112,8 @@ final class LaTeXModel {
             try store.save(next)
             projects = next
             selectedID = nil
+            pdfOperation?.cancel()
+            buildingPDF = false
             source = ""
             original = nil
             review = nil
@@ -137,6 +147,9 @@ final class LaTeXModel {
 
     func submit() {
         guard var project = selected, let original, canSubmit else { return }
+        pdfOperation?.cancel()
+        buildingPDF = false
+        buildURL = nil
         let text = source
         if project.reviewBranch == nil {
             project.reviewBranch = "latex/\(UUID().uuidString.lowercased())"
@@ -152,6 +165,7 @@ final class LaTeXModel {
             self.original = try await self.service.load(submitted)
             self.message = "Pull request #\(number) saved. GitHub will compile the PDF."
             self.review = try await self.service.review(submitted)
+            self.followBuild(submitted)
         }
     }
 
@@ -170,6 +184,47 @@ final class LaTeXModel {
     func refreshReview() {
         guard let project = selected else { return }
         perform { self.review = try await self.service.review(project) }
+    }
+
+    private func followBuild(_ project: LaTeXProject) {
+        pdfOperation?.cancel()
+        buildingPDF = true
+        pdfOperation = Task { [weak self] in
+            for _ in 0..<60 {
+                do {
+                    guard !Task.isCancelled, let self, self.selectedID == project.id else { return }
+                    if let build = try await self.service.build(project) {
+                        guard !Task.isCancelled, self.selectedID == project.id else { return }
+                        self.buildURL = URL(string: build.html_url)
+                        if build.status == "completed" {
+                            guard build.conclusion == "success" else {
+                                self.buildingPDF = false
+                                self.message =
+                                    "PDF build failed on GitHub. Open the build for details."
+                                return
+                            }
+                            if let pdf = try await self.service.previewPDF(
+                                project, buildID: build.id)
+                            {
+                                guard !Task.isCancelled, self.selectedID == project.id else {
+                                    return
+                                }
+                                self.pdfPreview = pdf
+                                self.buildGeneration = UUID()
+                                self.buildingPDF = false
+                                self.message = "PDF compiled on GitHub."
+                                return
+                            }
+                        }
+                    }
+                } catch {
+                    if !Task.isCancelled { self?.message = error.localizedDescription }
+                }
+                do { try await Task.sleep(for: .seconds(10)) } catch { return }
+            }
+            self?.buildingPDF = false
+            self?.message = "The PDF build is taking longer. Open the build or refresh the PDF."
+        }
     }
 
     func merge(automatically: Bool) {

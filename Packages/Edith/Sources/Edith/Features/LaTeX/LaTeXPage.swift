@@ -133,9 +133,12 @@ struct LaTeXPage: View {
     private func workspace(_ project: LaTeXProject) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: UIScale.pt(10)) {
-                if model.busy || model.load.isRunning {
+                if model.busy || model.load.isRunning || model.buildingPDF {
                     LoadingIndicator()
-                    Text(model.busy ? "Working…" : "Loading source…")
+                    Text(
+                        model.busy
+                            ? "Saving and compiling…"
+                            : model.buildingPDF ? "Building PDF on GitHub…" : "Loading source…")
                 } else if model.dirty {
                     Label("Unsaved changes", systemImage: "circle.fill")
                         .foregroundStyle(.orange)
@@ -209,7 +212,8 @@ struct LaTeXPage: View {
                         .disabled(model.original == nil || model.busy || model.load.isRunning)
                 } else {
                     Button(
-                        project.pullRequest == nil ? "Create pull request" : "Update pull request"
+                        project.pullRequest == nil
+                            ? "Create pull request" : model.dirty ? "Save & compile" : "Recompile"
                     ) {
                         model.submit()
                     }
@@ -365,6 +369,7 @@ struct LaTeXPage: View {
                         Button("Refresh PDF") { model.refreshPDF() }.disabled(
                             model.busy || model.dirty)
                     }
+                    if let url = model.buildURL { Link("View PDF build", destination: url) }
                     if let data = model.pdfPreview {
                         LaTeXPDFPane(data: data, generation: model.buildGeneration)
                     } else {

@@ -159,6 +159,83 @@ import WebKit
         #expect(saves == 1)
     }
 
+    @Test func nativeSaveRecompilesAnUnchangedRepositoryAndLoadsPDF() async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let project = LaTeXProject(
+            name: "Paper", location: .github, sourcePath: "main.tex",
+            repository: "northstar/paper", baseBranch: "main", reviewBranch: "latex/paper",
+            pullRequest: 42)
+        let calls = LaTeXBuildCalls()
+        let service = LaTeXService { tool, args, _, directory in
+            #expect(directory == nil)
+            if tool == "pukbot" {
+                #expect(
+                    args == ["workflow", "rerun", "--repo", project.repository, "72", "--json"])
+                await calls.record()
+                return Data()
+            }
+            if args.contains(where: { $0.contains("git/ref") }) {
+                return Data(#"{"object":{"sha":"current"}}"#.utf8)
+            }
+            if args.contains("view") {
+                return Data(
+                    #"{"number":42,"title":"Paper","state":"OPEN","url":"https://github.com/northstar/paper/pull/42","headRefOid":"current","mergeable":"MERGEABLE","statusCheckRollup":[]}"#
+                        .utf8)
+            }
+            if args.contains("diff") { return Data() }
+            if args.contains(where: { $0.contains("/contents/") }) {
+                return Data(
+                    #"{"type":"file","encoding":"base64","content":"SGVsbG8=","sha":"blob"}"#.utf8)
+            }
+            if args.contains(where: { $0.hasSuffix("/runs") }) {
+                return Data(
+                    "{\"workflow_runs\":[{\"id\":72,\"path\":\"\(project.workflowPath)\",\"html_url\":\"https://github.com/northstar/paper/actions/runs/72\",\"status\":\"completed\",\"conclusion\":\"success\"}]}"
+                        .utf8)
+            }
+            if args.contains(where: { $0.hasSuffix("/zip") }) {
+                return Data(
+                    base64Encoded:
+                        "UEsDBBQAAAAIAK0bSF1BbHXDIgAAACAAAAAIAAAAbWFpbi5wZGZTDXBx0zXUM+cqrswryUgtyUzWLShKLctMLedSVXX1dwMAUEsBAhQDFAAAAAgArRtIXUFsdcMiAAAAIAAAAAgAAAAAAAAAAAAAAIABAAAAAG1haW4ucGRmUEsFBgAAAAABAAEANgAAAEgAAAAAAA=="
+                )!
+            }
+            return Data(
+                #"{"artifacts":[{"id":2,"expired":false,"size_in_bytes":100,"workflow_run":{"id":72,"head_sha":"current"}}]}"#
+                    .utf8)
+        }
+        let store = LaTeXProjectStore(url: root.appendingPathComponent("projects.json"))
+        try store.save([project])
+        let model = LaTeXModel(service: service, store: store)
+        await model.start()
+        await model.select(project.id)
+        #expect(!model.dirty && model.canSubmit)
+        #expect(model.pdfPreview != nil)
+        let host = try auditHost(
+            LaTeXPage(model: model, opensEditor: true), size: CGSize(width: 1100, height: 800))
+        let window = TestWindowHost.window(contentRect: host.bounds)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        try await waitForEditor(model.editorControls)
+        let view = try #require(model.editorControls.webView)
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero,
+                modifierFlags: .command, timestamp: 0, windowNumber: window.windowNumber,
+                context: nil, characters: "s", charactersIgnoringModifiers: "s", isARepeat: false,
+                keyCode: 1))
+        view.keyDown(with: event)
+        for _ in 0..<50 {
+            if model.message == "PDF compiled on GitHub." { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(await calls.count == 1)
+        #expect(model.message == "PDF compiled on GitHub.")
+        #expect(!model.busy && !model.buildingPDF && !model.dirty)
+        #expect(model.pdfPreview == Data("%PDF-1.7\nsynthetic-preview\n%%EOF".utf8))
+        #expect(try store.load() == [project])
+    }
+
     @Test func typingKeepsWorkspaceAndWrappedViewportStable() async throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -357,4 +434,9 @@ import WebKit
         Every useful document begins with a simple idea.
         \end{document}
         """#
+}
+
+private actor LaTeXBuildCalls {
+    var count = 0
+    func record() { count += 1 }
 }
