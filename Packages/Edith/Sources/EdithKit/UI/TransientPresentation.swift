@@ -5,13 +5,14 @@ private struct TransientPresentation: ViewModifier {
     @Environment(\.dismiss) private var dismiss
     let dismissible: Bool
     let dismissOnEscape: Bool
+    var onEscape: (() -> Void)? = nil
 
     func body(content: Content) -> some View {
         content
             .background(
                 SheetDismissalMonitor(
                     dismissible: dismissible, dismissOnEscape: dismissOnEscape,
-                    dismiss: { dismiss() })
+                    onEscape: onEscape, dismiss: { dismiss() })
             )
             .interactiveDismissDisabled(!dismissible)
     }
@@ -20,12 +21,14 @@ private struct TransientPresentation: ViewModifier {
 struct SheetDismissalMonitor: NSViewRepresentable {
     let dismissible: Bool
     let dismissOnEscape: Bool
+    var onEscape: (() -> Void)? = nil
     let dismiss: () -> Void
 
     func makeNSView(context: Context) -> SheetDismissalView {
         let view = SheetDismissalView()
         view.dismissible = dismissible
         view.dismissOnEscape = dismissOnEscape
+        view.onEscape = onEscape
         view.dismiss = dismiss
         return view
     }
@@ -33,6 +36,7 @@ struct SheetDismissalMonitor: NSViewRepresentable {
     func updateNSView(_ view: SheetDismissalView, context: Context) {
         view.dismissible = dismissible
         view.dismissOnEscape = dismissOnEscape
+        view.onEscape = onEscape
         view.dismiss = dismiss
     }
 
@@ -44,6 +48,7 @@ struct SheetDismissalMonitor: NSViewRepresentable {
 final class SheetDismissalView: NSView {
     var dismissible = true
     var dismissOnEscape = true
+    var onEscape: (() -> Void)?
     var dismiss: (() -> Void)?
     private var monitor: Any?
 
@@ -55,7 +60,11 @@ final class SheetDismissalView: NSView {
             [weak self] event in
             let dismissed = MainActor.assumeIsolated {
                 guard let self, self.shouldDismiss(for: event) else { return false }
-                self.dismiss?()
+                if event.type == .keyDown, let onEscape = self.onEscape {
+                    onEscape()
+                } else {
+                    self.dismiss?()
+                }
                 return true
             }
             return dismissed ? nil : event
@@ -69,7 +78,8 @@ final class SheetDismissalView: NSView {
             !(NSApp.keyWindow is NSSavePanel)
         else { return false }
         if event.type == .keyDown {
-            return dismissOnEscape && event.keyCode == 53 && event.window === sheet
+            return (dismissOnEscape || onEscape != nil) && event.keyCode == 53
+                && event.window === sheet
                 && NSApp.keyWindow === sheet
                 && event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty
         }
@@ -86,19 +96,23 @@ final class SheetDismissalView: NSView {
 
 extension View {
     public func transientPresentation(
-        dismissible: Bool = true, dismissOnEscape: Bool = true
+        dismissible: Bool = true, dismissOnEscape: Bool = true,
+        onEscape: (() -> Void)? = nil
     ) -> some View {
-        modifier(TransientPresentation(dismissible: dismissible, dismissOnEscape: dismissOnEscape))
+        modifier(
+            TransientPresentation(
+                dismissible: dismissible, dismissOnEscape: dismissOnEscape, onEscape: onEscape))
     }
 
     public func edithSheet<Content: View>(
         isPresented: Binding<Bool>, dismissible: Bool? = true, dismissOnEscape: Bool = true,
-        onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content
+        onEscape: (() -> Void)? = nil, onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         sheet(isPresented: isPresented, onDismiss: onDismiss) {
             if let dismissible {
                 content().transientPresentation(
-                    dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+                    dismissible: dismissible, dismissOnEscape: dismissOnEscape, onEscape: onEscape)
             } else {
                 content()
             }
@@ -107,12 +121,13 @@ extension View {
 
     public func edithSheet<Item: Identifiable, Content: View>(
         item: Binding<Item?>, dismissible: Bool? = true, dismissOnEscape: Bool = true,
-        onDismiss: (() -> Void)? = nil, @ViewBuilder content: @escaping (Item) -> Content
+        onEscape: (() -> Void)? = nil, onDismiss: (() -> Void)? = nil,
+        @ViewBuilder content: @escaping (Item) -> Content
     ) -> some View {
         sheet(item: item, onDismiss: onDismiss) { item in
             if let dismissible {
                 content(item).transientPresentation(
-                    dismissible: dismissible, dismissOnEscape: dismissOnEscape)
+                    dismissible: dismissible, dismissOnEscape: dismissOnEscape, onEscape: onEscape)
             } else {
                 content(item)
             }
