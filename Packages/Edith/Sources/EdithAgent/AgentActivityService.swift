@@ -13,7 +13,7 @@ public actor AgentActivityService {
     }
 
     private let settings: Settings
-    private let listener: Listener
+    private var listener: Listener
     private let now: @Sendable () -> Date
     private let lifetime: TimeInterval
     private var sessions: [String: AgentActivitySession] = [:]
@@ -38,9 +38,8 @@ public actor AgentActivityService {
     }
 
     public func register(on runtime: AgentRuntime) async {
-        let service = AgentActivityService(
-            settings: settings, listener: { await runtime.hasSubscribers(topic: .agentActivity) },
-            now: now, lifetime: lifetime)
+        listener = { await runtime.hasSubscribers(topic: .agentActivity) }
+        let service = self
         await runtime.register(operation: AgentActivityOperation.ingest) { payload in
             guard payload.count <= AgentActivityParser.maximumInputBytes else {
                 throw AgentError(.refused, "The agent event is too large.")
@@ -97,9 +96,14 @@ public actor AgentActivityService {
                 request: pending.values.first { $0.eventID == proposed.id }?.request)
         }
         var event = proposed
-        event.receivedAt = now()
+        let date = now()
+        event.receivedAt = min(date, max(date.addingTimeInterval(-300), proposed.receivedAt))
         remember(event.id)
-        signals[event.provider.rawValue] = event.receivedAt
+        signals[event.provider.rawValue] = date
+        if let current = sessions[event.identity], event.receivedAt < current.updatedAt {
+            await emit()
+            return AgentActivityReceipt()
+        }
         if var session = sessions[event.identity] {
             session.apply(event)
             sessions[event.identity] = session

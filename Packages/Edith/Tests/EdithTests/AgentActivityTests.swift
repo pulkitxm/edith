@@ -263,6 +263,33 @@ private actor ActivityPublications {
         #expect(await service.snapshot().sessions.first?.phase == .working)
     }
 
+    @Test func asynchronousObserverDeliveryCannotReopenAFinishedSession() async {
+        let environment = ActivityEnvironment()
+        let service = environment.service()
+        var finished = permissionEvent()
+        finished.receivedAt = environment.now
+        finished.eventName = "Stop"
+        finished.phase = .finished
+        finished.permissionRequest = false
+        _ = await service.ingest(finished)
+        var older = permissionEvent()
+        older.receivedAt = environment.now.addingTimeInterval(-1)
+        #expect(await service.ingest(older).token == nil)
+        #expect(await service.snapshot().sessions.first?.phase == .finished)
+    }
+
+    @Test func simultaneousToolRequestsStayIndependentWithinOneSession() async throws {
+        let service = ActivityEnvironment().service()
+        let first = try #require(await service.ingest(permissionEvent()).token)
+        let second = try #require(await service.ingest(permissionEvent()).token)
+        #expect(first.id != second.id)
+        #expect(await service.snapshot().approvals.count == 2)
+        #expect(await service.decide(AgentApprovalDecision(token: first, choice: .allowOnce)))
+        #expect(await service.poll(first).choice == .allowOnce)
+        #expect(await service.poll(second).pending)
+        await service.cancel(second)
+    }
+
     @Test func unchangedTicksDoNotPublishClockNoise() async throws {
         let environment = ActivityEnvironment()
         let service = environment.service()

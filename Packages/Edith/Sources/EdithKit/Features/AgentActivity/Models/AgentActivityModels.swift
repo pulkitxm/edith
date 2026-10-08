@@ -86,6 +86,8 @@ public struct AgentActivitySession: Codable, Equatable, Identifiable, Sendable {
         tool = event.tool
         detail = event.detail
         pane = event.pane
+        completedTools =
+            (event.eventName == "PostToolUse" || event.eventName == "tool.execute.after") ? 1 : 0
         startedAt = event.receivedAt
         updatedAt = event.receivedAt
     }
