@@ -1,14 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   claudeCloudReceipts,
+  claudeCredentials,
   claudeReceiptIdentity,
   collectClaudeCloud,
   collectCodexCloud,
+  localClaudeReceipts,
   normalizeCodexCloud,
 } from "../Packages/Edith/Sources/EdithKit/Resources/usage-cloud.mjs";
+
+import { BillingArchive } from "../Packages/Edith/Sources/EdithKit/Resources/usage-billing-archive.mjs";
 
 const client = (id = "CODEX_WORK_WEB", overrides = {}) => ({
   client_id: id,
@@ -193,6 +197,40 @@ describe("Claude Code cloud receipts", () => {
     expect(JSON.stringify(rows)).not.toContain("content");
   });
 
+  test("excludes local receipts after the billing archive removes transcript fields", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-billing-test-"));
+    let archive;
+    try {
+      const config = join(root, "config");
+      const projects = join(config, "projects", "synthetic");
+      await mkdir(projects, { recursive: true });
+      const rows = [
+        receipt("resumed"),
+        { type: "progress", data: { message: receipt("wrapped") } },
+      ];
+      await writeFile(
+        join(projects, "session.jsonl"),
+        rows.map(JSON.stringify).join("\n") + "\n",
+      );
+      archive = new BillingArchive(join(root, "history"));
+      archive.bootstrap({ generatedAt: "2026-10-01T12:00:00Z", blocks: [] });
+      archive.ingest(config);
+      const snapshot = join(root, "snapshot");
+      archive.materialize(snapshot);
+      const local = await localClaudeReceipts(join(snapshot, "projects"));
+      expect(local.size).toBe(2);
+      const remaining = claudeCloudReceipts(
+        [receipt("resumed"), receipt("wrapped"), receipt("web-only")],
+        "cloud-session",
+        local,
+      );
+      expect(remaining.map((row) => row.message.id)).toEqual(["web-only"]);
+    } finally {
+      archive?.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("reads event payloads and preserves prompt cache categories", () => {
     const row = receipt();
     row.message.usage.cache_creation_input_tokens = 50;
@@ -344,6 +382,89 @@ describe("Claude Code cloud receipts", () => {
           fetcher: async () => reply({}, 401),
         }),
       ).rejects.toThrow("HTTP 401");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("Claude cloud sign-in", () => {
+  test("uses subscription browser credentials even when a model-only environment token is present", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-auth-test-"));
+    try {
+      await mkdir(join(root, ".claude"));
+      await writeFile(
+        join(root, ".claude", ".credentials.json"),
+        JSON.stringify({
+          claudeAiOauth: {
+            accessToken: "synthetic-browser-token",
+            scopes: ["user:inference", "user:sessions:claude_code"],
+          },
+        }),
+      );
+      expect(
+        await claudeCredentials(root, {
+          platform: "linux",
+          env: { CLAUDE_CODE_OAUTH_TOKEN: "synthetic-model-token" },
+        }),
+      ).toBe("synthetic-browser-token");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not mistake setup-token or an API key for cloud-session access", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-auth-test-"));
+    try {
+      await expect(
+        claudeCredentials(root, {
+          platform: "linux",
+          env: { CLAUDE_CODE_OAUTH_TOKEN: "synthetic-model-token" },
+        }),
+      ).rejects.toThrow("setup-token only supports model requests");
+      expect(
+        await claudeCredentials(root, {
+          platform: "linux",
+          env: { ANTHROPIC_API_KEY: "synthetic-api-key" },
+        }),
+      ).toBeNull();
+      await mkdir(join(root, ".claude"));
+      await writeFile(
+        join(root, ".claude", ".credentials.json"),
+        JSON.stringify({
+          claudeAiOauth: {
+            accessToken: "synthetic-limited-token",
+            scopes: ["user:inference"],
+          },
+        }),
+      );
+      await expect(
+        claudeCredentials(root, { platform: "linux", env: {} }),
+      ).rejects.toThrow("lacks session access");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("reads subscription credentials from the macOS keychain", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-auth-test-"));
+    try {
+      const services = [];
+      const token = await claudeCredentials(root, {
+        env: {},
+        platform: "darwin",
+        keychain: (service) => {
+          services.push(service);
+          return JSON.stringify({
+            claudeAiOauth: {
+              accessToken: "synthetic-browser-token",
+              scopes: ["user:sessions:claude_code"],
+            },
+          });
+        },
+      });
+      expect(token).toBe("synthetic-browser-token");
+      expect(services).toEqual(["Claude Code-credentials"]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

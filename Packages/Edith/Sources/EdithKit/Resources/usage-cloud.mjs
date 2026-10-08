@@ -187,10 +187,11 @@ export async function collectCodexCloud(
   return { daily };
 }
 
-export function claudeReceiptIdentity(row) {
+export function claudeReceiptIdentity(value) {
+  const row = value?.data?.message ?? value;
   const message = row?.message;
   if (
-    row?.type !== "assistant" ||
+    (row?.type !== undefined && row.type !== "assistant") ||
     !message?.usage ||
     !message.id ||
     !row.requestId
@@ -202,7 +203,8 @@ export function claudeReceiptIdentity(row) {
 export function claudeCloudReceipts(events, sessionID, local = new Set()) {
   const result = new Map();
   for (const event of events) {
-    const row = event?.payload ?? event;
+    const payload = event?.payload ?? event;
+    const row = payload?.data?.message ?? payload;
     const identity = claudeReceiptIdentity(row);
     if (!identity || local.has(identity)) continue;
     if (
@@ -264,7 +266,7 @@ export function claudeCloudReceipts(events, sessionID, local = new Set()) {
   return [...result.values()];
 }
 
-async function localClaudeReceipts(root) {
+export async function localClaudeReceipts(root) {
   const found = new Set();
   async function walk(directory) {
     let entries;
@@ -442,35 +444,44 @@ export async function collectClaudeCloud(
   return { sessions: records.length, receipts };
 }
 
-async function claudeCredentials(home) {
-  const config = process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
+export async function claudeCredentials(
+  home,
+  {
+    env = process.env,
+    platform = process.platform,
+    keychain = (service) =>
+      execFileSync("security", ["find-generic-password", "-s", service, "-w"], {
+        timeout: 2000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+  } = {},
+) {
+  const config = env.CLAUDE_CONFIG_DIR || join(home, ".claude");
   let credentials = await jsonFile(join(config, ".credentials.json"));
-  if (
-    !credentials?.claudeAiOauth?.accessToken &&
-    process.platform === "darwin"
-  ) {
-    const suffix = process.env.CLAUDE_CONFIG_DIR
+  if (!credentials?.claudeAiOauth?.accessToken && platform === "darwin") {
+    const suffix = env.CLAUDE_CONFIG_DIR
       ? `-${createHash("sha256").update(config.normalize("NFC")).digest("hex").slice(0, 8)}`
       : "";
     try {
-      credentials = JSON.parse(
-        execFileSync(
-          "security",
-          [
-            "find-generic-password",
-            "-s",
-            `Claude Code-credentials${suffix}`,
-            "-w",
-          ],
-          { timeout: 2000, stdio: ["ignore", "pipe", "ignore"] },
-        ),
-      );
+      credentials = JSON.parse(keychain(`Claude Code-credentials${suffix}`));
     } catch {}
   }
-  return (
-    credentials?.claudeAiOauth?.accessToken ??
-    process.env.CLAUDE_CODE_OAUTH_TOKEN
-  );
+  const oauth = credentials?.claudeAiOauth;
+  if (!oauth?.accessToken) {
+    if (env.CLAUDE_CODE_OAUTH_TOKEN)
+      throw new Error(
+        "Cloud session access requires a browser sign-in. A setup-token only supports model requests. Run claude auth login.",
+      );
+    return null;
+  }
+  if (
+    Array.isArray(oauth.scopes) &&
+    !oauth.scopes.includes("user:sessions:claude_code")
+  )
+    throw new Error(
+      "Cloud browser sign-in lacks session access. Run claude auth login.",
+    );
+  return oauth.accessToken;
 }
 
 if (import.meta.main) {
