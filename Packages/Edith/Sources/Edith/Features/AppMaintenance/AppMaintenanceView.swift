@@ -26,6 +26,7 @@ final class AppMaintenanceModel {
     }
 
     var applications: [InstalledApplication] = []
+    var query = ""
     var selectedApplicationID: String?
     var plan: AppMaintenancePlan?
     var selectedItemIDs = Set<String>()
@@ -101,6 +102,7 @@ final class AppMaintenanceModel {
     var selectedBytes: Int64 { selectedItems.reduce(0) { $0 + $1.sizeBytes } }
 
     func refresh(automatic: Bool = false, interval: TimeInterval = 86_400) {
+        guard phase == .ready || phase == .loading else { return }
         task?.cancel()
         let generation = loading.begin()
         refreshInterval = interval
@@ -465,6 +467,15 @@ final class AppMaintenanceModel {
         if phase != .installing { cancelInstallPlan() }
     }
 
+    func cancelDiscovery() {
+        guard checkingUpdates || phase == .loading else { return }
+        loading.cancel()
+        task?.cancel()
+        task = nil
+        checkingUpdates = false
+        phase = .ready
+    }
+
     private func releaseSecurityScopedAccess() {
         if hasSecurityScopedAccess { securityScopedURL?.stopAccessingSecurityScopedResource() }
         securityScopedURL = nil
@@ -518,8 +529,8 @@ enum AppMaintenanceSection: String, CaseIterable, Identifiable {
 }
 
 struct AppMaintenanceView: View {
-    @State private var model = AppMaintenanceModel()
-    @State private var query = ""
+    @State private var model: AppMaintenanceModel
+    @Environment(\.windowSessionOwner) private var sessions
     @State private var confirmingRemoval = false
     @State private var confirmingUpdates = false
     @State private var showingDiskImagePicker = false
@@ -543,8 +554,12 @@ struct AppMaintenanceView: View {
     @AppStorage(AppStorageKeys.AppMaintenance.updateRetries, store: SharedDefaults.store)
     private var updateRetries = 1
 
+    init(model: AppMaintenanceModel? = nil) {
+        _model = State(initialValue: model ?? AppMaintenanceModel())
+    }
+
     private var filteredApplications: [InstalledApplication] {
-        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return model.applications }
         return model.applications.filter {
             $0.name.localizedCaseInsensitiveContains(value)
@@ -553,7 +568,7 @@ struct AppMaintenanceView: View {
     }
 
     private var filteredUpdates: [AppUpdateItem] {
-        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return model.updates }
         return model.updates.filter {
             $0.name.localizedCaseInsensitiveContains(value)
@@ -582,7 +597,7 @@ struct AppMaintenanceView: View {
             content
         }
         .navigationRoute("section", selection: sectionBinding)
-        .pageTask(cancel: model.cancel) { model.refresh(interval: updateRefreshInterval) }
+        .pageTask(cancel: model.cancelDiscovery) { model.refresh(interval: updateRefreshInterval) }
         .pageRefresh(
             active: updateAutoRefresh, interval: { .seconds(max(updateRefreshInterval, 900)) }
         ) {
@@ -699,7 +714,7 @@ struct AppMaintenanceView: View {
     @ViewBuilder
     private var content: some View {
         if section == .packages {
-            HomebrewMaintenanceView()
+            HomebrewMaintenanceView(model: sessions?.homebrew)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if section == .cleaner {
             ScrollView {
@@ -745,7 +760,7 @@ struct AppMaintenanceView: View {
 
     private var removalInventory: some View {
         VStack(spacing: 0) {
-            TextField("Search applications", text: $query)
+            TextField("Search applications", text: $model.query)
                 .textFieldStyle(.roundedBorder)
                 .padding(UIScale.pt(12))
             Divider()
@@ -785,7 +800,7 @@ struct AppMaintenanceView: View {
 
     private var updateInventory: some View {
         VStack(spacing: 0) {
-            TextField("Search updates", text: $query)
+            TextField("Search updates", text: $model.query)
                 .textFieldStyle(.roundedBorder)
                 .padding(UIScale.pt(12))
             Divider()

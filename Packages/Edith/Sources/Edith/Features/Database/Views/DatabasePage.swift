@@ -7,14 +7,14 @@ import SwiftUI
 struct DatabasePage: View {
     @State private var model: DatabasePageModel
     @State private var connectionWorkspace: DatabaseConnectionWorkspaceModel
-    @State private var connectionManagement = DatabaseConnectionManagementModel()
+    @State private var connectionManagement: DatabaseConnectionManagementModel
     @State private var connectionCreation: DatabaseConnectionCreationModel?
     @State private var connectionManagementRoute: DatabaseConnectionManagementRoute?
     @State private var actionConfirmation: DatabaseConnectionActionConfirmation?
     @State private var managementMessage: DatabaseConnectionManagementMessage?
-    @State private var tableTabs = DatabaseTableTabsModel()
-    @State private var objectExplorer = DatabaseObjectExplorerModel()
-    @State private var workspace = DatabaseWorkspaceModel()
+    @State private var tableTabs: DatabaseTableTabsModel
+    @State private var objectExplorer: DatabaseObjectExplorerModel
+    @State private var workspace: DatabaseWorkspaceModel
     @State private var showsServiceDetails = false
     @State private var focusedConnectionID: DatabaseConnectionID?
     @State private var catalogFocusConnectionID: DatabaseConnectionID?
@@ -28,11 +28,18 @@ struct DatabasePage: View {
 
     init(
         model: DatabasePageModel? = nil,
-        connectionWorkspace: DatabaseConnectionWorkspaceModel? = nil
+        connectionWorkspace: DatabaseConnectionWorkspaceModel? = nil,
+        session: DatabasePageSession? = nil
     ) {
-        _model = State(initialValue: model ?? DatabasePageModel())
+        _model = State(initialValue: model ?? session?.page ?? DatabasePageModel())
         _connectionWorkspace = State(
-            initialValue: connectionWorkspace ?? DatabaseConnectionWorkspaceModel())
+            initialValue: connectionWorkspace ?? session?.connections
+                ?? DatabaseConnectionWorkspaceModel())
+        _connectionManagement = State(
+            initialValue: session?.management ?? DatabaseConnectionManagementModel())
+        _tableTabs = State(initialValue: session?.tables ?? DatabaseTableTabsModel())
+        _objectExplorer = State(initialValue: session?.objects ?? DatabaseObjectExplorerModel())
+        _workspace = State(initialValue: session?.workspace ?? DatabaseWorkspaceModel())
     }
 
     private var dark: Bool { scheme == .dark }

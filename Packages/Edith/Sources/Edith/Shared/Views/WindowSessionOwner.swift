@@ -9,6 +9,11 @@ final class WindowSessionOwner: ObservableObject {
     private var storedStudio: StudioModel?
     private var storedQuinjet: QuinjetPageModel?
     private var storedCapture: CompanionCaptureModel?
+    private var storedCompanion: CompanionWorkspaceSession?
+    private var storedDatabase: DatabasePageSession?
+    private var storedMaintenance: AppMaintenanceModel?
+    private var storedHomebrew: HomebrewPageModel?
+    private var storedBlitzTree: BlitzTreeModel?
 
     init(acceptsCommandVideo: Bool = true) {
         self.acceptsCommandVideo = acceptsCommandVideo
@@ -56,11 +61,49 @@ final class WindowSessionOwner: ObservableObject {
         return model
     }
 
+    var companion: CompanionWorkspaceSession {
+        if let storedCompanion { return storedCompanion }
+        let session = CompanionWorkspaceSession()
+        storedCompanion = session
+        return session
+    }
+
+    var database: DatabasePageSession {
+        if let storedDatabase { return storedDatabase }
+        let session = DatabasePageSession()
+        storedDatabase = session
+        return session
+    }
+
+    var maintenance: AppMaintenanceModel {
+        if let storedMaintenance { return storedMaintenance }
+        let model = AppMaintenanceModel()
+        storedMaintenance = model
+        return model
+    }
+
+    var homebrew: HomebrewPageModel {
+        if let storedHomebrew { return storedHomebrew }
+        let model = HomebrewPageModel()
+        storedHomebrew = model
+        return model
+    }
+
+    var blitzTree: BlitzTreeModel {
+        if let storedBlitzTree { return storedBlitzTree }
+        let model = BlitzTreeModel()
+        storedBlitzTree = model
+        return model
+    }
+
     deinit {
         if let model = storedAttention { Task { @MainActor in model.cancelLoading() } }
         if let model = storedCodeStats { Task { @MainActor in model.cancelLoading() } }
         if let model = storedStudio { Task { @MainActor in model.closeEditors() } }
         if let model = storedQuinjet { Task { @MainActor in model.stopAll() } }
+        if let model = storedMaintenance { Task { @MainActor in model.cancel() } }
+        if let model = storedHomebrew { Task { @MainActor in model.cancel() } }
+        if let model = storedBlitzTree { Task { @MainActor in model.cancel() } }
     }
 }
 

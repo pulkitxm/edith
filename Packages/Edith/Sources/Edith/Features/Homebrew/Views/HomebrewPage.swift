@@ -3,7 +3,6 @@ import SwiftUI
 
 struct HomebrewMaintenanceView: View {
     @State private var model: HomebrewPageModel
-    @State private var query = ""
     @State private var pendingUninstall: HomebrewPackage?
     @AppStorage(AppStorageKeys.Homebrew.defaultKind, store: SharedDefaults.store)
     private var kindRaw = HomebrewPackageKind.formula.rawValue
@@ -14,13 +13,8 @@ struct HomebrewMaintenanceView: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     @MainActor
-    init() {
-        _model = State(initialValue: HomebrewPageModel())
-    }
-
-    @MainActor
-    init(model: HomebrewPageModel) {
-        _model = State(initialValue: model)
+    init(model: HomebrewPageModel? = nil) {
+        _model = State(initialValue: model ?? HomebrewPageModel())
     }
 
     private var kind: HomebrewPackageKind {
@@ -52,7 +46,7 @@ struct HomebrewMaintenanceView: View {
             }
         }
         .navigationRoute("view", selection: $model.mode)
-        .pageTask(cancel: { model.cancel() }) {
+        .pageTask(cancel: model.cancelDiscovery) {
             model.activate(kind: kind)
         }
         .onChange(of: kindRaw) { _, _ in
@@ -63,8 +57,8 @@ struct HomebrewMaintenanceView: View {
             guard automaticActionsEnabled else { return }
             if mode == .installed {
                 model.loadInstalled(kind: kind)
-            } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                model.search(query, kind: kind)
+            } else if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                model.search(model.query, kind: kind)
             } else {
                 model.packages = []
                 model.loading.setContent()
@@ -79,7 +73,7 @@ struct HomebrewMaintenanceView: View {
             Button("Uninstall", role: .destructive) {
                 guard let package = pendingUninstall else { return }
                 pendingUninstall = nil
-                model.perform(.uninstall, package: package, query: query, kind: kind)
+                model.perform(.uninstall, package: package, query: model.query, kind: kind)
             }
             Button("Cancel", role: .cancel) { pendingUninstall = nil }
         } message: {
@@ -160,20 +154,23 @@ struct HomebrewMaintenanceView: View {
         )
         .labelsHidden()
         .frame(width: UIScale.pt(170))
+        .disabled(model.isMutating)
     }
 
     @ViewBuilder
     private var actions: some View {
         if model.mode == .search {
             HStack(spacing: 10) {
-                SearchField(placeholder: "Search \(kind.pluralTitle.lowercased())", text: $query)
-                    .frame(maxWidth: compact ? .infinity : 320)
-                    .onSubmit { runSearch() }
+                SearchField(
+                    placeholder: "Search \(kind.pluralTitle.lowercased())", text: $model.query
+                )
+                .frame(maxWidth: compact ? .infinity : 320)
+                .onSubmit { runSearch() }
                 Button("Search", action: runSearch)
                     .buttonStyle(.edith(.primary))
                     .disabled(
                         model.isBusy
-                            || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            || model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         } else {
             Button {
@@ -317,7 +314,7 @@ struct HomebrewMaintenanceView: View {
                         HomebrewPackageRow(
                             package: package, disabled: model.isBusy, accent: theme,
                             perform: {
-                                model.perform($0, package: package, query: query, kind: kind)
+                                model.perform($0, package: package, query: model.query, kind: kind)
                             },
                             uninstall: { pendingUninstall = package })
                     }
@@ -327,7 +324,9 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var emptyTitle: String {
-        if model.mode == .search, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if model.mode == .search,
+            model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
             return "Search Homebrew"
         }
         return model.mode == .search
@@ -335,7 +334,9 @@ struct HomebrewMaintenanceView: View {
     }
 
     private var emptyDetail: String {
-        if model.mode == .search, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if model.mode == .search,
+            model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
             return "Enter a name or keyword to inspect available packages before installing."
         }
         return model.mode == .search
@@ -344,7 +345,7 @@ struct HomebrewMaintenanceView: View {
     }
 
     private func runSearch() {
-        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         model.search(value, kind: kind)
     }
@@ -352,7 +353,7 @@ struct HomebrewMaintenanceView: View {
     private func refreshCurrentMode() {
         if model.mode == .installed {
             model.loadInstalled(kind: kind)
-        } else if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        } else if !model.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             runSearch()
         } else {
             model.packages = []

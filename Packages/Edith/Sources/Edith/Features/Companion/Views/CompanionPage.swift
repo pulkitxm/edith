@@ -60,16 +60,17 @@ enum CompanionTab: String, CaseIterable, Identifiable {
 }
 
 struct CompanionPage: View {
-    @State private var home = CompanionHomeModel()
-    @State private var chat = CompanionChatModel()
+    @State private var workspace: CompanionWorkspaceSession
+    private var home: CompanionHomeModel { workspace.home }
+    private var chat: CompanionChatModel { workspace.chat }
     @StateObject private var fallbackOwner = WindowSessionOwner()
     @Environment(\.windowSessionOwner) private var sessionOwner
     private var capture: CompanionCaptureModel { sessionOwner?.capture ?? fallbackOwner.capture }
-    @State private var library = CompanionLibraryModel()
-    @State private var mind = CompanionMindModel()
-    @State private var desk = CompanionDeskModel()
-    @State private var backend = CompanionBackendModel()
-    @State private var reason = CompanionSettingsModel()
+    private var library: CompanionLibraryModel { workspace.library }
+    private var mind: CompanionMindModel { workspace.mind }
+    private var desk: CompanionDeskModel { workspace.desk }
+    private var backend: CompanionBackendModel { workspace.backend }
+    private var reason: CompanionSettingsModel { workspace.settings }
     @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
     @Environment(\.colorScheme) private var scheme
@@ -85,6 +86,10 @@ struct CompanionPage: View {
     @AppStorage(AppStorageKeys.Companion.setupDeclined, store: SharedDefaults.store)
     private var setupDeclined = false
 
+    init(session: CompanionWorkspaceSession? = nil) {
+        _workspace = State(initialValue: session ?? CompanionWorkspaceSession())
+    }
+
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
     private var tabBinding: Binding<CompanionTab> {
@@ -92,6 +97,7 @@ struct CompanionPage: View {
     }
 
     var body: some View {
+        @Bindable var library = workspace.library
         PageWorkspace {
             header
             tabBar
