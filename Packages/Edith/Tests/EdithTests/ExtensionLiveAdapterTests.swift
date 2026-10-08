@@ -56,7 +56,8 @@ import EdithCore
 
     @Test func keepAwakeRequiresItsDownloadedPackage() async {
         let result = await ExtensionLiveAdapters.readiness(for: "keepAwake")
-        #expect(result == .uninstalled("Download this extension from Extensions before enabling it."))
+        #expect(
+            result == .uninstalled("Download this extension from Extensions before enabling it."))
     }
 
     @Test func catalogCoversEveryPreviouslyDeferredExtension() {

@@ -30,6 +30,8 @@ else
     set --
 fi
 
+node ../../scripts/extension-host-abi.mjs --write ../..
+
 batch_args=()
 if [[ -n "$batch" ]]; then
     batch_spec="$(python3 ../../scripts/test-batches.py swift-args "$batch")"

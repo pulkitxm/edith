@@ -155,10 +155,14 @@ struct ExtensionsPane: View {
                 "Update enabled extensions automatically",
                 isOn: Binding(
                     get: {
-                        SharedDefaults.store.object(forKey: "extensionAutomaticUpdates") as? Bool
+                        SharedDefaults.store.object(
+                            forKey: AppStorageKeys.Extensions.automaticUpdates) as? Bool
                             ?? true
                     },
-                    set: { SharedDefaults.store.set($0, forKey: "extensionAutomaticUpdates") })
+                    set: {
+                        SharedDefaults.store.set(
+                            $0, forKey: AppStorageKeys.Extensions.automaticUpdates)
+                    })
             )
             .toggleStyle(.checkbox)
             Button("Check for updates") { Task { await marketplace.refresh() } }

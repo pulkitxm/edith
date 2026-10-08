@@ -24,7 +24,9 @@ final class MarketplaceModel {
     }
 
     func updateEnabledExtensionsOnLaunch() async {
-        guard SharedDefaults.store.object(forKey: "extensionAutomaticUpdates") as? Bool ?? true
+        guard
+            SharedDefaults.store.object(forKey: AppStorageKeys.Extensions.automaticUpdates) as? Bool
+                ?? true
         else { return }
         let selected = ExtensionRegistry.entries.filter {
             $0.isEnabled(in: SharedDefaults.store)

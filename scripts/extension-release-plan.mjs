@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
+import { writeHostABI } from "./extension-host-abi.mjs";
 
 export function planExtensionBuilds(definitions, changes) {
   const ids = new Set(definitions.map(({ id }) => id));
@@ -145,6 +146,7 @@ export async function planUnpublishedExtensions(
 }
 
 if (import.meta.main) {
+  await writeHostABI();
   const root = process.cwd();
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
