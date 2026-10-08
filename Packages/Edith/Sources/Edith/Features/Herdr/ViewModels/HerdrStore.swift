@@ -90,7 +90,7 @@ final class HerdrStore {
             TerminalSessionHolder, @escaping @MainActor (Bool) -> Void
         ) -> Void
 
-    static let shared = HerdrStore()
+    static let shared = HerdrStore(workspacePresenter: { MainWindow.showHerdr() })
     static let boardID = "board"
 
     var hosts: [HerdrHostSnapshot] = [] {
@@ -251,6 +251,7 @@ final class HerdrStore {
     @ObservationIgnored private var agentStartupTasks: [String: Task<Void, Never>] = [:]
     private let agentFocuser: @Sendable (String, String, Machine?) async throws -> Void
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
+    private let workspacePresenter: @MainActor () -> Void
     private let machinesProvider: () -> [Machine]
     private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
@@ -299,7 +300,8 @@ final class HerdrStore {
             holder.requestUserClose(completion)
         },
         terminalPanels: HerdrTerminalPanels? = nil,
-        messaging: HerdrMessaging? = nil
+        messaging: HerdrMessaging? = nil,
+        workspacePresenter: @escaping @MainActor () -> Void = {}
     ) {
         self.defaults = defaults
         sidebarAgentOrder = HerdrSidebarOrder(
@@ -315,6 +317,7 @@ final class HerdrStore {
         self.agentStarter = agentStarter
         self.terminalIDResolver = terminalIDResolver
         self.agentFocuser = agentFocuser
+        self.workspacePresenter = workspacePresenter
         self.machinesProvider = machinesProvider
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
@@ -756,8 +759,10 @@ final class HerdrStore {
         let terminal = HerdrMachineTerminal.agent(for: host, session: agent.session)
         if HerdrAgentWindow.raise(terminal.id) { return }
         open(terminal)
-        MainWindow.showHerdr()
+        revealWorkspaceWindow()
     }
+
+    func revealWorkspaceWindow() { workspacePresenter() }
 
     func openInNewTab(_ agent: HerdrAgent) {
         open(agent)

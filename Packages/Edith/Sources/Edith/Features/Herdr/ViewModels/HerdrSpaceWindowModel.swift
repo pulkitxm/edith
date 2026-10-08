@@ -218,6 +218,7 @@ final class HerdrSpaceTabModel: Identifiable {
             title = agent.agent.title
             return
         }
+        title = "Terminal"
     }
 }
 

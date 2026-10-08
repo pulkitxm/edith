@@ -24,7 +24,7 @@ private actor HerdrFocusRecorder {
         let holder = try #require(store.session(first.id)).holder
         store.selectBoard()
 
-        store.open(first)
+        HerdrAgentActions().open(first, store: store)
 
         #expect(store.tabs.count == 1)
         #expect(store.currentTab?.id == tab.id)
@@ -54,6 +54,20 @@ private actor HerdrFocusRecorder {
         #expect(store.session(terminal.id)?.holder === holder)
         #expect(store.tabs.count == 2)
         #expect(store.tab(containing: first.id)?.layout == layout)
+    }
+
+    @Test func openingInHerdrPresentsTheWorkspaceAfterSelectingTheTerminal() async throws {
+        var presentations = 0
+        let store = HerdrStore(
+            defaults: defaults(), agentFocuser: { _, _, _ in }, machinesProvider: { [] },
+            workspacePresenter: { presentations += 1 })
+        let target = agent(pane: "w1:p1")
+        store.hosts = [.local(herdrPresent: true, agents: [target])]
+
+        try await store.openInHerdrTerminal(target)
+
+        #expect(presentations == 1)
+        #expect(store.focusedSession?.agent.isTerminal == true)
     }
 
     @Test func namedSessionsOpenTheirOwnTerminal() async throws {

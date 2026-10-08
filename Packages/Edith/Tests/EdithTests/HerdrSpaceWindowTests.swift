@@ -18,6 +18,7 @@ import Testing
 
         #expect(model.tabs.count == 2)
         #expect(tab.agentID == nil)
+        #expect(tab.title == "Terminal")
         #expect(tab.paneCount == 1)
         #expect(tab.holders.contains { $0 === terminal })
         #expect(model.tabs[1] === other)

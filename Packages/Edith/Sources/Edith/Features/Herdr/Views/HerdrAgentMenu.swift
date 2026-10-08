@@ -15,14 +15,14 @@ final class HerdrAgentActions {
         if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         if HerdrAgentWindow.raise(agent.id) { return }
         store.open(agent)
-        MainWindow.showHerdr()
+        store.revealWorkspaceWindow()
     }
 
     func openInNewTab(_ agent: HerdrAgent, store: HerdrStore) {
         HerdrSpaceWindow.removeAgent(agent.id)
         HerdrAgentWindow.close(agent.id)
         withAnimation(store.layoutAnimation) { store.openInNewTab(agent) }
-        MainWindow.showHerdr()
+        store.revealWorkspaceWindow()
     }
 
     func openInNewWindow(_ agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
@@ -35,7 +35,7 @@ final class HerdrAgentActions {
         HerdrSpaceWindow.removeAgent(agent.id)
         HerdrAgentWindow.close(agent.id)
         withAnimation(store.layoutAnimation) { store.open(agent, in: tabID, beside: side) }
-        MainWindow.showHerdr()
+        store.revealWorkspaceWindow()
     }
 
     func openInHerdrTerminal(_ agent: HerdrAgent, store: HerdrStore) async {
@@ -121,7 +121,7 @@ struct HerdrAgentMenu: View {
                     HerdrSpaceWindow.raise(containingAgent: agent.id)
                     || HerdrAgentWindow.raise(agent.id)
                 store.messaging.compose(to: agent, presenterID: detached ? agent.id : nil)
-                if !detached { MainWindow.showHerdr() }
+                if !detached { store.revealWorkspaceWindow() }
             }
             if let hook = store.messaging.armedHook(for: agent.id) {
                 Button("Cancel Waiting Message") {
@@ -185,6 +185,8 @@ private struct HerdrAgentContextMenu<Extra: View>: ViewModifier {
     let extra: Extra
     var onOpen: () -> Void = {}
     @State private var actions = HerdrAgentActions()
+    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
+    private var presenterBlurAgents = true
 
     func body(content: Content) -> some View {
         content
@@ -193,7 +195,10 @@ private struct HerdrAgentContextMenu<Extra: View>: ViewModifier {
                     HerdrAgentMenu(agent: agent, store: store, actions: actions, onOpen: onOpen)
                 } else {
                     ForEach(agents) { agent in
-                        Menu(agent.title) {
+                        Menu(
+                            PresenterState.shared.active && presenterBlurAgents
+                                ? agent.kind : agent.title
+                        ) {
                             HerdrAgentMenu(
                                 agent: agent, store: store, actions: actions, onOpen: onOpen)
                         }
