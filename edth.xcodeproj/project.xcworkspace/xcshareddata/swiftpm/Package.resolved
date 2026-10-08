@@ -55,14 +55,6 @@
       }
     },
     {
-      "identity" : "onnxruntime-swift-package-manager",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/microsoft/onnxruntime-swift-package-manager.git",
-      "state" : {
-        "revision" : "b7fb7f7dea8a2469e6335d95a61b8f36d0dc83b2"
-      }
-    },
-    {
       "identity" : "postgres-nio",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/vapor/postgres-nio.git",
