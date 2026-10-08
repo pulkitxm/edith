@@ -301,6 +301,20 @@ struct HerdrSessionView: View {
             TerminalDropTransferStatus(holder: tab.holder)
             agentTerminalOverlay
         }
+        .overlay(alignment: .top) {
+            if let message = store.agentStartupMessages[tab.id] {
+                HStack(spacing: UIScale.pt(12)) {
+                    Text(message)
+                        .font(.edithText(.callout))
+                        .foregroundStyle(DashSkin.warn)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Dismiss") { store.dismissAgentStartupMessage(tab.id) }
+                        .buttonStyle(.edith(.secondary))
+                }
+                .padding(UIScale.pt(12))
+                .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
+            }
+        }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .presenterCover(hideAgents, dark: dark)
     }

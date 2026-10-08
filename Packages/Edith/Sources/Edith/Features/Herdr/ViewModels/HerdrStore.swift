@@ -31,7 +31,7 @@ private enum HerdrClosedRecord: Equatable {
     case agent(HerdrClosedAgentRecord)
 }
 
-typealias HerdrNewAgentLauncher =
+typealias HerdrNewAgentPaneCreator =
     @Sendable (
         _ kind: String, _ machine: Machine?, _ existingSpace: HerdrWorkspaceSummary?,
         _ newSpaceLabel: String?
@@ -245,7 +245,10 @@ final class HerdrStore {
     private let defaults: UserDefaults
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
-    private let newAgentLauncher: HerdrNewAgentLauncher
+    private let newAgentPaneCreator: HerdrNewAgentPaneCreator
+    private let agentStarter: @Sendable (String, String, Machine?) async throws -> Void
+    private(set) var agentStartupMessages: [String: String] = [:]
+    @ObservationIgnored private var agentStartupTasks: [String: Task<Void, Never>] = [:]
     private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
     private let machinesProvider: () -> [Machine]
     private let requestUserClose: UserCloseRequester
@@ -267,21 +270,21 @@ final class HerdrStore {
         defaults: UserDefaults = SharedDefaults.store,
         liveWatcher: @escaping HerdrLiveWatcher = { yield in await HerdrLive.watch(yield) },
         agentCloser: @escaping HerdrAgentCloser = { try await HerdrAgentCloseExecution.close($0) },
-        newAgentLauncher: @escaping HerdrNewAgentLauncher = {
+        newAgentPaneCreator: @escaping HerdrNewAgentPaneCreator = {
             kind, machine, existingSpace, newSpaceLabel in
-            let created: HerdrCreatedPane
             if let existingSpace {
-                created = try await HerdrLaunchOperations.createTab(
+                return try await HerdrLaunchOperations.createTab(
                     workspaceID: existingSpace.id, on: machine)
-            } else {
-                created = try await HerdrLaunchOperations.createWorkspace(
-                    label: newSpaceLabel ?? "New space", on: machine)
             }
+            return try await HerdrLaunchOperations.createWorkspace(
+                label: newSpaceLabel ?? "New space", on: machine)
+        },
+        agentStarter: @escaping @Sendable (String, String, Machine?) async throws -> Void = {
+            kind, pane, machine in
             try await HerdrLaunchOperations.launchAgent(
                 kind: kind,
                 name: HerdrLaunchSettings.defaultHerdrSlug(for: kind) ?? kind.lowercased(),
-                pane: created.paneID, on: machine)
-            return created
+                pane: pane, on: machine)
         },
         terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
             {
@@ -304,7 +307,8 @@ final class HerdrStore {
         self.messaging = messaging ?? HerdrMessaging()
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
-        self.newAgentLauncher = newAgentLauncher
+        self.newAgentPaneCreator = newAgentPaneCreator
+        self.agentStarter = agentStarter
         self.terminalIDResolver = terminalIDResolver
         self.machinesProvider = machinesProvider
         self.requestUserClose = requestUserClose
@@ -346,6 +350,7 @@ final class HerdrStore {
     }
 
     deinit {
+        for task in agentStartupTasks.values { task.cancel() }
         if let machinesObserver { IPC.stopObserving(machinesObserver) }
     }
 
@@ -1464,6 +1469,8 @@ final class HerdrStore {
         else {
             return
         }
+        agentStartupTasks.removeValue(forKey: id)?.cancel()
+        agentStartupMessages.removeValue(forKey: id)
         sessions[index].quinjet.stop()
         sessions.remove(at: index)
         detachFromLayout(id)
@@ -1881,13 +1888,17 @@ final class HerdrStore {
         host.isLocal ? nil : machinesProvider().first { $0.id.uuidString == host.id }
     }
 
+    func dismissAgentStartupMessage(_ id: String) {
+        agentStartupMessages.removeValue(forKey: id)
+    }
+
     func launchNewAgent(
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
         newSpaceLabel: String?, openBeside: Bool = false
     ) async throws {
         let machine = machine(for: host)
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
-        let created = try await newAgentLauncher(
+        let created = try await newAgentPaneCreator(
             kind, machine, existingSpace, newSpaceLabel)
         let placeholder = HerdrAgent.make(
             machineID: host.id, machineName: host.name, machineIsLocal: host.isLocal,
@@ -1898,6 +1909,17 @@ final class HerdrStore {
             open(placeholder, beside: .right)
         } else {
             open(placeholder)
+        }
+        let start = agentStarter
+        let id = placeholder.id
+        agentStartupTasks[id] = Task { [weak self] in
+            do {
+                try await start(kind, created.paneID, machine)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self?.agentStartupMessages[id] = HerdrLaunchOperations.startupMessage(for: error)
+            }
+            self?.agentStartupTasks[id] = nil
         }
     }
 

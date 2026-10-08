@@ -643,10 +643,10 @@ private actor HerdrWatchHarness {
         }
         let recorder = Recorder()
         let store = HerdrStore(
-            newAgentLauncher: { kind, machine, space, label in
+            newAgentPaneCreator: { kind, machine, space, label in
                 await recorder.record(kind, machine, space, label)
                 return HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
-            })
+            }, agentStarter: { _, _, _ in })
 
         try await store.launchNewAgent(
             kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
@@ -671,10 +671,10 @@ private actor HerdrWatchHarness {
         }
         let recorder = Recorder()
         let store = HerdrStore(
-            newAgentLauncher: { _, machine, _, _ in
+            newAgentPaneCreator: { _, machine, _, _ in
                 await recorder.record(machine)
                 return HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
-            },
+            }, agentStarter: { _, _, _ in },
             machinesProvider: { [machine] })
         let space = HerdrWorkspaceSummary(id: "w1", label: "edith", tabCount: 1, paneCount: 1)
 
@@ -692,9 +692,9 @@ private actor HerdrWatchHarness {
     @Test func launchNewAgentOpensBesideTheCurrentTabWhenRequested() async throws {
         let existing = agent("Claude Code", pane: "existing")
         let store = HerdrStore(
-            newAgentLauncher: { _, _, _, _ in
+            newAgentPaneCreator: { _, _, _, _ in
                 HerdrCreatedPane(workspaceID: "w9", tabID: "w9:t1", paneID: "w9:p1")
-            })
+            }, agentStarter: { _, _, _ in })
         store.hosts = [.local(herdrPresent: true, agents: [existing])]
         store.open(existing)
         let existingTabID = store.selectedTab
@@ -752,9 +752,99 @@ private actor HerdrWatchHarness {
         #expect(store.listedAgents.map(\.id) == agents.map(\.id))
     }
 
+    @Test func agentCreationOpensTheTerminalBeforeStartupSettles() async throws {
+        actor Startup {
+            var continuation: CheckedContinuation<Void, Never>?
+            var entered = false
+            func wait() async {
+                entered = true
+                await withCheckedContinuation { continuation = $0 }
+            }
+            func finish() { continuation?.resume(); continuation = nil }
+        }
+        let startup = Startup()
+        let store = HerdrStore(
+            newAgentPaneCreator: { _, _, _, _ in
+                HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
+            },
+            agentStarter: { kind, pane, machine in
+                #expect(kind == "Claude Code")
+                #expect(pane == "w1:p2")
+                #expect(machine == nil)
+                await startup.wait()
+            })
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "demo")
+        #expect(store.focusedSession?.agent.pane == "w1:p2")
+        for _ in 0..<100 where !(await startup.entered) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await startup.entered)
+        await startup.finish()
+        store.closeAll()
+    }
+
+    @Test(arguments: ["agent_not_ready", "timeout", "agent_executable_not_found"])
+    func startupFailuresKeepTheCreatedTerminalAccessible(code: String) async throws {
+        let store = HerdrStore(
+            newAgentPaneCreator: { _, _, _, _ in
+                HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
+            },
+            agentStarter: { _, _, _ in
+                throw HerdrCommandError.commandFailed(
+                    "{\"error\":{\"code\":\"\(code)\",\"message\":\"startup detail\"}}")
+            })
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "demo")
+        let id = try #require(store.focusedSession?.id)
+        for _ in 0..<100 where store.agentStartupMessages[id] == nil {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let message = try #require(store.agentStartupMessages[id])
+        #expect(!message.contains("{\"error\""))
+        #expect(store.focusedSession?.agent.pane == "w1:p2")
+        store.dismissAgentStartupMessage(id)
+        #expect(store.agentStartupMessages[id] == nil)
+        store.closeAll()
+    }
+
+    @Test func closingAStartingAgentCancelsOnlyItsStartupWait() async throws {
+        actor Startup {
+            var started = false
+            var cancelled = false
+            func wait() async throws {
+                started = true
+                do { try await Task.sleep(for: .seconds(30)) } catch {
+                    cancelled = true; throw error
+                }
+            }
+        }
+        let startup = Startup()
+        let store = HerdrStore(
+            newAgentPaneCreator: { _, _, _, _ in
+                HerdrCreatedPane(workspaceID: "w1", tabID: "w1:t2", paneID: "w1:p2")
+            }, agentStarter: { _, _, _ in try await startup.wait() })
+        try await store.launchNewAgent(
+            kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
+            newSpaceLabel: "demo")
+        for _ in 0..<100 where !(await startup.started) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await startup.started)
+        store.closeAll()
+        for _ in 0..<100 where !(await startup.cancelled) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await startup.cancelled)
+        #expect(store.agentStartupMessages.isEmpty)
+        #expect(store.sessions.isEmpty)
+    }
+
     @Test func launchNewAgentPropagatesLauncherErrors() async {
         struct LaunchFailure: Error {}
-        let store = HerdrStore(newAgentLauncher: { _, _, _, _ in throw LaunchFailure() })
+        let store = HerdrStore(newAgentPaneCreator: { _, _, _, _ in throw LaunchFailure() })
         await #expect(throws: LaunchFailure.self) {
             try await store.launchNewAgent(
                 kind: "Claude Code", host: .local(herdrPresent: true), existingSpace: nil,
