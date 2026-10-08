@@ -86,7 +86,7 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/Edith/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
+          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/(Edith|ExtensionMarketplace)/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'

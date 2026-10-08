@@ -1,0 +1,177 @@
+name: Extensions
+
+on:
+  pull_request:
+    paths:
+      - 'Extensions/**'
+      - 'Packages/ExtensionMarketplace/**'
+      - 'scripts/*extension*'
+      - '.github/workflows/extensions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'Extensions/**'
+      - 'Packages/ExtensionMarketplace/**'
+      - 'scripts/*extension*'
+      - '.github/workflows/extensions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extensions-${{ github.event_name == 'pull_request' && github.ref || 'publish' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  EXTENSION_CATALOG_PUBLIC_KEY: ZmEn7Nvq56SkxwSOm7ey0kyBdFERSQgDywlDCuvxZgk=
+
+jobs:
+  tests:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - run: bun install --frozen-lockfile
+      - run: bun test scripts/extension-release-plan.test.js scripts/extension-publish.test.js
+      - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
+      - run: swift test --package-path Extensions --build-system native --jobs 2
+      - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
+      - run: bun scripts/test-extension-marketplace.mjs
+
+  plan:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      changed: ${{ steps.plan.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Compare with the last trusted catalog
+        id: plan
+        run: |
+          mkdir -p dist/extensions
+          status="$(curl --silent --show-error --location --output dist/extensions/catalog.json --write-out '%{http_code}' https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json)"
+          if [ "$status" = 404 ]; then
+            printf '%s' '{"schemaVersion":1,"revision":0,"packages":[]}' > dist/extensions/previous.json
+          elif [ "$status" = 200 ]; then
+            swift scripts/extension-catalog-sign.swift verify dist/extensions/catalog.json dist/extensions/previous.json "$EXTENSION_CATALOG_PUBLIC_KEY"
+          else
+            echo "Cannot read the published catalog: HTTP $status" >&2
+            exit 1
+          fi
+          bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
+          echo "matrix=$(cat dist/extensions/plan.json)" >> "$GITHUB_OUTPUT"
+          echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-plan
+          path: |
+            dist/extensions/previous.json
+            dist/extensions/plan.json
+          retention-days: 7
+
+  build:
+    needs: [tests, plan]
+    if: needs.plan.outputs.changed == 'true'
+    env:
+      HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Import the release signing certificate
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          test -n "$MACOS_CERT_P12"
+          keychain="$RUNNER_TEMP/extensions.keychain-db"
+          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          rm "$RUNNER_TEMP/cert.p12"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          if [ -z "$identity" ]; then
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -n 1)"
+          fi
+          test -n "$identity"
+          echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: Build only this extension
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+          EXTENSION_VERSION: ${{ matrix.version }}
+        run: bun scripts/build-extension-package.mjs "$EXTENSION_ID"
+      - name: Notarize the downloaded package
+        if: ${{ env.HAS_NOTARY == 'true' }}
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          test -n "$NOTARY_KEY"
+          test -n "$NOTARY_KEY_ID"
+          test -n "$NOTARY_ISSUER_ID"
+          printf '%s' "$NOTARY_KEY" > "$RUNNER_TEMP/notary-key.p8"
+          trap 'rm -f "$RUNNER_TEMP/notary-key.p8"' EXIT
+          xcrun notarytool submit "dist/extensions/$EXTENSION_ID.zip" --wait --key "$RUNNER_TEMP/notary-key.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-${{ matrix.id }}
+          path: dist/extensions/*.*
+          retention-days: 7
+      - name: Remove the temporary signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/extensions.keychain-db" || true
+
+  publish:
+    needs: [plan, build]
+    if: needs.plan.outputs.changed == 'true'
+    runs-on: macos-26
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+      EXTENSION_CATALOG_PRIVATE_KEY: ${{ secrets.EXTENSION_CATALOG_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: extension-*
+          path: dist/extensions
+          merge-multiple: true
+      - name: Install the release client
+        run: |
+          curl --fail --silent --show-error --location https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/pukbot-macos-aarch64 --output "$RUNNER_TEMP/pukbot"
+          curl --fail --silent --show-error --location https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/SHA256SUMS --output "$RUNNER_TEMP/SHA256SUMS"
+          cd "$RUNNER_TEMP"
+          mv pukbot pukbot-macos-aarch64
+          shasum -a 256 -c <(rg '  pukbot-macos-aarch64$' SHA256SUMS)
+          chmod +x pukbot-macos-aarch64
+          mkdir -p "$RUNNER_TEMP/bin"
+          mv pukbot-macos-aarch64 "$RUNNER_TEMP/bin/pukbot"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Inspect release capabilities
+        run: |
+          pukbot capabilities --json
+          pukbot release create --help
+          pukbot release edit --help
+          pukbot release upload-asset --help
+      - name: Publish immutable extension releases and the signed catalog
+        run: bun scripts/extension-publish.mjs
