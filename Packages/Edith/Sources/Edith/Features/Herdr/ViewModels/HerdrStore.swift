@@ -728,6 +728,17 @@ final class HerdrStore {
         open(agent, showing: nil)
     }
 
+    func openInNewTab(_ agent: HerdrAgent) {
+        open(agent)
+        moveToNewTab(agent.id)
+    }
+
+    func open(_ agent: HerdrAgent, in tabID: String, beside side: InsertSide) {
+        guard let target = tab(tabID), !target.layout.contains(agent.id) else { return }
+        selectedTab = tabID
+        open(agent, beside: side)
+    }
+
     func open(_ request: HerdrOpenRequest) async {
         if !agents.contains(where: { $0.id == request.agentID }) { await refresh() }
         guard let agent = agents.first(where: { $0.id == request.agentID }) else { return }
