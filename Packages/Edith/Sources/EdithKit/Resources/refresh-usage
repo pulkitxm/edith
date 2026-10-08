@@ -26,6 +26,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 BILLING_ARCHIVE_SCRIPT="${BASH_SOURCE[0]%/*}/usage-billing-archive.mjs"
 SESSION_INPUT_SCRIPT="${BASH_SOURCE[0]%/*}/usage-session-input.mjs"
+CLOUD_USAGE_SCRIPT="${BASH_SOURCE[0]%/*}/usage-cloud.mjs"
 trap 'printf "  ✖ collector stopped at line %s\n" "$LINENO" >&2' ERR
 
 _now() { /usr/bin/perl -MTime::HiRes=time -e 'printf "%.3f", time' 2>/dev/null || date +%s; }
@@ -183,6 +184,8 @@ label_for() {
     cli) echo "Claude Code" ;;
     cowork) echo "Cowork" ;;
     codex) echo "Codex" ;;
+    codex-cloud) echo "Codex Cloud" ;;
+    claude-cloud) echo "Claude Code Web" ;;
     opencode) echo "OpenCode" ;;
     commandcode) echo "Command Code" ;;
     amp) echo "Amp" ;;
@@ -507,7 +510,17 @@ HISTORY='
             ) ],
         projects: ($history.projects + ($new.projects // []))
       };
-  $previous[0] as $old
+  (($fresh[0].cloudSourcesCollected // [])
+    | map(select(. == "codex-cloud" or . == "claude-cloud"))) as $collectedCloud
+  | ($previous[0]
+      | .sources = ((.sources // []) - $collectedCloud)
+      | .defaultSources = ((.defaultSources // []) - $collectedCloud)
+      | .sourceMeta = ((.sourceMeta // {}) | keepSources(keys - $collectedCloud))
+      | .sessions = [(.sessions // [])[] | select(.source as $source | $collectedCloud | index($source) | not)]
+      | .daily = [(.daily // [])[] | trimDay(.; ((.bySource // {} | keys) - $collectedCloud))]
+      | if .historyRetention != null then
+          .historyRetention.blocks |= map(select(.source as $source | $collectedCloud | index($source) | not))
+        else . end) as $old
   | retainHistory($old; $fresh[0]) as $new
   | localSources($old.sources // []) as $oldSources
   | localSources($old.defaultSources // []) as $oldDefaults
@@ -518,6 +531,7 @@ HISTORY='
       historyRetention: ($new.historyRetention // {version: 1, blocks: []}),
       schemaVersion: $new.schemaVersion,
       generatedAt: $new.generatedAt,
+      cloudSourcesCollected: $collectedCloud,
       sources: (($oldSources + ($new.sources // [])) | dedupe),
       defaultSources: (($oldDefaults + ($new.defaultSources // [])) | dedupe),
       sourceMeta: ($oldMeta + ($new.sourceMeta // {})),
@@ -682,6 +696,7 @@ FLEET='
   | {
       schemaVersion: 8,
       generatedAt: $base.generatedAt,
+      cloudSourcesCollected: ($base.cloudSourcesCollected // []),
       historyRetention: ($base.historyRetention // {version: 1, blocks: []}),
       sources: ((($base.sources // []) + [ $fleet[].sources[] ]) | dedupe),
       defaultSources: ((($base.defaultSources // []) + [ $fleet[].defaultSources[] ]) | dedupe),
@@ -1330,6 +1345,33 @@ collect_cursor() {
 
 collect_cursor
 
+printf '%s\n' '[]' >"$TMP/cloud-collected.json"
+if [ "${EDITH_USAGE_CLOUD:-1}" = "1" ]; then
+  if bun "$CLOUD_USAGE_SCRIPT" codex "$TMP/codex-cloud.daily.json" 2>"$TMP/codex-cloud.error"; then
+    printf '%s\n' '{"sessions":[]}' >"$TMP/codex-cloud.session.json"
+    include_source codex-cloud "$TMP/codex-cloud.daily.json" "$TMP/codex-cloud.session.json"
+    jq '. + ["codex-cloud"]' "$TMP/cloud-collected.json" >"$TMP/cloud-collected.next.json"
+    mv "$TMP/cloud-collected.next.json" "$TMP/cloud-collected.json"
+  else
+    _note "codex cloud unavailable: $(cat "$TMP/codex-cloud.error") previous history retained"
+  fi
+  CLOUD_CLAUDE_CFG="$TMP/claude-cloud"
+  mkdir -p "$CLOUD_CLAUDE_CFG/projects"
+  if bun "$CLOUD_USAGE_SCRIPT" claude "$CLOUD_CLAUDE_CFG" "$CLI_CFG/projects" "$OUT_DIR/cloud-history/claude.json" 2>"$TMP/claude-cloud.error"; then
+    if CLAUDE_CONFIG_DIR="$CLOUD_CLAUDE_CFG" ccu claude daily --json --offline >"$TMP/claude-cloud.daily.json" 2>/dev/null \
+      && CLAUDE_CONFIG_DIR="$CLOUD_CLAUDE_CFG" ccu claude session --json --offline >"$TMP/claude-cloud.session.json" 2>/dev/null; then
+      if [ -s "$TMP/claude-cloud.error" ]; then _note "$(cat "$TMP/claude-cloud.error")"; fi
+      include_source claude-cloud "$TMP/claude-cloud.daily.json" "$TMP/claude-cloud.session.json"
+      jq '. + ["claude-cloud"]' "$TMP/cloud-collected.json" >"$TMP/cloud-collected.next.json"
+      mv "$TMP/cloud-collected.next.json" "$TMP/cloud-collected.json"
+    else
+      _note "claude cloud pricing unavailable; previous history retained"
+    fi
+  else
+    _note "claude cloud unavailable: $(cat "$TMP/claude-cloud.error") previous history retained"
+  fi
+fi
+
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 HAS_MACHINES=0
 MACHINES_STAGED=0
@@ -1378,7 +1420,7 @@ stage_machines() {
 
 if [ ! -s "$TMP/manifest.jsonl" ]; then
   stage_machines
-  if [ "$HAS_MACHINES" = "0" ]; then
+  if [ "$HAS_MACHINES" = "0" ] && [ "$(jq 'length' "$TMP/cloud-collected.json")" = "0" ]; then
     _error "no usage found from any source"
     exit 3
   fi
@@ -1393,7 +1435,7 @@ if [ -s "$TMP/manifest.jsonl" ]; then
     --slurpfile ss "$TMP/sessions.json" \
     "$ASSEMBLE" "$TMP/manifest.jsonl" >"$TMP/usage.json"
 else
-  _note "no usage on this Mac; reporting the machines only"
+  _note "no current usage on this Mac; assembling the remaining history"
   jq -n --arg now "$NOW" "$EMPTY" >"$TMP/usage.json"
 fi
 
@@ -2181,6 +2223,13 @@ if [ -s "$TMP/manifest.jsonl" ]; then
   mv "$TMP/merged.json" "$TMP/usage.json"
   _phase "merge" "hours + projects merged"
 fi
+
+if ! jq --slurpfile collected "$TMP/cloud-collected.json" \
+  '.cloudSourcesCollected = $collected[0]' "$TMP/usage.json" >"$TMP/cloud-usage.json"; then
+  _error "cloud usage assembly failed; previous data preserved"
+  exit 1
+fi
+mv "$TMP/cloud-usage.json" "$TMP/usage.json"
 
 if ! _billing_blocks "$TMP/usage.json" >"$TMP/billing-fresh.json" \
   || ! bun "$BILLING_ARCHIVE_SCRIPT" reconcile "$BILLING_HISTORY" "$TMP/billing-fresh.json" \

@@ -352,6 +352,70 @@ import Testing
         #expect(UsageHistory.retainedHistoryBlockCount(in: cloudMerged) == 0)
     }
 
+    @Test(arguments: ["codex-cloud", "claude-cloud"])
+    func completeCloudSnapshotsReplaceDecreasesAndEmptyHistory(source: String) throws {
+        let previous = try document([day("2026-09-05", [source: [row("one", 100)]])])
+        for amount in [0.0, 40.0] {
+            var fresh = try object(document([day("2026-09-05", ["cli": [row("one", 60)]])]))
+            if amount > 0 {
+                fresh = try object(
+                    document([
+                        day(
+                            "2026-09-05",
+                            [
+                                "cli": [row("one", 60)], source: [row("one", amount)],
+                            ])
+                    ]))
+            }
+            fresh["cloudSourcesCollected"] = [source, "cli"]
+            let incoming = try JSONSerialization.data(withJSONObject: fresh)
+            for merged in [
+                UsageHistory.mergeRefresh(fresh: incoming, previous: previous),
+                UsageHistory.merge(local: incoming, cloud: previous),
+            ] {
+                let result = try #require(merged)
+                #expect(UsageHistory.isValidDocument(result))
+                #expect(tokens(try object(result)) == 60 + amount)
+                #expect(UsageHistory.retainedHistoryBlockCount(in: result) == 0)
+            }
+        }
+    }
+
+    @Test func failedCloudRefreshPreservesHistoryAndCannotRemoveLocalSources() throws {
+        let previous = try document([
+            day(
+                "2026-09-05",
+                [
+                    "claude-cloud": [row("one", 100)], "cli": [row("one", 10)],
+                ])
+        ])
+        var fresh = try object(document([day("2026-09-05", ["cli": [row("one", 20)]])]))
+        fresh["cloudSourcesCollected"] = ["cli"]
+        let incoming = try JSONSerialization.data(withJSONObject: fresh)
+        for merged in [
+            UsageHistory.mergeRefresh(fresh: incoming, previous: previous),
+            UsageHistory.merge(local: incoming, cloud: previous),
+        ] {
+            let result = try #require(merged)
+            #expect(tokens(try object(result)) == 120)
+            #expect(UsageHistory.isValidDocument(result))
+        }
+    }
+
+    @Test func olderLocalCloudSnapshotCannotReplaceNewerSyncedUsage() throws {
+        var cloudDocument = try object(
+            document([day("2026-09-05", ["codex-cloud": [row("one", 100)]])]))
+        cloudDocument["cloudSourcesCollected"] = ["codex-cloud"]
+        let cloud = try JSONSerialization.data(withJSONObject: cloudDocument)
+        var local = try object(document([day("2026-09-05", ["codex-cloud": [row("one", 40)]])]))
+        local["cloudSourcesCollected"] = ["codex-cloud"]
+        local["generatedAt"] = "2026-09-04T12:00:00.000Z"
+        let incoming = try JSONSerialization.data(withJSONObject: local)
+        let result = try #require(UsageHistory.merge(local: incoming, cloud: cloud))
+        #expect(UsageHistory.isValidDocument(result))
+        #expect(tokens(try object(result)) == 100)
+    }
+
     private func document(_ days: [[String: Any]]) throws -> Data {
         let sources = Array(Set(days.flatMap { ($0["bySource"] as? [String: Any] ?? [:]).keys }))
             .sorted()

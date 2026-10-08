@@ -370,7 +370,7 @@ import Testing
     @Test func theRemoteRunWritesUnderTheMachinesOwnHome() {
         #expect(
             MachineUsageCollector.runCommand(home: "/home/pi")
-                == "bash -s -- /home/pi/.cache/edith/usage")
+                == "EDITH_USAGE_CLOUD=0 bash -s -- /home/pi/.cache/edith/usage")
         #expect(
             MachineUsageCollector.documentPath(home: "/home/pi")
                 == "/home/pi/.cache/edith/usage/usage.json")
@@ -378,7 +378,7 @@ import Testing
 
     @Test func aHomeWithSpacesIsStillOneArgument() {
         let command = MachineUsageCollector.runCommand(home: "/Users/some one")
-        #expect(command == "bash -s -- '/Users/some one/.cache/edith/usage'")
+        #expect(command == "EDITH_USAGE_CLOUD=0 bash -s -- '/Users/some one/.cache/edith/usage'")
     }
 
     @Test func theProbeAsksForTheHomeAndTheHostName() {
@@ -395,6 +395,7 @@ import Testing
         #expect(probe.contains("USERPROFILE"))
         #expect(command.contains("Git/bin/bash.exe"))
         #expect(command.contains("bash -s --"))
+        #expect(command.contains("EDITH_USAGE_CLOUD=0"))
         #expect(
             MachineUsageCollector.documentPath(
                 home: "C:\\Users\\kpulk", platform: .windows)
