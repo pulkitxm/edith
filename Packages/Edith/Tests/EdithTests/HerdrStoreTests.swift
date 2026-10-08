@@ -498,7 +498,12 @@ private actor HerdrWatchHarness {
 
     @Test(arguments: ["Cursor Agent", "cursor-agent-cli", "Codex", "OpenCode"])
     func localAgentAttachmentUsesTheGraphicsCapableTerminalClient(kind: String) async throws {
-        let store = HerdrStore()
+        let store = HerdrStore(terminalIDResolver: { session, pane, machine in
+            #expect(session == "default")
+            #expect(pane == "pane-1")
+            #expect(machine == nil)
+            return "term-fixture"
+        })
         let selected = agent(kind, pane: "pane-1")
         store.open(selected)
         let tab = try #require(store.sessions.first)
@@ -509,13 +514,47 @@ private actor HerdrWatchHarness {
         let request = try await store.attachRequest(
             for: tab, environment: environment, localExecutable: executable,
             bridgeExecutable: bridge)
-        let controller = HerdrOperationExecution.localAttachRequest(
-            for: selected, environment: environment, executable: executable)
+        let controller = HerdrOperationExecution.localTerminalAttachRequest(
+            session: selected.session, terminalID: "term-fixture",
+            environment: environment, executable: executable)
         let expected = try HerdrTerminalBridge.launchRequest(
             bridgeExecutable: bridge, controller: controller,
             mouse: .buttons, transport: .terminal)
 
         #expect(request == expected)
+    }
+
+    @Test func shellPanelAttachmentUsesItsTerminalWithoutAgentDetection() async throws {
+        let store = HerdrStore(terminalIDResolver: { session, pane, machine in
+            #expect(session == "default")
+            #expect(pane == "w1:p2")
+            #expect(machine == nil)
+            return "term-shell"
+        })
+        let terminal = HerdrPanelTerminal(
+            id: "shell", host: .local, session: "default", cwd: "/tmp",
+            holder: TerminalSessionHolder(), scroll: HerdrTerminalScroll(), pane: "w1:p2")
+        let request = try await store.attachRequest(
+            for: terminal, environment: [], localExecutable: URL(fileURLWithPath: "/tmp/herdr"),
+            bridgeExecutable: URL(fileURLWithPath: "/tmp/ed"))
+        let specification = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        #expect(specification.transport == .terminal)
+        #expect(
+            specification.arguments == [
+                "--session", "default", "terminal", "attach", "term-shell", "--takeover",
+            ])
+    }
+
+    @Test func missingPaneAttachmentReportsTheFailureBeforeStartingAClient() async {
+        let store = HerdrStore(terminalIDResolver: { _, _, _ in
+            throw HerdrCommandError.commandFailed("pane_not_found")
+        })
+        store.open(agent("Codex", pane: "missing"))
+        guard let tab = store.sessions.first else { Issue.record("Missing tab"); return }
+        await #expect(throws: HerdrCommandError.commandFailed("pane_not_found")) {
+            _ = try await store.attachRequest(
+                for: tab, environment: [], bridgeExecutable: URL(fileURLWithPath: "/tmp/ed"))
+        }
     }
 
     @Test func openingADiffRemembersItForThatAgent() {

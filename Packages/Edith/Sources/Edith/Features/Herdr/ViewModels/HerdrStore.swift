@@ -246,6 +246,7 @@ final class HerdrStore {
     private let liveWatcher: HerdrLiveWatcher
     private let agentCloser: HerdrAgentCloser
     private let newAgentLauncher: HerdrNewAgentLauncher
+    private let terminalIDResolver: @Sendable (String, String, Machine?) async throws -> String
     private let machinesProvider: () -> [Machine]
     private let requestUserClose: UserCloseRequester
     private var expectedHostCount: Int
@@ -282,6 +283,10 @@ final class HerdrStore {
                 pane: created.paneID, on: machine)
             return created
         },
+        terminalIDResolver: @escaping @Sendable (String, String, Machine?) async throws -> String =
+            {
+                try await HerdrPaneOperations.terminalID(session: $0, pane: $1, on: $2)
+            },
         machinesProvider: @escaping () -> [Machine] = { MachineRegistry.machines() },
         requestUserClose: @escaping UserCloseRequester = { holder, completion in
             holder.requestUserClose(completion)
@@ -300,6 +305,7 @@ final class HerdrStore {
         self.liveWatcher = liveWatcher
         self.agentCloser = agentCloser
         self.newAgentLauncher = newAgentLauncher
+        self.terminalIDResolver = terminalIDResolver
         self.machinesProvider = machinesProvider
         self.requestUserClose = requestUserClose
         expectedHostCount = machinesProvider().count + 1
@@ -1947,8 +1953,10 @@ final class HerdrStore {
         let controller: TerminalLaunchRequest
         let transport: HerdrTerminalBridgeSpecification.Transport
         if agent.machineIsLocal {
-            controller = HerdrOperationExecution.localAttachRequest(
-                for: agent, environment: environment, executable: localExecutable)
+            let terminalID = try await terminalIDResolver(agent.session, agent.pane, nil)
+            controller = HerdrOperationExecution.localTerminalAttachRequest(
+                session: agent.session, terminalID: terminalID,
+                environment: environment, executable: localExecutable)
             transport = .terminal
         } else {
             guard let machine else {
@@ -1962,9 +1970,10 @@ final class HerdrStore {
                     platform: platform)
                 transport = .records
             } else {
-                controller = HerdrOperationExecution.remoteAttachRequest(
-                    for: agent, connection: connection, environment: environment,
-                    platform: platform)
+                let terminalID = try await terminalIDResolver(agent.session, agent.pane, machine)
+                controller = HerdrOperationExecution.remoteTerminalAttachRequest(
+                    session: agent.session, terminalID: terminalID, connection: connection,
+                    environment: environment, platform: platform)
                 transport = .terminal
             }
         }

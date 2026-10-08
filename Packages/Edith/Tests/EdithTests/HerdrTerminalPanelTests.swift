@@ -118,7 +118,7 @@ private actor HerdrPanelHerdr {
         let defaults = Self.scratchDefaults()
         defaults.set(mouse.rawValue, forKey: AppStorageKeys.Herdr.terminalMouse)
         let store = HerdrStore(
-            defaults: defaults,
+            defaults: defaults, terminalIDResolver: { _, pane, _ in "term-" + pane },
             terminalPanels: HerdrTerminalPanels(defaults: defaults, operations: herdr.operations))
         store.open(agent("Cursor Agent", pane: "a"))
         let owner = store.selectedTab
@@ -140,6 +140,8 @@ private actor HerdrPanelHerdr {
             #expect(specification.mouse == mouse)
             #expect(specification.transport == .terminal)
             #expect(specification.arguments.contains("attach"))
+            #expect(specification.arguments.contains("terminal"))
+            #expect(!specification.arguments.contains("agent"))
             #expect(!specification.arguments.contains("control"))
             var router = HerdrTerminalInputRouter(
                 mouse: specification.mouse, transport: specification.transport)

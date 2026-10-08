@@ -124,6 +124,17 @@ public enum HerdrListParser {
         return panes
     }
 
+    public static func terminalID(from text: String, pane: String) -> String? {
+        guard let json = firstJSON(in: text) as? [String: Any],
+            let payload = unwrap(json) as? [String: Any],
+            let record = payload["pane"] as? [String: Any],
+            string(in: record, keys: ["pane_id"]) == pane,
+            let terminalID = string(in: record, keys: ["terminal_id"]),
+            !terminalID.isEmpty
+        else { return nil }
+        return terminalID
+    }
+
     public static func paneProcess(from text: String) -> HerdrPaneProcess? {
         guard let json = firstJSON(in: text) as? [String: Any],
             let payload = unwrap(json) as? [String: Any],
