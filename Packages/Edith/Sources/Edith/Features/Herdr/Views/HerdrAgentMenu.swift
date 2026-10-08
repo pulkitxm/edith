@@ -74,7 +74,11 @@ struct HerdrAgentMenu: View {
     private var hideAgents: Bool { PresenterState.shared.active && presenterBlurAgents }
 
     var body: some View {
-        Menu {
+        Button("Open") {
+            onOpen()
+            actions.open(agent, store: store)
+        }
+        Menu("Open In") {
             Button("New Tab") {
                 onOpen()
                 actions.openInNewTab(agent, store: store)
@@ -95,11 +99,6 @@ struct HerdrAgentMenu: View {
                     }
                 }
             }
-        } label: {
-            Text("Open")
-        } primaryAction: {
-            onOpen()
-            actions.open(agent, store: store)
         }
         if !agent.isTerminal {
             Button("Open in Herdr Terminal") {

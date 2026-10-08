@@ -155,12 +155,12 @@ struct HerdrLayoutPopover: View {
                     if !candidates.isEmpty {
                         Menu("Add Agent") {
                             ForEach(candidates) { agent in
-                                Menu {
+                                Menu(hideAgents ? agent.kind : agent.title) {
+                                    Button("Add to This Tab") {
+                                        perform { store.open(agent, beside: .right) }
+                                    }
+                                    Divider()
                                     HerdrAgentMenu(agent: agent, store: store, actions: actions)
-                                } label: {
-                                    Text(hideAgents ? agent.kind : agent.title)
-                                } primaryAction: {
-                                    perform { store.open(agent, beside: .right) }
                                 }
                             }
                         }
