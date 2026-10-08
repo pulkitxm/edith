@@ -15,7 +15,7 @@ public struct LaTeXService: Sendable {
             CLICommandRequest(
                 executableURL: executable, arguments: arguments,
                 environment: CLIToolEnvironment.sanitized(), currentDirectoryURL: directory,
-                timeout: ["tectonic", "latexmk"].contains(tool) ? 300 : 60,
+                timeout: ["tectonic", "latexmk", "pukbot"].contains(tool) ? 300 : 60,
                 maximumOutputBytes: 20_971_520,
                 standardInputData: input, terminatesProcessGroup: true)
         ) { _ in }
@@ -111,7 +111,43 @@ public struct LaTeXService: Sendable {
         return String(decoding: output, as: UTF8.self)
     }
 
-    public func previewPDF(_ project: LaTeXProject) async throws -> Data? {
+    public func build(_ project: LaTeXProject) async throws -> LaTeXBuild? {
+        try project.validate()
+        guard project.location == .github else {
+            throw LaTeXError.message("Local builds run on this Mac.")
+        }
+        let sha = try await branchSHA(project, branch: project.reviewBranch ?? project.baseBranch)
+        let data = try await run(
+            "gh",
+            [
+                "api", "--method", "GET", "repos/\(project.repository)/actions/runs",
+                "-f", "head_sha=\(sha)", "-f", "per_page=100",
+            ])
+        return try JSONDecoder().decode(Builds.self, from: data).workflow_runs.first {
+            $0.path == project.workflowPath
+        }
+    }
+
+    public func rebuild(_ project: LaTeXProject) async throws -> LaTeXBuild {
+        guard var build = try await build(project) else {
+            throw LaTeXError.message(
+                "No PDF build exists for this revision. Save to a pull request first.")
+        }
+        if build.status == "completed" {
+            _ = try await run(
+                "pukbot",
+                [
+                    "workflow", "rerun", "--repo", project.repository, String(build.id), "--json",
+                ])
+            build.status = "queued"
+            build.conclusion = nil
+        }
+        return build
+    }
+
+    private struct Builds: Decodable { let workflow_runs: [LaTeXBuild] }
+
+    public func previewPDF(_ project: LaTeXProject, buildID: Int? = nil) async throws -> Data? {
         try project.validate()
         guard project.location == .github else {
             throw LaTeXError.message("Local PDFs are read from disk.")
@@ -125,8 +161,10 @@ public struct LaTeXService: Sendable {
             ])
         let artifacts = try JSONDecoder().decode(Artifacts.self, from: response).artifacts
         guard
-            let artifact = artifacts.first(where: { !$0.expired && $0.workflow_run.head_sha == sha }
-            )
+            let artifact = artifacts.first(where: {
+                !$0.expired && $0.workflow_run.head_sha == sha
+                    && (buildID == nil || $0.workflow_run.id == buildID)
+            })
         else { return nil }
         let limit = 20_971_520
         guard artifact.size_in_bytes <= limit else {
@@ -163,7 +201,10 @@ public struct LaTeXService: Sendable {
             let expired: Bool
             let size_in_bytes: Int
             let workflow_run: Run
-            struct Run: Decodable { let head_sha: String }
+            struct Run: Decodable {
+                let id: Int?
+                let head_sha: String
+            }
         }
     }
 
@@ -206,7 +247,10 @@ public struct LaTeXService: Sendable {
                 "pukbot", ["apply", "--input", "-", "--json"], input: JSONEncoder().encode(document)
             )
         }
-        if let number = project.pullRequest { return number }
+        if let number = project.pullRequest {
+            if current.text == text { _ = try await rebuild(project) }
+            return number
+        }
         let existing = try await pullRequests(project, branch: branch)
         if let number = existing.first?.number { return number }
         _ = try await run(
@@ -409,4 +453,12 @@ public struct LaTeXCheck: Decodable, Sendable {
     public let workflow: String
     public let status: String
     public let link: String
+}
+
+public struct LaTeXBuild: Decodable, Sendable {
+    public let id: Int
+    public let path: String
+    public let html_url: String
+    public var status: String
+    public var conclusion: String?
 }

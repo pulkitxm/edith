@@ -133,6 +133,43 @@ import Testing
             #expect(applied.code == 0 && applied.object?["applied"] as? Bool == true)
         }
     }
+
+    @Test func repositoryCompileRebuildsSavedHeadThroughPukbot() async throws {
+        try await CLIProbe.inWorld { world in
+            defer { LaTeXCLIEnvironment.reset() }
+            let project = LaTeXProject(
+                name: "Paper", location: .github, sourcePath: "main.tex",
+                repository: "northstar/paper", baseBranch: "main", reviewBranch: "latex/paper",
+                pullRequest: 42)
+            LaTeXCLIEnvironment.store = LaTeXProjectStore(
+                url: world.sandbox.appendingPathComponent("projects.json"))
+            try LaTeXCLI.persist(project)
+            LaTeXCLIEnvironment.service = LaTeXService { tool, args, input, directory in
+                #expect(input == nil && directory == nil)
+                if tool == "pukbot" {
+                    #expect(
+                        args == ["workflow", "rerun", "--repo", project.repository, "72", "--json"])
+                    return Data()
+                }
+                if args.contains(where: { $0.contains("git/ref") }) {
+                    #expect(args.last?.contains("latex/paper") == true)
+                    return Data(#"{"object":{"sha":"saved-head"}}"#.utf8)
+                }
+                #expect(args.contains("head_sha=saved-head"))
+                return Data(
+                    "{\"workflow_runs\":[{\"id\":71,\"path\":\"other.yml\",\"html_url\":\"https://example.com/other\",\"status\":\"completed\"},{\"id\":72,\"path\":\"\(project.workflowPath)\",\"html_url\":\"https://github.com/northstar/paper/actions/runs/72\",\"status\":\"completed\",\"conclusion\":\"success\"}]}"
+                        .utf8)
+            }
+            let result = await CLIProbe.capture([
+                "latex", "compile", project.id.uuidString, "--json",
+            ])
+            #expect(result.code == 0)
+            #expect(result.object?["status"] as? String == "queued")
+            #expect(result.object?["buildID"] as? Int == 72)
+            #expect(result.object?["pdfPath"] is NSNull)
+            #expect(try LaTeXCLIEnvironment.store.load() == [project])
+        }
+    }
 }
 
 private actor LaTeXCLICalls {

@@ -52,7 +52,10 @@ reconnects existing remote work. Do not make another branch to hide a failure.
 
 ## Verify and review
 
-Use `ed latex compile PROJECT --json` to rebuild a saved disk source. If a local
+Use `ed latex compile PROJECT --json` to rebuild a saved source on disk or GitHub.
+Repository results return `buildURL`, `buildID`, and `status`; compilation is
+asynchronous and changes no source. Reuse a running build, and inspect its
+checks before fetching the PDF. Do not repeat rebuilds while a run is pending. If a local
 save succeeds but compilation fails, the source remains saved. Read it again
 before the next edit and use the compiler error to make a focused correction.
 Tectonic must be installed locally; pdfLaTeX uses latexmk and TeX Live.

@@ -15,7 +15,7 @@ writes, GitHub Actions builds, and native Quinjet review, without a local clone.
 | `ed latex read PROJECT --json` | Complete UTF-8 source, project metadata, and a revision token. |
 | `ed latex write PROJECT --revision REVISION --json` | Preview a complete replacement supplied as raw UTF-8 stdin. |
 | `ed latex edit PROJECT --revision REVISION --json` | Preview literal replacements supplied as JSON stdin. |
-| `ed latex compile PROJECT --json` | Compile the saved disk source and report the PDF path and log. |
+| `ed latex compile PROJECT --json` | Rebuild the saved disk source or rerun its GitHub PDF build. |
 | `ed latex preview PROJECT --json` | Check PDF availability for the current revision. |
 | `ed latex review PROJECT --json` | PR metadata, diff, and checks for native Quinjet review. |
 | `ed latex merge PROJECT --json` | Preview a squash merge with branch deletion. |
@@ -49,6 +49,11 @@ or latexmk with TeX Live must be installed for local builds. Repository builds
 run on GitHub after submission, so inspect `review` for checks.
 
 ## PDFs and merges
+
+`compile` rebuilds the saved revision without changing source. Disk results contain
+`pdfPath` and `log`. Repository results contain `buildURL`, `buildID`, and `status`,
+with a null `pdfPath`. A running build is reused; a completed build is rerun
+through Pukbot. Use `preview` after the build succeeds.
 
 `preview --data --json` returns base64 PDF bytes. Repository previews stay in
 memory and only return artifacts matching the current PR head. Pending or

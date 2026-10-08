@@ -327,14 +327,27 @@ struct LaTeXEditCommand: AsyncParsableCommand {
 
 struct LaTeXCompileCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "compile", abstract: "Build a PDF beside a local LaTeX source.",
+        commandName: "compile", abstract: "Rebuild a saved project's PDF locally or on GitHub.",
         discussion:
-            "Reads the saved local source and writes compiler artifacts beside it. Repository edits compile on GitHub through write or edit. Example: ed latex compile PROJECT --json"
+            "Disk projects write a PDF beside the saved source. Repository projects rerun their current revision's PDF workflow through Pukbot, returning its URL and build status. Example: ed latex compile PROJECT --json"
     )
     @OptionGroup var options: LaTeXTargetOptions
     func run() async throws {
         try await execute {
             let project = try LaTeXCLI.project(options.project)
+            if project.location == .github {
+                let build = try await LaTeXCLIEnvironment.service.rebuild(project)
+                if options.json {
+                    CLIOut.json(
+                        .object([
+                            "buildURL": .string(build.html_url), "status": .string(build.status),
+                            "buildID": .int(build.id), "pdfPath": .null,
+                        ]))
+                } else {
+                    CLIOut.out("\(build.status): \(build.html_url)")
+                }
+                return
+            }
             let log = try await LaTeXCLIEnvironment.service.compileLocal(project)
             if options.json {
                 CLIOut.json(
