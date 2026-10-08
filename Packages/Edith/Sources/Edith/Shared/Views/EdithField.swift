@@ -4,6 +4,7 @@ import SwiftUI
 
 struct EdithFieldSurface: ViewModifier {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let focused: Bool
     var compact = false
@@ -26,7 +27,8 @@ struct EdithFieldSurface: ViewModifier {
                 RoundedRectangle(cornerRadius: radius)
                     .strokeBorder(border, lineWidth: UIScale.pt(focused || invalid ? 1.5 : 1))
             )
-            .animation(.easeOut(duration: 0.12), value: focused)
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion), value: focused)
     }
 }
 
@@ -49,6 +51,7 @@ struct EdithTextField: View {
     var compact = false
     var clearable = false
     var typeAhead = false
+    var searchable = false
     var invalid = false
     var focus: FocusState<Bool>.Binding?
     var onSubmit: (() -> Void)?
@@ -68,13 +71,16 @@ struct EdithTextField: View {
             if clearable, !text.isEmpty {
                 Button {
                     text = ""
+                    (focus ?? $localFocus).wrappedValue = true
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: UIScale.pt(fontSize)))
                         .foregroundStyle(DashSkin.inkFaint(dark))
+                        .frame(width: UIScale.pt(20), height: UIScale.pt(20))
                 }
                 .buttonStyle(.edith(.borderless))
                 .help("Clear this field")
+                .accessibilityLabel("Clear \(placeholder)")
             }
         }
         .edithFieldSurface(focused: focused, compact: compact, invalid: invalid)
@@ -90,14 +96,20 @@ struct EdithTextField: View {
             .focused(focus ?? $localFocus)
             .focusEffectDisabled()
             .textEditingCommands()
-            .onExitCommand { (focus ?? $localFocus).wrappedValue = false }
+            .onExitCommand {
+                if searchable, !text.isEmpty {
+                    text = ""
+                } else {
+                    (focus ?? $localFocus).wrappedValue = false
+                }
+            }
             .onSubmit { onSubmit?() }
     }
 
     @ViewBuilder
     private var typeAheadAnchor: some View {
-        if typeAhead {
-            TypeAheadAnchor()
+        if typeAhead || searchable {
+            TypeAheadAnchor(typeAhead: typeAhead)
         }
     }
 }
@@ -112,7 +124,7 @@ struct SearchField: View {
     var body: some View {
         EdithTextField(
             placeholder: placeholder, text: $text, icon: "magnifyingglass", compact: compact,
-            clearable: true, typeAhead: typeAhead, focus: focus)
+            clearable: true, typeAhead: typeAhead, searchable: true, focus: focus)
     }
 }
 
@@ -138,13 +150,18 @@ struct EdithNumberField: View {
 }
 
 private struct TypeAheadAnchor: NSViewRepresentable {
+    let typeAhead: Bool
     func makeNSView(context: Context) -> NSView {
         let anchor = NSView(frame: .zero)
-        TypeAhead.shared.register(anchor: anchor)
+        TypeAhead.shared.register(anchor: anchor, typeAhead: typeAhead)
         return anchor
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        TypeAhead.shared.register(anchor: nsView)
+        TypeAhead.shared.register(anchor: nsView, typeAhead: typeAhead)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: ()) {
+        TypeAhead.shared.unregister(anchor: nsView)
     }
 }
