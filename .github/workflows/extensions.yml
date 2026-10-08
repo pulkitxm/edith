@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun install --frozen-lockfile
-      - run: bun test scripts/extension-release-plan.test.js scripts/extension-publish.test.js
+      - run: bun test scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
       - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
       - run: swift test --package-path Extensions --build-system native --jobs 2
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
