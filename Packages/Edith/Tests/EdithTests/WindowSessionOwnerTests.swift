@@ -63,6 +63,26 @@ import Testing
         #expect(second.blitzTree.list == .children)
     }
 
+    @Test func catalogsAndLiveAppFiltersSurviveNavigationWithinTheirWindow() {
+        let first = WindowSessionOwner()
+        let second = WindowSessionOwner()
+        first.extensions.query = "sample tool"
+        first.extensions.category = .media
+        first.runningApps.query = "sample editor"
+        first.studio.toolQuery = "compress"
+        first.studio.toolFilter = .intelligence
+        #expect(first.extensions === first.extensions)
+        #expect(first.runningApps === first.runningApps)
+        #expect(first.extensions.query == "sample tool")
+        #expect(first.extensions.category == .media)
+        #expect(first.runningApps.query == "sample editor")
+        #expect(first.studio.toolFilter == .intelligence)
+        #expect(second.extensions.query.isEmpty)
+        #expect(second.extensions.category == .all)
+        #expect(second.runningApps.query.isEmpty)
+        #expect(second.studio.toolFilter == .all)
+    }
+
     @Test func bridgeTargetsFocusedHostAndPreservesSurvivingAttachments() {
         let bridge = QuinjetSessionBridge()
         let first = WindowSessionOwner()
