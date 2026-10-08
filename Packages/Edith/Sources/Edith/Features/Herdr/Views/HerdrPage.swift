@@ -23,6 +23,9 @@ struct HerdrPage: View {
     @State private var compactRailPresented = false
     @State private var compactDetailsPresented = false
     @State private var filterDismissedAt: Date?
+    @State private var agentToDelete: HerdrAgent?
+    @State private var deletingAgentIDs: Set<String> = []
+    @State private var agentDeleteError: String?
 
     @MainActor init(store: HerdrStore? = nil, drag: HerdrDragCoordinator? = nil) {
         _store = State(initialValue: store ?? .shared)
@@ -181,6 +184,46 @@ struct HerdrPage: View {
             }
         } message: { request in
             Text(request.message)
+        }
+        .confirmationDialog(
+            "Delete this agent?", isPresented: agentDeleteRequested,
+            titleVisibility: .visible, presenting: agentToDelete
+        ) { agent in
+            Button("Delete Agent", role: .destructive) {
+                Task { await deleteAgent(agent) }
+            }
+            Button("Cancel", role: .cancel) { agentToDelete = nil }
+        } message: { agent in
+            Text("\(agent.title) will exit and its Herdr pane will close.")
+        }
+        .alert("Could not delete agent", isPresented: agentDeleteFailed) {
+            Button("OK") { agentDeleteError = nil }
+        } message: {
+            Text(agentDeleteError ?? "Herdr could not close the agent.")
+        }
+    }
+
+    private var agentDeleteRequested: Binding<Bool> {
+        Binding(
+            get: { agentToDelete != nil },
+            set: { if !$0 { agentToDelete = nil } })
+    }
+
+    private var agentDeleteFailed: Binding<Bool> {
+        Binding(
+            get: { agentDeleteError != nil },
+            set: { if !$0 { agentDeleteError = nil } })
+    }
+
+    private func deleteAgent(_ agent: HerdrAgent) async {
+        guard deletingAgentIDs.insert(agent.id).inserted else { return }
+        defer { deletingAgentIDs.remove(agent.id) }
+        do {
+            try await store.closeAgent(agent)
+            HerdrAgentWindow.close(agent.id)
+            store.reattach(agent.id)
+        } catch {
+            agentDeleteError = error.localizedDescription
         }
     }
 
@@ -1076,19 +1119,29 @@ struct HerdrPage: View {
 
     @ViewBuilder
     private func agentRowMenu(_ agent: HerdrAgent) -> some View {
-        Button("Open") { openAgent(agent) }
-        if let tab = store.currentTab, !onBoard, !tab.layout.contains(agent.id) {
-            Menu("Open Beside") {
-                Button("Right") { openBeside(agent, .right) }
-                Button("Left") { openBeside(agent, .left) }
-                Button("Below") { openBeside(agent, .bottom) }
-                Button("Above") { openBeside(agent, .top) }
+        Menu {
+            Button("New Tab") { openAgentInNewTab(agent) }
+            Button("New Window") {
+                if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
+                store.close(agent.id, rememberingPlacement: false)
+                HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             }
-        }
-        Button("Open in New Window") {
-            if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-            store.close(agent.id, rememberingPlacement: false)
-            HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
+            let destinations = store.tabs.filter { !$0.layout.contains(agent.id) }
+            if !destinations.isEmpty {
+                Divider()
+                ForEach(destinations) { tab in
+                    Menu("Beside in \(tabTitle(tab))") {
+                        Button("Right") { openBeside(agent, in: tab.id, .right) }
+                        Button("Left") { openBeside(agent, in: tab.id, .left) }
+                        Button("Below") { openBeside(agent, in: tab.id, .bottom) }
+                        Button("Above") { openBeside(agent, in: tab.id, .top) }
+                    }
+                }
+            }
+        } label: {
+            Text("Open")
+        } primaryAction: {
+            openAgentInNewTab(agent)
         }
         if !agent.isTerminal {
             Divider()
@@ -1099,13 +1152,22 @@ struct HerdrPage: View {
                 }
                 .help(hook.schedule.sendsPhrase(now: Date()))
             }
+            Divider()
+            Button("Delete", role: .destructive) { agentToDelete = agent }
+                .disabled(deletingAgentIDs.contains(agent.id))
         }
     }
 
-    private func openBeside(_ agent: HerdrAgent, _ side: InsertSide) {
+    private func openAgentInNewTab(_ agent: HerdrAgent) {
         if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         HerdrAgentWindow.close(agent.id)
-        animate { store.open(agent, beside: side) }
+        animate { store.openInNewTab(agent) }
+    }
+
+    private func openBeside(_ agent: HerdrAgent, in tabID: String, _ side: InsertSide) {
+        if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
+        HerdrAgentWindow.close(agent.id)
+        animate { store.open(agent, in: tabID, beside: side) }
     }
 
     private func rowDetail(_ agent: HerdrAgent) -> String {
