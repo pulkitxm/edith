@@ -96,7 +96,7 @@ import Testing
                 .appMaintenance, .blitztree,
                 .system, .runningApps,
                 .desk,
-                .media, .studio, .timeLapse, .downloads, .music, .calendar, .virtualCamera,
+                .media, .studio, .latex, .timeLapse, .downloads, .music, .calendar, .virtualCamera,
                 .data, .database, .attention, .seoAudit, .codeStats,
             ])
     }

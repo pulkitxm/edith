@@ -65,7 +65,7 @@ struct LaTeXAddProject: View {
                 if busy { LoadingIndicator(); Text("Checking source…").font(.edithText(.caption)) }
                 Spacer()
                 Button("Add project") { add() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .disabled(
                         busy || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                             || sourcePath.isEmpty

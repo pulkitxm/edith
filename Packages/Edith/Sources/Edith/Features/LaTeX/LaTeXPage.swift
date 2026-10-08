@@ -126,7 +126,7 @@ struct LaTeXPage: View {
                 RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(
                     Color.secondary.opacity(0.2)))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.edith(.borderless))
         .disabled(model.busy || model.load.isRunning)
     }
 
@@ -206,7 +206,7 @@ struct LaTeXPage: View {
                 }.disabled(model.dirty || model.busy)
                 if project.location == .disk {
                     Button("Save & compile") { model.saveAndCompile() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.edith(.primary))
                         .keyboardShortcut("s", modifiers: .command)
                         .help("Save and compile (⌘S)")
                         .disabled(model.original == nil || model.busy || model.load.isRunning)
@@ -217,7 +217,7 @@ struct LaTeXPage: View {
                     ) {
                         model.submit()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.edith(.primary))
                     .keyboardShortcut("s", modifiers: .command)
                     .help("Save to the pull request and compile on GitHub (⌘S)")
                     .disabled(!model.canSubmit)
@@ -306,7 +306,7 @@ struct LaTeXPage: View {
                     }.help("Editor options").accessibilityLabel("Editor options")
                 }.disabled(model.busy || model.load.isRunning)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.edith(.toolbar))
             .tint(.primary)
             .padding(.horizontal, UIScale.pt(12))
             .frame(height: UIScale.pt(40))

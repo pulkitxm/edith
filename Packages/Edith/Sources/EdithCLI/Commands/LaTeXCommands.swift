@@ -329,7 +329,7 @@ struct LaTeXCompileCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "compile", abstract: "Rebuild a saved project's PDF locally or on GitHub.",
         discussion:
-            "Disk projects write a PDF beside the saved source. Repository projects rerun their current revision's PDF workflow through Pukbot, returning its URL and build status. Example: ed latex compile PROJECT --json"
+            "Reads the saved revision and writes a PDF beside a disk source, or reruns the repository's PDF workflow through Pukbot and returns its URL and build status. Source files do not change. Example: ed latex compile PROJECT --json"
     )
     @OptionGroup var options: LaTeXTargetOptions
     func run() async throws {

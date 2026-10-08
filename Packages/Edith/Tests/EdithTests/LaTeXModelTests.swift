@@ -138,12 +138,12 @@ import WebKit
         controls.wrapsLines = false
         try await Task.sleep(for: .milliseconds(200))
         controls.undo()
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitUntil { text != edited && controls.canRedo }
         #expect(text != edited)
         #expect(text.hasSuffix(Self.sample))
         #expect(controls.canRedo)
         controls.redo()
-        try await Task.sleep(for: .milliseconds(200))
+        try await waitUntil { text == edited }
         #expect(text == edited)
         controls.find()
         try await Task.sleep(for: .milliseconds(200))
@@ -397,6 +397,14 @@ import WebKit
         override var window: NSWindow? { target }
         override var windowNumber: Int { number }
         override var locationInWindow: NSPoint { point }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        for _ in 0..<100 {
+            if condition() { return }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(condition())
     }
 
     private func waitForEditor(_ controls: LaTeXEditorControls) async throws {
