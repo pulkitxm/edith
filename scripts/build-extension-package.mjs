@@ -69,10 +69,11 @@ export async function copyNativeFrameworks(root, definition, contents) {
     names.add(name);
     await mkdir(directory, { recursive: true });
     const destination = resolve(directory, name);
-    execFileSync("/bin/cp", ["-R", origin, destination]);
+    execFileSync("/bin/cp", ["-RL", origin, destination]);
+    await rm(resolve(destination, "Versions"), { recursive: true, force: true });
     const binary = await realpath(resolve(destination, name.slice(0, -10)));
     if (!binary.startsWith((await realpath(destination)) + "/")) throw new Error("Native framework executable escapes its bundle");
-    binaries.push({ binary, framework: destination });
+    binaries.push({ binary, framework: destination, installName: `@rpath/${name}/${name.slice(0, -10)}` });
   }
   return binaries;
 }
@@ -260,7 +261,7 @@ export async function buildExtensionPackage({
       await mkdir(frameworks, { recursive: true });
       await copyNativeResources(root, definition, contents, resourceNames);
       const frameworkBinaries = await copyNativeFrameworks(root, definition, contents);
-      for (const { binary, framework } of frameworkBinaries) {
+      for (const { binary, framework, installName } of frameworkBinaries) {
         const architectures = execFileSync("lipo", ["-archs", binary], { encoding: "utf8" }).trim().split(/\s+/);
         if (!architectures.includes("arm64")) throw new Error("A native framework lacks arm64");
         if (architectures.length > 1) {
@@ -269,6 +270,7 @@ export async function buildExtensionPackage({
           await copyFile(temporary, binary);
           await rm(temporary);
         }
+        execFileSync("install_name_tool", ["-id", installName, binary]);
         execFileSync("strip", ["-rSTx", binary]);
         execFileSync("codesign", ["--force", "--sign", development ? "-" : identity,
           ...(development ? [] : ["--options", "runtime", "--timestamp"]), framework], { stdio: "inherit" });
@@ -283,6 +285,14 @@ export async function buildExtensionPackage({
         `@rpath/${libraryName}`,
         library,
       ]);
+      const dependencies = execFileSync("otool", ["-L", library], { encoding: "utf8" })
+        .split("\n").slice(1).map((line) => line.trim().split(" ")[0]);
+      for (const { framework, installName } of frameworkBinaries) {
+        for (const dependency of dependencies) {
+          if (dependency.startsWith(`@rpath/${basename(framework)}/`) && dependency !== installName)
+            execFileSync("install_name_tool", ["-change", dependency, installName, library]);
+        }
+      }
       if (frameworkBinaries.length && !execFileSync("otool", ["-l", library], { encoding: "utf8" }).includes("path @loader_path ("))
         execFileSync("install_name_tool", ["-add_rpath", "@loader_path", library]);
       execFileSync("strip", ["-rSTx", library]);

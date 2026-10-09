@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { copyNativeFrameworks, copyNativeResources, nativeClangModuleFlags } from "./build-extension-package.mjs";
@@ -77,7 +77,7 @@ test("native resources reject collisions and destination paths outside Resources
 });
 
 
-test("native frameworks preserve versioned layout and reject unowned paths", async () => {
+test("native frameworks flatten versioned links before signing and reject unowned paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-native-frameworks-"));
   try {
     const nativePackage = "Extensions/mock/Native";
@@ -88,9 +88,10 @@ test("native frameworks preserve versioned layout and reject unowned paths", asy
     await symlink("Versions/Current/Parser", join(root, nativePackage, source, "Parser"));
     const contents = join(root, "mock.bundle/Contents");
     const copied = await copyNativeFrameworks(root, { nativePackage, nativeFrameworks: [source] }, contents);
-    expect(await readlink(join(contents, "Frameworks/Parser.framework/Parser"))).toBe("Versions/Current/Parser");
-    expect(copied).toEqual([{ binary: await realpath(join(contents, "Frameworks/Parser.framework/Versions/A/Parser")), framework: join(contents, "Frameworks/Parser.framework") }]);
-    expect(await readFile(join(contents, "Frameworks/Parser.framework/Versions/A/Parser"), "utf8")).toBe("synthetic binary");
+    expect((await lstat(join(contents, "Frameworks/Parser.framework/Parser"))).isSymbolicLink()).toBe(false);
+    expect(await lstat(join(contents, "Frameworks/Parser.framework/Versions")).catch(() => undefined)).toBeUndefined();
+    expect(copied).toEqual([{ binary: await realpath(join(contents, "Frameworks/Parser.framework/Parser")), framework: join(contents, "Frameworks/Parser.framework"), installName: "@rpath/Parser.framework/Parser" }]);
+    expect(await readFile(join(contents, "Frameworks/Parser.framework/Parser"), "utf8")).toBe("synthetic binary");
     for (const nativeFrameworks of [["../Outside.framework"], [source, source], ["invalid.dylib"]]) {
       await expect(copyNativeFrameworks(root, { nativePackage, nativeFrameworks }, contents)).rejects.toThrow("invalid native framework");
     }
