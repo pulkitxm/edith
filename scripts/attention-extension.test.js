@@ -125,6 +125,7 @@ function fixture() {
     session,
     intervals,
     notifyIdle: (value) => listeners.idle(value),
+    notifyFocus: (value) => listeners.focus(value),
     presenceRequests: () => presenceRequests,
     native(value) {
       nativeActivity = value;
@@ -747,4 +748,16 @@ test("idle and lock notifications bypass a recently cached native snapshot", asy
   await f.tick();
   expect(f.session.attentionPrevious.presence).toBe("locked");
   expect(f.presenceRequests()).toBe(3);
+});
+
+test("returning to the browser refreshes hardware input despite a false active Chrome clock", async () => {
+  const f = fixture();
+  f.native({ presence: "idle", idleSeconds: "900", idleThreshold: "300" });
+  await f.tick();
+  f.advance(1);
+  f.native({ presence: "active", idleSeconds: "0", idleThreshold: "300" });
+  f.notifyFocus(1);
+  await f.tick();
+  expect(f.session.attentionPrevious.presence).toBe("active");
+  expect(f.presenceRequests()).toBe(2);
 });

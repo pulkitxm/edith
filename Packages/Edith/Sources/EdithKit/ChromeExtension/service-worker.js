@@ -486,7 +486,10 @@ chrome.tabs.onUpdated.addListener((tabId, change) => {
 })
 chrome.tabs.onRemoved.addListener(tabId => chrome.storage.session.remove([`page:${tabId}`, `signals:${tabId}`]))
 chrome.windows.onFocusChanged.addListener(windowID => {
-  work = work.catch(() => {}).then(() => rememberFocus(windowID))
+  work = work.catch(() => {}).then(async () => {
+    await rememberFocus(windowID)
+    await chrome.storage.session.remove("attentionSystemActivity")
+  })
   scheduleHeartbeat()
 })
 chrome.idle.onStateChanged.addListener(() => {
