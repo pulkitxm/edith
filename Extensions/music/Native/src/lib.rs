@@ -228,6 +228,23 @@ pub unsafe extern "C" fn edith_music_player_start(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn edith_music_player_forget(service: *const c_char) -> bool {
+    let Some(service) = (unsafe { bounded_text(service, 256) }) else {
+        return false;
+    };
+    if catalog::Library::forget(&service).is_err() {
+        return false;
+    }
+    let Ok(entry) = keyring::Entry::new(&service, "spotify") else {
+        return false;
+    };
+    matches!(
+        entry.delete_credential(),
+        Ok(()) | Err(keyring::Error::NoEntry)
+    )
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn edith_music_player_send(
     handle: *mut c_void,
     data: *const u8,

@@ -1,7 +1,6 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import AppKit
-
-public protocol DirectKeyboardInputResponder: AnyObject {}
 
 @MainActor
 public enum MusicKeyCommand {

@@ -415,6 +415,7 @@ public enum TrackMeta {
                 options: [.skipsHiddenFiles, .skipsPackageDescendants])
         else { return }
         for case let file as URL in enumerator {
+            guard !Task.isCancelled else { return }
             guard playableExtensions.contains(file.pathExtension.lowercased()),
                 (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
             else { continue }

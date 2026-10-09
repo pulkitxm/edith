@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionUI
 import EdithExtensionSupport
 import Observation
 
@@ -44,6 +45,13 @@ struct ExternalTrack: Equatable, Sendable {
 }
 
 enum ExternalNowPlaying {
+    static func accepts(app: ExternalApp, existing: ExternalTrack?, incoming: ExternalTrack?)
+        -> Bool
+    {
+        guard let existing, existing.app != app else { return true }
+        return !existing.isPlaying && incoming?.isPlaying == true
+    }
+
     static func parse(app: ExternalApp, userInfo: [AnyHashable: Any]) -> ExternalTrack? {
         let state = (userInfo["Player State"] as? String)?.lowercased()
         guard state != "stopped" else { return nil }
@@ -68,6 +76,12 @@ enum ExternalNowPlaying {
 @Observable
 final class ExternalMusic {
     private(set) var current: ExternalTrack?
+    private(set) var playback: ExternalPlayback?
+    private(set) var lastError: String?
+    private let runner = ExternalPlaybackRunner()
+    private var pollingTask: Task<Void, Never>?
+    private var commandTask: Task<Void, Never>?
+    private var observingPlayback = false
 
     private var observers: [(ExternalApp, NSObjectProtocol)] = []
 
@@ -102,19 +116,78 @@ final class ExternalMusic {
         let center = DistributedNotificationCenter.default()
         for (_, observer) in observers { center.removeObserver(observer) }
         observers.removeAll()
-        current = nil
+        current = nil; playback = nil
+        observePlayback(false)
+        commandTask?.cancel(); commandTask = nil
+        if let commandObserver { MusicEvents.stopObserving(commandObserver) }
+        if let stateObserver { MusicEvents.stopObserving(stateObserver) }
+        commandObserver = nil; stateObserver = nil
     }
 
     func handle(command info: [AnyHashable: Any]) {
-        switch (info["action"] as? String ?? "").lowercased() {
-        case "playpause": playPause()
-        case "next": next()
-        case "previous": previous()
-        case "volume":
-            if let value = info["value"] as? Double { setVolume(Float(value)) }
-        default: break
+        guard let app = current?.app,
+            let command = ExternalPlaybackScript.command(info, app: app)
+        else { return }
+        let previous = commandTask
+        commandTask = Task { [weak self] in
+            await previous?.value
+            guard let self, !Task.isCancelled else { return }
+            await refreshPlayback(app: app, command: command)
         }
-        broadcast()
+    }
+
+    func observePlayback(_ active: Bool) {
+        guard active != observingPlayback else { return }
+        observingPlayback = active
+        pollingTask?.cancel(); pollingTask = nil
+        guard active else { return }
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                if lastError == nil {
+                    let apps: [ExternalApp]
+                    if let track = current {
+                        apps = [track.app]
+                    } else {
+                        apps = ExternalApp.allCases.filter {
+                            !NSRunningApplication.runningApplications(
+                                withBundleIdentifier: $0.bundleID
+                            ).isEmpty
+                        }
+                    }
+                    for app in apps {
+                        await refreshPlayback(app: app)
+                        if current?.isPlaying == true || lastError != nil { break }
+                    }
+                }
+                do { try await Task.sleep(for: .seconds(2)) } catch { return }
+            }
+        }
+    }
+
+    func retryPlayback() {
+        lastError = nil
+        guard let app = current?.app else { return }
+        Task { [weak self] in await self?.refreshPlayback(app: app) }
+    }
+
+    private func refreshPlayback(app: ExternalApp, command: String? = nil) async {
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).isEmpty
+        else {
+            if current?.app == app { current = nil; playback = nil }
+            return
+        }
+        do {
+            let next = try await runner.run(app: app, command: command)
+            guard !Task.isCancelled,
+                ExternalNowPlaying.accepts(app: app, existing: current, incoming: next?.track)
+            else { return }
+            playback = next; current = next?.track; lastError = nil
+            broadcast()
+        } catch {
+            guard (current == nil || current?.app == app), !Task.isCancelled else { return }
+            lastError = error.localizedDescription
+        }
     }
 
     func perform(_ request: MusicTransportRequest) {
@@ -130,51 +203,36 @@ final class ExternalMusic {
             payload["title"] = track.title
             payload["artist"] = track.artist
             payload["isPlaying"] = track.isPlaying
+            payload["duration"] = track.duration
+            if let playback {
+                payload["elapsed"] = playback.elapsed(); payload["volume"] = playback.volume
+                payload["shuffling"] = playback.shuffling; payload["looping"] = playback.repeating
+            }
         }
         MusicEvents.post(MusicEvents.Name.nowPlayingState, userInfo: payload)
     }
 
-    func playPause() { control("playpause") }
-    func next() { control("next track") }
-    func previous() { control("previous track") }
-
-    func setVolume(_ value: Float) {
-        guard let app = current?.app else { return }
-        let level = Int(max(0, min(1, value)) * 100)
-        let source = """
-            tell application "System Events"
-                if not (exists process "\(app.processName)") then return
-            end tell
-            tell application "\(app.processName)" to set sound volume to \(level)
-            """
-        Task.detached {
-            var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
-        }
-    }
-
-    private func control(_ command: String) {
-        guard let app = current?.app else { return }
-        let source = """
-            tell application "System Events"
-                if not (exists process "\(app.processName)") then return
-            end tell
-            tell application "\(app.processName)" to \(command)
-            """
-        Task.detached {
-            var error: NSDictionary?
-            NSAppleScript(source: source)?.executeAndReturnError(&error)
-        }
-    }
+    func playPause() { perform(.toggle) }
+    func next() { perform(.next) }
+    func previous() { perform(.previous) }
 
     private func handle(app: ExternalApp, userInfo: [AnyHashable: Any]) {
         guard let track = ExternalNowPlaying.parse(app: app, userInfo: userInfo) else {
-            if current?.app == app { current = nil }
+            if current?.app == app { current = nil; playback = nil }
             return
         }
-        if let existing = current, existing.app != app, existing.isPlaying, !track.isPlaying {
+        guard ExternalNowPlaying.accepts(app: app, existing: current, incoming: track) else {
             return
+        }
+        if current?.title != track.title || current?.artist != track.artist
+            || current?.app != track.app
+        {
+            playback = nil
         }
         current = track
+        if var value = playback {
+            value.position = value.elapsed(); value.sampledAt = .now; value.track = track
+            playback = value
+        }
     }
 }
