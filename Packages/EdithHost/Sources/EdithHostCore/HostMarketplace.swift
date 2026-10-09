@@ -150,7 +150,9 @@ public final class HostMarketplace {
         error = nil
         defer { operationID = nil }
         do { try await sessions.disable(id: id) } catch {
-            self.error = "The extension could not stop. Try again."
+            self.error =
+                (error as? HostWorkerError)?.disableMessage
+                ?? "The extension could not stop. It remains enabled. Open the extension and try again."
         }
     }
 
@@ -213,7 +215,8 @@ public final class HostMarketplace {
                     }
                 } catch {
                     self.error =
-                        "The update could not start. The previous version will keep running if available."
+                        (error as? HostWorkerError)?.disableMessage
+                        ?? "The update could not start. The previous version will keep running if available."
                 }
             }
             try store.prune(hostABI: HostContract.compatibility)
@@ -232,7 +235,9 @@ public final class HostMarketplace {
             _ = try store.requestRemoval(id: id)
             try reloadInstalled()
         } catch {
-            self.error = "The extension could not be removed. Try again."
+            self.error =
+                (error as? HostWorkerError)?.disableMessage
+                ?? "The extension could not be removed. It remains installed. Open the extension and try again."
         }
     }
 

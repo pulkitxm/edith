@@ -84,6 +84,34 @@ public final class ExtensionBundleRuntime {
         instance.active = false
     }
 
+    public func prepareDisableAll() async throws {
+        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
+        for instance in loaded.values
+        where instance.active && instance.object.responds(to: selector) {
+            let completion = BundleCommandCompletion()
+            _ = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard completion.begin(continuation) else { return }
+                    typealias Prepare =
+                        @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
+                        -> Void
+                    let prepare = unsafeBitCast(
+                        instance.object.method(for: selector), to: Prepare.self)
+                    let callback: @convention(block) (NSError?) -> Void = { error in
+                        if let error {
+                            completion.finish(.failure(error))
+                        } else {
+                            completion.finish(.success(Data()))
+                        }
+                    }
+                    prepare(instance.object, selector, callback)
+                }
+            } onCancel: {
+                completion.finish(.failure(CancellationError()))
+            }
+        }
+    }
+
     public func prepareToStopAll() async throws {
         let selector = NSSelectorFromString("prepareToStopWithCompletion:")
         for instance in loaded.values

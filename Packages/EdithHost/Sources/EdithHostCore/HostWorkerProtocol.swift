@@ -74,6 +74,7 @@ public enum HostWorkerError: Error, Equatable {
     case invalidResponse
     case rejected
     case stillRunning
+    case disableRejected(String)
 }
 
 public struct HostWorkerFrames: Sendable {
@@ -104,5 +105,13 @@ public struct HostWorkerFrames: Sendable {
         guard data.count <= maximumBytes else { throw HostWorkerError.invalidResponse }
         data.append(10)
         return data
+    }
+}
+
+public extension HostWorkerError {
+    var disableMessage: String {
+        if case .disableRejected(let message) = self { return message }
+        return
+            "The extension could not finish restoring its system settings. It remains enabled. Open the extension and try again."
     }
 }
