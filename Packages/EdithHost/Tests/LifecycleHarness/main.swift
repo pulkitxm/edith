@@ -76,19 +76,22 @@ struct HostLifecycleHarness {
         }
         var workerLogs: [URL] = []
         var logHandles: [FileHandle] = []
-        let sessions = HostExtensionSessions(defaults: defaults) { package in
-            let log = fixture.appendingPathComponent("worker-" + UUID().uuidString + ".log")
-            FileManager.default.createFile(atPath: log.path, contents: nil)
-            let handle = try! FileHandle(forWritingTo: log)
-            workerLogs.append(log)
-            logHandles.append(handle)
-            return
-                HostWorker(
-                    configuration: HostWorkerConfiguration(
-                        identity: identity, extensionID: package.id, version: package.version),
-                    executable: executable, errorOutput: handle)
+        func makeSessions(executable: URL) -> HostExtensionSessions {
+            HostExtensionSessions(defaults: UserDefaults(suiteName: suite)!) { package in
+                let log = fixture.appendingPathComponent("worker-" + UUID().uuidString + ".log")
+                FileManager.default.createFile(atPath: log.path, contents: nil)
+                let handle = try! FileHandle(forWritingTo: log)
+                workerLogs.append(log)
+                logHandles.append(handle)
+                return
+                    HostWorker(
+                        configuration: HostWorkerConfiguration(
+                            identity: identity, extensionID: package.id, version: package.version),
+                        executable: executable, errorOutput: handle)
+            }
         }
-        let surfaces = try HostSurfaces(
+        var sessions = makeSessions(executable: executable)
+        var surfaces = try HostSurfaces(
             identity: identity, entries: HostIndex.bundled(), sessions: sessions)
         surfaces.layouts.update(.home) { $0.tiles = [.init(.ability(extensionID))] }
         guard surfaces.context.activeIDs.isEmpty else { throw HostWorkerError.rejected }
@@ -185,8 +188,35 @@ struct HostLifecycleHarness {
             guard surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
-            stage = "restore"
+            stage = "replace host application"
+            let replacement = fixture.appendingPathComponent("UpdatedFixture.app")
+            try FileManager.default.copyItem(at: app, to: replacement)
+            let replacementInfo = replacement.appendingPathComponent("Contents/Info.plist")
+            plist["CFBundleVersion"] = "2"
+            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+                .write(to: replacementInfo)
+            let replacementSign = Process()
+            replacementSign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+            replacementSign.arguments = ["--force", "--sign", "-", replacement.path]
+            try replacementSign.run()
+            replacementSign.waitUntilExit()
+            guard replacementSign.terminationStatus == 0 else {
+                throw MarketplaceError.invalidSignature
+            }
+            try FileManager.default.removeItem(at: app)
+            sessions = makeSessions(
+                executable: replacement.appendingPathComponent("Contents/MacOS/Edith"))
+            surfaces = try HostSurfaces(
+                identity: identity, entries: HostIndex.bundled(), sessions: sessions)
+            guard sessions.processIdentifiers.isEmpty,
+                sessions.enabledIDs == [extensionID],
+                surfaces.layouts.home == savedSurface
+            else { throw HostWorkerError.invalidResponse }
+            stage = "restore in replacement host"
             await sessions.restore(packages: [second.id: second])
+            guard let restoredPID = sessions.processIdentifiers[first.id], restoredPID != newPID,
+                kill(restoredPID, 0) == 0
+            else { throw HostWorkerError.rejected }
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             guard sessions.versions[first.id] == second.version else {
@@ -248,7 +278,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard")}"
             )
         } catch {
             if extensionID == "jev" {

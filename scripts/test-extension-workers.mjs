@@ -34,6 +34,8 @@ try {
       });
     }
     await mkdir(join(root, `${id}-host`));
+    const fixtureHome = join(root, `${id}-home`);
+    await mkdir(fixtureHome);
     const result = JSON.parse(
       execFileSync(
         resolve("Packages/EdithHost/.build/debug/HostLifecycleHarness"),
@@ -44,7 +46,14 @@ try {
           id,
           surfaceContractVersion === 1 ? "1" : "0",
         ],
-        { encoding: "utf8", timeout: 90_000 },
+        {
+          encoding: "utf8",
+          timeout: 90_000,
+          env: {
+            ...process.env,
+            EDITH_EXTENSION_FIXTURE_HOME: fixtureHome,
+          },
+        },
       ).trim(),
     );
     for (const key of [
@@ -52,6 +61,7 @@ try {
       "nativeWindow",
       "updateWithoutAppRestart",
       "restoreAfterAppUpdate",
+      "freshHostSessionRestored",
       "removedPayloads",
       "isolatedSupportTypes",
       "surfaceLayoutRestored",
