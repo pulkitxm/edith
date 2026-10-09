@@ -1,6 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import {
   buildExtensionSupport,
@@ -104,6 +111,22 @@ export async function buildExtensionPackage({
         resolve(root, resource),
         resolve(contents, "Resources", name),
       );
+    }
+    if (definition.supportProduct === "EdithExtensionDocuments") {
+      const resources = resolve(
+        root,
+        "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/Resources",
+      );
+      for (const name of await readdir(resources)) {
+        if (resourceNames.has(name))
+          throw new Error("Duplicate extension resource name");
+        resourceNames.add(name);
+        await mkdir(resolve(contents, "Resources"), { recursive: true });
+        await copyFile(
+          resolve(resources, name),
+          resolve(contents, "Resources", name),
+        );
+      }
     }
     const nativeFlags = [];
     if (definition.nativePackage) {
