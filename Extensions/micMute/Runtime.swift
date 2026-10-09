@@ -10,6 +10,21 @@ final class ExtensionRuntime: NSObject {
     private var service: MicMuteEngine?
     private var observer: NSObjectProtocol?
 
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
+            return try await SurfaceCommandService.execute(
+                providerID: "micMute", command: command, payload: payload,
+                snapshot: { _ in MicMuteSurface.snapshot(muted: service.muted, error: service.error)
+                },
+                perform: { action in
+                    service.setMuted(action == "mute")
+                })
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -47,7 +62,9 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "synchronize": service?.syncSettings()
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
             service?.shutdown()
             service = nil
             IPC.stopObserving(observer)

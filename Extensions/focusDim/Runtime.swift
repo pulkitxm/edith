@@ -10,6 +10,28 @@ final class ExtensionRuntime: NSObject {
     private var service: FocusDimEngine?
     private var observer: NSObjectProtocol?
 
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
+            return try await SurfaceCommandService.execute(
+                providerID: "focusDim", command: command, payload: payload,
+                snapshot: { _ in
+                    FocusDimSurface.snapshot(
+                        active: FocusDimState.isActive(),
+                        intensity: SharedDefaults.store.object(
+                            forKey: AppStorageKeys.FocusDim.intensity) as? Double
+                            ?? FocusDimMath.defaultIntensity)
+                },
+                perform: { action in
+                    FocusDimState.setActive(action == "enable")
+                    service.applySettings()
+                    IPC.post(IPC.Name.settingsChanged)
+                })
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -39,7 +61,9 @@ final class ExtensionRuntime: NSObject {
             UIScale.install(from: SharedDefaults.store)
             return NSHostingController(rootView: ExtensionPageHost { FocusDimSettings() })
         case "synchronize": service?.applySettings()
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
             service?.shutdown()
             service = nil
             IPC.stopObserving(observer)

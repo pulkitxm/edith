@@ -8,6 +8,26 @@ import Foundation
 final class ExtensionRuntime: NSObject {
     private var service: SystemStatsStatusItem?
 
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
+            return try await SurfaceCommandService.execute(
+                providerID: "systemStats", command: command, payload: payload,
+                snapshot: { _ in
+                    SystemStatsSurface.snapshot(
+                        cpu: service.snapshot.cpu, memory: service.snapshot.memory,
+                        freeDiskBytes: try? URL(fileURLWithPath: "/").resourceValues(forKeys: [
+                            .volumeAvailableCapacityForImportantUsageKey
+                        ]).volumeAvailableCapacityForImportantUsage)
+                },
+                perform: { action in
+                    throw ExtensionPeerError.invalidRequest
+                })
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -42,7 +62,9 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "synchronize": break
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
             service?.shutdown()
             service = nil
         case "status": return ["ok": true, "running": service != nil] as NSDictionary

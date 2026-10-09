@@ -10,6 +10,16 @@ final class ExtensionRuntime: NSObject {
     private var service: EmojiStore?
     private var observers: [NSObjectProtocol] = []
 
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
+            return try await EmojiSurface.execute(
+                command, payload: payload, store: service, pick: { EmojiPanel.shared.show() })
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -75,7 +85,9 @@ final class ExtensionRuntime: NSObject {
         case "synchronize":
             registerHotKey()
             IPC.post(IPC.Name.settingsChanged)
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
             EmojiPanel.shared.hide()
             EmojiPanel.shared.store = nil
             service?.shutdown()

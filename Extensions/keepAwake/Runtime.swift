@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import Foundation
 import SwiftUI
 
@@ -6,6 +7,19 @@ import SwiftUI
 @objc(EdithKeepAwakeExtensionRuntime)
 final class KeepAwakeRuntime: NSObject {
     private var store: KeepAwakeStore?
+    private var defaults: UserDefaults?
+
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, let store = self.store, let defaults = self.defaults else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try await KeepAwakeSurface.execute(
+                command, payload: payload, store: store, defaults: defaults)
+        }
+    }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
@@ -24,6 +38,7 @@ final class KeepAwakeRuntime: NSObject {
             else {
                 return ["ok": false] as NSDictionary
             }
+            self.defaults = defaults
             if store == nil { store = KeepAwakeStore(defaults: defaults) }
             defaults.set(true, forKey: KeepAwakeKeys.enabled)
             store?.syncPreventSleep()
@@ -40,9 +55,14 @@ final class KeepAwakeRuntime: NSObject {
         case "synchronize":
             store?.syncPreventSleep()
             return ["ok": true] as NSDictionary
+        case "cancelCommand":
+            commands.cancel(input["token"] as? String ?? "")
+            return ["ok": true] as NSDictionary
         case "stop":
+            commands.shutdown()
             store?.shutdown()
             store = nil
+            defaults = nil
             return ["ok": true] as NSDictionary
         case "status":
             return [

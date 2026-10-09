@@ -21,6 +21,7 @@ public enum SurfaceCommandService {
                 throw ExtensionPeerError.invalidRequest
             }
             let current = project(try await snapshot(request.tile), tile: request.tile)
+            _ = try current.encoded()
             guard current.providerID == providerID, action.value == nil,
                 (current.actions + current.rows.flatMap(\.actions)).contains(where: {
                     $0.id == action.actionID
