@@ -594,7 +594,13 @@ import Testing
         let keys = enabledKeys + hiddenKeys
         let previousValues = keys.map { defaults.object(forKey: $0) }
         let previousZoom = UIScale.current
+        let previousHome = defaults.string(forKey: SurfaceTarget.home.key)
+        defaults.set(
+            SurfaceLayout(tiles: [SurfaceTile(.actions)]).encoded, forKey: SurfaceTarget.home.key)
+        SurfaceLayoutStore.shared.reload()
         defer {
+            defaults.set(previousHome, forKey: SurfaceTarget.home.key)
+            SurfaceLayoutStore.shared.reload()
             for (key, value) in zip(keys, previousValues) {
                 defaults.set(value, forKey: key)
             }
@@ -657,8 +663,8 @@ import Testing
                     #expect(Set(actionFrames.map { Int($0.midY.rounded()) }).count > 1)
                 } else {
                     let coverage = actionFrames.reduce(CGRect.null) { $0.union($1) }
-                    let allocatedWidth = (viewport.width - UIScale.pt(32)) * 16 / 24
-                    #expect(coverage.width > allocatedWidth - UIScale.pt(48))
+                    let allocatedWidth = viewport.width - UIScale.pt(32)
+                    #expect(coverage.width >= allocatedWidth - UIScale.pt(48) - 1)
                 }
                 #expect(!TestWindowHost.isExposedOnDesktop(window))
             }

@@ -701,6 +701,7 @@ final class SettingsBackup {
 
     nonisolated static let registryV2Keys =
         SuiteRegistry.defaultsKeys + [
+            AppStorageKeys.Surfaces.profiles, AppStorageKeys.Surfaces.agentActivity,
             AppStorageKeys.Homebrew.enabled, AppStorageKeys.Cleaner.enabled,
             AppStorageKeys.Downloads.enabled, AppStorageKeys.Music.barCollapsed,
             AppStorageKeys.Music.barAutoHide, AgentSettingsKeys.pauseAmbientOnBattery,
