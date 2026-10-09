@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  copyFile,
   mkdir,
   mkdtemp,
   readFile,
@@ -50,18 +51,25 @@ import Sparkle
 }
 `,
     );
-    execFileSync("swiftc", [
-      "-emit-library",
-      "-module-name",
-      "CameraFixture",
-      "-F",
-      join(hostApp, "Contents/Frameworks"),
-      "-framework",
-      "Sparkle",
-      source,
-      "-o",
-      join(contents, "MacOS/Runtime"),
-    ]);
+    if (role === "cameraProvider" && process.env.CAMERA_PROVIDER_LIBRARY) {
+      await copyFile(
+        resolve(process.env.CAMERA_PROVIDER_LIBRARY),
+        join(contents, "MacOS/Runtime"),
+      );
+    } else {
+      execFileSync("swiftc", [
+        "-emit-library",
+        "-module-name",
+        "CameraFixture",
+        "-F",
+        join(hostApp, "Contents/Frameworks"),
+        "-framework",
+        "Sparkle",
+        source,
+        "-o",
+        join(contents, "MacOS/Runtime"),
+      ]);
+    }
     const info = {
       CFBundleIdentifier: `com.pulkit.edith.extensions.virtualCamera.${role}`,
       CFBundleExecutable: "Runtime",
@@ -120,9 +128,13 @@ import Sparkle
     assert.equal(result.ok, true);
     assert.equal(result.payloadLoaded, true);
     assert.equal(result.role, role);
-    assert.equal(result.sparkleGUIControllerInitialized, true);
-    assert.equal(result.sparkleGUIResourcesLoaded, true);
-    assert.equal(result.exposedWindows, 0);
+    if (role === "cameraProvider" && process.env.CAMERA_PROVIDER_LIBRARY) {
+      assert.equal(result.providerServiceStarted, false);
+    } else {
+      assert.equal(result.sparkleGUIControllerInitialized, true);
+      assert.equal(result.sparkleGUIResourcesLoaded, true);
+      assert.equal(result.exposedWindows, 0);
+    }
     assert.equal(
       output.provenance.roles.find((item) => item.role === role)
         .executableBeforeSigningSHA256,
@@ -176,6 +188,9 @@ import Sparkle
       hostExecutableProvenanceValidated: true,
       linkedRuntimeFrameworksValidated: true,
       sparkleGUIControllerAndResourcesValidated: true,
+      actualProviderPayloadValidated: Boolean(
+        process.env.CAMERA_PROVIDER_LIBRARY,
+      ),
       archiveSymlinks: 0,
       signatureTamperRejected: true,
       fixtureScopeRejected: true,

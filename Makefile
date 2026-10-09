@@ -189,6 +189,11 @@ ci-extension-camera-carrier: host
 	bun test scripts/camera-carrier.test.js
 	bun scripts/test-camera-carrier.mjs
 
+.PHONY: ci-extension-camera-provider
+ci-extension-camera-provider: host
+	swift test --package-path Extensions/virtualCamera/Provider --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
+	CAMERA_PROVIDER_LIBRARY=Extensions/virtualCamera/Provider/.build/debug/libCameraProvider.dylib bun scripts/test-camera-carrier.mjs
+
 ci-extension-docs:
 	swift test --package-path Packages/EdithDocsWorker --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 
