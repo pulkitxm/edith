@@ -11,7 +11,10 @@ struct HostLifecycleHarness {
     @MainActor static func main() async throws {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
-        guard arguments.count == 4 else { throw HostWorkerError.rejected }
+        guard arguments.count == 5, ["0", "1"].contains(arguments[4]) else {
+            throw HostWorkerError.rejected
+        }
+        let validateSurface = arguments[4] == "1"
         let extensionID = arguments[3]
         let fixture = URL(fileURLWithPath: arguments[0])
         let sourceApp = URL(fileURLWithPath: arguments[1])
@@ -104,7 +107,8 @@ struct HostLifecycleHarness {
             guard String(decoding: opened, as: UTF8.self) == "{\"opened\":true}" else {
                 throw HostWorkerError.invalidResponse
             }
-            try await verifySurfaceContext(endpoint, saved: savedSurface, id: extensionID)
+            try await verifySurfaceContext(
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
             if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
@@ -137,7 +141,8 @@ struct HostLifecycleHarness {
             guard surfaces.context.activeIDs == [extensionID],
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
-            try await verifySurfaceContext(endpoint, saved: savedSurface, id: extensionID)
+            try await verifySurfaceContext(
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "updated commands"
             guard sessions.versions[first.id] == second.version,
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
@@ -171,7 +176,8 @@ struct HostLifecycleHarness {
             else { throw HostWorkerError.invalidResponse }
             stage = "restore"
             await sessions.restore(packages: [second.id: second])
-            try await verifySurfaceContext(endpoint, saved: savedSurface, id: extensionID)
+            try await verifySurfaceContext(
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
@@ -229,7 +235,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(extensionID == "calendar")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface)}"
             )
         } catch {
             if extensionID == "jev" {
@@ -251,15 +257,19 @@ struct HostLifecycleHarness {
     }
 
     @MainActor private static func verifySurfaceContext(
-        _ endpoint: ExtensionPeerEndpoint, saved: SurfaceLayout, id: String
+        _ endpoint: ExtensionPeerEndpoint, saved: SurfaceLayout, id: String, validateData: Bool
     ) async throws {
         let data = try await endpoint.invoke("surface.context")
         let context = try JSONDecoder().decode(SurfaceContextSnapshot.self, from: data)
-        guard context.contractVersion == 1, context.activeIDs == [id], context.home == saved else {
+        guard context.contractVersion == 1, context.activeIDs == [id],
+            context.activeVersions[id] != nil, context.home == saved
+        else {
             throw HostWorkerError.invalidResponse
         }
-        if id == "calendar" {
-            let request = SurfaceSnapshotRequest(target: .home, tile: .init(.calendar))
+        if validateData {
+            var tile = SurfaceTile(.ability(id))
+            tile.itemLimit = 3
+            let request = SurfaceSnapshotRequest(target: .home, tile: tile)
             let data = try await endpoint.invoke(
                 "surface.snapshot", payload: request.encoded(providerID: id))
             let snapshot = try SurfaceSnapshot.decode(data, providerID: id)
@@ -268,7 +278,7 @@ struct HostLifecycleHarness {
             }
             do {
                 let invalid = SurfaceActionRequest(
-                    snapshot: request, actionID: "join:unlisted-synthetic-meeting")
+                    snapshot: request, actionID: "invalid-synthetic-action")
                 _ = try await endpoint.invoke(
                     "surface.perform", payload: invalid.encoded(providerID: id))
                 throw HostWorkerError.invalidResponse
