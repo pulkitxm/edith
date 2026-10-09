@@ -68,7 +68,10 @@ public enum ClaudeStatusLine {
     ) -> Limits? {
         guard let limits = limits(from: data) else { return nil }
         var store = LimitsHistory(url: history)
-        store.append(provider: .claude, session: limits.session, week: limits.week, now: now)
+        let latest = LimitsHistory.latest(provider: .claude, url: history)
+        store.append(
+            provider: .claude, session: limits.session, week: limits.week,
+            fable: current(latest?.fable, now: now), now: now)
         return limits
     }
 
@@ -88,7 +91,7 @@ public enum ClaudeStatusLine {
         let latest = LimitsHistory.latest(provider: .claude, url: history)
         return LimitsProviderSnapshot(
             provider: .claude, session: current(latest?.session, now: now),
-            week: current(latest?.week, now: now))
+            week: current(latest?.week, now: now), fable: current(latest?.fable, now: now))
     }
 
     public static func command(executable: String, wrapping previous: String?) -> String {
