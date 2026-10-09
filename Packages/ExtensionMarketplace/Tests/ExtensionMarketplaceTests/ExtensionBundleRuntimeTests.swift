@@ -72,6 +72,17 @@ import Testing
         try runtime.start(id: package.id, context: ["defaultsSuite": suite])
         #expect(try runtime.snapshot(id: package.id)?.version == package.version)
         try runtime.stopAll()
+        let privileged = fixture.store.directory(for: package).appendingPathComponent(package.id)
+            .appendingPathComponent("privileged.bundle")
+        try FileManager.default.createDirectory(at: privileged, withIntermediateDirectories: true)
+        let privilegedRuntime = ExtensionBundleRuntime(
+            store: fixture.store, role: .helper, hostABI: package.hostABI,
+            packageVersion: package.version,
+            verify: ExtensionCodeSignature.verifyDevelopment)
+        #expect(throws: MarketplaceError.invalidBundle) {
+            try privilegedRuntime.start(id: package.id, context: ["defaultsSuite": suite])
+        }
+        #expect(try privilegedRuntime.snapshot(id: package.id) == nil)
     }
 
     @Test func anUninstalledExtensionCannotStart() {
