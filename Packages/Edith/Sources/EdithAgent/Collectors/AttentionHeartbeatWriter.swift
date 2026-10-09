@@ -9,6 +9,7 @@ struct AttentionHeartbeatSample: Sendable {
     let processID: pid_t
     let captureWindowTitle: Bool
     var counters: AttentionInputCounters? = nil
+    var idleSeconds: TimeInterval? = nil
 }
 
 struct AttentionInputCounters: Equatable, Sendable {
@@ -18,7 +19,7 @@ struct AttentionInputCounters: Equatable, Sendable {
 
     static func read() -> AttentionInputCounters {
         func count(_ type: CGEventType) -> UInt32 {
-            CGEventSource.counterForEventType(.combinedSessionState, eventType: type)
+            CGEventSource.counterForEventType(.hidSystemState, eventType: type)
         }
         return AttentionInputCounters(
             keys: count(.keyDown),

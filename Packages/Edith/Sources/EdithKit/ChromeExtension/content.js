@@ -1,6 +1,9 @@
 const counters = { keys: 0, clicks: 0, scrolls: 0 }
 let lastScroll = 0
 let lastSignature = ""
+let lastInputAt = 0
+let publishedInputAt = 0
+let inputResumed = false
 
 function text(value) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, 300) : null
@@ -47,24 +50,38 @@ function publish(force) {
   const signature = JSON.stringify([location.href, document.title, media.map(item => [item.title, item.kind]), tags])
   const changed = signature !== lastSignature
   const active = counters.keys || counters.clicks || counters.scrolls
-  if (!force && !changed && !active) return
+  const inputChanged = lastInputAt !== publishedInputAt
+  if (!force && !changed && !active && !inputChanged) return
   lastSignature = signature
   const signals = active ? { ...counters } : null
+  publishedInputAt = lastInputAt
+  const resumed = inputResumed
+  inputResumed = false
   counters.keys = 0
   counters.clicks = 0
   counters.scrolls = 0
-  chrome.runtime.sendMessage({ type: "edith-page", url: location.href, title: document.title, media, tags, signals, changed }).catch(() => {})
+  chrome.runtime.sendMessage({ type: "edith-page", url: location.href, title: document.title, media, tags, signals, changed, lastInputAt, inputResumed: resumed }).catch(() => {})
 }
 
-document.addEventListener("keydown", () => { counters.keys += 1 }, { capture: true, passive: true })
-document.addEventListener("pointerdown", () => { counters.clicks += 1 }, { capture: true, passive: true })
-document.addEventListener("wheel", () => {
+function recordInput(event, counter) {
+  if (!event.isTrusted || document.visibilityState !== "visible" || !document.hasFocus()) return
   const now = Date.now()
-  if (now - lastScroll > 250) {
-    counters.scrolls += 1
-    lastScroll = now
+  inputResumed ||= lastInputAt === 0 || now - lastInputAt >= 10000
+  lastInputAt = now
+  if (counter === "scrolls") {
+    if (now - lastScroll > 250) {
+      counters.scrolls += 1
+      lastScroll = now
+    }
+  } else if (counter) {
+    counters[counter] += 1
   }
-}, { capture: true, passive: true })
+  if (inputResumed) publish(false)
+}
+
+for (const [name, counter] of [["keydown", "keys"], ["pointerdown", "clicks"], ["wheel", "scrolls"], ["pointermove", null], ["touchmove", null]]) {
+  document.addEventListener(name, event => recordInput(event, counter), { capture: true, passive: true })
+}
 for (const name of ["play", "pause", "ended", "loadedmetadata"]) {
   document.addEventListener(name, () => publish(true), true)
 }

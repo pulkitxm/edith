@@ -3,7 +3,7 @@ import EdithCore
 import Foundation
 
 public enum AttentionExtensionInstaller {
-    public static let version = "2.0.2"
+    public static let version = "2.0.3"
 
     public static var bundledDirectory: URL? {
         Bundle.module.url(forResource: "ChromeExtension", withExtension: nil)
