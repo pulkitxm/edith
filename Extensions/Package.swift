@@ -26,6 +26,15 @@ let package = Package(
             name: "CompanionExtensionTests", dependencies: ["CompanionExtension"],
             path: "companion/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "BifrostExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "bifrost", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "BifrostExtensionTests", dependencies: ["BifrostExtension"],
+            path: "bifrost/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+
+        .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "clipboard", exclude: ["Tests", "Runtime.swift"],
