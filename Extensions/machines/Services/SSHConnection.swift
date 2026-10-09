@@ -184,7 +184,7 @@ public actor SSHConnection {
         }
         MachinePaths.prepare()
         try? FileManager.default.removeItem(atPath: socketPath)
-        masterProcess?.terminate()
+        if let process = masterProcess { await Self.stopProcess(process) }
         masterProcess = nil
 
         let process = Process()
@@ -223,13 +223,13 @@ public actor SSHConnection {
             do {
                 try await Task.sleep(for: .milliseconds(100))
             } catch {
-                process.terminate()
+                await Self.stopProcess(process)
                 masterProcess = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 throw error
             }
         }
-        process.terminate()
+        await Self.stopProcess(process)
         masterProcess = nil
         stderrPipe.fileHandleForReading.readabilityHandler = nil
         let pending = String(decoding: buffer.snapshot(), as: UTF8.self)
@@ -269,7 +269,7 @@ public actor SSHConnection {
 
     public func disconnect() async {
         _ = try? await runControl(["-O", "exit"])
-        masterProcess?.terminate()
+        if let process = masterProcess { await Self.stopProcess(process) }
         masterProcess = nil
         remotePlatform = nil
         try? FileManager.default.removeItem(atPath: socketPath)
@@ -722,6 +722,11 @@ public actor SSHConnection {
 
     private nonisolated func environment() -> [String: String] {
         MachineSSHEnvironment.make(for: machine)
+    }
+
+    static func stopProcess(_ process: Process) async {
+        if process.isRunning { process.terminate() }
+        _ = await waitForExit(process, timeout: 2, killDelay: 0.1)
     }
 
     static func waitForExit(

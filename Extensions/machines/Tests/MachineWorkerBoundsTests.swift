@@ -63,6 +63,26 @@ import Testing
         #expect(!session.isCollecting)
     }
 
+    @Test func stoppingAnSSHProcessWaitsForExitEvenWhenTheOwnerIsCancelled() async throws {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        process.arguments = [
+            "-c",
+            "import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); print('ready',flush=True); time.sleep(60)",
+        ]
+        process.standardOutput = output; process.standardError = FileHandle.nullDevice
+        try process.run()
+        #expect(
+            String(decoding: output.fileHandleForReading.readData(ofLength: 6), as: UTF8.self)
+                == "ready\n")
+        let stop = Task { await SSHConnection.stopProcess(process) }
+        stop.cancel()
+        await stop.value
+        #expect(!process.isRunning)
+        #expect(process.terminationReason == .uncaughtSignal)
+    }
+
     @Test func remoteUsageOperationHasOnlyFixedNativeCommandsAndPaths() throws {
         let forced = try MachineRemoteUsageOperation.command(platform: .darwin, force: true)
         #expect(forced.contains("exec python3 -c"))
