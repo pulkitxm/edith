@@ -39,6 +39,7 @@ EXACT = {
     "extension-dev": "swift-test",
     "ci-extension-support": "swift-test",
     "ci-extension-commands": "swift-test",
+    "ci-extension-workers": "swift-test",
     "host": "swift-test",
     "ci-swift-test-batch": "swift-test",
     "ci-swift-lint": "swift-test",

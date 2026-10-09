@@ -10,8 +10,15 @@ try {
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  for (const { id } of definitions.filter(
-    (entry) => entry.contractVersion === 1,
+  const requested = process.argv.slice(2);
+  const workers = definitions.filter((entry) => entry.contractVersion === 1);
+  for (const id of requested)
+    assert(
+      workers.some((entry) => entry.id === id),
+      `Unknown worker extension ${id}`,
+    );
+  for (const { id } of workers.filter(
+    (entry) => requested.length === 0 || requested.includes(entry.id),
   )) {
     const releases = join(root, id);
     await mkdir(releases);
