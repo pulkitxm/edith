@@ -157,7 +157,8 @@ public struct AgentActivityCard: View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             HStack(spacing: UIScale.pt(6)) {
                 Circle().fill(AgentActivityStyle.color(row.phase)).frame(width: 6, height: 6)
-                Text(row.projectTitle).font(.edithText(.callout)).lineLimit(1)
+                Text(row.title).font(.edithText(.callout)).fontWeight(.medium).lineLimit(2)
+                    .multilineTextAlignment(.leading).help(row.title)
                 if row.isSubagent { Image(systemName: "arrow.turn.down.right").help("Subagent") }
                 Spacer(minLength: 0)
                 if tile.showActions, let terminal = row.terminal {
@@ -171,6 +172,10 @@ public struct AgentActivityCard: View {
                     }
                     .buttonStyle(.edith(.borderless)).help("Open agent terminal")
                 }
+            }
+            if tile.shows("project"), row.title != row.projectTitle, !row.project.isEmpty {
+                Text(row.projectTitle).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .lineLimit(1).help(row.project)
             }
             HStack(spacing: UIScale.pt(6)) {
                 if tile.shows("provider") { Text(row.providerTitle) }

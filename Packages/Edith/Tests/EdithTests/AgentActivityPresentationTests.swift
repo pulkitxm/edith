@@ -60,6 +60,39 @@ import Testing
         #expect(offline.working == 1)
     }
 
+    @Test func agentsInTheSameWorkspaceRetainTheirBoardTitles() {
+        var first = terminal("first")
+        first.title = "Refine navigation"
+        var second = terminal("second")
+        second.title = "Improve search"
+        let presentation = AgentActivityPresentation(
+            activity: .init(refreshedAt: now), terminals: terminals([first, second]), now: now)
+        #expect(presentation.rows.count == 2)
+        #expect(presentation.rows.first { $0.id == first.id }?.title == first.title)
+        #expect(presentation.rows.first { $0.id == second.id }?.title == second.title)
+        #expect(presentation.rows.allSatisfy { $0.projectTitle == "demo" })
+    }
+
+    @Test func mergedProviderSessionsFollowTerminalRenamesAndKeepUnnamedFallbacks() throws {
+        let activity = AgentActivitySnapshot(sessions: [session()], refreshedAt: now)
+        var agent = terminal("pane", native: "native-1")
+        for name in ["Refine navigation", "Improve search"] {
+            agent.title = name
+            let presentation = AgentActivityPresentation(
+                activity: activity, terminals: terminals([agent]), now: now)
+            #expect(presentation.rows.count == 1)
+            let row = try #require(presentation.rows.first)
+            #expect(row.title == name)
+            #expect(row.projectTitle == "demo")
+            #expect(row.isHook)
+        }
+        agent.title = " \n "
+        #expect(AgentActivityRow(agent, observedAt: now).title == "demo")
+        #expect(AgentActivityRow(session()).title == "demo")
+        agent.cwd = ""; agent.workspace = ""
+        #expect(AgentActivityRow(agent, observedAt: now).title == "Claude Code")
+    }
+
     @Test func oldAttentionEvidenceCannotOverrideAFreshProviderSignal() {
         let agent = terminal("pane", native: "native-1")
         let activity = AgentActivitySnapshot(sessions: [session()], refreshedAt: now)

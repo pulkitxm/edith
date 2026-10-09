@@ -484,6 +484,7 @@ extension SurfaceWidget {
                 ("quiet", "No recent signal count"), ("errors", "Error count"),
                 ("subagents", "Subagent count"), ("sessions", "Session list"),
                 ("approvals", "Permission requests"), ("provider", "Provider names"),
+                ("project", "Workspace names"),
                 ("tool", "Latest tool and command"), ("model", "Model name"),
                 ("elapsed", "Session elapsed time"), ("source", "Source and last signal"),
             ]

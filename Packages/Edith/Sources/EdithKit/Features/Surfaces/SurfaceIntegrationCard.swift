@@ -28,7 +28,8 @@ public struct SurfaceIntegrationCard: View {
         if tile.widget == .agents {
             AgentActivityCard(
                 tile: tile, active: active,
-                activity: sampleContent ? SurfaceSampleData.agents() : nil)
+                activity: sampleContent ? SurfaceSampleData.agents() : nil,
+                terminals: sampleContent ? SurfaceSampleData.agentTerminals() : nil)
         } else if tile.widget.usesExtensionCard {
             SurfaceExtensionCard(
                 tile: tile, active: active,

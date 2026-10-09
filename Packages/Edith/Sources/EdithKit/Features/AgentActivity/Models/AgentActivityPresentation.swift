@@ -20,7 +20,12 @@ public struct AgentActivityRow: Identifiable, Equatable, Sendable {
         isHook ? "Provider hook" : (terminal?.machineName ?? "Terminal discovery")
     }
     public var isActive: Bool { phase != .finished && phase != .ended }
+    public var title: String {
+        let name = terminal?.title.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? projectTitle : name
+    }
     public var projectTitle: String {
+        guard !project.isEmpty else { return providerTitle }
         let component = URL(fileURLWithPath: project).lastPathComponent
         return component.isEmpty ? providerTitle : component
     }

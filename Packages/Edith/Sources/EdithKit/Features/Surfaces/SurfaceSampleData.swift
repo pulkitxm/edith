@@ -29,6 +29,30 @@ public enum SurfaceSampleData {
             settings: .init(providers: providers, monitorTerminalAttention: true))
     }
 
+    public static func agentTerminals() -> SessionsSnapshot {
+        let activity = agents()
+        let titles = [
+            "Refine Atlas navigation", "Improve Beacon search",
+            "Review Atlas permissions", "Repair Harbor build",
+        ]
+        let agents = activity.sessions.enumerated().map { index, session in
+            HerdrAgent(
+                id: "sample-terminal-\(index)", machineID: "sample-local",
+                machineName: "Sample Mac", machineIsLocal: true, sshTarget: nil,
+                session: "sample", pane: "sample-pane-\(index)", kind: session.provider.title,
+                status: .working, title: titles[index], workspace: session.project,
+                cwd: session.project,
+                nativeSession: .init(provider: session.provider.rawValue, value: session.sessionID))
+        }
+        return SessionsSnapshot(
+            discoveredAt: date,
+            hosts: [
+                HerdrHostSnapshot(
+                    id: "sample-local", name: "Sample Mac", isLocal: true,
+                    herdrPresent: true, reachable: true, agents: agents)
+            ], working: 2, total: agents.count)
+    }
+
     public static func snapshot(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
         var value: SurfaceExtensionSnapshot
         if tile.widget == .limits { return limits(tile) }
