@@ -1562,5 +1562,42 @@
     "testTargets": [
       "ci-extension-lid-awake"
     ]
+  },
+  {
+    "id": "attention",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "app": [
+        "Extensions/attention/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/attention"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": null,
+    "nativePackage": "Extensions/attention/NativeRuntime",
+    "nativeProduct": "AttentionNative",
+    "nativeResources": [
+      "AttentionNative_AttentionNative.bundle"
+    ],
+    "nativeLicenses": [
+      {
+        "source": "Extensions/attention/Licenses/GRDB-LICENSE",
+        "destination": "GRDB-LICENSE"
+      }
+    ],
+    "testTargets": [
+      "ci-extension-attention"
+    ]
   }
 ]
