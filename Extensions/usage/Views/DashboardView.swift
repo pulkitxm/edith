@@ -70,6 +70,9 @@ struct DashboardView: View {
             }
         } content: {
             if showLog { logView }
+            if let notice = UsageWorkerOperations.controller?.notice {
+                PageNotice(notice, tone: .information)
+            }
             if model.loaded, let error = model.contentLoad.errorMessage {
                 PageNotice(
                     error, tone: .error,
@@ -128,7 +131,7 @@ struct DashboardView: View {
 
     private var masthead: some View {
         PageHeader {
-            Text("Agent usage")
+            Text("Agent usage").accessibilityLabel("Agent usage")
         } trailing: {
             mastheadButtons
         } accessory: {
@@ -141,7 +144,7 @@ struct DashboardView: View {
                 }
                 .font(.system(size: UIScale.pt(12.5))).foregroundStyle(DashSkin.inkSoft(dark))
             }
-        }
+        }.accessibilityElement(children: .contain).accessibilityLabel("Agent usage")
     }
 
     private var mastheadButtons: some View {

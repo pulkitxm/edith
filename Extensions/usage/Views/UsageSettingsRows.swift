@@ -6,6 +6,7 @@ import UserNotifications
 private struct ClaudeStatusLineRow: View {
     @State private var connected: Bool?
     @State private var failure: String?
+    @State private var operation: Task<Void, Never>?
 
     var body: some View {
         LabeledContent("Claude Code status line") {
@@ -19,6 +20,9 @@ private struct ClaudeStatusLineRow: View {
                     .disabled(connected == nil)
             }
         }
+        .onDisappear {
+            operation?.cancel(); operation = nil
+        }
         .pageTask {
             let result = await ClaudeStatusLine.isConnected()
             guard !Task.isCancelled else { return }
@@ -29,9 +33,11 @@ private struct ClaudeStatusLineRow: View {
     private func toggle() {
         let connect = connected != true
         failure = nil
-        Task {
+        operation?.cancel()
+        operation = Task {
             do {
                 let change = try await ClaudeStatusLine.setConnected(connect)
+                guard !Task.isCancelled else { return }
                 connected = change != .removed && change != .restored && change != .absent
             } catch {
                 failure = error.localizedDescription
@@ -126,6 +132,7 @@ struct UsageSettingsRows: View {
     private var hasProvider: Bool { claudeEnabled || codexEnabled || cursorEnabled || grokEnabled }
 
     var body: some View {
+        UsageMachineSettingsRows()
         Section {
             Group {
                 Toggle(

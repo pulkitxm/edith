@@ -533,6 +533,13 @@ public enum UsageHistory {
         return merge(local: filtered, cloud: protectedPrevious)
     }
 
+    public static func forgetting(machineID: UUID, in data: Data) -> Data? {
+        guard let document = decode(data) else { return nil }
+        let result = removingMachineIDs([machineID.uuidString.lowercased()], from: document)
+        guard let data = encoded(result), isValidDocument(data) else { return nil }
+        return data
+    }
+
     public static func retainedHistoryBlockCount(in data: Data) -> Int {
         let retention = decode(data)?["historyRetention"] as? [String: Any]
         return (retention?["blocks"] as? [[String: Any]])?.count ?? 0

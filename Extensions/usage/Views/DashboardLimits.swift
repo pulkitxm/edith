@@ -318,13 +318,15 @@ struct LimitsRefreshButton: View {
     let dark: Bool
     var onRefreshed: () -> Void
     @State private var refreshing = false
+    @State private var timeoutTask: Task<Void, Never>?
 
     var body: some View {
         Button {
             refreshing = true
             try? UsageWorkerOperations.requestLimitsRefresh()
-            Task {
-                try? await Task.sleep(nanoseconds: 10_000_000_000)
+            timeoutTask?.cancel()
+            timeoutTask = Task {
+                do { try await Task.sleep(nanoseconds: 10_000_000_000) } catch { return }
                 refreshing = false
             }
         } label: {
@@ -344,6 +346,9 @@ struct LimitsRefreshButton: View {
         .buttonStyle(.edith(.toolbar))
         .disabled(refreshing)
         .help("Refresh limits now")
+        .onDisappear {
+            timeoutTask?.cancel(); timeoutTask = nil
+        }
         .pageTask {
             for await _ in NotificationCenter.default.notifications(
                 named: UsageEvents.limitsUpdated)

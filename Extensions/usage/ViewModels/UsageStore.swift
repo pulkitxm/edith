@@ -104,6 +104,7 @@ final class UsageStore {
     private var seedTask: Task<Void, Never>?
     private var limitsRequestTask: Task<Void, Never>?
     private var limitsRestoreObserver: NSObjectProtocol?
+    private let menuBarAllowed: Bool
     private var terminating = false
     private var limitsRestoreReloadGeneration = UsageReloadGenerationState()
     private var statusItem: LimitsStatusItem?
@@ -155,6 +156,7 @@ final class UsageStore {
     }
 
     init(showMenuBar: Bool = true) {
+        menuBarAllowed = showMenuBar
         seedTask = Task { @MainActor [weak self] in
             let latest = await LimitsHistory.loadLatestProviders()
             guard !Task.isCancelled, self?.terminating == false else { return }
@@ -236,7 +238,7 @@ final class UsageStore {
     }
 
     func syncStatusItem() {
-        guard NSApp != nil else { return }
+        guard menuBarAllowed, !terminating, NSApp != nil else { return }
         let on =
             SharedDefaults.store.object(forKey: AppStorageKeys.Limits.inMenuBar) as? Bool ?? true
         if on, statusItem == nil {

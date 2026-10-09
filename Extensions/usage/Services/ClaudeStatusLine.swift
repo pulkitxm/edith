@@ -43,8 +43,11 @@ public enum ClaudeStatusLine {
 
     public static func settingsURL(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = UsageExecutionEnvironment.home
     ) -> URL {
+        if let fixture = UsageExecutionEnvironment.fixtureHome(environment: environment) {
+            return fixture.appendingPathComponent(".claude/settings.json")
+        }
         let configured = environment["CLAUDE_CONFIG_DIR"].flatMap { path -> URL? in
             guard !path.isEmpty else { return nil }
             return URL(

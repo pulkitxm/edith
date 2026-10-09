@@ -21,6 +21,6 @@ public enum MachineRegistry {
             let data = try? Data(contentsOf: file), data.count <= 1_048_576,
             let machines = try? JSONDecoder().decode([Machine].self, from: data)
         else { return [] }
-        return machines
+        return Array(machines.prefix(128))
     }
 }

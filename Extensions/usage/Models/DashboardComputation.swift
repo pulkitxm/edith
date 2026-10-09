@@ -473,6 +473,10 @@ extension DashboardComputation {
         return UsageAmount(tokens: usage.tokens ?? 0, cost: usage.cost ?? 0)
     }
 
+    static func repositoryID(_ project: DashUsage.Project) -> String {
+        repositoryIdentity(project).id
+    }
+
     fileprivate static func repositoryIdentity(
         _ project: DashUsage.Project
     ) -> RepositoryIdentity {

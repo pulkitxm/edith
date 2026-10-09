@@ -124,6 +124,7 @@ public enum UsageDataFiles {
         do {
             var data = Data()
             while data.count <= maximumBytes {
+                try Task.checkCancellation()
                 let remaining = maximumBytes + 1 - data.count
                 guard let chunk = try handle.read(upToCount: min(64 * 1_024, remaining)),
                     !chunk.isEmpty

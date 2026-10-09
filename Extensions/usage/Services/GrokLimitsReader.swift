@@ -11,7 +11,7 @@ enum GrokCredentialStore {
     }
 
     static func load(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = UsageExecutionEnvironment.home
     ) -> Material? {
         let file = home.appendingPathComponent(".grok/auth.json")
         guard let data = try? Data(contentsOf: file),
@@ -69,7 +69,7 @@ enum GrokCredentialStore {
     }
 
     static func tierDisplay(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser
+        home: URL = UsageExecutionEnvironment.home
     ) -> String? {
         let file = home.appendingPathComponent(".grok/settings_cache.json")
         guard let data = try? Data(contentsOf: file),
