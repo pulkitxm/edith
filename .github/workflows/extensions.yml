@@ -123,6 +123,24 @@ jobs:
           EXTENSION_ID: ${{ matrix.id }}
         run: |
           bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extension workers can ship")'
+      - name: Identify optional native prerequisites
+        id: native
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+        run: |
+          ghostty="$(bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); console.log(entry?.nativeProduct==="GhosttyTerminal")')"
+          echo "ghostty=$ghostty" >> "$GITHUB_OUTPUT"
+      - name: Cache the optional terminal library
+        if: steps.native.outputs.ghostty == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: Extensions/terminal/Native/vendor
+          key: ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh', 'Extensions/terminal/Native/Package.swift') }}
+      - name: Build the optional terminal library
+        if: steps.native.outputs.ghostty == 'true'
+        run: |
+          command -v zig >/dev/null 2>&1 || brew install zig
+          make ghostty-extension
       - name: Cache the worker host
         uses: ./.github/actions/cache-host
       - name: Build the isolated host and exercise this worker's lifecycle

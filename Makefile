@@ -356,7 +356,7 @@ endif
 
 .PHONY: ghostty-extension ci-extension-terminal
 ghostty-extension:
-	test -d Extensions/terminal/Native/vendor/GhosttyKit.xcframework -a -f Extensions/terminal/Native/vendor/GhosttyResources/terminfo/78/xterm-ghostty || $(MAKE) ghostty
+	test -d Extensions/terminal/Native/vendor/GhosttyKit.xcframework -a -f Extensions/terminal/Native/vendor/GhosttyResources/terminfo/78/xterm-ghostty || bash scripts/build-ghostty.sh
 
 ci-extension-terminal: ghostty-extension
 	swift format lint --strict --parallel --recursive Extensions/terminal

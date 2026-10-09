@@ -67,3 +67,31 @@ test("only successful changed extension builds can publish", () => {
   expect(text(publish)).toContain("extension-publish.mjs");
   expect(text(publish)).toContain("EXTENSION_CATALOG_PRIVATE_KEY");
 });
+
+test("terminal dependencies are restored before native lifecycle builds", () => {
+  const native = build.steps.findIndex((step) => step.id === "native");
+  const cache = build.steps.findIndex(
+    (step) => step.name === "Cache the optional terminal library",
+  );
+  const bootstrap = build.steps.findIndex(
+    (step) => step.name === "Build the optional terminal library",
+  );
+  const lifecycle = build.steps.findIndex(
+    (step) =>
+      step.name ===
+      "Build the isolated host and exercise this worker's lifecycle",
+  );
+  expect(native).toBeGreaterThan(-1);
+  expect(native).toBeLessThan(cache);
+  expect(cache).toBeLessThan(bootstrap);
+  expect(bootstrap).toBeLessThan(lifecycle);
+  expect(build.steps[native].run).toContain(
+    'nativeProduct===\"GhosttyTerminal\"',
+  );
+  expect(build.steps[cache].with.path).toBe(
+    "Extensions/terminal/Native/vendor",
+  );
+  expect(build.steps[cache].if).toBe("steps.native.outputs.ghostty == 'true'");
+  expect(build.steps[bootstrap].if).toBe(build.steps[cache].if);
+  expect(build.steps[bootstrap].run).toContain("make ghostty-extension");
+});
