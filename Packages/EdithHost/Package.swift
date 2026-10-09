@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "EdithHost", targets: ["EdithHost"]),
         .executable(name: "HostLifecycleHarness", targets: ["HostLifecycleHarness"]),
+        .executable(name: "HostCommandHarness", targets: ["HostCommandHarness"]),
     ],
     dependencies: [
         .package(path: "../ExtensionMarketplace"),
@@ -27,6 +28,9 @@ let package = Package(
         .executableTarget(
             name: "HostLifecycleHarness", dependencies: ["EdithHostCore"],
             path: "Tests/LifecycleHarness"),
+        .executableTarget(
+            name: "HostCommandHarness", dependencies: ["EdithHostCore"],
+            path: "Tests/CommandHarness"),
         .testTarget(
             name: "EdithHostCoreTests", dependencies: ["EdithHostCore"],
             resources: [.copy("Fixtures")]),

@@ -6,21 +6,26 @@ import time
 
 mode = sys.argv[1]
 os.setpgid(0, 0)
-if mode == "child":
-    child = subprocess.Popen(["/bin/sleep", "30"])
+if mode in ["child", "child-group", "child-reserved", "child-group-crash", "child-group-ignore-stop"]:
+    if mode == "child-reserved":
+        child = subprocess.Popen([sys.executable, "-c", "import os,time;time.sleep(0.25);os.setpgid(0,0);time.sleep(30)"])
+    else:
+        child = subprocess.Popen(["/bin/sleep", "30"], start_new_session=mode != "child")
+    if mode != "child":
+        print(json.dumps({"kind": "processGroup", "pid": child.pid, "registered": True}), flush=True)
     with open(sys.argv[2], "w") as stream:
         stream.write(str(child.pid))
 for line in sys.stdin:
     request = json.loads(line)
     operation = request["operation"]
-    if mode == "crash":
+    if mode in ["crash", "child-group-crash"]:
         sys.exit(4)
     if mode == "timeout":
         time.sleep(30)
     if mode == "malformed":
         print("x" * 70000, flush=True)
         continue
-    if mode == "ignore-stop" and operation == "stop":
+    if mode in ["ignore-stop", "child-group-ignore-stop"] and operation == "stop":
         time.sleep(30)
     response = {"token": request["token"], "ok": mode != "reject"}
     if operation == "start":

@@ -14,6 +14,9 @@ let package = Package(
             name: "EdithExtensionUI", dependencies: ["EdithExtensionSupport"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
+            name: "EdithExtensionSupportTests", dependencies: ["EdithExtensionSupport"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
             name: "EdithExtensionUITests", dependencies: ["EdithExtensionUI"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ]

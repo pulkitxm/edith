@@ -91,7 +91,10 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
-    @Test func disablingAWorkerAlsoStopsItsOwnedChildProcesses() async throws {
+    @Test(arguments: [
+        "child", "child-group", "child-reserved", "child-group-crash", "child-group-ignore-stop",
+    ])
+    func disablingAWorkerAlsoStopsItsOwnedChildProcesses(mode: String) async throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: file) }
         let identity = try HostIdentity(
@@ -103,10 +106,15 @@ import Testing
             configuration: HostWorkerConfiguration(
                 identity: identity, extensionID: "sample", version: "1.0.0"),
             executable: URL(fileURLWithPath: "/usr/bin/python3"),
-            arguments: [script.path, "child", file.path], requestTimeout: .seconds(2))
-        try await worker.start()
+            arguments: [script.path, mode, file.path], requestTimeout: .seconds(2))
+        do {
+            try await worker.start()
+            #expect(mode != "child-group-crash")
+        } catch {
+            #expect(mode == "child-group-crash")
+        }
         let childPID = try #require(Int32(String(contentsOf: file, encoding: .utf8)))
-        #expect(kill(childPID, 0) == 0)
+        if mode != "child-group-crash" { #expect(kill(childPID, 0) == 0) }
         try await worker.stop()
         let deadline = ContinuousClock.now + .seconds(2)
         while kill(childPID, 0) == 0, ContinuousClock.now < deadline {

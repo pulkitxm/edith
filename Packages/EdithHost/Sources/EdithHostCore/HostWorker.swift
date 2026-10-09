@@ -21,6 +21,9 @@ public final class HostWorker {
     private var launched = false
     private var exited = false
     private var processGroup: Int32?
+    private var ownedProcessGroups: Set<Int32> = []
+    private var readSource: DispatchSourceRead?
+    private var outputIsNonblocking = false
 
     public init(
         configuration: HostWorkerConfiguration, executable: URL,
@@ -47,10 +50,18 @@ public final class HostWorker {
     public func start() async throws {
         guard !launched else { throw HostWorkerError.rejected }
         launched = true
-        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let bytes = handle.availableData
-            Task { @MainActor [weak self] in self?.receive(bytes) }
+        let descriptor = output.fileHandleForReading.fileDescriptor
+        let flags = fcntl(descriptor, F_GETFL)
+        guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
+            throw HostWorkerError.exited
         }
+        outputIsNonblocking = true
+        let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.drainOutput() }
+        }
+        readSource = source
+        source.resume()
         process.terminationHandler = { [weak self] _ in
             Task { @MainActor [weak self] in self?.finish() }
         }
@@ -127,12 +138,20 @@ public final class HostWorker {
     private func receive(_ bytes: Data) {
         guard !exited else { return }
         guard !bytes.isEmpty else {
-            output.fileHandleForReading.readabilityHandler = nil
+            readSource?.cancel()
+            readSource = nil
             if !pending.isEmpty { fail(HostWorkerError.exited) }
             return
         }
         do {
             for data in try frames.append(bytes) {
+                if let resource = try? JSONDecoder().decode(
+                    HostWorkerProcessGroup.self, from: data),
+                    resource.kind == "processGroup"
+                {
+                    try receive(resource)
+                    continue
+                }
                 let response = try JSONDecoder().decode(HostWorkerResponse.self, from: data)
                 guard let request = pending.removeValue(forKey: response.token) else {
                     throw HostWorkerError.invalidResponse
@@ -145,6 +164,56 @@ public final class HostWorker {
                 }
             }
         } catch { fail(HostWorkerError.invalidResponse) }
+    }
+
+    private func drainOutput() {
+        guard !exited, outputIsNonblocking else { return }
+        var buffer = [UInt8](repeating: 0, count: 8192)
+        while true {
+            let count = read(output.fileHandleForReading.fileDescriptor, &buffer, buffer.count)
+            if count > 0 {
+                receive(Data(buffer.prefix(count)))
+            } else if count == 0 {
+                receive(Data())
+                return
+            } else if errno == EINTR {
+                continue
+            } else if errno == EAGAIN || errno == EWOULDBLOCK {
+                return
+            } else {
+                fail(HostWorkerError.exited)
+                return
+            }
+        }
+    }
+
+    private func receive(_ resource: HostWorkerProcessGroup) throws {
+        guard resource.pid > 1, resource.pid != process.processIdentifier, resource.pid != getpid()
+        else {
+            throw HostWorkerError.invalidResponse
+        }
+        if resource.registered {
+            let group = getpgid(resource.pid)
+            guard
+                group == resource.pid || group == process.processIdentifier
+                    || (group == -1 && kill(-resource.pid, 0) == 0)
+            else { return }
+            guard ownedProcessGroups.count < 128 || ownedProcessGroups.contains(resource.pid) else {
+                terminateResource(resource.pid)
+                throw HostWorkerError.invalidResponse
+            }
+            ownedProcessGroups.insert(resource.pid)
+        } else if getpgid(resource.pid) == -1, errno == ESRCH,
+            kill(-resource.pid, 0) == -1, errno == ESRCH
+        {
+            ownedProcessGroups.remove(resource.pid)
+        }
+    }
+
+    private func terminateResource(_ pid: Int32) {
+        let group = getpgid(pid)
+        if group == process.processIdentifier || group == pid { kill(pid, SIGKILL) }
+        kill(-pid, SIGKILL)
     }
 
     private func fail(_ error: any Error) {
@@ -171,6 +240,8 @@ public final class HostWorker {
     }
 
     private func terminateGroup() {
+        for pid in ownedProcessGroups { terminateResource(pid) }
+        ownedProcessGroups.removeAll()
         if let processGroup { kill(-processGroup, SIGKILL) }
         processGroup = nil
     }
@@ -185,9 +256,11 @@ public final class HostWorker {
 
     private func finish() {
         guard !exited else { return }
+        drainOutput()
         exited = true
         ready = false
-        output.fileHandleForReading.readabilityHandler = nil
+        readSource?.cancel()
+        readSource = nil
         process.terminationHandler = nil
         try? input.fileHandleForWriting.close()
         try? output.fileHandleForReading.close()
