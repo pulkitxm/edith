@@ -374,54 +374,57 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: select)
                 .gesture(
-                    DragGesture(minimumDistance: tile.locked ? .infinity : 3)
-                        .onChanged { drag in
-                            if gestureFrame == nil {
-                                gestureFrame = frame
-                                select()
-                            }
-                            let origin = gestureFrame ?? frame
-                            let column = min(
-                                layout.columns - tile.span,
-                                max(
-                                    0,
-                                    Int(((origin.minX + drag.translation.width) / pitch).rounded()))
-                            )
-                            let row = max(
-                                0,
-                                Int(
-                                    ((origin.minY + drag.translation.height)
-                                        / UIScale.pt(layout.rowHeight)).rounded()))
-                            movement = CGSize(
-                                width: singleColumn ? 0 : CGFloat(column) * pitch - origin.minX,
-                                height: CGFloat(row) * UIScale.pt(layout.rowHeight) - origin.minY)
+                    DragGesture(
+                        minimumDistance: tile.locked ? .infinity : 3, coordinateSpace: .global
+                    )
+                    .onChanged { drag in
+                        if gestureFrame == nil {
+                            gestureFrame = frame
+                            select()
                         }
-                        .onEnded { drag in
-                            var next = tile
-                            let origin = gestureFrame ?? frame
-                            next.column = min(
-                                layout.columns - tile.span,
-                                max(
-                                    0,
-                                    Int(((origin.minX + drag.translation.width) / pitch).rounded()))
-                            )
-                            next.row = max(
+                        let origin = gestureFrame ?? frame
+                        let column = min(
+                            layout.columns - tile.span,
+                            max(
                                 0,
-                                Int(
-                                    ((origin.minY + drag.translation.height)
-                                        / UIScale.pt(layout.rowHeight)).rounded()))
-                            movement = .zero
-                            gestureFrame = nil
-                            if singleColumn {
-                                reorder(
-                                    Double(
-                                        (origin.midY + drag.translation.height) / UIScale.current))
-                            } else {
-                                configure(next)
-                            }
+                                Int(((origin.minX + drag.translation.width) / pitch).rounded()))
+                        )
+                        let row = max(
+                            0,
+                            Int(
+                                ((origin.minY + drag.translation.height)
+                                    / UIScale.pt(layout.rowHeight)).rounded()))
+                        movement = CGSize(
+                            width: singleColumn ? 0 : CGFloat(column) * pitch - origin.minX,
+                            height: CGFloat(row) * UIScale.pt(layout.rowHeight) - origin.minY)
+                    }
+                    .onEnded { drag in
+                        var next = tile
+                        let origin = gestureFrame ?? frame
+                        next.column = min(
+                            layout.columns - tile.span,
+                            max(
+                                0,
+                                Int(((origin.minX + drag.translation.width) / pitch).rounded()))
+                        )
+                        next.row = max(
+                            0,
+                            Int(
+                                ((origin.minY + drag.translation.height)
+                                    / UIScale.pt(layout.rowHeight)).rounded()))
+                        movement = .zero
+                        gestureFrame = nil
+                        if singleColumn {
+                            reorder(
+                                Double(
+                                    (origin.midY + drag.translation.height) / UIScale.current))
+                        } else {
+                            configure(next)
                         }
+                    }
                 )
                 .help("Drag to position on the grid")
+                .accessibilityLabel("Move " + tile.displayTitle)
             }
             Group {
                 if let height = tile.height {
@@ -445,58 +448,62 @@ private struct SurfaceCanvasTile<Content: View>: View {
                         .frame(width: UIScale.pt(28), height: UIScale.pt(22))
                         .contentShape(Rectangle())
                         .gesture(
-                            DragGesture(minimumDistance: tile.locked ? .infinity : 3)
-                                .onChanged {
-                                    if gestureFrame == nil {
-                                        gestureFrame = frame
-                                        gestureContentHeight = contentHeight
-                                        select()
-                                    }
-                                    let origin = gestureFrame ?? frame
-                                    let column = Int((origin.minX / pitch).rounded())
-                                    let span = min(
-                                        layout.columns - column,
-                                        max(
-                                            1,
-                                            Int(
-                                                ((origin.width + UIScale.pt(layout.gap)
-                                                    + $0.translation.width) / pitch).rounded())))
-                                    sizing = CGSize(
-                                        width: singleColumn
-                                            ? 0
-                                            : CGFloat(span) * pitch - UIScale.pt(layout.gap)
-                                                - origin.width,
-                                        height: UIScale.pt(resizedHeight($0.translation.height))
-                                            - (gestureContentHeight ?? contentHeight))
+                            DragGesture(
+                                minimumDistance: tile.locked ? .infinity : 3,
+                                coordinateSpace: .global
+                            )
+                            .onChanged {
+                                if gestureFrame == nil {
+                                    gestureFrame = frame
+                                    gestureContentHeight = contentHeight
+                                    select()
                                 }
-                                .onEnded { drag in
-                                    var next = tile
-                                    let origin = gestureFrame ?? frame
-                                    next.span = min(
-                                        layout.columns - Int((origin.minX / pitch).rounded()),
-                                        max(
-                                            1,
-                                            Int(
-                                                ((origin.width + UIScale.pt(layout.gap)
-                                                    + drag.translation.width) / pitch).rounded())))
-                                    if singleColumn {
-                                        next.span = tile.span
-                                    } else {
-                                        next.column =
-                                            tile.column ?? Int((origin.minX / pitch).rounded())
-                                        next.row =
-                                            tile.row
-                                            ?? Int(
-                                                (origin.minY / UIScale.pt(layout.rowHeight))
-                                                    .rounded())
-                                    }
-                                    next.height = resizedHeight(drag.translation.height)
-                                    sizing = .zero
-                                    gestureFrame = nil
-                                    gestureContentHeight = nil
-                                    configure(next)
+                                let origin = gestureFrame ?? frame
+                                let column = Int((origin.minX / pitch).rounded())
+                                let span = min(
+                                    layout.columns - column,
+                                    max(
+                                        1,
+                                        Int(
+                                            ((origin.width + UIScale.pt(layout.gap)
+                                                + $0.translation.width) / pitch).rounded())))
+                                sizing = CGSize(
+                                    width: singleColumn
+                                        ? 0
+                                        : CGFloat(span) * pitch - UIScale.pt(layout.gap)
+                                            - origin.width,
+                                    height: UIScale.pt(resizedHeight($0.translation.height))
+                                        - (gestureContentHeight ?? contentHeight))
+                            }
+                            .onEnded { drag in
+                                var next = tile
+                                let origin = gestureFrame ?? frame
+                                next.span = min(
+                                    layout.columns - Int((origin.minX / pitch).rounded()),
+                                    max(
+                                        1,
+                                        Int(
+                                            ((origin.width + UIScale.pt(layout.gap)
+                                                + drag.translation.width) / pitch).rounded())))
+                                if singleColumn {
+                                    next.span = tile.span
+                                } else {
+                                    next.column =
+                                        tile.column ?? Int((origin.minX / pitch).rounded())
+                                    next.row =
+                                        tile.row
+                                        ?? Int(
+                                            (origin.minY / UIScale.pt(layout.rowHeight))
+                                                .rounded())
                                 }
+                                next.height = resizedHeight(drag.translation.height)
+                                sizing = .zero
+                                gestureFrame = nil
+                                gestureContentHeight = nil
+                                configure(next)
+                            }
                         )
+                        .accessibilityLabel("Resize " + tile.displayTitle)
                         .help(
                             tile.locked
                                 ? "Unlock this widget to resize" : "Drag to resize width and height"

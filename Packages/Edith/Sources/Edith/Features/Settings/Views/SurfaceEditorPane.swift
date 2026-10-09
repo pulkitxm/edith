@@ -80,7 +80,12 @@ struct SurfaceEditorPane: View {
                         .padding(UIScale.pt(16))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    if inspectorVisible, selection != nil {
+                    .onGeometryChange(for: CGRect.self) {
+                        $0.frame(in: .global)
+                    } action: {
+                        canvasViewport = $0
+                    }
+                    if inspectorVisible {
                         Divider()
                         ScrollView { inspector.padding(UIScale.pt(12)) }
                             .frame(width: UIScale.pt(260))

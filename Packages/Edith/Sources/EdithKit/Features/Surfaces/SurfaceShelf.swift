@@ -201,14 +201,16 @@ private struct SurfaceShelfTile<Content: View>: View {
                 .padding(.top, UIScale.pt(8)).contentShape(Rectangle())
                 .onTapGesture(perform: select)
                 .gesture(
-                    DragGesture(minimumDistance: tile.locked ? .infinity : 3)
-                        .onChanged { value in
-                            select(); movement = value.translation.width
-                        }
-                        .onEnded { value in
-                            move((frame.midX + value.translation.width) / UIScale.current)
-                            movement = 0
-                        }
+                    DragGesture(
+                        minimumDistance: tile.locked ? .infinity : 3, coordinateSpace: .global
+                    )
+                    .onChanged { value in
+                        select(); movement = value.translation.width
+                    }
+                    .onEnded { value in
+                        move((frame.midX + value.translation.width) / UIScale.current)
+                        movement = 0
+                    }
                 )
                 .accessibilityLabel("Reorder \(tile.displayTitle)")
             }
@@ -231,26 +233,29 @@ private struct SurfaceShelfTile<Content: View>: View {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .padding(UIScale.pt(6)).contentShape(Rectangle())
                         .gesture(
-                            DragGesture(minimumDistance: tile.locked ? .infinity : 2)
-                                .onChanged { value in
-                                    if sizingOrigin == nil {
-                                        sizingOrigin = CGSize(width: width, height: height)
-                                    }
-                                    select(); sizing = value.translation
+                            DragGesture(
+                                minimumDistance: tile.locked ? .infinity : 2,
+                                coordinateSpace: .global
+                            )
+                            .onChanged { value in
+                                if sizingOrigin == nil {
+                                    sizingOrigin = CGSize(width: width, height: height)
                                 }
-                                .onEnded { value in
-                                    var changed = tile
-                                    changed.shelfWidth = min(
-                                        760,
-                                        max(160, width + value.translation.width / UIScale.current))
-                                    changed.height = min(
-                                        600,
-                                        max(64, height + value.translation.height / UIScale.current)
-                                    )
-                                    configure(changed)
-                                    sizing = .zero
-                                    sizingOrigin = nil
-                                }
+                                select(); sizing = value.translation
+                            }
+                            .onEnded { value in
+                                var changed = tile
+                                changed.shelfWidth = min(
+                                    760,
+                                    max(160, width + value.translation.width / UIScale.current))
+                                changed.height = min(
+                                    600,
+                                    max(64, height + value.translation.height / UIScale.current)
+                                )
+                                configure(changed)
+                                sizing = .zero
+                                sizingOrigin = nil
+                            }
                         )
                         .accessibilityLabel("Resize \(tile.displayTitle)")
                 }
