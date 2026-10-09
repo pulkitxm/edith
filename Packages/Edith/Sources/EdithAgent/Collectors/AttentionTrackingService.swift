@@ -140,7 +140,28 @@ final class AttentionTrackingService {
             let signals = after.signals(since: before)
             sample.event.signals = signals.isEmpty ? nil : signals
         }
-        writer.submit(sample)
+        if let current, let idleSeconds = current.idleSeconds,
+            sample.event.presence != .locked, current.event.presence != .locked,
+            sample.event.presence != current.event.presence
+        {
+            let transition = now.addingTimeInterval(
+                -idleSeconds + (current.event.presence == .idle ? settings.idleThreshold : 0))
+            let before = min(duration, max(0, transition.timeIntervalSince(sample.event.startedAt)))
+            let signals = sample.event.signals
+            sample.event.signals = nil
+            sample.event.duration = before
+            if before > 0 { writer.submit(sample) }
+            if before < duration {
+                sample.event.id = UUID().uuidString
+                sample.event.startedAt = sample.event.startedAt.addingTimeInterval(before)
+                sample.event.duration = duration - before
+                sample.event.presence = current.event.presence
+                sample.event.signals = current.event.presence == .active ? signals : nil
+                writer.submit(sample)
+            }
+        } else {
+            writer.submit(sample)
+        }
     }
 
     func recordMedia(now: Date, playing: [AttentionPlayback]? = nil) {
@@ -192,11 +213,11 @@ final class AttentionTrackingService {
         let identity = FrontmostIdentityLookup.identity(pid: app.processIdentifier) {
             (name: app.localizedName ?? "Unknown", bundleID: app.bundleIdentifier)
         }
-        let idleSeconds = CGEventSource.secondsSinceLastEventType(
-            .combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!)
+        let idleSeconds = AttentionSystemActivity.idleSeconds()
         let away = identity.bundleID.map(AttentionCatalog.awayBundleIDs.contains) ?? false
-        let presence: AttentionPresence =
-            locked || away ? .locked : idleSeconds >= settings.idleThreshold ? .idle : .active
+        let presence = AttentionSystemActivity.presence(
+            idleSeconds: idleSeconds, threshold: settings.idleThreshold,
+            locked: locked || away || AttentionSystemActivity.isLocked)
         let context = AttentionContextBoard.shared.context(for: identity.bundleID, now: now)
         let contextTitle = settings.windowTitlesEnabled ? context?.windowTitle : nil
         return AttentionHeartbeatSample(
@@ -209,7 +230,7 @@ final class AttentionTrackingService {
                     allowed: AttentionTag.edithSafe)),
             processID: identity.pid,
             captureWindowTitle: settings.windowTitlesEnabled && contextTitle == nil,
-            counters: AttentionInputCounters.read())
+            counters: AttentionInputCounters.read(), idleSeconds: idleSeconds)
     }
 }
 
