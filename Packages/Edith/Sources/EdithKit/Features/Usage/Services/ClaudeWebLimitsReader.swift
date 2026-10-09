@@ -6,10 +6,11 @@ public enum ClaudeWebLimitsReader {
         let organization: String?
     }
 
-    public enum Failure: LocalizedError, Equatable {
+    public enum Failure: LocalizedError, Equatable, Sendable {
         case missingSession
         case browserAccess
         case keychainAccess
+        case credentialTimeout
         case unauthorized
         case challenge
         case organization
@@ -24,6 +25,8 @@ public enum ClaudeWebLimitsReader {
             case .browserAccess:
                 "Allow Edith to read Chrome data in macOS Privacy & Security, then refresh limits."
             case .keychainAccess: "Unlock Chrome Safe Storage for Edith, then refresh limits."
+            case .credentialTimeout:
+                "Chrome session lookup timed out. Unlock Chrome Safe Storage for Edith, then refresh limits."
             case .unauthorized:
                 "Your Claude website session expired. Sign in to claude.ai, then refresh limits."
             case .challenge:
@@ -37,6 +40,8 @@ public enum ClaudeWebLimitsReader {
         }
     }
 
+    private static let credentialLookup = BoundedKeychainAccess<Result<Credential, Failure>>()
+
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
@@ -49,9 +54,13 @@ public enum ClaudeWebLimitsReader {
     }()
 
     public static func fetch() async throws -> LimitsProviderSnapshot {
-        let credential = try await Task.detached {
-            try Self.credential()
-        }.value
+        let lookup = await credentialLookup.run(timeout: 3, fallback: .failure(.credentialTimeout))
+        {
+            do { return .success(try Self.credential()) } catch let failure as Failure {
+                return .failure(failure)
+            } catch { return .failure(.browserAccess) }
+        }
+        let credential = try lookup.get()
         return try await fetch(credential: credential) { request in
             let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }

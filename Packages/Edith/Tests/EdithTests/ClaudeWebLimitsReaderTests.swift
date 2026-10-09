@@ -15,6 +15,22 @@ import Testing
                     "scope":{"model":{"display_name":"Fable"}}}]}
         """.utf8)
 
+    @Test func blockedCredentialReadsTimeOutWithoutStartingMoreWorkers() async {
+        let lookup = BoundedKeychainAccess<Bool>()
+        let release = DispatchSemaphore(value: 0)
+        let result = await lookup.run(timeout: 0.02, fallback: false) {
+            release.wait()
+            return true
+        }
+        #expect(!result)
+        let second = await lookup.run(timeout: 0.02, fallback: false) {
+            Issue.record("A blocked credential read started another worker")
+            return true
+        }
+        #expect(!second)
+        release.signal()
+    }
+
     @Test func websiteRefreshUsesTheActiveOrganizationAndPersistsEveryWindow() async throws {
         var requested: [String] = []
         var persisted: LimitsProviderSnapshot?
