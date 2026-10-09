@@ -92,6 +92,17 @@ import Testing
                 readKeychain: { _ in credential(scopes: ["user:inference"]) }) == nil)
     }
 
+    @Test func loginRenewalIsPickedUpOnTheNextRead() {
+        var current = credential(token: "synthetic-first-token")
+        let first = ClaudeSavedLogin.token(
+            environment: [:], now: now, readKeychain: { _ in current })
+        current = credential(token: "synthetic-renewed-token")
+        let second = ClaudeSavedLogin.token(
+            environment: [:], now: now, readKeychain: { _ in current })
+        #expect(first == "synthetic-first-token")
+        #expect(second == "synthetic-renewed-token")
+    }
+
     @Test(arguments: [Data(), Data("{}".utf8), Data(repeating: 0, count: 65_537)])
     func absentOrMalformedDataLeavesShellAuthenticationAvailable(data: Data) {
         #expect(

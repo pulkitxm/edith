@@ -6,7 +6,11 @@ enum ClaudeSavedLogin {
     static func token(
         environment: [String: String] = UserShellEnvironment.userEnvironment(),
         now: Date = Date(),
-        readFile: (URL) -> Data? = { try? Data(contentsOf: $0) },
+        readFile: (URL) -> Data? = { url in
+            guard let file = try? FileHandle(forReadingFrom: url) else { return nil }
+            defer { try? file.close() }
+            return try? file.read(upToCount: 65_537)
+        },
         readKeychain: ([String: Any]) -> Data? = { query in
             var item: CFTypeRef?
             guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess else {

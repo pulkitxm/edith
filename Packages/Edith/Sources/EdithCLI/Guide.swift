@@ -446,7 +446,7 @@ public enum Guide {
         Usage numbers come from the same `usage.json` the dashboard reads, and limits
         come from the same `limits-history.jsonl` the rings read. `ed` never recomputes
         them, so the CLI and the UI can never disagree. Claude limits arrive through
-        the CLAUDE_CODE_OAUTH_TOKEN in your login shell, with Claude Code's status line as a fallback.
+        the saved Claude Code login or a profile-scoped shell OAuth token, with the status line as a fallback.
 
         ```
         ed usage limits                 session and weekly, per provider

@@ -42,8 +42,12 @@ public enum ClaudeLimitsReader {
     }()
 
     public static func fetch() async throws -> LimitsProviderSnapshot {
+        UserShellEnvironment.shared.enable()
+        await UserShellEnvironment.shared.refreshIfEnabled()
+        let environment = UserShellEnvironment.userEnvironment()
         let token = try await resolveUsageToken(
-            savedLogin: { ClaudeSavedLogin.token() }, shellToken: { try await resolveToken() })
+            savedLogin: { ClaudeSavedLogin.token(environment: environment) },
+            shellToken: { try await resolveToken() })
         return try await fetch(token: token) { request in
             let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }

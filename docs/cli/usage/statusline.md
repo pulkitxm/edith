@@ -1,8 +1,9 @@
 # `ed usage statusline`
 
 Connects Claude Code's status line to Edith as a fallback for Claude's
-5-hour and 7-day rate limits. The background agent also polls Claude's usage API using the login shell's
-`CLAUDE_CODE_OAUTH_TOKEN` for session, weekly, and Fable windows.
+5-hour and 7-day rate limits. The background agent also polls Claude's usage API
+using the saved Claude Code login, then a profile-scoped `CLAUDE_CODE_OAUTH_TOKEN`
+from the login shell, for session, weekly, and Fable windows.
 
 Claude Code runs the command named in the `statusLine` setting of its
 `settings.json` and passes it a JSON document on standard input. For claude.ai
