@@ -1,6 +1,6 @@
 # Lightweight host rebuild measurements
 
-Measured on 2026-10-09. The rebuild is in progress and the PR is not ready to merge. 8 of the 38 indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
+Measured on 2026-10-09. The rebuild is in progress and the PR is not ready to merge. 10 of the 38 indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
 
 The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Feature navigation integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
 
@@ -8,38 +8,42 @@ The host contains its executable, marketplace runtime, Sparkle updater including
 | --- | ---: | ---: |
 | Original bundled app | 116.47 | 52.27 |
 | Superseded partial extraction | 95.70 | 44.94 |
-| Current host foundation with updater and shared UI | 3.25 | 1.40 |
-| Host plus all 8 migrated extensions | 7.47 | 3.02 |
+| Current host foundation with updater and shared UI | 3.50 | 1.51 |
+| Host plus all 10 migrated extensions | 10.96 | 4.49 |
 
-MB means 1,000,000 bytes. The current host foundation is 97.21% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. The current host foundation is 97.00% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
 
 | Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
 | --- | ---: | ---: | ---: |
-| Color Picker | 214,719 | 548,715 | 518 |
-| Emoji Picker | 343,599 | 927,969 | 500 |
-| Focus Dim | 196,619 | 509,906 | 509 |
+| Calendar | 368,165 | 878,495 | 509 |
+| Color Picker | 306,066 | 760,667 | 518 |
+| Emoji Picker | 421,843 | 1,120,481 | 501 |
+| Focus Dim | 282,380 | 707,122 | 509 |
+| Packages | 362,541 | 877,375 | 509 |
 | Keep Awake | 18,173 | 79,141 | 510 |
-| Keystroke Highlight | 213,971 | 548,496 | 539 |
-| Mic Mute | 192,785 | 493,103 | 506 |
-| CPU & Memory in menu bar | 179,193 | 475,195 | 518 |
-| Window Sweaters | 261,442 | 635,298 | 527 |
-| All 8 migrated packages | 1,620,501 | 4,217,823 | 4,127 |
+| Keystroke Highlight | 306,147 | 762,256 | 539 |
+| Mic Mute | 285,339 | 707,567 | 506 |
+| CPU & Memory in menu bar | 271,436 | 689,339 | 518 |
+| Window Sweaters | 359,016 | 881,874 | 527 |
+| All 10 migrated packages | 2,981,106 | 7,464,317 | 5,146 |
 
-The 8 ZIPs plus their metadata occupy 1,624,628 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
+The 10 ZIPs plus their metadata occupy 2,986,252 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
 
-Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. Its dedicated process group also stops owned child processes. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
+Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. The host also tracks commands launched into their own process groups and stops those groups on disable, crash, or unresponsive shutdown. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
 
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 
-Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All 8 migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
+Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All 10 migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
 
 Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). Regenerate both reports after a fresh host build and extension builds:
 
 ```sh
 make ci-marketplace-host
+make extension-dev EXTENSION=calendar
 make extension-dev EXTENSION=colorPicker
 make extension-dev EXTENSION=emoji
 make extension-dev EXTENSION=focusDim
+make extension-dev EXTENSION=homebrew
 make extension-dev EXTENSION=keepAwake
 make extension-dev EXTENSION=keystrokeHighlight
 make extension-dev EXTENSION=micMute
@@ -48,4 +52,4 @@ make extension-dev EXTENSION=windowSweaters
 python3 -B scripts/extension-host-size-report.py --baseline local/baseline/size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline JSON records source commit `9c6b7ae8a4827578c99dbe5a3df433a19293311b` and the original app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, and CRC before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
+The baseline JSON records source commit `9c6b7ae8a4827578c99dbe5a3df433a19293311b` and the original app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.

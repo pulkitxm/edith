@@ -3,14 +3,20 @@ from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 
 
-def build_report(baseline, app, packages, definitions, index):
+def build_report(baseline, app, packages, definitions, index, expected_fingerprints=None):
     migrated = [entry["id"] for entry in definitions if entry.get("contractVersion") == 1]
     known = {entry["id"] for entry in index}
     if len(known) != len(index) or len(set(migrated)) != len(migrated) or not set(migrated).issubset(known):
         raise ValueError("Migrated extensions must belong to the host index")
+    if expected_fingerprints is not None:
+        for identifier in migrated:
+            metadata = json.loads((packages / f"{identifier}.json").read_text())
+            if not expected_fingerprints.get(identifier) or metadata.get("sourceFingerprint") != expected_fingerprints[identifier]:
+                raise ValueError(f"Rebuild {identifier} before measuring: its source fingerprint is stale")
     specification = importlib.util.spec_from_file_location("size_measurements", Path(__file__).with_name("extension-size-report.py"))
     measurements = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(measurements)
@@ -70,7 +76,7 @@ MB means 1,000,000 bytes. The current host foundation is {report['savedPercent']
 
 The {count} ZIPs plus their metadata occupy {totals['releaseAssetBytes']:,} bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
 
-Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. Its dedicated process group also stops owned child processes. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
+Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. The host also tracks commands launched into their own process groups and stops those groups on disable, crash, or unresponsive shutdown. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
 
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 
@@ -84,7 +90,7 @@ make ci-marketplace-host
 python3 -B scripts/extension-host-size-report.py --baseline local/baseline/size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline JSON records source commit `{report['measurement']['baselineSourceCommit']}` and the original app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, and CRC before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
+The baseline JSON records source commit `{report['measurement']['baselineSourceCommit']}` and the original app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
 """
 
 
@@ -96,7 +102,8 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--markdown-output", type=Path)
     arguments = parser.parse_args()
-    report = build_report(json.loads(arguments.baseline.read_text()), arguments.app, arguments.packages, json.loads(Path("Extensions/manifest.json").read_text()), json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text()))
+    fingerprints = json.loads(subprocess.run(["bun", str(Path(__file__).with_name("extension-artifact-fingerprints.mjs"))], check=True, capture_output=True, text=True).stdout)
+    report = build_report(json.loads(arguments.baseline.read_text()), arguments.app, arguments.packages, json.loads(Path("Extensions/manifest.json").read_text()), json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text()), fingerprints)
     arguments.output.write_text(json.dumps(report, indent=2) + "\n")
     if arguments.markdown_output:
         index = json.loads(Path("Packages/EdithHost/Sources/EdithHostCore/Resources/index.json").read_text())
