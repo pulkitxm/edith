@@ -13,6 +13,7 @@ final class LaTeXModel {
     var pdfPreview: Data?
     var log = ""
     var buildGeneration = UUID()
+    var editorRequest: UInt64 = 0
     var message: String?
     var busy = false
     var buildingPDF = false
@@ -45,8 +46,17 @@ final class LaTeXModel {
         let request = load.begin()
         do {
             projects = try store.load()
+            if let draft = try store.loadDraft(),
+                projects.contains(where: { $0.id == draft.projectID })
+            {
+                selectedID = draft.projectID; source = draft.text; original = draft.original
+                editorRequest &+= 1
+                message = "Unsaved edits restored. Save or discard them to continue."
+            }
             load.complete(request, empty: projects.isEmpty)
-        } catch { load.fail(request, error: error) }
+        } catch {
+            if !isStopped && !Task.isCancelled { load.fail(request, error: error) }
+        }
     }
 
     func select(_ id: UUID) async {
@@ -91,7 +101,9 @@ final class LaTeXModel {
             pdfPreview = preview
             hasRepositoryBuild = hasBuild
             load.complete(request)
-        } catch { load.fail(request, error: error) }
+        } catch {
+            if !isStopped && !Task.isCancelled { load.fail(request, error: error) }
+        }
     }
 
     func add(_ project: LaTeXProject) async throws {
@@ -138,7 +150,14 @@ final class LaTeXModel {
     }
 
     func discard() {
+        guard !isStopped else { return }
         if let original { source = original.text }
+        do { try store.saveDraft(nil) } catch { message = error.localizedDescription }
+    }
+
+    func requestEditor() {
+        guard !isStopped, selectedID != nil else { return }
+        editorRequest &+= 1
     }
 
     func saveAndCompile() {
@@ -299,7 +318,10 @@ final class LaTeXModel {
         message = nil
         operation = Task {
             defer { busy = false; operation = nil }
-            do { try await action() } catch {
+            do {
+                try await action()
+                if !dirty { try store.saveDraft(nil) }
+            } catch {
                 if !isStopped && !Task.isCancelled { message = error.localizedDescription }
             }
         }
@@ -317,6 +339,11 @@ final class LaTeXModel {
     }
 
     func shutdown() async {
+        if dirty, let selectedID, let original {
+            do {
+                try store.saveDraft(.init(projectID: selectedID, text: source, original: original))
+            } catch { message = error.localizedDescription }
+        }
         isStopped = true
         operation?.cancel()
         for job in jobs.values { job.cancel() }
@@ -325,6 +352,7 @@ final class LaTeXModel {
         operation = nil; jobs.removeAll(); pdfID = nil
         await tools.shutdown()
         editorControls.shutdown()
+        load.reset(); editorRequest = 0
         projects.removeAll(); selectedID = nil; source = ""; original = nil
         review = nil; pdfPreview = nil; log = ""; message = nil
         busy = false; buildingPDF = false; hasRepositoryBuild = false; buildURL = nil

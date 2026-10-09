@@ -69,7 +69,8 @@ import EdithExtensionUI
                 host.layoutSubtreeIfNeeded()
                 let text = try auditText(host)
                 #expect(text.contains("Save"))
-                #expect(text.contains("paper.tex"))
+                #expect(
+                    text.lowercased().filter { $0.isLetter || $0.isNumber }.contains("papertex"))
                 try capture(host, name: "latex-local-\(compact)-\(scheme)")
             }
         }

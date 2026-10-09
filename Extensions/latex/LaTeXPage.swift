@@ -16,7 +16,7 @@ struct LaTeXPage: View {
     let model: LaTeXModel
     init(model: LaTeXModel, opensEditor: Bool = false) {
         self.model = model
-        _editing = State(initialValue: opensEditor)
+        _editing = State(initialValue: opensEditor || model.editorRequest > 0)
     }
     private var editorControls: LaTeXEditorControls { model.editorControls }
 
@@ -41,6 +41,9 @@ struct LaTeXPage: View {
         .edithSheet(isPresented: $showingTools, dismissible: nil) {
             LaTeXToolsPage(owner: model.tools).frame(
                 width: UIScale.pt(620), height: UIScale.pt(530))
+        }
+        .onChange(of: model.editorRequest) { _, generation in
+            if generation > 0 { editing = true }
         }
         .onChange(of: model.selectedID) { _, id in
             inspector = "PDF"; if id == nil { editing = false }

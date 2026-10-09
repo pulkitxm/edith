@@ -114,7 +114,11 @@ extension SurfaceWidget {
                     ("issues", "Issue count"),
                 ]
             case .ability("latex"):
-                [("projects", "Document count"), ("reviews", "Pull request count")]
+                [
+                    ("projects", "Document count"), ("reviews", "Pull request count"),
+                    ("source", "Source location"), ("compiler", "Compiler"),
+                    ("build", "Build actions"),
+                ]
             case .ability("bifrost"), .ability("system"):
                 [("apps", "App count")]
             case .ability("companion"):
