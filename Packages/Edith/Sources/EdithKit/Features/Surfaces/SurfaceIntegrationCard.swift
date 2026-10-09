@@ -4,7 +4,6 @@ public struct SurfaceIntegrationCard: View {
     let tile: SurfaceTile
     let active: Bool
     let open: (String) -> Void
-    @State private var usage: UsageTopicSnapshot?
     @State private var load = ContentLoad()
     @State private var focus: AttentionFocusSession?
     @State private var error: String?
@@ -30,6 +29,8 @@ public struct SurfaceIntegrationCard: View {
                 tile: tile, active: active,
                 activity: sampleContent ? SurfaceSampleData.agents() : nil,
                 terminals: sampleContent ? SurfaceSampleData.agentTerminals() : nil)
+        } else if tile.widget == .usage || tile.widget == .activity {
+            SurfaceUsageCard(tile: tile, active: active, open: open)
         } else if tile.widget.usesExtensionCard {
             SurfaceExtensionCard(
                 tile: tile, active: active,
@@ -92,18 +93,6 @@ public struct SurfaceIntegrationCard: View {
 
     @ViewBuilder private var content: some View {
         switch tile.widget {
-        case .usage, .activity:
-            if let usage {
-                HStack {
-                    metric(
-                        "Total cost", String(format: "$%.2f", Double(usage.totalCostCents) / 100))
-                    metric("Days", "\(usage.days)")
-                }.presenterCover(.usage)
-                if !tile.dense {
-                    Text("Updated \(usage.refreshedAt.formatted(.dateTime.hour().minute()))")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                }
-            }
         case .agents: EmptyView()
         case .focus:
             if let focus {
@@ -142,38 +131,12 @@ public struct SurfaceIntegrationCard: View {
         }
     }
 
-    private func metric(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value).font(.edithText(.title3)).monospacedDigit()
-            Text(title).font(.edithText(.caption)).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
     private func refresh() async {
         let request = load.begin()
         defer { if Task.isCancelled { load.cancel(request) } }
-        do {
-            switch tile.widget {
-            case .usage, .activity:
-                let next = try await AgentClient.shared.snapshotAsync(
-                    UsageTopicSnapshot.self, topic: .usage)
-                guard load.isCurrent(request) else { return }
-                usage = next
-                if let failure = next.failure {
-                    throw NSError(
-                        domain: "SurfaceUsage", code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: failure])
-                }
-            case .agents: break
-            case .focus: focus = repository.activeFocus()
-            default: break
-            }
-            error = nil
-            load.complete(request)
-        } catch {
-            guard load.isCurrent(request) else { return }
-            load.fail(request, error: error)
-            self.error = error.localizedDescription
-        }
+        if tile.widget == .focus { focus = repository.activeFocus() }
+        error = nil
+        load.complete(request)
         loading = false
     }
 

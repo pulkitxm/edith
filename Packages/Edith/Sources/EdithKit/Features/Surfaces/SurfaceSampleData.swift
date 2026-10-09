@@ -53,6 +53,42 @@ public enum SurfaceSampleData {
             ], working: 2, total: agents.count)
     }
 
+    public static func usage(_ tile: SurfaceTile) -> SurfaceUsageSnapshot {
+        let calendar = Calendar.current
+        let daily: [SurfaceUsageDocument.Day] = (0..<30).compactMap { index in
+            guard let day = calendar.date(byAdding: .day, value: index - 29, to: date) else {
+                return nil
+            }
+            let parts = calendar.dateComponents([.year, .month, .day], from: day)
+            let period = String(
+                format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+            let amount = Double((index * 7) % 11 + 1)
+            return .init(
+                period: period,
+                bySource: [
+                    "claude": [
+                        .init(
+                            modelName: "sonnet", inputTokens: amount * 180_000,
+                            outputTokens: amount * 24_000, cacheCreationTokens: 0,
+                            cacheReadTokens: amount * 320_000, cost: amount * 0.73)
+                    ],
+                    "codex": [
+                        .init(
+                            modelName: "gpt-6.1", inputTokens: amount * 120_000,
+                            outputTokens: amount * 36_000, cacheCreationTokens: 0,
+                            cacheReadTokens: amount * 210_000, cost: amount * 0.48)
+                    ],
+                ])
+        }
+        return SurfaceUsageSnapshot(
+            document: .init(
+                generatedAt: "2026-10-09T08:00:00Z",
+                defaultSources: ["claude", "codex"],
+                sourceMeta: [
+                    "claude": .init(label: "Claude Code"), "codex": .init(label: "Codex"),
+                ], daily: daily), tile: tile, now: date, calendar: calendar)
+    }
+
     public static func snapshot(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
         var value: SurfaceExtensionSnapshot
         if tile.widget == .limits { return limits(tile) }
