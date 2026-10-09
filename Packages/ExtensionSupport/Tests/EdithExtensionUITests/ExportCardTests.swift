@@ -3,8 +3,8 @@ import EdithExtensionUI
 import SwiftUI
 import Testing
 
-@MainActor @Suite(.serialized)
-struct ExportCardTests {
+@MainActor
+extension SurfaceGridRenderingTests {
     @Test func syntheticArtworkRendersAtDeclaredExportDimensions() throws {
         let data = try ExportCardRenderer.pngData(
             ZStack {
