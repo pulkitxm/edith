@@ -9,6 +9,15 @@ struct HostEntry {
     @MainActor static func main() {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
+        guard
+            HostContract.permitsLaunching(
+                identifier: Bundle.main.bundleIdentifier, bundleURL: Bundle.main.bundleURL)
+                || arguments == ["--version"] || arguments == ["extensions", "catalog", "--json"]
+        else {
+            FileHandle.standardError.write(
+                Data("Install Edith in /Applications before starting the release app.\n".utf8))
+            exit(1)
+        }
         if arguments == ["--extension-command"] {
             do { try ExtensionCommandSpecification.runWrapper() } catch { exit(1) }
         }
