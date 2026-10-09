@@ -98,6 +98,8 @@ const plist = {
     "Show the optional camera preview in the Notch extension.",
   NSMicrophoneUsageDescription:
     "Record optional microphone audio in Screen Recorder and Companion extensions.",
+  NSAppleEventsUsageDescription:
+    "Control playback in music apps you select in the Music extension.",
   LSMinimumSystemVersion: "14.0",
   SUFeedURL:
     "https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml",
