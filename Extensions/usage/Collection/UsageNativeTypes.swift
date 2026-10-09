@@ -93,6 +93,8 @@ struct UsageNativeEvent: Codable, Equatable, Sendable {
     var tokens: UsageNativeTokens
     var recordedCost: Double?
     var serviceTier: String?
+    var detailAvailable = true
+    var reportingDay: String?
     var estimated = false
     var receiptID: String?
 

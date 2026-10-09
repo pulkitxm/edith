@@ -61,6 +61,9 @@ final class UsageNativeArchive {
             guard latest?.hash == previous?.hash, latest?.generation == previous?.generation else {
                 throw UsageNativeFailure.archive("admit a concurrently changed source")
             }
+            if snapshot.records.contains(where: { $0.event.source == "codex" && $0.event.receiptID != nil }) {
+                try database.run("DELETE FROM records WHERE path=? AND identity LIKE 'legacy:%'", [snapshot.path])
+            }
             let generation = (previous?.generation ?? 0) + (previous != nil && !appended ? 1 : 0)
             for record in snapshot.records {
                 try Task.checkCancellation()
@@ -105,6 +108,41 @@ final class UsageNativeArchive {
                     [key, event.identity ?? String(index), UsageNativeJSON.hash(payload), payload])
             }
             try enforceCapacity()
+        }
+    }
+
+    func replaceRemote(_ events: [UsageNativeEvent], key: String, account: String) throws {
+        try database.transaction {
+            try database.run("DELETE FROM records WHERE path=?", [key])
+            try database.run(
+                "INSERT INTO metadata VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                ["account:" + key, account])
+            try insertRemote(events, key: key)
+            try enforceCapacity()
+        }
+    }
+
+    func retainRemote(_ events: [UsageNativeEvent], key: String, account: String) throws {
+        try database.transaction {
+            let previous = try database.rows("SELECT value FROM metadata WHERE key=?", ["account:" + key]).first?["value"]
+            if previous != nil, previous != account {
+                try database.run("DELETE FROM records WHERE path=?", [key])
+            }
+            try database.run(
+                "INSERT INTO metadata VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                ["account:" + key, account])
+            try insertRemote(events, key: key)
+            try enforceCapacity()
+        }
+    }
+
+    private func insertRemote(_ events: [UsageNativeEvent], key: String) throws {
+        for (index, event) in events.enumerated() {
+            try Task.checkCancellation()
+            let payload = String(decoding: try event.canonicalData, as: UTF8.self)
+            try database.run(
+                "INSERT OR IGNORE INTO records(path,identity,hash,payload) VALUES(?,?,?,?)",
+                [key, event.identity ?? String(index), UsageNativeJSON.hash(payload), payload])
         }
     }
 
