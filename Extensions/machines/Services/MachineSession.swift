@@ -17,6 +17,7 @@ private struct MachineLiveMetrics {
 @Observable
 public final class MachineSession {
     public let machine: Machine
+    private let synthetic: Bool
     public nonisolated var id: UUID { machine.id }
 
     public private(set) var state: MachineConnectionState = .disconnected
@@ -91,18 +92,20 @@ public final class MachineSession {
     public private(set) var isCollecting = false
 
     public init(
-        machine: Machine, local: Bool = false, observesWakeRequests: Bool = true
+        machine: Machine, local: Bool = false, observesWakeRequests: Bool = true,
+        synthetic: Bool = false
     ) {
         self.machine = machine
+        self.synthetic = synthetic
         isLocal = local
         connection =
-            local
+            local || synthetic
             ? nil
             : SSHConnection(machine: machine, controlSocketMode: .shared)
         localSampler =
-            local
+            local && !synthetic
             ? LocalMachineSampler() : nil
-        if observesWakeRequests { observeWake() }
+        if observesWakeRequests && !synthetic { observeWake() }
     }
 
     deinit {
@@ -133,7 +136,9 @@ public final class MachineSession {
 
     private func resumeCollection() {
 
-        guard state.isConnected, !foregroundObservers.isEmpty, !isCollecting else { return }
+        guard !synthetic, state.isConnected, !foregroundObservers.isEmpty, !isCollecting else {
+            return
+        }
         isCollecting = true
         if isLocal {
             startLocalSampling()
@@ -174,6 +179,26 @@ public final class MachineSession {
     }
 
     public func start() {
+        if synthetic {
+            state = .connected(latencyMillis: isLocal ? 0 : 12)
+            remotePlatform = isLocal ? .darwin : .linux
+            hello = MachineHello(
+                os: isLocal ? "macOS" : "Linux", arch: "arm64",
+                host: "synthetic", cpuModel: "Synthetic processor", cores: 8, memTotalKB: 16_777_216
+            )
+            apply(
+                sample: MachineSample(
+                    ts: 1, dt: 2, cpu: MachineCPU(total: 32),
+                    mem: MachineMemory(totalKB: 16_777_216, availKB: 8_388_608, usedKB: 8_388_608),
+                    uptime: 3_600))
+            slow = MachineSlow(disks: [
+                MachineFilesystem(
+                    fs: "/dev/mock", mount: "/", totalKB: 100_000_000,
+                    usedKB: 32_000_000, availKB: 68_000_000)
+            ])
+            return
+        }
+
         guard !state.isConnected, !state.isBusy else { return }
         guard !machine.isMissing else {
             state = .failed(
@@ -198,6 +223,21 @@ public final class MachineSession {
         let connection = connection
         Task { await connection?.disconnect() }
         state = .disconnected
+    }
+
+    public func shutdown() async {
+        let tasks = [
+            supervisor, dockerTask, latencyTask, localTask, metricsRestartTask,
+            metricsWatchdog, probeTask, mountTask, platformProfileTask,
+            internetSpeedScheduleTask, internetSpeedRunTask,
+        ].compactMap { $0 }
+        stop()
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
+        for task in tasks { await task.value }
+        await connection?.disconnect()
     }
 
     public func retry() {
@@ -450,6 +490,7 @@ public final class MachineSession {
     }
 
     public func refreshInternetSpeed() {
+        guard !synthetic else { return }
 
         guard state.isConnected, !isTestingInternetSpeed else { return }
         internetSpeedRunTask?.cancel()
@@ -484,6 +525,7 @@ public final class MachineSession {
     }
 
     public func beginInternetSpeedObservation() {
+        guard !synthetic else { return }
         internetSpeedObserverCount += 1
 
         if internetSpeedObserverCount == 1, isCollecting { startInternetSpeedSchedule() }
@@ -681,6 +723,7 @@ public final class MachineSession {
     public func runCommand(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
+        if synthetic { return .failure(ExtensionPeerError.unavailable) }
 
         guard let connection else {
             return await runLocalCommand(command, stdin: stdin, timeout: timeout)
@@ -871,6 +914,8 @@ public final class MachineSession {
     }
 
     public func listFiles(path: String) async -> Result<[RemoteFileEntry], Error> {
+        if synthetic { return .success([]) }
+
         if isLocal { return .success(Self.listLocalFiles(path: path)) }
         do {
             let listing = try await RemoteDirectoryOperationExecution.list(
@@ -882,6 +927,11 @@ public final class MachineSession {
     }
 
     public func homeDirectory() async -> Result<String, Error> {
+        if synthetic {
+            return .success(
+                ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] ?? "/tmp")
+        }
+
         if isLocal { return .success(FileManager.default.homeDirectoryForCurrentUser.path) }
         do {
             return .success(try await directoryEndpoint.homeDirectory())

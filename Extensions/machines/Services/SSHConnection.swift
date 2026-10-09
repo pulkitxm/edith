@@ -163,8 +163,11 @@ public actor SSHConnection {
         self.connectTimeout = connectTimeout
         let connectionID = controlSocketMode == .isolated ? UUID() : nil
         socketPath = MachinePaths.socketFile(for: machine.id, connectionID: connectionID).path
-        let userKnownHosts = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".ssh/known_hosts").path
+        let home =
+            ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+                URL(fileURLWithPath: $0)
+            } ?? FileManager.default.homeDirectoryForCurrentUser
+        let userKnownHosts = home.appendingPathComponent(".ssh/known_hosts").path
         knownHostsArgument =
             "\"\(MachinePaths.knownHostsFile.path)\" \"\(userKnownHosts)\""
     }
@@ -289,7 +292,8 @@ public actor SSHConnection {
 
     @discardableResult
     public func run(
-        _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
+        _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60,
+        maximumOutputBytes: Int = 64 * 1_024 * 1_024
     ) async throws -> SSHExecResult {
 
         let process = execProcess(command: command)
@@ -297,8 +301,13 @@ public actor SSHConnection {
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        let stdout = PipeCollector(stdoutPipe.fileHandleForReading)
-        let stderr = PipeCollector(stderrPipe.fileHandleForReading)
+        let stop: @Sendable () -> Void = { if process.isRunning { process.terminate() } }
+        let stdout = PipeCollector(
+            stdoutPipe.fileHandleForReading,
+            maximumBytes: maximumOutputBytes, onOverflow: stop)
+        let stderr = PipeCollector(
+            stderrPipe.fileHandleForReading,
+            maximumBytes: maximumOutputBytes, onOverflow: stop)
         if let stdin {
             let stdinPipe = Pipe()
             process.standardInput = stdinPipe
@@ -314,8 +323,12 @@ public actor SSHConnection {
         } onCancel: {
             process.terminate()
         }
-        return SSHExecResult(
-            status: status, stdout: await stdout.collected(), stderr: await stderr.collected())
+        let output = await stdout.collected()
+        let errors = await stderr.collected()
+        guard !stdout.exceededLimit, !stderr.exceededLimit else {
+            throw SSHConnectionError.transferFailed("The command exceeds its output limit.")
+        }
+        return SSHExecResult(status: status, stdout: output, stderr: errors)
     }
 
     @discardableResult
@@ -335,7 +348,8 @@ public actor SSHConnection {
     }
 
     public func download(
-        remotePath: String, to localURL: URL, progress: (@Sendable (Int64) -> Void)? = nil
+        remotePath: String, to localURL: URL, maximumBytes: Int64 = .max,
+        progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws {
 
         let command =
@@ -367,7 +381,7 @@ public actor SSHConnection {
         do {
             status = try await Self.receiveDownload(
                 process: process, reader: reader, output: output, localURL: localURL,
-                progress: progress)
+                maximumBytes: maximumBytes, progress: progress)
         } catch {
             stderrPipe.fileHandleForReading.readabilityHandler = nil
             throw error
@@ -384,7 +398,7 @@ public actor SSHConnection {
 
     static func receiveDownload(
         process: Process, reader: FileHandle, output: FileHandle, localURL: URL,
-        progress: (@Sendable (Int64) -> Void)? = nil
+        maximumBytes: Int64 = .max, progress: (@Sendable (Int64) -> Void)? = nil
     ) async throws -> Int32 {
         do {
             return try await withTaskCancellationHandler {
@@ -394,6 +408,10 @@ public actor SSHConnection {
                     let chunk = reader.readData(ofLength: 128 * 1024)
                     if chunk.isEmpty { break }
                     try Task.checkCancellation()
+                    guard maximumBytes >= 0, Int64(chunk.count) <= maximumBytes - written else {
+                        throw SSHConnectionError.transferFailed(
+                            "The download exceeds its byte limit.")
+                    }
                     output.write(chunk)
                     written += Int64(chunk.count)
                     progress?(written)
@@ -610,7 +628,7 @@ public actor SSHConnection {
 
     public nonisolated var controlSocketPath: String { socketPath }
 
-    public nonisolated static let controlPersist = "10m"
+    public nonisolated static let controlPersist = "no"
 
     public nonisolated func masterArguments() -> [String] {
         ["-N", "-M", "-S", socketPath, "-o", "ControlPersist=\(Self.controlPersist)"]

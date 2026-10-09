@@ -199,7 +199,11 @@ public enum MachineRegistry {
     }
 
     private static func decode<T: Decodable>(_ file: URL) -> T? {
-        guard let data = try? Data(contentsOf: file) else { return nil }
+        var metadata = stat()
+        guard lstat(file.path, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG,
+            metadata.st_size >= 0, metadata.st_size <= 1_048_576,
+            let data = try? Data(contentsOf: file), data.count <= 1_048_576
+        else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(T.self, from: data)
@@ -209,7 +213,7 @@ public enum MachineRegistry {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(value) else { return }
+        guard let data = try? encoder.encode(value), data.count <= 1_048_576 else { return }
         try? FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)

@@ -5,7 +5,21 @@ public enum AskpassEntry {
     public static let accountVariable = "EDITH_ASKPASS_ACCOUNT"
 
     public static func helperPath() -> String {
-        Bundle.main.executablePath ?? ProcessInfo.processInfo.arguments.first ?? ""
+        let file = MachinePaths.dir.appendingPathComponent("askpass.sh")
+        let script = """
+            #!/bin/sh
+            case "$1" in
+                *yes/no*|*"Are you sure"*) exit 1 ;;
+            esac
+            exec /usr/bin/security find-generic-password -s \(ShellQuote.quote(MachineSecrets.service)) -a "$EDITH_ASKPASS_ACCOUNT" -w
+            """
+        MachinePaths.prepare()
+        do {
+            try Data((script + "\n").utf8).write(to: file, options: .atomic)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o700], ofItemAtPath: file.path)
+            return file.path
+        } catch { return "/usr/bin/false" }
     }
 
     public static func runIfRequested(

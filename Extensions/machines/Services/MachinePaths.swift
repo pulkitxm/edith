@@ -5,7 +5,7 @@ public enum MachinePaths {
     nonisolated(unsafe) public static var root: URL = ExtensionData.root
 
     public static var dir: URL {
-        root.appendingPathComponent("machines")
+        root
     }
 
     public static var machinesFile: URL { dir.appendingPathComponent("machines.json") }
@@ -15,7 +15,7 @@ public enum MachinePaths {
     public static var socketsDir: URL { dir.appendingPathComponent("sockets") }
 
     public static var previewCacheDir: URL {
-        root.appendingPathComponent("machines/previews")
+        root.appendingPathComponent("previews")
     }
 
     public static func prepare() {
