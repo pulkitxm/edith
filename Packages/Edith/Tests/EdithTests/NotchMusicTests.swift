@@ -78,11 +78,19 @@ import Testing
         #expect(np?.isPlaying == true)
     }
 
-    @Test func nothingShowsWithoutPriorPlayback() {
+    @Test func discoversPausedExternalWithoutPriorPlayback() {
         let np = NotchMusicResolver.resolve(
             localTitle: "Paused Local", localPlaying: false,
             external: external("Paused Spotify", playing: false))
-        #expect(np == nil)
+        #expect(np?.source == .external(.spotify))
+        #expect(np?.title == "Paused Spotify")
+        #expect(np?.isPlaying == false)
+    }
+
+    @Test func pausedLocalDoesNotAppearWithoutPriorPlayback() {
+        #expect(
+            NotchMusicResolver.resolve(
+                localTitle: "Paused Local", localPlaying: false, external: nil) == nil)
     }
 
     @Test func pausedLocalStaysWhenItWasLastActive() {

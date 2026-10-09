@@ -30,7 +30,7 @@ enum NotchMusicResolver {
                 isPlaying: true)
         }
         switch previous?.source {
-        case .external:
+        case .external, .none:
             return external.map {
                 NotchNowPlaying(
                     source: .external($0.app), title: $0.title, artist: $0.artist,
@@ -41,8 +41,6 @@ enum NotchMusicResolver {
                 ? NotchNowPlaying(
                     source: .local, title: localTitle!, artist: "", isPlaying: false)
                 : nil
-        case .none:
-            return nil
         }
     }
 }
