@@ -1,4 +1,7 @@
 import Darwin
+import CoreGraphics
+import ImageIO
+import UniformTypeIdentifiers
 import EdithHostCore
 import EdithExtensionSupport
 import LocalAuthentication
@@ -315,6 +318,8 @@ struct HostLifecycleHarness {
             ("10000000-0000-0000-0000-000000000002", "synthetic native note two"),
             ("10000000-0000-0000-0000-000000000003", "https://example.com/mock-clipboard"),
         ]
+        let imageID = "10000000-0000-0000-0000-000000000004"
+        let image = try clipboardFixtureImage()
         let query = try JSONSerialization.data(withJSONObject: [
             "offset": 0, "limit": 10, "recentlyCreated": false,
         ])
@@ -350,6 +355,14 @@ struct HostLifecycleHarness {
                 }
             }
             _ = try await endpoint.invoke(
+                "clipboard.capture",
+                payload: JSONSerialization.data(withJSONObject: [
+                    "id": imageID, "data": image.base64EncodedString(), "types": ["public.png"],
+                    "ext": "png", "preview": "synthetic native image", "sourceApp": "Mock Camera",
+                    "sourceBundleID": "example.mock.camera",
+                    "capturedAt": Date().timeIntervalSinceReferenceDate,
+                ]))
+            _ = try await endpoint.invoke(
                 "clipboard.mutate",
                 payload: JSONSerialization.data(withJSONObject: [
                     "kind": "pin", "ids": [fixtures[0].0],
@@ -358,8 +371,9 @@ struct HostLifecycleHarness {
         }
         let storedData = try await endpoint.invoke("clipboard.snapshot", payload: query)
         guard let stored = try JSONSerialization.jsonObject(with: storedData) as? [String: Any],
-            stored["total"] as? Int == 3, let entries = stored["entries"] as? [[String: Any]],
-            Set(entries.compactMap { $0["preview"] as? String }) == Set(fixtures.map(\.1)),
+            stored["total"] as? Int == 4, let entries = stored["entries"] as? [[String: Any]],
+            Set(entries.compactMap { $0["preview"] as? String })
+                == Set(fixtures.map(\.1) + ["synthetic native image"]),
             entries.first(where: { $0["id"] as? String == fixtures[0].0 })?["pinned"] as? Bool
                 == true
         else {
@@ -402,6 +416,54 @@ struct HostLifecycleHarness {
                         "Clipboard category, item limit, or opaque actions were invalid."
                 ])
         }
+        let rawPreview = try await endpoint.invoke(
+            "clipboard.thumbnail",
+            payload: JSONSerialization.data(withJSONObject: [
+                "id": UUID().uuidString, "entryID": imageID,
+            ]))
+        guard let raw = try JSONSerialization.jsonObject(with: rawPreview) as? [String: Any],
+            let encodedPreview = raw["data"] as? String,
+            let previewBytes = Data(base64Encoded: encodedPreview), !previewBytes.isEmpty
+        else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 9,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "The loaded clipboard renderer returned no image."
+                ])
+        }
+        try SurfaceThumbnail(data: previewBytes).validate()
+        var images = SurfaceTile(.ability("clipboard")); images.sourceIDs = ["image"];
+        images.itemLimit = 1
+        var imageSnapshot = SurfaceSnapshot(providerID: "clipboard")
+        for _ in 0..<6 {
+            imageSnapshot = try SurfaceSnapshot.decode(
+                try await endpoint.invoke(
+                    "surface.snapshot",
+                    payload: SurfaceSnapshotRequest(target: .home, tile: images).encoded(
+                        providerID: "clipboard")), providerID: "clipboard")
+            if imageSnapshot.rows.first?.thumbnail != nil { break }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        guard imageSnapshot.rows.count == 1, imageSnapshot.rows[0].id == imageID,
+            let preview = imageSnapshot.rows[0].thumbnail, preview.data.count <= 131_072
+        else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 8,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Synthetic image preview was unavailable: rows \(imageSnapshot.rows.count), preview \(imageSnapshot.rows.first?.thumbnail != nil)."
+                ])
+        }
+        try preview.validate()
+        images.hiddenFields = ["previews"]
+        let hiddenImage = try SurfaceSnapshot.decode(
+            try await endpoint.invoke(
+                "surface.snapshot",
+                payload: SurfaceSnapshotRequest(target: .home, tile: images).encoded(
+                    providerID: "clipboard")), providerID: "clipboard")
+        guard hiddenImage.rows.count == 1, hiddenImage.rows[0].thumbnail == nil else {
+            throw HostWorkerError.invalidResponse
+        }
         tile.showActions = false
         let hidden = SurfaceActionRequest(
             snapshot: .init(target: .notch, tile: tile), actionID: "delete/" + fixtures[0].0)
@@ -412,6 +474,25 @@ struct HostLifecycleHarness {
                 domain: "ClipboardFixture", code: 7,
                 userInfo: [NSLocalizedDescriptionKey: "Hidden clipboard deletion was accepted."])
         } catch is ExtensionPeerError {}
+    }
+
+    private static func clipboardFixtureImage() throws -> Data {
+        guard
+            let context = CGContext(
+                data: nil, width: 64, height: 32, bitsPerComponent: 8,
+                bytesPerRow: 256, space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { throw HostWorkerError.invalidResponse }
+        context.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 64, height: 32))
+        let data = NSMutableData()
+        guard let image = context.makeImage(),
+            let destination = CGImageDestinationCreateWithData(
+                data, UTType.png.identifier as CFString, 1, nil)
+        else { throw HostWorkerError.invalidResponse }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else { throw HostWorkerError.invalidResponse }
+        return data as Data
     }
 
     private static func verifyBlitzTree(_ endpoint: ExtensionPeerEndpoint, fixture: URL)
