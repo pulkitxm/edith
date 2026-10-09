@@ -5,6 +5,7 @@ import { join } from "node:path";
 import {
   extensionFingerprint,
   planExtensionBuilds,
+  supportCacheFingerprint,
 } from "./extension-release-plan.mjs";
 
 const definitions = [
@@ -29,6 +30,92 @@ const definitions = [
 ];
 
 describe("independent extension releases", () => {
+  test("rebuilds only consumers of changed support products", async () => {
+    const root = await mkdtemp(join(tmpdir(), "extension-support-inputs-"));
+    const products = [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionDocuments",
+    ];
+    const consumers = products.map((supportProduct, index) => ({
+      id: `consumer${index}`,
+      version: "1.0.0",
+      hostABI: "edith-host-1",
+      supportProduct,
+      inputs: [`Extensions/consumer${index}`],
+      sharedInputs: [
+        "Packages/ExtensionSupport",
+        "scripts/build-extension-support.mjs",
+      ],
+      dependencies: [],
+    }));
+    try {
+      await mkdir(join(root, "scripts"), { recursive: true });
+      await writeFile(
+        join(root, "scripts/build-extension-support.mjs"),
+        "builder",
+      );
+      for (const [index, product] of products.entries()) {
+        await mkdir(join(root, `Extensions/consumer${index}`), {
+          recursive: true,
+        });
+        await writeFile(
+          join(root, `Extensions/consumer${index}/Runtime.swift`),
+          "runtime",
+        );
+        const directory = `Packages/ExtensionSupport/Sources/${product}`;
+        await mkdir(join(root, directory), { recursive: true });
+        await writeFile(join(root, directory, "Source.swift"), product);
+      }
+      const fingerprints = await Promise.all(
+        consumers.map((definition) =>
+          extensionFingerprint(root, definition, consumers),
+        ),
+      );
+      const cacheKeys = await Promise.all(
+        consumers.map((definition) =>
+          supportCacheFingerprint(root, definition),
+        ),
+      );
+      for (const [index, product] of products.entries()) {
+        const path = `Packages/ExtensionSupport/Sources/${product}/Source.swift`;
+        expect(
+          planExtensionBuilds(consumers, [path]).map(({ id }) => id),
+        ).toEqual(consumers.slice(index).map(({ id }) => id));
+        await writeFile(join(root, path), `changed ${product}`);
+        for (const [consumerIndex, definition] of consumers.entries()) {
+          const fingerprint = await extensionFingerprint(
+            root,
+            definition,
+            consumers,
+          );
+          const cacheKey = await supportCacheFingerprint(root, definition);
+          if (consumerIndex >= index) {
+            expect(fingerprint).not.toBe(fingerprints[consumerIndex]);
+            expect(cacheKey).not.toBe(cacheKeys[consumerIndex]);
+          } else {
+            expect(fingerprint).toBe(fingerprints[consumerIndex]);
+            expect(cacheKey).toBe(cacheKeys[consumerIndex]);
+          }
+        }
+        await writeFile(join(root, path), product);
+      }
+      await writeFile(
+        join(root, "scripts/build-extension-support.mjs"),
+        "new builder",
+      );
+      for (const [index, definition] of consumers.entries()) {
+        expect(
+          await extensionFingerprint(root, definition, consumers),
+        ).not.toBe(fingerprints[index]);
+        expect(await supportCacheFingerprint(root, definition)).not.toBe(
+          cacheKeys[index],
+        );
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   test("rebuilds only the changed extension and its dependents", () => {
     expect(
       planExtensionBuilds(definitions, ["Extensions/music/Player.swift"]).map(

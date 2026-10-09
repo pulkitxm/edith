@@ -2,6 +2,36 @@ import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import { writeHostABI } from "./extension-host-abi.mjs";
+import { supportSourceInputs } from "./build-extension-support.mjs";
+
+export function definitionInputs(definition) {
+  const shared = definition.supportProduct
+    ? [
+        ...definition.sharedInputs.filter(
+          (path) =>
+            path !== "Packages/ExtensionSupport" &&
+            !path.startsWith("Packages/ExtensionSupport/"),
+        ),
+        ...supportSourceInputs(definition.supportProduct),
+      ]
+    : definition.sharedInputs;
+  return [...definition.inputs, ...shared];
+}
+
+export async function supportCacheFingerprint(root, definition) {
+  if (!definition.supportProduct) return "none";
+  const support = {
+    supportProduct: definition.supportProduct,
+    id: "support",
+    inputs: [
+      "scripts/build-extension-support.mjs",
+      ...supportSourceInputs(definition.supportProduct),
+    ],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  return extensionFingerprint(root, support, [support]);
+}
 
 export function planExtensionBuilds(definitions, changes) {
   const ids = new Set(definitions.map(({ id }) => id));
@@ -17,7 +47,7 @@ export function planExtensionBuilds(definitions, changes) {
   for (const definition of definitions) {
     if (
       changes.some((path) =>
-        [...definition.inputs, ...definition.sharedInputs].some(
+        definitionInputs(definition).some(
           (input) => path === input || path.startsWith(`${input}/`),
         ),
       )
@@ -51,8 +81,7 @@ export async function extensionFingerprint(root, definition, definitions) {
     const current = definitions.find((candidate) => candidate.id === id);
     if (!current) throw new Error("Unknown dependency");
     visiting.add(id);
-    for (const input of [...current.inputs, ...current.sharedInputs])
-      inputs.add(input);
+    for (const input of definitionInputs(current)) inputs.add(input);
     for (const dependency of current.dependencies) await visit(dependency);
     visiting.delete(id);
     visited.add(id);
@@ -142,6 +171,7 @@ export async function planUnpublishedExtensions(
       fingerprint,
       version,
       tag: `extensions/${definition.id}/${fingerprint.slice(0, 20)}`,
+      supportFingerprint: await supportCacheFingerprint(root, definition),
     });
   }
   return result;
