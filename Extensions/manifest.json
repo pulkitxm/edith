@@ -615,5 +615,72 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1
+  },
+  {
+    "id": "notchShelf",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "helper": [
+        "Extensions/notchShelf/Browser/Models/BrowserAddress.swift",
+        "Extensions/notchShelf/Browser/Models/BrowserSession.swift",
+        "Extensions/notchShelf/Browser/Models/BrowserShortcut.swift",
+        "Extensions/notchShelf/Browser/Models/BrowserTab.swift",
+        "Extensions/notchShelf/Browser/Models/ChromeInstallation.swift",
+        "Extensions/notchShelf/Browser/Models/LocalStorageSeed.swift",
+        "Extensions/notchShelf/Browser/Models/NotchBrowserGeometry.swift",
+        "Extensions/notchShelf/Browser/Services/ChromeLocalStorage.swift",
+        "Extensions/notchShelf/Browser/Services/ChromeProfileImporter.swift",
+        "Extensions/notchShelf/Browser/Services/LevelDBReader.swift",
+        "Extensions/notchShelf/Browser/Services/NotchBrowserActionBridge.swift",
+        "Extensions/notchShelf/Browser/Services/NotchBrowserActions.swift",
+        "Extensions/notchShelf/Browser/Services/NotchBrowserWebDelegate.swift",
+        "Extensions/notchShelf/Browser/Services/Snappy.swift",
+        "Extensions/notchShelf/Browser/ViewModels/NotchBrowserStore.swift",
+        "Extensions/notchShelf/Browser/Views/NotchBrowserChrome.swift",
+        "Extensions/notchShelf/Browser/Views/NotchBrowserPane.swift",
+        "Extensions/notchShelf/Browser/Views/NotchBrowserSetupView.swift",
+        "Extensions/notchShelf/BrowserContract/BrowserSearchEngine.swift",
+        "Extensions/notchShelf/BrowserContract/BrowserSessionContract.swift",
+        "Extensions/notchShelf/BrowserContract/ChromeCookieReader.swift",
+        "Extensions/notchShelf/BrowserContract/ChromeProfile.swift",
+        "Extensions/notchShelf/BrowserContract/ChromeSafeStorage.swift",
+        "Extensions/notchShelf/BrowserContract/NotchBrowserCommand.swift",
+        "Extensions/notchShelf/Files/ShelfIndex.swift",
+        "Extensions/notchShelf/Files/ShelfItemOperations.swift",
+        "Extensions/notchShelf/Files/ShelfMutationOperations.swift",
+        "Extensions/notchShelf/NotchWorkerEnvironment.swift",
+        "Extensions/notchShelf/Runtime.swift",
+        "Extensions/notchShelf/Shelf/Models/NotchAlert.swift",
+        "Extensions/notchShelf/Shelf/Models/NotchGeometry.swift",
+        "Extensions/notchShelf/Shelf/Models/NotchInteraction.swift",
+        "Extensions/notchShelf/Shelf/Models/NotchSurfaceGlance.swift",
+        "Extensions/notchShelf/Shelf/Models/ShelfThumbnails.swift",
+        "Extensions/notchShelf/Shelf/Services/NotchAlertDetectors.swift",
+        "Extensions/notchShelf/Shelf/Services/NotchCommands.swift",
+        "Extensions/notchShelf/Shelf/Services/NotchPanel.swift",
+        "Extensions/notchShelf/Shelf/Services/NotchShelfController.swift",
+        "Extensions/notchShelf/Shelf/Services/NotchSurfaceObservation.swift",
+        "Extensions/notchShelf/Shelf/ViewModels/ShelfStore.swift",
+        "Extensions/notchShelf/Shelf/Views/NotchCameraTab.swift",
+        "Extensions/notchShelf/Shelf/Views/NotchHomeTab.swift",
+        "Extensions/notchShelf/Shelf/Views/NotchSettingsPage.swift",
+        "Extensions/notchShelf/Shelf/Views/NotchShape.swift",
+        "Extensions/notchShelf/Shelf/Views/NotchShelfView.swift",
+        "Extensions/notchShelf/TextEditingCommands.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/notchShelf"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI"
   }
 ]
