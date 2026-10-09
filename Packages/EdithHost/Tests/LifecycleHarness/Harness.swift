@@ -46,6 +46,7 @@ struct HostLifecycleHarness {
         let executable = app.appendingPathComponent("Contents/MacOS/Edith")
         let identity = try HostIdentity(identifier: identifier, supportDirectory: fixture)
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        if extensionID == "machines" { try MachinesFixture.seed(identity: identity, home: fixture) }
         let suite = identity.defaultsSuite
         UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
             false, forKey: "windowSweatersActive")
@@ -153,6 +154,8 @@ struct HostLifecycleHarness {
                 try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
+            } else if extensionID == "machines" {
+                try await MachinesFixture.verify(endpoint)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "studio" {
@@ -206,6 +209,8 @@ struct HostLifecycleHarness {
                 try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
+            } else if extensionID == "machines" {
+                try await MachinesFixture.verify(endpoint)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
@@ -283,6 +288,8 @@ struct HostLifecycleHarness {
                 try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
+            } else if extensionID == "machines" {
+                try await MachinesFixture.verify(endpoint)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
@@ -350,7 +357,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
