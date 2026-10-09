@@ -42,7 +42,13 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "nativeLicenses": [
+      {
+        "source": "Extensions/audioMixer/NativeRuntime/.build/artifacts/onnxruntime-swift-package-manager/onnxruntime/LICENSE",
+        "destination": "onnxruntime-LICENSE"
+      }
+    ]
   },
   {
     "id": "focusDim",
@@ -758,5 +764,79 @@
       ]
     },
     "minimumSystemVersion": 14
+  },
+  {
+    "id": "music",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "app": [
+        "Extensions/music/Models/DownloadQueue.swift",
+        "Extensions/music/Models/ExternalPlayback.swift",
+        "Extensions/music/Models/Favourites.swift",
+        "Extensions/music/Models/MediaDownloadInput.swift",
+        "Extensions/music/Models/MusicKeyCommand.swift",
+        "Extensions/music/Models/MusicProvider.swift",
+        "Extensions/music/Models/MusicSourceRequest.swift",
+        "Extensions/music/Models/TrackMeta.swift",
+        "Extensions/music/Models/UnitInterval.swift",
+        "Extensions/music/Services/ChromeCookieReader.swift",
+        "Extensions/music/Services/ChromeProfile.swift",
+        "Extensions/music/Services/ChromeSafeStorage.swift",
+        "Extensions/music/Services/DownloadOperations.swift",
+        "Extensions/music/Services/DownloadWorker.swift",
+        "Extensions/music/Services/ExternalMusic.swift",
+        "Extensions/music/Services/LocalMusicPlayer.swift",
+        "Extensions/music/Services/MediaDownloadRequest.swift",
+        "Extensions/music/Services/MusicBrowserConnection.swift",
+        "Extensions/music/Services/MusicDownloadClient.swift",
+        "Extensions/music/Services/MusicEvents.swift",
+        "Extensions/music/Services/MusicFade.swift",
+        "Extensions/music/Services/MusicFolderSelectionOperation.swift",
+        "Extensions/music/Services/MusicLibrary.swift",
+        "Extensions/music/Services/MusicLibraryContentOperations.swift",
+        "Extensions/music/Services/MusicLibraryOperations.swift",
+        "Extensions/music/Services/MusicNativePlayer.swift",
+        "Extensions/music/Services/MusicPrivacyState.swift",
+        "Extensions/music/Services/MusicReveal.swift",
+        "Extensions/music/Services/MusicStorage.swift",
+        "Extensions/music/Services/MusicSurface.swift",
+        "Extensions/music/Services/MusicTaskOwner.swift",
+        "Extensions/music/Services/MusicTools.swift",
+        "Extensions/music/Services/MusicTransportOperations.swift",
+        "Extensions/music/Services/MusicWorker.swift",
+        "Extensions/music/Services/SystemVolume.swift",
+        "Extensions/music/Services/YoutubeDownloader.swift",
+        "Extensions/music/Views/DownloadSheetView.swift",
+        "Extensions/music/Views/MusicAccounts.swift",
+        "Extensions/music/Views/MusicPageView.swift",
+        "Extensions/music/Views/MusicProviderView.swift",
+        "Extensions/music/Views/MusicRootView.swift",
+        "Extensions/music/Views/MusicSettings.swift",
+        "Extensions/music/Views/MusicSpotifyComponents.swift",
+        "Extensions/music/Views/MusicSpotifyLibrary.swift",
+        "Extensions/music/Views/MusicSpotifyWorkspace.swift",
+        "Extensions/music/Views/PlaybackWave.swift",
+        "Extensions/music/Views/VideoPreview.swift",
+        "Extensions/music/Runtime.swift"
+      ]
+    },
+    "nativeCargo": {
+      "manifest": "Extensions/music/Native/Cargo.toml",
+      "library": "libedith_music_player.dylib"
+    },
+    "inputs": [
+      "Extensions/music"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   }
 ]
