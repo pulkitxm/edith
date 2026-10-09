@@ -1,11 +1,13 @@
 import AppKit
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import Observation
 import SwiftUI
 
 @MainActor
 final class SystemStatsStatusItem: NSObject, FeatureModule {
     private let panel = StatusItemPanel()
-    private let snapshot = SystemMenuSnapshot()
+    let snapshot = SystemMenuSnapshot()
     private var item: NSStatusItem!
     private var timer: Timer?
     private var previous: CPUTicks?
@@ -90,7 +92,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             panel.show(
                 from: item, title: "System",
                 actions: [
-                    .init(title: "Open System…") { MainApp.open(section: "system") }
+                    .init(title: "Open Settings…") { ExtensionPresentation.showWindow() }
                 ]
             ) {
                 SystemMenuReadings(snapshot: snapshot)
@@ -176,6 +178,7 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 }
 
 @MainActor
+@Observable
 final class SystemMenuSnapshot {
     var cpu = 0.0
     var memory = 0.0

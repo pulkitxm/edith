@@ -1,5 +1,7 @@
 import AppKit
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
 import Foundation
 
 @MainActor
@@ -17,7 +19,28 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            guard let suite = input["defaultsSuite"] as? String,
+                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+            else { return ["ok": false] as NSDictionary }
             if service == nil { service = SystemStatsStatusItem() }
+        case "view":
+            guard let service else { return ["ok": false] as NSDictionary }
+            return NSHostingController(
+                rootView: ExtensionPageHost {
+                    PageWorkspace {
+                        PageHeader("System Stats")
+                    } content: {
+                        Form {
+                            Section("Usage") { SystemMenuReadings(snapshot: service.snapshot) }
+                            Section("Menu Bar") {
+                                Text(
+                                    "CPU and memory readings refresh every two seconds while this extension is enabled."
+                                )
+                                .settingsCaption()
+                            }
+                        }.formStyle(.grouped)
+                    }
+                })
         case "synchronize": break
         case "stop":
             service?.shutdown()
