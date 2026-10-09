@@ -5,8 +5,6 @@ import EdithExtensionUI
 import SwiftUI
 
 struct ClipboardRows: View {
-    @AppStorage(AppStorageKeys.Clipboard.enabled, store: SharedDefaults.store) private var enabled =
-        false
     @AppStorage(AppStorageKeys.Clipboard.maxItems, store: SharedDefaults.store) private
         var maxItems = ClipboardIndex.defaultMaxItems
     @AppStorage(AppStorageKeys.Clipboard.maxItemBytes, store: SharedDefaults.store) private
@@ -94,8 +92,6 @@ struct ClipboardRows: View {
                 default: generalSections
                 }
             }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : 0.5)
 
             Section {
                 if let error = recent.error {
@@ -192,6 +188,8 @@ struct ClipboardRows: View {
                     "Accessibility isn't granted yet - selecting an item only copies until you grant it."
                 )
                 .font(.system(size: UIScale.pt(10))).foregroundStyle(.orange)
+                Button("Grant Accessibility") { ClipboardPermission.request() }
+                    .buttonStyle(.edith(.secondary))
             }
             Toggle(
                 "Paste without formatting",

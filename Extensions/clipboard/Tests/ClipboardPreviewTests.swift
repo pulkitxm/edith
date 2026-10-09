@@ -39,6 +39,15 @@ import UniformTypeIdentifiers
         let size = try Self.dimensions(thumbnail)
         #expect(size.width == 160)
         #expect(size.height == 80)
+        let surface = await MainActor.run {
+            ClipboardSurface(client: client, privacyValues: { [:] }, copy: { _ in })
+        }
+        let surfaceData = try await surface.execute(
+            "surface.snapshot",
+            payload: SurfaceSnapshotRequest(target: .home, tile: SurfaceTile(.ability("clipboard")))
+                .encoded(providerID: "clipboard"))
+        let surfaceSnapshot = try SurfaceSnapshot.decode(surfaceData, providerID: "clipboard")
+        #expect(surfaceSnapshot.rows.first(where: { $0.id == picture.id })?.thumbnail != nil)
         let imageFile = fixture.root.appendingPathComponent("picture.png")
         try pixels.write(to: imageFile)
         let reference = fixture.capture(Data(imageFile.absoluteString.utf8), ext: "url")
@@ -90,7 +99,7 @@ import UniformTypeIdentifiers
         await previews.stop()
     }
 
-    @Test func cancellationCrossesXPCAndReleasesTheRenderer() async throws {
+    @Test func cancellationCrossesOwnedServiceAndReleasesTheRenderer() async throws {
         let fixture = try ClipboardPreviewFixture()
         defer { fixture.cleanup() }
         let capture = fixture.capture(Data("fixture".utf8), ext: "png")
