@@ -2,18 +2,20 @@ import AppKit
 import Darwin
 import EdithHostCore
 import EdithExtensionUI
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
 @MainActor
 final class HostWorkerApplication {
-    private let control: FileHandle
+    private let control: HostWorkerControl
     private var frames = HostWorkerFrames()
     private var runtimes: [ExtensionBundleRuntime] = []
     private var configuration: HostWorkerConfiguration?
     private var window: NSWindow?
     private var parentWatcher: DispatchSourceProcess?
     private var windowObserver: NSObjectProtocol?
+    private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
 
     init() throws {
@@ -21,11 +23,32 @@ final class HostWorkerApplication {
         guard descriptor >= 0, dup2(STDERR_FILENO, STDOUT_FILENO) >= 0 else {
             throw CocoaError(.fileWriteUnknown)
         }
-        control = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        control = HostWorkerControl(descriptor: descriptor)
     }
 
     func run() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        for (name, registered) in [
+            (ExtensionCommandOwnership.registerNotification, true),
+            (ExtensionCommandOwnership.releaseNotification, false),
+        ] {
+            resourceObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: name, object: nil, queue: nil
+                ) { [control] notification in
+                    let accept = notification.userInfo?["accept"] as? (Bool) -> Void
+                    guard let pid = notification.userInfo?["pid"] as? Int32, pid > 1,
+                        pid != getpid()
+                    else {
+                        accept?(false)
+                        return
+                    }
+                    do {
+                        try control.send(HostWorkerProcessGroup(pid: pid, registered: registered))
+                        accept?(true)
+                    } catch { accept?(false) }
+                })
+        }
         windowObserver = NotificationCenter.default.addObserver(
             forName: ExtensionPresentation.showWindowNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -61,7 +84,7 @@ final class HostWorkerApplication {
                         token: request.token, ok: false,
                         message: "The extension could not complete this action.")
                 }
-                try control.write(contentsOf: HostWorkerFrames.encode(response))
+                try control.send(response)
                 if request.operation == "stop" { shutdown(); return }
                 if !response.ok, request.operation == "start" { shutdown(); return }
             }
@@ -186,6 +209,8 @@ final class HostWorkerApplication {
         parentWatcher = nil
         if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
         windowObserver = nil
+        resourceObservers.forEach(NotificationCenter.default.removeObserver)
+        resourceObservers.removeAll()
         for runtime in runtimes { try? runtime.stopAll() }
         window?.close()
         try? control.close()

@@ -9,7 +9,11 @@ struct HostEntry {
     @MainActor static func main() {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments == ["--extension-command"] {
+            do { try ExtensionCommandSpecification.runWrapper() } catch { exit(1) }
+        }
         if arguments == ["--extension-worker"] {
+            setenv("EDITH_EXTENSION_WORKER", "1", 1)
             guard setpgid(0, 0) == 0 || getpgrp() == getpid() else { exit(1) }
             do {
                 let worker = try HostWorkerApplication()

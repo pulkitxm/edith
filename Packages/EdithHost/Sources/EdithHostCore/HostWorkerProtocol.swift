@@ -55,6 +55,18 @@ public struct HostWorkerResponse: Codable, Sendable {
     }
 }
 
+public struct HostWorkerProcessGroup: Codable, Sendable {
+    public let kind: String
+    public let pid: Int32
+    public let registered: Bool
+
+    public init(pid: Int32, registered: Bool) {
+        kind = "processGroup"
+        self.pid = pid
+        self.registered = registered
+    }
+}
+
 public enum HostWorkerError: Error, Equatable {
     case exited
     case timedOut
