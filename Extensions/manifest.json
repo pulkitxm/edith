@@ -493,5 +493,35 @@
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI"
+  },
+  {
+    "id": "blitztree",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "app": [
+        "Extensions/blitztree/BlitzTreeActions.swift",
+        "Extensions/blitztree/BlitzTreeClient.swift",
+        "Extensions/blitztree/BlitzTreeCommands.swift",
+        "Extensions/blitztree/BlitzTreeMap.swift",
+        "Extensions/blitztree/BlitzTreeModel.swift",
+        "Extensions/blitztree/BlitzTreePage.swift",
+        "Extensions/blitztree/BlitzTreeRings.swift",
+        "Extensions/blitztree/BlitzTreeScanner.swift",
+        "Extensions/blitztree/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/blitztree"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI"
   }
 ]

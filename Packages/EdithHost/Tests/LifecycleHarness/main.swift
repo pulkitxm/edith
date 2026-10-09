@@ -96,7 +96,9 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.invalidResponse
             }
             stage = "initial commands"
-            if extensionID == "appMaintenance" {
+            if extensionID == "blitztree" {
+                try await verifyBlitzTree(endpoint, fixture: fixture)
+            } else if extensionID == "appMaintenance" {
                 try await verifyMaintenance(endpoint)
             } else if extensionID == "cleaner" {
                 try await verifyCleaner(endpoint)
@@ -127,7 +129,9 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "appMaintenance" {
+            if extensionID == "blitztree" {
+                try await verifyBlitzTree(endpoint, fixture: fixture)
+            } else if extensionID == "appMaintenance" {
                 try await verifyMaintenance(endpoint)
             } else if extensionID == "cleaner" {
                 try await verifyCleaner(endpoint)
@@ -153,7 +157,9 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "appMaintenance" {
+            if extensionID == "blitztree" {
+                try await verifyBlitzTree(endpoint, fixture: fixture)
+            } else if extensionID == "appMaintenance" {
                 try await verifyMaintenance(endpoint)
             } else if extensionID == "cleaner" {
                 try await verifyCleaner(endpoint)
@@ -215,6 +221,39 @@ struct HostLifecycleHarness {
                         "\(extensionID) failed during \(stage): \(error). \(logs)"
                 ])
 
+        }
+    }
+
+    private static func verifyBlitzTree(_ endpoint: ExtensionPeerEndpoint, fixture: URL)
+        async throws
+    {
+        let root = fixture.appendingPathComponent("synthetic-scan", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("sample.bin")
+        try Data(repeating: 42, count: 4_096).write(to: file)
+        let output = try await endpoint.invoke(
+            "blitztree.scan", payload: JSONSerialization.data(withJSONObject: ["path": root.path]))
+        guard let preview = try JSONSerialization.jsonObject(with: output) as? [String: Any],
+            preview["working"] as? Bool == false,
+            let token = preview["previewToken"] as? String, UUID(uuidString: token) != nil,
+            let report = preview["report"] as? [String: Any],
+            let summary = report["summary"] as? [String: Any], summary["fileCount"] as? Int == 1,
+            let inventory = (report["report"] as? [String: Any])?["inventory"] as? [String: Any],
+            let entry = (inventory["largestChildren"] as? [[String: Any]])?.first,
+            let path = entry["path"] as? String
+        else { throw HostWorkerError.invalidResponse }
+        for confirmed in [false, true] {
+            do {
+                _ = try await endpoint.invoke(
+                    "blitztree.trash",
+                    payload: JSONSerialization.data(withJSONObject: [
+                        "confirmed": confirmed, "previewToken": UUID().uuidString, "path": path,
+                    ]))
+                throw HostWorkerError.invalidResponse
+            } catch is ExtensionPeerError {}
+        }
+        guard try Data(contentsOf: file) == Data(repeating: 42, count: 4_096) else {
+            throw HostWorkerError.invalidResponse
         }
     }
 
