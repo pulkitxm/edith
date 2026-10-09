@@ -20,6 +20,18 @@ extension SurfaceWidget {
         default: false
         }
     }
+    public var sourceTitle: String {
+        switch self {
+        case .github, .ability("quinjet"), .codeStats: "Repositories"
+        case .databases: "Connections"
+        case .ability("audioMixer"): "Audio apps"
+        case .ability("companion"): "Item kinds"
+        case .limits, .agents: "Providers"
+        case .clocks: "Cities"
+        case .calendar: "Calendars"
+        default: "Sources"
+        }
+    }
     public var contentChoices: [SurfaceSourceChoice] {
         switch self {
         case .github, .ability("quinjet"):

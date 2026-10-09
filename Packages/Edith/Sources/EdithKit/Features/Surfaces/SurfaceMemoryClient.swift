@@ -18,7 +18,7 @@ public struct SurfaceMemoryClient: Sendable {
     public typealias Read = @Sendable (URLRequest) async throws -> Data
     private let endpoint: URL
     private let read: Read
-    public init(endpoint: URL, read: @escaping Read = Self.networkRead) {
+    public init(endpoint: URL, read: @escaping Read = { try await Self.networkRead($0) }) {
         self.endpoint = endpoint; self.read = read
     }
     public func snapshot(_ health: CompanionHealthSnapshot, tile: SurfaceTile) async throws

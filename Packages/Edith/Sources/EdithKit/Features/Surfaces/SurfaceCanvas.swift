@@ -97,7 +97,8 @@ public struct SurfaceCanvas<Content: View>: View {
                         configure: configure
                     ) {
                         content(tile).environment(
-                            \.surfacePresentation, SurfacePresentation(tile: tile, layout: layout))
+                            \.surfacePresentation, SurfacePresentation(tile: tile, layout: layout)
+                        ).tint(tile.highlightColor)
                     }
                 }
             }
@@ -428,10 +429,10 @@ private struct SurfaceCanvasTile<Content: View>: View {
             }
             Group {
                 if let height = tile.height {
-                    ScrollView { content().allowsHitTesting(!editing) }
+                    ScrollView { content().disabled(editing).allowsHitTesting(!editing) }
                         .frame(height: UIScale.pt(height))
                 } else {
-                    content().allowsHitTesting(!editing)
+                    content().disabled(editing).allowsHitTesting(!editing)
                 }
             }
             .onGeometryChange(for: CGFloat.self) {

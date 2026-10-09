@@ -21,11 +21,10 @@ struct SurfaceEditorPane: View {
     @State private var previewCompact = false
     @State private var previewWidth: Double?
     @State private var livePreview = true
-    @State private var geometryExpanded = false
+    @State private var editorPanel: SurfaceEditorPanel?
     @State private var glancesExpanded = true
     @State private var libraryVisible = true
     @State private var inspectorVisible = true
-    @State private var profilesExpanded = false
     @State private var profileName = ""
     @State private var renamingProfile: UUID?
     @State private var renamedProfile = ""
@@ -54,7 +53,13 @@ struct SurfaceEditorPane: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                         if libraryVisible { ScrollView { library }.frame(height: UIScale.pt(220)) }
-                        canvas
+                        if target == .notch {
+                            ScrollView(.horizontal) {
+                                canvas.frame(width: UIScale.pt(layout.notchWidth + 24))
+                            }
+                        } else {
+                            canvas
+                        }
                         if inspectorVisible { inspector }
                         if target == .notch { notchTabs }
                     }
@@ -72,12 +77,19 @@ struct SurfaceEditorPane: View {
                             .frame(width: UIScale.pt(220))
                         Divider()
                     }
-                    ScrollView(previewWidth == nil ? .vertical : [.horizontal, .vertical]) {
+                    ScrollView(
+                        previewWidth == nil && target == .home
+                            ? .vertical : [.horizontal, .vertical]
+                    ) {
                         VStack(spacing: UIScale.pt(18)) {
                             canvas
                             if target == .notch { notchTabs }
                         }
-                        .frame(width: previewWidth.map { CGFloat(UIScale.pt($0)) })
+                        .frame(
+                            width: target == .notch
+                                ? UIScale.pt(max(layout.notchWidth + 24, previewWidth ?? 0))
+                                : previewWidth.map { CGFloat(UIScale.pt($0)) }
+                        )
                         .padding(UIScale.pt(16))
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -95,6 +107,24 @@ struct SurfaceEditorPane: View {
             }
         }
         .id(target)
+        .edithSheet(item: $editorPanel) { panel in
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                HStack {
+                    Text(panel.title).font(.edithText(.title2))
+                    Spacer()
+                    Button("Done") { editorPanel = nil }.keyboardShortcut(.defaultAction)
+                }
+                Divider()
+                ScrollView {
+                    if panel == .geometry { canvasSettings } else { savedLayouts }
+                }
+                if let layoutError {
+                    Text(layoutError).font(.edithText(.caption)).foregroundStyle(.red)
+                }
+            }
+            .padding(UIScale.pt(20))
+            .frame(width: UIScale.pt(440), height: UIScale.pt(560))
+        }
         .pageTask(id: livePreview, active: livePreview && target == .home) {
             await dashboard.restoreCachedHomeUsage()
             await dashboard.load()
@@ -142,17 +172,15 @@ struct SurfaceEditorPane: View {
             if let layoutError {
                 Text(layoutError).font(.edithText(.caption)).foregroundStyle(.red)
             }
-            canvasSettings
-            savedLayouts
             Text(
-                "Drag widgets onto the grid. Move with the title handle and resize with the corner. Use the inspector for precise values. Changes appear immediately."
+                "Drag in a widget, move its handle, or resize a corner."
             )
             .font(.edithText(.callout)).foregroundStyle(.secondary)
         }
     }
 
     private var savedLayouts: some View {
-        DisclosureGroup("Saved layouts", isExpanded: $profilesExpanded) {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 HStack {
                     TextField("Layout name", text: $profileName).textFieldStyle(.roundedBorder)
@@ -232,7 +260,7 @@ struct SurfaceEditorPane: View {
     }
 
     private var canvasSettings: some View {
-        DisclosureGroup("Canvas geometry", isExpanded: $geometryExpanded) {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
             VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                 Stepper(
                     "Grid: \(layout.columns) columns",
@@ -352,6 +380,16 @@ struct SurfaceEditorPane: View {
                 Image(systemName: "sidebar.left")
             }
             .help("Workspace panels and layout sharing")
+            Button {
+                editorPanel = .geometry
+            } label: {
+                Label("Grid", systemImage: "square.grid.3x3")
+            }
+            Button {
+                editorPanel = .layouts
+            } label: {
+                Label("Layouts", systemImage: "rectangle.stack")
+            }
             Menu("Presets") {
                 Button("Default layout") { store.update(target) { $0 = .standard(target) } }
                 Button("Developer") {
@@ -490,7 +528,8 @@ struct SurfaceEditorPane: View {
                     in: RoundedRectangle(cornerRadius: UIScale.pt(target == .notch ? 22 : 14))
                 )
                 .environment(\.colorScheme, target == .notch ? .dark : scheme)
-                .frame(maxWidth: target == .notch ? UIScale.pt(layout.notchWidth) : .infinity)
+                .frame(width: target == .notch ? UIScale.pt(layout.notchWidth) : nil)
+                .frame(maxWidth: target == .home ? .infinity : nil)
             Text(
                 livePreview && target == .home
                     ? "Live content. Controls are paused while editing."
@@ -927,6 +966,43 @@ struct SurfaceEditorPane: View {
                     inherited: layout.cornerRadius)
                 Toggle("Dense content", isOn: setting(tile.id, \.dense, fallback: false))
                 Toggle("Accent color", isOn: setting(tile.id, \.accent, fallback: true))
+                Toggle(
+                    "Custom accent",
+                    isOn: Binding(
+                        get: { selection?.accentHex != nil },
+                        set: { custom in
+                            edit(tile.id) { $0.accentHex = custom ? Color.accentColor.hex6 : nil }
+                        }
+                    )
+                ).disabled(!tile.accent)
+                if tile.accentHex != nil {
+                    ColorPicker(
+                        "Widget color",
+                        selection: Binding(
+                            get: { selection?.highlightColor ?? .accentColor },
+                            set: { color in edit(tile.id) { $0.accentHex = color.hex6 } }
+                        ), supportsOpacity: false
+                    ).disabled(!tile.accent)
+                    Text("#" + (tile.accentHex ?? "")).font(.edithText(.caption)).monospaced()
+                }
+                if tile.widget.usesExtensionCard || tile.widget == .agents {
+                    Toggle(
+                        "Automatic metric columns",
+                        isOn: Binding(
+                            get: { selection?.metricColumns == nil },
+                            set: { automatic in
+                                edit(tile.id) { $0.metricColumns = automatic ? nil : 2 }
+                            }
+                        ))
+                    if let columns = tile.metricColumns {
+                        Stepper(
+                            "Metric columns: \(columns)",
+                            value: Binding(
+                                get: { selection?.metricColumns ?? 2 },
+                                set: { columns in edit(tile.id) { $0.metricColumns = columns } }
+                            ), in: 1...6)
+                    }
+                }
                 Stepper(
                     "Visible items: \(tile.itemLimit)",
                     value: setting(tile.id, \.itemLimit, fallback: 5), in: 1...20)
@@ -1002,15 +1078,21 @@ struct SurfaceEditorPane: View {
 
     private func extensionSources(_ tile: SurfaceTile) -> some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            Text("Sources").font(.edithText(.headline))
+            Text(tile.widget.sourceTitle).font(.edithText(.headline))
             Toggle(
-                "All sources",
+                "All " + tile.widget.sourceTitle.lowercased(),
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
             if tile.sourceIDs != nil {
-                let choices =
+                let available =
                     tile.widget.sourceChoices.isEmpty ? sourceChoices : tile.widget.sourceChoices
+                let known = Set(available.map(\.id))
+                let choices =
+                    available
+                    + (tile.sourceIDs ?? []).subtracting(known).sorted().map {
+                        SurfaceSourceChoice($0, $0 + " (unavailable)")
+                    }
                 ForEach(choices) { choice in
                     Toggle(
                         choice.title,
@@ -1187,6 +1269,12 @@ struct SurfaceEditorPane: View {
     }
 }
 
+private enum SurfaceEditorPanel: String, Identifiable {
+    case geometry, layouts
+    var id: String { rawValue }
+    var title: String { self == .geometry ? "Canvas geometry" : "Saved layouts" }
+}
+
 private struct SurfaceWidgetPreview: View {
     let tile: SurfaceTile
     let notch: Bool
@@ -1304,7 +1392,7 @@ private struct SurfaceWidgetPreview: View {
                 Text("\(Int(percent))% used").font(.edithText(.caption)).monospacedDigit()
             }
             ProgressView(value: percent, total: 100).tint(
-                tile.accent ? Color.accentColor : .secondary)
+                tile.highlightColor)
             if tile.showDetails, tile.shows("resets") {
                 Text("Resets in 2h 14m").font(.edithText(.caption2)).foregroundStyle(.secondary)
             }

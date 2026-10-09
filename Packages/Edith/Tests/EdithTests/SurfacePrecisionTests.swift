@@ -4,6 +4,32 @@ import Testing
 @testable import EdithKit
 
 struct SurfacePrecisionTests {
+    @Test @MainActor func widgetAppearanceSurvivesProfilesDuplicatesAndUndo() throws {
+        let suite = "SurfaceAppearance-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SurfaceLayoutStore(defaults: defaults)
+        let id = store.home.tiles[0].id
+        store.update(.home) { layout in
+            layout.tiles[0].accentHex = "d77958"
+            layout.tiles[0].metricColumns = 3
+        }
+        #expect(store.home.tiles[0].accentHex == "D77958")
+        #expect(store.saveProfile("Custom", target: .home))
+        store.update(.home) { _ = $0.duplicate(id) }
+        let copy = store.home.tiles[1]
+        #expect(copy.accentHex == "D77958" && copy.metricColumns == 3)
+        store.update(.home) {
+            $0.tiles[0].accentHex = "not a color"; $0.tiles[0].metricColumns = Int.max
+        }
+        #expect(store.home.tiles[0].accentHex == nil && store.home.tiles[0].metricColumns == 6)
+        #expect(store.home.tiles[1] == copy)
+        store.undo(.home)
+        #expect(store.home.tiles[0].accentHex == "D77958")
+        let restored = SurfaceLayoutStore(defaults: defaults)
+        #expect(restored.home.tiles[0].metricColumns == 3)
+        #expect(restored.profiles(.home).first?.layout.tiles[0].accentHex == "D77958")
+    }
     @Test func resamplingPreservesProportionsPositionsAndContent() {
         var tile = SurfaceTile(.github)
         tile.span = 8; tile.column = 16; tile.row = 80; tile.height = 240

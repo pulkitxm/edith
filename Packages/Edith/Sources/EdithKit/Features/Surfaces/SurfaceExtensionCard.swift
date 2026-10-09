@@ -94,11 +94,8 @@ public struct SurfaceExtensionCard: View {
         let metrics = value.metrics.filter { tile.shows($0.id) }
         if !metrics.isEmpty {
             LazyVGrid(
-                columns: [
-                    GridItem(
-                        .adaptive(minimum: UIScale.pt(tile.dense ? 72 : 88)),
-                        spacing: UIScale.pt(12))
-                ], alignment: .leading, spacing: UIScale.pt(10)
+                columns: tile.metricGrid(minimum: tile.dense ? 72 : 88), alignment: .leading,
+                spacing: UIScale.pt(10)
             ) {
                 ForEach(metrics) { metric in
                     VStack(alignment: .leading, spacing: UIScale.pt(4)) {
@@ -108,7 +105,7 @@ public struct SurfaceExtensionCard: View {
                             .lineLimit(2)
                         if tile.shows("progress"), let fraction = metric.fraction {
                             ProgressView(value: fraction).tint(
-                                tile.accent ? .accentColor : .secondary)
+                                tile.highlightColor)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -119,7 +116,7 @@ public struct SurfaceExtensionCard: View {
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     HStack(alignment: .top, spacing: UIScale.pt(8)) {
                         Image(systemName: row.icon).foregroundStyle(
-                            tile.accent ? Color.accentColor : .secondary
+                            tile.highlightColor
                         )
                         .frame(width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
@@ -137,7 +134,7 @@ public struct SurfaceExtensionCard: View {
                         }
                     }
                     if tile.shows("progress"), let progress = row.progress {
-                        ProgressView(value: progress).tint(tile.accent ? .accentColor : .secondary)
+                        ProgressView(value: progress).tint(tile.highlightColor)
                     }
                     if tile.showActions, tile.shows("volume"), let volume = row.volume {
                         SurfaceAudioSlider(control: volume, title: row.title) {

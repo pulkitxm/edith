@@ -12,6 +12,25 @@ public struct SurfacePresentation: Equatable, Sendable {
     }
 }
 
+extension SurfaceTile {
+    public var highlightColor: Color {
+        guard accent else { return .secondary }
+        guard let accentHex, accentHex.utf8.count == 6, let value = UInt32(accentHex, radix: 16)
+        else { return .accentColor }
+        return Color(
+            red: Double((value >> 16) & 255) / 255,
+            green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)
+    }
+    public func metricGrid(minimum: Double, spacing: Double = 12) -> [GridItem] {
+        if let metricColumns {
+            return Array(
+                repeating: GridItem(.flexible(minimum: 0), spacing: UIScale.pt(spacing)),
+                count: min(6, max(1, metricColumns)))
+        }
+        return [GridItem(.adaptive(minimum: UIScale.pt(minimum)), spacing: UIScale.pt(spacing))]
+    }
+}
+
 extension EnvironmentValues {
     @Entry public var surfacePresentation: SurfacePresentation?
     @Entry public var surfaceSampleContent = false

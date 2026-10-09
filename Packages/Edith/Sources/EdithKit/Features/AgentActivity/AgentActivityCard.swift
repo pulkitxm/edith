@@ -116,7 +116,7 @@ public struct AgentActivityCard: View {
 
     private var metrics: some View {
         LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(tile.dense ? 64 : 80)))],
+            columns: tile.metricGrid(minimum: tile.dense ? 64 : 80),
             alignment: .leading, spacing: UIScale.pt(8)
         ) {
             if tile.shows("running") { metric("Working", presentation.working, color: .green) }

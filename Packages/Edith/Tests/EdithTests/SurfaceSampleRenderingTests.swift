@@ -42,7 +42,9 @@ import Testing
             .agents, .github, .databases, .ability("systemStats"), .media, .machines,
         ]
         var tiles = widgets.map { SurfaceTile($0) }
-        for index in tiles.indices { tiles[index].span = 12; tiles[index].itemLimit = 3 }
+        for index in tiles.indices {
+            tiles[index].span = 12; tiles[index].itemLimit = 3; tiles[index].showActions = false
+        }
         let layout = SurfaceLayout(tiles: tiles)
         defaults.set(layout.encoded, forKey: SurfaceTarget.home.key)
         SurfaceLayoutStore.shared.reload()
@@ -101,7 +103,7 @@ import Testing
                 )
                 .frame(width: 280)
             }
-        }.padding(12).environment(\.colorScheme, .dark).background(Color.black)
+        }.disabled(true).padding(12).environment(\.colorScheme, .dark).background(Color.black)
         let data = try render(cards, size: CGSize(width: 596, height: 430), dark: true)
         #expect(data.count > 10_000)
         try save(data, name: "media-sample-controls.png")

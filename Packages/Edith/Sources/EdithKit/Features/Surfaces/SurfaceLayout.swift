@@ -195,6 +195,8 @@ public struct SurfaceTile: Codable, Equatable, Identifiable, Sendable {
     public var itemLimit = 5
     public var dense = false
     public var accent = true
+    public var accentHex: String?
+    public var metricColumns: Int?
     public var hiddenFields: Set<String> = []
     public var paddingOverride: Double?
     public var cornerOverride: Double?
@@ -279,6 +281,11 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
                 tile.row = tile.row.map { min(Self.maximumRow, max(0, $0)) }
                 tile.height = tile.height.flatMap { $0.isFinite ? min(1200, max(64, $0)) : nil }
                 tile.itemLimit = min(20, max(1, tile.itemLimit))
+                tile.metricColumns = tile.metricColumns.map { min(6, max(1, $0)) }
+                tile.accentHex = tile.accentHex.flatMap { value in
+                    guard value.utf8.count == 6, UInt32(value, radix: 16) != nil else { return nil }
+                    return value.uppercased()
+                }
                 tile.paddingOverride = tile.paddingOverride.flatMap {
                     $0.isFinite ? min(48, max(0, $0)) : nil
                 }

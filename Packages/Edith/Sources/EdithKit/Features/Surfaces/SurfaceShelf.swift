@@ -67,7 +67,8 @@ public struct SurfaceShelf<Content: View>: View {
                             ) {
                                 content(tile).environment(
                                     \.surfacePresentation,
-                                    SurfacePresentation(tile: tile, layout: layout))
+                                    SurfacePresentation(tile: tile, layout: layout)
+                                ).tint(tile.highlightColor)
                             }
                             .id(tile.id)
                         }
@@ -222,7 +223,7 @@ private struct SurfaceShelfTile<Content: View>: View {
                     } action: {
                         contentHeight = $0
                     }
-                    .allowsHitTesting(!editing)
+                    .disabled(editing).allowsHitTesting(!editing)
             }
             .frame(height: UIScale.pt(min(600, max(64, height + sizing.height / UIScale.current))))
             if editing {
