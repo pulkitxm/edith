@@ -567,7 +567,7 @@ private struct NotchHomeTab: View {
                 NotchNowPlayingCard(controller: controller, track: track, tile: tile).frame(
                     minHeight: tile.dense ? 62 : 92)
             } else {
-                emptyMusicCard(tile).frame(height: tile.dense ? 62 : 92)
+                emptyMusicCard(tile).frame(minHeight: tile.dense ? 62 : 92)
             }
         case .actions: quickActions(tile)
         case .calendar:
@@ -795,10 +795,18 @@ private struct NotchHomeTab: View {
             Image(systemName: "music.note")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.28))
-            Text("Nothing playing")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.35))
+            if let error = controller.nowPlayingControlError {
+                Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center).lineLimit(4)
+                if tile.showActions {
+                    Button("Retry playback controls") { controller.retryNowPlayingControls() }
+                        .font(.edithText(.caption)).buttonStyle(.edith(.borderless))
+                }
+            } else {
+                Text("Nothing playing").font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
         }
+        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
     }

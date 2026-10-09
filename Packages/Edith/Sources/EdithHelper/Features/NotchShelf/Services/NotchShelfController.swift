@@ -1180,8 +1180,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     var nowPlayingControlError: String? {
-        if case .external = nowPlaying?.source { return external.lastError }
-        return nil
+        nowPlaying?.source == .local ? nil : external.lastError
     }
     func retryNowPlayingControls() { external.retryPlayback() }
     func setNowPlayingShuffle(_ enabled: Bool) { performNowPlayingTransport(.shuffle(enabled)) }
