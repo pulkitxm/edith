@@ -259,6 +259,36 @@ export async function buildCameraCarrier({
     await cp(payload, join(contents, "PlugIns", `${role}.bundle`), {
       recursive: true,
     });
+    if (role === "cameraCarrier") {
+      const privileged = resolve(payloadDirectory, "privileged.bundle");
+      if (!development || (await lstat(privileged).catch(() => null))) {
+        await requireRegularTree(privileged);
+        execFileSync(
+          "codesign",
+          ["--verify", "--strict", "--deep", privileged],
+          { stdio: "inherit" },
+        );
+        await cp(privileged, join(contents, "PlugIns/privileged.bundle"), {
+          recursive: true,
+        });
+      }
+      const microphone = resolve(contents, "Library/Audio/Plug-Ins/HAL");
+      execFileSync(
+        "python3",
+        [
+          resolve(root, "scripts/build-camera-microphone.py"),
+          "--application",
+          hostIdentifier,
+          "--version",
+          version,
+          "--identity",
+          identity,
+          "--output",
+          microphone,
+        ],
+        { stdio: "inherit" },
+      );
+    }
     const runtime = await copyContainedHostRuntime(hostApp, contents, {
       identity,
       development,

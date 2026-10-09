@@ -181,6 +181,7 @@ ci-extension-audio-mixer:
 
 .PHONY: ci-extension-camera
 ci-extension-camera:
+	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
 	swift format lint --strict --recursive Extensions/virtualCamera
 	swift test --package-path Extensions/virtualCamera --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --no-parallel
 
@@ -191,6 +192,8 @@ ci-extension-camera-carrier: host
 
 .PHONY: ci-extension-camera-voice
 ci-extension-camera-voice:
+	python3 scripts/build-camera-microphone.py --application com.pulkit.edith.tests.camera --version 1.0.0 --output local/camera-microphone
+	python3 scripts/build-camera-microphone.py --test --driver local/camera-microphone/com.pulkit.edith.tests.camera.microphone.driver --output local/camera-microphone
 	swift test --package-path Extensions/virtualCamera/NativeRuntime --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
 
 .PHONY: ci-extension-camera-provider
