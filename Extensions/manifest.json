@@ -27,7 +27,7 @@
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "host-69510afbd2941570cd9cdbda",
+    "hostABI": "host-f9f2d6ffd5bfa72aa5851dcc",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [

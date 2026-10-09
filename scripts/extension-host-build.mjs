@@ -10,7 +10,7 @@ export async function buildHostInterfaces(root = process.cwd()) {
   const products = resolve(directory, ".build/release");
   await rm(resolve(directory, "Presenter"), { recursive: true, force: true });
   await cp(
-    resolve(root, "Extensions/presenter/Helper"),
+    resolve(root, "Extensions/presenter"),
     resolve(directory, "Presenter"),
     { recursive: true },
   );
@@ -33,6 +33,7 @@ export async function buildHostInterfaces(root = process.cwd()) {
   await mkdir(resolve(directory, "Sources"), { recursive: true });
   for (const module of [
     "EdithCore",
+    "EdithDatabase",
     "EdithKit",
     "EdithCameraSupport",
     "EdithLidAwakeSupport",
@@ -44,6 +45,7 @@ export async function buildHostInterfaces(root = process.cwd()) {
       { recursive: true, force: true },
     );
   const sdk = resolve(root, "Packages/ExtensionMarketplace");
+  const support = resolve(root, "Packages/ExtensionSupport");
   await writeFile(
     resolve(directory, "Package.swift"),
     `// swift-tools-version:6.0
@@ -52,15 +54,16 @@ let package = Package(
     name: "ExtensionHost",
     platforms: [.macOS(.v14)],
     products: [.library(name: "EdithShared", type: .dynamic, targets: ["EdithShared"])],
-    dependencies: [.package(path: ${JSON.stringify(sdk)})],
+    dependencies: [.package(path: ${JSON.stringify(sdk)}), .package(path: ${JSON.stringify(support)}), .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1")],
     targets: [
         .target(name: "EdithCore", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "EdithDatabase", dependencies: ["EdithCore", .product(name: "GRDB", package: "GRDB.swift")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithCameraSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithLidAwakeSupport", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(name: "EdithKit", dependencies: ["EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport", .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace")], resources: [.process("Resources"), .copy("ChromeExtension"), .copy("LaTeXEditor")], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "EdithKit", dependencies: ["EdithCore", "EdithDatabase", "EdithLidAwakeSupport", "EdithCameraSupport", .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace")], resources: [.process("Resources"), .copy("ChromeExtension"), .copy("LaTeXEditor")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "EdithShared", dependencies: ["EdithKit", "EdithCore", "EdithCameraSupport", "EdithLidAwakeSupport"], swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(name: "PresenterExtension", dependencies: ["EdithKit"], path: "Presenter", swiftSettings: [.swiftLanguageMode(.v5)]),
-        .testTarget(name: "PresenterExtensionTests", dependencies: ["PresenterExtension", "EdithKit"], path: "PresenterTests", swiftSettings: [.swiftLanguageMode(.v5)])
+        .target(name: "PresenterExtension", dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")], path: "Presenter", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "PresenterExtensionTests", dependencies: ["PresenterExtension", .product(name: "EdithExtensionUI", package: "ExtensionSupport")], path: "PresenterTests", swiftSettings: [.swiftLanguageMode(.v5)])
     ]
 )
 `,

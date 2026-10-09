@@ -16,6 +16,7 @@ async function fixture(run) {
   try {
     for (const module of [
       "EdithCore",
+      "EdithDatabase",
       "EdithKit",
       "EdithShared",
       "EdithCameraSupport",
@@ -138,5 +139,29 @@ test("build preparation refuses a missing host declaration", async () => {
     await expect(writeHostABI(root)).rejects.toThrow(
       "Missing host ABI declaration",
     );
+  });
+});
+
+test("database interfaces invalidate legacy bundles without changing the worker contract", async () => {
+  await fixture(async ({ root, manifest }) => {
+    await writeFile(
+      manifest,
+      JSON.stringify([
+        { id: "isolated", contractVersion: 1, hostABI: "stale" },
+        { id: "legacy", hostABI: "stale" },
+      ]),
+    );
+    const previous = await writeHostABI(root);
+    await writeFile(
+      join(root, "Packages/Edith/Sources/EdithDatabase/Surface.swift"),
+      "changed database interface",
+    );
+    const next = await writeHostABI(root);
+    expect(next).not.toBe(previous);
+    expect(
+      JSON.parse(await readFile(manifest, "utf8")).map(
+        (entry) => entry.hostABI,
+      ),
+    ).toEqual(["edith-host-1", next]);
   });
 });
