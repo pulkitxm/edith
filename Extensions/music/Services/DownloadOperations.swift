@@ -106,7 +106,7 @@ public enum DownloadToolOperationExecution {
         let request = CLICommandRequest(
             executableURL: executable, arguments: ["--version"],
             environment: CLIToolEnvironment.sanitized(),
-            timeout: 10)
+            timeout: 30)
         return DownloadToolStatus(
             executable: executable,
             version: await ToolVersionProbe.version(request, runCommand: runCommand))

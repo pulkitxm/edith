@@ -168,7 +168,8 @@ final class ExternalMusic {
     func retryPlayback() {
         lastError = nil
         guard let app = current?.app else { return }
-        Task { [weak self] in await self?.refreshPlayback(app: app) }
+        commandTask?.cancel()
+        commandTask = Task { [weak self] in await self?.refreshPlayback(app: app) }
     }
 
     private func refreshPlayback(app: ExternalApp, command: String? = nil) async {

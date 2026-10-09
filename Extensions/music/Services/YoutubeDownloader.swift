@@ -359,6 +359,7 @@ public final class YoutubeDownloader {
                 try Task.checkCancellation()
                 apply(try await client.snapshot())
             } catch {
+                guard !Task.isCancelled else { return }
                 errorMessage = error.localizedDescription
             }
         }
@@ -373,12 +374,14 @@ public final class YoutubeDownloader {
             do {
                 let update = try await DownloadToolOperationExecution.update(
                     executable: CLIToolEnvironment.executable(named: "yt-dlp"))
+                try Task.checkCancellation()
                 let text = update.output.isEmpty ? "yt-dlp updated" : update.output
                 updateResult = .success(text)
                 ytdlpUpdateMessage = text
                 ytdlpVersion = update.after
                 unavailableReason = nil
             } catch {
+                guard !Task.isCancelled else { return }
                 updateResult = .failure(error)
                 ytdlpUpdateMessage = error.localizedDescription
             }
