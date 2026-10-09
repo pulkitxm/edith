@@ -8,6 +8,7 @@ public final class SurfaceLayoutStore {
     public private(set) var home: SurfaceLayout
     public private(set) var notch: SurfaceLayout
     public private(set) var profiles: [SurfaceLayoutProfile] = []
+    private var profilesByTarget: [SurfaceTarget: [SurfaceLayoutProfile]] = [:]
     private var deletedProfiles: [SurfaceTarget: SurfaceLayoutProfile] = [:]
     private let defaults: UserDefaults
     private var undoHistory: [SurfaceTarget: [SurfaceLayout]] = [:]
@@ -15,7 +16,9 @@ public final class SurfaceLayoutStore {
 
     public init(defaults: UserDefaults = SharedDefaults.store) {
         self.defaults = defaults
-        profiles = Self.loadProfiles(defaults)
+        let loadedProfiles = Self.loadProfiles(defaults)
+        profiles = loadedProfiles
+        profilesByTarget = Self.groupProfiles(loadedProfiles)
         home = SurfaceLayout.decode(defaults.string(forKey: SurfaceTarget.home.key), target: .home)
         notch = SurfaceLayout.decode(
             defaults.string(forKey: SurfaceTarget.notch.key), target: .notch)
@@ -49,9 +52,7 @@ public final class SurfaceLayoutStore {
     }
 
     public func profiles(_ target: SurfaceTarget) -> [SurfaceLayoutProfile] {
-        profiles.filter { $0.target == target }.sorted {
-            $0.name.localizedStandardCompare($1.name) == .orderedAscending
-        }
+        profilesByTarget[target] ?? []
     }
     public func canRestoreProfile(_ target: SurfaceTarget) -> Bool {
         deletedProfiles[target] != nil
@@ -121,8 +122,20 @@ public final class SurfaceLayoutStore {
         else { return false }
         defaults.set(raw, forKey: AppStorageKeys.Surfaces.profiles)
         profiles = next
+        profilesByTarget = Self.groupProfiles(next)
         IPC.post(IPC.Name.settingsChanged)
         return true
+    }
+    private nonisolated static func groupProfiles(_ profiles: [SurfaceLayoutProfile])
+        -> [SurfaceTarget: [SurfaceLayoutProfile]]
+    {
+        var grouped = Dictionary(grouping: profiles.prefix(40), by: \.target)
+        for target in SurfaceTarget.allCases {
+            grouped[target]?.sort {
+                $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+        }
+        return grouped
     }
     private static func loadProfiles(_ defaults: UserDefaults) -> [SurfaceLayoutProfile] {
         guard let raw = defaults.string(forKey: AppStorageKeys.Surfaces.profiles),
@@ -145,7 +158,10 @@ public final class SurfaceLayoutStore {
 
     public func reload() {
         let nextProfiles = Self.loadProfiles(defaults)
-        if profiles != nextProfiles { profiles = nextProfiles }
+        if profiles != nextProfiles {
+            profiles = nextProfiles
+            profilesByTarget = Self.groupProfiles(nextProfiles)
+        }
 
         for target in SurfaceTarget.allCases {
             let next = SurfaceLayout.decode(defaults.string(forKey: target.key), target: target)

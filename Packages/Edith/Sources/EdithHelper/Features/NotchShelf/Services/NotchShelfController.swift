@@ -78,7 +78,7 @@ final class NotchShelfController: FeatureModule {
             updatePanelFrames()
             if !layoutEditing, surfaceLayout.notchExpandPermissions,
                 !agentActivity.activity.approvals.isEmpty,
-                let id = expandedDisplay ?? builtinDisplayID ?? panels.keys.sorted().first
+                let id = expandedDisplay ?? builtinDisplayID ?? panels.keys.min()
             {
                 expand(on: id, preferredTab: .agents)
             }
@@ -210,11 +210,17 @@ final class NotchShelfController: FeatureModule {
             usageStore?.session, usageStore?.week, usageStore?.fableWeek,
             usageStore?.codexSession, usageStore?.codexWeek, usageStore?.cursorSession,
             usageStore?.cursorWeek, usageStore?.grokWeek,
-        ].compactMap { $0 }
-            .filter { ($0.resetsAt ?? .distantFuture) > agentActivity.now }
-        let quota = windows.map { 100 - $0.percent }.min()
-        let meeting = calendarStore?.events.filter { !$0.isAllDay && $0.end > agentActivity.now }
-            .map(\.start).min()
+        ]
+        var quota: Double?
+        for case let window? in windows
+        where (window.resetsAt ?? .distantFuture) > agentActivity.now {
+            quota = min(quota ?? .infinity, 100 - window.percent)
+        }
+        var meeting: Date?
+        for event in calendarStore?.events ?? []
+        where !event.isAllDay && event.end > agentActivity.now {
+            meeting = min(meeting ?? .distantFuture, event.start)
+        }
         return SurfaceGlanceContext(
             agents: agentPresentation,
             observing: agentActivity.activity.settings.enabled
@@ -278,7 +284,7 @@ final class NotchShelfController: FeatureModule {
         let newRequests = requests.subtracting(knownApprovalIDs)
         knownApprovalIDs = requests
         if !newRequests.isEmpty, surfaceLayout.notchExpandPermissions, !layoutEditing,
-            let id = builtinDisplayID ?? panels.keys.sorted().first
+            let id = builtinDisplayID ?? panels.keys.min()
         {
             activeTab = .agents
             expand(on: id)

@@ -106,8 +106,12 @@ struct SurfacePrecisionTests {
         #expect(restored.profiles(.home).first?.name == "Development")
         store.removeProfile(profile.id)
         #expect(store.profiles(.home).isEmpty)
+        restored.reload()
+        #expect(restored.profiles(.home).isEmpty)
         #expect(store.restoreProfile(.home))
         #expect(store.profiles(.home).first?.id == profile.id)
+        restored.reload()
+        #expect(restored.profiles(.home).first?.id == profile.id)
         #expect(store.profiles(.notch).count == 1)
     }
     @Test @MainActor func savedLayoutLimitsDoNotOverwriteExistingEntries() throws {
@@ -116,6 +120,7 @@ struct SurfacePrecisionTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = SurfaceLayoutStore(defaults: defaults)
         for index in 0..<20 { #expect(store.saveProfile("Layout \(index)", target: .home)) }
+        #expect(store.profiles(.home).prefix(3).map(\.name) == ["Layout 0", "Layout 1", "Layout 2"])
         #expect(!store.saveProfile("Overflow", target: .home))
         #expect(!store.saveProfile("  ", target: .home))
         let profile = try #require(store.profiles(.home).first)

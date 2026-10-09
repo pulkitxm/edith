@@ -83,12 +83,16 @@ public final class AgentActivityMonitor {
         }
     }
 
-    private func received(_ snapshot: AgentActivitySnapshot, feedID: UUID) {
+    private func received(_ snapshot: AgentActivitySnapshot, feedID: UUID) async {
+        let active = await Task.detached(priority: .utility) {
+            Set(snapshot.approvals.map(\.id))
+        }.value
         guard self.feedID == feedID, !Task.isCancelled else { return }
         activity = snapshot
         load.setContent()
-        let active = Set(snapshot.approvals.map(\.id))
-        decisionErrors = decisionErrors.filter { active.contains($0.key) }
+        for id in Array(decisionErrors.keys) where !active.contains(id) {
+            decisionErrors[id] = nil
+        }
     }
 
     private func failed(_ error: Error, feedID: UUID) {
@@ -96,10 +100,12 @@ public final class AgentActivityMonitor {
         load.fail(load.begin(), error: error)
     }
 
-    private func receivedTerminals(_ snapshot: SessionsSnapshot, feedID: UUID) {
+    private func receivedTerminals(_ snapshot: SessionsSnapshot, feedID: UUID) async {
+        let active = await Task.detached(priority: .utility) {
+            Set(snapshot.hosts.flatMap(\.agents).filter { !$0.isTerminal }.map(\.id))
+        }.value
         guard terminalFeedID == feedID, !Task.isCancelled else { return }
-        let active = Set(snapshot.hosts.flatMap(\.agents).filter { !$0.isTerminal }.map(\.id))
-        observedAt = observedAt.filter { active.contains($0.key) }
+        for id in Array(observedAt.keys) where !active.contains(id) { observedAt[id] = nil }
         for id in active where observedAt[id] == nil { observedAt[id] = snapshot.discoveredAt }
         terminals = snapshot
     }
@@ -127,7 +133,7 @@ public final class AgentActivityMonitor {
                 SessionsSnapshot.self, topic: .sessions, client: client)
             {
                 guard !Task.isCancelled else { break }
-                self?.receivedTerminals(value, feedID: id)
+                await self?.receivedTerminals(value, feedID: id)
             }
         }
     }

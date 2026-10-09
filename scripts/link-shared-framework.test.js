@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { basename } from "node:path";
 
 function objects(suffix, fileList, missing = false) {
   const result = Bun.spawnSync(
@@ -43,7 +44,14 @@ for (const suffix of ["", "-t"]) {
   for (const fileList of [true, false]) {
     test(`framework objects use Release artifacts in ${suffix || "plain"} targets with file lists ${fileList}`, () => {
       const result = objects(suffix, fileList);
-      expect(result.objects).toHaveLength(5);
+      expect(result.objects.map((path) => basename(path)).sort()).toEqual([
+        "EdithCameraSupport.o",
+        "EdithCore.o",
+        "EdithDatabase.o",
+        "EdithKit.o",
+        "EdithLidAwakeSupport.o",
+        "EdithShared.o",
+      ]);
       for (const path of result.objects) {
         expect(path).toContain("/Release/");
         expect(path).toEndWith(".o");
