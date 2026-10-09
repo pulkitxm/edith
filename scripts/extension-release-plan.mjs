@@ -112,6 +112,7 @@ export async function extensionFingerprint(root, definition, definitions) {
           "target",
           "Tests",
           "tests",
+          "vendor",
         ].includes(entry.name)
       )
         continue;

@@ -15,7 +15,7 @@ extension SurfaceWidget {
             .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
             .ability("seoAudit"), .ability("latex"), .ability("audioMixer"), .ability("timeLapse"),
-            .ability("companion"):
+            .ability("companion"), .ability("terminal"):
             true
         default: false
         }
@@ -26,6 +26,7 @@ extension SurfaceWidget {
         case .databases: "Connections"
         case .ability("audioMixer"): "Audio apps"
         case .ability("companion"): "Item kinds"
+        case .ability("terminal"): "Sessions"
         case .limits, .agents: "Providers"
         case .clocks: "Cities"
         case .calendar: "Calendars"
@@ -131,6 +132,8 @@ extension SurfaceWidget {
                 [("agents", "Detected agent count"), ("skills", "Available skill count")]
             case .ability("studio"), .ability("notchShelf"):
                 [("files", "File count")]
+            case .ability("terminal"):
+                [("sessions", "Session count"), ("running", "Running shells")]
             case .ability("virtualCamera"):
                 [("scenes", "Scene count")]
             default: []
