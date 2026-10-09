@@ -434,5 +434,34 @@
       "Packages/ExtensionSupport"
     ],
     "dependencies": []
+  },
+  {
+    "id": "cleaner",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/cleaner/CleanerCommands.swift",
+        "Extensions/cleaner/CleanerModel.swift",
+        "Extensions/cleaner/CleanerOperations.swift",
+        "Extensions/cleaner/CleanerPage.swift",
+        "Extensions/cleaner/CleanerServices.swift",
+        "Extensions/cleaner/CleanerViews.swift",
+        "Extensions/cleaner/JunkScanner.swift",
+        "Extensions/cleaner/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/cleaner"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
   }
 ]

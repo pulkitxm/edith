@@ -92,7 +92,9 @@ struct HostLifecycleHarness {
             stage = "window"
             try await sessions.show(id: first.id)
             stage = "initial commands"
-            if extensionID == "timeLapse" {
+            if extensionID == "cleaner" {
+                try await verifyCleaner(endpoint)
+            } else if extensionID == "timeLapse" {
                 try await verifyRecording(endpoint)
             } else if extensionID == "system" {
                 try await verifySystem(endpoint)
@@ -119,7 +121,9 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "timeLapse" {
+            if extensionID == "cleaner" {
+                try await verifyCleaner(endpoint)
+            } else if extensionID == "timeLapse" {
                 try await verifyRecording(endpoint)
             } else if extensionID == "system" {
                 try await verifySystem(endpoint)
@@ -141,7 +145,9 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "timeLapse" {
+            if extensionID == "cleaner" {
+                try await verifyCleaner(endpoint)
+            } else if extensionID == "timeLapse" {
                 try await verifyRecording(endpoint)
             } else if extensionID == "system" {
                 try await verifySystem(endpoint)
@@ -199,6 +205,27 @@ struct HostLifecycleHarness {
                         "\(extensionID) failed during \(stage): \(error). \(logs)"
                 ])
 
+        }
+    }
+
+    @MainActor private static func verifyCleaner(_ endpoint: ExtensionPeerEndpoint) async throws {
+        try await verify(
+            endpoint, command: "cleaner.status", input: [:], field: "working", expected: false)
+        let preview = try await endpoint.invoke("cleaner.preview", timeout: 5)
+        let result = try JSONSerialization.jsonObject(with: preview) as? [String: Any]
+        guard let categories = result?["categories"] as? [Any], categories.isEmpty,
+            let token = result?["previewToken"] as? String, UUID(uuidString: token) != nil
+        else { throw HostWorkerError.rejected }
+        for confirmed in [false, true] {
+            do {
+                _ = try await endpoint.invoke(
+                    "cleaner.clean",
+                    payload: JSONSerialization.data(
+                        withJSONObject: [
+                            "confirmed": confirmed, "previewToken": "expired-fixture-preview",
+                        ]), timeout: 5)
+                throw HostWorkerError.rejected
+            } catch ExtensionPeerError.rejected {}
         }
     }
 
