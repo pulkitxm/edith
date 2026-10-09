@@ -346,7 +346,18 @@ public actor HomebrewListingStore {
     }
 
     public func load() -> HomebrewListingSnapshot? {
-        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        guard
+            let values = try? fileURL.resourceValues(forKeys: [
+                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
+            ]),
+            values.isRegularFile == true, values.isSymbolicLink != true,
+            let size = values.fileSize, size <= 8 * 1024 * 1024,
+            let handle = try? FileHandle(forReadingFrom: fileURL)
+        else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 8 * 1024 * 1024 + 1),
+            data.count <= 8 * 1024 * 1024
+        else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(HomebrewListingSnapshot.self, from: data)

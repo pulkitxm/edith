@@ -15,6 +15,24 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.model != nil else { throw ExtensionPeerError.unavailable }
+            if command == "surface.snapshot" || command == "surface.perform" {
+                return try await SurfaceCommandService.execute(
+                    providerID: "system", command: command, payload: payload,
+                    snapshot: { tile in
+                        SystemSurface.snapshot(apps: self.operations.list(), tile: tile)
+                    },
+                    perform: { action in
+                        guard
+                            let app = self.operations.list().first(where: {
+                                "activate:" + $0.pid.description == action
+                            }), let running = NSRunningApplication(processIdentifier: app.pid),
+                            running.bundleIdentifier == app.bundleID
+                        else { throw ExtensionPeerError.invalidRequest }
+                        guard running.activate() else {
+                            throw ExtensionPeerError.rejected("The app could not open.")
+                        }
+                    })
+            }
             switch command {
             case "apps.list":
                 return try JSONSerialization.data(

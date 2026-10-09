@@ -7,7 +7,9 @@ let package = Package(
     dependencies: [.package(path: "../Packages/ExtensionSupport")],
     targets: [
         .target(
-            name: "KeepAwakeExtension", path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),
+            name: "KeepAwakeExtension",
+            dependencies: [.product(name: "EdithExtensionSupport", package: "ExtensionSupport")],
+            path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),
         .testTarget(
             name: "KeepAwakeExtensionTests", dependencies: ["KeepAwakeExtension"],
             path: "keepAwake/Tests"),

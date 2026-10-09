@@ -15,8 +15,21 @@ final class ExtensionRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
-        commands.invoke(request, completion: completion) { [weak self] command, _ in
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
+            if command == "surface.snapshot" || command == "surface.perform" {
+                return try await SurfaceCommandService.execute(
+                    providerID: "presenter", command: command, payload: payload,
+                    snapshot: { _ in
+                        PresenterSurface.snapshot(PresenterRuntimeOperationExecution.status())
+                    },
+                    perform: { action in
+                        if action == "stop" { self.service?.pauseUntilShareEnds() }
+                        _ = PresenterRuntimeOperationExecution.perform(
+                            action == "stop" ? .stop : .start)
+                        self.synchronize()
+                    })
+            }
             switch command {
             case "presenter.start": _ = PresenterRuntimeOperationExecution.perform(.start)
             case "presenter.stop": _ = PresenterRuntimeOperationExecution.perform(.stop)

@@ -13,6 +13,14 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let model = self?.model else { throw ExtensionPeerError.unavailable }
+            if command == "surface.snapshot" || command == "surface.perform" {
+                return try await SurfaceCommandService.execute(
+                    providerID: "appMaintenance", command: command, payload: payload,
+                    snapshot: { tile in AppMaintenanceSurface.snapshot(model, tile: tile) },
+                    perform: { action in
+                        if action == "refresh" { model.refresh() } else { model.cancel() }
+                    })
+            }
             return try await MaintenanceCommands.execute(command, payload: payload, model: model)
         }
     }

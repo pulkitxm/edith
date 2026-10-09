@@ -143,4 +143,25 @@ struct SurfaceCommandServiceTests {
         #expect(masked.message == "Hidden while presenting.")
     }
 
+    @Test(arguments: ["contract", "duplicates", "size"])
+    func invalidCurrentSnapshotsCannotAuthorizeActions(_ defect: String) async throws {
+        var current = SurfaceSnapshot(
+            providerID: "keepAwake", actions: [.init("enable", "Enable", "power")])
+        switch defect {
+        case "contract": current.contractVersion = 2
+        case "duplicates": current.actions.append(.init("enable", "Again", "power"))
+        default: current.message = String(repeating: "x", count: 4097)
+        }
+        var performed = false
+        let action = SurfaceActionRequest(
+            snapshot: .init(target: .home, tile: .init(.actions)), actionID: "enable")
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await SurfaceCommandService.execute(
+                providerID: "keepAwake", command: "surface.perform",
+                payload: action.encoded(providerID: "keepAwake"), snapshot: { _ in current },
+                perform: { _ in performed = true })
+        }
+        #expect(!performed)
+    }
+
 }
