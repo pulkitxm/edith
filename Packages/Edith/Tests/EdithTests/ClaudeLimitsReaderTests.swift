@@ -49,13 +49,18 @@ import Testing
                 try await ClaudeLimitsReader.fetch(token: "synthetic-token") { request in
                     count += 1
                     #expect(
-                        request.url?.absoluteString == "https://api.anthropic.com/api/oauth/usage")
+                        request.url?.absoluteString
+                            == "https://api.anthropic.com/api/oauth/usage?cedar_ember=1")
                     #expect(
                         request.value(forHTTPHeaderField: "Authorization")
                             == "Bearer synthetic-token")
                     #expect(
                         request.value(forHTTPHeaderField: "anthropic-beta") == "oauth-2025-04-20")
                     #expect(request.value(forHTTPHeaderField: "Cookie") == nil)
+                    #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+                    #expect(
+                        request.value(forHTTPHeaderField: "User-Agent")
+                            == "claude-cli/2.1.0 (external, cli)")
                     #expect(request.cachePolicy == .reloadIgnoringLocalCacheData)
                     return (usage, response(request, status: 200))
                 }
@@ -97,19 +102,40 @@ import Testing
     }
 
     @Test func insufficientProfileScopeIsReportedWithoutEchoingTheResponse() async {
+        var count = 0
         let body = Data(
             "{\"error\":{\"message\":\"synthetic-secret-token does not meet scope requirement user:profile\"}}"
                 .utf8)
         let result = await LimitsCollector.fetchClaude(
             fetch: {
                 try await ClaudeLimitsReader.fetch(token: "synthetic-token") { request in
-                    (body, response(request, status: 403))
+                    count += 1
+                    return (body, response(request, status: 403))
                 }
             }, fallback: { .init(provider: .claude, session: nil, week: nil) },
             persist: { _ in Issue.record("Rejected tokens must not persist limits") })
         #expect(
             result.0.error == ClaudeLimitsReader.Failure.missingProfileScope.localizedDescription)
         #expect(result.0.error?.contains("synthetic-secret-token") == false)
+        #expect(count == 1)
+    }
+
+    @Test(arguments: [400, 403])
+    func optionalInventoryRejectionRetriesWithTheSameCredential(status: Int) async throws {
+        var count = 0
+        let result = try await ClaudeLimitsReader.fetch(token: "synthetic-token") { request in
+            count += 1
+            #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer synthetic-token")
+            if count == 1 {
+                #expect(request.url?.query == "cedar_ember=1")
+                return (Data(), response(request, status: status))
+            }
+            #expect(request.url?.query == nil)
+            #expect(request.value(forHTTPHeaderField: "User-Agent") == "claude-cli/2.1.0")
+            return (usage, response(request, status: 200))
+        }
+        #expect(count == 2)
+        #expect(result.fable?.percent == 7)
     }
 
     @Test(arguments: [401, 403, 429, 500])
@@ -130,7 +156,7 @@ import Testing
                 .init(provider: .claude, session: nil, week: .init(percent: 0, resetsAt: nil))
             },
             persist: { _ in Issue.record("Failed API requests must not persist limits") })
-        #expect(count == 1)
+        #expect(count == (status == 403 ? 2 : 1))
         #expect(result.0.session == nil)
         #expect(result.0.week == nil)
         #expect(result.0.error != nil)

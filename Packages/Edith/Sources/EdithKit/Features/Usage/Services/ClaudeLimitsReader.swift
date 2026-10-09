@@ -75,26 +75,40 @@ public enum ClaudeLimitsReader {
         token: String,
         send: (URLRequest) async throws -> (Data, HTTPURLResponse)
     ) async throws -> LimitsProviderSnapshot {
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
+        let endpoint = "https://api.anthropic.com/api/oauth/usage"
+        var request = URLRequest(url: URL(string: endpoint + "?cedar_ember=1")!)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, response) = try await send(request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("claude-cli/2.1.0 (external, cli)", forHTTPHeaderField: "User-Agent")
+        var (data, response) = try await send(request)
+        if response.statusCode == 400
+            || (response.statusCode == 403 && !requiresProfileScope(data))
+        {
+            try Task.checkCancellation()
+            request.url = URL(string: endpoint)!
+            request.setValue("claude-cli/2.1.0", forHTTPHeaderField: "User-Agent")
+            (data, response) = try await send(request)
+        }
         switch response.statusCode {
         case 200: return try limits(json: data)
         case 401: throw Failure.unauthorized
         case 403:
-            let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let error = body?["error"] as? [String: Any]
-            let message = error?["message"] as? String
-            if message?.contains("user:profile") == true { throw Failure.missingProfileScope }
+            if requiresProfileScope(data) { throw Failure.missingProfileScope }
             throw Failure.forbidden
         case 429:
             throw Failure.rateLimited(
                 response.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init))
         default: throw Failure.http(response.statusCode)
         }
+    }
+
+    private static func requiresProfileScope(_ data: Data) -> Bool {
+        let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        let error = body?["error"] as? [String: Any]
+        return (error?["message"] as? String)?.contains("user:profile") == true
     }
 
     static func limits(json data: Data) throws -> LimitsProviderSnapshot {
