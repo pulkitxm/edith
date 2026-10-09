@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { copyNativeFrameworks, copyNativeResources } from "./build-extension-package.mjs";
+import { copyNativeFrameworks, copyNativeResources, nativeClangModuleFlags } from "./build-extension-package.mjs";
 
 test("native Swift resources and explicit licenses retain their bundle structure", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-native-resources-"));
@@ -84,8 +84,12 @@ test("native frameworks preserve versioned layout and reject unowned paths", asy
     const source = ".build/artifacts/Parser.framework";
     await mkdir(join(root, nativePackage, source, "Versions/A"), { recursive: true });
     await writeFile(join(root, nativePackage, source, "Versions/A/Parser"), "synthetic binary");
+    await symlink("A", join(root, nativePackage, source, "Versions/Current"));
+    await symlink("Versions/Current/Parser", join(root, nativePackage, source, "Parser"));
     const contents = join(root, "mock.bundle/Contents");
-    await copyNativeFrameworks(root, { nativePackage, nativeFrameworks: [source] }, contents);
+    const copied = await copyNativeFrameworks(root, { nativePackage, nativeFrameworks: [source] }, contents);
+    expect(await readlink(join(contents, "Frameworks/Parser.framework/Parser"))).toBe("Versions/Current/Parser");
+    expect(copied).toEqual([{ binary: await realpath(join(contents, "Frameworks/Parser.framework/Versions/A/Parser")), framework: join(contents, "Frameworks/Parser.framework") }]);
     expect(await readFile(join(contents, "Frameworks/Parser.framework/Versions/A/Parser"), "utf8")).toBe("synthetic binary");
     for (const nativeFrameworks of [["../Outside.framework"], [source, source], ["invalid.dylib"]]) {
       await expect(copyNativeFrameworks(root, { nativePackage, nativeFrameworks }, contents)).rejects.toThrow("invalid native framework");
@@ -93,4 +97,13 @@ test("native frameworks preserve versioned layout and reject unowned paths", asy
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+test("native Clang modules admit only owned target names", () => {
+  const nativePackage = "Extensions/mock/Native";
+  expect(nativeClangModuleFlags("/synthetic", { nativePackage, nativeClangTargets: ["CPDFium"] }))
+    .toEqual(["-I", "/synthetic/Extensions/mock/Native/.build/release/CPDFium.build"]);
+  for (const nativeClangTargets of [["../Outside"], ["CPDFium", "CPDFium"], ["/absolute"], [""], ["-flag"]])
+    expect(() => nativeClangModuleFlags("/synthetic", { nativePackage, nativeClangTargets })).toThrow("Invalid native Clang target");
 });

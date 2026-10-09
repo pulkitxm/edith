@@ -6,6 +6,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -68,10 +69,21 @@ export async function copyNativeFrameworks(root, definition, contents) {
     names.add(name);
     await mkdir(directory, { recursive: true });
     const destination = resolve(directory, name);
-    await cp(origin, destination, { recursive: true, dereference: false });
-    binaries.push(resolve(destination, name.slice(0, -10)));
+    execFileSync("/bin/cp", ["-R", origin, destination]);
+    const binary = await realpath(resolve(destination, name.slice(0, -10)));
+    if (!binary.startsWith((await realpath(destination)) + "/")) throw new Error("Native framework executable escapes its bundle");
+    binaries.push({ binary, framework: destination });
   }
   return binaries;
+}
+
+export function nativeClangModuleFlags(root, definition) {
+  const targets = definition.nativeClangTargets ?? [];
+  if (new Set(targets).size !== targets.length
+    || targets.some((target) => !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(target)))
+    throw new Error("Invalid native Clang target");
+  return targets.flatMap((target) => ["-I",
+    resolve(root, definition.nativePackage, ".build/release", target + ".build")]);
 }
 
 export async function buildExtensionPackage({
@@ -248,7 +260,7 @@ export async function buildExtensionPackage({
       await mkdir(frameworks, { recursive: true });
       await copyNativeResources(root, definition, contents, resourceNames);
       const frameworkBinaries = await copyNativeFrameworks(root, definition, contents);
-      for (const binary of frameworkBinaries) {
+      for (const { binary, framework } of frameworkBinaries) {
         const architectures = execFileSync("lipo", ["-archs", binary], { encoding: "utf8" }).trim().split(/\s+/);
         if (!architectures.includes("arm64")) throw new Error("A native framework lacks arm64");
         if (architectures.length > 1) {
@@ -259,7 +271,7 @@ export async function buildExtensionPackage({
         }
         execFileSync("strip", ["-rSTx", binary]);
         execFileSync("codesign", ["--force", "--sign", development ? "-" : identity,
-          ...(development ? [] : ["--options", "runtime", "--timestamp"]), resolve(binary, "..")], { stdio: "inherit" });
+          ...(development ? [] : ["--options", "runtime", "--timestamp"]), framework], { stdio: "inherit" });
       }
       const library = resolve(frameworks, libraryName);
       await copyFile(
@@ -271,7 +283,8 @@ export async function buildExtensionPackage({
         `@rpath/${libraryName}`,
         library,
       ]);
-      if (frameworkBinaries.length) execFileSync("install_name_tool", ["-add_rpath", "@loader_path", library]);
+      if (frameworkBinaries.length && !execFileSync("otool", ["-l", library], { encoding: "utf8" }).includes("path @loader_path ("))
+        execFileSync("install_name_tool", ["-add_rpath", "@loader_path", library]);
       execFileSync("strip", ["-rSTx", library]);
       execFileSync(
         "codesign",
@@ -284,7 +297,9 @@ export async function buildExtensionPackage({
         ],
         { stdio: "inherit" },
       );
+      nativeFlags.push(...nativeClangModuleFlags(root, definition));
       nativeFlags.push(
+        "-F", frameworks,
         "-I",
         resolve(root, definition.nativePackage, ".build/release/Modules"),
         "-L",
