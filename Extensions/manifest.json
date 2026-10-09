@@ -1434,5 +1434,126 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI"
     ],
     "dependencies": []
+  },
+  {
+    "id": "bifrost",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/bifrost/Models/BifrostApplication.swift",
+        "Extensions/bifrost/Models/BifrostCommand.swift",
+        "Extensions/bifrost/Models/BifrostCurrency.swift",
+        "Extensions/bifrost/Models/BifrostEntry.swift",
+        "Extensions/bifrost/Models/BifrostLibrary.swift",
+        "Extensions/bifrost/Models/BifrostMode.swift",
+        "Extensions/bifrost/Models/BifrostPlaceholder.swift",
+        "Extensions/bifrost/Models/BifrostResult.swift",
+        "Extensions/bifrost/Models/BifrostSection.swift",
+        "Extensions/bifrost/Models/BifrostSource.swift",
+        "Extensions/bifrost/Models/BifrostSystemAction.swift",
+        "Extensions/bifrost/Models/BifrostUnit.swift",
+        "Extensions/bifrost/Models/BifrostWindowAction.swift",
+        "Extensions/bifrost/Runtime.swift",
+        "Extensions/bifrost/Services/BifrostActionRunner.swift",
+        "Extensions/bifrost/Services/BifrostApplicationScanner.swift",
+        "Extensions/bifrost/Services/BifrostCalculator.swift",
+        "Extensions/bifrost/Services/BifrostClipboardFeed.swift",
+        "Extensions/bifrost/Services/BifrostCommandExecution.swift",
+        "Extensions/bifrost/Services/BifrostConversion.swift",
+        "Extensions/bifrost/Services/BifrostEntryCatalog.swift",
+        "Extensions/bifrost/Services/BifrostFileSearch.swift",
+        "Extensions/bifrost/Services/BifrostFixture.swift",
+        "Extensions/bifrost/Services/BifrostIPC.swift",
+        "Extensions/bifrost/Services/BifrostIndexStore.swift",
+        "Extensions/bifrost/Services/BifrostMatcher.swift",
+        "Extensions/bifrost/Services/BifrostNumberFormat.swift",
+        "Extensions/bifrost/Services/BifrostOperation.swift",
+        "Extensions/bifrost/Services/BifrostPasteSynth.swift",
+        "Extensions/bifrost/Services/BifrostPeers.swift",
+        "Extensions/bifrost/Services/BifrostQuery.swift",
+        "Extensions/bifrost/Services/BifrostRateService.swift",
+        "Extensions/bifrost/Services/BifrostRemoteSearch.swift",
+        "Extensions/bifrost/Services/BifrostRunningApps.swift",
+        "Extensions/bifrost/Services/BifrostSearchPlan.swift",
+        "Extensions/bifrost/Services/BifrostShortcutsIndex.swift",
+        "Extensions/bifrost/Services/BifrostSystemRunner.swift",
+        "Extensions/bifrost/Services/BifrostUsageLedger.swift",
+        "Extensions/bifrost/Services/BifrostWindowManager.swift",
+        "Extensions/bifrost/Services/BifrostWorker.swift",
+        "Extensions/bifrost/Surface.swift",
+        "Extensions/bifrost/ViewModels/BifrostPanelModel.swift",
+        "Extensions/bifrost/ViewModels/BifrostStore.swift",
+        "Extensions/bifrost/Views/BifrostDragGuides.swift",
+        "Extensions/bifrost/Views/BifrostLibraryEditors.swift",
+        "Extensions/bifrost/Views/BifrostPanel.swift",
+        "Extensions/bifrost/Views/BifrostPanelView.swift",
+        "Extensions/bifrost/Views/BifrostRows.swift",
+        "Extensions/bifrost/Views/BifrostSettings.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/bifrost"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "lidAwake",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/lidAwake/Models/LidAwakeOperations.swift",
+        "Extensions/lidAwake/Models/LidAwakeState.swift",
+        "Extensions/lidAwake/Runtime.swift",
+        "Extensions/lidAwake/Services/LidAwakeAutoOffTimer.swift",
+        "Extensions/lidAwake/Services/LidAwakeBatteryMonitor.swift",
+        "Extensions/lidAwake/Services/LidAwakeCommand.swift",
+        "Extensions/lidAwake/Services/LidAwakeCommandProcess.swift",
+        "Extensions/lidAwake/Services/LidAwakeDisplayWakeKeeper.swift",
+        "Extensions/lidAwake/Services/LidAwakeEngine.swift",
+        "Extensions/lidAwake/Services/LidAwakeLidMonitor.swift",
+        "Extensions/lidAwake/Services/LidAwakePrivilegedClient.swift",
+        "Extensions/lidAwake/Services/LidAwakeWorker.swift",
+        "Extensions/lidAwake/Surface.swift",
+        "Extensions/lidAwake/Views/LidAwakeRows.swift",
+        "Extensions/lidAwake/Views/LidAwakeSettings.swift"
+      ],
+      "privileged": [
+        "Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift",
+        "Extensions/lidAwake/Privileged/LidAwakePrivilegedRuntime.swift",
+        "Extensions/lidAwake/Services/LidAwakeCommand.swift",
+        "Extensions/lidAwake/Services/LidAwakeCommandProcess.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/lidAwake"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+    ],
+    "dependencies": [],
+    "supportProducts": {
+      "privileged": null
+    }
   }
 ]
