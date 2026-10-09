@@ -103,8 +103,10 @@ private struct NotchProviderCard: View {
                 Label("Hidden while presenting", systemImage: "eye.slash").font(
                     .edithText(.caption))
             } else if let snapshot {
-                SurfaceSnapshotContent(tile: tile, snapshot: snapshot, perform: perform)
-                    .disabled(actionTask != nil)
+                SurfaceSnapshotContent(
+                    tile: tile, snapshot: snapshot, perform: perform, adjust: adjust
+                )
+                .disabled(actionTask != nil)
             } else if load.isRunning {
                 LoadingIndicator()
             }
@@ -142,17 +144,26 @@ private struct NotchProviderCard: View {
     }
 
     private func perform(_ action: SurfaceAction) {
+        execute(actionID: action.id)
+    }
+
+    private func adjust(_ slider: SurfaceSlider, _ value: Double) {
+        execute(actionID: slider.id, value: value)
+    }
+
+    private func execute(actionID: String, value: Double? = nil) {
         guard !hidden, actionTask == nil, let snapshot else { return }
+        actionError = nil
         let token = UUID()
         actionToken = token
         actionTask = Task {
             defer { if actionToken == token { actionTask = nil; actionToken = nil } }
             do {
-                let value = try await controller.requests.perform(
+                let next = try await controller.requests.perform(
                     providerID: providerID, target: .notch, tile: tile, snapshot: snapshot,
-                    actionID: action.id)
+                    actionID: actionID, value: value)
                 try Task.checkCancellation()
-                self.snapshot = value
+                self.snapshot = next
             } catch {
                 if !Task.isCancelled { actionError = error.localizedDescription }
             }
