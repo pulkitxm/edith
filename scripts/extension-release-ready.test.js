@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { generateKeyPairSync, sign } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -97,13 +97,20 @@ test("the Node command rejects an invalid release source instead of skipping val
   try {
     const result = spawnSync(
       process.env.EXTENSION_TEST_NODE ?? "node",
-      [fileURLToPath(new URL("./extension-release-ready.mjs", import.meta.url)), root],
+      [
+        fileURLToPath(
+          new URL("./extension-release-ready.mjs", import.meta.url),
+        ),
+        root,
+      ],
       { encoding: "utf8", timeout: 10_000 },
     );
     expect(result.error).toBeUndefined();
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("ENOENT");
-    expect(result.stdout).not.toContain("Compatible extension catalog verified");
+    expect(result.stdout).not.toContain(
+      "Compatible extension catalog verified",
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
