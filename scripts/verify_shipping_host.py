@@ -61,7 +61,12 @@ def inspect_host(bundle, release=False, launcher_required=True):
         commands = run('otool', '-l', str(path))
         for rpath in re.findall(r'cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (\S+) \(offset', commands):
             assert not rpath.startswith('/') or rpath.startswith(('/System/', '/usr/')), f'Build path in {path.name}'
-    sparkle = (bundle / 'Contents/Frameworks/Sparkle.framework/Versions/Current').resolve()
+    sparkle_root = bundle / 'Contents/Frameworks/Sparkle.framework'
+    sparkle = (sparkle_root / 'Versions/Current').resolve() if (sparkle_root / 'Versions').is_dir() else sparkle_root
+    if launcher_required:
+        assert sparkle == sparkle_root, 'Shipping Sparkle must use its canonical flat layout'
+        assert not any(path.is_symlink() for path in sparkle_root.rglob('*')), 'Shipping Sparkle contains symbolic links'
+        assert '/Sparkle.framework/Versions/' not in run('otool', '-L', str(executable)), 'Versioned Sparkle dependency in shipping host'
     expected_binaries = {
         executable, bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib',
         sparkle / 'Sparkle', sparkle / 'Autoupdate',

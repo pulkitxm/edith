@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -61,6 +63,29 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         expect(
           JSON.parse(verified.stdout.toString()).extensionPayloadBytes,
         ).toBe(0);
+        const sparkle = join(app, "Contents/Frameworks/Sparkle.framework");
+        const inspectLinks = (directory) => {
+          for (const name of readdirSync(directory)) {
+            const path = join(directory, name);
+            const stat = lstatSync(path);
+            expect(stat.isSymbolicLink()).toBe(false);
+            if (stat.isDirectory()) inspectLinks(path);
+          }
+        };
+        inspectLinks(sparkle);
+        expect(readdirSync(sparkle)).not.toContain("Versions");
+        const dependencies = run(
+          "otool",
+          "-L",
+          join(app, "Contents/MacOS/Edith"),
+        );
+        expect(dependencies.exitCode).toBe(0);
+        expect(dependencies.stdout.toString()).toContain(
+          "@rpath/Sparkle.framework/Sparkle",
+        );
+        expect(dependencies.stdout.toString()).not.toContain(
+          "/Sparkle.framework/Versions/",
+        );
         const catalog = run(
           join(app, "Contents/MacOS/ed"),
           "extensions",

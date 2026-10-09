@@ -32,6 +32,13 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
     temporary = Path(temporary)
     bundle = temporary / 'Edith.app'
     run('ditto', str(source), str(bundle))
+    framework = bundle / 'Contents/Frameworks/Sparkle.framework'
+    if (framework / 'Versions').is_dir():
+        canonical = temporary / 'Sparkle.framework'
+        shutil.copytree(framework, canonical, symlinks=False)
+        shutil.rmtree(canonical / 'Versions')
+        shutil.rmtree(framework)
+        canonical.rename(framework)
     plist_path = bundle / 'Contents/Info.plist'
     plist = plistlib.loads(plist_path.read_bytes())
     plist.update({key: value for key, value in version.items() if key.startswith('NS') and key.endswith('UsageDescription')})
@@ -50,6 +57,14 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
         path.unlink()
     run('dot_clean', '-m', str(bundle))
     machos = [path for path in bundle.rglob('*') if path.is_file() and not path.is_symlink() and 'Mach-O' in run('file', '-b', str(path))]
+    canonical_sparkle = '@rpath/Sparkle.framework/Sparkle'
+    for path in machos:
+        for line in run('otool', '-L', str(path)).splitlines()[1:]:
+            dependency = line.strip().split(' ')[0]
+            if '/Sparkle.framework/Versions/' in dependency and dependency.endswith('/Sparkle'):
+                run('install_name_tool', '-change', dependency, canonical_sparkle, str(path))
+        if path == framework / 'Sparkle':
+            run('install_name_tool', '-id', canonical_sparkle, str(path))
     for path in machos:
         run('codesign', '--force', '--sign', args.identity, *runtime, '--preserve-metadata=entitlements', str(path))
     nested = sorted([path for path in bundle.rglob('*') if path.is_dir() and not path.is_symlink() and path.suffix in ('.framework', '.xpc', '.app')], key=lambda path: len(path.parts), reverse=True)
