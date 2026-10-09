@@ -8,6 +8,7 @@ public final class HostSurfaces {
     public let context: SurfaceHostContext
     public let requests: SurfaceSnapshotClient
     public let privacy: SurfacePrivacyState
+    public let navigation: HostSurfaceNavigation
 
     public init(identity: HostIdentity, entries: [HostExtension], sessions: HostExtensionSessions)
         throws
@@ -21,6 +22,7 @@ public final class HostSurfaces {
             namespace: identity.identifier, owner: "host")
         context = SurfaceHostContext(defaults: defaults, sharedState: channel)
         privacy = SurfacePrivacyState(channel: channel)
+        navigation = HostSurfaceNavigation(context: context)
         let known = Set(entries.map(\.id))
         let activeVersions: @MainActor () -> [String: String] = { [weak sessions] in
             guard let sessions else { return [:] }

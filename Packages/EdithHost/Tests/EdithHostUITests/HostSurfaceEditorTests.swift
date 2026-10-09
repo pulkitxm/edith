@@ -272,6 +272,7 @@ import Testing
 
         func clean() {
             let identity = marketplace.identity
+            marketplace.surfaces.navigation.shutdown()
             marketplace.surfaces.requests.shutdown()
             marketplace.surfaces.privacy.shutdown()
             UserDefaults(suiteName: identity.identifier)?.removePersistentDomain(
