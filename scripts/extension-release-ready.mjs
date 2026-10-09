@@ -1,6 +1,7 @@
 import { createPublicKey, verify } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
 
@@ -91,7 +92,10 @@ export async function waitForPackages({
   }
 }
 
-if (import.meta.main) {
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
   const revision = await waitForPackages({
     expected: await expectedPackages(process.argv[2] ?? process.cwd()),
     url: "https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json",
