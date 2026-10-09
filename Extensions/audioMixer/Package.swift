@@ -9,7 +9,7 @@ let package = Package(
             name: "AudioMixerExtension",
             dependencies: [
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport")
-            ], path: ".", exclude: ["Tests", "NativeRuntime"],
+            ], path: ".", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "AudioMixerExtensionTests", dependencies: ["AudioMixerExtension"],

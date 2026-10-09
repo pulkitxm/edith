@@ -1283,7 +1283,9 @@
       "Extensions/studio/NativeRuntime/Sources/EdithStudio/PDF/StudioPDF.swift",
       "Extensions/studio/NativeRuntime/Sources/EdithStudio/PDF/StudioPDFRasterizer.swift",
       "Extensions/studio/NativeRuntime/Sources/EdithStudio/Web/WebCapture.swift",
-      "Extensions/studio/NativeRuntime/Sources/EdithStudio/Web/WebTools.swift"
+      "Extensions/studio/NativeRuntime/Sources/EdithStudio/Web/WebTools.swift",
+      "Extensions/studio/NativeRuntime/Sources/CPDFium/CPDFium.c",
+      "Extensions/studio/NativeRuntime/Sources/CPDFium/include/CPDFium.h"
     ],
     "inputs": [
       "Extensions/studio"

@@ -189,6 +189,10 @@ ci-extension-camera-carrier: host
 	bun test scripts/camera-carrier.test.js
 	bun scripts/test-camera-carrier.mjs
 
+.PHONY: ci-extension-camera-voice
+ci-extension-camera-voice:
+	swift test --package-path Extensions/virtualCamera/NativeRuntime --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
+
 .PHONY: ci-extension-camera-provider
 ci-extension-camera-provider: host
 	swift test --package-path Extensions/virtualCamera/Provider --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
