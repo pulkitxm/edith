@@ -9,7 +9,8 @@ let package = Package(
         .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "clipboard", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
+            path: "clipboard", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "ClipboardExtensionTests", dependencies: ["ClipboardExtension"],
             path: "clipboard/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),

@@ -21,7 +21,7 @@ final class ClipboardPanel: NSObject, NSWindowDelegate {
         didSet {
             guard store !== oldValue else { return }
             if store == nil { hide() }
-            mountRootView()
+            if panel?.isVisible == true { mountRootView() }
         }
     }
 
