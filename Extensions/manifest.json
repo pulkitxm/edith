@@ -1831,5 +1831,41 @@
         "Extensions/machines/Resources/machine-collector.sh"
       ]
     }
+  },
+  {
+    "id": "downloads",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "app": [
+        "Extensions/downloads/Models/DownloadQueue.swift",
+        "Extensions/downloads/Models/MediaDownloadInput.swift",
+        "Extensions/downloads/Runtime.swift",
+        "Extensions/downloads/Services/DownloadOperations.swift",
+        "Extensions/downloads/Services/DownloadWorker.swift",
+        "Extensions/downloads/Services/DownloadsClient.swift",
+        "Extensions/downloads/Services/DownloadsStorage.swift",
+        "Extensions/downloads/Services/DownloadsTaskOwner.swift",
+        "Extensions/downloads/Services/DownloadsTools.swift",
+        "Extensions/downloads/Services/MediaDownloadRequest.swift",
+        "Extensions/downloads/Services/YoutubeDownloader.swift",
+        "Extensions/downloads/Surface.swift",
+        "Extensions/downloads/Views/DownloadSheetView.swift",
+        "Extensions/downloads/Views/DownloadsSettings.swift",
+        "Extensions/downloads/Worker.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/downloads"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionUI"
   }
 ]
