@@ -7,6 +7,14 @@ let package = Package(
     dependencies: [.package(path: "../Packages/ExtensionSupport")],
     targets: [
         .target(
+            name: "ClipboardExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "clipboard", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "ClipboardExtensionTests", dependencies: ["ClipboardExtension"],
+            path: "clipboard/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "NotchShelfExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "notchShelf", exclude: ["Tests", "Runtime.swift"],

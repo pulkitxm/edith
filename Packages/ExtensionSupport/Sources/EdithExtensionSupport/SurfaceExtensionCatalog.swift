@@ -83,7 +83,12 @@ extension SurfaceWidget {
                     ("frames", "Captured frames"), ("size", "Captured size"),
                     ("recordings", "Saved recording count"),
                 ]
-            case .desk, .ability("clipboard"), .ability("colorPicker"):
+            case .desk, .ability("clipboard"):
+                [
+                    ("total", "Recent item count"), ("pinned", "Pinned count"),
+                    ("previews", "Image previews"),
+                ]
+            case .ability("colorPicker"):
                 [("total", "Recent item count"), ("pinned", "Pinned count")]
             case .machines:
                 [
