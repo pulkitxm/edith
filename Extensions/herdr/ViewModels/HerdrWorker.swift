@@ -6,6 +6,7 @@ import Foundation
     let store: HerdrStore
     let hooks: AgentHookService
     let automaticActions: Bool
+    private let attention: HerdrAttentionBridge
     private let inventory: HerdrInventoryCommands
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
     private(set) var isStopped = false
@@ -14,6 +15,7 @@ import Foundation
 
     init(
         store: HerdrStore? = nil, hooks: AgentHookService = .shared,
+        attention: HerdrAttentionBridge? = nil,
         automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
         send: @escaping @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome = {
@@ -22,6 +24,7 @@ import Foundation
     ) {
         self.store = store ?? .shared
         self.hooks = hooks
+        self.attention = attention ?? HerdrAttentionBridge()
         self.automaticActions = automaticActions
         self.inventory = inventory
         self.send = send
@@ -155,6 +158,7 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        attention.shutdown()
         maintenance?.cancel()
         HerdrOpenBridge.shutdown()
         HerdrLayoutBridge.shutdown()
@@ -173,31 +177,12 @@ import Foundation
     }
 
     private func recordAttention() async {
-        guard !isStopped, let endpoint = ExtensionPeerEndpoint.current(owner: "attention"),
-            !(ExtensionSharedState.current?.values(for: "presenter")["active"] == "1")
-        else { return }
-        let hosts: [[String: Any]] = store.hosts.prefix(64).map { host in
-            [
-                "reachable": host.reachable,
-                "agents": host.agents.prefix(512).map { agent in
-                    [
-                        "id": Self.bounded(agent.id, 256), "kind": Self.bounded(agent.kind, 128),
-                        "machineName": Self.bounded(agent.machineName, 256),
-                        "cwd": Self.bounded(agent.cwd, 4_096),
-                        "title": Self.bounded(agent.title, 1_024),
-                        "status": agent.status == .done
-                            ? "finished"
-                            : agent.status == .unknown ? "idle" : agent.status.rawValue,
-                        "isTerminal": agent.isTerminal,
-                    ] as [String: Any]
-                },
-            ] as [String: Any]
-        }
-        guard hosts.reduce(0, { $0 + (($1["agents"] as? [[String: Any]])?.count ?? 0) }) <= 512,
-            let data = try? JSONSerialization.data(withJSONObject: ["hosts": hosts]),
-            data.count <= 1_048_576
-        else { return }
-        _ = try? await endpoint.invoke("attention.agents.record", payload: data, timeout: 15)
+        let focused = store.focusedSession?.agent
+        try? await attention.forward(
+            hosts: store.hosts, focused: focused,
+            view: focused.map { store.view(for: $0.id).rawValue } ?? "board",
+            bundleID: ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
+                ?? "com.pulkit.edith")
     }
 
     static func bounded(_ value: String, _ bytes: Int) -> String {
