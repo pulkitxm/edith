@@ -77,7 +77,9 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.rejected
             }
             try await sessions.show(id: first.id)
-            if extensionID == "jev" {
+            if extensionID == "system" {
+                try await verifySystem(endpoint)
+            } else if extensionID == "jev" {
                 try await verify(
                     endpoint, command: "jev.status", input: ["probe": false], field: "hasSavedKey",
                     expected: false)
@@ -98,7 +100,9 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "jev" {
+            if extensionID == "system" {
+                try await verifySystem(endpoint)
+            } else if extensionID == "jev" {
                 try await verify(
                     endpoint, command: "jev.status", input: ["probe": false], field: "hasSavedKey",
                     expected: true)
@@ -115,7 +119,9 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "jev" {
+            if extensionID == "system" {
+                try await verifySystem(endpoint)
+            } else if extensionID == "jev" {
                 try await verify(
                     endpoint, command: "jev.status", input: ["probe": false], field: "hasSavedKey",
                     expected: true)
@@ -152,6 +158,18 @@ struct HostLifecycleHarness {
             }
             await sessions.shutdown()
             throw error
+        }
+    }
+
+    @MainActor private static func verifySystem(_ endpoint: ExtensionPeerEndpoint) async throws {
+        let data = try await endpoint.invoke("apps.list", payload: Data("{}".utf8), timeout: 5)
+        guard let apps = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+            apps.allSatisfy({ ($0["pid"] as? Int ?? 0) > 0 && $0["name"] is String })
+        else { throw HostWorkerError.rejected }
+        do {
+            _ = try await endpoint.invoke("apps.quit", payload: Data("{}".utf8), timeout: 5)
+            throw HostWorkerError.rejected
+        } catch ExtensionPeerError.rejected {
         }
     }
 
