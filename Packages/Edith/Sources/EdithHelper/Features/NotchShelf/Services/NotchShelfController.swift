@@ -144,8 +144,15 @@ final class NotchShelfController: FeatureModule {
     private var dragStartPositions: [UUID: CGPoint] = [:]
     private var dragPointerStart: CGPoint?
 
-    init() {
+    convenience init() {
+        self.init(nowPlaying: nil, startsServices: true)
+    }
+
+    init(nowPlaying: NotchNowPlaying?, startsServices: Bool) {
+        self.nowPlaying = nowPlaying
         items = store.items
+        loadArtwork(for: nowPlaying)
+        guard startsServices else { return }
         store.onExternalChange = { [weak self] in
             guard let self else { return }
             self.items = self.store.items
