@@ -230,6 +230,40 @@ import Testing
         } catch UsageNativeFailure.network(let status) { #expect(status == 302) }
     }
 
+    @Test func openCodeV2DatabaseUsesMessageTimeAndSessionDirectory() async throws {
+        try await fixture { home, data in
+            let root = home.appendingPathComponent(".local/share/opencode")
+            try UsageNativeFileIO.privateDirectory(root)
+            let database = try UsageNativeDatabase(url: root.appendingPathComponent("opencode.db"))
+            try database.execute(
+                "CREATE TABLE session_v2(id TEXT,directory TEXT,title TEXT); CREATE TABLE session_message(id TEXT,session_id TEXT,type TEXT,time_created INTEGER,data TEXT)"
+            )
+            try database.run(
+                "INSERT INTO session_v2 VALUES(?,?,?)",
+                ["mock-v2-session", "/mock/project", "Mock title"])
+            let payload: [String: Any] = [
+                "model": ["id": "gpt-5"],
+                "tokens": [
+                    "input": 4, "output": 2, "reasoning": 3, "cache": ["read": 1, "write": 2],
+                ], "cost": 0.5, "content": "PRIVATE_CONTENT_CANARY",
+            ]
+            try database.run(
+                "INSERT INTO session_message VALUES(?,?,?,?,?)",
+                [
+                    "mock-v2-message", "mock-v2-session", "assistant", 1_788_570_000_000,
+                    String(decoding: try UsageNativeJSON.encode(payload), as: UTF8.self),
+                ]);
+            database.close()
+            let result = try await collect(home, data)
+            try validate(result)
+            #expect((result["totals"] as? [String: Any])?["tokens"] as? Double == 12)
+            #expect((result["totals"] as? [String: Any])?["cost"] as? Double == 0.5)
+            let day = try #require((result["daily"] as? [[String: Any]])?.first)
+            #expect(
+                (day["projects"] as? [[String: Any]])?.first?["path"] as? String == "/mock/project")
+        }
+    }
+
     private func collect(_ home: URL, _ data: URL, network: UsageNativeNetwork = .init())
         async throws -> [String: Any]
     {

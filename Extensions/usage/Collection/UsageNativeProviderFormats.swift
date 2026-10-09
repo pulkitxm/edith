@@ -47,7 +47,7 @@ enum UsageNativeProviderFormats {
     }
 
     private static func number(_ row: [String: Any], _ keys: String...) throws -> Double {
-        for key in keys where row[key] != nil { return try UsageNativeTokens.number(row[key]) }
+        for key in keys where row[key] != nil { return try UsageNativeTokens.wireNumber(row[key]) }
         return 0
     }
 

@@ -301,7 +301,7 @@ final class UsageNativeArchive {
                         ? Self.cliDetail(project, paths: false) : nil
                 }
                 let encoded = try UsageNativeJSON.encode(incoming)
-                if encoded != (try UsageNativeJSON.encode(original)) {
+                if try Self.contentIdentity(incoming) != Self.contentIdentity(original) {
                     try database.run(
                         "INSERT OR IGNORE INTO aggregate_candidates VALUES(?,?,?)",
                         [
@@ -361,12 +361,59 @@ final class UsageNativeArchive {
         else { throw UsageNativeFailure.capacity }
     }
 
+    private static func contentIdentity(_ value: Any, ordered: Bool = false) throws -> Data {
+        if var object = value as? [String: Any] {
+            if object["modelName"] != nil {
+                object = Dictionary(
+                    uniqueKeysWithValues: [
+                        "modelName", "inputTokens", "outputTokens", "cacheCreationTokens",
+                        "cacheReadTokens", "cost",
+                    ].map {
+                        ($0, object[$0] ?? ($0 == "modelName" ? "" : 0))
+                    })
+            }
+            var result: [String: Any] = [:]
+            for (key, item) in object {
+                result[key] = try JSONSerialization.jsonObject(
+                    with: contentIdentity(item, ordered: key == "hours"),
+                    options: [.fragmentsAllowed])
+            }
+            return try UsageNativeJSON.encode(result)
+        }
+        if let array = value as? [Any] {
+            let encoded = try array.map { try contentIdentity($0) }
+            let sorted = ordered ? encoded : encoded.sorted { $0.lexicographicallyPrecedes($1) }
+            let values = try sorted.map {
+                try JSONSerialization.jsonObject(with: $0, options: [.fragmentsAllowed])
+            }
+            return try UsageNativeJSON.encode(values)
+        }
+        return try JSONSerialization.data(
+            withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+    }
+
     private static func cliDetail(_ node: [String: Any], paths: Bool) -> [String: Any] {
         var result = node
         let source = (node["bySource"] as? [String: Any])?["cli"] as? [String: Any]
         result["bySource"] = source.map { ["cli": $0] } ?? [:]
         result["tokens"] = source?["tokens"] ?? 0
         result["cost"] = source?["cost"] ?? 0
+        if let chats = node["chats"] as? [[String: Any]] {
+            result["chats"] = chats.filter { $0["source"] as? String == "cli" }
+        }
+        if let worktrees = node["worktrees"] as? [[String: Any]] {
+            result["worktrees"] = worktrees.compactMap { worktree -> [String: Any]? in
+                let chats = (worktree["chats"] as? [[String: Any]] ?? []).filter {
+                    $0["source"] as? String == "cli"
+                }
+                guard !chats.isEmpty else { return nil }
+                return [
+                    "name": worktree["name"] ?? "", "chats": chats,
+                    "tokens": chats.reduce(0.0) { $0 + ($1["tokens"] as? Double ?? 0) },
+                    "cost": chats.reduce(0.0) { $0 + ($1["cost"] as? Double ?? 0) },
+                ]
+            }
+        }
         if paths {
             result["byPath"] = (node["byPath"] as? [String: [String: Any]] ?? [:]).compactMapValues
             {

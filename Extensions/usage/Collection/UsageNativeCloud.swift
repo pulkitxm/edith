@@ -338,6 +338,7 @@ final class UsageNativeCloud {
             environment["XDG_CONFIG_HOME"].map { URL(fileURLWithPath: $0) }
             ?? home.appendingPathComponent(".config")
         var auth: [String: Any]?
+        var authFile: URL?
         for path in [
             config.appendingPathComponent("cursor/auth.json"),
             home.appendingPathComponent(".cursor/auth.json"),
@@ -345,7 +346,7 @@ final class UsageNativeCloud {
             if let value = try UsageNativeFileIO.optionalObject(path),
                 value["accessToken"] as? String != nil
             {
-                auth = value; break
+                auth = value; authFile = path; break
             }
         }
         if auth == nil {
@@ -364,8 +365,16 @@ final class UsageNativeCloud {
                     })
             }
         }
-        guard let token = UsageNativeJSON.text(auth?["accessToken"], maximum: 32_768) else {
+        guard var token = UsageNativeJSON.text(auth?["accessToken"], maximum: 32_768) else {
             return false
+        }
+        let account = UsageNativeJSON.hash(jwtSubject(token) ?? token)
+        if let refresh = UsageNativeJSON.text(auth?["refreshToken"], maximum: 32_768),
+            CursorCredentialStore.expiresSoon(token, now: now)
+        {
+            let material = try await refreshCursor(refresh, file: authFile, network: network)
+            token = material.accessToken
+            auth?["refreshToken"] = material.refreshToken
         }
         var metadata: [String: [String: Any]] = [:]
         var start = now.addingTimeInterval(-180 * 86_400).timeIntervalSince1970 * 1000
@@ -393,13 +402,24 @@ final class UsageNativeCloud {
                 "endDate": String(Int64(now.timeIntervalSince1970 * 1000)), "page": page,
                 "pageSize": 100,
             ])
-            let response = try await network.object(request)
+            let response: [String: Any]
+            do {
+                response = try await network.object(request)
+            } catch UsageNativeFailure.network(let status) where status == 401 || status == 403 {
+                guard let refresh = UsageNativeJSON.text(auth?["refreshToken"], maximum: 32_768)
+                else { throw UsageNativeFailure.network(status) }
+                let material = try await refreshCursor(refresh, file: authFile, network: network)
+                token = material.accessToken
+                auth?["refreshToken"] = material.refreshToken
+                request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+                response = try await network.object(request)
+            }
             guard let batch = response["usageEventsDisplay"] as? [[String: Any]],
                 response["totalUsageEventsCount"] != nil
             else {
                 throw UsageNativeFailure.invalidInput("usage event response")
             }
-            let total = try UsageNativeTokens.number(response["totalUsageEventsCount"])
+            let total = try UsageNativeTokens.wireNumber(response["totalUsageEventsCount"])
             guard total <= 5000 else { throw UsageNativeFailure.capacity }
             let hash = UsageNativeJSON.hash(try UsageNativeJSON.encode(batch))
             guard pages.insert(hash).inserted || batch.isEmpty else {
@@ -417,8 +437,35 @@ final class UsageNativeCloud {
             if page == 50 { throw UsageNativeFailure.capacity }
         }
         try archive.replaceRemote(
-            events, key: "remote:cursor", account: UsageNativeJSON.hash(jwtSubject(token) ?? token))
+            events, key: "remote:cursor", account: account)
         return true
+    }
+
+    private static func refreshCursor(_ refresh: String, file: URL?, network: UsageNativeNetwork)
+        async throws -> CursorCredentialStore.Material
+    {
+        var request = URLRequest(url: URL(string: "https://api2.cursor.sh/oauth/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try UsageNativeJSON.encode([
+            "grant_type": "refresh_token", "refresh_token": refresh,
+        ])
+        let response = try await network.object(request)
+        guard response["shouldLogout"] as? Bool != true,
+            let access = UsageNativeJSON.text(response["access_token"], maximum: 32_768)
+        else {
+            throw UsageNativeFailure.invalidInput("usage sign-in refresh")
+        }
+        try Task.checkCancellation()
+        let material = CursorCredentialStore.Material(
+            accessToken: access,
+            refreshToken: UsageNativeJSON.text(response["refresh_token"], maximum: 32_768)
+                ?? refresh, file: file)
+        if let file {
+            _ = try UsageNativeFileIO.read(file, maximum: 1_048_576)
+            try CursorCredentialStore.save(material)
+        }
+        return material
     }
 
     private static func decodeEvents(_ value: Any?) throws -> [UsageNativeEvent] {

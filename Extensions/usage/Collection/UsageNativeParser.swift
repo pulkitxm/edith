@@ -278,10 +278,10 @@ final class UsageNativeParser {
         let session = UsageNativeJSON.text(row["conversationId"]) ?? session
         let model = UsageNativeJSON.text(row["model"]) ?? "unknown"
         let tokens = try UsageNativeTokens(
-            input: UsageNativeTokens.number(usage["inputTokens"]),
-            output: UsageNativeTokens.number(usage["outputTokens"]),
-            creation: UsageNativeTokens.number(usage["cacheWriteTokens"]),
-            read: UsageNativeTokens.number(usage["cacheReadTokens"]))
+            input: UsageNativeTokens.wireNumber(usage["inputTokens"]),
+            output: UsageNativeTokens.wireNumber(usage["outputTokens"]),
+            creation: UsageNativeTokens.wireNumber(usage["cacheWriteTokens"]),
+            read: UsageNativeTokens.wireNumber(usage["cacheReadTokens"]))
         let cents = try UsageNativeTokens.amount(row["chargedCents"] ?? usage["totalCents"])
         return .init(
             source: source,

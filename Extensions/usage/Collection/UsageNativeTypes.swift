@@ -37,6 +37,18 @@ struct UsageNativeTokens: Codable, Equatable, Sendable {
         return number.doubleValue
     }
 
+    static func wireNumber(_ value: Any?) throws -> Double {
+        if let text = value as? String {
+            guard text.range(of: "^(0|[1-9][0-9]{0,15})$", options: .regularExpression) != nil,
+                let number = Double(text)
+            else {
+                throw UsageNativeFailure.invalidInput("token count")
+            }
+            return try self.number(NSNumber(value: number))
+        }
+        return try number(value)
+    }
+
     static func amount(_ value: Any?) throws -> Double? {
         guard let value, !(value is NSNull) else { return nil }
         let number: Double?

@@ -169,6 +169,37 @@ import Testing
         }
     }
 
+    @Test func canonicalOverlapIgnoresModelOrderAndPricingPresentationMetadata() throws {
+        try fixture { root in
+            let archive = try UsageNativeArchive(dataDirectory: root)
+            let zero: [String: Any] = ["tokens": 0, "cost": 0, "bySource": [:], "byPath": [:]]
+            let baseline: [String: Any] = [
+                "period": "2026-09-05",
+                "bySource": [
+                    "cli": [
+                        ["modelName": "second", "inputTokens": 10, "cost": 1],
+                        ["modelName": "first", "outputTokens": 2, "cost": 2],
+                    ]
+                ], "hours": (0..<24).map { _ in zero }, "projects": [],
+            ]
+            try archive.bootstrap(["generatedAt": "2026-09-06T00:00:00Z", "daily": [baseline]])
+            var updated = baseline
+            updated["bySource"] = [
+                "cli": [
+                    [
+                        "modelName": "first", "outputTokens": 2, "cost": 2, "costMissing": false,
+                        "unpricedTokens": 0, "tokens": 2,
+                    ],
+                    ["modelName": "second", "inputTokens": 10, "cost": 1, "isFallback": true],
+                ]
+            ]
+            #expect(
+                (try archive.reconcile([updated])["blocks"] as? [[String: Any]])?.isEmpty == true)
+            updated["bySource"] = ["cli": [["modelName": "second", "inputTokens": 11, "cost": 1]]]
+            #expect((try archive.reconcile([updated])["blocks"] as? [[String: Any]])?.count == 1)
+        }
+    }
+
     private func admit(_ path: URL, key: String, archive: UsageNativeArchive) throws {
         let previous = try archive.known(key)
         let snapshot = try UsageNativeParser(source: "cli").snapshot(

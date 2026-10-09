@@ -236,6 +236,104 @@ import Testing
         }
     }
 
+    @Test func cursorRefreshesExpiredCredentialsAndPersistsRotatedMaterialOnlyAfterSuccess()
+        async throws
+    {
+        try await fixture { home, data in
+            let file = home.appendingPathComponent(".cursor/auth.json")
+            let claims = Data("{\"exp\":1,\"sub\":\"mock-account\"}".utf8).base64EncodedString()
+                .replacingOccurrences(of: "=", with: "")
+            try write(
+                try json([
+                    "accessToken": "header." + claims + ".signature",
+                    "refreshToken": "mock-refresh", "preserved": "mock-setting",
+                ]), file)
+            let counter = RequestCounter()
+            let network = UsageNativeNetwork { request in
+                await counter.add(request.url!.path)
+                if request.url!.path == "/oauth/token" {
+                    #expect(request.httpMethod == "POST")
+                    let body = try UsageNativeJSON.object(request.httpBody!)
+                    #expect(body["refresh_token"] as? String == "mock-refresh")
+                    return (
+                        try self.json([
+                            "access_token": "mock-fresh", "refresh_token": "mock-rotated",
+                        ]), 200
+                    )
+                }
+                #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer mock-fresh")
+                return (
+                    try self.json([
+                        "totalUsageEventsCount": "1",
+                        "usageEventsDisplay": [
+                            [
+                                "timestamp": "2026-09-05T01:00:00Z", "model": "gpt-5",
+                                "conversationId": "mock",
+                                "tokenUsage": ["inputTokens": "10", "outputTokens": "2"],
+                                "chargedCents": "25",
+                            ]
+                        ],
+                    ]), 200
+                )
+            }
+            let archive = try UsageNativeArchive(dataDirectory: data)
+            #expect(
+                try await UsageNativeCloud.collect(
+                    home: home, environment: [:], now: Date(), archive: archive, network: network,
+                    onEvent: { _ in }) == ["cursor"])
+            #expect(await counter.count == 2)
+            let saved = try #require(try UsageNativeFileIO.optionalObject(file))
+            #expect(saved["accessToken"] as? String == "mock-fresh")
+            #expect(saved["refreshToken"] as? String == "mock-rotated")
+            #expect(saved["preserved"] as? String == "mock-setting")
+            #expect(try archive.events().first?.tokens.total == 12)
+            #expect(try archive.events().first?.recordedCost == 0.25)
+        }
+    }
+
+    @Test func cursorUnauthorizedResponseRefreshesOnceAndCancelledRefreshDoesNotWriteCredentials()
+        async throws
+    {
+        try await fixture { home, data in
+            let file = home.appendingPathComponent(".cursor/auth.json")
+            try write(
+                try json(["accessToken": "mock-stale", "refreshToken": "mock-refresh"]), file)
+            let counter = RequestCounter()
+            let network = UsageNativeNetwork { request in
+                await counter.add(request.url!.path)
+                if request.url!.path == "/oauth/token" {
+                    return (try self.json(["access_token": "mock-fresh"]), 200)
+                }
+                if request.value(forHTTPHeaderField: "Authorization") == "Bearer mock-stale" {
+                    return (Data("{}".utf8), 401)
+                }
+                return (try self.json(["totalUsageEventsCount": 0, "usageEventsDisplay": []]), 200)
+            }
+            let archive = try UsageNativeArchive(dataDirectory: data)
+            #expect(
+                try await UsageNativeCloud.collect(
+                    home: home, environment: [:], now: Date(), archive: archive, network: network,
+                    onEvent: { _ in }) == ["cursor"])
+            #expect(await counter.count == 3)
+            let before = try UsageNativeFileIO.read(file)
+            let cancellation = UsageNativeNetwork { request in
+                if request.url!.path == "/oauth/token" { try await Task.sleep(for: .seconds(30)) }
+                return (Data("{}".utf8), 401)
+            }
+            let task = Task {
+                let ownedArchive = try UsageNativeArchive(dataDirectory: data)
+                return try await UsageNativeCloud.collect(
+                    home: home, environment: [:], now: Date(), archive: ownedArchive,
+                    network: cancellation, onEvent: { _ in })
+            }
+            try await Task.sleep(for: .milliseconds(50)); task.cancel()
+            do {
+                _ = try await task.value; Issue.record("Cancelled refresh completed")
+            } catch is CancellationError {}
+            #expect(try UsageNativeFileIO.read(file) == before)
+        }
+    }
+
     private func receipt(id: String) -> [String: Any] {
         [
             "type": "assistant", "timestamp": "2026-09-05T01:00:00Z", "sessionId": "mock-session",
