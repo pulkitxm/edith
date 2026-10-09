@@ -95,9 +95,20 @@ import Testing
         let active: Set<String> = ["notchShelf", "clipboard", "audioMixer", "herdr"]
         #expect(
             SurfaceNotchTab.visible(layout: layout, activeIDs: active)
-                == [.audio, .home, .clipboard, .agents])
+                == [.camera, .audio, .home, .clipboard, .agents])
         #expect(
             SurfaceNotchTab.validSelection(.camera, visible: [.home, .audio]) == .home)
+    }
+
+    @Test func notchBrowserAndCameraPreviewBelongToTheNotchPackage() {
+        let layout = SurfaceLayout.standard(.notch)
+        #expect(
+            SurfaceNotchTab.visible(layout: layout, activeIDs: ["notchShelf"])
+                == [.home, .files, .camera])
+        #expect(
+            SurfaceNotchTab.visible(
+                layout: layout, activeIDs: ["notchShelf"], browserEnabled: true)
+                == [.home, .browser, .files, .camera])
     }
 
     @Test func glanceSettingsSurviveMissingProvidersWithoutRequestingTheirData() throws {

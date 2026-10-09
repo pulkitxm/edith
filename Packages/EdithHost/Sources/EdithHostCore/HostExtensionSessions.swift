@@ -5,7 +5,10 @@ import Observation
 @MainActor
 @Observable
 public final class HostExtensionSessions {
-    public private(set) var states: [String: HostActivationState] = [:]
+    public private(set) var states: [String: HostActivationState] = [:] {
+        didSet { didChange() }
+    }
+    @ObservationIgnored public var didChange: @MainActor () -> Void = {}
     public private(set) var versions: [String: String] = [:]
     public private(set) var failures: Set<String> = []
     @ObservationIgnored private let defaults: UserDefaults

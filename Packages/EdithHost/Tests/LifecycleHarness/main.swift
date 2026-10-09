@@ -44,6 +44,7 @@ struct HostLifecycleHarness {
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
+            UserDefaults(suiteName: identifier)?.removePersistentDomain(forName: identifier)
             UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?
                 .removePersistentDomain(forName: identity.extensionDefaultsSuite(extensionID))
         }
@@ -77,6 +78,10 @@ struct HostLifecycleHarness {
                         identity: identity, extensionID: package.id, version: package.version),
                     executable: executable, errorOutput: handle)
         }
+        let surfaces = try HostSurfaces(
+            identity: identity, entries: HostIndex.bundled(), sessions: sessions)
+        surfaces.layouts.update(.home) { $0.tiles = [.init(.ability(extensionID))] }
+        guard surfaces.context.activeIDs.isEmpty else { throw HostWorkerError.rejected }
         defer { for handle in logHandles { try? handle.close() } }
         var stage = "installation"
         do {
@@ -89,12 +94,17 @@ struct HostLifecycleHarness {
             guard let oldPID = sessions.processIdentifiers[first.id] else {
                 throw HostWorkerError.rejected
             }
+            guard surfaces.context.activeIDs == [extensionID] else {
+                throw HostWorkerError.invalidResponse
+            }
+            let savedSurface = surfaces.layouts.home
             stage = "window"
             try await sessions.show(id: first.id)
             let opened = try await endpoint.invoke("extension.open")
             guard String(decoding: opened, as: UTF8.self) == "{\"opened\":true}" else {
                 throw HostWorkerError.invalidResponse
             }
+            try await verifySurfaceContext(endpoint, saved: savedSurface, id: extensionID)
             stage = "initial commands"
             if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
@@ -124,6 +134,10 @@ struct HostLifecycleHarness {
             }
             stage = "update"
             try await sessions.applyUpdate(second)
+            guard surfaces.context.activeIDs == [extensionID],
+                surfaces.layouts.home == savedSurface
+            else { throw HostWorkerError.invalidResponse }
+            try await verifySurfaceContext(endpoint, saved: savedSurface, id: extensionID)
             stage = "updated commands"
             guard sessions.versions[first.id] == second.version,
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
@@ -152,8 +166,12 @@ struct HostLifecycleHarness {
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
             }
+            guard surfaces.context.activeIDs.isEmpty,
+                surfaces.layouts.home == savedSurface
+            else { throw HostWorkerError.invalidResponse }
             stage = "restore"
             await sessions.restore(packages: [second.id: second])
+            try await verifySurfaceContext(endpoint, saved: savedSurface, id: extensionID)
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
@@ -190,11 +208,19 @@ struct HostLifecycleHarness {
             }
             stage = "disable"
             try await sessions.disable(id: first.id)
-            guard sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty else {
+            guard surfaces.context.activeIDs.isEmpty,
+                surfaces.layouts.home == savedSurface,
+                sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty
+            else {
                 throw HostWorkerError.rejected
             }
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
+            guard surfaces.layouts.home == savedSurface,
+                surfaces.context.visibleLayout(.home).tiles.isEmpty
+            else {
+                throw HostWorkerError.invalidResponse
+            }
             for handle in logHandles { try handle.close() }
             guard
                 try workerLogs.allSatisfy({
@@ -203,7 +229,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true}"
             )
         } catch {
             if extensionID == "jev" {
@@ -221,6 +247,16 @@ struct HostLifecycleHarness {
                         "\(extensionID) failed during \(stage): \(error). \(logs)"
                 ])
 
+        }
+    }
+
+    @MainActor private static func verifySurfaceContext(
+        _ endpoint: ExtensionPeerEndpoint, saved: SurfaceLayout, id: String
+    ) async throws {
+        let data = try await endpoint.invoke("surface.context")
+        let context = try JSONDecoder().decode(SurfaceContextSnapshot.self, from: data)
+        guard context.contractVersion == 1, context.activeIDs == [id], context.home == saved else {
+            throw HostWorkerError.invalidResponse
         }
     }
 

@@ -18,7 +18,7 @@ public struct HostWorkerConfiguration: Codable, Sendable {
             : identity.root.deletingLastPathComponent()
         self.extensionID = extensionID
         self.version = version
-        let preferences = UserDefaults(suiteName: identity.identifier)
+        let preferences = SharedDefaults.applicationStore(identifier: identity.identifier)
         theme = preferences?.string(forKey: AppStorageKeys.General.theme) ?? "accent"
         appearance = preferences?.string(forKey: AppStorageKeys.General.appearance) ?? "system"
         let storedZoom = preferences?.double(forKey: AppStorageKeys.General.mainWindowZoom) ?? 1

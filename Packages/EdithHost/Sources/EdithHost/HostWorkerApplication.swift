@@ -151,6 +151,12 @@ final class HostWorkerApplication {
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
                 guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                if command == "surface.context" {
+                    guard payload.isEmpty, let context = SurfaceHostContext.current else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                    return try JSONEncoder().encode(SurfaceContextSnapshot(context))
+                }
                 if command == "extension.open" {
                     guard payload.isEmpty else { throw ExtensionPeerError.invalidRequest }
                     try self.showWindow()

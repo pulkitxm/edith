@@ -3,10 +3,13 @@ import Foundation
 public enum SurfaceNotchTab: String, CaseIterable, Equatable, Sendable {
     case home, agents, browser, files, clipboard, audio, camera
 
-    public static func visible(layout: SurfaceLayout, activeIDs: Set<String>) -> [Self] {
+    public static func visible(
+        layout: SurfaceLayout, activeIDs: Set<String>, browserEnabled: Bool = false
+    ) -> [Self] {
         guard activeIDs.contains("notchShelf") else { return [] }
         return layout.tabOrder.compactMap(Self.init(rawValue:)).filter { tab in
             !layout.hiddenTabs.contains(tab.rawValue)
+                && (tab != .browser || browserEnabled)
                 && (tab == .home || !tab.providerIDs.isDisjoint(with: activeIDs))
         }
     }
@@ -15,11 +18,11 @@ public enum SurfaceNotchTab: String, CaseIterable, Equatable, Sendable {
         switch self {
         case .home: []
         case .agents: ["herdr"]
-        case .browser: ["quinjet"]
+        case .browser: ["notchShelf"]
         case .files: ["notchShelf"]
         case .clipboard: ["clipboard"]
         case .audio: ["audioMixer"]
-        case .camera: ["virtualCamera"]
+        case .camera: ["notchShelf"]
         }
     }
 

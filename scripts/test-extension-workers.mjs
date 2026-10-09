@@ -53,6 +53,7 @@ try {
       "restoreAfterAppUpdate",
       "removedPayloads",
       "isolatedSupportTypes",
+      "surfaceLayoutRestored",
     ])
       assert.equal(result[key], true);
     assert.equal(result.disabledProcesses, 0);

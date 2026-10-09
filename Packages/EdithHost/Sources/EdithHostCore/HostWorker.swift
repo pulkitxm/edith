@@ -42,6 +42,7 @@ public final class HostWorker {
                 configuration.extensionID)
             environment["EDITH_EXTENSION_DATA_ROOT"] =
                 identity.extensionDirectory(configuration.extensionID).path
+            environment["EDITH_SURFACE_DEFAULTS_SUITE"] = identity.identifier
             environment["EDITH_EXTENSION_ID"] = configuration.extensionID
             environment["EDITH_EXTENSION_STATE_ROOT"] =
                 identity.root.appendingPathComponent("ExtensionState").path
