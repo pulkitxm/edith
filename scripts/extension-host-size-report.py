@@ -31,6 +31,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
     result["hostExecutableSHA256"] = hashlib.sha256((app / "Contents/MacOS/Edith").read_bytes()).hexdigest()
     result["measurement"] = {
         "baselineSourceCommit": baseline["sourceCommit"],
+        "baselineBuild": {key: baseline[key] for key in ("configuration", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive") if key in baseline},
         "architecture": "arm64",
         "signature": "development",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
@@ -69,12 +70,11 @@ The host contains its executable, marketplace runtime, Sparkle updater including
 
 | Measured build | Installed MB | Comparison ZIP MB |
 | --- | ---: | ---: |
-| Original bundled app | {baseline['installedBytes']/1_000_000:.2f} | {baseline['comparisonZipBytes']/1_000_000:.2f} |
-| Superseded partial extraction | 95.70 | 44.94 |
+| Current main with bundled extensions | {baseline['installedBytes']/1_000_000:.2f} | {baseline['comparisonZipBytes']/1_000_000:.2f} |
 | Current host foundation with updater and shared UI | {host['installedBytes']/1_000_000:.2f} | {host['comparisonZipBytes']/1_000_000:.2f} |
 | Host plus all {count} migrated extensions | {combined['installedBytes']/1_000_000:.2f} | {combined['comparisonZipAndPackageBytes']/1_000_000:.2f} |
 
-MB means 1,000,000 bytes. The current host foundation is {report['savedPercent']['installedBytes']:.2f}% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. The current host foundation is {report['savedPercent']['installedBytes']:.2f}% smaller on disk than the current-main bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
 
 | Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
 | --- | ---: | ---: | ---: |
@@ -87,9 +87,9 @@ Each enabled extension runs in a worker launched from the same Edith executable.
 
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 
-Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All {count} migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
+Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, removes the old app, reconstructs persisted sessions and layouts in a replacement app, disables the extension, checks process exit, and removes its payloads. All {count} migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
 
-Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The remaining live-card adapters, full world-clock controls, and the Notch worker are still being migrated.
+Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The native Notch renderer and world-clock controls are implemented. Live-card adapters for remaining extensions still need completion.
 
 A card is active only when its provider is installed, compatible, and running. Downloaded or remembered-enabled extensions do not count as running. Runtime layouts omit inactive cards without changing the saved configuration. Disabled, removed, or temporarily incompatible extensions retain their positions, filters, and profiles for later restoration. The availability planner returns no provider queries for hidden surfaces and hidden cards. A widget cannot implicitly start an extension. The shared request client cancels affected requests on disable, removal, or version changes and rejects late replies. Presenter changes clear displayed private card data and pause requests immediately. Editor sample previews are labeled explicitly and do not start workers or fetch data; live preview only queries already running providers.
 
@@ -112,17 +112,17 @@ A card is active only when its provider is installed, compatible, and running. D
 | Notch shell, files, browser, camera preview | Downloadable Notch extension |
 | Notch Clipboard and Audio tabs | Their own running extension workers |
 
-The Notch browser and camera preview are functions of the Notch package. They do not require Review or Virtual Camera. The Notch renderer will run only while its extension is enabled. External data and actions will cross the worker command boundary as versioned, bounded data; feature models and services stay outside the base app. The existing native runtime tests now also verify that each tested worker reads the same saved Home configuration after replacement and app restart, and that disabling or removing it leaves the layout intact.
+The Notch browser and camera preview are functions of the Notch package. They do not require Review or Virtual Camera. The Notch renderer runs only while its extension is enabled. External data and actions will cross the worker command boundary as versioned, bounded data; feature models and services stay outside the base app. The existing native runtime tests now also verify that each tested worker reads the same saved Home configuration after replacement and app restart, and that disabling or removing it leaves the layout intact.
 
 Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). Regenerate both reports after a fresh host build and extension builds:
 
 ```sh
 make ci-marketplace-host
 make ci-extension-workers EXTENSION=--retain-packages
-python3 -B scripts/extension-host-size-report.py --baseline local/baseline/size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
+python3 -B scripts/extension-host-size-report.py --baseline local/baseline/current-main-size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
-The baseline JSON records source commit `{report['measurement']['baselineSourceCommit']}` and the original app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
+The baseline JSON records source commit `{report['measurement']['baselineSourceCommit']}` and the current-main app measurements. The generator verifies each migrated package's ZIP size, SHA-256, expanded bytes, CRC, and current source fingerprint before producing the comparison. Installed sizes exclude filesystem allocation rounding, receipts, caches, user data, and retained versions.
 """
 
 
