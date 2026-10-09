@@ -6,18 +6,22 @@ struct NotchHomeTab: View {
     let controller: NotchShelfController
     @State private var selected: String?
 
-    private var layout: SurfaceLayout {
-        var value = controller.surfaceLayout
-        value.tiles = value.visible.filter { $0.widget.available(activeIDs: controller.activeIDs) }
-        return value
-    }
+    private var layout: SurfaceLayout { controller.visibleSurfaceLayout }
 
     var body: some View {
         Group {
-            if layout.notchHorizontal {
+            if layout.visible.isEmpty {
+                VStack(spacing: UIScale.pt(12)) {
+                    Text("Enable extensions to add their widgets to the Notch.").font(
+                        .edithText(.callout))
+                    Button("Customize") { controller.openCustomization() }.buttonStyle(
+                        .edith(.secondary))
+                }.padding(UIScale.pt(24))
+            } else if layout.notchHorizontal {
                 SurfaceShelf(
                     layout: layout, editing: controller.layoutEditing, selected: selected,
-                    select: { selected = $0 }, inspect: { _ in controller.openCustomization() },
+                    select: { selected = $0 },
+                    inspect: { controller.openCustomization(tileID: $0) },
                     reorder: reorder, configure: configure, add: add,
                     measuredHeight: controller.measureHomeContent
                 ) { tile in NotchSurfaceCard(controller: controller, tile: tile) }
@@ -27,7 +31,7 @@ struct NotchHomeTab: View {
                         layout: layout, singleColumn: false, editing: controller.layoutEditing,
                         selected: selected, select: { selected = $0 },
                         place: { widget, _ in add(widget) },
-                        inspect: { _ in controller.openCustomization() }, reorder: reorder,
+                        inspect: { controller.openCustomization(tileID: $0) }, reorder: reorder,
                         configure: configure
                     ) { tile in NotchSurfaceCard(controller: controller, tile: tile) }
                 }
@@ -48,7 +52,7 @@ struct NotchHomeTab: View {
     }
 
     private func add(_ widget: SurfaceWidget) {
-        controller.layouts.update(.notch) { $0.tiles.append(SurfaceTile(widget)) }
+        controller.layouts.update(.notch) { _ = $0.add(widget) }
     }
 }
 

@@ -21,6 +21,37 @@ struct NotchSurfaceGlance: Equatable {
 }
 
 extension NotchShelfController {
+    var glanceProviderIDs: Set<String> {
+        let sources = [surfaceLayout.notchLeadingGlance, surfaceLayout.notchTrailingGlance]
+        if sources.contains(.automatic) {
+            return ["herdr", "music", "attention", "usage", "calendar"]
+        }
+        return Set(
+            sources.compactMap { source in
+                switch source {
+                case .music: "music"
+                case .focus: "attention"
+                case .limits: "usage"
+                case .nextMeeting: "calendar"
+                case .workingAgents, .waitingAgents, .stuckAgents, .activeAgents, .quietAgents,
+                    .failedAgents, .permissions:
+                    "herdr"
+                default: nil
+                }
+            })
+    }
+
+    static func glanceWidget(_ id: String) -> SurfaceWidget {
+        switch id {
+        case "herdr": .agents
+        case "music": .music
+        case "calendar": .calendar
+        case "usage": .limits
+        case "attention": .focus
+        default: .ability(id)
+        }
+    }
+
     var leadingGlance: NotchSurfaceGlance? {
         glance(surfaceLayout.notchLeadingGlance, trailing: false)
     }
@@ -78,8 +109,9 @@ extension NotchShelfController {
         let metric =
             snapshot.metrics.first { $0.id == metricID }
             ?? (pair.0 == "herdr" ? nil : snapshot.metrics.first)
-        let value = metric?.value ?? snapshot.rows.first?.value ?? snapshot.rows.first?.title
-        guard let value, !value.isEmpty, value != "0" else { return nil }
+        let value = [metric?.value, snapshot.rows.first?.value, snapshot.rows.first?.title]
+            .compactMap { $0 }.first { !$0.isEmpty }
+        guard let value, value != "0" else { return nil }
         return NotchSurfaceGlance(
             source: source, title: source.title, value: String(value.prefix(16)), icon: pair.1.icon,
             urgent: [.permissions, .waitingAgents, .stuckAgents, .failedAgents].contains(source))

@@ -341,8 +341,15 @@ struct NotchShelfContentView: View {
     }
 
     private func providerTab(_ tile: SurfaceTile) -> some View {
-        ScrollView {
-            NotchSurfaceCard(controller: controller, tile: tile)
+        var configured = tile
+        configured.itemLimit = 20
+        configured.dense = true
+        if tile.widget == .agents {
+            configured.sourceIDs = controller.surfaceLayout.notchAgentSources
+            configured.includeSubagents = controller.surfaceLayout.notchIncludeSubagents
+        }
+        return ScrollView {
+            NotchSurfaceCard(controller: controller, tile: configured)
                 .padding(.horizontal, 12).padding(.bottom, 12)
         }
     }

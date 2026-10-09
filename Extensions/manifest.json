@@ -681,6 +681,7 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   }
 ]

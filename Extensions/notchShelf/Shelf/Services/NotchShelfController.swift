@@ -48,6 +48,7 @@ final class NotchShelfController {
     private(set) var surfaceSnapshots: [String: SurfaceSnapshot] = [:]
     private var glanceTask: Task<Void, Never>?
     private var stopped = false
+    private var startsServices = false
     private var contextObserver: NSObjectProtocol?
     private(set) var currentAlert: NotchAlert?
     private(set) var browser: NotchBrowserStore?
@@ -93,6 +94,7 @@ final class NotchShelfController {
 
     init(context: SurfaceHostContext, startsServices: Bool = true, root: URL = ShelfIndex.root) {
         self.context = context
+        self.startsServices = startsServices
         layouts = SurfaceLayoutStore(defaults: context.defaults) {
             NotchWorkerIPC.post("settingsChanged")
         }
@@ -144,6 +146,11 @@ final class NotchShelfController {
     }
 
     var surfaceLayout: SurfaceLayout { layouts.notch }
+    var visibleSurfaceLayout: SurfaceLayout {
+        var layout = surfaceLayout
+        layout.tiles = layout.visible.filter { $0.widget.available(activeIDs: activeIDs) }
+        return layout
+    }
     var visibleTabs: [NotchTab] {
         SurfaceNotchTab.visible(
             layout: surfaceLayout, activeIDs: activeIDs,
@@ -157,15 +164,29 @@ final class NotchShelfController {
         privacy.refresh()
         layouts.reload()
         activeTab = NotchTab.validSelection(activeTab, visible: visibleTabs)
-        surfaceSnapshots = surfaceSnapshots.filter { activeIDs.contains($0.key) }
-        if privacy.values["active"] == "1" { surfaceSnapshots = [:] }
+        surfaceSnapshots = surfaceSnapshots.filter {
+            activeIDs.contains($0.key) && !privacy.hides(Self.glanceWidget($0.key))
+        }
         let browserEnabled = context.defaults.bool(forKey: AppStorageKeys.Notch.browserEnabled)
         if browserEnabled, browser == nil {
             attachBrowser(NotchBrowserStore(defaults: context.defaults))
         }
         if !browserEnabled, let browser { browser.shutdown(); attachBrowser(nil) }
-        syncAlerts()
+        if startsServices { syncAlerts(); beginGlanceRefresh() }
         updatePanelFrames()
+    }
+
+    func recordSurfaceSnapshot(_ snapshot: SurfaceSnapshot) {
+        guard activeIDs.contains(snapshot.providerID),
+            !privacy.hides(Self.glanceWidget(snapshot.providerID))
+        else { return }
+        surfaceSnapshots[snapshot.providerID] = snapshot
+        if surfaceLayout.notchPrioritizePermissions, !layoutEditing,
+            let count = snapshot.metrics.first(where: { $0.id == "permissions" })?.value,
+            let pending = Int(count), pending > 0, visibleTabs.contains(.agents)
+        {
+            if let display = expandedDisplay { expand(on: display, preferredTab: .agents) }
+        }
     }
 
     func installContextObserver() {
@@ -180,20 +201,24 @@ final class NotchShelfController {
         glanceTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, !self.stopped else { return }
-                for (id, widget) in [
-                    ("herdr", SurfaceWidget.agents), ("music", .music), ("calendar", .calendar),
-                    ("usage", .limits), ("attention", .focus),
-                ] {
-                    guard self.activeIDs.contains(id), !self.privacy.hides(widget) else { continue }
+                let providers = self.glanceProviderIDs
+                for id in providers.sorted() {
+                    let widget = Self.glanceWidget(id)
+                    guard !self.isExpanded, self.activeIDs.contains(id), !self.privacy.hides(widget)
+                    else { continue }
                     var tile = SurfaceTile(widget)
                     tile.itemLimit = 1
+                    if widget == .agents {
+                        tile.sourceIDs = self.surfaceLayout.notchAgentSources
+                        tile.includeSubagents = self.surfaceLayout.notchIncludeSubagents
+                    }
                     do {
                         let snapshot = try await self.requests.snapshot(
                             providerID: id, target: .notch, tile: tile)
                         guard !Task.isCancelled, self.activeIDs.contains(id),
                             !self.privacy.hides(widget)
                         else { continue }
-                        self.surfaceSnapshots[id] = snapshot
+                        self.recordSurfaceSnapshot(snapshot)
                         self.updatePanelFrames()
                     } catch {
                         self.surfaceSnapshots.removeValue(forKey: id)
@@ -330,7 +355,6 @@ final class NotchShelfController {
     }
     private var openOnDrag: Bool { flag(AppStorageKeys.Notch.shelfOpenOnDrag, default: true) }
     private var openOnHover: Bool { flag(AppStorageKeys.Notch.shelfOpenOnHover, default: true) }
-    private var showMusic: Bool { flag(AppStorageKeys.Notch.shelfShowMusic, default: true) }
     private var requireOption: Bool {
         flag(AppStorageKeys.Notch.shelfRequireOption, default: false)
     }
@@ -513,7 +537,7 @@ final class NotchShelfController {
         let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
         let requested = NotchGeometry.expandedShapeSize(
             tab: activeTab, hasMusic: false, notchHeight: base.height,
-            browserSize: browserSize(on: id), layout: surfaceLayout, editing: layoutEditing,
+            browserSize: browserSize(on: id), layout: visibleSurfaceLayout, editing: layoutEditing,
             homeHeight: homeContentHeight)
         guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
             return requested
