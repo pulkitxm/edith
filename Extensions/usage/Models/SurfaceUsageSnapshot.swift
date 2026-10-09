@@ -23,6 +23,8 @@ public struct SurfaceUsageDocument: Decodable, Sendable {
         public let cacheCreationTokens: Double?
         public let cacheReadTokens: Double?
         public let cost: Double?
+        public let costMissing: Bool?
+        public let unpricedTokens: Double?
         public var tokens: Double {
             [inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens].reduce(0) {
                 min(1e15, $0 + SurfaceUsageSnapshot.valid($1))
@@ -51,6 +53,12 @@ public struct SurfaceUsageSnapshot: Sendable {
     public let providers: [Breakdown]
     public let models: [Breakdown]
     public let updatedAt: Date?
+    public let unpricedModelCount: Int
+    public var pricingNotice: String? {
+        unpricedModelCount > 0
+            ? "Cost estimates are incomplete for \(unpricedModelCount) unpriced model\(unpricedModelCount == 1 ? "" : "s"). Token totals include this usage."
+            : nil
+    }
     public var activeDays: Int { days.filter { $0.tokens > 0 || $0.cost > 0 }.count }
     public var chartUsesTokens: Bool { total.cost == 0 && total.tokens > 0 }
 
@@ -67,6 +75,7 @@ public struct SurfaceUsageSnapshot: Sendable {
         var byProvider: [String: Total] = [:]
         var byModel: [String: Total] = [:]
         var today = Total(); var week = Total(); var total = Total()
+        var unpriced: Set<String> = []
         for day in document.daily {
             let parts = day.period.split(separator: "-").compactMap { Int($0) }
             guard parts.count == 3,
@@ -81,6 +90,9 @@ public struct SurfaceUsageSnapshot: Sendable {
                     let cost = Self.valid(row.cost); let tokens = row.tokens
                     amount.add(cost: cost, tokens: tokens)
                     if date >= start {
+                        if row.costMissing == true || Self.valid(row.unpricedTokens) > 0 {
+                            unpriced.insert(row.modelName ?? "Unknown model")
+                        }
                         byProvider[source, default: Total()].add(cost: cost, tokens: tokens)
                         byModel[row.modelName ?? "Unknown model", default: Total()].add(
                             cost: cost, tokens: tokens)
@@ -95,6 +107,7 @@ public struct SurfaceUsageSnapshot: Sendable {
             }
         }
         self.today = today; self.week = week; self.total = total
+        unpricedModelCount = unpriced.count
         days = (0..<max(1, tile.days)).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset, to: start) else {
                 return nil

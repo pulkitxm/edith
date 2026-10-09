@@ -72,6 +72,7 @@ struct HostLifecycleHarness {
             terminalDefaults?.set(fixture.path, forKey: "terminalCustomFolder")
             terminalDefaults?.set(false, forKey: "terminalConfirmClose")
         }
+        if extensionID == "usage" { try prepareUsageFixture() }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -144,6 +145,8 @@ struct HostLifecycleHarness {
             stage = "initial commands"
             if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "usage" {
+                try await verifyUsage(endpoint, restored: false)
             } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
             } else if let companionServer {
@@ -195,6 +198,8 @@ struct HostLifecycleHarness {
             try await requireExited(terminalChildren)
             if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "usage" {
+                try await verifyUsage(endpoint, restored: true)
             } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
@@ -270,6 +275,8 @@ struct HostLifecycleHarness {
             }
             if extensionID == "audioMixer" {
                 try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "usage" {
+                try await verifyUsage(endpoint, restored: true)
             } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
@@ -343,7 +350,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage")}"
             )
         } catch {
             if extensionID == "jev" {

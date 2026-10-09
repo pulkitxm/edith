@@ -13,6 +13,26 @@ struct UsageNativeProject: Codable, Sendable {
 enum UsageNativeProjects {
     static func resolve(_ cwd: String, archive: UsageNativeArchive) throws -> UsageNativeProject {
         let key = "repository:" + UsageNativeJSON.hash(cwd)
+        if archive.remoteContext != nil {
+            let project: UsageNativeProject
+            if let supplied = archive.remoteProjects[cwd] {
+                project = supplied.project
+            } else if let cached = try archive.cached(key),
+                let saved = try? JSONDecoder().decode(
+                    UsageNativeProject.self, from: UsageNativeJSON.encode(cached))
+            {
+                return saved
+            } else {
+                let folder =
+                    cwd.split(whereSeparator: { $0 == "/" || $0 == "\\" }).last.map(String.init)
+                    ?? "Unattributed"
+                project = .init(
+                    repositoryID: "folder:" + cwd, repositoryName: folder, repositoryURL: nil,
+                    folderName: folder, root: cwd, worktree: nil)
+            }
+            try archive.cache(UsageNativeJSON.object(JSONEncoder().encode(project)), key: key)
+            return project
+        }
         let markers = ["/.claude/worktrees/", "/.cursor/worktrees/"]
         let marker = markers.first { cwd.contains($0) }
         let base = marker.flatMap { cwd.components(separatedBy: $0).first }

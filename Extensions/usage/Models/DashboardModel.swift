@@ -608,12 +608,19 @@ final class DashboardModel {
                 return
             }
             do {
-                let parsed = try await Task.detached(
-                    priority: .utility,
-                    operation: {
-                        try JSONDecoder().decode(DashUsage.self, from: Data(contentsOf: url))
-                    }
-                ).value
+                let read = Task.detached(priority: .utility) {
+                    guard
+                        let data = try UsageDataFiles.readRegularFile(
+                            at: url, maximumBytes: 67_108_864)
+                    else { throw CocoaError(.fileReadNoSuchFile) }
+                    try Task.checkCancellation()
+                    return try JSONDecoder().decode(DashUsage.self, from: data)
+                }
+                let parsed = try await withTaskCancellationHandler {
+                    try await read.value
+                } onCancel: {
+                    read.cancel()
+                }
                 guard contentLoad.isCurrent(request) else { return }
                 mtime = m
                 await ingestDetached(parsed)
@@ -705,12 +712,21 @@ final class DashboardModel {
         await computeTask?.value
     }
 
+    func shutdown() {
+        observers = 0
+        reloadDebounce?.cancel(); reloadDebounce = nil
+        dataDirWatch?.cancel(); dataDirWatch = nil
+        cancelLoading()
+    }
+
     func cancelLoading() {
         contentLoad.cancel()
         computation.cancel()
         ingestion.cancel()
         computeTask?.cancel()
         computeTask = nil
+        homeUsageStoreTask?.cancel()
+        homeUsageStoreTask = nil
     }
 
     static func agentName(_ entry: DashUsage.Meta?, id: String, local: Bool) -> String {

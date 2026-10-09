@@ -58,8 +58,10 @@ public actor SurfaceUsageStore {
             else { throw CocoaError(.fileReadCorruptFile) }
             let current = Stamp(modifiedAt: date, size: size, inode: inode)
             if current == previous { return (current, Optional<SurfaceUsageDocument>.none) }
-            let data = try Data(contentsOf: url)
-            guard data.count <= 67_108_864 else { throw CocoaError(.fileReadCorruptFile) }
+            guard
+                let data = try UsageDataFiles.readRegularFile(
+                    at: url, maximumBytes: 67_108_864)
+            else { throw CocoaError(.fileReadNoSuchFile) }
             try Task.checkCancellation()
             let document = try JSONDecoder().decode(SurfaceUsageDocument.self, from: data)
             try Task.checkCancellation()

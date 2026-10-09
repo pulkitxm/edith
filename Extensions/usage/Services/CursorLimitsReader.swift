@@ -9,11 +9,12 @@ enum CursorCredentialStore {
     }
 
     static func load(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        home: URL = UsageExecutionEnvironment.home,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Material? {
         let configHome =
-            environment["XDG_CONFIG_HOME"].map { URL(fileURLWithPath: $0) }
+            (UsageExecutionEnvironment.fixtureHome(environment: environment) == nil
+            ? environment["XDG_CONFIG_HOME"] : nil).map { URL(fileURLWithPath: $0) }
             ?? home.appendingPathComponent(".config")
         let files = [
             configHome.appendingPathComponent("cursor/auth.json"),

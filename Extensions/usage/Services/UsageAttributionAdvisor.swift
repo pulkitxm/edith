@@ -1,0 +1,156 @@
+import Foundation
+
+public enum UsageAttributionAdvisor {
+    public static let perRunLimit = 40
+    public static let threshold = 0.9
+    public static let titleLimit = 80
+    public static let titleCount = 5
+    public static let purpose = "usage.attribution"
+    public static let question = "repository"
+    public static let noneOption = "none"
+
+    struct Unit {
+        let key: String
+        let folder: String
+        let path: String
+        let machine: String
+        let isChat: Bool
+        var sources: Set<String> = []
+        var titles: [String] = []
+        var cost = 0.0
+    }
+
+    public static func advise(
+        _ data: Data, cache: UsageAttributionCache, decider: JevDeciding?,
+        limit: Int = perRunLimit, now: Date = Date()
+    ) async -> UsageAttributionCache {
+        guard !Task.isCancelled, data.count <= 67_108_864,
+            let document = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return cache }
+        let repositories = UsageAttribution.knownRepositories(document)
+        guard !repositories.isEmpty else { return cache }
+        let matcher = UsageAttributionMatcher(repositories: repositories)
+        var next = cache
+        for (key, decision) in next.decisions
+        where decision.method == .jev && decision.repository != nil
+            && (decision.confidence ?? 0) < threshold
+        {
+            next.decisions[key]?.repository = nil
+        }
+        var questions: [Unit] = []
+        for unit in units(document) where next.decisions[unit.key] == nil {
+            let match =
+                unit.isChat
+                ? matcher.title(unit.titles.first ?? "")
+                : matcher.folder(name: unit.folder, path: unit.path)
+            if let match {
+                next.decisions[unit.key] = decision(unit, .name, match, confidence: nil, now)
+            } else if !unit.isChat || !unit.titles.isEmpty {
+                questions.append(unit)
+            }
+        }
+        guard let decider else { return next }
+        for unit in questions.prefix(min(perRunLimit, max(0, limit))) {
+            guard !Task.isCancelled else { return cache }
+            guard
+                let answer = try? await decider.decide(
+                    request(unit, repositories: repositories), purpose: purpose
+                ).answer(question)
+            else { break }
+            let probability = answer.chosenProbability ?? 0
+            let chosen =
+                probability >= threshold ? repositories.first { $0.id == answer.choice } : nil
+            next.decisions[unit.key] = decision(unit, .jev, chosen, confidence: probability, now)
+        }
+        return next
+    }
+
+    static func request(_ unit: Unit, repositories: [UsageAttributionRepository]) -> JevRequest {
+        let options =
+            repositories.prefix(JevQuestion.maximumOptions - 1).map {
+                JevOption($0.id, "\($0.name) (\($0.id))")
+            } + [JevOption(noneOption, "none of these; keep it as its own folder")]
+        return JevRequest(
+            state: .fields([
+                "folder": unit.folder, "path": String(unit.path.suffix(160)),
+                "machine": unit.machine,
+                "source": unit.sources.sorted().joined(separator: ", "),
+                "titles": unit.titles.prefix(titleCount).map {
+                    String(
+                        $0.split(whereSeparator: \.isWhitespace).map { word in
+                            word.count >= 20 && !word.contains("/")
+                                && word.contains(where: \.isLetter)
+                                && word.contains(where: \.isNumber) ? "[redacted]" : String(word)
+                        }.joined(separator: " ").prefix(titleLimit))
+                }.joined(separator: "\n"),
+            ]),
+            questions: [
+                question: .choice(
+                    "Which repository was the work in `folder` at `path` done for, judging by the chat `titles`?",
+                    options: options)
+            ])
+    }
+
+    static func units(_ document: [String: Any]) -> [Unit] {
+        var units: [String: Unit] = [:]
+        for day in document["daily"] as? [[String: Any]] ?? [] {
+            for project in day["projects"] as? [[String: Any]] ?? []
+            where !UsageAttribution.isGitHub(project) && project["attribution"] == nil {
+                let machine = project["machineName"] as? String ?? "this Mac"
+                let chats = project["chats"] as? [[String: Any]] ?? []
+                guard UsageAttribution.isUnknown(project) else {
+                    let key = UsageAttribution.folderKey(project)
+                    var unit =
+                        units[key]
+                        ?? Unit(
+                            key: key, folder: UsageAttribution.string(project["folderName"]),
+                            path: UsageAttribution.localPath(project), machine: machine,
+                            isChat: false)
+                    unit.sources.formUnion(sources(project))
+                    unit.cost += UsageAttribution.number(project["cost"])
+                    for title in chats.map({ UsageAttribution.string($0["title"]) })
+                    where !UsageAttribution.isGeneric(title: title) && !unit.titles.contains(title)
+                        && unit.titles.count < titleCount
+                    {
+                        unit.titles.append(title)
+                    }
+                    units[key] = unit
+                    continue
+                }
+                for chat in chats {
+                    guard let key = UsageAttribution.chatKey(chat, in: project) else { continue }
+                    let title = UsageAttribution.string(chat["title"])
+                    var unit =
+                        units[key]
+                        ?? Unit(
+                            key: key, folder: "unknown", path: "", machine: machine, isChat: true,
+                            titles: UsageAttribution.isGeneric(title: title) ? [] : [title])
+                    unit.sources.formUnion(
+                        UsageAttribution.chatSource(chat, in: project).map { [local($0)] } ?? [])
+                    unit.cost += UsageAttribution.number(chat["cost"])
+                    units[key] = unit
+                }
+            }
+        }
+        return units.values.sorted { $0.cost == $1.cost ? $0.key < $1.key : $0.cost > $1.cost }
+    }
+
+    private static func sources(_ project: [String: Any]) -> [String] {
+        (project["bySource"] as? [String: Any] ?? [:]).keys.map(local)
+    }
+
+    private static func local(_ source: String) -> String {
+        guard let range = source.range(of: #"^machine:[^:]+:"#, options: .regularExpression)
+        else { return source }
+        return String(source[range.upperBound...])
+    }
+
+    private static func decision(
+        _ unit: Unit, _ method: UsageAttributionDecision.Method,
+        _ repository: UsageAttributionRepository?, confidence: Double?, _ now: Date
+    ) -> UsageAttributionDecision {
+        UsageAttributionDecision(
+            method: method, repository: repository, confidence: confidence, folder: unit.folder,
+            machine: unit.machine, title: unit.isChat ? unit.titles.first : nil, decidedAt: now)
+    }
+}
