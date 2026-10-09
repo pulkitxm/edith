@@ -152,7 +152,7 @@ final class ExtensionRuntime: NSObject {
         self.defaults = defaults
         let bundle = Bundle(for: ExtensionRuntime.self)
         let directory = bundle.bundleURL.deletingLastPathComponent()
-        source = directory.appendingPathComponent("CameraCarrier.app")
+        source = directory.appendingPathComponent("CameraCarrier.app").resolvingSymlinksInPath()
         installed = URL(
             fileURLWithPath: "/Applications/Edith Extensions/" + host + ".cameraCarrier.app")
         fixture =
@@ -190,7 +190,7 @@ final class ExtensionRuntime: NSObject {
                     fixture ? "--contained-extension-fixture-session" : "--contained-extension-role"
                 ]
                 process.standardInput = Pipe(); process.standardOutput = Pipe()
-                process.standardError = FileHandle.nullDevice
+                process.standardError = fixture ? FileHandle.standardError : FileHandle.nullDevice
                 var environment = ProcessInfo.processInfo.environment
                 for key in environment.keys where key.hasPrefix("DYLD_") || key == "LD_PRELOAD" {
                     environment.removeValue(forKey: key)

@@ -11,6 +11,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+import { buildCameraCarrier } from "./build-camera-carrier.mjs";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
@@ -181,6 +182,7 @@ export async function buildExtensionPackage({
   development = false,
   version,
   tagOverride,
+  containedHostApp = process.env.EXTENSION_CONTAINING_HOST_APP,
 }) {
   await writeHostABI(root);
   const definitions = JSON.parse(
@@ -249,9 +251,23 @@ export async function buildExtensionPackage({
     );
   }
   for (const [role, sources] of Object.entries(definition.roles)) {
-    if (!["app", "helper", "agent", "cli", "privileged"].includes(role))
+    if (
+      ![
+        "app",
+        "helper",
+        "agent",
+        "cli",
+        "privileged",
+        "cameraCarrier",
+        "cameraProvider",
+      ].includes(role)
+    )
       throw new Error(`Unknown host role ${role}`);
-    const supportProduct = definition.supportProducts && Object.hasOwn(definition.supportProducts, role) ? definition.supportProducts[role] : definition.supportProduct;
+    const supportProduct =
+      definition.supportProducts &&
+      Object.hasOwn(definition.supportProducts, role)
+        ? definition.supportProducts[role]
+        : definition.supportProduct;
     const support = supportProduct
       ? buildExtensionSupport(root, supportProduct, `${id}_${role}`)
       : undefined;
@@ -562,6 +578,43 @@ export async function buildExtensionPackage({
     execFileSync("codesign", ["--verify", "--strict", bundle], {
       stdio: "inherit",
     });
+  }
+  if (definition.systemExtensionCarrier) {
+    if (!containedHostApp)
+      throw new Error(
+        "A frozen signed host app is required for a system extension carrier",
+      );
+    const hostIdentifier = execFileSync(
+      "/usr/libexec/PlistBuddy",
+      [
+        "-c",
+        "Print :CFBundleIdentifier",
+        resolve(containedHostApp, "Contents/Info.plist"),
+      ],
+      { encoding: "utf8" },
+    ).trim();
+    const metadata = {
+      ...definition.systemExtensionCarrier,
+      applicationIdentifier: `${hostIdentifier}.cameraCarrier`,
+      extensionIdentifier: `${hostIdentifier}.camera`,
+    };
+    await buildCameraCarrier({
+      root,
+      hostApp: containedHostApp,
+      payloadDirectory: payload,
+      output: payload,
+      version: releaseVersion,
+      hostABI: definition.hostABI,
+      definition: metadata,
+      development,
+    });
+    await copyFile(
+      resolve(payload, "camera-carrier-provenance.json"),
+      resolve(target, `${id}.carrier-provenance.json`),
+    );
+    await rm(resolve(payload, "camera-carrier-provenance.json"));
+    await rm(resolve(payload, "cameraCarrier.bundle"), { recursive: true });
+    await rm(resolve(payload, "cameraProvider.bundle"), { recursive: true });
   }
   const payloadManifest = {
     id,
