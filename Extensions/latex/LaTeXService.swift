@@ -375,7 +375,9 @@ public struct LaTeXService: Sendable {
         _ tool: String, _ arguments: [String], input: Data? = nil, directory: URL? = nil
     ) async throws -> Data {
         try Task.checkCancellation()
-        return try await execute(tool, arguments, input, directory)
+        let data = try await execute(tool, arguments, input, directory)
+        try Task.checkCancellation()
+        return data
     }
 
     private func encodedPath(_ path: String) -> String {

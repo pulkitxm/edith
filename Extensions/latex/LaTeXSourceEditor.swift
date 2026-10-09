@@ -16,6 +16,14 @@ final class LaTeXEditorControls {
     var ready = false
     @ObservationIgnored var webView: WKWebView?
 
+    func shutdown() {
+        webView?.stopLoading()
+        webView?.configuration.userContentController.removeScriptMessageHandler(
+            forName: "latexEditor")
+        webView?.navigationDelegate = nil
+        webView = nil; ready = false; canUndo = false; canRedo = false
+    }
+
     func undo() { command("undo") }
     func redo() { command("redo") }
     func find() { command("find") }

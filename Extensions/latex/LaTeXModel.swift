@@ -20,10 +20,13 @@ final class LaTeXModel {
     var buildURL: URL?
     let load = ContentLoad()
     let editorControls = LaTeXEditorControls()
+    let tools = LaTeXToolOwner()
     private let service: LaTeXService
     private let store: LaTeXProjectStore
     private var operation: Task<Void, Never>?
-    private var pdfOperation: Task<Void, Never>?
+    private var pdfID: UUID?
+    private var jobs: [UUID: Task<Void, Never>] = [:]
+    private(set) var isStopped = false
 
     init(service: LaTeXService = .live, store: LaTeXProjectStore = LaTeXProjectStore()) {
         self.service = service
@@ -38,7 +41,7 @@ final class LaTeXModel {
     }
 
     func start() async {
-        guard !load.hasContent else { return }
+        guard !isStopped, !load.hasContent else { return }
         let request = load.begin()
         do {
             projects = try store.load()
@@ -47,7 +50,7 @@ final class LaTeXModel {
     }
 
     func select(_ id: UUID) async {
-        guard !dirty, !busy else { return }
+        guard !isStopped, !dirty, !busy else { return }
         stopFollowingBuild()
         selectedID = id
         hasRepositoryBuild = false
@@ -61,7 +64,7 @@ final class LaTeXModel {
     }
 
     func reload() async {
-        guard let project = selected, !dirty, !busy else { return }
+        guard !isStopped, let project = selected, !dirty, !busy else { return }
         stopFollowingBuild()
         let request = load.begin(preservingContent: original != nil)
         do {
@@ -82,7 +85,7 @@ final class LaTeXModel {
             if current.location == .github && !hasBuild {
                 hasBuild = (try? await service.build(current)) != nil
             }
-            guard load.isCurrent(request), selectedID == current.id else { return }
+            guard !isStopped, load.isCurrent(request), selectedID == current.id else { return }
             source = result.text
             original = result
             pdfPreview = preview
@@ -92,8 +95,11 @@ final class LaTeXModel {
     }
 
     func add(_ project: LaTeXProject) async throws {
+        guard !isStopped else { throw CancellationError() }
         let resolved = try await service.resolve(project)
         let content = try await service.load(resolved)
+        try Task.checkCancellation()
+        guard !isStopped else { throw CancellationError() }
         guard
             !projects.contains(where: {
                 $0.location == resolved.location && $0.sourcePath == resolved.sourcePath
@@ -116,7 +122,7 @@ final class LaTeXModel {
     }
 
     func remove() {
-        guard let selected, !dirty, !busy else { return }
+        guard !isStopped, let selected, !dirty, !busy else { return }
         do {
             let next = projects.filter { $0.id != selected.id }
             try store.save(next)
@@ -205,9 +211,13 @@ final class LaTeXModel {
     }
 
     private func followBuild(_ project: LaTeXProject) {
-        pdfOperation?.cancel()
+        stopFollowingBuild()
+        guard !isStopped, jobs.count < 16 else { return }
         buildingPDF = true
-        pdfOperation = Task { [weak self] in
+        let id = UUID()
+        pdfID = id
+        jobs[id] = Task { [weak self] in
+            defer { self?.jobs[id] = nil }
             for _ in 0..<60 {
                 do {
                     guard !Task.isCancelled, let self, self.selectedID == project.id else { return }
@@ -247,8 +257,8 @@ final class LaTeXModel {
     }
 
     private func stopFollowingBuild() {
-        pdfOperation?.cancel()
-        pdfOperation = nil
+        if let pdfID { jobs[pdfID]?.cancel() }
+        pdfID = nil
         buildingPDF = false
         buildURL = nil
     }
@@ -284,12 +294,40 @@ final class LaTeXModel {
     }
 
     private func perform(_ action: @escaping @MainActor () async throws -> Void) {
-        guard !busy else { return }
+        guard !isStopped, !busy else { return }
         busy = true
         message = nil
         operation = Task {
             defer { busy = false; operation = nil }
-            do { try await action() } catch { message = error.localizedDescription }
+            do { try await action() } catch {
+                if !isStopped && !Task.isCancelled { message = error.localizedDescription }
+            }
         }
     }
+    @discardableResult
+    func launch(_ action: @escaping @MainActor () async -> Void) -> Bool {
+        guard !isStopped, jobs.count < 16 else { return false }
+        let id = UUID()
+        jobs[id] = Task { [weak self] in
+            defer { self?.jobs[id] = nil }
+            guard !Task.isCancelled, self?.isStopped == false else { return }
+            await action()
+        }
+        return true
+    }
+
+    func shutdown() async {
+        isStopped = true
+        operation?.cancel()
+        for job in jobs.values { job.cancel() }
+        if let operation { await operation.value }
+        for job in Array(jobs.values) { await job.value }
+        operation = nil; jobs.removeAll(); pdfID = nil
+        await tools.shutdown()
+        editorControls.shutdown()
+        projects.removeAll(); selectedID = nil; source = ""; original = nil
+        review = nil; pdfPreview = nil; log = ""; message = nil
+        busy = false; buildingPDF = false; hasRepositoryBuild = false; buildURL = nil
+    }
+
 }

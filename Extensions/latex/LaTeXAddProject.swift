@@ -102,7 +102,7 @@ struct LaTeXAddProject: View {
     private func add() {
         busy = true
         error = nil
-        Task {
+        model.launch {
             defer { busy = false }
             do {
                 try await model.add(

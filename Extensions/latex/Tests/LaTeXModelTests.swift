@@ -65,6 +65,8 @@ import EdithExtensionUI
                     LaTeXPage(model: model, opensEditor: true).environment(\.compactLayout, compact)
                         .environment(
                             \.colorScheme, scheme), size: size)
+                try await Task.sleep(for: .milliseconds(100))
+                host.layoutSubtreeIfNeeded()
                 let text = try auditText(host)
                 #expect(text.contains("Save"))
                 #expect(text.contains("paper.tex"))

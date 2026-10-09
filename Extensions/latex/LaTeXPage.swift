@@ -10,6 +10,7 @@ struct LaTeXPage: View {
     @State private var editing = false
     @State private var adding = false
     @State private var showingReview = false
+    @State private var showingTools = false
     @State private var inspector = "PDF"
     @State private var layout = "Split"
     let model: LaTeXModel
@@ -37,6 +38,10 @@ struct LaTeXPage: View {
         .edithSheet(isPresented: $adding, dismissible: nil) {
             LaTeXAddProject(model: model, onAdded: { editing = true })
         }
+        .edithSheet(isPresented: $showingTools, dismissible: nil) {
+            LaTeXToolsPage(owner: model.tools).frame(
+                width: UIScale.pt(620), height: UIScale.pt(530))
+        }
         .onChange(of: model.selectedID) { _, id in
             inspector = "PDF"; if id == nil { editing = false }
         }
@@ -45,6 +50,7 @@ struct LaTeXPage: View {
     private var projectsPage: some View {
         PageScaffold {
             PageHeader("LaTeX projects") {
+                Button("Tools", systemImage: "wrench.and.screwdriver") { showingTools = true }
                 Button {
                     adding = true
                 } label: {
@@ -61,7 +67,7 @@ struct LaTeXPage: View {
                 title: "Your first LaTeX project",
                 message: model.load.errorMessage
                     ?? "Add a .tex file from this Mac or a source path in a GitHub repository.",
-                layout: .cards, retry: { Task { await model.start() } }
+                layout: .cards, retry: { model.launch { await model.start() } }
             ) {
                 LazyVGrid(
                     columns: PageMetrics.cardColumns(compact, minimum: 300, spacing: 16),
@@ -75,7 +81,7 @@ struct LaTeXPage: View {
 
     private func projectCard(_ project: LaTeXProject) -> some View {
         Button {
-            Task {
+            model.launch {
                 editing = true
                 await model.select(project.id)
             }
@@ -152,7 +158,7 @@ struct LaTeXPage: View {
                     Button("Discard edits") { model.discard() }.disabled(model.busy)
                 }
                 if model.load.errorMessage != nil {
-                    Button("Retry") { Task { await model.reload() } }.disabled(model.dirty)
+                    Button("Retry") { model.launch { await model.reload() } }.disabled(model.dirty)
                 }
             }
             .font(.edithText(.caption))
@@ -236,7 +242,7 @@ struct LaTeXPage: View {
                     Image(systemName: "rectangle.split.2x1")
                 }.help("Editor layout").accessibilityLabel("Editor layout")
                 Menu {
-                    Button("Reload source") { Task { await model.reload() } }
+                    Button("Reload source") { model.launch { await model.reload() } }
                     if project.location == .disk {
                         Button("Reveal source in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([
