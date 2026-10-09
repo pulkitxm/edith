@@ -16,18 +16,44 @@ public enum ExtensionPrivilegedService {
     public static var service: SMAppService { .daemon(plistName: plistName) }
 }
 
+@MainActor protocol ExtensionPrivilegedTransport: AnyObject {
+    func activate(source: URL, owner: String, version: String) async throws
+    func invoke(_ command: String, payload: Data) async throws -> Data
+    func release() async throws
+    func invalidate()
+}
+
 @MainActor public final class ExtensionPrivilegedClient {
     public let owner: String
     private let source: URL
     private let version: String
-    private var connection: NSXPCConnection?
-    private var proxy: ExtensionPrivilegedProtocol?
+    private let serviceStatus: @MainActor () -> SMAppService.Status
+    private let connect:
+        @MainActor (@escaping @MainActor () -> Void) -> any ExtensionPrivilegedTransport
+    private var channel: (any ExtensionPrivilegedTransport)?
+    private var channelID: UUID?
+    private var needsRestoration = false
+    private var requesting = false
 
-    public init(owner: String, source: URL, version: String) {
-        self.owner = owner; self.source = source; self.version = version
+    public convenience init(owner: String, source: URL, version: String) {
+        self.init(
+            owner: owner, source: source, version: version,
+            status: { ExtensionPrivilegedService.service.status },
+            connect: { ExtensionPrivilegedXPC(invalidated: $0) })
     }
 
-    public var status: SMAppService.Status { ExtensionPrivilegedService.service.status }
+    init(
+        owner: String, source: URL, version: String,
+        status: @escaping @MainActor () -> SMAppService.Status,
+        connect:
+            @escaping @MainActor (@escaping @MainActor () -> Void) ->
+            any ExtensionPrivilegedTransport
+    ) {
+        self.owner = owner; self.source = source; self.version = version
+        serviceStatus = status; self.connect = connect
+    }
+
+    public var status: SMAppService.Status { serviceStatus() }
 
     public func requestApproval() throws {
         let service = ExtensionPrivilegedService.service
@@ -36,61 +62,110 @@ public enum ExtensionPrivilegedService {
     }
 
     public func invoke(_ command: String, payload: Data) async throws -> Data {
-        guard !command.isEmpty, command.utf8.count <= 256, !command.utf8.contains(0),
-            payload.count <= 32_768
+        guard !requesting, !command.isEmpty, command.utf8.count <= 256,
+            !command.utf8.contains(0), payload.count <= 32_768
         else { throw ExtensionPeerError.invalidRequest }
-        try await activate()
-        guard let proxy else { throw ExtensionPeerError.unavailable }
-        return try await call { completion in
-            proxy.invoke(command, payload: payload, reply: completion)
-        }
+        requesting = true; defer { requesting = false }
+        let channel = try await activate()
+        return try await channel.invoke(command, payload: payload)
     }
 
     public func release() async throws {
-        guard let proxy else { return }
-        _ = try await call { completion in proxy.release { completion(Data(), $0) } }
-        connection?.invalidate(); connection = nil; self.proxy = nil
+        guard needsRestoration || channel != nil else { return }
+        guard !requesting else { throw ExtensionPeerError.invalidRequest }
+        requesting = true; defer { requesting = false }
+        let channel = try await activate()
+        try await channel.release()
+        needsRestoration = false
+        shutdown()
     }
 
-    public func shutdown() { connection?.invalidate(); connection = nil; proxy = nil }
+    public func shutdown() {
+        let previous = channel; channel = nil; channelID = nil; previous?.invalidate()
+    }
 
-    private func activate() async throws {
-        if proxy != nil { return }
+    private func activate() async throws -> any ExtensionPrivilegedTransport {
+        if let channel { return channel }
         guard status == .enabled else {
             throw ExtensionPeerError.rejected(
                 "Approve Edith in System Settings > General > Login Items & Extensions, then try again."
             )
         }
-        let connection = NSXPCConnection(
-            machServiceName: ExtensionPrivilegedService.identifier, options: .privileged)
-        connection.remoteObjectInterface = NSXPCInterface(with: ExtensionPrivilegedProtocol.self)
-        connection.resume()
-        self.connection = connection
-        guard
-            let proxy = connection.remoteObjectProxyWithErrorHandler({ _ in connection.invalidate()
-            }) as? ExtensionPrivilegedProtocol
-        else { shutdown(); throw ExtensionPeerError.unavailable }
-        self.proxy = proxy
+        let id = UUID()
+        let created = connect { [weak self] in
+            guard self?.channelID == id else { return }
+            self?.channel = nil; self?.channelID = nil
+        }
+        channelID = id; channel = created
         do {
-            _ = try await call { completion in
-                proxy.activate(source.path, owner: owner, version: version) {
-                    completion(Data(), $0)
-                }
-            }
-        } catch { shutdown(); throw error }
+            try await created.activate(source: source, owner: owner, version: version)
+            guard channelID == id else { throw ExtensionPeerError.unavailable }
+            needsRestoration = true
+            return created
+        } catch {
+            if channelID == id { shutdown() } else { created.invalidate() }
+            throw error
+        }
+    }
+}
+
+@MainActor private final class ExtensionPrivilegedXPC: ExtensionPrivilegedTransport {
+    private let connection = NSXPCConnection(
+        machServiceName: ExtensionPrivilegedService.identifier, options: .privileged)
+    private let invalidated: @MainActor () -> Void
+    private var proxy: ExtensionPrivilegedProtocol?
+    private var pending: [UUID: ExtensionPrivilegedReply] = [:]
+    private var closed = false
+
+    init(invalidated: @escaping @MainActor () -> Void) {
+        self.invalidated = invalidated
+        connection.remoteObjectInterface = NSXPCInterface(with: ExtensionPrivilegedProtocol.self)
+        connection.invalidationHandler = { [weak self] in
+            Task { @MainActor in self?.invalidate() }
+        }
+        connection.interruptionHandler = connection.invalidationHandler
+        connection.resume()
+        proxy =
+            connection.remoteObjectProxyWithErrorHandler { [weak self] _ in
+                Task { @MainActor in self?.invalidate() }
+            } as? ExtensionPrivilegedProtocol
+    }
+
+    func activate(source: URL, owner: String, version: String) async throws {
+        guard let proxy else { throw ExtensionPeerError.unavailable }
+        _ = try await call { completion in
+            proxy.activate(source.path, owner: owner, version: version) { completion(Data(), $0) }
+        }
+    }
+    func invoke(_ command: String, payload: Data) async throws -> Data {
+        guard let proxy else { throw ExtensionPeerError.unavailable }
+        return try await call { completion in
+            proxy.invoke(command, payload: payload, reply: completion)
+        }
+    }
+    func release() async throws {
+        guard let proxy else { throw ExtensionPeerError.unavailable }
+        _ = try await call { completion in proxy.release { completion(Data(), $0) } }
+    }
+    func invalidate() {
+        guard !closed else { return }; closed = true
+        connection.invalidate(); proxy = nil
+        for reply in pending.values { reply.finish(.failure(ExtensionPeerError.unavailable)) }
+        pending.removeAll(); invalidated()
     }
 
     private func call(_ send: (@escaping @Sendable (Data?, NSError?) -> Void) -> Void) async throws
         -> Data
     {
+        guard !closed else { throw ExtensionPeerError.unavailable }
         let reply = ExtensionPrivilegedReply()
-        let connection = self.connection
+        let id = UUID(); pending[id] = reply
         let timeout = Task {
             try? await Task.sleep(for: .seconds(20))
             guard !Task.isCancelled else { return }
-            if reply.finish(.failure(ExtensionPeerError.timedOut)) { connection?.invalidate() }
+            if reply.finish(.failure(ExtensionPeerError.timedOut)) { invalidate() }
         }
-        defer { timeout.cancel() }
+        defer { timeout.cancel(); pending[id] = nil }
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 guard reply.begin(continuation) else { return }
@@ -105,7 +180,9 @@ public enum ExtensionPrivilegedService {
                 }
             }
         } onCancel: {
-            if reply.finish(.failure(CancellationError())) { connection?.invalidate() }
+            if reply.finish(.failure(CancellationError())) {
+                Task { @MainActor [weak self] in self?.invalidate() }
+            }
         }
     }
 }

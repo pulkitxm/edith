@@ -8,6 +8,7 @@ import Security
     private let listener = NSXPCListener(machServiceName: ExtensionPrivilegedService.identifier)
     private let team: String
     private var sessions: [UUID: HostPrivilegedSession] = [:]
+    private let leases = HostPrivilegedLeases()
 
     public init(approved: Bool) throws {
         guard approved, getuid() == 0, let team = ExtensionCodeSignature.teamIdentifier() else {
@@ -35,7 +36,12 @@ import Security
             let admission = HostPrivilegedAdmission(
                 root: URL(fileURLWithPath: "/Library/Application Support/Edith Extension Carrier")
             ) { [team] in try ExtensionCodeSignature.verify($0, teamIdentifier: team) }
-            let session = HostPrivilegedSession(admission: admission) { [weak self] in
+            let session = HostPrivilegedSession(
+                admission: admission,
+                reserveOwner: { [leases] in leases.reserve($0) },
+                releaseOwner: { [leases] in leases.release($0) }
+            ) { [weak self] in
+                connection.invalidate(); connection.exportedObject = nil
                 self?.sessions[id] = nil
                 guard self?.sessions.isEmpty == true else { return }
                 Task {
@@ -53,16 +59,35 @@ import Security
     }
 }
 
-@MainActor private final class HostPrivilegedSession: NSObject, ExtensionPrivilegedProtocol {
+@MainActor final class HostPrivilegedSession: NSObject, ExtensionPrivilegedProtocol {
     private let admission: HostPrivilegedAdmission
     private let ended: @MainActor () -> Void
     private var worker: HostPrivilegedProcess?
     private var payload: URL?
     private var restoration: Task<Void, Never>?
     private var releasing = false
+    private var finished = false
+    private var owner: String?
+    private let reserveOwner: @MainActor (String) -> Bool
+    private let releaseOwner: @MainActor (String) -> Void
+    private let makeWorker: @MainActor (URL) throws -> HostPrivilegedProcess
 
-    init(admission: HostPrivilegedAdmission, ended: @escaping @MainActor () -> Void) {
+    init(
+        admission: HostPrivilegedAdmission,
+        reserveOwner: @escaping @MainActor (String) -> Bool,
+        releaseOwner: @escaping @MainActor (String) -> Void,
+        makeWorker: @escaping @MainActor (URL) throws -> HostPrivilegedProcess = { payload in
+            guard let executable = Bundle.main.executableURL else {
+                throw MarketplaceError.invalidBundle
+            }
+            return HostPrivilegedProcess(
+                executable: executable,
+                arguments: ["--extension-carrier-worker", payload.path])
+        }, ended: @escaping @MainActor () -> Void
+    ) {
         self.admission = admission; self.ended = ended
+        self.reserveOwner = reserveOwner; self.releaseOwner = releaseOwner;
+        self.makeWorker = makeWorker
     }
 
     nonisolated func activate(
@@ -70,20 +95,22 @@ import Security
         reply: @escaping @Sendable (NSError?) -> Void
     ) {
         Task { @MainActor in
+            guard self.worker == nil, !self.releasing, !self.finished else {
+                reply(MarketplaceError.invalidBundle as NSError); return
+            }
+            guard self.reserveOwner(owner) else {
+                reply(
+                    ExtensionPeerError.rejected(
+                        "This extension already owns a privileged worker. Wait for restoration, then try again."
+                    ) as NSError);
+                return
+            }
+            self.owner = owner
             do {
-                guard self.worker == nil, !self.releasing else {
-                    throw MarketplaceError.invalidBundle
-                }
                 let payload = try self.admission.admit(
                     source: URL(fileURLWithPath: source), owner: owner, version: version)
                 self.payload = payload
-                guard let executable = Bundle.main.executableURL else {
-                    throw MarketplaceError.invalidBundle
-                }
-                let worker = HostPrivilegedProcess(
-                    executable: executable, arguments: ["--extension-carrier-worker", payload.path])
-                self.worker = worker
-                try await worker.start()
+                try await self.startWorker(payload)
                 reply(nil)
             } catch { reply(error as NSError); self.finish() }
         }
@@ -118,7 +145,7 @@ import Security
     }
 
     func connectionLost() {
-        guard restoration == nil else { return }
+        guard restoration == nil, !finished else { return }
         releasing = true
         restoration = Task { [self] in
             while !Task.isCancelled {
@@ -129,10 +156,23 @@ import Security
         }
     }
 
-    private func prepare() async throws { try await worker?.stop() }
+    private func startWorker(_ payload: URL) async throws {
+        let created = try makeWorker(payload); worker = created
+        created.didExit = { [weak self] in
+            guard self?.releasing == false else { return }; self?.connectionLost()
+        }
+        try await created.start()
+    }
+
+    private func prepare() async throws {
+        if worker?.processIdentifier == nil, let payload { try await startWorker(payload) }
+        try await worker?.stop()
+    }
 
     private func finish() {
+        guard !finished else { return }; finished = true
         worker = nil
+        if let owner { releaseOwner(owner); self.owner = nil }
         if let payload { try? admission.remove(payload); self.payload = nil }
         ended()
     }
@@ -141,4 +181,10 @@ import Security
 private final class HostPrivilegedConnection: @unchecked Sendable {
     let connection: NSXPCConnection
     init(_ connection: NSXPCConnection) { self.connection = connection }
+}
+
+@MainActor final class HostPrivilegedLeases {
+    private var owners = Set<String>()
+    func reserve(_ owner: String) -> Bool { owners.insert(owner).inserted }
+    func release(_ owner: String) { owners.remove(owner) }
 }
