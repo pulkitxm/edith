@@ -17,6 +17,11 @@ final class NativeTaskFixtureRuntime: NSObject {
                     "output": result.standardOutputData.base64EncodedString(),
                     "error": result.standardErrorData.base64EncodedString(),
                 ])
+            case "native.returnWithChild":
+                let result = try await run(Data([3]), input: Data())
+                return try JSONSerialization.data(withJSONObject: [
+                    "status": result.terminationStatus
+                ])
             case "native.launch":
                 task = Task { _ = try? await run(Data([2]), input: Data()) }
                 return Data("{}".utf8)
@@ -124,5 +129,6 @@ public func executeNativeTaskFixture(_ bytes: UnsafePointer<UInt8>?, _ count: In
         return 1
     }
     try? Data(String(child).utf8).write(to: root.appendingPathComponent("native-child.pid"))
+    if bytes[0] == 3 { return 9 }
     while true { usleep(100_000) }
 }

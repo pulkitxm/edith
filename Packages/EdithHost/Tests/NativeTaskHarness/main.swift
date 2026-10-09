@@ -93,6 +93,10 @@ import Foundation
         unowned.standardError = FileHandle.nullDevice
         try unowned.run(); unowned.waitUntilExit()
         guard unowned.terminationStatus == 1 else { throw HostWorkerError.invalidResponse }
+        let returned = try await call(endpoint, "native.returnWithChild")
+        guard returned["status"] as? Int == 9 else { throw HostWorkerError.invalidResponse }
+        let returnedChild = try pid(data.appendingPathComponent("native-child.pid"))
+        try await wait { kill(returnedChild, 0) == -1 && kill(-returnedChild, 0) == -1 }
         for mode in ["cancel", "parentExit"] {
             try? FileManager.default.removeItem(at: data.appendingPathComponent("native-child.pid"))
             _ = try await call(endpoint, "native.launch")
@@ -124,7 +128,7 @@ import Foundation
         try await sessions.disable(id: "keepAwake")
         guard sessions.processIdentifiers.isEmpty else { throw HostWorkerError.invalidResponse }
         print(
-            "{\"sameAppExecutable\":true,\"binaryStdio\":true,\"disabledAdmission\":true,\"malformedAdmission\":true,\"oversizeAdmission\":true,\"contextAdmission\":true,\"incompatibleAdmission\":true,\"uninstalledAdmission\":true,\"unownedAdmission\":true,\"tamperedAdmission\":true,\"parentExitCleanup\":true,\"cancelledDescendants\":true,\"remainingProcesses\":0}"
+            "{\"sameAppExecutable\":true,\"binaryStdio\":true,\"disabledAdmission\":true,\"malformedAdmission\":true,\"oversizeAdmission\":true,\"contextAdmission\":true,\"incompatibleAdmission\":true,\"uninstalledAdmission\":true,\"unownedAdmission\":true,\"tamperedAdmission\":true,\"parentExitCleanup\":true,\"cancelledDescendants\":true,\"normalReturnCleanup\":true,\"remainingProcesses\":0}"
         )
     }
 

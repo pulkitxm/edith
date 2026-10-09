@@ -89,7 +89,21 @@ try {
     { encoding: "utf8", timeout: 120_000 },
   );
   const result = JSON.parse(output.trim());
-  for (const key of ["sameAppExecutable", "binaryStdio", "disabledAdmission", "malformedAdmission", "oversizeAdmission", "contextAdmission", "incompatibleAdmission", "uninstalledAdmission", "unownedAdmission", "tamperedAdmission", "parentExitCleanup", "cancelledDescendants"])
+  for (const key of [
+    "sameAppExecutable",
+    "binaryStdio",
+    "disabledAdmission",
+    "malformedAdmission",
+    "oversizeAdmission",
+    "contextAdmission",
+    "incompatibleAdmission",
+    "uninstalledAdmission",
+    "unownedAdmission",
+    "tamperedAdmission",
+    "parentExitCleanup",
+    "cancelledDescendants",
+    "normalReturnCleanup",
+  ])
     assert.equal(result[key], true);
   assert.equal(result.remainingProcesses, 0);
   process.stdout.write(`${JSON.stringify(result)}\n`);
