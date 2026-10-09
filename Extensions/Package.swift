@@ -44,6 +44,15 @@ let package = Package(
             name: "CodeStatsExtensionTests", dependencies: ["CodeStatsExtension"],
             path: "codeStats/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "HerdrExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "herdr", exclude: ["Tests", "Views", "ViewModels", "Package.swift"],
+            resources: [.process("Resources")],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "HerdrExtensionTests", dependencies: ["HerdrExtension"],
+            path: "herdr/Tests/Core", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "LaTeXExtension",
             dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
             path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],

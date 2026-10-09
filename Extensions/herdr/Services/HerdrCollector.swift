@@ -1,0 +1,240 @@
+import EdithExtensionSupport
+import Foundation
+
+public enum HerdrCollector {
+    public static let commandTimeout: TimeInterval = 12
+    public static let pathPrefix =
+        "$HOME/.local/bin:$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+    public static func collect(_ scope: HerdrCollectScope = .all) async -> [HerdrHostSnapshot] {
+        switch scope {
+        case .all:
+            async let local = collectLocal()
+            let remotes = await collectRemotes(MachineRegistry.machines())
+            return await [local] + remotes
+        case .local:
+            return [await collectLocal()]
+        case let .machine(machine):
+            return [await collectRemote(machine)]
+        }
+    }
+
+    public static func executable() -> URL? {
+        if let found = CLIToolEnvironment.executable(named: "herdr") { return found }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let extras = [
+            home.appendingPathComponent(".local/bin/herdr"),
+            home.appendingPathComponent(".cargo/bin/herdr"),
+            URL(fileURLWithPath: "/opt/homebrew/bin/herdr"),
+            URL(fileURLWithPath: "/usr/local/bin/herdr"),
+        ]
+        return extras.first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    public static func collectLocal() async -> HerdrHostSnapshot {
+        let machineID = HerdrHostSnapshot.localID
+        let machineName = "This Mac"
+        guard executable() != nil else {
+            return .local(herdrPresent: false, error: "herdr is not on PATH")
+        }
+        let listed = await listAgents(
+            runner: .local, machineID: machineID, machineName: machineName, machineIsLocal: true,
+            sshTarget: nil)
+        return .local(
+            herdrPresent: listed.present, agents: listed.agents, terminals: listed.terminals,
+            error: listed.error)
+    }
+
+    public static func collectRemote(
+        _ machine: Machine, connection existingConnection: SSHConnection? = nil
+    ) async -> HerdrHostSnapshot {
+        let ownsConnection = existingConnection == nil
+        let connection =
+            existingConnection ?? SSHConnection(machine: machine, controlSocketMode: .isolated)
+        if existingConnection == nil {
+            do {
+                try await connection.connect()
+            } catch {
+                return HerdrHostSnapshot(
+                    id: machine.id.uuidString, name: machine.name, isLocal: false,
+                    sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
+                    error: error.localizedDescription)
+            }
+        }
+        let listed = await listAgents(
+            runner: .ssh(connection), machineID: machine.id.uuidString, machineName: machine.name,
+            machineIsLocal: false, sshTarget: machine.sshTarget)
+        let snapshot = HerdrHostSnapshot(
+            id: machine.id.uuidString, name: machine.name, isLocal: false,
+            sshTarget: machine.sshTarget, herdrPresent: listed.present, reachable: true,
+            agents: listed.agents, terminals: listed.terminals, error: listed.error)
+        if ownsConnection { await connection.disconnect() }
+        return snapshot
+    }
+
+    static func collectRemotes(
+        _ machines: [Machine],
+        maximumInFlight: Int = HerdrFleetScheduler.defaultMaximumInFlight,
+        collector: @escaping @Sendable (Machine) async -> HerdrHostSnapshot = { machine in
+            await collectRemote(machine)
+        }
+    ) async -> [HerdrHostSnapshot] {
+        await HerdrFleetScheduler.map(
+            machines, maximumInFlight: maximumInFlight, operation: collector)
+    }
+
+    private enum Runner {
+        case local
+        case ssh(SSHConnection)
+    }
+
+    private struct Listing {
+        var present: Bool
+        var agents: [HerdrAgent]
+        var terminals: [HerdrSpacePane] = []
+        var error: String?
+    }
+
+    private static func listAgents(
+        runner: Runner, machineID: String, machineName: String, machineIsLocal: Bool,
+        sshTarget: String?
+    ) async -> Listing {
+        let sessionsResult = await run(runner, herdr: ["session", "list", "--json"])
+        if isMissing(sessionsResult) {
+            return Listing(present: false, agents: [], error: "herdr is not installed")
+        }
+        let sessions = HerdrListParser.sessions(from: sessionsResult.stdout)
+        let names = sessions.isEmpty ? ["default"] : sessions
+        let listings = await fanOut(names) { session in
+            await agentsInSession(
+                runner: runner, session: session, machineID: machineID, machineName: machineName,
+                machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+        }
+        var agents: [HerdrAgent] = []
+        var terminals: [HerdrSpacePane] = []
+        var lastError: String?
+        for listed in listings {
+            if !listed.present {
+                return Listing(present: false, agents: [], error: listed.error)
+            }
+            if listed.agents.isEmpty { lastError = listed.error }
+            agents.append(contentsOf: listed.agents)
+            terminals.append(contentsOf: listed.terminals)
+        }
+        return Listing(
+            present: true, agents: agents, terminals: terminals,
+            error: agents.isEmpty
+                ? lastError ?? jsonOrProcessError(sessionsResult) : nil)
+    }
+
+    static let sessionFanout = 4
+
+    static func fanOut<Value: Sendable>(
+        _ names: [String], limit: Int = HerdrCollector.sessionFanout,
+        _ body: @escaping @Sendable (String) async -> Value
+    ) async -> [Value] {
+        await BoundedTaskRunner.map(names, limit: limit) { _, name in await body(name) }
+    }
+
+    private static func agentsInSession(
+        runner: Runner, session: String, machineID: String, machineName: String,
+        machineIsLocal: Bool, sshTarget: String?
+    ) async -> Listing {
+        let snapshot = await run(
+            runner, herdr: ["--session", session, "api", "snapshot"])
+        if isMissing(snapshot) {
+            return Listing(present: false, agents: [], error: "herdr is not installed")
+        }
+        if HerdrListParser.hasSnapshot(snapshot.stdout) {
+            let agents = HerdrListParser.agents(
+                fromSnapshot: snapshot.stdout, session: session, machineID: machineID,
+                machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+            let terminals = HerdrListParser.snapshotBoard(from: snapshot.stdout).map {
+                HerdrListParser.spacePanes(in: $0, session: session)
+            }
+            return Listing(
+                present: true, agents: agents, terminals: terminals ?? [],
+                error: agents.isEmpty ? jsonOrProcessError(snapshot) : nil)
+        }
+        let result = await run(
+            runner, herdr: ["--session", session, "agent", "list"])
+        if isMissing(result) {
+            return Listing(present: false, agents: [], error: "herdr is not installed")
+        }
+        let agents = HerdrListParser.agents(
+            from: result.stdout, session: session, machineID: machineID,
+            machineName: machineName, machineIsLocal: machineIsLocal, sshTarget: sshTarget)
+        return Listing(
+            present: true, agents: agents,
+            error: agents.isEmpty ? jsonOrProcessError(result) : nil)
+    }
+
+    private struct CommandResult {
+        var status: Int32
+        var stdout: String
+        var stderr: String
+        var ok: Bool { status == 0 }
+    }
+
+    private static func run(_ runner: Runner, herdr arguments: [String]) async -> CommandResult {
+        switch runner {
+        case .local:
+            return await runLocal(remoteHerdrCommand(arguments: arguments, platform: .darwin))
+        case let .ssh(connection):
+            do {
+                let platform = await connection.remotePlatform ?? .linux
+                let command = remoteHerdrCommand(arguments: arguments, platform: platform)
+                let result = try await connection.run(command, timeout: commandTimeout)
+                return CommandResult(
+                    status: result.status, stdout: result.stdoutText, stderr: result.stderrText)
+            } catch {
+                return CommandResult(status: 1, stdout: "", stderr: error.localizedDescription)
+            }
+        }
+    }
+
+    private static func runLocal(_ command: String) async -> CommandResult {
+        do {
+            let result = try await CLICommandRunner.runLocalSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-c", command],
+                    environment: CLIToolEnvironment.sanitized(), timeout: commandTimeout,
+                    maximumOutputBytes: 16 << 20),
+                onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+            return CommandResult(
+                status: result.terminationStatus, stdout: result.standardOutput,
+                stderr: String(decoding: result.standardErrorData, as: UTF8.self))
+        } catch {
+            return CommandResult(status: 1, stdout: "", stderr: error.localizedDescription)
+        }
+    }
+
+    private static func jsonOrProcessError(_ result: CommandResult) -> String? {
+        HerdrListParser.errorMessage(in: result.stdout)
+            ?? HerdrListParser.errorMessage(in: result.stderr)
+            ?? message(from: result)
+    }
+
+    private static func isMissing(_ result: CommandResult) -> Bool {
+        if result.status == 127 { return true }
+        let text = (result.stdout + "\n" + result.stderr).lowercased()
+        return text.contains("command not found") || text.contains("no such file")
+            || text.contains("not found: herdr")
+            || text.contains("the term 'herdr' is not recognized")
+            || text.contains("the term &apos;herdr&apos; is not recognized")
+    }
+
+    private static func message(from result: CommandResult) -> String? {
+        let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stderr.isEmpty, !isPowerShellProgress(stderr) { return stderr }
+        let stdout = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !result.ok, !stdout.isEmpty { return stdout }
+        if !result.ok { return "herdr exited \(result.status)" }
+        return nil
+    }
+
+    private static func isPowerShellProgress(_ value: String) -> Bool {
+        value.hasPrefix("#< CLIXML") && value.contains("Preparing modules for first use.")
+            && !value.contains("<S S=\"Error\">")
+    }
+}

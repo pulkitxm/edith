@@ -417,3 +417,7 @@ ci-extension-downloads:
 ci-extension-native-tasks:
 	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostNativeTaskHarness
 	bun scripts/test-extension-native-tasks.mjs
+.PHONY: ci-extension-herdr-core
+ci-extension-herdr-core:
+	EDITH_EXTENSION_FIXTURE_HOME=/tmp/edith-herdr-tests swift test --package-path Extensions --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrExtensionTests
+
