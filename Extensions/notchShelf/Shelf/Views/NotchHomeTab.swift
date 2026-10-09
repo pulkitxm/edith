@@ -67,10 +67,7 @@ struct NotchSurfaceCard: View {
                 Label(tile.displayTitle, systemImage: tile.widget.icon).font(.edithText(.headline))
             }
             if tile.widget == .clocks {
-                TimelineView(.periodic(from: .now, by: 60)) { context in
-                    Text(context.date.formatted(date: .omitted, time: .shortened))
-                        .font(.edithText(.title2)).monospacedDigit()
-                }
+                SurfaceWorldClocks(tile: tile, defaults: controller.context.defaults)
             } else {
                 ForEach(
                     tile.widget.providerIDs.intersection(controller.activeIDs).sorted(), id: \.self

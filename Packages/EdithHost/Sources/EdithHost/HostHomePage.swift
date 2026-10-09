@@ -51,7 +51,7 @@ struct HostSurfaceCard: View {
                     .accessibilityLabel(title)
             }
             if tile.widget == .clocks {
-                HostClockCard(tile: tile)
+                SurfaceWorldClocks(tile: tile, defaults: marketplace.surfaces.preferences)
             } else {
                 ForEach(providers) { provider in
                     HostSurfaceProviderCard(
@@ -75,22 +75,6 @@ struct HostSurfaceCard: View {
             return marketplace.entries.first { $0.id == id }?.title ?? tile.widget.title
         }
         return tile.widget.title
-    }
-}
-
-private struct HostClockCard: View {
-    let tile: SurfaceTile
-    @State private var now = Date()
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-            Text(now.formatted(date: .omitted, time: .shortened)).font(.edithText(.title2))
-                .monospacedDigit()
-            if tile.showDetails {
-                Text("Local time").font(.edithText(.caption)).foregroundStyle(.secondary)
-            }
-        }
-        .pageRefresh(interval: { .seconds(60) }) { now = Date() }
     }
 }
 
