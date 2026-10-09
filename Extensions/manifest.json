@@ -43,16 +43,13 @@
       "Extensions/audioMixer"
     ],
     "sharedInputs": [
-      "scripts/build-extension-package.mjs"
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProducts": {
-      "app": [
-        "EdithExtensionUI"
-      ]
-    }
+    "supportProduct": "EdithExtensionUI"
   },
   {
     "id": "focusDim",

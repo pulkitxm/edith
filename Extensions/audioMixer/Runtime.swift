@@ -82,7 +82,7 @@ final class ExtensionRuntime: NSObject {
 
     @available(macOS 14.4, *)
     private func makeEngine() -> MixerEngine {
-        if ProcessInfo.processInfo.environment["EDITH_TEST_RUNTIME_ROOT"] != nil {
+        if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
             return MixerEngine(
                 snapshotLoader: {
                     .init(
