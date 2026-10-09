@@ -3,18 +3,15 @@ import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export function publishHostRelease({
+export function preflightHostRelease({
   directory,
   repository,
   tag,
-  target,
-  rebuild = false,
   execute = execFileSync,
 }) {
   if (
     !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
-    !/^v\d+\.\d+\.\d+$/.test(tag) ||
-    !/^[0-9a-f]{40}$/.test(target)
+    !/^v\d+\.\d+\.\d+$/.test(tag)
   )
     throw new Error("Invalid release identity");
   const assets = ["Edith.dmg", "appcast.xml"];
@@ -30,6 +27,41 @@ export function publishHostRelease({
     !/sparkle:edSignature="[^"\s]+"/.test(appcast)
   )
     throw new Error("Invalid signed appcast");
+  for (const name of assets) {
+    const result = JSON.parse(
+      execute(
+        "pukbot",
+        [
+          "release",
+          "upload-asset",
+          "1",
+          resolve(directory, name),
+          "--repo",
+          repository,
+          "--dry-run",
+          "--json",
+        ],
+        { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+      ),
+    );
+    if (result.ok === false)
+      throw new Error(
+        result.error?.message ?? "Release asset preflight failed",
+      );
+  }
+  return assets;
+}
+
+export function publishHostRelease({
+  directory,
+  repository,
+  tag,
+  target,
+  rebuild = false,
+  execute = execFileSync,
+}) {
+  if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
+  const assets = preflightHostRelease({ directory, repository, tag, execute });
   const gh = (...args) => execute("gh", args, { encoding: "utf8" });
   const mutate = (...args) =>
     execute("pukbot", [...args, "--repo", repository, "--json"], {
@@ -93,12 +125,23 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  const target = execFileSync(
-    "git",
-    ["-C", "release-source", "rev-parse", "HEAD"],
-    { encoding: "utf8" },
-  ).trim();
-  process.stdout.write(
-    `${JSON.stringify(publishHostRelease({ directory: resolve(process.argv[2]), repository: process.env.GITHUB_REPOSITORY, tag: process.env.RELEASE_TAG, target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
-  );
+  const preflight = process.argv[2] === "--preflight";
+  const configuration = {
+    directory: resolve(process.argv[preflight ? 3 : 2]),
+    repository: process.env.GITHUB_REPOSITORY,
+    tag: process.env.RELEASE_TAG,
+  };
+  if (preflight) {
+    preflightHostRelease(configuration);
+    process.stdout.write("Release assets accepted by the release client.\n");
+  } else {
+    const target =
+      process.env.RELEASE_TARGET_SHA ??
+      execFileSync("git", ["-C", "release-source", "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim();
+    process.stdout.write(
+      `${JSON.stringify(publishHostRelease({ ...configuration, target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
+    );
+  }
 }

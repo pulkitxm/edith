@@ -3,50 +3,63 @@ import { spawnSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
-const frameworkChecks = readFileSync("Makefile", "utf8")
-  .split("\n")
-  .filter(
-    (line) =>
-      line.startsWith("\ttest ") &&
-      line.includes("find dist/Edith.app -name") &&
-      line.includes(".framework"),
-  );
-const required = [
-  "Sparkle.framework",
-  "EdithShared.framework",
-  "ExtensionMarketplace.framework",
-];
+const required = ["Sparkle.framework", "libExtensionMarketplace.dylib"];
 
 function verify({ missing, extra } = {}) {
   const root = mkdtempSync(join(tmpdir(), "extension-bundle-layout-"));
   try {
+    const app = join(root, "Edith.app");
+    const contents = join(app, "Contents");
+    for (const path of ["MacOS", "Frameworks", "Resources"])
+      mkdirSync(join(contents, path), { recursive: true });
+    writeFileSync(join(contents, "MacOS/Edith"), "synthetic host");
     for (const name of required.filter((name) => name !== missing)) {
-      mkdirSync(join(root, "dist/Edith.app/Contents/Frameworks", name), {
-        recursive: true,
-      });
+      if (name.endsWith(".framework"))
+        mkdirSync(join(contents, "Frameworks", name));
+      else
+        writeFileSync(join(contents, "Frameworks", name), "synthetic runtime");
     }
-    if (extra)
-      mkdirSync(join(root, "dist/Edith.app", extra), { recursive: true });
+    for (const name of ["AppIcon.icns", "index.json"])
+      writeFileSync(join(contents, "Resources", name), "synthetic resource");
     writeFileSync(
-      join(root, "Makefile"),
-      `verify:\n${frameworkChecks.join("\n")}\n`,
+      join(contents, "Resources/ed-launcher"),
+      "#!/bin/sh\nexit 0\n",
     );
-    return spawnSync("make", ["verify"], { cwd: root, encoding: "utf8" });
+    symlinkSync("../Resources/ed-launcher", join(contents, "MacOS/ed"));
+    if (extra) mkdirSync(join(app, extra), { recursive: true });
+    return spawnSync(
+      "python3",
+      [
+        "-c",
+        `import sys, plistlib
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from verify_shipping_host import inspect_layout
+app = Path(sys.argv[2])
+plist = dict(CFBundleIdentifier='com.pulkit.edith', CFBundleDisplayName='Edith', CFBundleExecutable='Edith', SUPublicEDKey='synthetic-key', SUFeedURL='https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml')
+(app/'Contents/Info.plist').write_bytes(plistlib.dumps(plist))
+inspect_layout(app, release=True)
+`,
+        resolve("scripts"),
+        app,
+      ],
+      { encoding: "utf8" },
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-test("release bundle accepts one shared marketplace runtime without inference payloads", () => {
-  expect(frameworkChecks.length).toBeGreaterThanOrEqual(5);
-  expect(verify().status).toBe(0);
+test("empty release bundle accepts only Sparkle and the marketplace library", () => {
+  const result = verify();
+  expect(result.status, result.stderr).toBe(0);
 });
 
 test.each(required)("release bundle rejects missing %s", (missing) => {
@@ -55,13 +68,13 @@ test.each(required)("release bundle rejects missing %s", (missing) => {
 
 test.each([
   "Contents/Frameworks/ExtensionMarketplace.framework/ExtensionMarketplace.framework",
+  "Contents/Frameworks/EdithShared.framework",
   "Contents/Frameworks/MeetingVoice.framework",
   "Contents/Library/LoginItems/Edith.app/Contents/Frameworks/MeetingVoice.framework",
   "Contents/Frameworks/onnxruntime.framework",
   "Contents/Library/LoginItems/Edith.app/Contents/Frameworks/onnxruntime.framework",
-])(
-  "release bundle rejects duplicated or bundled downloadable code at %s",
-  (extra) => {
-    expect(verify({ extra }).status).not.toBe(0);
-  },
-);
+  "Contents/MacOS/downloaded-worker",
+  "Contents/Resources/GhosttyResources",
+])("release bundle rejects bundled feature payloads at %s", (extra) => {
+  expect(verify({ extra }).status).not.toBe(0);
+});

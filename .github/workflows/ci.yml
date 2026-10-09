@@ -88,7 +88,7 @@ jobs:
             fi
           }
           area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/(Edith|EdithHost|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|edth\.xcodeproj/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
-          area host '^(Packages/(EdithHost|ExtensionMarketplace)/|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
+          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -653,6 +653,9 @@ jobs:
 
       - name: Wait for compatible extension releases
         run: node release-source/scripts/extension-release-ready.mjs release-source
+
+      - name: Require the release client to accept both assets
+        run: node scripts/publish-host-release.mjs --preflight release-assets
 
       - name: Commit and tag the release
         id: release_state

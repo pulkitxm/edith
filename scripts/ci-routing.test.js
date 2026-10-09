@@ -430,6 +430,8 @@ test("backend changes run the companion job", () => {
 test("independent feature changes do not release or invalidate the host", () => {
   for (const path of [
     "Extensions/calendar/Runtime.swift",
+    "Packages/EdithHost/Tests/EdithHostCoreTests/HostTests.swift",
+    "Packages/ExtensionMarketplace/Tests/ExtensionMarketplaceTests/StoreTests.swift",
     "apps/music-player/src/main.rs",
     "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/DocumentRenderer.swift",
   ]) {

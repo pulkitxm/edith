@@ -86,6 +86,23 @@ export async function publishExtensions({
     await readFile(resolve(directory, "plan.json"), "utf8"),
   );
   if (include.length === 0) return { published: [], revision: old.revision };
+  for (const entry of include) {
+    for (const suffix of ["zip", "json"]) {
+      const result = mutate(
+        "release",
+        "upload-asset",
+        "--repo",
+        repository,
+        "1",
+        resolve(directory, `${entry.id}.${suffix}`),
+        "--dry-run",
+      );
+      if (result.ok === false)
+        throw new Error(
+          result.error?.message ?? "Extension asset preflight failed",
+        );
+    }
+  }
   const records = [];
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);

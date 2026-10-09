@@ -391,3 +391,35 @@ test("GitHub Actions publishes a release from main", () => {
   expect(agents).not.toContain("workflows-disabled");
   expect(agents).not.toContain("make ci-all");
 });
+
+test("local releases use the same guarded commit and asset publisher as CI", () => {
+  const local = readFileSync("scripts/release-local.sh", "utf8");
+  expect(local).toContain(
+    "run-current-release-build.sh ./build.sh --no-open --release",
+  );
+  expect(local).toContain("scripts/publish-release-state.sh cut");
+  expect(local).toContain(
+    "scripts/publish-host-release.mjs dist/host-release-assets",
+  );
+  expect(local).toContain("package-host-dmg.py dist/Edith.app Edith.dmg");
+  expect(local).not.toContain("package-database-pack");
+  expect(local).not.toContain("git reset --hard");
+  expect(local).not.toContain("git push");
+  expect(local).not.toContain('pukbot release create "$RELEASE_TAG"');
+});
+
+test("release asset capacity is checked before any release commit", () => {
+  const preflight = publish.steps.findIndex(
+    (step) => step.name === "Require the release client to accept both assets",
+  );
+  const commit = publish.steps.findIndex(
+    (step) => step.name === "Commit and tag the release",
+  );
+  expect(preflight).toBeGreaterThan(-1);
+  expect(preflight).toBeLessThan(commit);
+  expect(publish.steps[preflight].run).toContain("--preflight release-assets");
+  const local = readFileSync("scripts/release-local.sh", "utf8");
+  expect(local.indexOf("--preflight dist/host-release-assets")).toBeLessThan(
+    local.indexOf("bash scripts/publish-release-state.sh cut"),
+  );
+});

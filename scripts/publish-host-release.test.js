@@ -2,7 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { publishHostRelease } from "./publish-host-release.mjs";
+import {
+  preflightHostRelease,
+  publishHostRelease,
+} from "./publish-host-release.mjs";
 
 function fixture(existing = false) {
   const directory = mkdtempSync(join(tmpdir(), "edith-host-publication-"));
@@ -54,7 +57,9 @@ test("publishes only the host DMG and signed appcast through the release client"
   const value = fixture();
   try {
     expect(publish(value).assets).toEqual(["Edith.dmg", "appcast.xml"]);
-    const mutations = value.calls.filter(([command]) => command === "pukbot");
+    const mutations = value.calls.filter(
+      (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+    );
     expect(mutations.map((args) => args[2])).toEqual([
       "create",
       "upload-asset",
@@ -84,7 +89,9 @@ test("retries identical assets without uploading again", () => {
     }));
     publish(value);
     expect(
-      value.calls.filter((args) => args[0] === "pukbot").map((args) => args[2]),
+      value.calls
+        .filter((args) => args[0] === "pukbot" && !args.includes("--dry-run"))
+        .map((args) => args[2]),
     ).toEqual(["edit"]);
     value.release.assets[0].bytes = Buffer.from("different");
     expect(() => publish(value)).toThrow("differs");
@@ -105,7 +112,9 @@ test("rebuild replaces changed assets but requires an existing release", () => {
       value.calls.some((args) => args[0] === "gh" && args.includes("DELETE")),
     ).toBe(true);
     expect(
-      value.calls.filter((args) => args[0] === "pukbot").map((args) => args[2]),
+      value.calls
+        .filter((args) => args[0] === "pukbot" && !args.includes("--dry-run"))
+        .map((args) => args[2]),
     ).toEqual(["upload-asset", "upload-asset", "edit"]);
   } finally {
     value.clean();
@@ -140,7 +149,11 @@ test("failed uploads do not expose an unfinished release", () => {
   const value = fixture();
   try {
     const execute = (command, args, options) => {
-      if (command === "pukbot" && args[1] === "upload-asset")
+      if (
+        command === "pukbot" &&
+        args[1] === "upload-asset" &&
+        !args.includes("--dry-run")
+      )
         throw new Error("Upload failed");
       return value.execute(command, args, options);
     };
@@ -148,6 +161,35 @@ test("failed uploads do not expose an unfinished release", () => {
     expect(
       value.calls.some((args) => args[0] === "pukbot" && args[2] === "edit"),
     ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("unsupported asset sizes fail before release creation or any upload", () => {
+  const value = fixture();
+  try {
+    const execute = (command, args) => {
+      value.calls.push([command, ...args]);
+      return JSON.stringify({
+        ok: false,
+        error: { message: "release asset must be between 1 and 40000 bytes" },
+      });
+    };
+    expect(() =>
+      preflightHostRelease({
+        directory: value.directory,
+        repository: "synthetic/fixture",
+        tag: "v1.2.3",
+        execute,
+      }),
+    ).toThrow("40000 bytes");
+    expect(() => publish(value, { execute })).toThrow("40000 bytes");
+    expect(
+      value.calls.every(
+        (args) => args[0] === "pukbot" && args.includes("--dry-run"),
+      ),
+    ).toBe(true);
   } finally {
     value.clean();
   }

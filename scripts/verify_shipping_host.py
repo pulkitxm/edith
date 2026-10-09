@@ -10,7 +10,7 @@ def run(*arguments):
     return result.stdout + result.stderr
 
 
-def inspect_host(bundle, release=False, launcher_required=True):
+def inspect_layout(bundle, release=False, launcher_required=True):
     bundle = Path(bundle).resolve()
     plist = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
     identifier = plist['CFBundleIdentifier']
@@ -33,6 +33,13 @@ def inspect_host(bundle, release=False, launcher_required=True):
         launcher = bundle / 'Contents/MacOS/ed'
         assert launcher.is_symlink() and launcher.readlink() == Path('../Resources/ed-launcher')
         assert (bundle / 'Contents/Resources/ed-launcher').read_text().startswith('#!/bin/sh\n')
+    return plist
+
+
+def inspect_host(bundle, release=False, launcher_required=True):
+    bundle = Path(bundle).resolve()
+    plist = inspect_layout(bundle, release=release, launcher_required=launcher_required)
+    executable = bundle / 'Contents/MacOS/Edith'
     bytes_installed = 0
     binaries = []
     for path in bundle.rglob('*'):
