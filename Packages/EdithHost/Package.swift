@@ -8,6 +8,7 @@ let package = Package(
         .executable(name: "EdithHost", targets: ["EdithHost"]),
         .executable(name: "HostLifecycleHarness", targets: ["HostLifecycleHarness"]),
         .executable(name: "HostCommandHarness", targets: ["HostCommandHarness"]),
+        .executable(name: "HostNativeTaskHarness", targets: ["HostNativeTaskHarness"]),
     ],
     dependencies: [
         .package(path: "../ExtensionMarketplace"),
@@ -39,6 +40,9 @@ let package = Package(
         .executableTarget(
             name: "HostCommandHarness", dependencies: ["EdithHostCore"],
             path: "Tests/CommandHarness"),
+        .executableTarget(
+            name: "HostNativeTaskHarness", dependencies: ["EdithHostCore"],
+            path: "Tests/NativeTaskHarness"),
         .testTarget(
             name: "EdithHostCoreTests", dependencies: ["EdithHostCore"],
             resources: [.copy("Fixtures")]),
