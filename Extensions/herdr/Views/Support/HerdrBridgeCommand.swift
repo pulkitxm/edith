@@ -340,6 +340,10 @@ private final class HerdrTerminalBridgeRuntime {
         }
 
         try forwardFrames(from: controllerOutput.fileHandleForReading)
+        if HerdrBridgeCancellation.isCancelled {
+            HerdrOwnedProcess.stop(controller)
+            throw HerdrBridgeExit(130)
+        }
         controller.waitUntilExit()
         guard controller.terminationStatus == 0 else {
             throw HerdrBridgeExit(controller.terminationStatus)

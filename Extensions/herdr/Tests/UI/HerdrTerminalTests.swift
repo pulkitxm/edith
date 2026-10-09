@@ -359,8 +359,8 @@ private func syntheticWindowsConnection(_ machine: Machine) async throws -> SSHC
     let connection = SSHConnection(machine: saved) { _, _, _ in
         try JSONSerialization.data(withJSONObject: [
             "machineID": saved.id.uuidString, "name": saved.name, "sshTarget": saved.sshTarget,
-            "sshArguments": [
-                "-o", "ControlPath=/tmp/synthetic/master", "-p", "2222", saved.sshTarget,
+            "sshArguments": SSHConnection.masterOnlyOptions + [
+                "-S", "/tmp/synthetic/master", "-p", "2222", "--", saved.sshTarget,
             ], "controlPath": "/tmp/synthetic/master", "platform": "windows",
         ])
     }

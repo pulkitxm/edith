@@ -16,9 +16,10 @@ import Testing
         }
         defer { MachineRegistry.shutdown() }
         let machine = try #require(MachineRegistry.machines().first)
-        let arguments = [
-            "-p", "2222", "-i", "/tmp/mock-key", "-o", "ControlPath=/tmp/mock-master", "--", target,
-        ]
+        let arguments =
+            SSHConnection.masterOnlyOptions + [
+                "-p", "2222", "-i", "/tmp/mock-key", "-S", "/tmp/mock-master", "--", target,
+            ]
         let connection = SSHConnection(machine: machine) { command, data, _ in
             #expect(command == "machines.connection.prepare")
             let object = try JSONSerialization.jsonObject(with: data) as? [String: String]

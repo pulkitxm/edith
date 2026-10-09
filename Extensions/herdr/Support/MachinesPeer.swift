@@ -32,7 +32,7 @@ public enum MachineRegistry {
         guard hosts.machines.count <= 1_024,
             Set(hosts.machines.map(\.id)).count == hosts.machines.count,
             hosts.machines.allSatisfy({
-                !$0.name.isEmpty && $0.name.utf8.count <= 256 && validTarget($0.sshTarget)
+                !$0.name.isEmpty && $0.name.utf8.count <= 512 && validTarget($0.sshTarget)
             })
         else { throw ExtensionPeerError.invalidRequest }
         lock.withLock {
@@ -43,7 +43,8 @@ public enum MachineRegistry {
     private struct Host: Decodable { let id: UUID; let name: String; let sshTarget: String }
     private struct Hosts: Decodable { let machines: [Host] }
     static func validTarget(_ target: String) -> Bool {
-        !target.isEmpty && target.utf8.count <= 512 && !target.hasPrefix("-")
+        !target.isEmpty && target.utf8.count <= 1536 && !target.hasPrefix("-")
+            && !target.contains(where: { $0.isWhitespace })
             && !target.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
     }
 }
@@ -74,6 +75,9 @@ public struct SSHExecResult: Sendable {
 public final class SSHConnection: @unchecked Sendable {
     public enum ControlSocketMode { case shared, isolated }
     public static let executable = URL(fileURLWithPath: "/usr/bin/ssh")
+    public static let masterOnlyOptions = [
+        "-o", "ControlMaster=no", "-o", "BatchMode=yes", "-o", "ProxyCommand=/usr/bin/false",
+    ]
     public let machine: Machine
     private let lock = NSLock()
     private var recipe: Recipe?
@@ -100,10 +104,20 @@ public final class SSHConnection: @unchecked Sendable {
         let data = try await invoke("machines.connection.prepare", payload, 60)
         let value = try JSONDecoder().decode(Recipe.self, from: data)
         guard value.machineID == machine.id, value.name == machine.name,
-            value.sshTarget == machine.sshTarget, value.sshArguments.count <= 64,
+            value.sshTarget == machine.sshTarget, value.sshArguments.count <= 128,
             value.sshArguments.reduce(0, { $0 + $1.utf8.count }) <= 16_384,
-            value.sshArguments.allSatisfy({ !$0.utf8.contains(0) }),
-            !value.controlPath.isEmpty, value.controlPath.utf8.count <= 1_024
+            value.sshArguments.allSatisfy({
+                !$0.isEmpty && $0.utf8.count <= 4096
+                    && !$0.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+            }),
+            Array(value.sshArguments.prefix(Self.masterOnlyOptions.count))
+                == Self.masterOnlyOptions,
+            value.sshArguments.last == machine.sshTarget,
+            value.sshArguments.filter({ $0 == "-S" }).count == 1,
+            let socket = value.sshArguments.firstIndex(of: "-S"),
+            socket + 1 < value.sshArguments.count,
+            value.sshArguments[socket + 1] == value.controlPath,
+            value.controlPath.hasPrefix("/"), value.controlPath.utf8.count <= 4096
         else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
         lock.withLock { recipe = value }

@@ -68,7 +68,7 @@ final class HerdrQuinjetSession {
         preparing = true
         defer { if attempt == generation { preparing = false } }
         do {
-            guard let executable = CLIToolEnvironment.executable(named: "quinjet") else {
+            guard let executable = HerdrQuinjetExecutable.local() else {
                 throw QuinjetClientError.notInstalled
             }
             let request: QuinjetLaunchRequest
@@ -93,11 +93,19 @@ final class HerdrQuinjetSession {
                     localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
             }
             guard attempt == generation else { return }
+            guard let host = HerdrTerminalBridge.executable() else {
+                throw HerdrTerminalBridgeError.executableUnavailable
+            }
+            let native = try HerdrTerminalBridge.launchRequest(
+                bridgeExecutable: host,
+                controller: TerminalLaunchRequest(
+                    executable: request.executableURL.path, arguments: request.arguments,
+                    environment: QuinjetOperationExecution.terminalEnvironment(
+                        overrides: request.environment)), transport: .terminal)
             holder.reset()
             holder.start(
-                executable: request.executableURL.path, arguments: request.arguments,
-                environment: QuinjetOperationExecution.terminalEnvironment(
-                    overrides: request.environment),
+                executable: native.executable, arguments: native.arguments,
+                environment: native.environment,
                 currentDirectory: request.currentDirectory,
                 allowsLocalFileLinks: remote == nil)
             launched = configuration

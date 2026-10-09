@@ -102,6 +102,9 @@ import Foundation
             guard Set(object.keys).isSubset(of: ["agentID", "view"]),
                 let id = object["agentID"] as? String, let agent = currentAgent(id)
             else { throw ExtensionPeerError.invalidRequest }
+            if let supplied = object["view"], !(supplied is String) {
+                throw ExtensionPeerError.invalidRequest
+            }
             let view = object["view"] as? String ?? HerdrAgentView.agent.rawValue
             guard let chosen = HerdrAgentView(rawValue: view) else {
                 throw ExtensionPeerError.invalidRequest

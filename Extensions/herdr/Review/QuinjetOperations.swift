@@ -266,26 +266,21 @@ public struct QuinjetLaunchRequest: Equatable, Sendable {
             quinjetArguments += ["--theme", configuration.theme.rawValue]
         }
         quinjetArguments += ["--appearance", configuration.appearance.rawValue]
-        var environment: [String: String] = [:]
-        if let remote, let remoteExecutable, remote.platform == .windows {
-            self.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-            let command = PowerShell.interactiveCommand(
-                PowerShell.invocation([remoteExecutable] + quinjetArguments)!)
-            self.arguments = [
-                "-tt", "-S", remote.controlPath, "--", remote.target, command,
-            ]
-        } else {
-            var arguments: [String] = []
-            if let remote {
-                arguments += [
-                    "--remote", remote.target, "--ssh-control-path", remote.controlPath,
-                ]
-                if let remoteExecutable {
-                    environment["QUINJET_REMOTE_BINARY"] = remoteExecutable
-                }
+        let environment: [String: String] = [:]
+        if let remote, let remoteExecutable {
+            self.executableURL = SSHConnection.executable
+            let command: String
+            if remote.platform == .windows {
+                command = PowerShell.interactiveCommand(
+                    PowerShell.invocation([remoteExecutable] + quinjetArguments)!)
+            } else {
+                command = ([remoteExecutable] + quinjetArguments).map(POSIXQuote.quote).joined(
+                    separator: " ")
             }
+            self.arguments = try remote.savedArguments(tty: true) + [command]
+        } else {
             self.executableURL = executableURL
-            self.arguments = arguments + quinjetArguments
+            self.arguments = quinjetArguments
         }
         self.environment = environment
         self.terminal = configuration.terminal

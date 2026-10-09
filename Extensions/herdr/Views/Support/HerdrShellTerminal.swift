@@ -60,9 +60,14 @@ struct HerdrShellTerminal: View {
                         environment: connection.terminalEnvironment())
                 }
                 try Task.checkCancellation()
+                guard let host = HerdrTerminalBridge.executable() else {
+                    throw HerdrTerminalBridgeError.executableUnavailable
+                }
+                let native = try HerdrTerminalBridge.launchRequest(
+                    bridgeExecutable: host, controller: request, transport: .terminal)
                 holder.start(
-                    executable: request.executable, arguments: request.arguments,
-                    environment: request.environment,
+                    executable: native.executable, arguments: native.arguments,
+                    environment: native.environment,
                     currentDirectory: target.machineID == Machine.localID ? target.argument : nil,
                     allowsLocalFileLinks: target.machineID == Machine.localID)
             } catch is CancellationError {} catch { self.error = error.localizedDescription }

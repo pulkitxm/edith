@@ -5,9 +5,18 @@ import Foundation
 enum HerdrNativeTerminalBridge {
     static func run(specification: HerdrTerminalBridgeSpecification) throws {
         signal(SIGPIPE, SIG_IGN)
+        signal(SIGTTOU, SIG_IGN)
         let terminal = HerdrRawTerminal()
         try terminal.configure(mouse: specification.mouse, managesPresentation: false)
         defer { terminal.restore() }
+        if let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+            let receipt = try JSONSerialization.data(withJSONObject: [
+                "pid": getpid(), "configured": true,
+                "group": getpgrp(), "foreground": tcgetpgrp(STDIN_FILENO),
+            ])
+            try receipt.write(
+                to: URL(fileURLWithPath: root).appendingPathComponent("herdr-pty-receipt.json"))
+        }
         let status = try relay(
             specification: specification, input: .standardInput, output: .standardOutput,
             dimensions: HerdrTerminalDimensions.current)
@@ -198,11 +207,9 @@ final class HerdrNativeTerminalProcess {
             _ = kill(pid, signal)
             if waitForExit(milliseconds: 200) { return }
         }
-        let identifier = pid
-        DispatchQueue.global(qos: .utility).async {
-            var status: Int32 = 0
-            while waitpid(identifier, &status, 0) < 0 && errno == EINTR {}
-        }
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+        terminationStatus = 128 + SIGKILL
     }
 
     private func reap() -> Bool {
