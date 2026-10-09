@@ -92,6 +92,8 @@ const plist = {
   NSPrincipalClass: "NSApplication",
   NSCalendarsFullAccessUsageDescription:
     "Show your upcoming events in the Calendar extension.",
+  NSMicrophoneUsageDescription:
+    "Record optional microphone audio in Screen Recorder and Companion extensions.",
   LSMinimumSystemVersion: "14.0",
   SUFeedURL:
     "https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml",

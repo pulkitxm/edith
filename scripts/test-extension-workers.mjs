@@ -49,6 +49,7 @@ try {
       "updateWithoutAppRestart",
       "restoreAfterAppUpdate",
       "removedPayloads",
+      "isolatedSupportTypes",
     ])
       assert.equal(result[key], true);
     assert.equal(result.disabledProcesses, 0);
