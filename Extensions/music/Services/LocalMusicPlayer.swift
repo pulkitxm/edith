@@ -204,6 +204,12 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             })
     }
 
+    func upcoming(limit: Int) async -> [Track] {
+        let order = await playOrder()
+        guard let current, let index = order.firstIndex(of: current) else { return [] }
+        return Array(order.dropFirst(index + 1).prefix(max(0, min(limit, 10))))
+    }
+
     private func handleRenamed(from: String, to: String) {
         guard current?.relativePath == from else { return }
         current = track(for: to)

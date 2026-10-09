@@ -2,7 +2,6 @@ import AppKit
 import CryptoKit
 import EdithExtensionSupport
 import EdithExtensionUI
-import EdithExtensionSupport
 import Observation
 import WebKit
 

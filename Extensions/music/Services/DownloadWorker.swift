@@ -1,6 +1,5 @@
 import EdithExtensionSupport
 import EdithExtensionUI
-import EdithExtensionSupport
 import Foundation
 
 private final class DownloadWorkerOutput: @unchecked Sendable {
