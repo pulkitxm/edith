@@ -112,9 +112,9 @@ closed.
   provider usage. `observedAt` can still repeat after
   `ed usage limits --refresh`, because the app appends a history row only when
   the values changed.
-- Claude limits come from Claude Code's status line, not from Anthropic.
-  `ed usage statusline install` sets that up; until then the Claude ring reports
-  that it needs the status line. See [`ed usage statusline`](./statusline.md).
+- Claude limits are polled from its signed-in website session in Chrome's active
+  profile, including the session, weekly, and Fable windows. A current Claude Code
+  status line reading remains a fallback. See [`ed usage statusline`](./statusline.md).
 - `ed config set tabUsageEnabled false` turns off the Agent Usage extension, and
   with it the app's own collection and the limit polling; `claudeLimitsEnabled`,
   `codexLimitsEnabled`, `cursorLimitsEnabled` and `grokLimitsEnabled` do the same

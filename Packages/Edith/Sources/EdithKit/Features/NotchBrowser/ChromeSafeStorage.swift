@@ -48,15 +48,16 @@ public enum ChromeSafeStorage {
     private static let versionPrefix = Array("v10".utf8)
     private static let initializationVector = [UInt8](repeating: 0x20, count: kCCBlockSizeAES128)
 
-    public static func keychainKey() throws -> ChromeCookieKey {
+    public static func keychainKey(allowPrompt: Bool = true) throws -> ChromeCookieKey {
         var result: CFTypeRef?
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        if !allowPrompt { query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail }
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { throw ChromeSafeStorageError.keychainMissing }
         guard status == errSecSuccess, let data = result as? Data,

@@ -5,6 +5,37 @@ import Testing
 
 @MainActor
 @Suite struct LimitsStatusItemTests {
+    @Test func failedWebsiteRefreshCannotReloadTheOldWeeklyZeroIntoTheMenuBar() async throws {
+        let url = LimitsHistory.url
+        let previous = try? Data(contentsOf: url)
+        defer {
+            if let previous {
+                try? previous.write(to: url)
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        var history = LimitsHistory(url: url)
+        let appended = history.append(
+            provider: .claude, session: nil,
+            week: .init(percent: 0, resetsAt: Date().addingTimeInterval(3600)))
+        #expect(appended)
+        let store = UsageStore()
+        defer { store.shutdown() }
+        let snapshot = LimitsTopicSnapshot(
+            refreshedAt: Date(),
+            providers: [
+                .init(
+                    provider: .claude, session: nil, week: nil,
+                    error: "Website session unavailable")
+            ], failure: nil)
+        await store.receiveLimitsSnapshot(snapshot)
+        await store.reloadLimitsFromHistory()
+        #expect(store.limits(for: .claude).session == nil)
+        #expect(store.limits(for: .claude).week == nil)
+        #expect(store.limitsError == "Website session unavailable")
+    }
+
     @Test func resetCountdownFormatsEveryUnitAndRollover() {
         let now = Date(timeIntervalSince1970: 0)
         let cases: [(TimeInterval, String)] = [

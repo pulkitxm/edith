@@ -125,10 +125,13 @@ struct UsageLimitsCommand: AsyncParsableCommand {
                 return
             }
             let rows = providers.flatMap { observation -> [[String]] in
-                let slots: [(LimitWindowSlot, LimitWindow?)] =
+                var slots: [(LimitWindowSlot, LimitWindow?)] =
                     observation.provider == .grok
                     ? [(.week, observation.week)]
                     : [(.session, observation.session), (.week, observation.week)]
+                if observation.provider == .claude, let fable = observation.fable {
+                    slots.append((.fable, fable))
+                }
                 var lines = slots.map { slot, window in
                     [
                         observation.provider.label,

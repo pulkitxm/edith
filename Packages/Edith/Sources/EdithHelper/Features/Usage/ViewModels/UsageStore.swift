@@ -96,6 +96,7 @@ final class UsageStore: FeatureModule {
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
 
+    private var claudeUnavailable = false
     private var launchObserver: NSObjectProtocol?
     private var limitsUpdatedObserver: NSObjectProtocol?
     private var limitsTopicTask: Task<Void, Never>?
@@ -186,7 +187,7 @@ final class UsageStore: FeatureModule {
     }
 
     private func seedFromHistory(_ latest: [LimitProvider: LimitsHistory.Latest]) {
-        if let last = latest[.claude] {
+        if !claudeUnavailable, let last = latest[.claude] {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
             fableWeek = Self.fresh(last.fable)
@@ -273,6 +274,12 @@ final class UsageStore: FeatureModule {
 
     func receiveLimitsSnapshot(_ snapshot: LimitsTopicSnapshot) async {
         guard !terminating else { return }
+        if let claude = snapshot.providers.first(where: { $0.provider == .claude }) {
+            claudeUnavailable = claude.error != nil && claude.session == nil
+            session = Self.fresh(claude.session)
+            week = Self.fresh(claude.week)
+            fableWeek = Self.fresh(claude.fable)
+        }
         await reloadLimitsFromHistory()
         limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
         refreshingLimits = false
