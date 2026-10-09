@@ -156,6 +156,29 @@ import Testing
 }
 
 @Suite @MainActor struct SurfaceLayoutPersistenceTests {
+    @Test func oversizedEditsLeaveSavedLayoutHistoryAndNotificationsUntouched() throws {
+        let suite = "com.pulkit.edith.tests.surface-layout.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var changes = 0
+        let store = SurfaceLayoutStore(defaults: defaults) { changes += 1 }
+        let previous = store.home
+        let sources = Set((0..<100).map { String($0) + String(repeating: "x", count: 500) })
+        #expect(
+            !store.update(.home) { layout in
+                layout.tiles = (0..<200).map {
+                    var tile = SurfaceTile(.ability("music"))
+                    tile.instanceID = "synthetic-\($0)"
+                    tile.sourceIDs = sources
+                    return tile
+                }
+            })
+        #expect(store.home == previous)
+        #expect(!store.canUndo(.home))
+        #expect(changes == 0)
+        #expect(SurfaceLayoutStore(defaults: defaults).home == previous)
+    }
+
     @Test func profilesAndUndoRetainCompleteLayoutAcrossHostRelaunch() throws {
         let suite = "com.pulkit.edith.tests.surface-layout.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
