@@ -85,12 +85,19 @@ backward through `limits-history.jsonl` and reports the newest valid line it
 finds for each provider. One provider's newer rows cannot hide another
 provider's history, and a partial final row is ignored.
 
-The background agent polls Claude's usage API using `CLAUDE_CODE_OAUTH_TOKEN`
-from its process environment or your login shell, including `.zshrc`. The token
-must include `user:profile` scope. Inference-only tokens cannot read usage:
-the API returns HTTP 403, which appears in the limits menu as a scope error.
-The token stays in memory and is sent only to `api.anthropic.com`; redirects
-are refused. Edith does not read Chrome cookies or Chrome Safe Storage.
+The background agent polls Claude's usage API using the saved Claude Code login.
+It reads only the `Claude Code-credentials` Keychain item, without prompting or
+changing it, and requires an unexpired token with `user:profile` scope. With
+`CLAUDE_CONFIG_DIR`, it reads that profile's `.credentials.json` instead and does
+not fall back to another account's Keychain login. It reloads credentials on each
+poll so renewals made by Claude Code are picked up.
+
+When no valid saved login is available, Edith tries `CLAUDE_CODE_OAUTH_TOKEN`
+from its process environment or your login shell, including `.zshrc`.
+Inference-only tokens cannot read usage: the API returns HTTP 403, which appears
+in the limits menu as a scope error. The token stays in memory and is sent only
+to `api.anthropic.com`; redirects are refused. Edith does not read Chrome cookies
+or Chrome Safe Storage.
 Session, weekly, and Fable windows include usage from web and cloud tasks.
 
 Claude Code's status line through [`ed usage statusline record`](./statusline.md)
@@ -104,7 +111,7 @@ old weekly zero. Other providers are also polled by the background agent.
 once the reset moment has passed.
 
 `--refresh` asks the background agent to poll the providers again, which for
-Claude includes fetching its usage API with the shell's OAuth token, and waits up
+Claude includes fetching its usage API with the selected OAuth credential, and waits up
 to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`
 is not running: exit 4 with `refreshing the rate limits needs the background
 agent`, hinted with `run ed agent restart or enable the background agent in

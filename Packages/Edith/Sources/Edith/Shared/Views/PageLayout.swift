@@ -1,3 +1,4 @@
+import AppKit
 import EdithKit
 import SwiftUI
 
@@ -22,7 +23,10 @@ enum PageMetrics {
     }
 
     static func tableNameWidth(viewport: CGFloat, fixedWidth: Double, columnCount: Int) -> CGFloat {
-        max(UIScale.pt(140), viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16))
+        let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+        return max(
+            0,
+            viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16) - scrollerWidth)
     }
 
     static func cardColumns(
