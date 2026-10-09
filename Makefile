@@ -370,3 +370,8 @@ ci-extension-terminal: ghostty-extension
 	swift format lint --strict --parallel --recursive Extensions/terminal
 	swift test --package-path Extensions/terminal/Native --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 	swift test --package-path Extensions/terminal --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)')
+
+.PHONY: ci-extension-attention
+ci-extension-attention:
+	swift format lint --strict --recursive Extensions/attention
+	swift test --package-path Extensions/attention/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
