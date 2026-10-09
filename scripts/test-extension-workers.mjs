@@ -20,7 +20,7 @@ try {
       workers.some((entry) => entry.id === id),
       `Unknown worker extension ${id}`,
     );
-  for (const { id } of workers.filter(
+  for (const { id, surfaceContractVersion } of workers.filter(
     (entry) => requested.length === 0 || requested.includes(entry.id),
   )) {
     const releases = join(root, id);
@@ -42,6 +42,7 @@ try {
           resolve("local/minimal-host/Edith.app"),
           releases,
           id,
+          surfaceContractVersion === 1 ? "1" : "0",
         ],
         { encoding: "utf8", timeout: 90_000 },
       ).trim(),
@@ -57,7 +58,7 @@ try {
     ])
       assert.equal(result[key], true);
     assert.equal(result.disabledProcesses, 0);
-    if (id === "calendar") assert.equal(result.surfaceDataValidated, true);
+    assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });

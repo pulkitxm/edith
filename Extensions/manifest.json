@@ -342,7 +342,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "jev",
