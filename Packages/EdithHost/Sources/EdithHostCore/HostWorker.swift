@@ -19,6 +19,8 @@ public final class HostWorker {
     private let requestTimeout: Duration
     private var frames = HostWorkerFrames()
     private var pending: [UUID: Pending] = [:]
+    private var abandoned = Set<UUID>()
+    private var preparationToken: UUID?
     private var launched = false
     private var exited = false
     private var processGroup: Int32?
@@ -109,7 +111,17 @@ public final class HostWorker {
         return try await request(HostWorkerRequest(operation: "status"))
     }
 
+    public func prepareDisable(timeout: Duration? = nil) async throws {
+        guard ready else { return }
+        guard preparationToken == nil else { throw HostWorkerError.rejected }
+        let request = HostWorkerRequest(operation: "prepareDisable")
+        preparationToken = request.token
+        defer { preparationToken = nil }
+        _ = try await self.request(request, timeout: timeout)
+    }
+
     public func stop() async throws {
+        try await prepareDisable()
         ready = false
         if process.isRunning {
             _ = try? await request(
@@ -128,21 +140,23 @@ public final class HostWorker {
         -> HostWorkerResponse
     {
         guard process.isRunning, !exited else { throw HostWorkerError.exited }
-        guard pending.isEmpty else { throw HostWorkerError.rejected }
+        guard pending.isEmpty, abandoned.count < 64 else { throw HostWorkerError.rejected }
         let data = try HostWorkerFrames.encode(request)
         let requestTimeout = timeout ?? self.requestTimeout
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let timeout = Task { [weak self, requestTimeout] in
                     do { try await Task.sleep(for: requestTimeout) } catch { return }
-                    self?.fail(HostWorkerError.timedOut)
+                    self?.cancelRequest(request.token, error: HostWorkerError.timedOut)
                 }
                 pending[request.token] = Pending(continuation: continuation, timeout: timeout)
                 do { try input.fileHandleForWriting.write(contentsOf: data) } catch { fail(error) }
-                if Task.isCancelled { fail(CancellationError()) }
+                if Task.isCancelled { cancelRequest(request.token, error: CancellationError()) }
             }
         } onCancel: {
-            Task { @MainActor [weak self] in self?.fail(CancellationError()) }
+            Task { @MainActor [weak self] in
+                self?.cancelRequest(request.token, error: CancellationError())
+            }
         }
     }
 
@@ -164,6 +178,7 @@ public final class HostWorker {
                     continue
                 }
                 let response = try JSONDecoder().decode(HostWorkerResponse.self, from: data)
+                if abandoned.remove(response.token) != nil { continue }
                 guard let request = pending.removeValue(forKey: response.token) else {
                     throw HostWorkerError.invalidResponse
                 }
@@ -171,7 +186,18 @@ public final class HostWorker {
                 if response.ok {
                     request.continuation.resume(returning: response)
                 } else {
-                    request.continuation.resume(throwing: HostWorkerError.rejected)
+                    if response.token == preparationToken {
+                        let message = response.message.flatMap {
+                            $0.isEmpty || $0.count > 1024 ? nil : $0
+                        }
+                        request.continuation.resume(
+                            throwing: HostWorkerError.disableRejected(
+                                message
+                                    ?? "The extension could not restore its system settings. It remains enabled. Open the extension and try again."
+                            ))
+                    } else {
+                        request.continuation.resume(throwing: HostWorkerError.rejected)
+                    }
                 }
             }
         } catch { fail(HostWorkerError.invalidResponse) }
@@ -225,6 +251,14 @@ public final class HostWorker {
         let group = getpgid(pid)
         if group == process.processIdentifier || group == pid { kill(pid, SIGKILL) }
         kill(-pid, SIGKILL)
+    }
+
+    private func cancelRequest(_ token: UUID, error: any Error) {
+        guard token == preparationToken else { fail(error); return }
+        guard let request = pending.removeValue(forKey: token) else { return }
+        abandoned.insert(token)
+        request.timeout.cancel()
+        request.continuation.resume(throwing: error)
     }
 
     private func fail(_ error: any Error) {

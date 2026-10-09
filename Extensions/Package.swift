@@ -10,6 +10,15 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "LidAwakeExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "lidAwake",
+            exclude: ["Tests", "Runtime.swift", "Privileged/LidAwakePrivilegedRuntime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "LidAwakeExtensionTests", dependencies: ["LidAwakeExtension"],
+            path: "lidAwake/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "LaTeXExtension",
             dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
             path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
@@ -25,6 +34,15 @@ let package = Package(
         .testTarget(
             name: "CompanionExtensionTests", dependencies: ["CompanionExtension"],
             path: "companion/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "BifrostExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "bifrost", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "BifrostExtensionTests", dependencies: ["BifrostExtension"],
+            path: "bifrost/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+
         .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],

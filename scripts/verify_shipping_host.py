@@ -23,8 +23,15 @@ def inspect_layout(bundle, release=False, launcher_required=True):
     assert plist['SUPublicEDKey'] and plist['SUFeedURL'].startswith('https://github.com/pulkitxm/edith/releases/')
     executable = bundle / 'Contents/MacOS/Edith'
     assert executable.is_file() and not executable.is_symlink()
-    allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature'}
+    allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature', 'Library'}
     assert {path.name for path in (bundle / 'Contents').iterdir()} <= allowed, 'Unexpected host payload directory'
+    library = bundle / 'Contents/Library'
+    label = 'com.pulkit.edith.extensions.carrier.v1'
+    assert {path.name for path in library.iterdir()} == {'LaunchDaemons'}, 'Feature payload in host Library'
+    daemons = library / 'LaunchDaemons'
+    assert {path.name for path in daemons.iterdir()} == {label + '.plist'}, 'Unexpected host daemon'
+    daemon = plistlib.loads((daemons / (label + '.plist')).read_bytes())
+    assert daemon == {'Label': label, 'BundleProgram': 'Contents/MacOS/Edith', 'ProgramArguments': ['Edith', '--extension-carrier'], 'MachServices': {label: True}}, 'Invalid generic host daemon'
     assert {path.name for path in (bundle / 'Contents/MacOS').iterdir()} == ({'Edith', 'ed'} if launcher_required else {'Edith'}), 'Unexpected host executable'
     assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'libExtensionMarketplace.dylib', 'Sparkle.framework'}, 'Feature framework in host'
     resources = {'AppIcon.icns', 'index.json', 'ed-launcher'} if launcher_required else {'AppIcon.icns', 'index.json'}
@@ -65,6 +72,7 @@ def inspect_host(bundle, release=False, launcher_required=True):
     sparkle = (sparkle_root / 'Versions/Current').resolve() if (sparkle_root / 'Versions').is_dir() else sparkle_root
     if launcher_required:
         assert sparkle == sparkle_root, 'Shipping Sparkle must use its canonical flat layout'
+        assert not any((sparkle_root / name).exists() for name in ('Headers', 'PrivateHeaders', 'Modules')), 'Compiler interfaces in shipping Sparkle'
         assert not any(path.is_symlink() for path in sparkle_root.rglob('*')), 'Shipping Sparkle contains symbolic links'
         assert '/Sparkle.framework/Versions/' not in run('otool', '-L', str(executable)), 'Versioned Sparkle dependency in shipping host'
     expected_binaries = {

@@ -123,7 +123,52 @@ import Testing
         #expect(kill(childPID, 0) == -1)
     }
 
-    private func fixture(_ mode: String) throws -> HostWorker {
+    @Test func rejectedRestorationKeepsTheWorkerUsableUntilRetry() async throws {
+        let worker = try fixture("reject-disable-once")
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) { try await worker.stop() }
+        #expect(worker.ready)
+        #expect(worker.processIdentifier == pid)
+        #expect(try await worker.status().ok)
+        try await worker.stop()
+        #expect(kill(pid, 0) == -1)
+    }
+
+    @Test func restorationCancellationAndItsLateReplyDoNotKillTheWorker() async throws {
+        let worker = try fixture("late-disable")
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        let task = Task { try await worker.stop() }
+        try await Task.sleep(for: .milliseconds(40))
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(worker.ready)
+        #expect(worker.processIdentifier == pid)
+        try await Task.sleep(for: .milliseconds(350))
+        #expect(try await worker.status().ok)
+        try await worker.stop()
+        #expect(kill(pid, 0) == -1)
+    }
+
+    @Test func restorationTimeoutPreservesTheWorkerAndAcceptsTheLateReply() async throws {
+        let worker = try fixture("late-disable")
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        await #expect(throws: HostWorkerError.timedOut) {
+            try await worker.prepareDisable(timeout: .milliseconds(120))
+        }
+        #expect(worker.ready)
+        #expect(worker.processIdentifier == pid)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(try await worker.status().ok)
+        try await worker.stop()
+        #expect(kill(pid, 0) == -1)
+    }
+
+    private func fixture(_ mode: String, timeout: Duration = .seconds(2)) throws -> HostWorker {
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.workers",
             supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
@@ -133,6 +178,6 @@ import Testing
             configuration: HostWorkerConfiguration(
                 identity: identity, extensionID: "sample", version: "1.0.0"),
             executable: URL(fileURLWithPath: "/usr/bin/python3"), arguments: [script.path, mode],
-            requestTimeout: .seconds(2))
+            requestTimeout: timeout)
     }
 }
