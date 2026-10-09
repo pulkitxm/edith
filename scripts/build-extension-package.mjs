@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFile,
+  cp,
   mkdir,
   readFile,
   readdir,
@@ -16,6 +17,42 @@ import {
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+
+export async function copyNativeResources(
+  root,
+  definition,
+  contents,
+  resourceNames = new Set(),
+) {
+  const resources = resolve(contents, "Resources");
+  const admit = async (name) => {
+    if (
+      !name ||
+      name === "." ||
+      name === ".." ||
+      basename(name) !== name ||
+      resourceNames.has(name)
+    )
+      throw new Error("Duplicate or invalid native resource name");
+    resourceNames.add(name);
+    await mkdir(resources, { recursive: true });
+  };
+  for (const license of definition.nativeLicenses ?? []) {
+    await admit(license.destination);
+    await copyFile(
+      resolve(root, license.source),
+      resolve(resources, license.destination),
+    );
+  }
+  for (const resource of definition.nativeResources ?? []) {
+    await admit(resource);
+    await cp(
+      resolve(root, definition.nativePackage, ".build/release", resource),
+      resolve(resources, resource),
+      { recursive: true },
+    );
+  }
+}
 
 export async function buildExtensionPackage({
   root = process.cwd(),
@@ -72,6 +109,37 @@ export async function buildExtensionPackage({
       { stdio: "inherit" },
     );
   }
+  let cargoLibrary;
+  if (definition.nativeCargo) {
+    const cargoTarget = resolve(root, "dist/native", id);
+    execFileSync(
+      "cargo",
+      [
+        "build",
+        "--locked",
+        "--release",
+        "--lib",
+        "--jobs",
+        "2",
+        "--manifest-path",
+        resolve(root, definition.nativeCargo.manifest),
+        "--target-dir",
+        cargoTarget,
+      ],
+      {
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          MACOSX_DEPLOYMENT_TARGET: definition.minimumSystemVersion,
+        },
+      },
+    );
+    cargoLibrary = resolve(
+      cargoTarget,
+      "release",
+      definition.nativeCargo.library,
+    );
+  }
   for (const [role, sources] of Object.entries(definition.roles)) {
     if (!["app", "helper", "agent", "cli"].includes(role))
       throw new Error(`Unknown host role ${role}`);
@@ -121,7 +189,9 @@ export async function buildExtensionPackage({
         if (resourceNames.has(name))
           throw new Error("Duplicate extension resource name");
         resourceNames.add(name);
-        await mkdir(resolve(contents, "Resources"), { recursive: true });
+        await mkdir(resolve(contents, "Resources"), {
+          recursive: true,
+        });
         await copyFile(
           resolve(resources, name),
           resolve(contents, "Resources", name),
@@ -129,20 +199,33 @@ export async function buildExtensionPackage({
       }
     }
     const nativeFlags = [];
+    if (cargoLibrary) {
+      const frameworks = resolve(contents, "Frameworks");
+      await mkdir(frameworks, { recursive: true });
+      const library = resolve(frameworks, definition.nativeCargo.library);
+      await copyFile(cargoLibrary, library);
+      execFileSync("install_name_tool", [
+        "-id",
+        `@rpath/${definition.nativeCargo.library}`,
+        library,
+      ]);
+      execFileSync(
+        "codesign",
+        [
+          "--force",
+          "--sign",
+          development ? "-" : identity,
+          ...(development ? [] : ["--options", "runtime", "--timestamp"]),
+          library,
+        ],
+        { stdio: "inherit" },
+      );
+    }
     if (definition.nativePackage) {
       const libraryName = `lib${definition.nativeProduct}.dylib`;
       const frameworks = resolve(contents, "Frameworks");
-      await mkdir(frameworks);
-      const resources = resolve(contents, "Resources");
-      await mkdir(resources);
-      await copyFile(
-        resolve(
-          root,
-          definition.nativePackage,
-          ".build/artifacts/onnxruntime-swift-package-manager/onnxruntime/LICENSE",
-        ),
-        resolve(resources, "onnxruntime-LICENSE"),
-      );
+      await mkdir(frameworks, { recursive: true });
+      await copyNativeResources(root, definition, contents, resourceNames);
       const library = resolve(frameworks, libraryName);
       await copyFile(
         resolve(root, definition.nativePackage, ".build/release", libraryName),
@@ -166,6 +249,8 @@ export async function buildExtensionPackage({
         { stdio: "inherit" },
       );
       nativeFlags.push(
+        "-I",
+        resolve(root, definition.nativePackage, ".build/release/Modules"),
         "-L",
         frameworks,
         `-l${definition.nativeProduct}`,
@@ -235,7 +320,10 @@ export async function buildExtensionPackage({
         "-o",
         executable,
       ],
-      { env: { ...process.env, DEVELOPER_DIR: developer }, stdio: "inherit" },
+      {
+        env: { ...process.env, DEVELOPER_DIR: developer },
+        stdio: "inherit",
+      },
     );
     if (hostProducts) {
       const dependencies = execFileSync("otool", ["-L", executable], {
