@@ -30,6 +30,10 @@ public final class SurfacePrivacyState {
     }
 
     public func hides(_ widget: SurfaceWidget) -> Bool {
+        Self.hides(widget, values: values)
+    }
+
+    public static func hides(_ widget: SurfaceWidget, values: [String: String]) -> Bool {
         guard values["active"] == "1", widget != .clocks, widget != .actions else { return false }
         let categories: [String]
         switch widget {
