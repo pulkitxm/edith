@@ -4,88 +4,88 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 3872355,
-    "comparisonZipBytes": 1671346
+    "installedBytes": 4839699,
+    "comparisonZipBytes": 2066014
   },
   "savedBytes": {
-    "installedBytes": 112592846,
-    "comparisonZipBytes": 50600140
+    "installedBytes": 111625502,
+    "comparisonZipBytes": 50205472
   },
   "savedPercent": {
-    "installedBytes": 96.68,
-    "comparisonZipBytes": 96.8
+    "installedBytes": 95.84,
+    "comparisonZipBytes": 96.05
   },
   "packages": [
     {
       "id": "appMaintenance",
       "version": "1.0.0",
-      "downloadBytes": 686697,
-      "installedBytes": 1574735,
-      "sha256": "9ba05e025bb57aa1772c1feea64a91dcb6c801f93806e1364f23cf084ba81841",
+      "downloadBytes": 815775,
+      "installedBytes": 1880479,
+      "sha256": "67ecbffb45d89e51be24b47be102bb65f59ca06afa98efacf4747a7dbf07f487",
       "releaseMetadataBytes": 528
     },
     {
       "id": "blitztree",
       "version": "1.0.0",
-      "downloadBytes": 482270,
-      "installedBytes": 1148850,
-      "sha256": "ee16a3c4557c42e5cabfaf3c3af4068c3cc2ae7efa8b85bdeef28862b2c688d9",
+      "downloadBytes": 612159,
+      "installedBytes": 1455202,
+      "sha256": "afd1a4a7d020dd25cf9b081c1ab622b8d1fdb5f2b50d0b122d6cc535e128ff72",
       "releaseMetadataBytes": 513
     },
     {
       "id": "calendar",
       "version": "1.0.0",
-      "downloadBytes": 485955,
-      "installedBytes": 1149583,
-      "sha256": "c401542e8b4da23b87742c56333af6800bafede3c1f43e17403386370a88b49f",
+      "downloadBytes": 623850,
+      "installedBytes": 1456431,
+      "sha256": "79ae9c7a8c7541b15277eacc0084a99b389a98c57b956328b8a8edbcdc29ec10",
       "releaseMetadataBytes": 510
     },
     {
       "id": "cleaner",
       "version": "1.0.0",
-      "downloadBytes": 519722,
-      "installedBytes": 1233148,
-      "sha256": "85586ca475eb5ffe401a081cbdf3692ece7f7b1e6b388e86a9d8ff44139126eb",
+      "downloadBytes": 649818,
+      "installedBytes": 1523116,
+      "sha256": "c575ed971d5e8e77da5063c8585ef752e8bd8711de3ea4d51fadbfcbd38bfd84",
       "releaseMetadataBytes": 507
     },
     {
       "id": "colorPicker",
       "version": "1.0.0",
-      "downloadBytes": 425185,
-      "installedBytes": 1047835,
-      "sha256": "1bb154fcfc491cceeb0cf34a85d40749dfa8f6f8f1e2d36c8846ca71e28dd7e3",
+      "downloadBytes": 545748,
+      "installedBytes": 1319883,
+      "sha256": "b697e52b18d5203c7e216aab052841a32c90c9faa5877e16c06de6abbcafd582",
       "releaseMetadataBytes": 519
     },
     {
       "id": "emoji",
       "version": "1.0.0",
-      "downloadBytes": 548995,
-      "installedBytes": 1391649,
-      "sha256": "ed12cc47d16a963b6bb51affae400180b594acee6c0f66e7ad73e9386b24bc84",
+      "downloadBytes": 688414,
+      "installedBytes": 1733313,
+      "sha256": "2091c9ad1863d92431667a1897a58eccdbbdbdbb84fc64c8aa443484fdac89e2",
       "releaseMetadataBytes": 501
     },
     {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 407193,
-      "installedBytes": 1012482,
-      "sha256": "6033ed6e6cf7bbe8e7974d4f4afe38f6b71ede645ec11439d7396d87da59bd42",
+      "downloadBytes": 529118,
+      "installedBytes": 1286402,
+      "sha256": "52b08b6049a775a662824930ae804d89d48fc82bed160cf05287867f27dead96",
       "releaseMetadataBytes": 510
     },
     {
       "id": "homebrew",
       "version": "1.0.0",
-      "downloadBytes": 486170,
-      "installedBytes": 1164527,
-      "sha256": "ba254b0998a383071b883d6c4c6c8cccc8b01a5f076e82882c74994b0f7a5869",
+      "downloadBytes": 615762,
+      "installedBytes": 1454783,
+      "sha256": "02540af9f7a5b499151db452ac6fb831d0b06e9e9ff3af53155f586f4c4944e1",
       "releaseMetadataBytes": 510
     },
     {
       "id": "jev",
       "version": "1.0.0",
-      "downloadBytes": 509595,
-      "installedBytes": 1201360,
-      "sha256": "81f9719e774f7e15c8d32458fbf2f3d261c6ce5d9df62255f38501d9c63b0b81",
+      "downloadBytes": 631688,
+      "installedBytes": 1506688,
+      "sha256": "9e6c3a3227e5efff07c4d42cc6475a1a99aa22581c1de63bbf8e92e9fd846966",
       "releaseMetadataBytes": 495
     },
     {
@@ -93,81 +93,81 @@
       "version": "1.0.0",
       "downloadBytes": 18173,
       "installedBytes": 79141,
-      "sha256": "1dfe19cf86a9e323ef5c1f80be9828ed8bf469799821bfdc5ea968578ae7b478",
+      "sha256": "a56fcde30280553279277312d6726f89384e148e0e7c6b937a50101bd0f44338",
       "releaseMetadataBytes": 510
     },
     {
       "id": "keystrokeHighlight",
       "version": "1.0.0",
-      "downloadBytes": 424330,
-      "installedBytes": 1033840,
-      "sha256": "ae894f780e7fedaf598143ef5ff0a2011f0b8a841cbf2c4deef81ff9ad385d81",
+      "downloadBytes": 553523,
+      "installedBytes": 1323904,
+      "sha256": "718b7a26d81674ae7480fb42fc8b067ec91bec5b0b97512ceb9812e67ee1b714",
       "releaseMetadataBytes": 540
     },
     {
       "id": "micMute",
       "version": "1.0.0",
-      "downloadBytes": 404348,
-      "installedBytes": 995903,
-      "sha256": "6917c0704a879eb981149ec972b8557f80b38cee322fa73d1a5c45513378f854",
-      "releaseMetadataBytes": 506
+      "downloadBytes": 534091,
+      "installedBytes": 1286303,
+      "sha256": "cd282bbf83d2bcf573840a740aedd0571b6f88cd6c6b0e8acdea069a8992de3e",
+      "releaseMetadataBytes": 507
     },
     {
       "id": "presenter",
       "version": "1.0.0",
-      "downloadBytes": 444710,
-      "installedBytes": 1081365,
-      "sha256": "339d335e31f62596813a022f82dc6a940bba2982da9fa70cf56c3345163f9a1e",
+      "downloadBytes": 566438,
+      "installedBytes": 1354469,
+      "sha256": "0a7bb6e199f82cd91a96ae6ca3d284225aae8e7e8b45ce18aef009fa0dc54703",
       "releaseMetadataBytes": 513
     },
     {
       "id": "system",
       "version": "1.0.0",
-      "downloadBytes": 458885,
-      "installedBytes": 1096473,
-      "sha256": "cc609657a1b10172b6e1ab97d31b12d195fd2ddcef2921b4bfd894bb9d68429c",
+      "downloadBytes": 588148,
+      "installedBytes": 1402921,
+      "sha256": "fb0022b10ae4c987420b4e7865876630589096501a20f115c81e7f8d70b3bad0",
       "releaseMetadataBytes": 504
     },
     {
       "id": "systemStats",
       "version": "1.0.0",
-      "downloadBytes": 396850,
-      "installedBytes": 978203,
-      "sha256": "cd329a08bd348206c0e221ab6622b739d4227e5913ba0fa713c85802a2240b5e",
-      "releaseMetadataBytes": 518
+      "downloadBytes": 528643,
+      "installedBytes": 1285867,
+      "sha256": "a170028162ad0e0a2dd2711bc8ba63a90ed1274aff2eddf79ec44770bb29c018",
+      "releaseMetadataBytes": 519
     },
     {
       "id": "timeLapse",
       "version": "1.0.0",
-      "downloadBytes": 621809,
-      "installedBytes": 1427762,
-      "sha256": "d5a2c8ed22c189e7e1f5d34dd66baf92f7b5e7d183fef022a10fbe1b03e541e4",
+      "downloadBytes": 752077,
+      "installedBytes": 1750098,
+      "sha256": "3d7e7b677490361c7fee35253645c321b10bee75d553a23c5d89d74efcf4fc25",
       "releaseMetadataBytes": 513
     },
     {
       "id": "windowSweaters",
       "version": "1.0.0",
-      "downloadBytes": 477973,
-      "installedBytes": 1153602,
-      "sha256": "ca6fcfbb5806b4b8ba34d587db6eede0781e0d10c36cfc937caa3782557bca10",
+      "downloadBytes": 599529,
+      "installedBytes": 1427090,
+      "sha256": "424e46ca5858bdc8c801cee9fdbeca512fb9a37518fd6b184b669400e27c5468",
       "releaseMetadataBytes": 528
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 7798860,
-    "installedBytes": 18770458,
-    "releaseMetadataBytes": 8725,
-    "releaseAssetBytes": 7807585
+    "downloadBytes": 9852954,
+    "installedBytes": 23526090,
+    "releaseMetadataBytes": 8727,
+    "releaseAssetBytes": 9861681
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 22642813,
-    "comparisonZipAndPackageBytes": 9470206
+    "installedBytes": 28365789,
+    "comparisonZipAndPackageBytes": 11918968
   },
-  "measuredAtUTC": "2026-10-09T08:32:45+00:00",
+  "measuredAtUTC": "2026-10-09T10:14:04+00:00",
   "status": "migration-in-progress",
   "migratedExtensions": 17,
   "indexedExtensions": 39,
-  "hostExecutableSHA256": "10369b8bc40a9a637357785c981e43b43e23aa06f82a29459cec9e8092970344",
+  "hostExecutableSHA256": "e24d475aa90f803ace1ae8e8c6ad5e39b57f68420aab5723ad908ee61f7aee70",
   "measurement": {
     "baselineSourceCommit": "9c6b7ae8a4827578c99dbe5a3df433a19293311b",
     "architecture": "arm64",
@@ -179,13 +179,13 @@
       "Sparkle updater and its helpers",
       "application icon",
       "extension index",
-      "shared Home and Notch layout contract",
+      "Home, customization editor and shared UI",
       "code signatures"
     ],
     "outstanding": [
       "remaining feature migrations",
       "remaining feature navigation integration",
-      "Home and Notch visual editor and worker card adapters",
+      "remaining live card adapters and Home clock controls",
       "Notch extension renderer",
       "required platform carriers",
       "shipping release packaging",
@@ -194,7 +194,8 @@
   },
   "surfaceCustomization": {
     "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
-    "reviewedCommit": "f7aa029b299e963262910ac37f6d78172819f1ac",
+    "reviewedCommit": "31edeb8ccf693441b1da155a6be6491981d3f08d",
+    "mergedCommit": "98a0f440e161c130f7ebd12a9da5dea42c38b238",
     "layoutContractVersion": 1,
     "implemented": [
       "host-owned layouts and profiles",
@@ -202,13 +203,19 @@
       "availability for every indexed extension",
       "composite provider filtering",
       "read-only worker context",
-      "layout retention through worker updates and app restarts"
+      "layout retention through worker updates and app restarts",
+      "visual editor at compact, regular and zoomed sizes in both color schemes",
+      "shared canvas and shelf rendering",
+      "bounded versioned snapshot and action requests",
+      "cancellation on disable, removal, update or hidden views",
+      "immediate Presenter privacy observation",
+      "Calendar live cards and validated meeting actions"
     ],
     "outstanding": [
-      "visual editor port",
-      "Home card data and action adapters",
+      "remaining Home card data and action adapters",
+      "world clock controls",
       "Notch renderer and integrations",
-      "synthetic visual verification"
+      "final combined synthetic visual verification"
     ]
   }
 }

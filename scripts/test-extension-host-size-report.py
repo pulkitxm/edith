@@ -45,9 +45,11 @@ class HostSizeReportTests(unittest.TestCase):
             self.assertNotIn("| Remaining |", rendered)
             self.assertIn("PR #1010", rendered)
             self.assertIn("visual editor", rendered)
+            self.assertIn("Editor sample previews are labeled explicitly", rendered)
+            self.assertIn("Calendar live cards and validated meeting actions", result["surfaceCustomization"]["implemented"])
             self.assertIn("Notch renderer", rendered)
             self.assertEqual(result["surfaceCustomization"]["layoutContractVersion"], 1)
-            self.assertIn("Home card data and action adapters", result["surfaceCustomization"]["outstanding"])
+            self.assertIn("remaining Home card data and action adapters", result["surfaceCustomization"]["outstanding"])
 
     def test_stale_or_missing_fingerprints_cannot_produce_size_claims(self):
         with tempfile.TemporaryDirectory() as directory:
