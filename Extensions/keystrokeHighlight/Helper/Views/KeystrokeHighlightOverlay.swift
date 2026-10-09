@@ -1,5 +1,6 @@
 import AppKit
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import SwiftUI
 
 final class KeystrokeHighlightPanel: NSPanel {

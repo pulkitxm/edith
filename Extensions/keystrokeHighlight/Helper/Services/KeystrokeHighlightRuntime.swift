@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import Observation
 import SwiftUI
 
@@ -22,6 +23,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     var entries: [KeystrokeHighlightEntry] { queue.entries }
 
     func syncSettings() {
+        if eventTap == nil { start() }
         guard !entries.isEmpty else { return }
         movePanelToPointerScreen()
     }
@@ -78,7 +80,11 @@ final class KeystrokeHighlightRuntime: FeatureModule {
             guard type == .keyDown, !IsSecureEventInputEnabled() else {
                 return Unmanaged.passUnretained(event)
             }
-            guard let labels = KeystrokeEventLabelReader.labels(from: event) else {
+            guard
+                let labels = MainActor.assumeIsolated({
+                    KeystrokeEventLabelReader.labels(from: event)
+                })
+            else {
                 return Unmanaged.passUnretained(event)
             }
             Task { @MainActor in
@@ -130,7 +136,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
 
     private func showPanel() {
         movePanelToPointerScreen()
-        WindowPresentation.orderFrontRegardless(panel)
+        panel?.orderFrontRegardless()
     }
 
     private func movePanelToPointerScreen() {

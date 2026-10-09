@@ -25,6 +25,8 @@ export async function buildExtensionPackage({
     throw new Error(
       "Worker extensions must not depend on the legacy host framework",
     );
+  const developer =
+    process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
   const releaseVersion = version ?? definition.version;
   const identity = process.env.EXTENSION_SIGN_IDENTITY;
   if (!development && (!identity || identity === "-"))
@@ -123,6 +125,11 @@ export async function buildExtensionPackage({
         "swiftc",
         "-emit-library",
         "-parse-as-library",
+        "-plugin-path",
+        resolve(
+          developer,
+          "Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins",
+        ),
         "-Osize",
         "-whole-module-optimization",
         "-module-name",
@@ -172,7 +179,7 @@ export async function buildExtensionPackage({
         "-o",
         executable,
       ],
-      { stdio: "inherit" },
+      { env: { ...process.env, DEVELOPER_DIR: developer }, stdio: "inherit" },
     );
     if (hostProducts) {
       const dependencies = execFileSync("otool", ["-L", executable], {

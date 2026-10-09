@@ -36,6 +36,8 @@ struct HostLifecycleHarness {
         let suite = identity.defaultsSuite
         UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
             false, forKey: "windowSweatersActive")
+        UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
+            false, forKey: "keystrokeHighlightActive")
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)

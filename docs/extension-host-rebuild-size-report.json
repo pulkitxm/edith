@@ -4,24 +4,32 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 3170812,
-    "comparisonZipBytes": 1363484
+    "installedBytes": 3189820,
+    "comparisonZipBytes": 1369387
   },
   "savedBytes": {
-    "installedBytes": 113294389,
-    "comparisonZipBytes": 50908002
+    "installedBytes": 113275381,
+    "comparisonZipBytes": 50902099
   },
   "savedPercent": {
-    "installedBytes": 97.28,
-    "comparisonZipBytes": 97.39
+    "installedBytes": 97.26,
+    "comparisonZipBytes": 97.38
   },
   "packages": [
     {
+      "id": "colorPicker",
+      "version": "1.0.0",
+      "downloadBytes": 192227,
+      "installedBytes": 494635,
+      "sha256": "8f31bf8ca812185a0f69585f0ff051fc1d525014717d9815b084936ad807030f",
+      "releaseMetadataBytes": 518
+    },
+    {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 174508,
+      "downloadBytes": 174528,
       "installedBytes": 457234,
-      "sha256": "8bd47f5958694547471f7d679c88f8374f5a926519c1d5fe704806257ff3ad3b",
+      "sha256": "846f4b355bdf1453c778c0fca79bc374ede5500c22182eb13f897a491dbe3ccf",
       "releaseMetadataBytes": 509
     },
     {
@@ -29,32 +37,40 @@
       "version": "1.0.0",
       "downloadBytes": 18173,
       "installedBytes": 79141,
-      "sha256": "3f556f6c281d6b921421dd7b2e0a46b5fa19a7b135950486c5e32b7669cfbaa8",
+      "sha256": "a0164a62116f37b8b4878a4d26b0d561e8c54c153a923c55ad2ec48730908394",
       "releaseMetadataBytes": 510
+    },
+    {
+      "id": "keystrokeHighlight",
+      "version": "1.0.0",
+      "downloadBytes": 199911,
+      "installedBytes": 512496,
+      "sha256": "66723c57b1a68dcb0be25c27888034b4d692ef5e9729fe5bba23a15771a8c454",
+      "releaseMetadataBytes": 539
     },
     {
       "id": "windowSweaters",
       "version": "1.0.0",
       "downloadBytes": 240196,
       "installedBytes": 598962,
-      "sha256": "58907d480579813151ddfd4a21ad733687ea9d0a38cea44d0756a712dcec49ce",
+      "sha256": "dcaa22169d2ed6ca408232d4916621a97af5725cc66e920bbd4bc4076a60af37",
       "releaseMetadataBytes": 527
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 432877,
-    "installedBytes": 1135337,
-    "releaseMetadataBytes": 1546,
-    "releaseAssetBytes": 434423
+    "downloadBytes": 825035,
+    "installedBytes": 2142468,
+    "releaseMetadataBytes": 2603,
+    "releaseAssetBytes": 827638
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 4306149,
-    "comparisonZipAndPackageBytes": 1796361
+    "installedBytes": 5332288,
+    "comparisonZipAndPackageBytes": 2194422
   },
   "status": "migration-in-progress",
-  "migratedExtensions": 3,
+  "migratedExtensions": 5,
   "indexedExtensions": 38,
-  "hostExecutableSHA256": "15083c52b8ea973dd6c295a0175f2fc0a5da17b247339e43acb61b4823f64119",
+  "hostExecutableSHA256": "65119ff22840706f014a8a224c3c71280c6de5d6a28012e62fc6e0906be4a7ec",
   "measurement": {
     "architecture": "arm64",
     "signature": "development",
