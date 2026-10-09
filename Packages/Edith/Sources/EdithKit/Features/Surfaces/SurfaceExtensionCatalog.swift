@@ -14,7 +14,8 @@ extension SurfaceWidget {
             .ability("downloads"),
             .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
-            .ability("seoAudit"), .ability("latex"), .ability("audioMixer"), .ability("timeLapse"):
+            .ability("seoAudit"), .ability("latex"), .ability("audioMixer"), .ability("timeLapse"),
+            .ability("companion"):
             true
         default: false
         }
@@ -30,6 +31,11 @@ extension SurfaceWidget {
             [
                 .init("connections", "Connections"), .init("queries", "Saved queries"),
                 .init("operations", "Recent operations"),
+            ]
+        case .ability("companion"):
+            [
+                .init("health", "Service health"), .init("totals", "Library totals"),
+                .init("recent", "Recent items"),
             ]
         case .ability("timeLapse"):
             [.init("active", "Live recorder"), .init("recordings", "Saved recordings")]
@@ -111,6 +117,12 @@ extension SurfaceWidget {
                 [("projects", "Document count"), ("reviews", "Pull request count")]
             case .ability("bifrost"), .ability("system"):
                 [("apps", "App count")]
+            case .ability("companion"):
+                [
+                    ("episodes", "Indexed item count"), ("sources", "Source count"),
+                    ("claims", "Claim count"), ("observations", "Observation count"),
+                    ("pending", "Pending indexing count"),
+                ]
             case .ability("plugins"):
                 [("agents", "Detected agent count"), ("skills", "Available skill count")]
             case .ability("studio"), .ability("notchShelf"):

@@ -37,6 +37,8 @@ public enum SurfaceSampleData {
             value = databases(tile)
         } else if tile.widget == .ability("audioMixer") || tile.widget == .ability("timeLapse") {
             value = media(tile)
+        } else if tile.widget == .ability("companion") {
+            return memory(tile)
         } else {
             value = base(tile.widget)
         }
@@ -82,6 +84,28 @@ public enum SurfaceSampleData {
         status.sources = 1; status.systemAudio = true
         return SurfaceMediaProjection.recorder(
             status, library: .init(), tile: tile, now: date)
+    }
+
+    private static func memory(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
+        SurfaceMemoryProjection.snapshot(
+            .init(
+                checkedAt: date, endpoint: "", reachable: true, degraded: false,
+                checks: [.init(name: "Search index", ok: true, detail: "Ready for local search")],
+                failure: nil, skipped: false),
+            status: .init(
+                sources: 8, episodes: 240, claims: 96, observations: 180,
+                chunks: 720, pendingEpisodes: 2, latestIngestedAt: nil),
+            episodes: [
+                .init(
+                    id: "sample-note", occurredAt: "2026-10-09T09:00:00Z", kind: "note",
+                    title: "Design review notes", sha256: ""),
+                .init(
+                    id: "sample-voice", occurredAt: "2026-10-09T08:00:00Z", kind: "voice",
+                    title: "Morning ideas", sha256: ""),
+                .init(
+                    id: "sample-document", occurredAt: "2026-10-08T12:00:00Z", kind: "pdf",
+                    title: "Sample project brief", sha256: ""),
+            ], tile: tile)
     }
 
     private static func base(_ widget: SurfaceWidget) -> SurfaceExtensionSnapshot {
@@ -188,13 +212,7 @@ public enum SurfaceSampleData {
                     .init("space", "Reclaimable", "4.8 GB"), .init("categories", "Categories", "6"),
                 ], actions: [review(widget)])
         case .ability("companion"):
-            return .init(
-                metrics: [.init("status", "Service", "Healthy")],
-                rows: [
-                    .init(
-                        "index", title: "Search index", detail: "Ready for local search",
-                        value: "Ready", icon: "checkmark.circle")
-                ])
+            return memory(SurfaceTile(widget))
         case .ability("seoAudit"):
             return .init(
                 metrics: [

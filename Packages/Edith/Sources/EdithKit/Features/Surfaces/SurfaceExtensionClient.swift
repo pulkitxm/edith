@@ -190,22 +190,8 @@ public actor SurfaceExtensionClient {
         case .ability("companion"):
             let snapshot = try await client.snapshotAsync(
                 CompanionHealthSnapshot.self, topic: .companion)
-            return .init(
-                metrics: [
-                    .init(
-                        "status", "Service",
-                        snapshot.skipped
-                            ? "Not set up"
-                            : snapshot.reachable
-                                ? (snapshot.degraded ? "Degraded" : "Healthy") : "Offline")
-                ],
-                rows: snapshot.checks.map {
-                    .init(
-                        $0.name, title: $0.name, detail: $0.detail,
-                        value: $0.ok ? "Ready" : "Needs attention",
-                        icon: $0.ok ? "checkmark.circle" : "exclamationmark.circle")
-                },
-                message: snapshot.failure, updatedAt: snapshot.checkedAt)
+            return try await SurfaceMemoryClient(endpoint: CompanionClient.endpoint(override: nil))
+                .snapshot(snapshot, tile: tile)
         case .ability("seoAudit"):
             let projects = try await SEOAuditController().list()
             let selected = projects.filter { tile.sourceIDs?.contains($0.id.uuidString) ?? true }
