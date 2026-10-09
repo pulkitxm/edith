@@ -1038,7 +1038,7 @@ struct SurfaceEditorPane: View {
                 Stepper(
                     "Visible items: \(tile.itemLimit)",
                     value: setting(tile.id, \.itemLimit, fallback: 5), in: 1...20)
-                ForEach(tile.widget.fields, id: \.0) { field in
+                ForEach(tile.widget.fields(for: target), id: \.0) { field in
                     Toggle(
                         field.1,
                         isOn: Binding(

@@ -114,7 +114,9 @@ struct HomeSurfaceWidget: View {
 
     @ViewBuilder var body: some View {
         if !tile.widget.available(in: SharedDefaults.store)
-            && !(sampleContent && (tile.widget.usesExtensionCard || tile.widget == .agents))
+            && !(sampleContent
+                && (tile.widget.usesExtensionCard || tile.widget == .agents
+                    || tile.widget == .usage))
         {
             PageCard(title: tile.displayTitle) {
                 Text("Enable this integration in Extensions.").font(.edithText(.callout))
@@ -140,7 +142,10 @@ struct HomeSurfaceWidget: View {
                         }
                     }
                 case .calendar: MeetingsCard(dark: dark)
-                case .usage: UsageSummaryCard(dark: dark)
+                case .usage:
+                    SurfaceUsageCard(
+                        tile: tile, active: automaticActionsEnabled,
+                        open: { MainApp.open(section: $0) })
                 case .music: HomeMusicCard(dark: dark)
                 case .limits, .codeStats, .github, .agents, .focus, .databases, .machines, .desk,
                     .media,
@@ -920,142 +925,6 @@ struct JumpLink: View {
     }
 }
 
-private struct UsageSummaryCard: View {
-    @Environment(\.surfacePresentation) private var presentation
-    let dark: Bool
-    @State private var model = DashboardModel.shared
-    private var presenterState = PresenterState.shared
-    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-        var presenterBlurMoney =
-        true
-
-    init(dark: Bool) {
-        self.dark = dark
-    }
-
-    private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
-
-    private static let ymd: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private func day(_ offset: Int) -> HeatDay? {
-        let cal = Calendar.current
-        let date = cal.date(byAdding: .day, value: -offset, to: cal.startOfDay(for: Date()))!
-        return model.homeUsage.heatDetail[Self.ymd.string(from: date)]
-    }
-
-    private var lastDays: [(date: Date, cost: Double, tokens: Double)] {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        return (0..<14).reversed().map { offset in
-            let date = cal.date(byAdding: .day, value: -offset, to: today)!
-            let detail = model.homeUsage.heatDetail[Self.ymd.string(from: date)]
-            return (date, detail?.cost ?? 0, detail?.tokens ?? 0)
-        }
-    }
-
-    private var weekModels: [NamedValue] {
-        HomeMath.topModels(days: (0..<7).map(day), limit: presentation?.tile.itemLimit ?? 3)
-    }
-
-    var body: some View {
-        PageCard(title: "Agent usage", note: "last 14 days") {
-            if model.homeUsage.hasDays {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    HStack(spacing: UIScale.pt(24)) {
-                        if presentation?.tile.shows("today") != false {
-                            stat("Today", cost: day(0)?.cost ?? 0, tokens: day(0)?.tokens ?? 0)
-                        }
-                        if presentation?.tile.shows("week") != false {
-                            stat(
-                                "This week",
-                                cost: (0..<7).reduce(0) { $0 + (day($1)?.cost ?? 0) },
-                                tokens: (0..<7).reduce(0) { $0 + (day($1)?.tokens ?? 0) })
-                        }
-                    }
-                    if presentation?.tile.shows("chart") != false { chart }
-                    if !weekModels.isEmpty, presentation?.tile.shows("models") != false {
-                        WrapHStack(spacing: UIScale.pt(12), lineSpacing: 4) {
-                            ForEach(Array(weekModels.enumerated()), id: \.element.id) { i, entry in
-                                HStack(spacing: UIScale.pt(5)) {
-                                    Circle()
-                                        .fill(DashPalette.categorical(i, dark: dark))
-                                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                                    Text(entry.name)
-                                        .font(.system(size: UIScale.pt(11)))
-                                        .foregroundStyle(DashSkin.inkSoft(dark))
-                                    Text(DashFmt.tokens(entry.value))
-                                        .font(DashSkin.mono(10))
-                                        .foregroundStyle(DashSkin.inkFaint(dark))
-                                        .presenterBlur(blurMoney)
-                                }
-                            }
-                        }
-                    }
-                    jumpLink("Open Agent Usage", to: .dashboard, dark: dark)
-                }
-            } else {
-                if model.loadAttempted {
-                    Text("No usage data yet")
-                        .font(.system(size: UIScale.pt(12.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
-                } else {
-                    UsageSummarySkeleton(dark: dark)
-                }
-            }
-        }
-    }
-
-    private func stat(_ label: String, cost: Double, tokens: Double) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(label.uppercased())
-                .font(DashSkin.mono(9.5)).tracking(UIScale.pt(1.3))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(DashFmt.usd(cost))
-                .font(DashSkin.heading(24))
-                .foregroundStyle(DashSkin.ink(dark))
-                .presenterBlur(blurMoney)
-            if presentation?.tile.shows("tokens") != false, presentation?.tile.showDetails != false
-            {
-                Text("\(DashFmt.tokens(tokens)) tokens")
-                    .font(.system(size: UIScale.pt(11)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .presenterBlur(blurMoney)
-            }
-        }
-    }
-
-    private var chart: some View {
-        Chart(lastDays, id: \.date) { entry in
-            BarMark(
-                x: .value("Day", entry.date, unit: .day),
-                y: .value("Cost", entry.cost)
-            )
-            .cornerRadius(2)
-            .foregroundStyle(
-                Calendar.current.isDateInToday(entry.date)
-                    ? DashSkin.accent(dark) : DashSkin.accent(dark).opacity(0.45))
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: 3)) { value in
-                AxisValueLabel {
-                    if let d = value.as(Date.self) {
-                        Text(d.formatted(.dateTime.day()))
-                            .font(.system(size: UIScale.pt(8)))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-        }
-        .chartYAxis(.hidden)
-        .frame(height: UIScale.pt(64))
-    }
-}
-
 private struct ActivityHeatmapSkeleton: View {
     var body: some View {
         SkeletonGroup {
@@ -1075,44 +944,6 @@ private struct ActivityHeatmapSkeleton: View {
             .frame(height: UIScale.pt(137))
         }
         .accessibilityLabel("Loading activity")
-    }
-}
-
-private struct UsageSummarySkeleton: View {
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                HStack(spacing: UIScale.pt(24)) {
-                    ForEach(0..<2, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            SkeletonBlock(width: index == 0 ? 44 : 66, height: 8)
-                            SkeletonBlock(width: 72, height: 22)
-                            SkeletonBlock(width: 88, height: 8)
-                        }
-                    }
-                }
-                HStack(alignment: .bottom, spacing: UIScale.pt(5)) {
-                    ForEach(0..<14, id: \.self) { index in
-                        SkeletonBlock(
-                            height: CGFloat(18 + index % 5 * 8),
-                            corner: 2)
-                    }
-                }
-                .frame(height: UIScale.pt(62), alignment: .bottom)
-                HStack(spacing: UIScale.pt(12)) {
-                    ForEach(0..<3, id: \.self) { index in
-                        SkeletonBlock(
-                            width: index == 1 ? 78 : 62,
-                            height: 9)
-                    }
-                }
-                SkeletonBlock(width: 116, height: 9)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
-        .accessibilityLabel("Loading usage summary")
     }
 }
 

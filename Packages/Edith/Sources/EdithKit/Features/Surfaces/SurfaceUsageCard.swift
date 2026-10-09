@@ -33,7 +33,7 @@ public struct SurfaceUsageCard: View {
                         }
                         .help("Refresh usage").accessibilityLabel("Refresh usage")
                         Button {
-                            open("usage")
+                            open(tile.widget.destination)
                         } label: {
                             Image(systemName: "arrow.up.right")
                         }

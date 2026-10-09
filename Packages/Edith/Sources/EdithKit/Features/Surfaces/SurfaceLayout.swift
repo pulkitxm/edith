@@ -447,6 +447,15 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
 }
 
 extension SurfaceWidget {
+    public func fields(for target: SurfaceTarget) -> [(String, String)] {
+        if target == .home, self == .music {
+            return fields.filter {
+                !["volume", "shuffle", "repeat", "seekControls"].contains($0.0)
+            }
+        }
+        return fields
+    }
+
     public var fields: [(String, String)] {
         switch self {
         case .clocks: [("faces", "Clock faces"), ("offsets", "Time differences")]
