@@ -180,6 +180,7 @@ ci-extension-support:
 	swift test --package-path Extensions --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)')
 
 ci-extension-workers:
+	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostLifecycleHarness
 	bun scripts/test-extension-workers.mjs $(EXTENSION)
 
 ci-extension-commands:
