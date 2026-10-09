@@ -63,23 +63,38 @@ struct HostLifecycleHarness {
                 _ = SecItemDelete(query as CFDictionary)
             }
         }
+        var workerLogs: [URL] = []
+        var logHandles: [FileHandle] = []
         let sessions = HostExtensionSessions(defaults: defaults) { package in
-            HostWorker(
-                configuration: HostWorkerConfiguration(
-                    identity: identity, extensionID: package.id, version: package.version),
-                executable: executable)
+            let log = fixture.appendingPathComponent("worker-" + UUID().uuidString + ".log")
+            FileManager.default.createFile(atPath: log.path, contents: nil)
+            let handle = try! FileHandle(forWritingTo: log)
+            workerLogs.append(log)
+            logHandles.append(handle)
+            return
+                HostWorker(
+                    configuration: HostWorkerConfiguration(
+                        identity: identity, extensionID: package.id, version: package.version),
+                    executable: executable, errorOutput: handle)
         }
+        defer { for handle in logHandles { try? handle.close() } }
+        var stage = "installation"
         do {
             let first = try record(releases, id: extensionID, version: "1.0.0")
             let second = try record(releases, id: extensionID, version: "1.1.0")
             try await install(first, releases: releases, store: store)
             guard sessions.processIdentifiers.isEmpty else { throw HostWorkerError.rejected }
+            stage = "enable"
             try await sessions.enable(first)
             guard let oldPID = sessions.processIdentifiers[first.id] else {
                 throw HostWorkerError.rejected
             }
+            stage = "window"
             try await sessions.show(id: first.id)
-            if extensionID == "system" {
+            stage = "initial commands"
+            if extensionID == "timeLapse" {
+                try await verifyRecording(endpoint)
+            } else if extensionID == "system" {
                 try await verifySystem(endpoint)
             } else if extensionID == "jev" {
                 try await verify(
@@ -97,12 +112,16 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == first.version, kill(oldPID, 0) == 0 else {
                 throw HostWorkerError.rejected
             }
+            stage = "update"
             try await sessions.applyUpdate(second)
+            stage = "updated commands"
             guard sessions.versions[first.id] == second.version,
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "system" {
+            if extensionID == "timeLapse" {
+                try await verifyRecording(endpoint)
+            } else if extensionID == "system" {
                 try await verifySystem(endpoint)
             } else if extensionID == "jev" {
                 try await verify(
@@ -117,11 +136,14 @@ struct HostLifecycleHarness {
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
             }
+            stage = "restore"
             await sessions.restore(packages: [second.id: second])
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "system" {
+            if extensionID == "timeLapse" {
+                try await verifyRecording(endpoint)
+            } else if extensionID == "system" {
                 try await verifySystem(endpoint)
             } else if extensionID == "jev" {
                 try await verify(
@@ -144,14 +166,22 @@ struct HostLifecycleHarness {
                     throw HostWorkerError.rejected
                 }
             }
+            stage = "disable"
             try await sessions.disable(id: first.id)
             guard sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty else {
                 throw HostWorkerError.rejected
             }
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
+            for handle in logHandles { try handle.close() }
+            guard
+                try workerLogs.allSatisfy({
+                    !(try String(contentsOf: $0, encoding: .utf8)).contains(
+                        "is implemented in both")
+                })
+            else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true}"
             )
         } catch {
             if extensionID == "jev" {
@@ -159,8 +189,28 @@ struct HostLifecycleHarness {
                     "jev.key.set", payload: Data("{\"key\":null}".utf8), timeout: 2)
             }
             await sessions.shutdown()
-            throw error
+            for handle in logHandles { try? handle.close() }
+            let logs = workerLogs.compactMap { try? String(contentsOf: $0, encoding: .utf8) }
+                .joined(separator: "\n")
+            throw NSError(
+                domain: "ExtensionFixture", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "\(extensionID) failed during \(stage): \(error). \(logs)"
+                ])
+
         }
+    }
+
+    @MainActor private static func verifyRecording(_ endpoint: ExtensionPeerEndpoint) async throws {
+        try await verify(
+            endpoint, command: "recording.status", input: [:], field: "recording", expected: false)
+        try await verify(
+            endpoint, command: "recording.stop", input: [:], field: "recording", expected: false)
+        let data = try await endpoint.invoke("recording.list", payload: Data("{}".utf8), timeout: 5)
+        guard let recordings = try JSONSerialization.jsonObject(with: data) as? [Any],
+            recordings.isEmpty
+        else { throw HostWorkerError.rejected }
     }
 
     @MainActor private static func verifySystem(_ endpoint: ExtensionPeerEndpoint) async throws {

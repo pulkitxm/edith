@@ -402,5 +402,37 @@
       "Packages/ExtensionSupport"
     ],
     "dependencies": []
+  },
+  {
+    "id": "timeLapse",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 15,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/timeLapse/Runtime.swift",
+        "Extensions/timeLapse/ScreenCaptureSourceCatalog.swift",
+        "Extensions/timeLapse/TimeLapseLibrary.swift",
+        "Extensions/timeLapse/TimeLapseLibraryModel.swift",
+        "Extensions/timeLapse/TimeLapseModels.swift",
+        "Extensions/timeLapse/TimeLapsePage.swift",
+        "Extensions/timeLapse/TimeLapseRecorder.swift",
+        "Extensions/timeLapse/TimeLapseRecordingRow.swift",
+        "Extensions/timeLapse/TimeLapseSourcePicker.swift",
+        "Extensions/timeLapse/TimeLapseSources.swift",
+        "Extensions/timeLapse/TimeLapseWriter.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/timeLapse"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
   }
 ]

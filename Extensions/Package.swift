@@ -107,5 +107,13 @@ let package = Package(
         .testTarget(
             name: "SystemExtensionTests", dependencies: ["SystemExtension"],
             path: "system/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "TimeLapseExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "timeLapse", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "TimeLapseExtensionTests", dependencies: ["TimeLapseExtension"],
+            path: "timeLapse/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
