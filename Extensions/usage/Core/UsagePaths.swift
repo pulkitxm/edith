@@ -1,3 +1,4 @@
+import Darwin
 import EdithExtensionSupport
 import Foundation
 
@@ -12,14 +13,18 @@ public enum MachineRegistry {
         file: URL = ExtensionData.root.deletingLastPathComponent().appendingPathComponent(
             "machines/machines.json")
     ) -> [Machine] {
-        guard
-            let metadata = try? file.resourceValues(forKeys: [
-                .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey,
-            ]),
-            metadata.isRegularFile == true, metadata.isSymbolicLink != true,
-            let size = metadata.fileSize, size <= 1_048_576,
-            let data = try? Data(contentsOf: file), data.count <= 1_048_576,
-            let machines = try? JSONDecoder().decode([Machine].self, from: data)
+        guard file.isFileURL else { return [] }
+        let descriptor = open(file.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else { return [] }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? handle.close() }
+        var metadata = stat()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard fstat(descriptor, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG,
+            metadata.st_uid == getuid(), metadata.st_size >= 0, metadata.st_size <= 1_048_576,
+            let data = try? handle.read(upToCount: 1_048_577), data.count <= 1_048_576,
+            let machines = try? decoder.decode([Machine].self, from: data)
         else { return [] }
         return Array(machines.prefix(128))
     }
