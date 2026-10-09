@@ -16,7 +16,10 @@ enum HerdrNativeTerminalBridge {
 
     static func relay(
         specification: HerdrTerminalBridgeSpecification, input: FileHandle, output: FileHandle,
-        dimensions: () -> HerdrTerminalDimensions
+        dimensions: () -> HerdrTerminalDimensions,
+        cancelled: () -> Bool = {
+            ExtensionCommandOwnership.isWorker && HerdrBridgeCancellation.isCancelled
+        }
     ) throws -> Int32 {
         var geometry = dimensions()
         let child = try HerdrNativeTerminalProcess(
@@ -38,6 +41,7 @@ enum HerdrNativeTerminalBridge {
         var inputCloseDeadline: ContinuousClock.Instant?
         let bufferLimit = 1024 * 1024
         while true {
+            if cancelled() { return 130 }
             if let deadline = inputCloseDeadline, clock.now >= deadline { return 0 }
             if let deadline = escapeDeadline, clock.now >= deadline {
                 for bytes in try router.flushEscapePrefix() { toChild.append(bytes) }
@@ -162,6 +166,7 @@ final class HerdrNativeTerminalProcess {
         let spawned = try Self.spawn(request, dimensions: dimensions)
         pid = spawned.pid
         terminal = FileHandle(fileDescriptor: spawned.master, closeOnDealloc: true)
+        do { try ExtensionNativeTask.registerChild(pid) } catch { close(); throw error }
     }
 
     deinit { close() }

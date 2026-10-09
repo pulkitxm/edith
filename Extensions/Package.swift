@@ -46,7 +46,7 @@ let package = Package(
         .target(
             name: "HerdrExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "herdr", exclude: ["Tests", "Views", "ViewModels", "Package.swift"],
+            path: "herdr", exclude: ["Tests", "Views", "ViewModels", "Package.swift", "Runtime.swift"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

@@ -56,7 +56,7 @@ struct HerdrShellTerminal: View {
                     }
                     request = TerminalLaunchRequest(
                         executable: SSHConnection.executable.path,
-                        arguments: connection.terminalArguments(remoteCommand: command),
+                        arguments: try connection.terminalArguments(remoteCommand: command),
                         environment: connection.terminalEnvironment())
                 }
                 try Task.checkCancellation()

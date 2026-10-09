@@ -11,7 +11,7 @@ let package = Package(
             dependencies: [
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
-            ], path: ".", exclude: ["Tests"], resources: [.process("Resources")],
+            ], path: ".", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "HerdrUITests", dependencies: ["HerdrUI"], path: "Tests/UI",

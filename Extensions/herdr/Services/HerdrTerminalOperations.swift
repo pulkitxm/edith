@@ -62,10 +62,10 @@ public enum HerdrMachineTerminal {
 
     public static func windowsLaunchRequest(
         connection: SSHConnection, environment: [String], session: String = ""
-    ) -> TerminalLaunchRequest {
+    ) throws -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(
+            arguments: try connection.terminalArguments(
                 remoteCommand: remoteHerdrCommand(
                     arguments: session.isEmpty ? [] : ["--session", session],
                     platform: .windows, interactive: true)),

@@ -72,7 +72,7 @@ final class HerdrSocketClient: @unchecked Sendable {
     static func ssh(_ connection: SSHConnection, socketPath: String) throws -> HerdrSocketClient {
         let command =
             "export PATH=\"\(HerdrCollector.pathPrefix)\"; python3 -u -c \(ShellQuote.quote(relayScript)) \(ShellQuote.quote(socketPath))"
-        let process = connection.streamProcess(command: command)
+        let process = try connection.streamProcess(command: command)
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -83,13 +83,13 @@ final class HerdrSocketClient: @unchecked Sendable {
         let readFD = Darwin.dup(stdoutPipe.fileHandleForReading.fileDescriptor)
         let writeFD = Darwin.dup(stdinPipe.fileHandleForWriting.fileDescriptor)
         guard readFD >= 0, writeFD >= 0 else {
-            if process.isRunning { process.terminate() }
+            HerdrOwnedProcess.stop(process)
             throw HerdrSocketError(message: "could not attach to the herdr relay")
         }
         return HerdrSocketClient(
             readFD: readFD, writeFD: writeFD,
             teardown: {
-                if process.isRunning { process.terminate() }
+                HerdrOwnedProcess.stop(process)
             },
             keepAlive: [process, stdinPipe, stdoutPipe, stderrPipe])
     }

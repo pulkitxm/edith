@@ -9,8 +9,6 @@ struct HerdrPage: View {
     @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
-        var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
     @State private var drag: HerdrDragCoordinator
     @State private var hoveredCard: String?
@@ -31,7 +29,7 @@ struct HerdrPage: View {
     }
 
     private var dark: Bool { scheme == .dark }
-    private var hideAgents: Bool { presenterState.active && presenterBlurAgents }
+    private var hideAgents: Bool { presenterState.hidesAgents }
     private var onBoard: Bool { store.selectedTab == HerdrStore.boardID }
     private var tabBinding: Binding<String> {
         Binding(

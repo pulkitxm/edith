@@ -8,8 +8,6 @@ struct HerdrSearchPopup: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store) private
-        var presenterBlurAgents = true
     private var presenterState = PresenterState.shared
     @State private var model: HerdrSearchModel
     @FocusState private var fieldFocused: Bool
@@ -25,7 +23,7 @@ struct HerdrSearchPopup: View {
 
     private var dark: Bool { scheme == .dark }
     private var openAgents: [HerdrAgent] { store.listedAgents }
-    private var hide: Bool { presenterState.active && presenterBlurAgents }
+    private var hide: Bool { presenterState.hidesAgents }
     private var queryTerms: [String] { AgentSearchTerms.terms(model.searchedQuery ?? "") }
 
     var body: some View {

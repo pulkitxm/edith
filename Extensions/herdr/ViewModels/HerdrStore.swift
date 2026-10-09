@@ -1989,15 +1989,17 @@ final class HerdrStore {
     ) async throws -> TerminalLaunchRequest {
         if tab.agent.isTerminal {
             if !tab.agent.machineIsLocal {
-                guard let machine = tab.machine else {
-                    throw HerdrQuinjetError.machineUnavailable
-                }
+                guard let machine = tab.machine else { throw HerdrQuinjetError.machineUnavailable }
                 let connection = try await connection(for: machine)
-                if await connection.remotePlatform == .windows {
-                    return HerdrMachineTerminal.windowsLaunchRequest(
-                        connection: connection, environment: environment, session: tab.agent.session
-                    )
-                }
+                let platform = await connection.remotePlatform ?? .linux
+                let command = remoteHerdrCommand(
+                    arguments: tab.agent.session.isEmpty ? [] : ["--session", tab.agent.session],
+                    platform: platform, interactive: true)
+                return TerminalLaunchRequest(
+                    executable: SSHConnection.executable.path,
+                    arguments: try connection.terminalArguments(remoteCommand: command),
+                    environment: HerdrMachineTerminal.unnested(
+                        environment + connection.terminalEnvironment()))
             }
             return HerdrMachineTerminal.launchRequest(
                 for: tab.agent, environment: environment, executable: localExecutable)
@@ -2047,13 +2049,13 @@ final class HerdrStore {
             let connection = try await connection(for: machine)
             let platform = await connection.remotePlatform ?? .linux
             if platform == .windows {
-                controller = HerdrOperationExecution.remoteControlRequest(
+                controller = try HerdrOperationExecution.remoteControlRequest(
                     for: agent, connection: connection, environment: environment,
                     platform: platform)
                 transport = .records
             } else {
                 let terminalID = try await terminalIDResolver(agent.session, agent.pane, machine)
-                controller = HerdrOperationExecution.remoteTerminalAttachRequest(
+                controller = try HerdrOperationExecution.remoteTerminalAttachRequest(
                     session: agent.session, terminalID: terminalID, connection: connection,
                     environment: environment, platform: platform)
                 transport = .terminal

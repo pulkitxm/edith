@@ -4,7 +4,15 @@ import Foundation
 
 enum HerdrBridgeCommand {
     static func run(encoded: String) throws {
+        HerdrBridgeCancellation.install()
         let specification = try HerdrTerminalBridgeSpecification(encoded: encoded)
+        guard specification.executable.hasPrefix("/"), !specification.executable.utf8.contains(0),
+            specification.arguments.count <= 128,
+            specification.arguments.allSatisfy({ !$0.utf8.contains(0) }),
+            specification.environment.count <= 256,
+            specification.environment.allSatisfy({ !$0.utf8.contains(0) }),
+            encoded.utf8.count <= 87_384
+        else { throw HerdrTerminalBridgeError.invalidSpecification }
         if specification.transport == .terminal {
             try HerdrNativeTerminalBridge.run(specification: specification)
         } else {
@@ -312,6 +320,9 @@ private final class HerdrTerminalBridgeRuntime {
         controller.standardOutput = controllerOutput
         controller.standardError = FileHandle.standardError
         try controller.run()
+        do { try ExtensionNativeTask.registerChild(controller.processIdentifier) } catch {
+            HerdrOwnedProcess.stop(controller); throw error
+        }
 
         let writer = HerdrTerminalWriter(controllerInput.fileHandleForWriting)
         writer.send(
@@ -319,12 +330,13 @@ private final class HerdrTerminalBridgeRuntime {
                 columns: dimensions.columns, rows: dimensions.rows,
                 cellWidth: dimensions.cellWidth, cellHeight: dimensions.cellHeight))
         let resizeTimer = startResizeTimer(writer: writer, initial: dimensions)
-        startInputForwarding(writer: writer)
+        let inputForwarding = startInputForwarding(writer: writer)
         defer {
             resizeTimer.cancel()
             writer.close()
-            if controller.isRunning { controller.terminate() }
-            controller.waitUntilExit()
+            HerdrBridgeCancellation.cancel()
+            inputForwarding.wait()
+            HerdrOwnedProcess.stop(controller)
         }
 
         try forwardFrames(from: controllerOutput.fileHandleForReading)
@@ -334,15 +346,18 @@ private final class HerdrTerminalBridgeRuntime {
         }
     }
 
-    private func startInputForwarding(writer: HerdrTerminalWriter) {
+    private func startInputForwarding(writer: HerdrTerminalWriter) -> DispatchGroup {
+        let group = DispatchGroup()
+        group.enter()
         DispatchQueue.global(qos: .userInteractive).async { [input, specification] in
+            defer { group.leave() }
             var router = HerdrTerminalInputRouter(mouse: specification.mouse)
-            while true {
+            while !HerdrBridgeCancellation.isCancelled {
                 do {
                     guard
                         let bytes = try HerdrTerminalStream.read(
                             from: input,
-                            timeoutMilliseconds: router.hasPendingEscapePrefix ? 40 : -1)
+                            timeoutMilliseconds: router.hasPendingEscapePrefix ? 40 : 100)
                     else {
                         try router.flushEscapePrefix().forEach(writer.send)
                         continue
@@ -358,6 +373,7 @@ private final class HerdrTerminalBridgeRuntime {
                 }
             }
         }
+        return group
     }
 
     private func startResizeTimer(
@@ -382,8 +398,9 @@ private final class HerdrTerminalBridgeRuntime {
 
     private func forwardFrames(from handle: FileHandle) throws {
         var buffer = Data()
-        while true {
-            let chunk = HerdrTerminalStream.read(from: handle)
+        while !HerdrBridgeCancellation.isCancelled {
+            guard let chunk = try HerdrTerminalStream.read(from: handle, timeoutMilliseconds: 100)
+            else { continue }
             guard !chunk.isEmpty else { break }
             buffer.append(chunk)
             while let newline = buffer.firstIndex(of: 0x0A) {

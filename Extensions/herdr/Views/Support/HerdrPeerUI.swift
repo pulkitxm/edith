@@ -10,6 +10,7 @@ final class PresenterState {
     static let shared = PresenterState()
     private var state: SurfacePrivacyState?
     var active: Bool { state?.values["active"] == "1" }
+    var hidesAgents: Bool { SurfacePrivacyState.hides(.agents, values: state?.values ?? [:]) }
     func start() {
         guard state == nil, let channel = ExtensionSharedState.current else { return }
         state = SurfacePrivacyState(channel: channel)

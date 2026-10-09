@@ -72,7 +72,7 @@ struct HerdrAgentMenu: View {
     @Environment(\.terminalLaunchEnabled) private var launchEnabled
     @AppStorage(AppStorageKeys.Presenter.blurAgents, store: SharedDefaults.store)
     private var presenterBlurAgents = true
-    private var hideAgents: Bool { PresenterState.shared.active && presenterBlurAgents }
+    private var hideAgents: Bool { PresenterState.shared.hidesAgents }
 
     var body: some View {
         Button("Open") {
@@ -196,7 +196,7 @@ private struct HerdrAgentContextMenu<Extra: View>: ViewModifier {
                 } else {
                     ForEach(agents) { agent in
                         Menu(
-                            PresenterState.shared.active && presenterBlurAgents
+                            PresenterState.shared.hidesAgents
                                 ? agent.kind : agent.title
                         ) {
                             HerdrAgentMenu(

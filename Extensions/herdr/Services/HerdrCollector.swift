@@ -183,7 +183,7 @@ public enum HerdrCollector {
     private static func run(_ runner: Runner, herdr arguments: [String]) async -> CommandResult {
         switch runner {
         case .local:
-            return await runLocal(remoteHerdrCommand(arguments: arguments, platform: .darwin))
+            return await runLocal(arguments)
         case let .ssh(connection):
             do {
                 let platform = await connection.remotePlatform ?? .linux
@@ -197,11 +197,14 @@ public enum HerdrCollector {
         }
     }
 
-    private static func runLocal(_ command: String) async -> CommandResult {
+    private static func runLocal(_ arguments: [String]) async -> CommandResult {
+        guard let executable = executable() else {
+            return CommandResult(status: 127, stdout: "", stderr: "Herdr is not available.")
+        }
         do {
             let result = try await CLICommandRunner.runLocalSeparated(
                 CLICommandRequest(
-                    executableURL: URL(fileURLWithPath: "/bin/zsh"), arguments: ["-c", command],
+                    executableURL: executable, arguments: arguments,
                     environment: CLIToolEnvironment.sanitized(), timeout: commandTimeout,
                     maximumOutputBytes: 16 << 20),
                 onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })

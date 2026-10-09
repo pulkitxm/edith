@@ -58,10 +58,10 @@ public enum HerdrOperationExecution {
     public static func remoteControlRequest(
         for agent: HerdrAgent, connection: SSHConnection, environment: [String],
         platform: RemoteMachinePlatform = .linux
-    ) -> TerminalLaunchRequest {
+    ) throws -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
-            arguments: connection.execArguments(
+            arguments: try connection.execArguments(
                 command: HerdrTerminalControlCommand.remoteShellLine(
                     session: agent.session, pane: agent.pane, platform: platform)),
             environment: environment + connection.terminalEnvironment())
@@ -90,10 +90,10 @@ public enum HerdrOperationExecution {
     public static func remoteTerminalAttachRequest(
         session: String, terminalID: String, connection: SSHConnection, environment: [String],
         platform: RemoteMachinePlatform = .linux
-    ) -> TerminalLaunchRequest {
+    ) throws -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(
+            arguments: try connection.terminalArguments(
                 remoteCommand: HerdrTerminalAttachCommand.remoteShellLine(
                     session: session, terminalID: terminalID, platform: platform)),
             environment: environment + connection.terminalEnvironment())
@@ -121,10 +121,10 @@ public enum HerdrOperationExecution {
     public static func remoteAttachRequest(
         for agent: HerdrAgent, connection: SSHConnection, environment: [String],
         platform: RemoteMachinePlatform = .linux
-    ) -> TerminalLaunchRequest {
+    ) throws -> TerminalLaunchRequest {
         TerminalLaunchRequest(
             executable: SSHConnection.executable.path,
-            arguments: connection.terminalArguments(
+            arguments: try connection.terminalArguments(
                 remoteCommand: HerdrAttachCommand.remoteShellLine(
                     session: agent.session, pane: agent.pane, platform: platform)),
             environment: environment + connection.terminalEnvironment())

@@ -537,7 +537,7 @@ private actor HerdrWatchHarness {
         let request = try await store.attachRequest(
             for: terminal, environment: [], localExecutable: URL(fileURLWithPath: "/tmp/herdr"),
             bridgeExecutable: URL(fileURLWithPath: "/tmp/ed"))
-        let specification = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        let specification = try HerdrTerminalBridgeSpecification(encoded: request.arguments[1])
         #expect(specification.transport == .terminal)
         #expect(
             specification.arguments == [

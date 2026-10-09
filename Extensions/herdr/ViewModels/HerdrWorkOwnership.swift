@@ -10,9 +10,9 @@ import Foundation
         guard !stopped else { let task = Task {}; task.cancel(); return task }
         let id = UUID()
         let task = Task {
+            defer { tasks.removeValue(forKey: id) }
             guard !Task.isCancelled else { return }
             await operation()
-            tasks.removeValue(forKey: id)
         }
         tasks[id] = task
         return task

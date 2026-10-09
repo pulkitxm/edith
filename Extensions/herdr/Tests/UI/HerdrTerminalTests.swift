@@ -95,10 +95,10 @@ import Testing
         #expect(request.environment.contains("TERM=xterm-256color"))
     }
 
-    @Test func WindowsMachineTerminalRunsHerdrOnTheRemoteHost() {
+    @Test func WindowsMachineTerminalRunsHerdrOnTheRemoteHost() async throws {
         let machine = Machine(name: "Box", host: "box.example", username: "dev")
-        let connection = SSHConnection(machine: machine)
-        let request = HerdrMachineTerminal.windowsLaunchRequest(
+        let connection = try await syntheticWindowsConnection(machine)
+        let request = try HerdrMachineTerminal.windowsLaunchRequest(
             connection: connection, environment: ["TERM=xterm-256color", "HERDR_ENV=1"])
 
         #expect(request.executable == SSHConnection.executable.path)
@@ -109,7 +109,7 @@ import Testing
         #expect(!request.environment.contains("HERDR_ENV=1"))
     }
 
-    @Test func aWindowsTerminalClearsNestingInheritedFromTheHostProcess() {
+    @Test func aWindowsTerminalClearsNestingInheritedFromTheHostProcess() async throws {
         let previous = ProcessInfo.processInfo.environment["HERDR_ENV"]
         setenv("HERDR_ENV", "1", 1)
         defer {
@@ -120,8 +120,8 @@ import Testing
             }
         }
         let machine = Machine(name: "Box", host: "box.example", username: "dev")
-        let request = HerdrMachineTerminal.windowsLaunchRequest(
-            connection: SSHConnection(machine: machine), environment: [])
+        let request = try HerdrMachineTerminal.windowsLaunchRequest(
+            connection: try await syntheticWindowsConnection(machine), environment: [])
 
         #expect(!request.environment.contains("HERDR_ENV=1"))
         #expect(request.environment.filter { $0.hasPrefix("HERDR_ENV=") } == ["HERDR_ENV="])
@@ -189,9 +189,9 @@ import Testing
             controller: controller)
 
         #expect(request.executable == "/Applications/Edith.app/Contents/MacOS/ed")
-        #expect(request.arguments.prefix(2) == ["herdr", "bridge"])
+        #expect(request.arguments.first == "--extension-native-task")
         #expect(request.environment == controller.environment)
-        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[1])
         #expect(decoded == HerdrTerminalBridgeSpecification(controller: controller))
     }
 
@@ -259,7 +259,7 @@ import Testing
         let request = try HerdrTerminalBridge.launchRequest(
             bridgeExecutable: URL(fileURLWithPath: "/Applications/Edith.app/Contents/MacOS/ed"),
             controller: controller, mouse: .scroll)
-        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[2])
+        let decoded = try HerdrTerminalBridgeSpecification(encoded: request.arguments[1])
         #expect(decoded.mouse == .scroll)
     }
 
@@ -345,4 +345,25 @@ private func decodedPowerShell(_ command: String) -> String? {
         let data = Data(base64Encoded: String(encoded))
     else { return nil }
     return String(data: data, encoding: .utf16LittleEndian)
+}
+
+private func syntheticWindowsConnection(_ machine: Machine) async throws -> SSHConnection {
+    try await MachineRegistry.refresh { _, _, _ in
+        try JSONSerialization.data(withJSONObject: [
+            "machines": [
+                ["id": machine.id.uuidString, "name": machine.name, "sshTarget": machine.sshTarget]
+            ]
+        ])
+    }
+    let saved = try #require(MachineRegistry.machines().first)
+    let connection = SSHConnection(machine: saved) { _, _, _ in
+        try JSONSerialization.data(withJSONObject: [
+            "machineID": saved.id.uuidString, "name": saved.name, "sshTarget": saved.sshTarget,
+            "sshArguments": [
+                "-o", "ControlPath=/tmp/synthetic/master", "-p", "2222", saved.sshTarget,
+            ], "controlPath": "/tmp/synthetic/master", "platform": "windows",
+        ])
+    }
+    try await connection.connect()
+    return connection
 }

@@ -22,8 +22,12 @@ public enum MachineRegistry {
     private static let lock = NSLock()
     nonisolated(unsafe) private static var snapshot: [Machine] = []
     public static func machines() -> [Machine] { lock.withLock { snapshot } }
-    public static func refresh() async throws {
-        let data = try await MachinesPeer.invoke("machines.companion.hosts", Data("{}".utf8), 15)
+    public static func refresh(
+        invoke: @Sendable (String, Data, TimeInterval) async throws -> Data = {
+            try await MachinesPeer.invoke($0, $1, $2)
+        }
+    ) async throws {
+        let data = try await invoke("machines.companion.hosts", Data("{}".utf8), 15)
         let hosts = try JSONDecoder().decode(Hosts.self, from: data)
         guard hosts.machines.count <= 1_024,
             Set(hosts.machines.map(\.id)).count == hosts.machines.count,
@@ -73,12 +77,19 @@ public final class SSHConnection: @unchecked Sendable {
     public let machine: Machine
     private let lock = NSLock()
     private var recipe: Recipe?
+    private let invoke: @Sendable (String, Data, TimeInterval) async throws -> Data
     public var remotePlatform: RemoteMachinePlatform? {
         get async { lock.withLock { recipe?.platform } }
     }
     public var controlSocketPath: String { lock.withLock { recipe?.controlPath ?? "" } }
-    public init(machine: Machine, controlSocketMode: ControlSocketMode = .isolated) {
+    public init(
+        machine: Machine, controlSocketMode: ControlSocketMode = .isolated,
+        invoke: @escaping @Sendable (String, Data, TimeInterval) async throws -> Data = {
+            try await MachinesPeer.invoke($0, $1, $2)
+        }
+    ) {
         self.machine = machine
+        self.invoke = invoke
     }
     public func connect() async throws {
         try Task.checkCancellation()
@@ -86,7 +97,7 @@ public final class SSHConnection: @unchecked Sendable {
             throw ExtensionPeerError.unavailable
         }
         let payload = try JSONEncoder().encode(Selection(machineID: machine.id))
-        let data = try await MachinesPeer.invoke("machines.connection.prepare", payload, 60)
+        let data = try await invoke("machines.connection.prepare", payload, 60)
         let value = try JSONDecoder().decode(Recipe.self, from: data)
         guard value.machineID == machine.id, value.name == machine.name,
             value.sshTarget == machine.sshTarget, value.sshArguments.count <= 64,
@@ -109,7 +120,7 @@ public final class SSHConnection: @unchecked Sendable {
             Run(
                 machineID: machine.id, command: command,
                 stdinbase64: stdin?.base64EncodedString(), timeout: timeout))
-        let data = try await MachinesPeer.invoke("machines.companion.run", payload, timeout + 15)
+        let data = try await invoke("machines.companion.run", payload, timeout + 15)
         let reply = try JSONDecoder().decode(Output.self, from: data)
         try Task.checkCancellation()
         guard reply.output.utf8.count <= 6 * 1_024 * 1_024 else {
@@ -117,22 +128,27 @@ public final class SSHConnection: @unchecked Sendable {
         }
         return SSHExecResult(status: 0, stdout: Data(reply.output.utf8), stderr: Data())
     }
-    public func execArguments(command: String) -> [String] { arguments(tty: false) + [command] }
-    public func terminalArguments(remoteCommand: String? = nil) -> [String] {
-        arguments(tty: true) + (remoteCommand.map { [$0] } ?? [])
+    public func execArguments(command: String) throws -> [String] {
+        try arguments(tty: false) + [command]
     }
-    private func arguments(tty: Bool) -> [String] {
-        lock.withLock {
-            [tty ? "-tt" : "-T"]
-                + (recipe?.sshArguments ?? ["-o", "ProxyCommand=false", "invalid.invalid"])
+    public func terminalArguments(remoteCommand: String? = nil) throws -> [String] {
+        try arguments(tty: true) + (remoteCommand.map { [$0] } ?? [])
+    }
+    private func arguments(tty: Bool) throws -> [String] {
+        try lock.withLock {
+            guard let recipe else {
+                throw ExtensionPeerError.rejected(
+                    "Connect the saved machine through Machines before opening a remote terminal.")
+            }
+            return [tty ? "-tt" : "-T"] + recipe.sshArguments
         }
     }
     public func terminalEnvironment() -> [String] {
         CLIToolEnvironment.sanitized().map { "\($0.key)=\($0.value)" }
     }
-    public func streamProcess(command: String) -> Process {
+    public func streamProcess(command: String) throws -> Process {
         let process = Process(); process.executableURL = Self.executable
-        process.arguments = execArguments(command: command);
+        process.arguments = try execArguments(command: command);
         process.environment = CLIToolEnvironment.sanitized()
         return process
     }

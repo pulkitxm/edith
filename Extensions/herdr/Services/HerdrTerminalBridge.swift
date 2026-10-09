@@ -112,7 +112,7 @@ public enum HerdrTerminalBridgeError: LocalizedError {
         case .invalidRecord:
             "Herdr returned an invalid terminal record."
         case .executableUnavailable:
-            "The bundled Edith command could not be found."
+            "The host executable is unavailable. Reinstall the app before opening this terminal."
         }
     }
 }
@@ -142,12 +142,10 @@ public enum HerdrTerminalBridge {
     public static func executable(
         bundle: Bundle = .main, fileManager: FileManager = .default
     ) -> URL? {
-        if let sibling = bundle.executableURL?.deletingLastPathComponent().appendingPathComponent(
-            "ed"), fileManager.isExecutableFile(atPath: sibling.path)
-        {
-            return sibling
-        }
-        return CLIToolEnvironment.executable(named: "ed")
+        guard let executable = bundle.executableURL,
+            fileManager.isExecutableFile(atPath: executable.path)
+        else { return nil }
+        return executable
     }
 
     public static func launchRequest(
@@ -160,7 +158,7 @@ public enum HerdrTerminalBridge {
         ).encoded()
         return TerminalLaunchRequest(
             executable: bridgeExecutable.path,
-            arguments: ["herdr", "bridge", specification],
+            arguments: ["--extension-native-task", specification],
             environment: controller.environment)
     }
 
