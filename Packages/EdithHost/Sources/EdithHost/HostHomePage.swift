@@ -122,8 +122,10 @@ private struct HostSurfaceProviderCard: View {
                     .edithText(.caption)
                 ).foregroundStyle(.secondary)
             } else if let snapshot {
-                SurfaceSnapshotContent(tile: tile, snapshot: snapshot, perform: perform)
-                    .disabled(actionTask != nil)
+                SurfaceSnapshotContent(
+                    tile: tile, snapshot: snapshot, perform: perform, adjust: adjust
+                )
+                .disabled(actionTask != nil)
             } else if load.isRunning {
                 LoadingIndicator()
             }
@@ -176,6 +178,14 @@ private struct HostSurfaceProviderCard: View {
     }
 
     private func perform(_ action: SurfaceAction) {
+        execute(actionID: action.id)
+    }
+
+    private func adjust(_ slider: SurfaceSlider, _ value: Double) {
+        execute(actionID: slider.id, value: value)
+    }
+
+    private func execute(actionID: String, value: Double? = nil) {
         guard !hidden, actionTask == nil, let snapshot else { return }
         actionError = nil
         let token = UUID()
@@ -185,7 +195,7 @@ private struct HostSurfaceProviderCard: View {
             do {
                 let next = try await marketplace.surfaces.requests.perform(
                     providerID: provider.id, target: target, tile: tile, snapshot: snapshot,
-                    actionID: action.id)
+                    actionID: actionID, value: value)
                 try Task.checkCancellation()
                 self.snapshot = next
             } catch {
