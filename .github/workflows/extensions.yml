@@ -141,12 +141,6 @@ jobs:
         run: |
           command -v zig >/dev/null 2>&1 || brew install zig
           make ghostty-extension
-      - name: Cache the worker host
-        uses: ./.github/actions/cache-host
-      - name: Build the isolated host and exercise this worker's lifecycle
-        run: |
-          make host
-          make ci-extension-workers EXTENSION=${{ matrix.id }}
       - name: Identify the support build toolchain
         id: support-toolchain
         run: |
@@ -157,6 +151,16 @@ jobs:
         with:
           path: local/extension-support/${{ matrix.id }}_*
           key: extension-support-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}
+      - name: Cache the worker host
+        uses: ./.github/actions/cache-host
+      - name: Test this extension's optional native packages
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+        run: bun scripts/test-extension-package.mjs "$EXTENSION_ID"
+      - name: Build the isolated host and exercise this worker's lifecycle
+        run: |
+          make host
+          make ci-extension-workers EXTENSION=${{ matrix.id }}
       - name: Import the release signing certificate
         if: github.event_name != 'pull_request'
         env:

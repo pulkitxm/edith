@@ -105,3 +105,26 @@ test("common extension checks do not repeat every native release build", () => {
   expect(checks).not.toContain("ci-extension-workers");
   expect(text(build)).toContain("ci-extension-workers EXTENSION=");
 });
+
+test("selected optional native suites gate lifecycle and release signing", () => {
+  const suites = build.steps.findIndex(
+    (step) => step.name === "Test this extension's optional native packages",
+  );
+  const prerequisites = build.steps.findIndex(
+    (step) => step.name === "Build the optional terminal library",
+  );
+  const lifecycle = build.steps.findIndex(
+    (step) =>
+      step.name === "Build the isolated host and exercise this worker's lifecycle",
+  );
+  const cache = build.steps.findIndex(
+    (step) => step.name === "Reuse this extension's unchanged support libraries",
+  );
+  expect(suites).toBeGreaterThan(prerequisites);
+  expect(cache).toBeLessThan(suites);
+  expect(suites).toBeLessThan(lifecycle);
+  expect(build.steps[suites].env.EXTENSION_ID).toContain("matrix.id");
+  expect(build.steps[suites].run).toBe(
+    'bun scripts/test-extension-package.mjs "$EXTENSION_ID"',
+  );
+});
