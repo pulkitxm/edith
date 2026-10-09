@@ -4,6 +4,11 @@ import ExtensionMarketplace
 public enum HostContract {
     public static let version = 1
     public static let compatibility = MarketplaceConfiguration.workerHostABI
+
+    public static func permitsLaunching(identifier: String?, bundleURL: URL) -> Bool {
+        identifier != "com.pulkit.edith"
+            || bundleURL.standardizedFileURL.path == "/Applications/Edith.app"
+    }
 }
 
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {

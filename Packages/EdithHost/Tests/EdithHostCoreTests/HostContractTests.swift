@@ -4,6 +4,25 @@ import Testing
 @testable import EdithHostCore
 
 @Suite struct HostContractTests {
+    @Test func releaseLaunchRequiresTheInstalledApplication() {
+        #expect(
+            HostContract.permitsLaunching(
+                identifier: "com.pulkit.edith",
+                bundleURL: URL(fileURLWithPath: "/Applications/Edith.app")))
+        for path in ["/synthetic/dist/Edith.app", "/Applications/Edith Copy.app", "/tmp/Edith.app"]
+        {
+            let bundle = URL(fileURLWithPath: path)
+            #expect(
+                !HostContract.permitsLaunching(identifier: "com.pulkit.edith", bundleURL: bundle))
+            #expect(
+                HostContract.permitsLaunching(
+                    identifier: "com.pulkit.edith.dev.synthetic", bundleURL: bundle))
+            #expect(
+                HostContract.permitsLaunching(
+                    identifier: "com.pulkit.edith.tests.synthetic", bundleURL: bundle))
+        }
+    }
+
     @Test func bundledIndexContainsOnlyExtensionMetadata() throws {
         let entries = try HostIndex.bundled()
         #expect(entries.count >= 35)
