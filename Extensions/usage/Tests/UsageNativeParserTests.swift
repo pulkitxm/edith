@@ -4,11 +4,25 @@ import Testing
 
 @Suite(.serialized) struct UsageNativeParserTests {
     @Test func grokModelReceiptsSubtractCachedInputAndPreserveDollarTicks() throws {
-        let row: [String: Any] = ["params": ["sessionId": "mock-session", "_meta": ["agentTimestampMs": 1_788_573_600_000],
-            "update": ["sessionUpdate": "turn_completed", "usage": ["modelUsage": [
-                "grok-4": ["inputTokens": 20, "cachedReadTokens": 5, "cacheCreationTokens": 3, "outputTokens": 2, "costUsdTicks": 5_000_000_000],
-                "grok-4-fast": ["inputTokens": 2, "outputTokens": 1, "costUsdTicks": 1_000_000_000],
-            ]]]]]
+        let row: [String: Any] = [
+            "params": [
+                "sessionId": "mock-session", "_meta": ["agentTimestampMs": 1_788_573_600_000],
+                "update": [
+                    "sessionUpdate": "turn_completed",
+                    "usage": [
+                        "modelUsage": [
+                            "grok-4": [
+                                "inputTokens": 20, "cachedReadTokens": 5, "cacheCreationTokens": 3,
+                                "outputTokens": 2, "costUsdTicks": 5_000_000_000,
+                            ],
+                            "grok-4-fast": [
+                                "inputTokens": 2, "outputTokens": 1, "costUsdTicks": 1_000_000_000,
+                            ],
+                        ]
+                    ],
+                ],
+            ]
+        ]
         let events = try UsageNativeParser(source: "grok").consume(row).map(\.event)
         #expect(events.count == 2)
         #expect(events[0].tokens.input == 12)
@@ -18,9 +32,18 @@ import Testing
     }
 
     @Test func promptCacheCreationMismatchRejectsInvalidGrokReceipt() throws {
-        let row: [String: Any] = ["params": ["sessionId": "mock", "_meta": ["agentTimestampMs": 1_788_573_600_000],
-            "update": ["sessionUpdate": "turn_completed", "usage": ["inputTokens": 2, "cachedReadTokens": 5]]]]
-        #expect(throws: UsageNativeFailure.self) { try UsageNativeParser(source: "grok").consume(row) }
+        let row: [String: Any] = [
+            "params": [
+                "sessionId": "mock", "_meta": ["agentTimestampMs": 1_788_573_600_000],
+                "update": [
+                    "sessionUpdate": "turn_completed",
+                    "usage": ["inputTokens": 2, "cachedReadTokens": 5],
+                ],
+            ]
+        ]
+        #expect(throws: UsageNativeFailure.self) {
+            try UsageNativeParser(source: "grok").consume(row)
+        }
     }
 
     @Test func modernReceiptsDeduplicateReplayAndReplaceLegacyTotals() throws {

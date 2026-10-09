@@ -31,6 +31,9 @@ enum UsageNativeFileIO {
             if errno == ENOENT { return [] }
             throw UsageNativeFailure.unsafePath
         }
+        if status.st_mode & S_IFMT == S_IFREG {
+            return extensions.contains(root.pathExtension.lowercased()) ? [root] : []
+        }
         guard status.st_mode & S_IFMT == S_IFDIR else { throw UsageNativeFailure.unsafePath }
         guard
             let iterator = FileManager.default.enumerator(
@@ -53,7 +56,10 @@ enum UsageNativeFileIO {
             }
             if entry.st_mode & S_IFMT == S_IFLNK { iterator.skipDescendants(); continue }
             if entry.st_mode & S_IFMT == S_IFREG,
-                extensions.contains(path.pathExtension.lowercased())
+                (extensions.contains(path.pathExtension.lowercased())
+                    || extensions.contains("jsonl")
+                        && (path.lastPathComponent.contains(".jsonl.deleted.")
+                            || path.lastPathComponent.contains(".jsonl.reset.")))
             {
                 result.append(path)
                 guard result.count <= limit else { throw UsageNativeFailure.capacity }

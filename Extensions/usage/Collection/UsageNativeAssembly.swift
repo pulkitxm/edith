@@ -22,9 +22,24 @@ enum UsageNativeAssembly {
 
     static func deduplicate(_ events: [UsageNativeEvent]) -> [UsageNativeEvent] {
         var unique: [String: UsageNativeEvent] = [:]
+        let copilot = events.filter { $0.source == "copilot" && $0.observationPriority != nil }
+        func overshadowed(_ event: UsageNativeEvent) -> Bool {
+            guard event.source == "copilot", let priority = event.observationPriority else {
+                return false
+            }
+            return copilot.contains { candidate in
+                guard let other = candidate.observationPriority, other < priority else {
+                    return false
+                }
+                if priority == 4 { return candidate.session == event.session }
+                return (event.traceID != nil && candidate.traceID == event.traceID)
+                    || (event.receiptID != nil && candidate.receiptID == event.receiptID)
+            }
+        }
         let localReceipts = Set(
             events.filter { $0.source == "cli" || $0.source == "cowork" }.compactMap(\.receiptID))
         for event in events {
+            if overshadowed(event) { continue }
             if event.source == "claude-cloud", let receipt = event.receiptID,
                 localReceipts.contains(receipt)
             {
@@ -75,7 +90,8 @@ enum UsageNativeAssembly {
                 .init(
                     event: event, cost: estimate.cost, missing: estimate.missing,
                     fallback: estimate.fallback,
-                    project: project, period: event.reportingDay ?? formatter.string(from: event.timestamp),
+                    project: project,
+                    period: event.reportingDay ?? formatter.string(from: event.timestamp),
                     hour: calendar.component(.hour, from: event.timestamp)))
         }
         let days = Dictionary(grouping: values, by: \.period)

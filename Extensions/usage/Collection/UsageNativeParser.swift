@@ -13,23 +13,19 @@ final class UsageNativeParser {
     private var seenResponses: Set<String> = []
     private var child = false
     private var childTurn = false
+    private var fallbackTimestamp = Date()
     private let source: String
 
     init(source: String, model: String = "gpt-5", tier: String? = nil) {
-        self.source = source; self.model = model; self.tier = tier
+        self.source = source;
+        self.model = source == "codex" || model != "gpt-5" ? model : "unknown"; self.tier = tier
     }
 
     func snapshot(
         _ path: URL, key: String, previous: UsageNativeArchive.KnownFile?,
         limits: UsageNativeFileLimits = .init()
     ) throws -> UsageNativeFileSnapshot {
-        session = path.deletingPathExtension().lastPathComponent
-        if source == "grok" {
-            cwd = path.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent.removingPercentEncoding ?? ""
-            if let summary = try UsageNativeFileIO.optionalObject(path.deletingLastPathComponent().appendingPathComponent("summary.json")) {
-                title = UsageNativeJSON.title(summary["generated_title"])
-            }
-        }
+        try configure(path)
         let properties = try UsageNativeFileIO.lines(
             path, previousBytes: previous?.size ?? 0, limits: limits
         ) {
@@ -53,6 +49,51 @@ final class UsageNativeParser {
             hash: properties.3, prefixHash: properties.4, records: records)
     }
 
+    private func configure(_ path: URL) throws {
+        session = path.deletingPathExtension().lastPathComponent
+        if source == "grok" {
+            cwd =
+                path.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
+                .removingPercentEncoding ?? ""
+            if let summary = try UsageNativeFileIO.optionalObject(
+                path.deletingLastPathComponent().appendingPathComponent("summary.json"))
+            {
+                title = UsageNativeJSON.title(summary["generated_title"])
+            }
+        }
+        if ["copilot", "kimi"].contains(source) {
+            session = path.deletingLastPathComponent().lastPathComponent
+            if source == "kimi", path.path.contains("/agents/") {
+                session =
+                    path.path.components(separatedBy: "/agents/")[0].split(separator: "/").last.map(
+                        String.init) ?? session
+            }
+        }
+        if let modified = try? path.resourceValues(forKeys: [.contentModificationDateKey])
+            .contentModificationDate
+        {
+            fallbackTimestamp = modified
+        }
+    }
+
+    func document(_ value: Any, path: URL, modified: Double) throws -> [UsageNativeParsedRecord] {
+        try configure(path)
+        fallbackTimestamp = Date(timeIntervalSince1970: modified)
+        if let events = try UsageNativeProviderFormats.document(value, context: providerContext) {
+            return events.enumerated().map {
+                .init(offset: $0.offset, end: $0.offset + 1, event: $0.element)
+            }
+        }
+        guard let row = value as? [String: Any] else { return [] }
+        return try consume(row)
+    }
+
+    private var providerContext: UsageNativeProviderFormats.Context {
+        .init(
+            source: source, session: session, cwd: cwd, title: title, model: model,
+            timestamp: fallbackTimestamp)
+    }
+
     func consume(_ original: [String: Any], offset: Int = 0, end: Int = 0) throws
         -> [UsageNativeParsedRecord]
     {
@@ -63,7 +104,9 @@ final class UsageNativeParser {
             row = nested
         }
         if let value = UsageNativeJSON.text(row["cwd"]) { cwd = value }
-        if let value = UsageNativeJSON.text(row["sessionId"] ?? row["sessionID"] ?? row["sid"]) {
+        if let value = UsageNativeJSON.text(
+            row["sessionId"] ?? row["sessionID"] ?? row["session_id"] ?? row["sid"])
+        {
             session = value
         }
         if let name = UsageNativeJSON.title(row["aiTitle"] ?? row["title"]) {
@@ -79,6 +122,18 @@ final class UsageNativeParser {
         }
         if source == "grok" {
             return try grok(row).map { .init(offset: offset, end: end, event: $0) }
+        }
+        if source == "openclaw",
+            ["model_change", "model-snapshot"].contains(
+                row["type"] as? String ?? row["customType"] as? String ?? "")
+        {
+            let values = row["data"] as? [String: Any] ?? row
+            model = UsageNativeJSON.text(values["modelId"] ?? values["model"]) ?? model
+            return []
+        }
+        if source == "gemini", let value = UsageNativeJSON.text(row["model"]) { model = value }
+        if let events = try UsageNativeProviderFormats.document(row, context: providerContext) {
+            return events.map { .init(offset: offset, end: end, event: $0) }
         }
         let event: UsageNativeEvent?
         switch source {
@@ -254,7 +309,7 @@ final class UsageNativeParser {
         guard let usage,
             let timestamp = UsageNativeJSON.date(row["timestamp"] ?? message["timestamp"])
         else { return nil }
-        let tokens: UsageNativeTokens
+        var tokens: UsageNativeTokens
         if usage["input_tokens"] != nil {
             tokens = try .anthropic(usage)
         } else {
@@ -262,9 +317,14 @@ final class UsageNativeParser {
                 input: UsageNativeTokens.number(usage["input"] ?? usage["inputTokens"]),
                 output: UsageNativeTokens.number(usage["output"] ?? usage["outputTokens"]),
                 creation: UsageNativeTokens.number(
-                    usage["cacheWrite"] ?? usage["cacheWriteTokens"]),
-                read: UsageNativeTokens.number(usage["cacheRead"] ?? usage["cacheReadTokens"]))
+                    usage["cacheWrite"] ?? usage["cacheWriteTokens"]
+                        ?? usage["cacheCreationInputTokens"]),
+                read: UsageNativeTokens.number(
+                    usage["cacheRead"] ?? usage["cacheReadTokens"] ?? usage["cacheReadInputTokens"])
+            )
         }
+        let reportedTotal = try UsageNativeTokens.number(usage["totalTokens"])
+        tokens.output += max(0, reportedTotal - tokens.total)
         let cost = try UsageNativeTokens.amount(
             (usage["cost"] as? [String: Any])?["total"] ?? usage["costUsd"] ?? row["costUSD"])
         return .init(
@@ -272,15 +332,20 @@ final class UsageNativeParser {
             identity: UsageNativeJSON.text(row["id"] ?? message["id"]) ?? session + ":"
                 + String(timestamp.timeIntervalSince1970),
             session: session,
-            model: UsageNativeJSON.text(message["model"] ?? row["model"]) ?? "unknown",
+            model: UsageNativeJSON.text(message["model"] ?? message["modelId"] ?? row["model"])
+                ?? model,
             timestamp: timestamp, cwd: cwd, title: title, tokens: tokens, recordedCost: cost)
     }
 
     private func grok(_ row: [String: Any]) throws -> [UsageNativeEvent] {
-        guard let params = row["params"] as? [String: Any], let update = params["update"] as? [String: Any],
-            update["sessionUpdate"] as? String == "turn_completed", let usage = update["usage"] as? [String: Any],
+        guard let params = row["params"] as? [String: Any],
+            let update = params["update"] as? [String: Any],
+            update["sessionUpdate"] as? String == "turn_completed",
+            let usage = update["usage"] as? [String: Any],
             let session = UsageNativeJSON.text(params["sessionId"]),
-            let timestamp = UsageNativeJSON.date((params["_meta"] as? [String: Any])?["agentTimestampMs"] ?? row["timestamp"]) else { return [] }
+            let timestamp = UsageNativeJSON.date(
+                (params["_meta"] as? [String: Any])?["agentTimestampMs"] ?? row["timestamp"])
+        else { return [] }
         let models = usage["modelUsage"] as? [String: [String: Any]] ?? [:]
         let selected = models.isEmpty ? ["unknown": usage] : models
         return try selected.keys.sorted().compactMap { model in
@@ -288,13 +353,20 @@ final class UsageNativeParser {
             let input = try UsageNativeTokens.number(values["inputTokens"])
             let read = try UsageNativeTokens.number(values["cachedReadTokens"])
             let creation = try UsageNativeTokens.number(values["cacheCreationTokens"])
-            guard read + creation <= input else { throw UsageNativeFailure.invalidInput("cached input count") }
-            let tokens = try UsageNativeTokens(input: input - read - creation,
-                output: UsageNativeTokens.number(values["outputTokens"]), creation: creation, read: read)
+            guard read + creation <= input else {
+                throw UsageNativeFailure.invalidInput("cached input count")
+            }
+            let tokens = try UsageNativeTokens(
+                input: input - read - creation,
+                output: UsageNativeTokens.number(values["outputTokens"]), creation: creation,
+                read: read)
             let cost = try UsageNativeTokens.number(values["costUsdTicks"]) / 10_000_000_000
             guard tokens.total > 0 || cost > 0 else { return nil }
-            return .init(source: source, identity: session + ":" + String(timestamp.timeIntervalSince1970) + ":" + model,
-                session: session, model: model, timestamp: timestamp, cwd: cwd, title: title, tokens: tokens, recordedCost: cost)
+            return .init(
+                source: source,
+                identity: session + ":" + String(timestamp.timeIntervalSince1970) + ":" + model,
+                session: session, model: model, timestamp: timestamp, cwd: cwd, title: title,
+                tokens: tokens, recordedCost: cost)
         }
     }
 
