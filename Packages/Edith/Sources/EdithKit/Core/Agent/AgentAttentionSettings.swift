@@ -9,11 +9,13 @@ public struct AgentAttentionSettings: Equatable, Sendable {
     public var errors: Bool
     public var stuck: Bool
     public var openDiff: Bool
+    public var monitoring: Bool
+    public var stuckMonitoring: Bool { stuck || monitoring }
     public var stuckMinutes: Int
 
     public init(
         blocked: Bool = true, finished: Bool = true, errors: Bool = true, stuck: Bool = false,
-        openDiff: Bool = false, stuckMinutes: Int = defaultStuckMinutes
+        openDiff: Bool = false, stuckMinutes: Int = defaultStuckMinutes, monitoring: Bool = false
     ) {
         self.blocked = blocked
         self.finished = finished
@@ -21,6 +23,7 @@ public struct AgentAttentionSettings: Equatable, Sendable {
         self.stuck = stuck
         self.openDiff = openDiff
         self.stuckMinutes = stuckMinutes
+        self.monitoring = monitoring
     }
 
     public init(defaults: UserDefaults) {
@@ -37,8 +40,9 @@ public struct AgentAttentionSettings: Equatable, Sendable {
             openDiff: flag(AgentSettingsKeys.openDiffWhenFinished, false),
             stuckMinutes: min(
                 Self.stuckMinutesRange.upperBound,
-                max(Self.stuckMinutesRange.lowerBound, minutes ?? Self.defaultStuckMinutes)))
+                max(Self.stuckMinutesRange.lowerBound, minutes ?? Self.defaultStuckMinutes)),
+            monitoring: herdr && AgentActivitySettings.load(in: defaults).monitorTerminalAttention)
     }
 
-    public var anyEnabled: Bool { blocked || finished || errors || stuck || openDiff }
+    public var anyEnabled: Bool { blocked || finished || errors || stuck || openDiff || monitoring }
 }

@@ -1,4 +1,5 @@
 import CoreGraphics
+import EdithKit
 
 enum NotchGeometry {
     static let topFlareRadius: CGFloat = 6
@@ -9,21 +10,39 @@ enum NotchGeometry {
 
     static func expandedShapeSize(
         tab: NotchTab, hasMusic: Bool, notchHeight: CGFloat,
-        browserSize: CGSize = NotchBrowserGeometry.defaultSize
+        browserSize: CGSize = NotchBrowserGeometry.defaultSize,
+        layout: SurfaceLayout = SurfaceLayout.decode(
+            SharedDefaults.store.string(forKey: SurfaceTarget.notch.key), target: .notch),
+        editing: Bool = false, homeHeight: CGFloat? = nil
     ) -> CGSize {
         if tab == .browser {
             return NotchBrowserGeometry.shapeSize(browser: browserSize, notchHeight: notchHeight)
         }
         let content: CGFloat =
             switch tab {
-            case .home: hasMusic ? 158 : 148
+            case .home:
+                layout.notchHorizontal
+                    ? (homeHeight
+                        ?? (CGFloat(
+                            min(
+                                600,
+                                max(
+                                    160,
+                                    max(
+                                        layout.notchShelfHeight,
+                                        layout.visible.compactMap(\.height).max() ?? 0)))) + 48
+                            + (editing ? 58 : 0)))
+                    : 310
+            case .agents: 360
             case .browser: 0
             case .files: 210
             case .clipboard: 260
             case .audio: 162
             case .camera: 332
             }
-        return CGSize(width: expandedWidth, height: notchHeight + expandedHeaderBand + content)
+        return CGSize(
+            width: CGFloat(layout.expandedNotchWidth),
+            height: notchHeight + expandedHeaderBand + content)
     }
 
     static func collapsedSize(
@@ -90,6 +109,10 @@ enum NotchGeometry {
     static func collapsedSize(base: CGSize, hasLiveActivity: Bool) -> CGSize {
         guard hasLiveActivity else { return base }
         return CGSize(width: base.width + 2 * musicWingWidth, height: base.height)
+    }
+
+    static func collapsedSize(base: CGSize, wingWidth: CGFloat) -> CGSize {
+        CGSize(width: base.width + 2 * max(0, wingWidth), height: base.height)
     }
 
     static func proximity(

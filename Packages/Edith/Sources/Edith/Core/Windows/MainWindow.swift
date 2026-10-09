@@ -125,6 +125,12 @@ enum MainWindow {
         }
     }
 
+    static func showHerdr() {
+        SharedDefaults.store.set(
+            MainDestination.herdr.rawValue, forKey: AppStorageKeys.General.mainWindowSection)
+        open()
+    }
+
     static func forget() { window = nil }
 }
 

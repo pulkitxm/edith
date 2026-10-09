@@ -58,7 +58,7 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = HerdrStore(
             defaults: defaults, liveWatcher: { _ in },
-            newAgentLauncher: { _, _, _, _ in throw CocoaError(.fileNoSuchFile) },
+            newAgentPaneCreator: { _, _, _, _ in throw CocoaError(.fileNoSuchFile) },
             machinesProvider: { [] })
         do {
             try await store.launchNewAgent(

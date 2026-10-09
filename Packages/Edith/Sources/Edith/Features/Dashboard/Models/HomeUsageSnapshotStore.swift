@@ -5,7 +5,7 @@ import Foundation
 struct HomeUsageSnapshot: Codable, Equatable {
     var calendarDays: [DayPoint] = []
     var heatDetail: [String: HeatDay] = [:]
-    var heatCuts: [Double] = [0, 0, 0]
+    var heatScale = UsageCalendarScale(days: [])
 
     var hasDays: Bool { !calendarDays.isEmpty }
 }

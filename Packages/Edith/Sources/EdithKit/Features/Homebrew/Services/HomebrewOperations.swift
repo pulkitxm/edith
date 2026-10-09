@@ -345,9 +345,7 @@ public actor HomebrewListingStore {
     }
 
     public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Edith", isDirectory: true)
-            .appendingPathComponent("homebrew-listing.json")
+        AppData.supportDir.appendingPathComponent("homebrew-listing.json")
     }
 
     public func load() -> HomebrewListingSnapshot? {

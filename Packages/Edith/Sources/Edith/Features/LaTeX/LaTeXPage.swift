@@ -260,14 +260,13 @@ struct LaTeXPage: View {
     private var editor: some View {
         @Bindable var editorControls = model.editorControls
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: UIScale.pt(12)) {
+            WrapHStack(spacing: UIScale.pt(12)) {
                 Label(
                     model.selected.map { URL(fileURLWithPath: $0.sourcePath).lastPathComponent }
                         ?? "Source", systemImage: "doc.text"
                 )
                 .font(.edithText(.subheadline))
                 .lineLimit(1).truncationMode(.middle)
-                Spacer(minLength: 0)
                 HStack(spacing: UIScale.pt(12)) {
                     Button {
                         editorControls.undo()
@@ -309,7 +308,7 @@ struct LaTeXPage: View {
             .buttonStyle(.edith(.toolbar))
             .tint(.primary)
             .padding(.horizontal, UIScale.pt(12))
-            .frame(height: UIScale.pt(40))
+            .padding(.vertical, UIScale.pt(8))
             Divider()
             LaTeXSourceEditor(
                 text: Binding(get: { model.source }, set: { model.source = $0 }),

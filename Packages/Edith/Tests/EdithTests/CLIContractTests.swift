@@ -1487,6 +1487,7 @@ enum JSONContract {
             "ed machines mount-reveal",
             ["machines", "mount-reveal", "nowhere-at-all", "--json"]),
         JSONCase("ed agent status", ["agent", "status", "--json"]),
+        JSONCase("ed agent activity status", ["agent", "activity", "status", "--json"]),
         JSONCase("ed agent jobs", ["agent", "jobs", "--json"]),
         JSONCase("ed agent restart", ["agent", "restart", "--json"]),
         JSONCase("ed agent logs", ["agent", "logs", "--json"]),

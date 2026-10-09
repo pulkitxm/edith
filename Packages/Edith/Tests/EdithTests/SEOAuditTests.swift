@@ -325,7 +325,7 @@ import Testing
         #expect(!source.contains("selectedProject!"))
     }
 
-    @Test func projectBackButtonUsesAStationaryHoverSurface() throws {
+    @Test func projectBackButtonUsesTheSharedStationaryHoverSurface() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
@@ -335,10 +335,12 @@ import Testing
                     "Sources/Edith/Features/SEOAudit/Views/SEOAuditProjectView.swift"),
             encoding: .utf8)
 
-        #expect(source.contains("@State private var backHovered = false"))
-        #expect(source.contains("backHovered ? DashSkin.paper2(dark) : .clear"))
-        #expect(source.contains("backHovered ? DashSkin.accent(dark).opacity(0.45) : .clear"))
-        #expect(!source.contains("backHovered ? 1."))
+        #expect(
+            source.contains(
+                "Button(\"Projects\", systemImage: \"chevron.left\", action: model.closeProject)"))
+        #expect(source.contains(".buttonStyle(.edith(.secondary))"))
+        #expect(!source.contains("backHovered"))
+        #expect(!source.contains("scaleEffect"))
     }
 
     @Test func runControlsStayPinnedAboveThePageList() throws {

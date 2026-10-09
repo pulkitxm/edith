@@ -232,6 +232,7 @@ enum CommandCrawler {
             "ed machines snippets", "ed machines power", "ed machines thermal",
             "ed machines control", "ed usage projects", "ed usage attribution",
             "ed machines services", "ed apps",
+            "ed agent activity", "ed agent activity hook",
             "ed agent", "ed agent tasks", "ed agent schedule", "ed mcp", "ed tools", "ed download",
             "ed studio",
             "ed latex",

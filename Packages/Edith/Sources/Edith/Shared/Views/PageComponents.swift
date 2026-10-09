@@ -2,6 +2,7 @@ import EdithKit
 import SwiftUI
 
 struct PageCard<Content: View>: View {
+    @Environment(\.surfacePresentation) private var presentation
     var title: String?
     var note: String?
     var fill = false
@@ -9,9 +10,9 @@ struct PageCard<Content: View>: View {
 
     var body: some View {
         PagePanel(fill: fill) {
-            if let title {
-                PageSectionHeader(title) {
-                    if let note {
+            if let title, presentation?.tile.showTitle != false {
+                PageSectionHeader(presentation?.tile.displayTitle ?? title) {
+                    if let note, presentation?.tile.showDetails != false {
                         Text(note).font(.edithText(.caption)).foregroundStyle(.secondary)
                     }
                 }
@@ -23,6 +24,8 @@ struct PageCard<Content: View>: View {
 }
 
 struct PagePanel<Header: View, Content: View>: View {
+    @Environment(\.surfacePresentation) private var presentation
+    @Environment(\.surfaceFillHeight) private var fillHeight
     var fill = false
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
@@ -32,9 +35,12 @@ struct PagePanel<Header: View, Content: View>: View {
             header()
             content()
         }
-        .padding(UIScale.pt(16))
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
-        .edithSurface(cornerRadius: 14)
+        .padding(UIScale.pt(presentation?.padding ?? 16))
+        .frame(
+            maxWidth: .infinity, maxHeight: fill || fillHeight ? .infinity : nil,
+            alignment: .topLeading
+        )
+        .edithSurface(cornerRadius: presentation?.cornerRadius ?? 14)
     }
 }
 

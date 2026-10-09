@@ -34,21 +34,44 @@ struct DatabaseWorkbenchTabView: View {
     }
 
     private var toolbar: some View {
-        HStack(spacing: UIScale.pt(10)) {
-            EdithSegmentedPicker(
-                "Workspace mode",
-                selection: Binding(
-                    get: { mode }, set: { tab?.selectMode($0, connection: connection) }),
-                options: DatabaseWorkbenchMode.allCases, label: { $0.title }
-            )
-            .labelsHidden().frame(width: UIScale.pt(208))
-            .disabled(tab == nil || data.isLoading)
-            if !compact {
-                Text(data.selectedObject?.path.joined(separator: ".") ?? "Select an object")
-                    .font(.system(size: UIScale.pt(11), weight: .medium)).lineLimit(1)
-                    .foregroundStyle(palette.inkSoft)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: UIScale.pt(10)) {
+                modePicker
+                objectTitle
+                Spacer(minLength: 0)
+                toolbarActions.fixedSize()
             }
-            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                modePicker
+                HStack {
+                    Spacer(minLength: 0); toolbarActions
+                }
+            }
+        }
+        .padding(UIScale.pt(12)).background(palette.panel)
+    }
+
+    private var modePicker: some View {
+        PageTabPicker(
+            title: "Workspace mode",
+            selection: Binding(
+                get: { mode }, set: { tab?.selectMode($0, connection: connection) }),
+            options: DatabaseWorkbenchMode.allCases, label: { $0.title }
+        )
+        .frame(maxWidth: UIScale.pt(208))
+        .disabled(tab == nil || data.isLoading)
+    }
+
+    @ViewBuilder private var objectTitle: some View {
+        if !compact {
+            Text(data.selectedObject?.path.joined(separator: ".") ?? "Select an object")
+                .font(.system(size: UIScale.pt(11), weight: .medium)).lineLimit(1)
+                .foregroundStyle(palette.inkSoft)
+        }
+    }
+
+    private var toolbarActions: some View {
+        HStack(spacing: UIScale.pt(10)) {
             if connection.environmentKind == .production {
                 Image(systemName: "exclamationmark.shield.fill").foregroundStyle(DashSkin.warn)
                     .help("Production connection").accessibilityLabel("Production connection")
@@ -62,7 +85,7 @@ struct DatabaseWorkbenchTabView: View {
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(.edith(.borderless)).help("Refresh data")
+                .buttonStyle(.edith(.iconOnly)).help("Refresh data")
                 .accessibilityLabel("Refresh selected object")
                 .disabled(data.isLoading || data.selectedObject == nil)
                 if supports(.insert) {
@@ -88,13 +111,11 @@ struct DatabaseWorkbenchTabView: View {
             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
             .accessibilityLabel("More database actions")
         }
-        .padding(.horizontal, UIScale.pt(12)).frame(height: UIScale.pt(44)).background(
-            palette.panel)
     }
 
     private var queryEditor: some View {
         VStack(spacing: UIScale.pt(8)) {
-            HStack {
+            WrapHStack(spacing: UIScale.pt(10)) {
                 Label("Read-only query", systemImage: "terminal")
                     .font(.system(size: UIScale.pt(10.5), weight: .medium)).foregroundStyle(
                         palette.inkSoft)

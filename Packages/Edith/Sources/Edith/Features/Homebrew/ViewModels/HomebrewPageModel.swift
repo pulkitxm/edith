@@ -11,16 +11,29 @@ enum HomebrewPageMode: String, CaseIterable, Identifiable {
 }
 
 @MainActor
-enum HomebrewCancellation {
-    private static var handler: (() -> Bool)?
+private final class HomebrewOperationOwner {
+    weak var model: HomebrewPageModel?
 
-    static func register(_ handler: @escaping () -> Bool) {
-        self.handler = handler
+    init(_ model: HomebrewPageModel) { self.model = model }
+}
+
+@MainActor
+enum HomebrewCancellation {
+    private static var owners: [HomebrewOperationOwner] = []
+
+    static func register(_ model: HomebrewPageModel) {
+        owners.removeAll { $0.model == nil }
+        owners.append(HomebrewOperationOwner(model))
     }
 
     @discardableResult
     static func cancel() -> Bool {
-        handler?() ?? false
+        owners.removeAll { $0.model == nil }
+        var cancelled = false
+        for owner in owners {
+            if owner.model?.cancel() == true { cancelled = true }
+        }
+        return cancelled
     }
 }
 
@@ -28,11 +41,16 @@ enum HomebrewCancellation {
 @Observable
 final class HomebrewPageModel {
     var mode = HomebrewPageMode.installed
+    var query = ""
+    var installedQuery = ""
+    var updatesOnly = false
+    var selectedPackageID: String?
     var packages: [HomebrewPackage] = []
     var status: HomebrewStatus?
     let loading = ContentLoad()
     var loaded: Bool { loading.hasContent }
     var isBusy = false
+    private(set) var isMutating = false
     var isCancelling = false
     var operationTitle: String?
     var errorMessage: String?
@@ -51,13 +69,22 @@ final class HomebrewPageModel {
     ) {
         self.client = client
         self.store = store
-        HomebrewCancellation.register { [weak self] in self?.cancel() ?? false }
+        HomebrewCancellation.register(self)
     }
 
     var updateCount: Int { packages.count(where: \.outdated) }
     var installedCount: Int { packages.count(where: \.installed) }
 
     func activate(kind: HomebrewPackageKind) {
+        guard !isMutating else { return }
+        if mode == .search {
+            if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                loading.setContent()
+            } else {
+                search(query, kind: kind)
+            }
+            return
+        }
         begin(title: "Checking Homebrew") { generation in
             let token = await self.store.claim()
             guard self.isCurrent(generation) else { return }
@@ -94,6 +121,7 @@ final class HomebrewPageModel {
     }
 
     func search(_ query: String, kind: HomebrewPackageKind) {
+        self.query = query
         mode = .search
         begin(title: "Searching \(kind.pluralTitle.lowercased())") { generation in
             do {
@@ -111,7 +139,7 @@ final class HomebrewPageModel {
         _ action: HomebrewMutation, package: HomebrewPackage,
         query: String, kind: HomebrewPackageKind
     ) {
-        begin(title: operationTitle(action, package: package)) { generation in
+        begin(title: operationTitle(action, package: package), mutation: true) { generation in
             do {
                 let result = try await self.client.mutate(
                     action, kind: package.kind, name: package.name)
@@ -149,6 +177,10 @@ final class HomebrewPageModel {
         errorMessage = nil
         resultMessage = nil
         output = ""
+    }
+
+    func cancelDiscovery() {
+        if !isMutating { cancel() }
     }
 
     private func fetchInstalled(
@@ -203,11 +235,13 @@ final class HomebrewPageModel {
     }
 
     private func begin(
-        title: String, operation: @escaping @MainActor (UInt64) async -> Void
+        title: String, mutation: Bool = false,
+        operation: @escaping @MainActor (UInt64) async -> Void
     ) {
         task?.cancel()
         let generation = loading.begin()
         isBusy = true
+        isMutating = mutation
         isCancelling = false
         operationTitle = title
         errorMessage = nil
@@ -218,6 +252,7 @@ final class HomebrewPageModel {
             if loading.owns(generation), Task.isCancelled {
                 loading.cancel(generation)
                 isBusy = false
+                isMutating = false
                 isCancelling = false
                 operationTitle = nil
                 task = nil
@@ -230,6 +265,7 @@ final class HomebrewPageModel {
         guard isCurrent(generation) else { return }
         loading.complete(generation)
         isBusy = false
+        isMutating = false
         isCancelling = false
         operationTitle = nil
         task = nil
@@ -239,6 +275,7 @@ final class HomebrewPageModel {
         guard loading.owns(generation) else { return }
         loading.fail(generation, error: error)
         isBusy = false
+        isMutating = false
         isCancelling = false
         operationTitle = nil
         task = nil

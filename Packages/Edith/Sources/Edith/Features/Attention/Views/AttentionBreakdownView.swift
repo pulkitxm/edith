@@ -3,80 +3,17 @@ import EdithCore
 import EdithKit
 import SwiftUI
 
-struct AttentionBreakdownItem: Identifiable {
-    var id: String { key }
-    var key: String
-    var label: String
-    var duration: TimeInterval
-    var categories: [String: TimeInterval]
-    var names: [String]
-    var entity: AttentionEntity? = nil
-
-    var subtitle: String? {
-        let candidates = names + [entity?.domain, entity?.category.name].compactMap { $0 }
-        var seen = Set([label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()])
-        let distinct = candidates.compactMap { value -> String? in
-            let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty, seen.insert(text.lowercased()).inserted else { return nil }
-            return text
-        }
-        return distinct.isEmpty ? nil : distinct.joined(separator: ", ")
-    }
-    var interactions: Int
-}
-
-enum AttentionBreakdownSort: String, CaseIterable, Identifiable {
-    case time = "Most time"
-    case name = "Name"
-    case inputs = "Most inputs"
-    var id: String { rawValue }
-
-    func sorted(_ rows: [AttentionBreakdownItem]) -> [AttentionBreakdownItem] {
-        rows.sorted {
-            switch self {
-            case .time: $0.duration == $1.duration ? $0.key < $1.key : $0.duration > $1.duration
-            case .name: $0.label.localizedStandardCompare($1.label) == .orderedAscending
-            case .inputs:
-                $0.interactions == $1.interactions
-                    ? $0.duration > $1.duration : $0.interactions > $1.interactions
-            }
-        }
-    }
-}
-
 struct AttentionBreakdownView: View {
     @Bindable var model: AttentionPageModel
-    @State private var sort = AttentionBreakdownSort.time
     @State private var selected: String?
-    @State private var limit = 40
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-
-    private func rows(_ dimension: AttentionDimension?) -> [AttentionBreakdownItem] {
-        guard let dimension else { return [] }
-        return sort.sorted(
-            dimension.rows.compactMap { row in
-                let duration = model.matches(
-                    categories: row.categories, levels: row.levels, spheres: row.spheres)
-                let label =
-                    dimension.key == AttentionTag.page
-                    ? (MainDestination(rawValue: row.key)?.title ?? row.key) : row.key
-                guard duration > 0, model.matchesSearch([label] + row.entityNames) else {
-                    return nil
-                }
-                return AttentionBreakdownItem(
-                    key: row.key, label: label, duration: duration, categories: row.categories,
-                    names: row.entityNames,
-                    entity: model.summary.entities.first { row.entityIDs.contains($0.id) },
-                    interactions: row.interactions)
-            })
-    }
 
     var body: some View {
         let dimensions = model.summary.dimensions
         let dimension = dimensions.first { $0.key == model.breakdownDimension } ?? dimensions.first
-        let rows = rows(dimension)
-        let total = rows.reduce(0) { $0 + $1.duration }
+        let rows = model.breakdown.rows
+        let total = model.breakdown.total
         let selection = rows.first { $0.key == selected } ?? rows.first
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             AttentionFilterBar(model: model)
@@ -96,18 +33,21 @@ struct AttentionBreakdownView: View {
                     }
                 }
             ) {
-                HStack(spacing: UIScale.pt(28)) {
-                    metric("Matching time", value: AttentionFormat.duration(total))
-                    metric(
-                        "Share of active",
-                        value: AttentionFormat.percent(total, of: model.summary.activeDuration))
-                    metric("Groups", value: "\(rows.count)")
-                    Spacer(minLength: 0)
-                    Picker("Sort", selection: $sort) {
-                        ForEach(AttentionBreakdownSort.allCases) { Text($0.rawValue).tag($0) }
-                    }.fixedSize()
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: UIScale.pt(28)) {
+                        metrics.fixedSize()
+                        Spacer(minLength: UIScale.pt(16))
+                        sortPicker
+                    }
+                    VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                        metrics
+                        sortPicker
+                    }
                 }
-                if rows.isEmpty {
+                if model.breakdownLoad.isRunning {
+                    LoadingIndicator("Updating activity…")
+                }
+                if rows.isEmpty && !model.breakdownLoad.isRunning {
                     AttentionEmpty(
                         text: dimensions.isEmpty
                             ? "No activity recorded in this period" : "Nothing matches the filters",
@@ -130,9 +70,26 @@ struct AttentionBreakdownView: View {
             }
         }
         .onChange(of: model.breakdownDimension) {
-            selected = nil; limit = 40
+            selected = nil
         }
-        .onChange(of: model.searchText) { limit = 40 }
+    }
+
+    private var metrics: some View {
+        HStack(alignment: .top, spacing: UIScale.pt(28)) {
+            metric("Matching time", value: AttentionFormat.duration(model.breakdown.total))
+            metric(
+                "Share of active",
+                value: AttentionFormat.percent(
+                    model.breakdown.total, of: model.summary.activeDuration))
+            metric("Groups", value: "\(model.breakdown.rows.count)")
+        }
+        .fixedSize()
+    }
+
+    private var sortPicker: some View {
+        Picker("Sort", selection: $model.breakdownSort) {
+            ForEach(AttentionBreakdownSort.allCases) { Text($0.rawValue).tag($0) }
+        }.fixedSize()
     }
 
     private func metric(_ title: String, value: String) -> some View {
@@ -143,7 +100,7 @@ struct AttentionBreakdownView: View {
     }
 
     private func ranking(_ rows: [AttentionBreakdownItem]) -> some View {
-        let top = Array(AttentionBreakdownSort.time.sorted(rows).prefix(8))
+        let top = Array(model.breakdown.top.prefix(compact ? 4 : 8))
         let maximum = max(1, top.first?.duration ?? 0)
         let accent = DashSkin.accent(scheme == .dark)
         return VStack(spacing: UIScale.pt(8)) {
@@ -189,61 +146,39 @@ struct AttentionBreakdownView: View {
     private func table(_ rows: [AttentionBreakdownItem], total: TimeInterval, selected: String?)
         -> some View
     {
-        VStack(spacing: 4) {
-            HStack {
-                Text("ACTIVITY").frame(maxWidth: .infinity, alignment: .leading)
-                Text("TIME").frame(width: UIScale.pt(80), alignment: .trailing)
-                Text("SHARE").frame(width: UIScale.pt(55), alignment: .trailing)
-            }.font(DashSkin.mono(10)).foregroundStyle(.secondary).padding(10)
-            Group {
-                LazyVStack(spacing: 4) {
-                    ForEach(rows.prefix(limit)) { row in
-                        Button {
-                            self.selected = row.key
-                        } label: {
-                            HStack(spacing: 10) {
-                                if let entity = row.entity {
-                                    AttentionEntityIcon(entity: entity, size: 28)
-                                } else {
-                                    AttentionResolvedIcon(
-                                        descriptor: .symbol("square.grid.2x2"),
-                                        fallbackColor: DashSkin.inkSoft(scheme == .dark), size: 28)
-                                }
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(row.label).font(
-                                        .system(size: UIScale.pt(12.5), weight: .medium)
-                                    ).lineLimit(2).help(row.label)
-                                    if let subtitle = row.subtitle {
-                                        Text(subtitle).font(.system(size: UIScale.pt(11)))
-                                            .foregroundStyle(.secondary).lineLimit(1)
-                                    }
-                                }.frame(maxWidth: .infinity, alignment: .leading)
-                                Text(AttentionFormat.duration(row.duration)).monospacedDigit().font(
-                                    .system(size: UIScale.pt(13), weight: .semibold)
-                                ).frame(width: UIScale.pt(80), alignment: .trailing)
-                                Text(AttentionFormat.percent(row.duration, of: total))
-                                    .monospacedDigit().font(.system(size: UIScale.pt(12)))
-                                    .foregroundStyle(.secondary).frame(
-                                        width: UIScale.pt(55), alignment: .trailing)
-                            }
-                            .padding(10)
-                            .background(
-                                (selected == row.key
-                                    ? DashSkin.accent(scheme == .dark).opacity(0.12)
-                                    : DashSkin.paper2(scheme == .dark)),
-                                in: RoundedRectangle(cornerRadius: 8)
-                            )
-                            .foregroundStyle(DashSkin.ink(scheme == .dark)).contentShape(
-                                Rectangle())
-                        }.buttonStyle(.edith(.borderless))
+        Table(
+            rows,
+            selection: Binding(get: { self.selected ?? selected }, set: { self.selected = $0 })
+        ) {
+            SwiftUI.TableColumn("Activity") { row in
+                HStack(spacing: UIScale.pt(8)) {
+                    if let entity = row.entity {
+                        AttentionEntityIcon(entity: entity, size: 24)
+                    }
+                    VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                        Text(row.label).font(.edithText(.body)).lineLimit(1).help(row.label)
+                        if let subtitle = row.subtitle {
+                            Text(subtitle).font(.edithText(.caption)).foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
                 }
+                .padding(.vertical, UIScale.pt(4))
             }
-            if rows.count > limit {
-                Button("Show \(min(40, rows.count - limit)) more of \(rows.count)") { limit += 40 }
-                    .buttonStyle(.edith(.secondary)).padding(.top, 8)
+            .width(min: UIScale.pt(160), ideal: UIScale.pt(280))
+            SwiftUI.TableColumn("Time") { row in
+                Text(AttentionFormat.duration(row.duration)).monospacedDigit()
             }
+            .width(UIScale.pt(90))
+            SwiftUI.TableColumn("Share") { row in
+                Text(AttentionFormat.percent(row.duration, of: total)).monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            .width(UIScale.pt(70))
         }
+        .tableStyle(.inset)
+        .frame(height: UIScale.pt(420))
+        .accessibilityLabel("Activity groups")
     }
 
     private func detail(_ row: AttentionBreakdownItem) -> some View {

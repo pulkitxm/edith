@@ -108,15 +108,28 @@ public struct SessionsHost: Codable, Equatable, Sendable {
     }
 }
 
+public struct AgentTerminalAttentionObservation: Codable, Equatable, Sendable {
+    public var state: HerdrAttentionState
+    public var checkedAt: Date
+    public init(state: HerdrAttentionState, checkedAt: Date) {
+        self.state = state; self.checkedAt = checkedAt
+    }
+}
+
 public struct SessionsSnapshot: Codable, Equatable, Sendable {
     public let discoveredAt: Date
     public let hosts: [HerdrHostSnapshot]
     public let working: Int
     public let total: Int
+    public let attention: [String: AgentTerminalAttentionObservation]
 
-    public init(discoveredAt: Date, hosts: [HerdrHostSnapshot], working: Int, total: Int) {
+    public init(
+        discoveredAt: Date, hosts: [HerdrHostSnapshot], working: Int, total: Int,
+        attention: [String: AgentTerminalAttentionObservation] = [:]
+    ) {
         self.discoveredAt = discoveredAt
         self.hosts = hosts
+        self.attention = attention
         self.working = working
         self.total = total
     }

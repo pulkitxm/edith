@@ -199,6 +199,23 @@ struct VideoEditorPage: View {
     }
 
     private var toolbar: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: UIScale.pt(10)) {
+                projectTitle
+                Spacer(minLength: 0)
+                HStack(spacing: UIScale.pt(10)) { toolbarControls }.fixedSize()
+            }
+            VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                projectTitle
+                WrapHStack(spacing: UIScale.pt(10)) { toolbarControls }
+            }
+        }
+        .buttonStyle(.edith(.iconOnly))
+        .padding(.horizontal, UIScale.pt(18))
+        .padding(.vertical, UIScale.pt(10))
+    }
+
+    private var projectTitle: some View {
         HStack(spacing: UIScale.pt(10)) {
             Image(systemName: "film.stack")
                 .foregroundStyle(.tint)
@@ -208,7 +225,7 @@ struct VideoEditorPage: View {
                     get: { model.titleDraft ?? model.project?.title ?? "" },
                     set: { model.titleDraft = $0 })
             )
-            .font(.system(size: UIScale.pt(15), weight: .semibold))
+            .font(.edithText(.title3)).fontWeight(.semibold)
             .lineLimit(1)
             .frame(minWidth: UIScale.pt(100), maxWidth: UIScale.pt(260))
             .layoutPriority(1)
@@ -217,71 +234,70 @@ struct VideoEditorPage: View {
                 model.renameProject(model.titleDraft ?? model.project?.title ?? "")
                 model.titleDraft = nil
             }
-            .help("Rename project")
-            Spacer()
-            Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
-                .labelStyle(.iconOnly)
-                .help("Media")
-                .popover(isPresented: $showingMedia) {
-                    mediaRail.frame(height: UIScale.pt(320))
-                }
-            Menu {
-                Button("Markers", systemImage: "waveform") { showingBeats = true }
-                    .disabled(model.project == nil)
-                Toggle(
-                    "Canvas",
-                    isOn: Binding(get: { model.canvasEditing }, set: { model.canvasEditing = $0 }))
-                Toggle(
-                    "Guides", isOn: Binding(get: { model.safeAreas }, set: { model.safeAreas = $0 })
-                )
-                if #available(macOS 15.0, *) {
-                    Button("Record", systemImage: "record.circle") { showingRecorder = true }
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .help("Editor actions")
-            Button {
-                if compact { showingInspectorPopover.toggle() } else { showingInspector.toggle() }
-            } label: {
-                Label("Inspector", systemImage: "sidebar.right")
-            }
-            .disabled(model.project == nil)
-            .labelStyle(.iconOnly)
-            .help("Inspector")
-            .popover(isPresented: $showingInspectorPopover) {
-                VideoInspector(model: model).frame(height: UIScale.pt(360))
-            }
-            Menu {
-                Button("New project", action: model.newProject)
-                Button("Open project…", action: model.openProject)
-                Button("Save project", action: model.save)
-                    .disabled(model.project == nil)
-                    .keyboardShortcut("s", modifiers: .command)
-            } label: {
-                Label("Projects", systemImage: "folder")
-            }
-            .labelStyle(.iconOnly)
-            .help("Projects")
-            Button(
-                model.project?.clips.isEmpty == false ? "Add media" : "Import video",
-                systemImage: "square.and.arrow.down", action: model.importMedia
-            )
-            .buttonStyle(.edith(.primary))
-            .labelStyle(.iconOnly)
-            .help("Add video, audio, or images")
-            Button {
-                showingExport = true
-            } label: {
-                exportLabel
-            }
-            .disabled(model.pipeline == nil && VideoExporter.shared.job == nil)
-            .labelStyle(.iconOnly)
-            .help("Export")
+            .help("Rename project").accessibilityLabel("Project title")
         }
-        .buttonStyle(.edith(.borderless))
-        .padding(.horizontal, UIScale.pt(18))
-        .frame(height: UIScale.pt(52))
+    }
+
+    @ViewBuilder private var toolbarControls: some View {
+        Button("Media", systemImage: "sidebar.left") { showingMedia.toggle() }
+            .labelStyle(.iconOnly)
+            .help("Media")
+            .popover(isPresented: $showingMedia) {
+                mediaRail.frame(height: UIScale.pt(320))
+            }
+        Menu {
+            Button("Markers", systemImage: "waveform") { showingBeats = true }
+                .disabled(model.project == nil)
+            Toggle(
+                "Canvas",
+                isOn: Binding(get: { model.canvasEditing }, set: { model.canvasEditing = $0 }))
+            Toggle(
+                "Guides", isOn: Binding(get: { model.safeAreas }, set: { model.safeAreas = $0 })
+            )
+            if #available(macOS 15.0, *) {
+                Button("Record", systemImage: "record.circle") { showingRecorder = true }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .help("Editor actions").accessibilityLabel("Editor actions")
+        Button {
+            if compact { showingInspectorPopover.toggle() } else { showingInspector.toggle() }
+        } label: {
+            Label("Inspector", systemImage: "sidebar.right")
+        }
+        .disabled(model.project == nil)
+        .labelStyle(.iconOnly)
+        .help("Inspector")
+        .popover(isPresented: $showingInspectorPopover) {
+            VideoInspector(model: model).frame(height: UIScale.pt(360))
+        }
+        Menu {
+            Button("New project", action: model.newProject)
+            Button("Open project…", action: model.openProject)
+            Button("Save project", action: model.save)
+                .disabled(model.project == nil)
+                .keyboardShortcut("s", modifiers: .command)
+        } label: {
+            Label("Projects", systemImage: "folder")
+        }
+        .labelStyle(.iconOnly)
+        .help("Projects")
+        Button(
+            model.project?.clips.isEmpty == false ? "Add media" : "Import video",
+            systemImage: "square.and.arrow.down", action: model.importMedia
+        )
+        .buttonStyle(.edith(.primary))
+        .labelStyle(.iconOnly)
+        .help("Add video, audio, or images").accessibilityLabel("Add media")
+        Button {
+            showingExport = true
+        } label: {
+            exportLabel
+        }
+        .disabled(model.pipeline == nil && VideoExporter.shared.job == nil)
+        .labelStyle(.iconOnly)
+        .help("Export").accessibilityLabel("Export video")
     }
 
     @ViewBuilder private var exportLabel: some View {

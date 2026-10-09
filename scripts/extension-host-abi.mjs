@@ -20,6 +20,7 @@ export async function hostABI(root = process.cwd()) {
   }
   for (const module of [
     "EdithCore",
+    "EdithDatabase",
     "EdithKit",
     "EdithShared",
     "EdithCameraSupport",

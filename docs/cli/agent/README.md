@@ -24,6 +24,7 @@ runbook are in `docs/background-agent.md`.
 | Command | What it does |
 | --- | --- |
 | [`ed agent status`](./status.md) | Registration state, build, uptime, memory, CPU and store schema |
+| [`ed agent activity`](./activity.md) | Observed coding sessions and pending permission requests |
 | [`ed agent jobs`](./jobs.md) | The live job table with triggers, cadences and subscribers |
 | [`ed agent restart`](./restart.md) | Stop the agent so launchd starts it again |
 | [`ed agent logs`](./logs.md) | Recent agent log lines from the unified log |

@@ -290,7 +290,40 @@ private struct AttentionFixture {
         #expect(notification.title == "Claude Code looks stuck")
         #expect(notification.body.hasSuffix(": no screen change in 10 minutes"))
         _ = try await fixture.observe(working, minutes: 45)
-        #expect(fixture.recorder.probes.count == 3)
+        #expect(fixture.recorder.probes.count == 4)
+    }
+
+    @Test func monitoringDetectsAndClearsStallsWithoutNotifications() async throws {
+        let fixture = AttentionFixture()
+        defer { fixture.close() }
+        for key in [
+            AgentSettingsKeys.notifyWhenBlocked, AgentSettingsKeys.notifyWhenFinished,
+            AgentSettingsKeys.notifyOnErrors, AgentSettingsKeys.notifyWhenStuck,
+        ] {
+            fixture.defaults.set(false, forKey: key)
+        }
+        let settings = AgentActivitySettings(monitorTerminalAttention: true)
+        fixture.defaults.set(settings.encoded, forKey: AppStorageKeys.Surfaces.agentActivity)
+        fixture.recorder.screen = "Running a test task"
+        let agent = fixture.agent(.working)
+        let hosts = [
+            HerdrHostSnapshot(
+                id: "local", name: "This Mac", isLocal: true,
+                herdrPresent: true, reachable: true, agents: [agent])
+        ]
+        #expect(try await fixture.observe([agent]).isEmpty)
+        #expect(try await fixture.observe([agent], minutes: 10).isEmpty)
+        #expect(try await fixture.observe([agent], minutes: 20).isEmpty)
+        #expect(await fixture.service.attentionObservations(hosts)[agent.id]?.state == .looping)
+        fixture.recorder.screen = "Task progressed to another step"
+        #expect(try await fixture.observe([agent], minutes: 30).isEmpty)
+        #expect(await fixture.service.attentionObservations(hosts)[agent.id]?.state == .working)
+        #expect(try await fixture.observe([agent], minutes: 40).isEmpty)
+        #expect(await fixture.service.attentionObservations(hosts)[agent.id]?.state == .looping)
+        fixture.defaults.set(
+            AgentActivitySettings().encoded, forKey: AppStorageKeys.Surfaces.agentActivity)
+        try await fixture.service.reconcileSettings()
+        #expect(await fixture.service.attentionObservations(hosts).isEmpty)
     }
 
     @Test func turningASettingOffPurgesItsNotifications() async throws {

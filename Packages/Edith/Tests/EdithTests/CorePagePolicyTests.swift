@@ -19,7 +19,7 @@ import Testing
         let system = try source("Features/Pages/Views/SystemPageView.swift")
 
         #expect(extensions.contains("PageMetrics.cardColumns(compact,"))
-        #expect(extensions.contains("EdithButtonStyle(.selection"))
+        #expect(extensions.contains("PageTabPicker("))
         #expect(system.contains("EdithButtonStyle(.destructive)"))
         #expect(system.contains(".accessibilityLabel(\"Dismiss status\")"))
     }

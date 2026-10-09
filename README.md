@@ -165,6 +165,9 @@ also be released under the GPL-3.0 with its source available.
 
 Sparkle, used for in-app updates, is distributed under the MIT licence.
 
+PDF page image export uses [PDFium](https://pdfium.googlesource.com/pdfium/),
+with its distribution and dependency notices included in the Studio resource bundle.
+
 ## Attribution
 
 The lid-awake feature was inspired by [Awayke](https://github.com/daemonphantom/Awayke),

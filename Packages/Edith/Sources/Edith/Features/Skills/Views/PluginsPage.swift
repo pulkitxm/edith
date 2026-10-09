@@ -20,7 +20,7 @@ struct PluginsPage: View {
                     .foregroundStyle(DashSkin.inkSoft(dark))
             }
         } content: {
-            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 HStack {
                     Text("Edith skills")
                         .font(.system(size: UIScale.pt(13), weight: .semibold))
@@ -66,7 +66,7 @@ struct PluginsPage: View {
     }
 }
 
-private struct SkillCatalogRow: View {
+struct SkillCatalogRow: View {
     let skill: EdithSkill
     let agents: [SkillAgent]
     let installed: Bool
@@ -74,83 +74,23 @@ private struct SkillCatalogRow: View {
     let preview: () -> Void
     let install: (String?) -> Void
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        HStack(spacing: UIScale.pt(16)) {
-            Button(action: preview) {
+        Group {
+            if compact {
+                VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                    previewContent
+                    HStack {
+                        Spacer(minLength: 0); installActions
+                    }
+                }
+            } else {
                 HStack(spacing: UIScale.pt(16)) {
-                    Image(nsImage: NSApplication.shared.applicationIconImage)
-                        .resizable().scaledToFit()
-                        .frame(width: UIScale.pt(52), height: UIScale.pt(52))
-                    VStack(alignment: .leading, spacing: UIScale.pt(5)) {
-                        Text(skill.name)
-                            .font(.system(size: UIScale.pt(17), weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Text(skill.summary)
-                            .font(.system(size: UIScale.pt(13)))
-                            .foregroundStyle(.secondary)
-                        Text(skill.detail)
-                            .font(.system(size: UIScale.pt(12)))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: UIScale.pt(8))
-                    Image(systemName: "doc.text.magnifyingglass")
-                        .font(.system(size: UIScale.pt(16)))
-                        .foregroundStyle(.secondary)
+                    previewContent
+                    installActions
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.edith(.borderless))
-            .accessibilityLabel("Preview \(skill.name)")
-            .help("Preview skill instructions and copy Markdown")
-            HStack(spacing: 0) {
-                Button {
-                    install(nil)
-                } label: {
-                    Text(installed ? "Installed" : "Install")
-                        .font(.system(size: UIScale.pt(12), weight: .semibold))
-                        .padding(.horizontal, UIScale.pt(14))
-                        .frame(height: UIScale.pt(30))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.edith(.borderless))
-                Divider().frame(height: UIScale.pt(18))
-                Menu {
-                    if agents.isEmpty { Text("No agents found on this Mac") }
-                    ForEach(agents) { agent in
-                        Button {
-                            install(agent.id)
-                        } label: {
-                            Label {
-                                Text("Install for \(agent.name)…")
-                            } icon: {
-                                if let image = SkillBrand.menuImage(for: agent.id) {
-                                    Image(nsImage: image)
-                                        .renderingMode(image.isTemplate ? .template : .original)
-                                } else {
-                                    Image(systemName: "terminal")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: UIScale.pt(10), weight: .semibold))
-                        .frame(width: UIScale.pt(28), height: UIScale.pt(30))
-                }
-                .menuStyle(.borderlessButton)
-                .menuIndicator(.hidden)
-                .fixedSize()
-                .accessibilityLabel("Choose an agent for \(skill.name)")
-            }
-            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
-            .overlay(
-                RoundedRectangle(cornerRadius: UIScale.pt(6)).strokeBorder(.primary.opacity(0.12))
-            )
-            .disabled(disabled)
         }
         .padding(UIScale.pt(22))
         .background(
@@ -160,6 +100,87 @@ private struct SkillCatalogRow: View {
             RoundedRectangle(cornerRadius: UIScale.pt(10)).strokeBorder(
                 DashSkin.line(scheme == .dark)))
     }
+    private var previewContent: some View {
+        Button(action: preview) {
+            HStack(spacing: UIScale.pt(16)) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable().scaledToFit()
+                    .frame(width: UIScale.pt(40), height: UIScale.pt(40))
+                VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                    Text(skill.name)
+                        .font(.system(size: UIScale.pt(17), weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Text(skill.summary)
+                        .font(.system(size: UIScale.pt(13)))
+                        .foregroundStyle(.secondary)
+                    Text(skill.detail)
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: UIScale.pt(8))
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: UIScale.pt(16)))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .accessibilityLabel("Preview \(skill.name)")
+        .help("Preview skill instructions and copy Markdown")
+    }
+
+    private var installActions: some View {
+        HStack(spacing: 0) {
+            Button {
+                install(nil)
+            } label: {
+                Text(installed ? "Installed" : "Install")
+                    .font(.system(size: UIScale.pt(12), weight: .semibold))
+                    .padding(.horizontal, UIScale.pt(14))
+                    .frame(height: UIScale.pt(30))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.edith(.borderless))
+            Divider().frame(height: UIScale.pt(18))
+            Menu {
+                if agents.isEmpty { Text("No agents found on this Mac") }
+                ForEach(agents) { agent in
+                    Button {
+                        install(agent.id)
+                    } label: {
+                        Label {
+                            Text("Install for \(agent.name)…")
+                        } icon: {
+                            if let image = SkillBrand.menuImage(for: agent.id) {
+                                Image(nsImage: image)
+                                    .renderingMode(image.isTemplate ? .template : .original)
+                            } else {
+                                Image(systemName: "terminal")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: UIScale.pt(10), weight: .semibold))
+                    .frame(width: UIScale.pt(28), height: UIScale.pt(30))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .accessibilityLabel("Choose an agent for \(skill.name)")
+        }
+        .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: UIScale.pt(6)))
+        .overlay(
+            RoundedRectangle(cornerRadius: UIScale.pt(6)).strokeBorder(.primary.opacity(0.12))
+        )
+        .disabled(disabled)
+        .fixedSize()
+    }
+
 }
 
 struct SkillAgentLogo: View {

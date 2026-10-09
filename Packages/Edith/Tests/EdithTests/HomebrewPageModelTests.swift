@@ -69,6 +69,60 @@ private func waitForHomebrewModel(
         #expect(!model.isCancelling)
     }
 
+    @Test func cancellationReachesOperationsInEveryWindowEvenAfterAnIdleWindowOpens() async {
+        let client = HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return CLICommandResult(terminationStatus: 0, output: "")
+        }
+        let first = HomebrewPageModel(client: client)
+        let second = HomebrewPageModel(client: client)
+        let package = HomebrewPackage(kind: .formula, name: "sample", displayName: "Sample")
+        first.perform(.install, package: package, query: "", kind: .formula)
+        second.perform(.install, package: package, query: "", kind: .formula)
+        let idle = HomebrewPageModel(client: client)
+        #expect(HomebrewCancellation.cancel())
+        #expect(await waitForHomebrewModel { !first.isBusy && !second.isBusy })
+        #expect(!idle.isBusy)
+        #expect(!HomebrewCancellation.cancel())
+    }
+
+    @Test func reenteringDiscoveryRetainsSearchAndResults() async {
+        let recorder = CLIHomebrewModelRecorder()
+        let model = HomebrewPageModel(client: Self.client(recorder: recorder))
+        model.search("fire", kind: .cask)
+        #expect(await waitForHomebrewModel { !model.isBusy && model.loaded })
+        model.activate(kind: .cask)
+        #expect(await waitForHomebrewModel { !model.isBusy })
+        #expect(model.mode == .search)
+        #expect(model.query == "fire")
+        #expect(model.packages.map(\.name) == ["firefox"])
+        #expect(recorder.requests.filter { $0.arguments.first == "search" }.count == 2)
+        #expect(!recorder.requests.contains { $0.arguments.contains("--installed") })
+    }
+
+    @Test func hidingOrReenteringPageDoesNotCancelAnInstallation() async {
+        let model = HomebrewPageModel(
+            client: HomebrewClient(executableURL: URL(fileURLWithPath: "/brew")) { request, _ in
+                if request.arguments.first == "install" {
+                    try await Task.sleep(for: .seconds(30))
+                }
+                return CLICommandResult(terminationStatus: 0, output: "")
+            })
+        model.perform(
+            .install,
+            package: HomebrewPackage(kind: .formula, name: "sample", displayName: "Sample"),
+            query: "", kind: .formula)
+        model.cancelDiscovery()
+        model.activate(kind: .formula)
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(model.isBusy)
+        #expect(model.isMutating)
+        #expect(!model.isCancelling)
+        model.cancel()
+        #expect(await waitForHomebrewModel { !model.isBusy })
+        #expect(!model.isMutating)
+    }
+
     @Test func cachedListingShowsBeforeRefreshFinishes() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

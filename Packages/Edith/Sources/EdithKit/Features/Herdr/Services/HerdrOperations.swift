@@ -67,6 +67,38 @@ public enum HerdrOperationExecution {
             environment: environment + connection.terminalEnvironment())
     }
 
+    public static func localTerminalAttachRequest(
+        session: String, terminalID: String, environment: [String],
+        executable: URL? = HerdrCollector.executable()
+    ) -> TerminalLaunchRequest {
+        guard let executable else {
+            return TerminalLaunchRequest(
+                executable: "/bin/zsh",
+                arguments: [
+                    "-c",
+                    HerdrTerminalAttachCommand.remoteShellLine(
+                        session: session, terminalID: terminalID),
+                ], environment: environment)
+        }
+        return TerminalLaunchRequest(
+            executable: executable.path,
+            arguments: HerdrTerminalAttachCommand.arguments(
+                session: session, terminalID: terminalID),
+            environment: environment)
+    }
+
+    public static func remoteTerminalAttachRequest(
+        session: String, terminalID: String, connection: SSHConnection, environment: [String],
+        platform: RemoteMachinePlatform = .linux
+    ) -> TerminalLaunchRequest {
+        TerminalLaunchRequest(
+            executable: SSHConnection.executable.path,
+            arguments: connection.terminalArguments(
+                remoteCommand: HerdrTerminalAttachCommand.remoteShellLine(
+                    session: session, terminalID: terminalID, platform: platform)),
+            environment: environment + connection.terminalEnvironment())
+    }
+
     public static func localAttachRequest(
         for agent: HerdrAgent, environment: [String], executable: URL? = HerdrCollector.executable()
     ) -> TerminalLaunchRequest {

@@ -128,13 +128,13 @@ import Testing
         let space = try #require(HerdrAgentSpace.group([agent]).first)
         let workspace = HerdrWorkspaceSummary(id: "w4", label: "demo", tabCount: 1, paneCount: 1)
         let store = HerdrStore(
-            newAgentLauncher: { kind, destination, existingSpace, newLabel in
+            newAgentPaneCreator: { kind, destination, existingSpace, newLabel in
                 #expect(kind == "OpenCode")
                 #expect(destination?.id == (remote ? machine.id : nil))
                 #expect(existingSpace == workspace)
                 #expect(newLabel == nil)
                 return HerdrCreatedPane(workspaceID: "w4", tabID: "w4:t2", paneID: "w4:p2")
-            }, machinesProvider: { [machine] })
+            }, agentStarter: { _, _, _ in }, machinesProvider: { [machine] })
         store.hosts = [host]
         let model = HerdrNewAgentPopupModel(space: space)
         model.selectKind("OpenCode")
@@ -153,7 +153,7 @@ import Testing
     @Test func spaceLaunchDoesNotCreateAReplacementForAMissingOrAmbiguousSpace() async throws {
         let host = HerdrHostSnapshot.local(herdrPresent: true)
         let space = try #require(HerdrAgentSpace.group([spaceAgent(host)]).first)
-        let store = HerdrStore(newAgentLauncher: { _, _, _, _ in
+        let store = HerdrStore(newAgentPaneCreator: { _, _, _, _ in
             Issue.record("An unavailable space must not launch an agent")
             throw HerdrNewAgentPopupModel.LaunchError.spaceUnavailable
         })

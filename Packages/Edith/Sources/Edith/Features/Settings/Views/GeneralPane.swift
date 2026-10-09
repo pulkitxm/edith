@@ -5,11 +5,14 @@ import SwiftUI
 
 struct SettingsPane: View {
     enum Tab: String, CaseIterable {
-        case general, permissions, agent, jev, data, shortcuts, terminal, icloud, updates
+        case general, surfaces, agentActivity, permissions, agent, jev, data, shortcuts, terminal,
+            icloud, updates
 
         var label: String {
             switch self {
             case .general: return "General"
+            case .surfaces: return "Home & Notch"
+            case .agentActivity: return "Agent connections"
             case .permissions: return "Permissions"
             case .agent: return "Background agent"
             case .jev: return "Jev"
@@ -24,6 +27,8 @@ struct SettingsPane: View {
         var symbol: String {
             switch self {
             case .general: return "gearshape"
+            case .surfaces: return "rectangle.3.group"
+            case .agentActivity: return "terminal"
             case .permissions: return "hand.raised"
             case .agent: return "bolt.horizontal.circle"
             case .jev: return "brain"
@@ -38,6 +43,8 @@ struct SettingsPane: View {
         var summary: String {
             switch self {
             case .general: return "Appearance, window, and welcome tour"
+            case .surfaces: return "Arrange widgets and build your own Home and Notch"
+            case .agentActivity: return "Live provider activity and explicit permission approvals"
             case .permissions: return "Privacy access used by enabled extensions"
             case .agent: return "The headless process that collects in the background"
             case .jev: return "Fast typed decisions from TypeSafe's Jev model"
@@ -88,6 +95,8 @@ struct SettingsPane: View {
             Group {
                 switch tab.wrappedValue {
                 case .general: GeneralPane()
+                case .surfaces: SurfaceEditorPane()
+                case .agentActivity: AgentConnectionsPane()
                 case .permissions: PermissionsPane()
                 case .agent: BackgroundAgentPane()
                 case .jev: JevSettingsPane()
@@ -116,7 +125,7 @@ struct SettingsPane: View {
 
     private var contentMaximumWidth: CGFloat {
         switch tab.wrappedValue {
-        case .permissions, .agent, .data: .infinity
+        case .permissions, .agent, .data, .surfaces, .agentActivity: .infinity
         case .general, .jev, .shortcuts, .terminal, .icloud, .updates: UIScale.pt(1180)
         }
     }

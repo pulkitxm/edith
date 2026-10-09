@@ -89,6 +89,10 @@ public enum ConfigCatalog {
 
     private static let agent: [SettingDefinition] = [
         SettingDefinition(
+            AppStorageKeys.Surfaces.agentActivity, .string, group: "agent",
+            summary: "Provider observation and explicit approval controls for agent surfaces.",
+            fallback: .string(AgentActivitySettings().encoded)),
+        SettingDefinition(
             AgentSettingsKeys.pauseAmbientOnBattery, .bool, group: "agent",
             summary: "Pause the agent's ambient jobs while this Mac is on battery.",
             fallback: .bool(false)),
@@ -149,6 +153,15 @@ public enum ConfigCatalog {
         SettingDefinition(
             AppStorageKeys.General.homeClockZones, .csv, group: "appearance",
             summary: "Comma separated time zone identifiers shown on the Home clocks."),
+        SettingDefinition(
+            AppStorageKeys.Surfaces.profiles, .string, group: "appearance",
+            summary: "Named Home and Notch layout profiles."),
+        SettingDefinition(
+            SurfaceTarget.home.key, .string, group: "appearance",
+            summary: "Home widget layout and configuration."),
+        SettingDefinition(
+            SurfaceTarget.notch.key, .string, group: "appearance",
+            summary: "Notch widget layout and configuration."),
     ]
 
     private static let panel: [SettingDefinition] = [

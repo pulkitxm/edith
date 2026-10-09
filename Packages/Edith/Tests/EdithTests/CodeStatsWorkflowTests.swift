@@ -154,7 +154,7 @@ struct CodeStatsWorkflowHarness {
             CodeStatsReport?.self,
             from: await harness.runtime.perform(
                 operation: CodeStatsAgentOperation.report,
-                payload: AgentPayload.encode(CodeStatsRange.all)))
+                payload: AgentPayload.encode(CodeStatsReportQuery(.all))))
         #expect(report?.totals.commits == 1)
         let authors = try await workflow.authors()
         #expect(authors.first?.email == "you@example.com")

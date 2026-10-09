@@ -148,43 +148,46 @@ struct StudioBackBar<Trailing: View>: View {
     let back: () -> Void
     @ViewBuilder var trailing: () -> Trailing
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        VStack(spacing: UIScale.pt(8)) {
+        ViewThatFits(in: .horizontal) {
             HStack(spacing: UIScale.pt(10)) {
-                Button(action: back) {
-                    Label("Studio", systemImage: "chevron.left")
-                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                }
-                .buttonStyle(.edith(.secondary))
-                .help("Back to Studio")
-                if let symbol {
-                    Image(systemName: symbol)
-                        .foregroundStyle(DashSkin.accent(scheme == .dark))
-                }
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.system(size: UIScale.pt(15), weight: .semibold))
-                        .lineLimit(1)
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.system(size: UIScale.pt(11)))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                heading.fixedSize(horizontal: true, vertical: false)
                 Spacer(minLength: UIScale.pt(8))
-                if !compact { trailing() }
+                trailing().fixedSize(horizontal: true, vertical: false)
             }
-            if compact {
-                ScrollView(.horizontal, showsIndicators: false) { trailing() }
+            VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                heading
+                ScrollView(.horizontal) { trailing() }
+                    .scrollIndicators(.automatic)
                     .frame(height: UIScale.pt(36))
             }
         }
         .padding(.horizontal, UIScale.pt(16))
-        .padding(.vertical, UIScale.pt(compact ? 8 : 0))
+        .padding(.vertical, UIScale.pt(8))
         .frame(minHeight: UIScale.pt(54))
+    }
+
+    private var heading: some View {
+        HStack(spacing: UIScale.pt(10)) {
+            Button(action: back) {
+                Label("Studio", systemImage: "chevron.left")
+                    .font(.edithText(.body))
+            }
+            .buttonStyle(.edith(.secondary))
+            .help("Back to Studio")
+            if let symbol {
+                Image(systemName: symbol)
+                    .foregroundStyle(DashSkin.accent(scheme == .dark))
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.edithText(.headline)).lineLimit(1)
+                if let subtitle {
+                    Text(subtitle).font(.edithText(.caption)).foregroundStyle(.secondary).lineLimit(
+                        1)
+                }
+            }
+        }
     }
 }
 

@@ -67,7 +67,9 @@ import Testing
         let repository = AttentionRepository(root: root, eventSink: sink)
         let settings = AttentionSettings(
             browserTrackingEnabled: true, serverPort: 0, serverToken: "local-secret")
-        let server = AttentionIngestionServer(repository: repository, settings: settings)
+        let server = AttentionIngestionServer(repository: repository, settings: settings) {
+            (idleSeconds: 900, locked: false)
+        }
         try server.start()
         defer { server.stop() }
 
@@ -77,6 +79,18 @@ import Testing
         #expect(server.state == .ready)
         let port = try #require(server.boundPort)
         #expect(await AttentionIngestionServer.isHealthy(port: port))
+
+        var presenceRequest = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/v1/presence")!)
+        let (_, unauthorized) = try await URLSession.shared.data(for: presenceRequest)
+        #expect((unauthorized as? HTTPURLResponse)?.statusCode == 401)
+        presenceRequest.setValue("local-secret", forHTTPHeaderField: "X-Edith-Token")
+        let (presenceData, presenceResponse) = try await URLSession.shared.data(
+            for: presenceRequest)
+        #expect((presenceResponse as? HTTPURLResponse)?.statusCode == 200)
+        let activity = try JSONDecoder().decode([String: String].self, from: presenceData)
+        #expect(activity["presence"] == "idle")
+        #expect(activity["idleSeconds"] == "900.0")
+        #expect(activity["idleThreshold"] == "300.0")
 
         var request = URLRequest(
             url: URL(string: "http://127.0.0.1:\(port)/v1/heartbeat")!)

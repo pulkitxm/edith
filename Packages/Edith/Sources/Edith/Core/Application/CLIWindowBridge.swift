@@ -22,6 +22,7 @@ enum CLIWindowBridge {
             }
         }
         StudioRecordInstaller.install()
+        TimeLapseSurfaceBridge.install()
         StudioJobBridge.install()
         HomebrewCancelBridge.install()
         CompanionStopBridge.install()

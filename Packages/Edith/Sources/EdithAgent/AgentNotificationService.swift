@@ -19,6 +19,7 @@ public actor AgentNotificationService {
         var fingerprint: UInt64?
         var stuck = false
         var sequence: Int?
+        var attentionState: HerdrAttentionState?
     }
 
     private struct State: Codable, Equatable {
@@ -186,20 +187,42 @@ public actor AgentNotificationService {
         let outcomes = await attention.resolve(checks, settings: settings)
         var resolved = state
         for outcome in outcomes {
+            guard let current = resolved.agents[outcome.hostID]?[outcome.agentID],
+                current.status == outcome.status, current.sequence == outcome.sequence
+            else { continue }
+            let repeatedStall = current.stuck && outcome.state == .looping
+            resolved.agents[outcome.hostID]?[outcome.agentID]?.attentionState = outcome.state
+            resolved.agents[outcome.hostID]?[outcome.agentID]?.checkedAt = now
             if var tracked = resolved.agents[outcome.hostID]?[outcome.agentID],
-                tracked.status == .working, let fingerprint = outcome.fingerprint
+                tracked.status == .working
             {
-                tracked.fingerprint = fingerprint
-                tracked.stuck =
-                    outcome.notification?.identifier.hasPrefix("session.stuck.") ?? false
+                if let fingerprint = outcome.fingerprint { tracked.fingerprint = fingerprint }
+                tracked.stuck = outcome.state == .looping
                 resolved.agents[outcome.hostID]?[outcome.agentID] = tracked
             }
-            if let notification = outcome.notification {
+            if let notification = outcome.notification, !repeatedStall {
                 enqueue(notification, into: &resolved, now: now)
             }
         }
         purgeSessions(&resolved, settings: AgentAttentionSettings(defaults: defaults))
         try commit(resolved)
+    }
+
+    public func attentionObservations(_ hosts: [HerdrHostSnapshot]) -> [String:
+        AgentTerminalAttentionObservation]
+    {
+        var observations: [String: AgentTerminalAttentionObservation] = [:]
+        for host in hosts where host.reachable && host.error == nil {
+            for agent in host.agents where !agent.isTerminal {
+                guard let tracked = state.agents[host.id]?[agent.id],
+                    tracked.status == agent.status, tracked.sequence == agent.stateSequence,
+                    let attention = tracked.attentionState
+                else { continue }
+                observations[agent.id] = AgentTerminalAttentionObservation(
+                    state: attention, checkedAt: tracked.checkedAt ?? tracked.since)
+            }
+        }
+        return observations
     }
 
     public func reconcileSettings(now: Date = Date()) throws {
@@ -239,8 +262,7 @@ public actor AgentNotificationService {
                         checks.append(AttentionCheck(agent: agent, hostID: host.id, event: event))
                     }
                     entry = TrackedAgent(status: agent.status, since: now)
-                } else if var current = entry, current.status == .working, settings.stuck,
-                    !current.stuck,
+                } else if var current = entry, current.status == .working, settings.stuckMonitoring,
                     now.timeIntervalSince(current.checkedAt ?? current.since) >= stall
                 {
                     checks.append(
@@ -274,14 +296,25 @@ public actor AgentNotificationService {
         -> Bool
     {
         switch event {
-        case .blocked: settings.blocked
-        case .finished: settings.finished || settings.errors || settings.openDiff
-        case .stalled: settings.stuck
+        case .blocked: settings.blocked || settings.monitoring
+        case .finished:
+            settings.finished || settings.errors || settings.openDiff || settings.monitoring
+        case .stalled: settings.stuckMonitoring
         }
     }
 
     private func purgeSessions(_ next: inout State, settings: AgentAttentionSettings) {
         if !settings.anyEnabled { next.agents = [:] }
+        if !settings.stuckMonitoring {
+            for host in next.agents.keys {
+                for id in next.agents[host]?.keys ?? Dictionary<String, TrackedAgent>().keys {
+                    if next.agents[host]?[id]?.attentionState == .looping {
+                        next.agents[host]?[id]?.attentionState = nil
+                        next.agents[host]?[id]?.stuck = false
+                    }
+                }
+            }
+        }
         let enabled = [settings.blocked, settings.finished, settings.errors, settings.stuck]
         for (kind, on) in zip(AgentAttention.kinds, enabled) where !on {
             next.deliveries = next.deliveries.filter { !$0.key.hasPrefix("session.\(kind).") }

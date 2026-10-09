@@ -41,50 +41,33 @@ enum StudioToolCatalogQuery {
 
 struct StudioToolsView: View {
     let model: StudioModel
-    @State private var filter: StudioToolFilter = .all
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
 
     var body: some View {
-        let tools = StudioToolCatalogQuery.tools(filter: filter, query: model.toolQuery)
+        let tools = StudioToolCatalogQuery.tools(filter: model.toolFilter, query: model.toolQuery)
         let groups = StudioToolGrouping.byGroup(tools)
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(18)) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(18)) {
                 let controls =
                     compact
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: UIScale.pt(10)))
                     : AnyLayout(HStackLayout(spacing: UIScale.pt(10)))
                 controls {
-                    HStack(spacing: UIScale.pt(6)) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField(
-                            "Search tools",
-                            text: Binding(get: { model.toolQuery }, set: { model.toolQuery = $0 })
-                        )
-                        .textFieldStyle(.plain)
-                    }
-                    .padding(.horizontal, UIScale.pt(10))
-                    .padding(.vertical, UIScale.pt(6))
-                    .frame(maxWidth: compact ? .infinity : UIScale.pt(260))
-                    .background(
-                        DashSkin.paper2(scheme == .dark),
-                        in: RoundedRectangle(cornerRadius: UIScale.pt(8))
+                    SearchField(
+                        placeholder: "Search tools",
+                        text: Binding(get: { model.toolQuery }, set: { model.toolQuery = $0 })
                     )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UIScale.pt(8)).strokeBorder(
-                            DashSkin.line(scheme == .dark)))
-                    ScrollView(.horizontal) {
-                        HStack(spacing: UIScale.pt(6)) {
-                            ForEach(StudioToolFilter.available, id: \.self) { option in
-                                StudioChip(title: option.title, selected: filter == option) {
-                                    filter = option
-                                }
-                            }
-                        }
-                    }
-                    .scrollIndicators(.never)
+                    .frame(maxWidth: compact ? .infinity : UIScale.pt(260))
+                    PageTabPicker(
+                        title: "Tool category",
+                        selection: Binding(
+                            get: { model.toolFilter }, set: { model.toolFilter = $0 }),
+                        options: StudioToolFilter.available, label: { $0.title })
                 }
-                if filter == .all, model.toolQuery.trimmingCharacters(in: .whitespaces).isEmpty {
+                if model.toolFilter == .all,
+                    model.toolQuery.trimmingCharacters(in: .whitespaces).isEmpty
+                {
                     StudioWorkflowSection(model: model)
                 }
                 if groups.isEmpty {
@@ -112,6 +95,7 @@ struct StudioToolsView: View {
                 }
             }
             .pageContent(compact)
+            .pageScrollPosition("studio/tools")
         }
         .scrollIndicators(.automatic)
     }

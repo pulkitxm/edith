@@ -58,8 +58,15 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        PageScaffold {
-            masthead
+        PageScaffold(pinnedHeader: true) {
+            VStack(spacing: 0) {
+                masthead
+                if model.loaded {
+                    controlsBar.pageGutter(compactLayout)
+                        .padding(.bottom, UIScale.pt(12))
+                }
+                Divider()
+            }
         } content: {
             if showLog { logView }
             if model.loaded, let error = model.contentLoad.errorMessage {
@@ -76,7 +83,6 @@ struct DashboardView: View {
                 refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
                 retry: refresh.requestRefresh
             ) {
-                controlsBar
                 kpiGrid(compact: compactLayout)
                 activityRow(compact: compactLayout)
                 LimitsCardView(theme: acc, dark: dark)
@@ -270,7 +276,7 @@ struct DashboardView: View {
 
     private var activityHeatmap: some View {
         ActivityHeatmap(
-            days: model.calendarDays, cuts: model.chartData.heatCuts,
+            days: model.calendarDays, scale: model.chartData.heatScale,
             model: model, dark: dark, blur: blurMoney, blurTokens: blurUsage
         )
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -925,16 +931,13 @@ private struct FilterChip: ViewModifier {
 
 struct ActivityHeatmap: View {
     let days: [DayPoint]
-    let cuts: [Double]
+    let scale: UsageCalendarScale
     let model: DashboardModel
     let dark: Bool
     var blur = false
     var blurTokens = false
     var body: some View {
-        let weeks = ActivityCalendar.weeks(
-            days: days.map {
-                ActivityCalendarDay(id: $0.id, date: $0.date, value: $0.cost)
-            }, cuts: cuts)
+        let weeks = scale.weeks(days: days)
         ActivityCalendarGrid(weeks: weeks, dark: dark) { day in
             if let detail = model.heatDetail[day.id] {
                 HeatCard(

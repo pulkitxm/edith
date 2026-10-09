@@ -22,6 +22,25 @@ import Testing
 
     private var today: String { DashboardModel.ymd.string(from: Date()) }
 
+    @Test func tokenOnlyActivitySurvivesIngestionAndBothPageSnapshots() throws {
+        let dashboard = try model(
+            """
+            {"period":"2026-06-01","bySource":{
+              "cli":[{"modelName":"sample","inputTokens":18600000,"outputTokens":2800000,
+                "cacheReadTokens":754100000,"cost":0}]}}
+            """, sources: "\"cli\"")
+        let point = try #require(dashboard.calendarDays.first { $0.id == "2026-06-01" })
+        #expect(point.tokens == 775_500_000)
+        #expect(point.cost == 0)
+        #expect(dashboard.chartData.heatScale.level(for: point) > 0)
+        let homePoint = try #require(
+            dashboard.homeUsage.calendarDays.first { $0.id == point.id })
+        #expect(homePoint == point)
+        #expect(
+            dashboard.homeUsage.heatScale.level(for: homePoint)
+                == dashboard.chartData.heatScale.level(for: point))
+    }
+
     @Test func sourceSpecificHoursAndMachineActivityStayAligned() throws {
         let daily = """
             {"period":"2026-06-01","bySource":{

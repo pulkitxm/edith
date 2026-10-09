@@ -1350,6 +1350,7 @@ if [ "${EDITH_USAGE_CLOUD:-1}" = "1" ]; then
   if bun "$CLOUD_USAGE_SCRIPT" codex "$TMP/codex-cloud.daily.json" 2>"$TMP/codex-cloud.error"; then
     printf '%s\n' '{"sessions":[]}' >"$TMP/codex-cloud.session.json"
     include_source codex-cloud "$TMP/codex-cloud.daily.json" "$TMP/codex-cloud.session.json"
+    _note "codex cloud coverage is partial: analytics groups launch surfaces, so desktop and CLI Cloud tasks are not included; returned history may be incomplete"
     jq '. + ["codex-cloud"]' "$TMP/cloud-collected.json" >"$TMP/cloud-collected.next.json"
     mv "$TMP/cloud-collected.next.json" "$TMP/cloud-collected.json"
   else

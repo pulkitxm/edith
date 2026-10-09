@@ -46,7 +46,9 @@ items. Automatic production updates are disabled in development builds.
 
 Development builds never use `SMAppService`. The daemon's property list inside the
 development bundle names `edithd` by absolute path, without `KeepAlive`. On launch the
-app loads it with `launchctl bootstrap` if it is missing and restarts it with
+app stages it in its user-owned runtime directory, so launchd can load builds on
+volumes with ownership disabled. It loads the job with `launchctl bootstrap` if it
+is missing and restarts it with
 `launchctl kickstart -k` if the running process predates the binary on disk. On quit it
 unloads the daemon and quits its menu helper. Development builds also skip the menu
 bar login item and the privileged lid-awake daemon, so nothing they do reaches a
