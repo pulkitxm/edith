@@ -3,6 +3,7 @@ import PackageDescription
 
 let products: [Product] = [
     .library(name: "EdithShared", type: .dynamic, targets: ["EdithShared"]),
+    .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
     .library(name: "EdithDatabaseDrivers", targets: ["EdithDatabaseDrivers"]),
     .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),

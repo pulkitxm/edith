@@ -286,7 +286,7 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(publish.if).toContain("needs.dmg.outputs.superseded != 'true'");
 });
 
-test("one Xcode build produces every bundled executable", () => {
+test("Xcode schemes produce every bundled executable without colliding framework copies", () => {
   const scheme = readFileSync(
     "edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme",
     "utf8",
@@ -297,14 +297,21 @@ test("one Xcode build produces every bundled executable", () => {
     "EdithLidAwakeHelper",
     "EdithCameraExtension",
   ]) {
-    expect(scheme).toContain(`BlueprintIdentifier = "${product}"`);
+    if (product === "edithd" || product === "edith-database") {
+      expect(scheme).not.toContain(`BlueprintIdentifier = "${product}"`);
+    } else {
+      expect(scheme).toContain(`BlueprintIdentifier = "${product}"`);
+    }
     expect(buildScript).toContain(
       `$DERIVED/Build/Products/$CONFIG/${product}"`,
     );
   }
   expect(
     scheme.match(/ReferencedContainer = "container:Packages\/Edith"/g),
-  ).toHaveLength(4);
+  ).toHaveLength(2);
+  expect(buildScript).toContain(
+    "for BUILD_SCHEME in EdithAgentRuntime EdithDatabaseRuntime EdithMain; do",
+  );
   expect(makefile).toContain("for target in EdithMain EdithHelper; do");
   expect(makefile).toContain("-derivedDataPath build");
 });
