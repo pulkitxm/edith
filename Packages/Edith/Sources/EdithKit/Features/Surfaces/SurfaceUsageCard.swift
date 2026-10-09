@@ -66,6 +66,7 @@ public struct SurfaceUsageCard: View {
             guard !sampleContent, active || retry > 0 else { return }
             repeat {
                 let request = load.begin()
+                defer { if Task.isCancelled { load.cancel(request) } }
                 do {
                     let next = try await SurfaceUsageStore.shared.snapshot(tile: tile)
                     guard load.isCurrent(request), !Task.isCancelled else { return }
