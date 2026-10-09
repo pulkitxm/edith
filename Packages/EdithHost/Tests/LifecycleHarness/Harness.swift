@@ -114,6 +114,27 @@ struct HostLifecycleHarness {
             }
         }
         var sessions = makeSessions(executable: executable)
+        func verifyMachines() async throws {
+            let usageReleases = releases.appendingPathComponent("usage-peer")
+            let usage = try record(usageReleases, id: "usage", version: "1.0.0")
+            try await install(usage, releases: usageReleases, store: store)
+            try await sessions.enable(usage)
+            guard let usagePID = sessions.processIdentifiers["usage"] else {
+                throw HostWorkerError.invalidResponse
+            }
+            do {
+                try await MachinesFixture.verify(endpoint, identity: identity)
+                try await sessions.disable(id: "usage")
+                guard kill(usagePID, 0) == -1, try store.requestRemoval(id: "usage") else {
+                    throw HostWorkerError.invalidResponse
+                }
+                UserDefaults(suiteName: identity.extensionDefaultsSuite("usage"))?
+                    .removePersistentDomain(forName: identity.extensionDefaultsSuite("usage"))
+            } catch {
+                try? await sessions.disable(id: "usage")
+                throw error
+            }
+        }
         var surfaces = try HostSurfaces(
             identity: identity, entries: HostIndex.bundled(), sessions: sessions)
         surfaces.layouts.update(.home) { $0.tiles = [.init(.ability(extensionID))] }
@@ -155,7 +176,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
             } else if extensionID == "machines" {
-                try await MachinesFixture.verify(endpoint)
+                try await verifyMachines()
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "studio" {
@@ -210,7 +231,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
             } else if extensionID == "machines" {
-                try await MachinesFixture.verify(endpoint)
+                try await verifyMachines()
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
@@ -289,7 +310,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
             } else if extensionID == "machines" {
-                try await MachinesFixture.verify(endpoint)
+                try await verifyMachines()
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {

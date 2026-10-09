@@ -1734,6 +1734,7 @@
         "Extensions/machines/Services/MachinePeerService.swift",
         "Extensions/machines/Services/MachinePeerTransport.swift",
         "Extensions/machines/Services/MachineUsageSnapshotStore.swift",
+        "Extensions/machines/Services/MachineUsageFixtureSnapshot.swift",
         "Extensions/machines/Services/MachineReconnect.swift",
         "Extensions/machines/Services/MachineRegistry.swift",
         "Extensions/machines/Services/MachineResourcePolicy.swift",

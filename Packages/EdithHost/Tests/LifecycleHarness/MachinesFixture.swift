@@ -6,6 +6,7 @@ import Foundation
 @MainActor enum MachinesFixture {
     static let machineID = "11111111-2222-3333-4444-555555555555"
     private static var previousCollectionID: String?
+    private static var receiptHash: String?
 
     static func seed(identity: HostIdentity, home: URL) throws {
         setenv("EDITH_EXTENSION_FIXTURE_HOME", home.path, 1)
@@ -25,9 +26,45 @@ import Foundation
         ]
         try JSONSerialization.data(withJSONObject: [forward]).write(
             to: directory.appendingPathComponent("forwards.json"))
+        var receipt = try JSONSerialization.data(withJSONObject: [
+            "type": "assistant", "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "sessionId": "synthetic-remote-session", "requestId": "synthetic-remote-request",
+            "cwd": "C:/Synthetic Projects/Worktree", "costUSD": 1.25,
+            "message": [
+                "id": "synthetic-remote-message", "model": "claude-sonnet-4-5",
+                "usage": ["input_tokens": 40, "output_tokens": 8],
+            ],
+        ])
+        receipt.append(10)
+        receiptHash = SHA256.hash(data: receipt).map { String(format: "%02x", $0) }.joined()
+        let snapshot = try JSONSerialization.data(withJSONObject: [
+            "version": 1,
+            "files": [
+                [
+                    "path": ".claude/projects/synthetic/session.jsonl",
+                    "modifiedAt": Date().timeIntervalSince1970,
+                    "data": receipt.base64EncodedString(),
+                ]
+            ],
+            "context": [
+                "timeZone": "UTC",
+                "projects": [
+                    [
+                        "cwd": "C:/Synthetic Projects/Worktree", "root": "C:/Synthetic Projects",
+                        "repositoryID": "github.com/example/synthetic-remote",
+                        "repositoryName": "Synthetic remote", "folderName": "Worktree",
+                        "repositoryURL": "https://github.com/example/synthetic-remote",
+                        "worktree": "topic",
+                    ]
+                ],
+            ],
+        ])
+        let raw = home.appendingPathComponent("machines-raw-snapshot.json")
+        try snapshot.write(to: raw, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: raw.path)
     }
 
-    static func verify(_ endpoint: ExtensionPeerEndpoint) async throws {
+    static func verify(_ endpoint: ExtensionPeerEndpoint, identity: HostIdentity) async throws {
         let hosts = try await call(endpoint, "machines.companion.hosts", [:])
         let machines = hosts["machines"] as? [[String: Any]]
         guard machines?.count == 1, machines?.first?["id"] as? String == machineID,
@@ -99,7 +136,13 @@ import Foundation
         }
         guard SHA256.hash(data: document).map({ String(format: "%02x", $0) }).joined() == hash,
             let data = try JSONSerialization.jsonObject(with: document) as? [String: Any],
-            data["schemaVersion"] as? Int == 8
+            data["schemaVersion"] as? Int == 8,
+            let totals = data["totals"] as? [String: Any],
+            totals["tokens"] as? Double == 48, totals["cost"] as? Double == 1.25,
+            let daily = data["daily"] as? [[String: Any]],
+            let project = daily.flatMap({ $0["projects"] as? [[String: Any]] ?? [] }).first,
+            project["repositoryID"] as? String == "github.com/example/synthetic-remote",
+            project["path"] as? String == "C:/Synthetic Projects"
         else { throw HostWorkerError.invalidResponse }
         for input in [
             ["collectionID": id, "offset": -1, "maximumBytes": 64],
@@ -112,9 +155,53 @@ import Foundation
         try await reject(
             endpoint, "machines.usage.result",
             ["collectionID": id, "offset": 0, "maximumBytes": 64])
+        try verifyArchive(identity: identity)
         let retained = try await call(
             endpoint, "machines.usage.collect", ["machineID": machineID, "force": true])
         previousCollectionID = retained["collectionID"] as? String
+        try verifyArchive(identity: identity)
+    }
+
+    private static func verifyArchive(identity: HostIdentity) throws {
+        let usage = identity.extensionDirectory("usage").appendingPathComponent("data")
+        let stages = usage.appendingPathComponent("remote-staging")
+        guard try FileManager.default.contentsOfDirectory(atPath: stages.path).isEmpty else {
+            throw HostWorkerError.invalidResponse
+        }
+        let database = usage.appendingPathComponent(
+            "remote-archives/\(machineID.lowercased())/native-usage-history/usage.sqlite")
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+        process.arguments = [
+            "-readonly", "-json", database.path,
+            "SELECT hash,payload FROM records;",
+        ]
+        process.standardOutput = pipe
+        try process.run()
+        let output = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0,
+            let records = try JSONSerialization.jsonObject(with: output) as? [[String: Any]],
+            records.count == 1, let payload = records[0]["payload"] as? String,
+            let hash = records[0]["hash"] as? String,
+            SHA256.hash(data: Data(payload.utf8)).map({ String(format: "%02x", $0) }).joined()
+                == hash
+        else { throw HostWorkerError.invalidResponse }
+        let files = Process()
+        let fileOutput = Pipe()
+        files.executableURL = process.executableURL
+        files.arguments = ["-readonly", "-json", database.path, "SELECT hash FROM files;"]
+        files.standardOutput = fileOutput
+        try files.run()
+        let fileBytes = fileOutput.fileHandleForReading.readDataToEndOfFile()
+        files.waitUntilExit()
+        guard files.terminationStatus == 0,
+            let rows = try JSONSerialization.jsonObject(with: fileBytes) as? [[String: Any]],
+            rows.count == 1, rows[0]["hash"] as? String == receiptHash
+        else {
+            throw HostWorkerError.invalidResponse
+        }
     }
 
     private static func call(

@@ -57,14 +57,22 @@ final class ExtensionRuntime: NSObject {
                 WorkspaceModel.shared = WorkspaceModel(machines: .shared)
                 let fixture =
                     ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
-                let transport = MachinePeerTransport()
+                let transport: MachinePeerTransport
+                if fixture {
+                    transport = MachinePeerTransport(
+                        usagePlatform: { _ in .linux },
+                        usageRun: { _, _, _, _, maximumBytes in
+                            let data = try MachineUsageFixtureSnapshot.load()
+                            guard data.count <= maximumBytes else {
+                                throw ExtensionPeerError.invalidRequest
+                            }
+                            return SSHExecResult(status: 0, stdout: data, stderr: Data())
+                        })
+                } else {
+                    transport = MachinePeerTransport()
+                }
                 self.transport = transport
                 let usage = MachineUsageCollectionService { machine, force in
-                    if fixture {
-                        return Data(
-                            "{\"schemaVersion\":8,\"generatedAt\":\"2026-10-09T00:00:00Z\",\"sources\":[],\"defaultSources\":[],\"sourceMeta\":{},\"daily\":[],\"sessions\":[],\"totals\":{}}"
-                                .utf8)
-                    }
                     return try await transport.collectUsage(machine, force: force)
                 }
                 peer = MachinePeerService(
