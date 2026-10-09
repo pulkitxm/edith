@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 const root = process.cwd();
@@ -81,6 +81,11 @@ await copyFile(
   join(packageDirectory, "Sources/EdithHostCore/Resources/index.json"),
   join(contents, "Resources/index.json"),
 );
+await mkdir(join(contents, "Library/LaunchDaemons"), { recursive: true });
+await writeFile(join(contents, "Library/LaunchDaemons/com.pulkit.edith.extensions.carrier.v1.plist"), `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>Label</key><string>com.pulkit.edith.extensions.carrier.v1</string><key>BundleProgram</key><string>Contents/MacOS/Edith</string><key>ProgramArguments</key><array><string>Edith</string><string>--extension-carrier</string></array><key>MachServices</key><dict><key>com.pulkit.edith.extensions.carrier.v1</key><true/></dict></dict></plist>
+`);
 const identity = `com.pulkit.edith.dev.${basename(root)}`;
 const plist = {
   CFBundleIdentifier: identity,
