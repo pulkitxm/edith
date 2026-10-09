@@ -14,6 +14,7 @@ final class CameraCarrierSession {
     private(set) var disconnected = false
     private(set) var released = false
     private var cleaning = false
+    private var draining = false
 
     init(
         controller: CameraSystemExtensionController, send: @escaping (Data) throws -> Void,
@@ -47,6 +48,19 @@ final class CameraCarrierSession {
                     publish(token: request.token)
                 case .status: publish(token: request.token)
                 case .activate, .deactivate, .prepareDisable, .microphonePrepare:
+                    if draining
+                        && (request.operation == .activate
+                            || request.operation == .microphonePrepare)
+                    {
+                        publish(token: request.token, error: "Camera is releasing its resources.")
+                        continue
+                    }
+                    let preceding =
+                        request.operation == .prepareDisable ? Array(requests.values) : []
+                    if request.operation == .prepareDisable {
+                        draining = true
+                        for task in preceding { task.cancel() }
+                    }
                     requests[request.token] = Task { [weak self] in
                         guard let self else { return }
                         defer { requests.removeValue(forKey: request.token) }
@@ -54,7 +68,9 @@ final class CameraCarrierSession {
                             switch request.operation {
                             case .activate: try await controller.activate()
                             case .deactivate: try await controller.deactivate()
-                            case .prepareDisable: try await deactivateOwnedResources()
+                            case .prepareDisable:
+                                for task in preceding { await task.value }
+                                try await deactivateOwnedResources()
                             case .microphonePrepare: try await prepareMicrophone()
                             default: throw CocoaError(.fileReadCorruptFile)
                             }
@@ -70,15 +86,16 @@ final class CameraCarrierSession {
     func disconnect() {
         guard !disconnected else { return }
         disconnected = true
-        for request in requests.values { request.cancel() }
+        draining = true
+        let pending = Array(requests.values)
+        for request in pending { request.cancel() }
         cleaning = true
         disconnectTask = Task { [weak self] in
             guard let self else { return }
             defer { cleaning = false }
             do {
-                try await deactivateOwnedResources()
-                let pending = Array(requests.values)
                 for request in pending { await request.value }
+                try await deactivateOwnedResources()
                 guard !controller.ownsProvider, !controller.pendingRequest else { return }
                 try await releaseResources()
                 released = true

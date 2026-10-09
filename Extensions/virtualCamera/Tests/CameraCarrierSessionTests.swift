@@ -279,6 +279,60 @@ private final class CarrierBrokerProbe: CameraSystemExtensionSubmitting {
         try await wait { session.released }
     }
 
+    @Test(arguments: [false, true]) func lateMicrophonePreparationIsDrainedBeforeRetirement(
+        disconnect: Bool
+    ) async throws {
+        let controller = CameraSystemExtensionController(
+            identifier: "org.example.fixture.camera", broker: CarrierBrokerProbe(),
+            providerExited: { true })
+        var preparation: CheckedContinuation<Void, Never>?
+        var microphone = false
+        var releases = 0
+        var retirements = 0
+        var replies: [CameraCarrierReply] = []
+        let session = CameraCarrierSession(
+            controller: controller, send: { replies.append(try decode($0)) },
+            prepareMicrophone: {
+                await withCheckedContinuation { preparation = $0 }
+                microphone = true
+            },
+            prepareDisableResources: {
+                microphone = false
+                retirements += 1
+            },
+            releaseResources: {
+                #expect(!microphone)
+                releases += 1
+            }, exited: {})
+        session.receive(try request(.microphonePrepare))
+        try await wait { preparation != nil }
+        let retirement = UUID()
+        if disconnect {
+            session.disconnect()
+        } else {
+            session.receive(
+                try CameraCarrierFrames.encode(
+                    CameraCarrierRequest(token: retirement, operation: .prepareDisable)))
+            let rejected = UUID()
+            session.receive(
+                try CameraCarrierFrames.encode(
+                    CameraCarrierRequest(token: rejected, operation: .microphonePrepare)))
+            #expect(replies.first(where: { $0.token == rejected })?.error != nil)
+        }
+        try await Task.sleep(for: .milliseconds(5))
+        #expect(retirements == 0 && releases == 0)
+        preparation?.resume()
+        if disconnect {
+            try await wait { session.released }
+        } else {
+            try await wait { replies.contains { $0.token == retirement } }
+            #expect(replies.first(where: { $0.token == retirement })?.error == nil)
+            session.disconnect()
+            try await wait { session.released }
+        }
+        #expect(!microphone && retirements >= 1 && releases == 1)
+    }
+
     private func request(_ operation: CameraCarrierOperation) throws -> Data {
         try CameraCarrierFrames.encode(CameraCarrierRequest(token: UUID(), operation: operation))
     }
