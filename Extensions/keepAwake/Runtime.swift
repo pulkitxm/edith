@@ -25,7 +25,7 @@ final class KeepAwakeRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             if store == nil { store = KeepAwakeStore(defaults: defaults) }
-            defaults.set(true, forKey: "keepAwakeEnabled")
+            defaults.set(true, forKey: KeepAwakeKeys.enabled)
             store?.syncPreventSleep()
             return ["ok": true] as NSDictionary
         case "view":

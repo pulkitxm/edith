@@ -35,6 +35,7 @@ public enum AppStorageKeys {
     public enum General {
         public static let editMainWindowFullScreen = "EdithMainWindowFullScreen"
         public static let appearance = "appearance"
+        public static let mainWindowZoom = "mainWindowZoom"
         public static let mainSidebarOpen = "mainSidebarOpen"
         public static let mainSidebarWidth = "mainSidebarWidth"
         public static let settingsCategoriesExpanded = "settingsCategoriesExpanded"

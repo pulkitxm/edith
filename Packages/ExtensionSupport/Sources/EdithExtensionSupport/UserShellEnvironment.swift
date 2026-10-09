@@ -266,7 +266,7 @@ public final class UserShellEnvironment: @unchecked Sendable {
         var environment = base
         environment["HOME"] = home.path
         environment["SHELL"] = shell.path
-        environment.removeValue(forKey: "TERM")
+        environment["TERM"] = nil
         environment["EDITH_RESOLVING_ENVIRONMENT"] = "1"
         let request = CLICommandRequest(
             executableURL: shell,

@@ -2,6 +2,10 @@ import AppKit
 import Foundation
 import IOKit.pwr_mgt
 
+enum KeepAwakeKeys {
+    static let enabled = "keepAwakeEnabled"
+}
+
 @MainActor
 final class KeepAwakeStore {
     private(set) var preventingSleep = false
@@ -59,7 +63,7 @@ final class KeepAwakeStore {
     func syncPreventSleep() {
         guard !stopped else { return }
         let want =
-            defaults.bool(forKey: "keepAwakeEnabled")
+            defaults.bool(forKey: KeepAwakeKeys.enabled)
             && defaults.bool(forKey: "preventSleep")
         guard want else {
             releaseCurrentAssertion()
