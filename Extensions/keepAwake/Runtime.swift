@@ -13,18 +13,11 @@ final class KeepAwakeRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, let store = self.store else { throw ExtensionPeerError.unavailable }
-            return try await SurfaceCommandService.execute(
-                providerID: "keepAwake", command: command, payload: payload,
-                snapshot: { _ in
-                    KeepAwakeSurface.snapshot(
-                        preventingSleep: store.preventingSleep,
-                        requested: self.defaults?.bool(forKey: "preventSleep") ?? false)
-                },
-                perform: { action in
-                    self.defaults?.set(action == "enable", forKey: "preventSleep")
-                    store.syncPreventSleep()
-                })
+            guard let self, let store = self.store, let defaults = self.defaults else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try await KeepAwakeSurface.execute(
+                command, payload: payload, store: store, defaults: defaults)
         }
     }
 

@@ -21,7 +21,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionSupport"
+    "supportProduct": "EdithExtensionSupport",
+    "surfaceContractVersion": 1
   },
   {
     "id": "audioMixer",
@@ -67,7 +68,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "windowSweaters",
@@ -109,7 +111,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "micMute",
@@ -136,7 +139,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "keystrokeHighlight",
@@ -164,7 +168,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "presenter",
@@ -199,7 +204,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "colorPicker",
@@ -228,7 +234,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "systemStats",
@@ -253,7 +260,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "emoji",
@@ -294,7 +302,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "homebrew",
@@ -320,7 +329,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "calendar",
@@ -388,7 +398,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "system",
@@ -414,7 +425,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "timeLapse",
@@ -446,7 +458,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "cleaner",
@@ -475,7 +488,8 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   },
   {
     "id": "appMaintenance",
@@ -505,7 +519,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "blitztree",
@@ -535,7 +550,8 @@
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1
   },
   {
     "id": "plugins",

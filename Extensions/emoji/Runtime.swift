@@ -15,22 +15,8 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
-            return try await SurfaceCommandService.execute(
-                providerID: "emoji", command: command, payload: payload,
-                snapshot: { _ in
-                    EmojiSurface.snapshot(frequent: service.frequent, character: service.character)
-                },
-                perform: { action in
-                    if action == "pick" {
-                        EmojiPanel.shared.show()
-                    } else if let emoji = service.frequent.first(where: {
-                        "copy:" + $0.id == action
-                    }) {
-                        service.copy(emoji)
-                    } else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                })
+            return try await EmojiSurface.execute(
+                command, payload: payload, store: service, pick: { EmojiPanel.shared.show() })
         }
     }
 

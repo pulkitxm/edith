@@ -13,6 +13,22 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let model = self?.model else { throw ExtensionPeerError.unavailable }
+            if command == "surface.snapshot" || command == "surface.perform" {
+                return try await SurfaceCommandService.execute(
+                    providerID: "blitztree", command: command, payload: payload,
+                    snapshot: { tile in BlitzTreeSurface.snapshot(model) },
+                    perform: { action in
+                        switch action {
+                        case "choose": model.chooseFolder()
+                        case "rescan":
+                            guard let root = model.root else {
+                                throw ExtensionPeerError.invalidRequest
+                            }; model.scan(root, remember: false)
+                        case "cancel": model.cancel()
+                        default: throw ExtensionPeerError.invalidRequest
+                        }
+                    })
+            }
             return try await BlitzTreeCommands.execute(command, payload: payload, model: model)
         }
     }

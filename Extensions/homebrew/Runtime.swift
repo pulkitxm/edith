@@ -7,6 +7,18 @@ import SwiftUI
 @MainActor
 final class ExtensionRuntime: NSObject {
     private var model: HomebrewPageModel?
+    private var surface: HomebrewSurface?
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            return try await SurfaceCommandService.execute(
+                providerID: "homebrew", command: command, payload: payload,
+                snapshot: { try await surface.snapshot($0) },
+                perform: { _ in throw ExtensionPeerError.invalidRequest })
+        }
+    }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
@@ -25,6 +37,7 @@ final class ExtensionRuntime: NSObject {
                 URL(fileURLWithPath: path).standardizedFileURL.path == ExtensionData.root.path
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = HomebrewPageModel() }
+            if surface == nil { surface = HomebrewSurface() }
             TextEditingCommands.install()
         case "view":
             guard let model else { return ["ok": false] as NSDictionary }
@@ -36,7 +49,10 @@ final class ExtensionRuntime: NSObject {
                         HomebrewMaintenanceView(model: model)
                     }
                 })
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
+            surface?.shutdown(); surface = nil
             model?.cancel()
             model = nil
             TextEditingCommands.shutdown()

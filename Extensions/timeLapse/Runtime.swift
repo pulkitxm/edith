@@ -16,6 +16,34 @@ final class ExtensionRuntime: NSObject {
             else {
                 throw ExtensionPeerError.unavailable
             }
+            if command == "surface.snapshot" || command == "surface.perform" {
+                return try await SurfaceCommandService.execute(
+                    providerID: "timeLapse", command: command, payload: payload,
+                    snapshot: { tile in
+                        let library = TimeLapseRecorder.libraryURL
+                        let recordings = try await BlockingWork.perform {
+                            try TimeLapseRecording.load(in: library)
+                        }
+                        return TimeLapseSurface.snapshot(
+                            recorder, recordings: recordings, tile: tile)
+                    },
+                    perform: { action in
+                        if action == "stop" {
+                            await recorder.stop()
+                        } else {
+                            let library = TimeLapseRecorder.libraryURL
+                            let recordings = try await BlockingWork.perform {
+                                try TimeLapseRecording.load(in: library)
+                            }
+                            guard
+                                let recording = recordings.first(where: {
+                                    "reveal:" + $0.id.uuidString == action
+                                })
+                            else { throw ExtensionPeerError.invalidRequest }
+                            NSWorkspace.shared.activateFileViewerSelecting([recording.directory])
+                        }
+                    })
+            }
             switch command {
             case "recording.status":
                 return try JSONSerialization.data(withJSONObject: [
