@@ -8,6 +8,15 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var store: CalendarStore?
     private var presentation: CalendarPresentationState?
+    private var surface: CalendarSurface?
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            return try await surface.execute(command, payload: payload)
+        }
+    }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
@@ -25,14 +34,20 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if store == nil { store = CalendarStore(startImmediately: false) }
             if presentation == nil { presentation = CalendarPresentationState() }
+            if let store, let presentation, surface == nil {
+                surface = CalendarSurface(store: store, presentation: presentation)
+            }
         case "view":
             guard let store, let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     CalendarPage(store: store, presentation: presentation)
                 })
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": store?.refreshAuthStatus()
         case "stop":
+            commands.shutdown()
+            surface = nil
             store?.shutdown()
             store = nil
             presentation?.shutdown()
