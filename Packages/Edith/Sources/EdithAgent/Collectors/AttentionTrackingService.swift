@@ -148,7 +148,7 @@ final class AttentionTrackingService {
                 -idleSeconds + (current.event.presence == .idle ? settings.idleThreshold : 0))
             let before = min(duration, max(0, transition.timeIntervalSince(sample.event.startedAt)))
             let signals = sample.event.signals
-            sample.event.signals = nil
+            sample.event.signals = sample.event.presence == .active ? signals : nil
             sample.event.duration = before
             if before > 0 { writer.submit(sample) }
             if before < duration {
@@ -207,11 +207,14 @@ final class AttentionTrackingService {
     private static func capture(
         now: Date, settings: AttentionSettings, locked: Bool
     ) -> AttentionHeartbeatSample? {
-        guard settings.isEnabled, settings.trackingEnabled,
-            let app = NSWorkspace.shared.frontmostApplication
-        else { return nil }
-        let identity = FrontmostIdentityLookup.identity(pid: app.processIdentifier) {
-            (name: app.localizedName ?? "Unknown", bundleID: app.bundleIdentifier)
+        guard settings.isEnabled, settings.trackingEnabled else { return nil }
+        let identity: FrontmostIdentity
+        if let app = NSWorkspace.shared.frontmostApplication {
+            identity = FrontmostIdentityLookup.identity(pid: app.processIdentifier) {
+                (name: app.localizedName ?? "Unknown", bundleID: app.bundleIdentifier)
+            }
+        } else {
+            identity = FrontmostIdentity(pid: 0, name: "System", bundleID: nil)
         }
         let idleSeconds = AttentionSystemActivity.idleSeconds()
         let away = identity.bundleID.map(AttentionCatalog.awayBundleIDs.contains) ?? false
@@ -229,7 +232,8 @@ final class AttentionTrackingService {
                     context?.tags, privacyLevel: settings.privacyLevel,
                     allowed: AttentionTag.edithSafe)),
             processID: identity.pid,
-            captureWindowTitle: settings.windowTitlesEnabled && contextTitle == nil,
+            captureWindowTitle: presence == .active && identity.pid > 0
+                && settings.windowTitlesEnabled && contextTitle == nil,
             counters: AttentionInputCounters.read(), idleSeconds: idleSeconds)
     }
 }

@@ -1,7 +1,7 @@
 const counters = { keys: 0, clicks: 0, scrolls: 0 }
 let lastScroll = 0
 let lastSignature = ""
-let lastInputAt = Date.now()
+let lastInputAt = 0
 let publishedInputAt = 0
 let inputResumed = false
 
@@ -66,7 +66,7 @@ function publish(force) {
 function recordInput(event, counter) {
   if (!event.isTrusted || document.visibilityState !== "visible" || !document.hasFocus()) return
   const now = Date.now()
-  inputResumed ||= now - lastInputAt >= 10000
+  inputResumed ||= lastInputAt === 0 || now - lastInputAt >= 10000
   lastInputAt = now
   if (counter === "scrolls") {
     if (now - lastScroll > 250) {

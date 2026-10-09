@@ -143,7 +143,7 @@ function idleThreshold(value) {
   return Number.isFinite(seconds) ? Math.max(15, Math.round(seconds)) : defaults.idleThreshold
 }
 
-async function systemActivity(settings, now, page) {
+async function systemActivity(settings, now) {
   const threshold = idleThreshold(settings.idleThreshold)
   if (detectionInterval !== threshold) {
     chrome.idle.setDetectionInterval(threshold)
@@ -167,7 +167,10 @@ async function systemActivity(settings, now, page) {
         idleSeconds: seconds !== null && Number.isFinite(seconds) && seconds >= 0 ? seconds : null,
         idleThreshold: idleThreshold(body.idleThreshold)
       }
-      await chrome.storage.session.set({ attentionSystemActivity: sample, attentionPresenceRetryAt: 0 })
+      await chrome.storage.session.set({
+        attentionSystemActivity: sample, attentionPresenceRetryAt: 0,
+        ...(sample.idleSeconds === null ? {} : { attentionLastInputAt: now - sample.idleSeconds * 1000 })
+      })
     } catch {
       await chrome.storage.session.set({ attentionPresenceRetryAt: now + 30000 })
     }
@@ -181,11 +184,15 @@ async function systemActivity(settings, now, page) {
     }
   }
   const presence = await chrome.idle.queryState(threshold)
-  const lastInput = Number(page.lastInputAt)
-  const seconds = Number.isFinite(lastInput) && lastInput > 0 && lastInput <= now ? (now - lastInput) / 1000 : null
+  const { attentionLastInputAt, attentionChromePresence } = await chrome.storage.session.get(["attentionLastInputAt", "attentionChromePresence"])
+  const lastInput = Number(attentionLastInputAt)
+  const resumed = presence === "active" && ["idle", "locked"].includes(attentionChromePresence)
+  const baseline = !resumed && Number.isFinite(lastInput) && lastInput > 0 && lastInput <= now ? lastInput : now
+  await chrome.storage.session.set({ attentionLastInputAt: baseline, attentionChromePresence: presence })
+  const seconds = (now - baseline) / 1000
   return {
     presence: presence === "locked" ? "locked" : presence === "idle" || seconds !== null && seconds >= threshold ? "idle" : "active",
-    idleSeconds: seconds,
+    idleSeconds: presence === "idle" && seconds < threshold ? null : seconds,
     idleThreshold: threshold
   }
 }
@@ -209,7 +216,7 @@ async function observe(settings, now) {
   const tab = await activeTab()
   if (!tab?.url || !/^https?:/.test(tab.url) || tab.incognito) return null
   const page = await pageFor(tab)
-  const activity = await systemActivity(settings, now, page)
+  const activity = await systemActivity(settings, now)
   const media = Array.isArray(page.media) ? page.media : []
   const tags = { ...urlTags(tab.url), ...(page.tags || {}) }
   const group = await groupTitle(tab)
@@ -443,12 +450,17 @@ async function recordPage(tabId, message) {
   const page = { ...(stored[key] || {}) }
   page.url = message.url
   page.title = message.title
+  let updatesInputAt = null
   if (Number.isFinite(message.lastInputAt) && message.lastInputAt > 0 && message.lastInputAt <= Date.now()) {
-    page.lastInputAt = Math.max(page.lastInputAt || 0, message.lastInputAt)
+    updatesInputAt = message.lastInputAt
   }
   if (Array.isArray(message.media)) page.media = message.media
   if (message.tags && typeof message.tags === "object") page.tags = message.tags
   const updates = { [key]: page }
+  if (updatesInputAt !== null) {
+    const { attentionLastInputAt = 0 } = await chrome.storage.session.get("attentionLastInputAt")
+    updates.attentionLastInputAt = Math.max(attentionLastInputAt, updatesInputAt)
+  }
   if (message.signals) updates[signalsKey] = addSignals(stored[signalsKey], message.signals)
   await chrome.storage.session.set(updates)
 }

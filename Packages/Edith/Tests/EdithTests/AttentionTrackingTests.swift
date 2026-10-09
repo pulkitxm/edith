@@ -117,6 +117,45 @@ private actor AttentionRecordedSamples {
         await collector.shutdown().value
     }
 
+    @Test func eightHoursWithoutInputOnlyCreditsTheInitialGracePeriod() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recorded = AttentionRecordedSamples()
+        let writer = AttentionHeartbeatWriter(
+            spool: AttentionDeliverySpool(file: root.appendingPathComponent("delivery.json")),
+            maximumPending: 1024, prepare: { $0.event },
+            deliver: { await recorded.append($0.batch) })
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let collector = AttentionTrackingService(
+            repository: AttentionRepository(root: root), writer: writer,
+            settings: AttentionSettings(isEnabled: true, trackingEnabled: true),
+            observe: false, now: now
+        ) { date, settings, _ in
+            let seconds = date.timeIntervalSince(now)
+            return AttentionHeartbeatSample(
+                event: AttentionEvent(
+                    startedAt: date, duration: 0, source: .application,
+                    presence: AttentionSystemActivity.presence(
+                        idleSeconds: seconds, threshold: settings.idleThreshold, locked: false),
+                    appName: "Fixture editor"), processID: 0, captureWindowTitle: false,
+                idleSeconds: seconds)
+        }
+        for step in 1...960 {
+            collector.writeHeartbeat(now: now.addingTimeInterval(Double(step) * 30))
+        }
+        await writer.flush()
+        let events = await recorded.events
+        let active = events.filter { $0.presence == .active }.reduce(0) { $0 + $1.duration }
+        let idle = events.filter { $0.presence == .idle }.reduce(0) { $0 + $1.duration }
+        #expect(active == 300)
+        #expect(idle == 28_500)
+        #expect(active + idle == 28_800)
+        if ProcessInfo.processInfo.environment["EDITH_ATTENTION_IDLE_EVIDENCE"] == "1" {
+            print("native collector fixture: unattended 8h, active 5m, idle 7h 55m")
+        }
+        await collector.shutdown().value
+    }
+
     @Test func disabledCollectionNeverSubmitsAnInitialSample() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

@@ -642,7 +642,8 @@ test("content collection rejects synthetic, hidden, and unfocused input", () => 
   expect(f.messages).toHaveLength(1);
   f.focus(true);
   f.input("keydown");
-  expect(f.messages.at(-1).lastInputAt).toBe(initial + 600_000);
+  expect(initial).toBe(0);
+  expect(f.messages.at(-1).lastInputAt).toBe(1_800_000_600_000);
   expect(f.messages.at(-1).signals).toEqual({ keys: 1, clicks: 0, scrolls: 0 });
   expect(f.messages.at(-1).inputResumed).toBe(true);
 });
@@ -675,4 +676,56 @@ test("media notifications never extend the page input clock", () => {
   f.input("loadedmetadata");
   expect(f.messages.at(-1).lastInputAt).toBe(initial);
   expect(f.messages.at(-1).inputResumed).toBe(false);
+});
+
+test("automatic navigation and worker restart cannot reset offline idle", async () => {
+  const f = fixture();
+  await f.tick();
+  for (let index = 0; index < 12; index++) {
+    f.advance(30);
+    f.tab(`https://fixture.example/${index}`);
+    await f.message({ type: "edith-page", changed: true, lastInputAt: 0 });
+    await f.tick();
+  }
+  expect(f.sent.at(-1).presence).toBe("idle");
+  f.reload();
+  f.advance(30);
+  await f.tick();
+  expect(f.sent.at(-1).presence).toBe("idle");
+});
+
+test("eight unattended hours credit only the initial grace period in the extension", async () => {
+  const f = fixture();
+  f.native({ presence: "active", idleSeconds: "0", idleThreshold: "300" });
+  await f.tick();
+  for (let step = 1; step <= 960; step++) {
+    f.advance(30);
+    f.native({
+      presence: step * 30 >= 300 ? "idle" : "active",
+      idleSeconds: String(step * 30),
+      idleThreshold: "300",
+    });
+    if (step % 2 === 0) {
+      f.title(`Automatic update ${step}`);
+      await f.message({ type: "edith-page", changed: true, lastInputAt: 0 });
+    }
+    await f.tick();
+  }
+  const segments = [
+    ...new Map(f.sent.map((event) => [event.id, event])).values(),
+  ];
+  const active = segments
+    .filter((event) => event.presence === "active")
+    .reduce((total, event) => total + event.duration, 0);
+  const idle = segments
+    .filter((event) => event.presence === "idle")
+    .reduce((total, event) => total + event.duration, 0);
+  expect(active).toBe(300);
+  expect(idle).toBe(28500);
+  expect(active + idle).toBe(28800);
+  if (process.env.EDITH_ATTENTION_IDLE_EVIDENCE === "1") {
+    console.log(
+      "browser collector fixture: unattended 8h, active 5m, idle 7h 55m",
+    );
+  }
 });
