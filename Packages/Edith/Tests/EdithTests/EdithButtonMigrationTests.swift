@@ -50,6 +50,8 @@ import Testing
             "Edith/Features/Pages/Views/MusicPageView.swift": 1,
             "Edith/Features/Settings/Views/GeneralPane.swift": 1,
             "Edith/Features/VideoEditor/VideoBeatPanel.swift": 1,
+            "EdithKit/Features/Surfaces/SurfaceCanvas.swift": 2,
+            "EdithKit/Features/Surfaces/SurfaceShelf.swift": 1,
             "EdithHelper/Features/NotchShelf/Views/NotchShelfView.swift": 1,
             "EdithHelper/Features/NotchBrowser/Views/NotchBrowserPane.swift": 1,
         ]

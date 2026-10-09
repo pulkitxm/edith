@@ -120,6 +120,10 @@ public actor AgentRuntime {
         }
     }
 
+    public func hasSubscribers(topic: AgentTopic) -> Bool {
+        subscribers.values.contains { $0.topics.contains(topic) && $0.proxy != nil }
+    }
+
     public func record(_ event: AgentEvent) {
         events.append(event)
         if events.count > AgentDiagnostics.capacity {

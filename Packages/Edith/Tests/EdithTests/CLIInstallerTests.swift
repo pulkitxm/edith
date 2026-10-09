@@ -131,15 +131,15 @@ import Testing
         try FileManager.default.createDirectory(
             at: isolated.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: CLIProcessProbe.binary, to: isolated)
-        try FileManager.default.copyItem(
-            at: CLIProcessProbe.binary.deletingLastPathComponent()
-                .appendingPathComponent("Sparkle.framework").resolvingSymlinksInPath(),
-            to: isolated.deletingLastPathComponent().appendingPathComponent("Sparkle.framework"))
-        try FileManager.default.copyItem(
-            at: CLIProcessProbe.binary.deletingLastPathComponent()
-                .appendingPathComponent("libMeetingVoice.dylib").resolvingSymlinksInPath(),
-            to: isolated.deletingLastPathComponent().appendingPathComponent("libMeetingVoice.dylib")
-        )
+        let runtime = CLIProcessProbe.binary.deletingLastPathComponent().resolvingSymlinksInPath()
+        for library in try FileManager.default.contentsOfDirectory(
+            at: runtime, includingPropertiesForKeys: nil)
+        where ["framework", "dylib"].contains(library.pathExtension) {
+            try FileManager.default.copyItem(
+                at: library.resolvingSymlinksInPath(),
+                to: isolated.deletingLastPathComponent().appendingPathComponent(
+                    library.lastPathComponent))
+        }
         let target = root.appendingPathComponent("links")
         let outside = root.appendingPathComponent("outside")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)

@@ -203,6 +203,8 @@ public enum CommandTree {
         "ed app open-link": Spec(
             options: ["--json", "-h", "--help", "--version"], arguments: [.appLink]),
         "ed agent status": Spec(options: common),
+        "ed agent activity": Spec(options: common),
+        "ed agent activity status": Spec(options: common),
         "ed agent jobs": Spec(options: common),
         "ed agent restart": Spec(options: common),
         "ed agent logs": Spec(options: ["--json", "--last"]),

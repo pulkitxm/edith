@@ -121,10 +121,21 @@ public actor CodeStatsWorkflow {
         case CodeStatsAgentOperation.status:
             return try AgentPayload.encode(await status())
         case CodeStatsAgentOperation.report:
-            let range = try AgentPayload.decode(CodeStatsRange.self, from: payload)
+            let query = try AgentPayload.decode(CodeStatsReportQuery.self, from: payload)
             let store = environment.store
-            let report = await BlockingWork.value {
-                store.loadReports().first { $0.range == range }
+            let now = environment.now()
+            let calendar = environment.calendar
+            let report = await BlockingWork.value { () -> CodeStatsReport? in
+                if query.filter == .default,
+                    let cached = store.loadReports().first(where: { $0.range == query.range })
+                {
+                    return cached
+                }
+                return store.loadFacts().map {
+                    CodeStatsReportBuilder.build(
+                        table: $0, filter: query.filter, range: query.range, today: now,
+                        calendar: calendar)
+                }
             }
             return try AgentPayload.encode(report)
         case CodeStatsAgentOperation.facts:

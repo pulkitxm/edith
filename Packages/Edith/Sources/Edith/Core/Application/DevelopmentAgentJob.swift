@@ -45,13 +45,30 @@ enum DevelopmentAgentJob {
     }
 
     private static func bootstrap() async -> Load {
+        guard
+            let plist = try? prepareLaunchPlist(
+                source: AgentService.bundledPlistURL,
+                directory: DataRoot.runtime.appendingPathComponent("launch-agents"))
+        else { return .failed }
         for _ in 0..<10 {
-            if await launchctl("bootstrap", domain, AgentService.bundledPlistURL.path) != nil {
+            if await launchctl("bootstrap", domain, plist.path) != nil {
                 return .started
             }
             guard (try? await Task.sleep(for: .milliseconds(200))) != nil else { break }
         }
         return .failed
+    }
+
+    static func prepareLaunchPlist(source: URL, directory: URL) throws -> URL {
+        let data = try Data(contentsOf: source)
+        let manager = FileManager.default
+        try manager.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        let destination = directory.appendingPathComponent(source.lastPathComponent)
+        try data.write(to: destination, options: .atomic)
+        try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        return destination
     }
 
     private static func processStart(_ pid: pid_t) -> Date? {

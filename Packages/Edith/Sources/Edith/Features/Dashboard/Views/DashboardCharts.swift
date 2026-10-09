@@ -198,7 +198,7 @@ struct DashChartData {
     var tokenMix: [StackDatum] = []
     var modelTime: [StackDatum] = []
     var source: [StackDatum] = []
-    var heatCuts: [Double] = [0, 0, 0]
+    var heatScale = UsageCalendarScale(days: [])
 }
 
 struct StackedChart: View {

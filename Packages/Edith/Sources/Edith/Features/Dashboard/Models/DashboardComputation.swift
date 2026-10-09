@@ -60,8 +60,8 @@ enum DashboardComputation {
     static let weeklyBucketThresholdDays = 60
     static let chartMarkBudget = 90
 
-    static func heatCuts(for days: [DayPoint]) -> [Double] {
-        ActivityCalendar.cuts(days.map(\.cost))
+    static func heatScale(for days: [DayPoint]) -> UsageCalendarScale {
+        UsageCalendarScale(days: days)
     }
 
     static let ymd: DateFormatter = {
@@ -451,7 +451,10 @@ extension DashboardComputation {
         var points: [DayPoint] = []
         while day <= end {
             let key = ymd.string(from: day)
-            points.append(DayPoint(id: key, date: day, cost: detail[key]?.cost ?? 0))
+            points.append(
+                DayPoint(
+                    id: key, date: day, cost: detail[key]?.cost ?? 0,
+                    tokens: detail[key]?.tokens ?? 0))
             day = calendar.date(byAdding: .day, value: 1, to: day) ?? end.addingTimeInterval(1)
         }
         return points
@@ -1643,7 +1646,7 @@ private struct DashboardFilterComputer {
         }
         next.modelTime = stackedSeries(buckets, values: \.byModel, label: DashFmt.shortModel)
         next.source = stackedSeries(buckets, values: \.bySource, label: sourceLabel)
-        next.heatCuts = DashboardComputation.heatCuts(for: calendarDays)
+        next.heatScale = DashboardComputation.heatScale(for: calendarDays)
         return next
     }
 }

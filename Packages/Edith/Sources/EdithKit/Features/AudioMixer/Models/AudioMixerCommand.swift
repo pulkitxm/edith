@@ -10,6 +10,7 @@ public enum AudioMixerIPC {
     public static let errorKey = "error"
     public static let appKey = "app"
     public static let volumeKey = "volume"
+    public static let targetKey = "target"
 }
 
 public struct AudioMixerAppRecord: Codable, Equatable, Sendable {
@@ -29,8 +30,30 @@ public struct AudioMixerAppRecord: Codable, Equatable, Sendable {
         self.volume = volume
     }
 
-    public var muted: Bool { volume == 0 }
-    public var percent: Int { Int((volume * 100).rounded()) }
+    public var muted: Bool { normalizedVolume == 0 }
+    public var normalizedVolume: Double { volume.isFinite ? min(1, max(0, volume)) : 1 }
+    public var percent: Int { Int((normalizedVolume * 100).rounded()) }
+    public var target: AudioMixerTarget { .init(objectID: objectID, pid: pid, bundleID: bundleID) }
+}
+
+public struct AudioMixerTarget: Codable, Equatable, Sendable {
+    public let objectID: UInt32
+    public let pid: Int32
+    public let bundleID: String
+
+    public init(objectID: UInt32, pid: Int32, bundleID: String) {
+        self.objectID = objectID; self.pid = pid; self.bundleID = bundleID
+    }
+    public var valid: Bool {
+        objectID > 0 && pid > 0 && !bundleID.isEmpty && bundleID.utf8.count <= 512
+    }
+    public var id: String { "\(objectID):\(pid):\(bundleID)" }
+    public func match(in apps: [AudioMixerAppRecord]) throws -> AudioMixerAppRecord {
+        guard valid, let app = apps.first(where: { $0.target == self }) else {
+            throw AudioMixerSelectionError.notFound(bundleID)
+        }
+        return app
+    }
 }
 
 public struct AudioMixerListSnapshot: Codable, Equatable, Sendable {
@@ -66,37 +89,54 @@ public struct AudioMixerRuntimeRequest: Sendable {
     public var volume: Double
     public var requestID: String
     public var deadline: Date
+    public var target: AudioMixerTarget?
 
     public init(
         request: AudioMixerRequest, app: String = "", volume: Double = 1,
-        deadline: Date, requestID: String = UUID().uuidString
+        deadline: Date, requestID: String = UUID().uuidString, target: AudioMixerTarget? = nil
     ) {
         self.request = request
         self.app = app
         self.volume = volume
         self.requestID = requestID
         self.deadline = deadline
+        self.target = target
     }
 
     public var payload: [String: Any] {
-        [
+        var value: [String: Any] = [
             AudioMixerIPC.requestKey: request.rawValue,
             AudioMixerIPC.appKey: app,
             AudioMixerIPC.volumeKey: volume,
             AudioMixerIPC.requestIDKey: requestID,
             AudioMixerIPC.deadlineKey: deadline.timeIntervalSince1970,
         ]
+        if let target, let data = try? JSONEncoder().encode(target) {
+            value[AudioMixerIPC.targetKey] = String(decoding: data, as: UTF8.self)
+        }
+        return value
     }
 
     public init?(payload: [AnyHashable: Any]) {
         guard let raw = payload[AudioMixerIPC.requestKey] as? String,
             let request = AudioMixerRequest(rawValue: raw),
             let requestID = payload[AudioMixerIPC.requestIDKey] as? String,
-            let deadline = payload[AudioMixerIPC.deadlineKey] as? Double
+            let deadline = payload[AudioMixerIPC.deadlineKey] as? Double, deadline.isFinite,
+            !requestID.isEmpty, requestID.utf8.count <= 128
         else { return nil }
+        let volume = payload[AudioMixerIPC.volumeKey] as? Double ?? 1
+        guard volume.isFinite, (0...1).contains(volume) else { return nil }
+        if let raw = payload[AudioMixerIPC.targetKey] {
+            guard let text = raw as? String, text.utf8.count <= 2048,
+                let decoded = try? JSONDecoder().decode(
+                    AudioMixerTarget.self, from: Data(text.utf8)),
+                decoded.valid
+            else { return nil }
+            target = decoded
+        }
         self.request = request
         self.app = payload[AudioMixerIPC.appKey] as? String ?? ""
-        self.volume = payload[AudioMixerIPC.volumeKey] as? Double ?? 1
+        self.volume = volume
         self.requestID = requestID
         self.deadline = Date(timeIntervalSince1970: deadline)
     }

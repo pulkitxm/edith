@@ -16,7 +16,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
 
     override init() {
         super.init()
-        muted = SharedDefaults.store.bool(forKey: "micMuted")
+        muted = SharedDefaults.store.bool(forKey: AppStorageKeys.Mic.muted)
         if muted { apply(true) }
         observeDeviceList()
         syncSettings()
@@ -46,7 +46,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     func setMuted(_ on: Bool) {
         guard on != muted else { return }
         muted = on
-        SharedDefaults.store.set(on, forKey: "micMuted")
+        SharedDefaults.store.set(on, forKey: AppStorageKeys.Mic.muted)
         apply(on)
         updateIcon()
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)

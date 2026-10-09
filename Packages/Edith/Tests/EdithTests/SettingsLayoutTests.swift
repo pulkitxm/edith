@@ -47,7 +47,9 @@ import EdithKit
         #expect(settings.contains(".pickerStyle(.menu)"))
         #expect(!settings.contains(".pickerStyle(.segmented)"))
         #expect(!settings.contains("List(selection: tab)"))
-        #expect(settings.contains("case .permissions, .agent, .data: .infinity"))
+        #expect(
+            settings.contains(
+                "case .permissions, .agent, .data, .surfaces, .agentActivity: .infinity"))
         #expect(settings.contains("UIScale.pt(1180)"))
         #expect(settings.contains("alignment: .topLeading"))
     }

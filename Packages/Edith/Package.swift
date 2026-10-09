@@ -3,6 +3,7 @@ import PackageDescription
 
 let products: [Product] = [
     .library(name: "EdithShared", type: .dynamic, targets: ["EdithShared"]),
+    .library(name: "EdithKit", targets: ["EdithKit"]),
     .library(name: "EdithDatabase", targets: ["EdithDatabase"]),
     .library(name: "EdithDatabaseDrivers", targets: ["EdithDatabaseDrivers"]),
     .library(name: "EdithDatabaseMCP", targets: ["EdithDatabaseMCP"]),
@@ -140,7 +141,7 @@ let targets: [Target] = [
     .target(
         name: "EdithKit",
         dependencies: [
-            "EdithCore", "EdithLidAwakeSupport", "EdithCameraSupport",
+            "EdithCore", "EdithDatabase", "EdithLidAwakeSupport", "EdithCameraSupport",
             .product(name: "ZIPFoundation", package: "ZIPFoundation"),
             .product(name: "MeetingVoice", package: "MeetingVoice"),
         ],

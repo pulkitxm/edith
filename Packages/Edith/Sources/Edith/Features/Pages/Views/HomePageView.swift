@@ -11,98 +11,73 @@ struct HomePage: View {
         true
     @AppStorage(AppStorageKeys.Tabs.usageEnabled, store: SharedDefaults.store) private
         var usageEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-        var musicEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.codeStatsEnabled, store: SharedDefaults.store) private
-        var codeStatsEnabled = false
-    @AppStorage(AppStorageKeys.Suites.data, store: SharedDefaults.store) private
-        var dataSuiteEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.calendarEnabled, store: SharedDefaults.store) private
-        var calendarEnabled =
-        false
-    @AppStorage(AppStorageKeys.General.keepAwakeEnabled, store: SharedDefaults.store) private
-        var keepAwakeEnabled = false
-    @AppStorage(AppStorageKeys.Tabs.systemEnabled, store: SharedDefaults.store) private
-        var systemEnabled = false
-    @AppStorage(AppStorageKeys.Presenter.enabled, store: SharedDefaults.store) private
-        var presenterEnabled =
-        false
-    @AppStorage(LidAwakeState.enabledKey, store: SharedDefaults.store) private
-        var lidAwakeEnabled = false
-    @AppStorage(AppStorageKeys.KeystrokeHighlight.enabled, store: SharedDefaults.store) private
-        var keystrokeHighlightEnabled = false
+    @Environment(\.surfaceSampleContent) private var sampleContent
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
-    @State private var usageCardHeight: CGFloat?
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
     private var dark: Bool { scheme == .dark }
     private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
 
+    @State private var layoutStore = SurfaceLayoutStore.shared
+    @State private var editing = false
+    @State private var selectedTile: String?
+
+    private var layout: SurfaceLayout {
+        var layout = layoutStore.home
+        if !editing, !sampleContent,
+            SharedDefaults.store.string(forKey: SurfaceTarget.home.key) == nil
+        {
+            layout.tiles.removeAll { !$0.widget.available(in: SharedDefaults.store) }
+        }
+        return layout
+    }
+
     var body: some View {
         PageScaffold(pinnedHeader: true) {
-            HomeHeader(dark: dark)
+            HomeHeader(dark: dark, editing: $editing)
         } content: {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: UIScale.pt(16)) {
-                    WorldClocksCard(dark: dark)
-                    if systemEnabled || keepAwakeEnabled || presenterEnabled
-                        || lidAwakeEnabled
-                        || keystrokeHighlightEnabled
-                    {
-                        QuickActionsCard(dark: dark)
+            SurfaceCanvas(
+                layout: layout, singleColumn: compact, editing: editing,
+                selected: selectedTile,
+                select: { selectedTile = $0 },
+                place: { widget, anchor in
+                    layoutStore.update(.home) { layout in
+                        let id = layout.add(widget)
+                        if let anchor { layout.move(id, before: anchor) }
+                        selectedTile = id
+                    }
+                },
+                inspect: { MainApp.openSurfaceEditor(.home, tileID: $0) },
+                reorder: { id, anchor in layoutStore.update(.home) { $0.move(id, before: anchor) }
+                },
+                configure: { tile in
+                    layoutStore.update(.home) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        else { return }
+                        if compact { layout.tiles[index] = tile } else { layout.position(tile) }
+                    }
+                },
+                placeAt: { widget, column, row in
+                    layoutStore.update(.home) { layout in
+                        selectedTile = layout.add(widget, column: column, row: row)
                     }
                 }
-                VStack(spacing: UIScale.pt(16)) {
-                    WorldClocksCard(dark: dark)
-                    if systemEnabled || keepAwakeEnabled || presenterEnabled
-                        || lidAwakeEnabled
-                        || keystrokeHighlightEnabled
-                    {
-                        QuickActionsCard(dark: dark)
-                    }
-                }
-            }
-            if usageEnabled {
-                if model.homeUsage.hasDays {
-                    PageCard(title: "Activity", note: "daily cost") {
-                        ActivityHeatmap(
-                            days: model.homeUsage.calendarDays,
-                            cuts: model.homeUsage.heatCuts,
-                            model: model, dark: dark, blur: blurMoney)
-                    }
-                } else if !model.loadAttempted {
-                    PageCard(title: "Activity", note: "daily cost") {
-                        ActivityHeatmapSkeleton()
-                    }
-                }
-            }
-            LazyVGrid(
-                columns: PageMetrics.cardColumns(compact, minimum: 340, spacing: 16),
-                alignment: .leading, spacing: UIScale.pt(16)
-            ) {
-                Group {
-                    if calendarEnabled { MeetingsCard(dark: dark) }
-                    if usageEnabled {
-                        UsageSummaryCard(dark: dark)
-                        RateLimitsDialsView(dark: dark, showsJumpLink: true)
-                    }
-                    if musicEnabled { HomeMusicCard(dark: dark) }
-                    if codeStatsEnabled, dataSuiteEnabled {
-                        CodeStatsHomeCard(dark: dark)
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .top)
+            ) { tile in HomeSurfaceWidget(tile: tile) }
+            if layout.visible.isEmpty, !editing {
+                ContentUnavailableView(
+                    "Make yourself at home", systemImage: "rectangle.3.group",
+                    description: Text("Add widgets in the Home & Notch editor."))
             }
         }
         .navigationTitle("Home")
-        .pageTask(id: usageEnabled, active: usageEnabled) {
+        .onReceive(DistributedNotificationCenter.default().publisher(for: IPC.Name.settingsChanged))
+        { _ in layoutStore.reload() }
+        .pageTask(id: usageEnabled, active: usageEnabled && !sampleContent) {
             await model.restoreCachedHomeUsage()
             await model.load()
         }
-        .pageTask(cancel: model.endObserving) {
-            model.beginObserving()
-        }
+        .pageTask(active: !sampleContent, cancel: model.endObserving) { model.beginObserving() }
     }
 
     private var background: some View {
@@ -125,8 +100,69 @@ struct HomePage: View {
     }
 }
 
+struct HomeSurfaceWidget: View {
+    let tile: SurfaceTile
+    @State private var model = DashboardModel.shared
+    @Environment(\.surfaceSampleContent) private var sampleContent
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
+    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
+        var presenterBlurMoney = true
+    private var dark: Bool { scheme == .dark }
+    private var blurMoney: Bool { PresenterState.shared.active && presenterBlurMoney }
+
+    @ViewBuilder var body: some View {
+        if !tile.widget.available(in: SharedDefaults.store)
+            && !(sampleContent
+                && (tile.widget.usesExtensionCard || tile.widget == .agents
+                    || tile.widget == .usage))
+        {
+            PageCard(title: tile.displayTitle) {
+                Text("Enable this integration in Extensions.").font(.edithText(.callout))
+                    .foregroundStyle(.secondary)
+                Button("Open Extensions") { MainApp.open(section: "extensions") }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: UIScale.pt(6)) {
+                switch tile.widget {
+                case .clocks: WorldClocksCard(dark: dark)
+                case .actions: QuickActionsCard(dark: dark)
+                case .activity:
+                    PageCard(title: "Activity", note: "daily activity") {
+                        if model.homeUsage.hasDays {
+                            ActivityHeatmap(
+                                days: model.homeUsage.calendarDays,
+                                scale: model.homeUsage.heatScale,
+                                model: model, dark: dark, blur: blurMoney)
+                        } else if !model.loadAttempted {
+                            ActivityHeatmapSkeleton()
+                        } else {
+                            Text("No usage activity yet").foregroundStyle(.secondary)
+                        }
+                    }
+                case .calendar: MeetingsCard(dark: dark)
+                case .usage:
+                    SurfaceUsageCard(
+                        tile: tile, active: automaticActionsEnabled,
+                        open: { MainApp.open(section: $0) })
+                case .music: HomeMusicCard(dark: dark)
+                case .limits, .codeStats, .github, .agents, .focus, .databases, .machines, .desk,
+                    .media,
+                    .ability:
+                    SurfaceIntegrationCard(
+                        tile: tile, active: automaticActionsEnabled,
+                        open: { MainApp.open(section: $0) })
+                }
+            }
+            .environment(\.compactLayout, compact || tile.dense)
+        }
+    }
+
+}
+
 enum HomeMath {
-    static let maxZones = 2
+    static let maxZones = 12
 
     static let zoneSuggestions = [
         "Europe/London", "Europe/Berlin", "Asia/Kolkata", "Asia/Tokyo", "Asia/Singapore",
@@ -185,10 +221,13 @@ enum HomeMath {
 
 private struct HomeHeader: View {
     let dark: Bool
+    @Binding var editing: Bool
     @Environment(\.compactLayout) private var compact
     @ObservedObject private var visibility = WindowVisibility.shared
+    @Environment(\.surfaceSampleContent) private var sampleContent
 
     private var firstName: String {
+        if sampleContent { return "Alex" }
         let full = NSFullUserName()
         let name = full.isEmpty ? NSUserName() : full
         return name.split(separator: " ").first.map(String.init) ?? name
@@ -212,12 +251,34 @@ private struct HomeHeader: View {
             PageHeader {
                 greeting(now)
             } trailing: {
-                if !compact { clockBlock(now, alignment: .trailing) }
+                HStack(spacing: UIScale.pt(16)) {
+                    if !compact { clockBlock(now, alignment: .trailing) }
+                    layoutControls
+                }
             } accessory: {
                 subtitle(now)
                 if compact { clockBlock(now, alignment: .leading) }
+                if editing {
+                    Text("Drag a widget handle to place it. Drag a corner to resize.")
+                        .font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
             }
         }
+    }
+
+    private var layoutControls: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Button("Auto fit") {
+                SurfaceLayoutStore.shared.update(.home) {
+                    $0.arrangeAutomatically()
+                    $0.balancedRows = true
+                }
+            }
+            Button(editing ? "Done" : "Edit layout") { editing.toggle() }
+            Button("Widget editor") { MainApp.openSurfaceEditor(.home) }
+        }
+        .font(.edithText(.caption))
+        .buttonStyle(.edith(.secondary))
     }
 
     private func greeting(_ now: Date) -> some View {
@@ -258,6 +319,7 @@ private struct HomeHeader: View {
 }
 
 private struct WorldClocksCard: View {
+    @Environment(\.surfacePresentation) private var presentation
     let dark: Bool
     @Environment(\.compactLayout) private var compact
     @AppStorage(AppStorageKeys.General.homeClockZones, store: SharedDefaults.store) private
@@ -270,14 +332,24 @@ private struct WorldClocksCard: View {
         zonesRaw.split(separator: ",").map(String.init).filter { TimeZone(identifier: $0) != nil }
     }
 
+    private var visibleZones: [String] {
+        Array(zoneIDs.prefix(max(0, (presentation?.tile.itemLimit ?? 5) - 1)))
+    }
+    private var canAdd: Bool {
+        zoneIDs.count < HomeMath.maxZones && presentation?.tile.showActions != false
+    }
+
     var body: some View {
         PageCard(title: "World clocks", note: "hover a clock to remove") {
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                WrapHStack(spacing: UIScale.pt(20), lineSpacing: 16) {
+                SurfaceFittedGrid(
+                    count: visibleZones.count + 1 + (canAdd ? 1 : 0),
+                    minimum: compact ? 76 : 104, gap: 16
+                ) {
                     ClockTile(
                         date: context.date, zone: TimeZone.current, label: "Local", dark: dark,
                         onRemove: nil)
-                    ForEach(zoneIDs, id: \.self) { id in
+                    ForEach(visibleZones, id: \.self) { id in
                         ClockTile(
                             date: context.date, zone: TimeZone(identifier: id)!,
                             label: HomeMath.cityName(id), dark: dark
@@ -285,7 +357,7 @@ private struct WorldClocksCard: View {
                             remove(id)
                         }
                     }
-                    if zoneIDs.count < HomeMath.maxZones {
+                    if canAdd {
                         addButton
                     }
                 }
@@ -321,7 +393,9 @@ private struct WorldClocksCard: View {
                         DashSkin.lineStrong(dark),
                         style: StrokeStyle(lineWidth: UIScale.pt(1), dash: [4, 3])
                     )
-                    .frame(width: compact ? 64 : 96, height: compact ? 64 : 96)
+                    .frame(
+                        width: UIScale.pt(compact ? 64 : 96), height: UIScale.pt(compact ? 64 : 96)
+                    )
                     .overlay {
                         Image(systemName: "plus")
                             .font(.system(size: UIScale.pt(24), weight: .light))
@@ -374,6 +448,7 @@ private struct WorldClocksCard: View {
 }
 
 private struct ClockTile: View {
+    @Environment(\.surfacePresentation) private var presentation
     let date: Date
     let zone: TimeZone
     let label: String
@@ -382,8 +457,8 @@ private struct ClockTile: View {
     @Environment(\.compactLayout) private var compact
     @State private var hovering = false
 
-    private var faceSize: CGFloat { compact ? 64 : 96 }
-    private var tileWidth: CGFloat { compact ? 92 : 112 }
+    private var faceSize: CGFloat { UIScale.pt(compact ? 64 : 96) }
+    private var tileWidth: CGFloat { compact ? 76 : 104 }
 
     private var offsetLabel: String {
         HomeMath.offsetLabel(
@@ -392,21 +467,23 @@ private struct ClockTile: View {
 
     var body: some View {
         VStack(spacing: UIScale.pt(10)) {
-            ClockFace(zone: zone, dark: dark)
-                .frame(width: faceSize, height: faceSize)
-                .overlay(alignment: .topTrailing) {
-                    if hovering, let onRemove {
-                        Button(action: onRemove) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: UIScale.pt(16)))
-                                .foregroundStyle(DashSkin.inkFaint(dark))
-                                .background(Circle().fill(DashSkin.paper2(dark)))
+            if presentation?.tile.shows("faces") != false {
+                ClockFace(zone: zone, dark: dark)
+                    .frame(width: faceSize, height: faceSize)
+                    .overlay(alignment: .topTrailing) {
+                        if hovering, let onRemove {
+                            Button(action: onRemove) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: UIScale.pt(16)))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                                    .background(Circle().fill(DashSkin.paper2(dark)))
+                            }
+                            .buttonStyle(.edith(.borderless))
+                            .offset(x: 5, y: -5)
+                            .help("Remove clock")
                         }
-                        .buttonStyle(.edith(.borderless))
-                        .offset(x: 5, y: -5)
-                        .help("Remove clock")
                     }
-                }
+            }
             VStack(spacing: UIScale.pt(2)) {
                 Text(label)
                     .font(DashSkin.heading(compact ? 13 : 15))
@@ -416,12 +493,15 @@ private struct ClockTile: View {
                 Text(date.formatted(Date.FormatStyle(timeZone: zone).hour().minute()))
                     .font(DashSkin.mono(11.5))
                     .foregroundStyle(DashSkin.inkSoft(dark))
-                Text(offsetLabel)
-                    .font(DashSkin.mono(9.5))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if presentation?.tile.shows("offsets") != false,
+                    presentation?.tile.showDetails != false
+                {
+                    Text(offsetLabel).font(DashSkin.mono(9.5)).foregroundStyle(
+                        DashSkin.inkFaint(dark))
+                }
             }
         }
-        .frame(width: tileWidth)
+        .frame(minWidth: UIScale.pt(tileWidth), maxWidth: .infinity)
         .onHover { hovering = $0 }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
@@ -522,6 +602,8 @@ private struct ClockFace: View {
 }
 
 private struct QuickActionsCard: View {
+    @Environment(\.surfacePresentation) private var presentation
+    @Environment(\.compactLayout) private var compact
     let dark: Bool
     @AppStorage(AppStorageKeys.General.preventSleep, store: SharedDefaults.store) private
         var preventSleep = false
@@ -548,13 +630,25 @@ private struct QuickActionsCard: View {
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
 
     private var theme: Color { themeColor(themeName) }
-    private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: UIScale.pt(130)), spacing: UIScale.pt(12))]
+    private var actionCount: Int {
+        [
+            systemEnabled, keepAwakeEnabled, lidAwakeEnabled, keystrokeHighlightEnabled,
+            presenterEnabled,
+        ]
+        .filter { $0 }.count
     }
 
     var body: some View {
         PageCard(title: "Quick actions") {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
+            if actionCount == 0 {
+                Text("Enable desk and system controls in Extensions.")
+                    .font(.edithText(.callout)).foregroundStyle(.secondary)
+                if presentation?.tile.showActions != false {
+                    Button("Choose controls") { MainApp.open(section: "extensions") }
+                        .buttonStyle(.edith(.secondary))
+                }
+            }
+            SurfaceControlLayout(minimumWidth: 130, cellHeight: compact ? 72 : 112, gap: 12) {
                 if systemEnabled {
                     tile(
                         icon: "keyboard", title: "Clean keys",
@@ -604,7 +698,7 @@ private struct QuickActionsCard: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity)
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
@@ -645,21 +739,28 @@ private struct QuickActionsCard: View {
     ) -> some View {
         Button(action: action) {
             VStack(spacing: UIScale.pt(6)) {
-                Image(systemName: icon)
-                    .font(.system(size: UIScale.pt(21)))
-                    .frame(height: UIScale.pt(26))
+                if presentation?.tile.shows("icons") != false {
+                    Image(systemName: icon)
+                        .font(.system(size: UIScale.pt(21)))
+                        .frame(height: UIScale.pt(26))
+                }
                 Text(title)
                     .font(.system(size: UIScale.pt(12.5), weight: .medium))
                     .lineLimit(1)
-                Text(sub)
-                    .font(.system(size: UIScale.pt(10.5)))
-                    .foregroundStyle(active ? .white.opacity(0.8) : DashSkin.inkFaint(dark))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .minimumScaleFactor(0.8)
+                if !compact, presentation?.tile.showDetails != false,
+                    presentation?.tile.shows("descriptions") != false
+                {
+                    Text(sub)
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(active ? .white.opacity(0.8) : DashSkin.inkFaint(dark))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, UIScale.pt(16))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.vertical, UIScale.pt(compact ? 8 : 16))
             .padding(.horizontal, UIScale.pt(8))
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
             .background(
@@ -674,6 +775,7 @@ private struct QuickActionsCard: View {
 }
 
 private struct MeetingsCard: View {
+    @Environment(\.surfacePresentation) private var presentation
     @MainActor private static let sharedStore = CalendarStore()
 
     let dark: Bool
@@ -707,9 +809,10 @@ private struct MeetingsCard: View {
                         .foregroundStyle(DashSkin.inkFaint(dark))
                         .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
                 } else {
-                    ForEach(todayEvents.prefix(6), id: \.id) { event in
+                    ForEach(todayEvents.prefix(presentation?.tile.itemLimit ?? 6), id: \.id) {
+                        event in
                         row(event)
-                        if event != todayEvents.prefix(6).last {
+                        if event != todayEvents.prefix(presentation?.tile.itemLimit ?? 6).last {
                             Divider().opacity(0.4)
                         }
                     }
@@ -734,18 +837,22 @@ private struct MeetingsCard: View {
 
     private func row(_ event: CalendarEventPayload) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(10)) {
-            Text(timeLabel(event))
-                .font(DashSkin.mono(11))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
+            if presentation?.tile.shows("time") != false {
+                Text(timeLabel(event))
+                    .font(DashSkin.mono(11))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
             Text(event.title)
                 .font(.system(size: UIScale.pt(12.5)))
                 .lineLimit(1)
                 .foregroundStyle(DashSkin.ink(dark))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .presenterBlur(blurCalendar)
-            if let url = MeetingLink.url(for: event) {
+            if let url = MeetingLink.url(for: event), presentation?.tile.showActions != false,
+                presentation?.tile.shows("join") != false
+            {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
@@ -791,6 +898,7 @@ private func jumpLink(_ title: String, to destination: MainDestination, dark: Bo
 }
 
 struct JumpLink: View {
+    @Environment(\.surfacePresentation) private var presentation
     let title: String
     let destination: MainDestination
     let dark: Bool
@@ -799,149 +907,21 @@ struct JumpLink: View {
         MainDestination.home.rawValue
 
     var body: some View {
-        Button {
-            mainWindowSection = destination.rawValue
-        } label: {
-            HStack(spacing: UIScale.pt(4)) {
-                Text(title)
-                Image(systemName: "arrow.right")
-                    .font(.system(size: UIScale.pt(9), weight: .semibold))
-            }
-            .font(.system(size: UIScale.pt(11.5), weight: .medium))
-            .foregroundStyle(DashSkin.accentDeep(dark))
-        }
-        .buttonStyle(.edith(.borderless))
-        .padding(.top, UIScale.pt(10))
-    }
-}
-
-private struct UsageSummaryCard: View {
-    let dark: Bool
-    @State private var model = DashboardModel.shared
-    private var presenterState = PresenterState.shared
-    @AppStorage(AppStorageKeys.Presenter.blurMoney, store: SharedDefaults.store) private
-        var presenterBlurMoney =
-        true
-
-    init(dark: Bool) {
-        self.dark = dark
-    }
-
-    private var blurMoney: Bool { presenterState.active && presenterBlurMoney }
-
-    private static let ymd: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    private func day(_ offset: Int) -> HeatDay? {
-        let cal = Calendar.current
-        let date = cal.date(byAdding: .day, value: -offset, to: cal.startOfDay(for: Date()))!
-        return model.homeUsage.heatDetail[Self.ymd.string(from: date)]
-    }
-
-    private var lastDays: [(date: Date, cost: Double, tokens: Double)] {
-        let cal = Calendar.current
-        let today = cal.startOfDay(for: Date())
-        return (0..<14).reversed().map { offset in
-            let date = cal.date(byAdding: .day, value: -offset, to: today)!
-            let detail = model.homeUsage.heatDetail[Self.ymd.string(from: date)]
-            return (date, detail?.cost ?? 0, detail?.tokens ?? 0)
-        }
-    }
-
-    private var weekModels: [NamedValue] {
-        HomeMath.topModels(days: (0..<7).map(day))
-    }
-
-    var body: some View {
-        PageCard(title: "Agent usage", note: "last 14 days") {
-            if model.homeUsage.hasDays {
-                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                    HStack(spacing: UIScale.pt(24)) {
-                        stat(
-                            "Today", cost: day(0)?.cost ?? 0,
-                            tokens: day(0)?.tokens ?? 0)
-                        stat(
-                            "This week",
-                            cost: (0..<7).reduce(0) { $0 + (day($1)?.cost ?? 0) },
-                            tokens: (0..<7).reduce(0) { $0 + (day($1)?.tokens ?? 0) })
-                    }
-                    chart
-                    if !weekModels.isEmpty {
-                        WrapHStack(spacing: UIScale.pt(12), lineSpacing: 4) {
-                            ForEach(Array(weekModels.enumerated()), id: \.element.id) { i, entry in
-                                HStack(spacing: UIScale.pt(5)) {
-                                    Circle()
-                                        .fill(DashPalette.categorical(i, dark: dark))
-                                        .frame(width: UIScale.pt(7), height: UIScale.pt(7))
-                                    Text(entry.name)
-                                        .font(.system(size: UIScale.pt(11)))
-                                        .foregroundStyle(DashSkin.inkSoft(dark))
-                                    Text(DashFmt.tokens(entry.value))
-                                        .font(DashSkin.mono(10))
-                                        .foregroundStyle(DashSkin.inkFaint(dark))
-                                        .presenterBlur(blurMoney)
-                                }
-                            }
-                        }
-                    }
-                    jumpLink("Open Agent Usage", to: .dashboard, dark: dark)
+        if presentation?.tile.showActions != false {
+            Button {
+                mainWindowSection = destination.rawValue
+            } label: {
+                HStack(spacing: UIScale.pt(4)) {
+                    Text(title)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
                 }
-            } else {
-                if model.loadAttempted {
-                    Text("No usage data yet")
-                        .font(.system(size: UIScale.pt(12.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120))
-                } else {
-                    UsageSummarySkeleton(dark: dark)
-                }
+                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .foregroundStyle(DashSkin.accentDeep(dark))
             }
+            .buttonStyle(.edith(.borderless))
+            .padding(.top, UIScale.pt(10))
         }
-    }
-
-    private func stat(_ label: String, cost: Double, tokens: Double) -> some View {
-        VStack(alignment: .leading, spacing: UIScale.pt(2)) {
-            Text(label.uppercased())
-                .font(DashSkin.mono(9.5)).tracking(UIScale.pt(1.3))
-                .foregroundStyle(DashSkin.inkFaint(dark))
-            Text(DashFmt.usd(cost))
-                .font(DashSkin.heading(24))
-                .foregroundStyle(DashSkin.ink(dark))
-                .presenterBlur(blurMoney)
-            Text("\(DashFmt.tokens(tokens)) tokens")
-                .font(.system(size: UIScale.pt(11)))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-                .presenterBlur(blurMoney)
-        }
-    }
-
-    private var chart: some View {
-        Chart(lastDays, id: \.date) { entry in
-            BarMark(
-                x: .value("Day", entry.date, unit: .day),
-                y: .value("Cost", entry.cost)
-            )
-            .cornerRadius(2)
-            .foregroundStyle(
-                Calendar.current.isDateInToday(entry.date)
-                    ? DashSkin.accent(dark) : DashSkin.accent(dark).opacity(0.45))
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day, count: 3)) { value in
-                AxisValueLabel {
-                    if let d = value.as(Date.self) {
-                        Text(d.formatted(.dateTime.day()))
-                            .font(.system(size: UIScale.pt(8)))
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-        }
-        .chartYAxis(.hidden)
-        .frame(height: UIScale.pt(64))
     }
 }
 
@@ -967,45 +947,8 @@ private struct ActivityHeatmapSkeleton: View {
     }
 }
 
-private struct UsageSummarySkeleton: View {
-    let dark: Bool
-
-    var body: some View {
-        SkeletonGroup {
-            VStack(alignment: .leading, spacing: UIScale.pt(12)) {
-                HStack(spacing: UIScale.pt(24)) {
-                    ForEach(0..<2, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
-                            SkeletonBlock(width: index == 0 ? 44 : 66, height: 8)
-                            SkeletonBlock(width: 72, height: 22)
-                            SkeletonBlock(width: 88, height: 8)
-                        }
-                    }
-                }
-                HStack(alignment: .bottom, spacing: UIScale.pt(5)) {
-                    ForEach(0..<14, id: \.self) { index in
-                        SkeletonBlock(
-                            height: CGFloat(18 + index % 5 * 8),
-                            corner: 2)
-                    }
-                }
-                .frame(height: UIScale.pt(62), alignment: .bottom)
-                HStack(spacing: UIScale.pt(12)) {
-                    ForEach(0..<3, id: \.self) { index in
-                        SkeletonBlock(
-                            width: index == 1 ? 78 : 62,
-                            height: 9)
-                    }
-                }
-                SkeletonBlock(width: 116, height: 9)
-            }
-        }
-        .frame(maxWidth: .infinity, minHeight: UIScale.pt(120), alignment: .topLeading)
-        .accessibilityLabel("Loading usage summary")
-    }
-}
-
 struct HomeMusicCard: View {
+    @Environment(\.surfacePresentation) private var presentation
     let dark: Bool
     @State private var remote = MusicRemote.shared
     @State private var accounts = MusicAccounts.shared
@@ -1032,8 +975,10 @@ struct HomeMusicCard: View {
     private var blur: Bool { presenterState.active && presenterBlurMusic }
 
     private var upNext: [Track] {
-        remote.tracks.filter { $0.relativePath != remote.currentFile }.prefix(4)
-            .map { $0 }
+        remote.tracks.filter { $0.relativePath != remote.currentFile }.prefix(
+            presentation?.tile.itemLimit ?? 4
+        )
+        .map { $0 }
     }
 
     var body: some View {
@@ -1054,7 +999,7 @@ struct HomeMusicCard: View {
                             .font(.system(size: UIScale.pt(12.5)))
                             .foregroundStyle(DashSkin.inkFaint(dark))
                             .frame(maxWidth: .infinity, minHeight: UIScale.pt(70))
-                    } else {
+                    } else if presentation?.tile.shows("queue") != false {
                         ForEach(upNext) { track in
                             trackRow(track)
                         }
@@ -1073,33 +1018,39 @@ struct HomeMusicCard: View {
     @ViewBuilder private var streaming: some View {
         if accounts.selected == .spotify, accounts.spotify.connected {
             HStack(spacing: UIScale.pt(10)) {
-                MusicStreamingArtwork(url: accounts.spotify.artworkURL)
+                if presentation?.tile.shows("artwork") != false {
+                    MusicStreamingArtwork(url: accounts.spotify.artworkURL)
+                }
                 VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                     Text(
                         accounts.spotify.title.isEmpty ? "Nothing playing" : accounts.spotify.title
                     )
                     .font(.edithText(.headline)).lineLimit(1).presenterBlur(.music)
-                    Text(accounts.spotify.artist.isEmpty ? "Spotify" : accounts.spotify.artist)
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                        .lineLimit(1).presenterBlur(.music)
+                    if presentation?.tile.shows("artist") != false {
+                        Text(accounts.spotify.artist.isEmpty ? "Spotify" : accounts.spotify.artist)
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                            .lineLimit(1).presenterBlur(.music)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button {
-                    accounts.spotify.send(["action": "toggle"])
-                } label: {
-                    Image(systemName: accounts.spotify.playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: UIScale.pt(15))).foregroundStyle(theme)
+                if presentation?.tile.showActions != false {
+                    Button {
+                        accounts.spotify.send(["action": "toggle"])
+                    } label: {
+                        Image(systemName: accounts.spotify.playing ? "pause.fill" : "play.fill")
+                            .font(.system(size: UIScale.pt(15))).foregroundStyle(theme)
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .accessibilityLabel("Play or pause Spotify")
+                    Button {
+                        accounts.spotify.send(["action": "next"])
+                    } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: UIScale.pt(12))).foregroundStyle(theme)
+                    }
+                    .buttonStyle(.edith(.toolbar))
+                    .accessibilityLabel("Next Spotify track")
                 }
-                .buttonStyle(.edith(.toolbar))
-                .accessibilityLabel("Play or pause Spotify")
-                Button {
-                    accounts.spotify.send(["action": "next"])
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: UIScale.pt(12))).foregroundStyle(theme)
-                }
-                .buttonStyle(.edith(.toolbar))
-                .accessibilityLabel("Next Spotify track")
             }
         } else {
             HStack(spacing: UIScale.pt(10)) {
@@ -1129,40 +1080,46 @@ struct HomeMusicCard: View {
 
     private func nowPlaying(_ track: Track) -> some View {
         HStack(spacing: UIScale.pt(10)) {
-            HomeArtworkThumb(track: track, size: 40)
+            if presentation?.tile.shows("artwork") != false {
+                HomeArtworkThumb(track: track, size: 40)
+            }
             VStack(alignment: .leading, spacing: UIScale.pt(2)) {
                 Text(track.title)
                     .font(.system(size: UIScale.pt(13), weight: .medium))
                     .lineLimit(1)
                     .foregroundStyle(DashSkin.ink(dark))
                     .presenterBlur(blur)
-                if remote.isPlaying, visibility.visible {
-                    TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in
+                if presentation?.tile.shows("progress") != false {
+                    if remote.isPlaying, visibility.visible {
+                        TimelineView(.periodic(from: MusicTick.epoch, by: 1)) { _ in
+                            elapsedText
+                        }
+                    } else {
                         elapsedText
                     }
-                } else {
-                    elapsedText
                 }
             }
             PlaybackWave(
                 playing: remote.isPlaying, color: theme.opacity(0.9), maxHeight: UIScale.pt(14))
             Spacer(minLength: 6)
-            Button {
-                remote.playPause()
-            } label: {
-                Image(systemName: remote.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: UIScale.pt(15)))
-                    .foregroundStyle(theme)
+            if presentation?.tile.showActions != false {
+                Button {
+                    remote.playPause()
+                } label: {
+                    Image(systemName: remote.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: UIScale.pt(15)))
+                        .foregroundStyle(theme)
+                }
+                .buttonStyle(.edith(.toolbar))
+                Button {
+                    remote.next()
+                } label: {
+                    Image(systemName: "forward.fill")
+                        .font(.system(size: UIScale.pt(12)))
+                        .foregroundStyle(theme)
+                }
+                .buttonStyle(.edith(.toolbar))
             }
-            .buttonStyle(.edith(.toolbar))
-            Button {
-                remote.next()
-            } label: {
-                Image(systemName: "forward.fill")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(theme)
-            }
-            .buttonStyle(.edith(.toolbar))
         }
     }
 
@@ -1171,20 +1128,24 @@ struct HomeMusicCard: View {
             remote.toggle(track)
         } label: {
             HStack(spacing: UIScale.pt(8)) {
-                HomeArtworkThumb(track: track, size: 26)
+                if presentation?.tile.shows("artwork") != false {
+                    HomeArtworkThumb(track: track, size: 26)
+                }
                 Text(track.title)
                     .font(.system(size: UIScale.pt(12)))
                     .lineLimit(1)
                     .foregroundStyle(DashSkin.inkSoft(dark))
                     .presenterBlur(blur)
                 Spacer(minLength: 6)
-                Image(systemName: "play.fill")
-                    .font(.system(size: UIScale.pt(9)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
+                if presentation?.tile.showActions != false {
+                    Image(systemName: "play.fill").font(.system(size: UIScale.pt(9)))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
+        .allowsHitTesting(presentation?.tile.showActions != false)
     }
 }
 

@@ -9,10 +9,17 @@ struct ActivityCalendarGrid<Detail: View>: View {
     var showsLegend = true
     @ViewBuilder let detail: (ActivityCalendarDay) -> Detail
     @State private var hovered: String?
+    @State private var availableWidth = 400.0
+    @Environment(\.surfacePresentation) private var presentation
+    private var adaptiveCellSize: CGFloat {
+        guard presentation != nil, !weeks.isEmpty else { return cellSize }
+        return max(
+            cellSize, min(28, (availableWidth / UIScale.current - 16) / CGFloat(weeks.count) - 3))
+    }
 
-    private var gridHeight: CGFloat { UIScale.pt(12 + 3 + 7 * cellSize + 6 * 3) }
+    private var gridHeight: CGFloat { UIScale.pt(12 + 3 + 7 * adaptiveCellSize + 6 * 3) }
     private var gridWidth: CGFloat {
-        UIScale.pt(16 + CGFloat(weeks.count) * (cellSize + 3) - 3)
+        UIScale.pt(16 + CGFloat(weeks.count) * (adaptiveCellSize + 3) - 3)
     }
     private var weekdays: [String] {
         (0..<7).map { calendar.veryShortWeekdaySymbols[(calendar.firstWeekday - 1 + $0) % 7] }
@@ -25,7 +32,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
                     Color.clear.frame(height: UIScale.pt(12))
                     ForEach(0..<7, id: \.self) { row in
                         Text(row.isMultiple(of: 2) ? weekdays[row] : "")
-                            .frame(width: UIScale.pt(12), height: UIScale.pt(cellSize))
+                            .frame(width: UIScale.pt(12), height: UIScale.pt(adaptiveCellSize))
                     }
                 }
                 .frame(width: UIScale.pt(12))
@@ -37,7 +44,8 @@ struct ActivityCalendarGrid<Detail: View>: View {
                                     Text(monthLabel(at: index))
                                         .fixedSize(horizontal: true, vertical: false)
                                         .frame(
-                                            width: UIScale.pt(cellSize), height: UIScale.pt(12),
+                                            width: UIScale.pt(adaptiveCellSize),
+                                            height: UIScale.pt(12),
                                             alignment: .leading)
                                     ForEach(week.cells) { cell in
                                         RoundedRectangle(cornerRadius: UIScale.pt(3))
@@ -45,8 +53,8 @@ struct ActivityCalendarGrid<Detail: View>: View {
                                                 ActivityCalendarStyle.color(cell.level, dark: dark)
                                             )
                                             .frame(
-                                                width: UIScale.pt(cellSize),
-                                                height: UIScale.pt(cellSize)
+                                                width: UIScale.pt(adaptiveCellSize),
+                                                height: UIScale.pt(adaptiveCellSize)
                                             )
                                             .overlay {
                                                 RoundedRectangle(cornerRadius: UIScale.pt(3))
@@ -72,7 +80,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
                                             ) { detail(cell) }
                                     }
                                 }
-                                .frame(width: UIScale.pt(cellSize), alignment: .leading)
+                                .frame(width: UIScale.pt(adaptiveCellSize), alignment: .leading)
                             }
                         }
                         .frame(minWidth: geometry.size.width, alignment: .leading)
@@ -81,7 +89,7 @@ struct ActivityCalendarGrid<Detail: View>: View {
                 }
             }
             .frame(height: gridHeight)
-            if showsLegend {
+            if showsLegend, presentation?.tile.showDetails != false {
                 HStack(spacing: UIScale.pt(3)) {
                     Spacer()
                     Text("Less")
@@ -94,7 +102,15 @@ struct ActivityCalendarGrid<Detail: View>: View {
                 }
             }
         }
-        .frame(maxWidth: max(UIScale.pt(16), gridWidth), alignment: .leading)
+        .frame(
+            maxWidth: presentation == nil ? max(UIScale.pt(16), gridWidth) : .infinity,
+            alignment: .leading
+        )
+        .onGeometryChange(for: Double.self) {
+            $0.size.width
+        } action: {
+            availableWidth = $0
+        }
         .font(.system(size: UIScale.pt(9)))
         .foregroundStyle(DashSkin.inkFaint(dark))
     }

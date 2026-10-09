@@ -560,8 +560,6 @@ import Testing
         let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
         let card = try Self.viewDeclaration("QuickActionsCard", in: source)
-        #expect(card.contains(".adaptive(minimum: UIScale.pt("))
-        #expect(card.contains("LazyVGrid(columns: columns"))
         #expect(card.contains("Button(action: action)"))
         for feature in [
             "systemEnabled", "keepAwakeEnabled", "lidAwakeEnabled",
@@ -594,7 +592,13 @@ import Testing
         let keys = enabledKeys + hiddenKeys
         let previousValues = keys.map { defaults.object(forKey: $0) }
         let previousZoom = UIScale.current
+        let previousHome = defaults.string(forKey: SurfaceTarget.home.key)
+        defaults.set(
+            SurfaceLayout(tiles: [SurfaceTile(.actions)]).encoded, forKey: SurfaceTarget.home.key)
+        SurfaceLayoutStore.shared.reload()
         defer {
+            defaults.set(previousHome, forKey: SurfaceTarget.home.key)
+            SurfaceLayoutStore.shared.reload()
             for (key, value) in zip(keys, previousValues) {
                 defaults.set(value, forKey: key)
             }
@@ -614,6 +618,7 @@ import Testing
                 UIScale.apply(zoom)
                 let host = NSHostingView(
                     rootView: HomePage()
+                        .environment(\.compactLayout, width == 420)
                         .environment(\.automaticViewActionsEnabled, false)
                         .environment(\.terminalLaunchEnabled, false)
                         .environment(\.windowVisible, false)
@@ -654,6 +659,12 @@ import Testing
                 }
                 if width == 420 {
                     #expect(Set(actionFrames.map { Int($0.midY.rounded()) }).count > 1)
+                }
+                let allocatedWidth = viewport.width - UIScale.pt(32)
+                let rows = Dictionary(grouping: actionFrames) { Int($0.midY.rounded()) }
+                for frames in rows.values {
+                    let coverage = frames.reduce(CGRect.null) { $0.union($1) }
+                    #expect(coverage.width >= allocatedWidth - UIScale.pt(48) - 1)
                 }
                 #expect(!TestWindowHost.isExposedOnDesktop(window))
             }

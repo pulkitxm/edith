@@ -249,7 +249,8 @@ public enum HerdrListParser {
             workspaceID: string(in: object, keys: ["workspace_id"]),
             cwd: string(in: object, keys: ["foreground_cwd", "cwd", "working_directory"]),
             revision: integer(in: object, keys: ["revision"]),
-            stateSequence: integer(in: object, keys: ["state_change_seq"]))
+            stateSequence: integer(in: object, keys: ["state_change_seq"]),
+            nativeSession: nativeSession(in: object))
     }
 
     static func integer(in object: [String: Any], keys: [String]) -> Int? {
@@ -310,7 +311,8 @@ public enum HerdrListParser {
             machineIsLocal: context.machineIsLocal, sshTarget: context.sshTarget,
             session: context.session, pane: record.pane, kind: kind, status: status, title: title,
             workspace: workspace, cwd: cwd,
-            stateSequence: record.stateSequence ?? previous?.stateSequence)
+            stateSequence: record.stateSequence ?? previous?.stateSequence,
+            nativeSession: record.nativeSession)
     }
 
     public static func agents(
@@ -389,7 +391,16 @@ public enum HerdrListParser {
             sshTarget: sshTarget, session: session, pane: pane,
             kind: HerdrKind.displayName(for: kindRaw),
             status: HerdrAgentStatus.parse(statusRaw), title: title, workspace: workspace,
-            cwd: cwd, stateSequence: integer(in: object, keys: ["state_change_seq"]))
+            cwd: cwd, stateSequence: integer(in: object, keys: ["state_change_seq"]),
+            nativeSession: nativeSession(in: object))
+    }
+
+    private static func nativeSession(in object: [String: Any]) -> HerdrNativeSession? {
+        guard let reference = object["agent_session"] as? [String: Any],
+            string(reference["kind"]) == "id", let provider = string(reference["agent"]),
+            let value = string(reference["value"]), value.utf8.count <= 4096
+        else { return nil }
+        return HerdrNativeSession(provider: provider, value: value)
     }
 
     public static func firstJSON(in text: String) -> Any? {

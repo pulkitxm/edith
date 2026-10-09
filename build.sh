@@ -187,18 +187,20 @@ TEAM_ID=""
 
 DERIVED=build
 python3 scripts/approve-package-plugins.py
-xcodebuild -project edth.xcodeproj -scheme EdithMain -configuration "$CONFIG" \
-  -derivedDataPath "$DERIVED" \
-  -destination 'platform=macOS,arch=arm64' \
-  -quiet \
-  -onlyUsePackageVersionsFromResolvedFile \
-  COMPILER_INDEX_STORE_ENABLE=NO \
-  CODE_SIGNING_ALLOWED=NO \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
-  DEVELOPMENT_TEAM="$TEAM_ID" \
-  "${XCODE_BUILD_SETTINGS[@]}" \
-  build
+for BUILD_SCHEME in EdithAgentRuntime EdithDatabaseRuntime EdithMain; do
+  xcodebuild -project edth.xcodeproj -scheme "$BUILD_SCHEME" -configuration "$CONFIG" \
+    -derivedDataPath "$DERIVED" \
+    -destination 'platform=macOS,arch=arm64' \
+    -quiet \
+    -onlyUsePackageVersionsFromResolvedFile \
+    COMPILER_INDEX_STORE_ENABLE=NO \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGN_STYLE=Manual \
+    CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
+    DEVELOPMENT_TEAM="$TEAM_ID" \
+    "${XCODE_BUILD_SETTINGS[@]}" \
+    build
+done
 
 BUILT="$DERIVED/Build/Products/$CONFIG/Edith.app"
 BUILT_HELPER="$DERIVED/Build/Products/$CONFIG/EdithHelper.app"

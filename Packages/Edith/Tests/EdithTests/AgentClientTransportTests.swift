@@ -205,6 +205,56 @@ import Testing
         subscription.cancel()
     }
 
+    @Test @MainActor func agentMonitorKeepsBothLiveFeedsUntilTheLastObserverLeaves() async throws {
+        let fixture = TransportFixture()
+        let client = fixture.client()
+        try await client.verifyHandshakeAsync()
+        let initial = AgentActivitySnapshot()
+        let initialData = try AgentPayload.encode(initial)
+        fixture.latest.producePayload = { initialData }
+        let monitor = AgentActivityMonitor(client: client, discoversTerminals: { true })
+        let first = Task { await monitor.observe() }
+        let second = Task { await monitor.observe() }
+        defer { first.cancel(); second.cancel() }
+        try await wait {
+            fixture.latest.topics.contains(AgentTopic.agentActivity.rawValue)
+                && fixture.latest.topics.contains(AgentTopic.sessions.rawValue)
+        }
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        var next = initial
+        next.sessions = [
+            AgentActivitySession(
+                event: AgentActivityEvent(
+                    provider: .codex,
+                    sessionID: "demo", eventName: "UserPromptSubmit", phase: .working,
+                    project: "/tmp/demo", receivedAt: date))
+        ]
+        fixture.latest.emit(AgentTopic.agentActivity.rawValue, try AgentPayload.encode(next))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while monitor.activity.sessions.count != 1 && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(monitor.activity.sessions.count == 1)
+        #expect(monitor.load.hasContent)
+        next.sessions[0].phase = .waiting
+        fixture.latest.emit(AgentTopic.agentActivity.rawValue, try AgentPayload.encode(next))
+        let sessions = SessionsSnapshot(discoveredAt: date, hosts: [], working: 0, total: 0)
+        fixture.latest.emit(AgentTopic.sessions.rawValue, try AgentPayload.encode(sessions))
+        while (monitor.activity.sessions.first?.phase != .waiting || monitor.terminals == nil)
+            && ContinuousClock.now < deadline
+        {
+            try await Task.sleep(for: .milliseconds(2))
+        }
+        #expect(monitor.activity.sessions.first?.phase == .waiting)
+        #expect(monitor.terminals == sessions)
+        first.cancel()
+        await first.value
+        #expect(fixture.latest.topics.contains(AgentTopic.agentActivity.rawValue))
+        second.cancel()
+        await second.value
+        try await wait { fixture.latest.topics.isEmpty }
+    }
+
     private func wait(_ ready: @escaping @Sendable () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while !ready(), ContinuousClock.now < deadline {

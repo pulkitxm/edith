@@ -1,6 +1,13 @@
 import Foundation
 
 public enum AppStorageKeys {
+    public enum Surfaces {
+        public static let profiles = "surfaceLayoutProfiles"
+        public static let editorTarget = "surfaceEditorTarget"
+        public static let editorWidget = "surfaceEditorWidget"
+        public static let agentActivity = "agentActivityProviders"
+    }
+
     public enum Suites {
         public static let agents = "suiteAgentsEnabled"
         public static let maintenance = "suiteMaintenanceEnabled"
@@ -260,6 +267,7 @@ public enum AppStorageKeys {
     }
 
     public enum Mic {
+        public static let muted = "micMuted"
         public static let muteEnabled = "micMuteEnabled"
         public static let muteInMenuBar = "micMuteInMenuBar"
     }
