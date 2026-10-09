@@ -128,6 +128,8 @@ struct UsageSettingsRows: View {
     @State private var projections: [String] = []
     @State private var testSent = false
     @State private var testMessage: String?
+    @State private var notificationTest: Task<Void, Never>?
+    @State private var notificationPermission: Task<Void, Never>?
 
     private var hasProvider: Bool { claudeEnabled || codexEnabled || cursorEnabled || grokEnabled }
 
@@ -387,9 +389,16 @@ struct UsageSettingsRows: View {
 
             HStack {
                 Button("Send test notification") {
-                    Task { testMessage = await LimitNotifier.shared.sendTest() }
+                    notificationTest?.cancel()
                     testSent = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { testSent = false }
+                    notificationTest = Task {
+                        let result = await LimitNotifier.shared.sendTest()
+                        guard !Task.isCancelled else { return }
+                        testMessage = result
+                        do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                        testSent = false
+                        notificationTest = nil
+                    }
                 }
                 if testSent {
                     Text(testMessage ?? "Sending test notification")
@@ -400,12 +409,16 @@ struct UsageSettingsRows: View {
             Text("Alerts")
         } footer: {
             Text(
-                "Alerts use your local clock and fire once per window. With a Jev key, on-pace, outlook and headroom alerts only go out when Jev thinks they are worth the interruption."
+                "Alerts use your local clock and fire once per window. With Jev enabled, on-pace, outlook and headroom alerts only go out when Jev thinks they are worth the interruption."
             )
             .font(.system(size: UIScale.pt(10)))
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.5)
+        .onDisappear {
+            notificationTest?.cancel(); notificationTest = nil
+            notificationPermission?.cancel(); notificationPermission = nil
+        }
         .pageTask(id: notifyMaster) {
             let result = await LimitAlertInspector.previewLines()
             guard !Task.isCancelled else { return }
@@ -423,7 +436,8 @@ struct UsageSettingsRows: View {
             set: { enabled in
                 $notifyMaster.wrappedValue = enabled
                 if enabled {
-                    Task {
+                    notificationPermission?.cancel()
+                    notificationPermission = Task {
                         _ = try? await UNUserNotificationCenter.current().requestAuthorization(
                             options: [.alert, .sound, .badge])
                     }

@@ -13,7 +13,9 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func sendTest() async -> String {
+        guard !Task.isCancelled else { return "Cancelled" }
         let status = await center.notificationSettings().authorizationStatus
+        guard !Task.isCancelled else { return "Cancelled" }
         switch status {
         case .denied:
             return "Blocked - enable Edith in System Settings > Notifications"
@@ -21,12 +23,14 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
             _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
             try? await Task.sleep(for: .seconds(1))
             let refreshed = await center.notificationSettings().authorizationStatus
+            guard !Task.isCancelled else { return "Cancelled" }
             let granted = refreshed == .authorized || refreshed == .provisional
             guard granted else { return "Permission not granted" }
         default:
             break
         }
-        let id = "test_\(UUID().uuidString)"
+        guard !Task.isCancelled else { return "Cancelled" }
+        let id = "usage.test_\(UUID().uuidString)"
         let content = UNMutableNotificationContent()
         content.title = "Hey, you're set"
         content.body = "If you see this, notifications work"
@@ -38,6 +42,10 @@ final class LimitNotifier: NSObject, UNUserNotificationCenterDelegate {
             return "Failed: \(error.localizedDescription)"
         }
         try? await Task.sleep(nanoseconds: 500_000_000)
+        guard !Task.isCancelled else {
+            center.removePendingNotificationRequests(withIdentifiers: [id])
+            return "Cancelled"
+        }
         let delivered = await center.deliveredNotifications().contains {
             $0.request.identifier == id
         }
