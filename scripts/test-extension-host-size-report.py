@@ -44,6 +44,15 @@ class HostSizeReportTests(unittest.TestCase):
             self.assertIn("| Sample |", rendered)
             self.assertNotIn("| Remaining |", rendered)
 
+    def test_stale_or_missing_fingerprints_cannot_produce_size_claims(self):
+        with tempfile.TemporaryDirectory() as directory:
+            packages = Path(directory)
+            (packages / "sample.json").write_text(json.dumps({"sourceFingerprint": "older-build"}))
+            for fingerprints in [{}, {"sample": "current-build"}]:
+                with self.assertRaisesRegex(ValueError, "Rebuild sample"):
+                    report.build_report({}, Path("missing-app"), packages,
+                        [{"id": "sample", "contractVersion": 1}], [{"id": "sample"}], fingerprints)
+
     def test_unindexed_or_duplicate_extensions_cannot_inflate_migration_counts(self):
         for index in [[{"id": "other"}], [{"id": "sample"}, {"id": "sample"}]]:
             with self.assertRaisesRegex(ValueError, "host index"):
