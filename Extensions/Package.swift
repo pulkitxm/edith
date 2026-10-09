@@ -44,9 +44,21 @@ let package = Package(
             name: "CodeStatsExtensionTests", dependencies: ["CodeStatsExtension"],
             path: "codeStats/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "QuinjetExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "quinjet",
+            exclude: [
+                "Tests", "Views", "ViewModels", "Models/QuinjetLaunchModels.swift",
+                "Services/QuinjetSessionBridge.swift", "Package.swift",
+            ], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "QuinjetExtensionTests", dependencies: ["QuinjetExtension"],
+            path: "quinjet/Tests/Core", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "HerdrExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "herdr", exclude: ["Tests", "Views", "ViewModels", "Package.swift", "Runtime.swift"],
+            path: "herdr",
+            exclude: ["Tests", "Views", "ViewModels", "Package.swift", "Runtime.swift"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
