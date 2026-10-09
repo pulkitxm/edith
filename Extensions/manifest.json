@@ -937,5 +937,75 @@
       ]
     },
     "minimumSystemVersion": 14
+  },
+  {
+    "id": "companion",
+    "version": "1.0.0",
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "hostABI": "edith-host-1",
+    "supportProduct": "EdithExtensionUI",
+    "inputs": [
+      "Extensions/companion"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+    ],
+    "dependencies": [],
+    "roles": {
+      "app": [
+        "Extensions/companion/Models/CompanionBrain.swift",
+        "Extensions/companion/Models/CompanionChat.swift",
+        "Extensions/companion/Models/CompanionDataport.swift",
+        "Extensions/companion/Models/CompanionDeployment.swift",
+        "Extensions/companion/Models/CompanionHealthSnapshot.swift",
+        "Extensions/companion/Models/CompanionHost.swift",
+        "Extensions/companion/Models/CompanionHostFacts.swift",
+        "Extensions/companion/Models/CompanionRuntimeFiles.swift",
+        "Extensions/companion/Models/CompanionScan.swift",
+        "Extensions/companion/Models/CompanionStackConfig.swift",
+        "Extensions/companion/Runtime.swift",
+        "Extensions/companion/Services/CompanionBackgroundOperation.swift",
+        "Extensions/companion/Services/CompanionChatLibraryOperations.swift",
+        "Extensions/companion/Services/CompanionClient.swift",
+        "Extensions/companion/Services/CompanionDataTransfer.swift",
+        "Extensions/companion/Services/CompanionHealthJob.swift",
+        "Extensions/companion/Services/CompanionInstaller.swift",
+        "Extensions/companion/Services/CompanionMachines.swift",
+        "Extensions/companion/Services/CompanionMindRuntimeOperations.swift",
+        "Extensions/companion/Services/CompanionMonitor.swift",
+        "Extensions/companion/Services/CompanionOutbox.swift",
+        "Extensions/companion/Services/CompanionOutboxDelivery.swift",
+        "Extensions/companion/Services/CompanionPaths.swift",
+        "Extensions/companion/Services/CompanionSettingsOperations.swift",
+        "Extensions/companion/Services/CompanionStackControl.swift",
+        "Extensions/companion/Services/CompanionSurface.swift",
+        "Extensions/companion/Services/CompanionTransport.swift",
+        "Extensions/companion/Services/CompanionWorker.swift",
+        "Extensions/companion/Services/ShellQuote.swift",
+        "Extensions/companion/ViewModels/CompanionBackendModel.swift",
+        "Extensions/companion/ViewModels/CompanionHomeModel.swift",
+        "Extensions/companion/ViewModels/CompanionLibraryReads.swift",
+        "Extensions/companion/ViewModels/CompanionRefreshable.swift",
+        "Extensions/companion/ViewModels/CompanionWorkspaceSession.swift",
+        "Extensions/companion/Views/CompanionBackendView.swift",
+        "Extensions/companion/Views/CompanionCaptureView.swift",
+        "Extensions/companion/Views/CompanionChatView.swift",
+        "Extensions/companion/Views/CompanionDeskView.swift",
+        "Extensions/companion/Views/CompanionLayout.swift",
+        "Extensions/companion/Views/CompanionLibraryView.swift",
+        "Extensions/companion/Views/CompanionMarkdown.swift",
+        "Extensions/companion/Views/CompanionMindView.swift",
+        "Extensions/companion/Views/CompanionOnboardingView.swift",
+        "Extensions/companion/Views/CompanionPage.swift",
+        "Extensions/companion/Views/CompanionSettingsView.swift",
+        "Extensions/companion/Views/CompanionUI.swift"
+      ]
+    },
+    "minimumSystemVersion": 14
   }
 ]
