@@ -548,7 +548,7 @@ final class NotchShelfController: FeatureModule {
             backing: .buffered, defer: true)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.isMovable = false
         panel.ignoresMouseEvents = true
