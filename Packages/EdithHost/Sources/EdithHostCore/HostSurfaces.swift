@@ -3,6 +3,7 @@ import Foundation
 
 @MainActor
 public final class HostSurfaces {
+    public let preferences: UserDefaults
     public let layouts: SurfaceLayoutStore
     public let context: SurfaceHostContext
 
@@ -12,6 +13,7 @@ public final class HostSurfaces {
         guard let defaults = SharedDefaults.applicationStore(identifier: identity.identifier) else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
+        preferences = defaults
         let channel = ExtensionSharedState(
             root: identity.root.appendingPathComponent("ExtensionState"),
             namespace: identity.identifier, owner: "host")
