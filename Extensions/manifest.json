@@ -524,5 +524,67 @@
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI"
+  },
+  {
+    "id": "plugins",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionDocuments",
+    "roles": {
+      "app": [
+        "Extensions/plugins/PluginResources.swift",
+        "Extensions/plugins/PluginsPage.swift",
+        "Extensions/plugins/PluginsSurface.swift",
+        "Extensions/plugins/Runtime.swift",
+        "Extensions/plugins/SkillAgent.swift",
+        "Extensions/plugins/SkillBrand.swift",
+        "Extensions/plugins/SkillCatalog.swift",
+        "Extensions/plugins/SkillDocument.swift",
+        "Extensions/plugins/SkillInstallSheet.swift",
+        "Extensions/plugins/SkillInstaller.swift",
+        "Extensions/plugins/SkillPreviewSheet.swift",
+        "Extensions/plugins/SkillsModel.swift"
+      ]
+    },
+    "resources": {
+      "app": [
+        "Extensions/plugins/Resources/amp.svg",
+        "Extensions/plugins/Resources/antigravity.svg",
+        "Extensions/plugins/Resources/claude.svg",
+        "Extensions/plugins/Resources/cline.svg",
+        "Extensions/plugins/Resources/codex.svg",
+        "Extensions/plugins/Resources/copilot.svg",
+        "Extensions/plugins/Resources/cursor.svg",
+        "Extensions/plugins/Resources/devin.svg",
+        "Extensions/plugins/Resources/gemini.svg",
+        "Extensions/plugins/Resources/grok.svg",
+        "Extensions/plugins/Resources/kilo.svg",
+        "Extensions/plugins/Resources/kimi.svg",
+        "Extensions/plugins/Resources/kiro.svg",
+        "Extensions/plugins/Resources/opencode.svg",
+        "Extensions/plugins/Resources/pi.svg",
+        "Extensions/plugins/Resources/plugin-command-code.svg",
+        "Extensions/plugins/Resources/plugin-droid.svg",
+        "Extensions/plugins/Resources/plugin-mistral.svg",
+        "Extensions/plugins/Resources/plugin-warp.svg",
+        "Extensions/plugins/Resources/plugin-zed.svg",
+        "Extensions/plugins/Resources/qoder.svg",
+        "Extensions/plugins/Resources/qwen.svg"
+      ]
+    },
+    "inputs": [
+      "Extensions/plugins"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "Packages/ExtensionSupport/Sources/EdithExtensionDocuments"
+    ],
+    "dependencies": []
   }
 ]

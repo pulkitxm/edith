@@ -1,0 +1,150 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import EdithExtensionDocuments
+import SwiftUI
+
+struct SkillPreviewSheet: View {
+    let skill: EdithSkill
+    let documents: SkillDocumentStore
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @State private var document: SkillDocument?
+    @State private var load = ContentLoad()
+    @State private var mode = Mode.preview
+    @State private var copied = false
+    @State private var refreshID = UUID()
+
+    init(skill: EdithSkill, documents: SkillDocumentStore) {
+        self.skill = skill
+        self.documents = documents
+        _document = State(initialValue: documents.cachedDocument(for: skill))
+    }
+
+    private enum Mode: String, CaseIterable {
+        case preview = "Preview"
+        case markdown = "Markdown"
+    }
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: UIScale.pt(14)) {
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable().scaledToFit()
+                    .frame(width: UIScale.pt(44), height: UIScale.pt(44))
+                VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                    Text(skill.name)
+                        .font(.system(size: UIScale.pt(20), weight: .semibold))
+                    Text("SKILL.md")
+                        .font(.system(size: UIScale.pt(11), design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.edith(.borderless))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Close preview")
+                .keyboardShortcut(.cancelAction)
+            }
+            .padding(UIScale.pt(24))
+            HStack {
+                EdithSegmentedPicker(
+                    "View", selection: $mode, options: Mode.allCases, label: { $0.rawValue }
+                )
+                .labelsHidden()
+                .frame(width: UIScale.pt(210))
+                Spacer()
+                Button {
+                    guard let document else { return }
+                    NSPasteboard.general.clearContents()
+                    copied = NSPasteboard.general.setString(document.markdown, forType: .string)
+                } label: {
+                    Label(
+                        copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc"
+                    )
+                }
+                .disabled(document == nil)
+                .help("Copy the complete skill Markdown, including its metadata")
+            }
+            .padding(.horizontal, UIScale.pt(24))
+            .padding(.bottom, UIScale.pt(16))
+            if document?.isCached == true {
+                Text(
+                    "Showing cached Markdown. Reopen to retry GitHub; installation downloads the complete skill separately."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+                .padding(.horizontal, UIScale.pt(24)).padding(.bottom, UIScale.pt(12))
+            }
+            Divider()
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(width: PresentationMetrics.width(740), height: PresentationMetrics.height(650))
+        .pageTask(id: refreshID) {
+            copied = false
+            await load.perform(operation: {
+                try await documents.load(skill)
+            }) { result in
+                document = result
+            }
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        if let document {
+            if mode == .preview {
+                ScrollView {
+                    MarkdownBody(
+                        text: document.body, dark: dark, size: 13, bodyInk: true,
+                        documentStyle: true
+                    )
+                    .frame(maxWidth: UIScale.pt(620), alignment: .leading)
+                    .padding(UIScale.pt(32))
+                    .frame(maxWidth: .infinity)
+                }
+            } else {
+                CodePreview(
+                    text: document.markdown, language: "markdown", truncated: false, dark: dark
+                )
+                .id(document.markdown)
+                .padding(UIScale.pt(12))
+                .accessibilityLabel("Read-only skill Markdown")
+            }
+        } else if let error = load.errorMessage {
+            VStack(spacing: UIScale.pt(12)) {
+                Image(systemName: "wifi.exclamationmark").font(.edithText(.title2)).foregroundStyle(
+                    .secondary)
+                Text(error).multilineTextAlignment(.center)
+                    .font(.edithText(.callout)).frame(maxWidth: UIScale.pt(380))
+                Button("Try again") { refreshID = UUID() }
+            }
+        } else {
+            SkeletonGroup {
+                VStack(alignment: .leading, spacing: UIScale.pt(24)) {
+                    SkeletonBlock(width: 280, height: 24)
+                    skeletonParagraph
+                    SkeletonBlock(width: 210, height: 18)
+                    skeletonParagraph
+                    SkeletonBlock(height: 80, corner: 10)
+                    skeletonParagraph
+                    Spacer(minLength: 0)
+                }
+                .padding(UIScale.pt(32))
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Loading skill")
+        }
+    }
+
+    private var skeletonParagraph: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+            SkeletonBlock(height: 12)
+            SkeletonBlock(height: 12)
+            SkeletonBlock(width: 390, height: 12)
+        }
+    }
+}
