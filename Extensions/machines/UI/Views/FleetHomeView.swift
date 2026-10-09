@@ -73,10 +73,13 @@ struct FleetHomeView: View {
     private var metricsGrid: some View {
         let fleet = model.fleet
         return LazyVGrid(
-            columns: [
-                GridItem(.flexible(), spacing: UIScale.pt(12)),
-                GridItem(.flexible(), spacing: UIScale.pt(12)),
-            ], spacing: UIScale.pt(12)
+            columns: compact
+                ? [GridItem(.flexible(minimum: 0))]
+                : [
+                    GridItem(.flexible(minimum: 0), spacing: UIScale.pt(12)),
+                    GridItem(.flexible(minimum: 0), spacing: UIScale.pt(12)),
+                ],
+            spacing: UIScale.pt(12)
         ) {
             MetricCard(
                 title: "CPU", value: String(format: "%.0f%%", fleet.cpuPercent),
@@ -179,52 +182,94 @@ private struct FleetMachineRow: View {
     let hostsCompanion: Bool
     let onOpen: () -> Void
     @State private var hovering = false
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: UIScale.pt(12)) {
-                Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
-                    .font(.system(size: UIScale.pt(13)))
-                    .foregroundStyle(DashSkin.inkSoft(dark))
-                    .frame(width: UIScale.pt(18))
-                VStack(alignment: .leading, spacing: UIScale.pt(1)) {
-                    HStack(spacing: UIScale.pt(5)) {
-                        Text(snapshot.name)
-                            .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                            .foregroundStyle(DashSkin.ink(dark))
-                        if hostsCompanion {
-                            Image(systemName: "brain.head.profile")
-                                .font(.system(size: UIScale.pt(9.5)))
-                                .foregroundStyle(DashSkin.accent(dark))
-                                .help("Runs the companion")
+            Group {
+                if compact {
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        HStack(spacing: UIScale.pt(12)) {
+                            Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
+                                .font(.system(size: UIScale.pt(13)))
+                                .foregroundStyle(DashSkin.inkSoft(dark))
+                            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                                Text(snapshot.name).font(.edithText(.headline)).lineLimit(1)
+                                Text(snapshot.online ? snapshot.os : "Not connected")
+                                    .font(.edithText(.caption)).foregroundStyle(
+                                        DashSkin.inkFaint(dark))
+                            }
+                            Spacer(minLength: 0)
+                            if hostsCompanion {
+                                Image(systemName: "brain.head.profile").foregroundStyle(
+                                    DashSkin.accent(dark))
+                            }
+                            if snapshot.online {
+                                Text("\(snapshot.cores) cores").font(DashSkin.mono(10))
+                                    .foregroundStyle(DashSkin.inkFaint(dark))
+                            }
+                            Image(systemName: "chevron.right").font(.edithText(.caption))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                        }
+                        if snapshot.online {
+                            HStack(spacing: UIScale.pt(12)) {
+                                meter(
+                                    "CPU", percent: snapshot.cpuPercent,
+                                    color: DashSkin.accent(dark))
+                                meter("MEM", percent: snapshot.memoryPercent, color: DashSkin.sage)
+                                meter(
+                                    "DISK", percent: snapshot.diskPercent,
+                                    color: snapshot.diskPercent > FleetMath.diskWarningPercent
+                                        ? DashSkin.danger : DashSkin.gold)
+                            }
                         }
                     }
-                    Text(snapshot.online ? snapshot.os : "Not connected")
-                        .font(.system(size: UIScale.pt(10.5)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .lineLimit(1)
-                }
-                .frame(width: UIScale.pt(190), alignment: .leading)
-                if snapshot.online {
-                    meter("CPU", percent: snapshot.cpuPercent, color: DashSkin.accent(dark))
-                    meter("MEM", percent: snapshot.memoryPercent, color: DashSkin.sage)
-                    meter(
-                        "DISK", percent: snapshot.diskPercent,
-                        color: snapshot.diskPercent > FleetMath.diskWarningPercent
-                            ? DashSkin.danger : DashSkin.gold)
-                    Text("\(snapshot.cores) cores")
-                        .font(DashSkin.mono(10))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(width: UIScale.pt(60), alignment: .trailing)
                 } else {
-                    Text("Offline")
-                        .font(.system(size: UIScale.pt(11)))
-                        .foregroundStyle(DashSkin.inkFaint(dark))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: UIScale.pt(12)) {
+                        Image(systemName: snapshot.isLocal ? "laptopcomputer" : "server.rack")
+                            .font(.system(size: UIScale.pt(13)))
+                            .foregroundStyle(DashSkin.inkSoft(dark))
+                            .frame(width: UIScale.pt(18))
+                        VStack(alignment: .leading, spacing: UIScale.pt(1)) {
+                            HStack(spacing: UIScale.pt(5)) {
+                                Text(snapshot.name)
+                                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                                    .foregroundStyle(DashSkin.ink(dark))
+                                if hostsCompanion {
+                                    Image(systemName: "brain.head.profile")
+                                        .font(.system(size: UIScale.pt(9.5)))
+                                        .foregroundStyle(DashSkin.accent(dark))
+                                        .help("Runs the companion")
+                                }
+                            }
+                            Text(snapshot.online ? snapshot.os : "Not connected")
+                                .font(.system(size: UIScale.pt(10.5)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .lineLimit(1)
+                        }
+                        .frame(width: UIScale.pt(190), alignment: .leading)
+                        if snapshot.online {
+                            meter("CPU", percent: snapshot.cpuPercent, color: DashSkin.accent(dark))
+                            meter("MEM", percent: snapshot.memoryPercent, color: DashSkin.sage)
+                            meter(
+                                "DISK", percent: snapshot.diskPercent,
+                                color: snapshot.diskPercent > FleetMath.diskWarningPercent
+                                    ? DashSkin.danger : DashSkin.gold)
+                            Text("\(snapshot.cores) cores")
+                                .font(DashSkin.mono(10))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .frame(width: UIScale.pt(60), alignment: .trailing)
+                        } else {
+                            Text("Offline")
+                                .font(.system(size: UIScale.pt(11)))
+                                .foregroundStyle(DashSkin.inkFaint(dark))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: UIScale.pt(9)))
+                            .foregroundStyle(DashSkin.inkFaint(dark))
+                    }
                 }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: UIScale.pt(9)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
             }
             .padding(.vertical, UIScale.pt(8))
             .padding(.horizontal, UIScale.pt(4))
