@@ -149,6 +149,16 @@ jobs:
         with:
           name: host-interfaces
           path: dist/host-interfaces
+      - name: Identify the support build toolchain
+        id: support-toolchain
+        run: |
+          fingerprint="$( { xcodebuild -version; swift --version; xcrun --sdk macosx --show-sdk-version; } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+      - name: Reuse this extension's unchanged support libraries
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: local/extension-support/${{ matrix.id }}_*
+          key: extension-support-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionSupport/Package.swift', 'Packages/ExtensionSupport/Sources/**', 'scripts/build-extension-support.mjs') }}
       - name: Import the release signing certificate
         if: github.event_name != 'pull_request'
         env:
