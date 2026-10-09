@@ -36,6 +36,19 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private var previewConsumers: Set<UUID> = []
     var previewVisible: Bool { !previewConsumers.isEmpty }
     private var activeSession: UUID?
+    var surfaceSnapshot: SurfaceRecorderSnapshot {
+        var value = SurfaceRecorderSnapshot()
+        value.sessionID = activeSession; value.recording = recording; value.busy = busy
+        value.startedAt = startedAt; value.frames = max(0, frames); value.bytes = max(0, bytes)
+        value.playbackSeconds = playbackSeconds.isFinite ? max(0, playbackSeconds) : 0
+        value.mode = settings.mode; value.frameRate = settings.outputFPS;
+        value.interval = settings.interval
+        value.sourceMode = sourceMode
+        value.sources = sourceMode == "displays" ? selectedDisplays.count : selectedWindows.count
+        value.systemAudio = settings.systemAudio; value.microphone = settings.microphoneID != nil
+        value.error = error
+        return value
+    }
     private var streams: [SCStream] = []
     private var outputs: [TimeLapseCaptureOutput] = []
     private var writer: TimeLapseWriter?
@@ -47,7 +60,7 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     static var libraryURL: URL {
-        VideoProject.libraryURL.appendingPathComponent("TimeLapses", isDirectory: true)
+        SurfaceRecordingLibrary.root
     }
 
     func loadSources(

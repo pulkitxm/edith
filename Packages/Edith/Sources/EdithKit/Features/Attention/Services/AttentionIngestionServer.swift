@@ -11,6 +11,7 @@ public final class AttentionIngestionServer: @unchecked Sendable {
 
     private let repository: AttentionRepository
     private let settings: AttentionSettings
+    private let activity: @Sendable () -> (idleSeconds: TimeInterval?, locked: Bool)
     private let queue = DispatchQueue(label: "com.pulkit.edith.attention.server")
     private var listener: NWListener?
     private let stateLock = NSLock()
@@ -18,10 +19,14 @@ public final class AttentionIngestionServer: @unchecked Sendable {
     private var storedPort: UInt16?
 
     public init(
-        repository: AttentionRepository = AttentionRepository(), settings: AttentionSettings
+        repository: AttentionRepository = AttentionRepository(), settings: AttentionSettings,
+        activity: @escaping @Sendable () -> (idleSeconds: TimeInterval?, locked: Bool) = {
+            (AttentionSystemActivity.idleSeconds(), AttentionSystemActivity.isLocked)
+        }
     ) {
         self.repository = repository
         self.settings = settings
+        self.activity = activity
     }
 
     public var state: State {
@@ -128,6 +133,23 @@ public final class AttentionIngestionServer: @unchecked Sendable {
             return .init(
                 status: 200,
                 body: ["status": "ok", "extension": AttentionExtensionInstaller.version])
+        }
+        if request.method == "GET", request.path == "/v1/presence" {
+            guard request.headers["x-edith-token"] == settings.serverToken else {
+                return .init(status: 401, body: ["error": "unauthorized"])
+            }
+            let sample = activity()
+            let presence = AttentionSystemActivity.presence(
+                idleSeconds: sample.idleSeconds, threshold: settings.idleThreshold,
+                locked: sample.locked)
+            var body = [
+                "presence": presence.rawValue,
+                "idleThreshold": String(settings.idleThreshold),
+            ]
+            if let seconds = sample.idleSeconds, seconds.isFinite, seconds >= 0 {
+                body["idleSeconds"] = String(seconds)
+            }
+            return .init(status: 200, body: body)
         }
         guard request.method == "POST", request.path == "/v1/heartbeat" else {
             if request.method == "POST", request.path == "/v1/history" {

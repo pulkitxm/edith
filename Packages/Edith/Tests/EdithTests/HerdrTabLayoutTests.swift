@@ -8,6 +8,61 @@ import Testing
 
 @MainActor
 @Suite struct HerdrTabLayoutTests {
+    @Test func openingInANamedTabWorksFromTheBoard() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let first = agent("Shell", pane: "a")
+        let second = agent("Shell", pane: "b")
+        let third = agent("Shell", pane: "c")
+        store.open(first)
+        let target = try #require(store.currentTab).id
+        store.open(second)
+        let other = try #require(store.currentTab)
+        store.selectBoard()
+
+        store.open(third, in: target, beside: .bottom)
+
+        #expect(store.selectedTab == target)
+        #expect(store.currentTab?.agentIDs == [first.id, third.id])
+        #expect(store.currentTab?.focused == third.id)
+        #expect(store.tab(other.id) == other)
+        let frames = try #require(store.currentTab).layout.frames(
+            in: CGRect(x: 0, y: 0, width: 100, height: 100))
+        #expect(frames[third.id] == CGRect(x: 0, y: 50, width: 100, height: 50))
+    }
+
+    @Test func openingInAMissingOrContainingTabDoesNothing() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let first = agent("Shell", pane: "a")
+        store.open(first)
+        let tabs = store.tabs
+        let target = try #require(store.currentTab).id
+        store.selectBoard()
+
+        store.open(first, in: target, beside: .right)
+        store.open(agent("Shell", pane: "b"), in: "missing", beside: .right)
+
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(store.tabs == tabs)
+        #expect(store.sessions.map(\.id) == [first.id])
+    }
+
+    @Test func openingInANewTabSeparatesAnExistingSplitWithoutRestarting() throws {
+        let store = HerdrStore(defaults: Self.scratchDefaults())
+        let first = agent("Shell", pane: "a")
+        let second = agent("Shell", pane: "b")
+        store.open(first)
+        store.open(second, beside: .right)
+        let holder = try #require(store.session(second.id)).holder
+
+        store.openInNewTab(second)
+
+        #expect(store.tabs.map(\.agentIDs) == [[first.id], [second.id]])
+        #expect(store.currentTab?.agentIDs == [second.id])
+        #expect(store.session(second.id)?.holder === holder)
+        store.openInNewTab(second)
+        #expect(store.tabs.count == 2)
+    }
+
     @Test func openingBesideBuildsOneSideBySideTab() throws {
         let store = HerdrStore(defaults: Self.scratchDefaults())
         let claude = agent("Claude Code", pane: "a")

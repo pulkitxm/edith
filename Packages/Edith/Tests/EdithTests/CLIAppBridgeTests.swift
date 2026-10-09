@@ -2,6 +2,7 @@ import Foundation
 import Testing
 
 @testable import EdithCLI
+@testable import EdithKit
 
 private final class SendableCounter: @unchecked Sendable {
     private let lock = NSLock()
@@ -22,14 +23,14 @@ private final class SendableCounter: @unchecked Sendable {
 
 @Suite struct CLIReplyWaiterTests {
     @Test func deliveryBeforeWaitingIsRetained() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         #expect(waiter.deliver(["value": "ready"]))
         let reply = await waiter.wait()
         #expect(reply?["value"] as? String == "ready")
     }
 
     @Test func deliveryResumesAWaitingCommand() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         let task = Task { await waiter.wait()?["value"] as? Int }
         await Task.yield()
         #expect(waiter.deliver(["value": 42]))
@@ -37,7 +38,7 @@ private final class SendableCounter: @unchecked Sendable {
     }
 
     @Test func theFirstReplyWins() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         #expect(waiter.deliver(["value": "first"]))
         #expect(!waiter.deliver(["value": "second"]))
         let reply = await waiter.wait()
@@ -45,13 +46,13 @@ private final class SendableCounter: @unchecked Sendable {
     }
 
     @Test func anEmptyReplyIsStillAReply() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         #expect(waiter.deliver([:]))
         #expect(await waiter.wait()?.isEmpty == true)
     }
 
     @Test func cancellationResumesWithNoReply() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         let task = Task { await waiter.wait() == nil }
         await Task.yield()
         task.cancel()
@@ -60,14 +61,14 @@ private final class SendableCounter: @unchecked Sendable {
     }
 
     @Test func cancellationBeforeWaitingIsRetained() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         #expect(waiter.cancel())
         #expect(!waiter.cancel())
         #expect(await waiter.wait() == nil)
     }
 
     @Test func onlyOneOfManyConcurrentRepliesIsAccepted() async {
-        let waiter = ReplyWaiter()
+        let waiter = IPCReplyWaiter()
         let accepted = await withTaskGroup(of: Bool.self, returning: Int.self) { group in
             for value in 0..<200 {
                 group.addTask { waiter.deliver(["value": value]) }
@@ -84,7 +85,7 @@ private final class SendableCounter: @unchecked Sendable {
         let values = await withTaskGroup(of: Int?.self, returning: [Int].self) { group in
             for value in 0..<100 {
                 group.addTask {
-                    let waiter = ReplyWaiter()
+                    let waiter = IPCReplyWaiter()
                     waiter.deliver(["value": value])
                     return await waiter.wait()?["value"] as? Int
                 }

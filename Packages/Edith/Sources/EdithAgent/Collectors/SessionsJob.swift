@@ -3,12 +3,14 @@ import Foundation
 
 public enum SessionsTally {
     public static func snapshot(
-        hosts: [HerdrHostSnapshot], now: Date = Date()
+        hosts: [HerdrHostSnapshot], now: Date = Date(),
+        attention: [String: AgentTerminalAttentionObservation] = [:]
     ) -> SessionsSnapshot {
         let agents = hosts.flatMap(\.agents)
         return SessionsSnapshot(
             discoveredAt: now, hosts: hosts,
-            working: agents.filter { $0.status == .working }.count, total: agents.count)
+            working: agents.filter { $0.status == .working }.count, total: agents.count,
+            attention: attention)
     }
 
     public static let remoteInterval: TimeInterval = 120
@@ -30,6 +32,8 @@ public final class SessionsJob: @unchecked Sendable {
     private let notify: @Sendable ([HerdrHostSnapshot]) async throws -> Void
     private let now: @Sendable () -> Date
     private let tracksAgents: @Sendable () -> Bool
+    private let attention:
+        @Sendable ([HerdrHostSnapshot]) async -> [String: AgentTerminalAttentionObservation]
     private let observe: @Sendable ([HerdrHostSnapshot]) async -> Void
     private let lock = NSLock()
     private var remoteCollectedAt = Date.distantPast
@@ -48,10 +52,16 @@ public final class SessionsJob: @unchecked Sendable {
         },
         now: @escaping @Sendable () -> Date = { Date() },
         tracksAgents: @escaping @Sendable () -> Bool = { false },
-        observe: @escaping @Sendable ([HerdrHostSnapshot]) async -> Void = { _ in }
+        observe: @escaping @Sendable ([HerdrHostSnapshot]) async -> Void = { _ in },
+        attention:
+            @escaping @Sendable ([HerdrHostSnapshot]) async -> [String:
+            AgentTerminalAttentionObservation] = {
+                await AgentNotificationService.shared.attentionObservations($0)
+            }
     ) {
         self.tracksAgents = tracksAgents
         self.observe = observe
+        self.attention = attention
         self.store = store
         self.isSubscribed = isSubscribed
         self.defaults = defaults
@@ -69,8 +79,9 @@ public final class SessionsJob: @unchecked Sendable {
         else { return nil }
         if case .all = scope { markRemoteCollected() }
         let collected = await collect(scope)
-        let snapshot = SessionsTally.snapshot(hosts: merged(collected, scope: scope))
+        let hosts = merged(collected, scope: scope)
         try await notify(collected)
+        let snapshot = SessionsTally.snapshot(hosts: hosts, attention: await attention(hosts))
         await observe(snapshot.hosts)
         SidebarBadgeStore.recordSessions(working: snapshot.working)
         try? await record(snapshot)

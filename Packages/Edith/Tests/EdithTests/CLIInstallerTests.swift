@@ -131,11 +131,14 @@ import Testing
         try FileManager.default.createDirectory(
             at: isolated.deletingLastPathComponent(), withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: CLIProcessProbe.binary, to: isolated)
-        for name in ["Sparkle.framework", "libExtensionMarketplace.dylib"] {
+        let runtime = CLIProcessProbe.binary.deletingLastPathComponent().resolvingSymlinksInPath()
+        for library in try FileManager.default.contentsOfDirectory(
+            at: runtime, includingPropertiesForKeys: nil)
+        where ["framework", "dylib"].contains(library.pathExtension) {
             try FileManager.default.copyItem(
-                at: CLIProcessProbe.binary.deletingLastPathComponent()
-                    .appendingPathComponent(name).resolvingSymlinksInPath(),
-                to: isolated.deletingLastPathComponent().appendingPathComponent(name))
+                at: library.resolvingSymlinksInPath(),
+                to: isolated.deletingLastPathComponent().appendingPathComponent(
+                    library.lastPathComponent))
         }
         let target = root.appendingPathComponent("links")
         let outside = root.appendingPathComponent("outside")

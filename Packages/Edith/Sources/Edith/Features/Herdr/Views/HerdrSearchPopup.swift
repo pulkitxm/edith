@@ -246,6 +246,7 @@ struct HerdrSearchPopup: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.selection, selected: selected))
+        .herdrAgentContextMenu(row.agent, store: store, onOpen: { dismiss() })
         .id(row.id)
         .help("Open this agent")
     }

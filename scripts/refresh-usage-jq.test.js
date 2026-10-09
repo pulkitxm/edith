@@ -2809,6 +2809,7 @@ describe("cloud collector integration", () => {
     expect(result.exitCode, result.stdout + result.stderr).toBe(0);
     const report = JSON.parse(result.output);
     expect(report.sources).toEqual(["cli", "codex-cloud", "claude-cloud"]);
+    expect(result.stdout).toContain("codex cloud coverage is partial");
     expect(report.defaultSources).toEqual(report.sources);
     expect(report.totals.cost).toBe(4);
     expect(report.totals.tokens).toBe(201);

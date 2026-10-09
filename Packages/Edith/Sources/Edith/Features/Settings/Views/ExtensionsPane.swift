@@ -3,7 +3,6 @@ import Combine
 import EdithCore
 import EdithDatabase
 import EdithKit
-import ExtensionMarketplace
 import SwiftUI
 
 @MainActor enum ExtensionPermissionState {
@@ -42,9 +41,8 @@ struct ExtensionEnablementStorage: DynamicProperty {
 }
 
 struct ExtensionsPane: View {
-    @State private var marketplace = MarketplaceModel.shared
-    @State private var query = ""
-    @State private var category = ExtensionMarketplaceCategory.all
+    @State private var model: ExtensionCatalogModel
+    @Environment(\.windowSessionOwner) private var sessions
     @State private var selectedEntry: ExtensionRegistryEntry?
     @State private var grantedPermissions: [ExtensionPermission: Bool] = [:]
     @State private var permissionRequest: ExtensionPermissionRequest?
@@ -58,6 +56,10 @@ struct ExtensionsPane: View {
     @Environment(\.compactLayout) private var compact
     @Environment(\.automaticViewActionsEnabled) private var automaticActionsEnabled
 
+    init(model: ExtensionCatalogModel? = nil) {
+        _model = State(initialValue: model ?? ExtensionCatalogModel())
+    }
+
     private var theme: Color { themeColor(themeName) }
 
     var body: some View {
@@ -67,32 +69,27 @@ struct ExtensionsPane: View {
                 accessory: {
                     searchField
                     categoryRow
-                    marketplaceStatus
                 })
         } content: {
             ScrollViewReader { proxy in
                 ScrollView {
                     extensionGrid
                         .pageContent(compact)
+                        .background {
+                            if let sessions {
+                                PageScrollPosition(
+                                    positions: sessions.scrollPositions, key: "extensions/catalog")
+                            }
+                        }
                 }
-                .scrollIndicators(.never)
+                .scrollIndicators(.automatic)
                 .onAppear {
                     if automaticActionsEnabled { handleDeepLink(using: proxy) }
                 }
             }
         }
         .navigationTitle("Extensions")
-        .pageTask(id: "extensions.catalog") { await marketplace.refresh() }
-        .alert(
-            "Extension download",
-            isPresented: Binding(
-                get: { marketplace.error != nil }, set: { if !$0 { marketplace.clearError() } })
-        ) {
-            Button("OK") { marketplace.clearError() }
-        } message: {
-            Text(marketplace.error ?? "")
-        }
-        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: category)
+        .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: model.category)
         .onChange(of: grantedPermissions) {
             enableRequestedExtensionIfReady()
         }
@@ -138,67 +135,21 @@ struct ExtensionsPane: View {
         }
     }
 
-    private var marketplaceStatus: some View {
-        HStack {
-            if marketplace.offline { Text("Offline. Installed extensions remain available.") }
-            if marketplace.restartRequired {
-                Button("Restart to apply changes") {
-                    Task {
-                        if await restartHelperForExtensionChanges() {
-                            AppRuntimeCenter().relaunchCurrentApplication()
-                        }
-                    }
-                }
-            }
-            Spacer()
-            Toggle(
-                "Update enabled extensions automatically",
-                isOn: Binding(
-                    get: {
-                        SharedDefaults.store.object(
-                            forKey: AppStorageKeys.Extensions.automaticUpdates) as? Bool
-                            ?? true
-                    },
-                    set: {
-                        SharedDefaults.store.set(
-                            $0, forKey: AppStorageKeys.Extensions.automaticUpdates)
-                    })
-            )
-            .toggleStyle(.checkbox)
-            Button("Check for updates") { Task { await marketplace.refresh() } }
-                .disabled(marketplace.refreshing)
-        }
-        .font(.edithText(.caption))
-    }
-
     private var searchField: some View {
-        SearchField(placeholder: "Search extensions", text: $query, typeAhead: true)
+        @Bindable var model = model
+        return SearchField(placeholder: "Search extensions", text: $model.query, typeAhead: true)
     }
 
     private var categoryRow: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: UIScale.pt(8)) {
-                ForEach(ExtensionMarketplaceCategory.allCases, id: \.self) { item in
-                    Button {
-                        withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
-                            category = item
-                        }
-                    } label: {
-                        Text(item.rawValue)
-                            .font(.system(size: UIScale.pt(10), weight: .semibold))
-                    }
-                    .buttonStyle(
-                        EdithButtonStyle(.selection, selected: category == item, tint: theme)
-                    )
-                }
-            }
-        }
-        .scrollIndicators(.never)
+        @Bindable var model = model
+        return PageTabPicker(
+            title: "Extension category", selection: $model.category,
+            options: ExtensionMarketplaceCategory.allCases, label: { $0.rawValue })
     }
 
     private var filteredEntries: [ExtensionRegistryEntry] {
         ExtensionMarketplaceFilter.filter(
-            entries: inspectionCenter.list().map(\.entry), query: query, category: category)
+            entries: ExtensionRegistry.entries, query: model.query, category: model.category)
     }
 
     private var visibleSuites: [(suite: SuiteDescriptor, abilities: [ExtensionRegistryEntry])] {
@@ -212,7 +163,8 @@ struct ExtensionsPane: View {
     @ViewBuilder
     private var extensionGrid: some View {
         if filteredEntries.isEmpty {
-            let state = ExtensionMarketplaceFilter.emptyState(query: query, category: category)
+            let state = ExtensionMarketplaceFilter.emptyState(
+                query: model.query, category: model.category)
             ContentUnavailableView {
                 Label(state.title, systemImage: "magnifyingglass")
             } description: {
@@ -235,23 +187,7 @@ struct ExtensionsPane: View {
                                     switchDisabled: entry.defaultsKey == LidAwakeState.enabledKey
                                         && lidAwakeOperations.applying,
                                     open: { openSettings(for: entry) },
-                                    setEnabled: { setEnabled($0, for: entry) },
-                                    marketplace: marketplace,
-                                    download: {
-                                        Task {
-                                            let firstInstall =
-                                                marketplace.installedPackage(for: entry.id) == nil
-                                            if await marketplace.download(id: entry.id),
-                                                firstInstall
-                                            {
-                                                setEnabled(true, for: entry)
-                                            }
-                                        }
-                                    },
-                                    remove: {
-                                        setEnabled(false, for: entry);
-                                        marketplace.remove(id: entry.id)
-                                    }
+                                    setEnabled: { setEnabled($0, for: entry) }
                                 )
                                 .id(entry.id)
                             }
@@ -265,19 +201,6 @@ struct ExtensionsPane: View {
     private func setSuiteEnabled(_ newValue: Bool, for suite: SuiteDescriptor) {
         SuiteEnablement.setEnabled(newValue, suite: suite.id)
         ExtensionMutationCenter.application.environment.announceChange()
-        if newValue {
-            Task {
-                for entry in ExtensionRegistry.entries
-                where entry.suite == suite.id && entry.isSelected(in: SharedDefaults.store)
-                    && MarketplaceServices.downloadableIDs.contains(entry.id)
-                    && marketplace.installedPackage(for: entry.id) == nil
-                {
-                    if await marketplace.download(id: entry.id) {
-                        ExtensionMutationCenter.application.environment.announceChange()
-                    }
-                }
-            }
-        }
     }
 
     private var gridColumns: [GridItem] {
@@ -297,8 +220,8 @@ struct ExtensionsPane: View {
             let entry = ExtensionRegistry.entries.first(where: { $0.id == id })
         else { return }
         SharedDefaults.store.removeObject(forKey: "extensionsExpand")
-        query = ""
-        category = .all
+        model.query = ""
+        model.category = .all
         DispatchQueue.main.async {
             withAnimation(Motion.animation(Motion.snap, reduceMotion: reduceMotion)) {
                 proxy.scrollTo(entry.id, anchor: .center)
@@ -308,12 +231,6 @@ struct ExtensionsPane: View {
     }
 
     private func setEnabled(_ newValue: Bool, for entry: ExtensionRegistryEntry) {
-        if newValue, MarketplaceServices.downloadableIDs.contains(entry.id),
-            marketplace.installedPackage(for: entry.id) == nil
-        {
-            Task { if await marketplace.download(id: entry.id) { setEnabled(true, for: entry) } }
-            return
-        }
         if entry.defaultsKey == LidAwakeState.enabledKey, !newValue {
             lidAwakeOperations.perform(.disableExtension)
             return
@@ -458,25 +375,18 @@ private struct ExtensionMarketplaceCard: View {
     let switchDisabled: Bool
     let open: () -> Void
     let setEnabled: (Bool) -> Void
-    let marketplace: MarketplaceModel
-    let download: () -> Void
-    let remove: () -> Void
     @State private var hovering = false
 
     init(
         entry: ExtensionRegistryEntry, dark: Bool, switchDisabled: Bool = false,
         open: @escaping () -> Void,
-        setEnabled: @escaping (Bool) -> Void, marketplace: MarketplaceModel,
-        download: @escaping () -> Void, remove: @escaping () -> Void
+        setEnabled: @escaping (Bool) -> Void
     ) {
         self.entry = entry
         self.dark = dark
         self.switchDisabled = switchDisabled
         self.open = open
         self.setEnabled = setEnabled
-        self.marketplace = marketplace
-        self.download = download
-        self.remove = remove
         _enabled = ExtensionEnablementStorage(entry: entry)
     }
 
@@ -508,30 +418,13 @@ private struct ExtensionMarketplaceCard: View {
                     PermissionInfoButton(permissions: permissions)
                 }
                 Spacer(minLength: 0)
-                if marketplace.pendingRemovals.contains(entry.id) {
-                    Text("Removal pending restart").font(.edithText(.caption))
-                } else if MarketplaceServices.downloadableIDs.contains(entry.id),
-                    marketplace.installedPackage(for: entry.id) == nil
-                {
-                    Button(action: download) {
-                        if marketplace.downloadingID == entry.id {
-                            LoadingIndicator("Downloading")
-                        } else {
-                            Text("Download").font(.edithText(.caption))
-                        }
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .disabled(marketplace.downloadingID != nil)
-                    .accessibilityLabel("Download \(entry.title)")
-                } else {
-                    Toggle("", isOn: enabledBinding)
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .tint(DashSkin.accent(dark))
-                        .disabled(switchDisabled)
-                        .accessibilityLabel("\(entry.title) enabled")
-                }
+                Toggle("", isOn: enabledBinding)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .tint(DashSkin.accent(dark))
+                    .disabled(switchDisabled)
+                    .accessibilityLabel("\(entry.title) enabled")
             }
             Button(action: open) {
                 Text(entry.lifecycle?.value ?? entry.subtitle)
@@ -541,30 +434,6 @@ private struct ExtensionMarketplaceCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.edith(.borderless))
-            if MarketplaceServices.downloadableIDs.contains(entry.id) {
-                HStack {
-                    if let installed = marketplace.installedPackage(for: entry.id) {
-                        Text(
-                            "v\(installed.version) · \(ByteCountFormatter.string(fromByteCount: installed.installedBytes, countStyle: .file))"
-                        )
-                        Spacer()
-                        if marketplace.updateAvailable(for: entry.id),
-                            !marketplace.pendingRemovals.contains(entry.id)
-                        {
-                            Button("Update", action: download).disabled(
-                                marketplace.downloadingID != nil)
-                        }
-                        Button("Remove", action: remove).disabled(
-                            marketplace.pendingRemovals.contains(entry.id))
-                    } else if let package = marketplace.package(for: entry.id) {
-                        Text(
-                            "\(ByteCountFormatter.string(fromByteCount: package.downloadBytes, countStyle: .file)) download"
-                        )
-                    }
-                }
-                .font(.edithText(.caption))
-                .foregroundStyle(DashSkin.inkSoft(dark))
-            }
         }
         .padding(UIScale.pt(11))
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -631,7 +500,6 @@ struct ExtensionSettingsSheet: View {
     let coordinator: ExtensionModalCoordinator
     let enableOnAppear: Bool
     @State private var startedEnableFlow = false
-    @State private var marketplace = MarketplaceModel.shared
     @Environment(\.dismiss) private var dismiss
     @ExtensionEnablementStorage private var enabled: Bool
     @State private var grantedPermissions: [ExtensionPermission: Bool]
@@ -660,8 +528,8 @@ struct ExtensionSettingsSheet: View {
         VStack(spacing: UIScale.pt(0)) {
             ExtensionSettingsHeader(
                 title: entry.title, enabled: enabledBinding,
-                disabled: (entry.defaultsKey == LidAwakeState.enabledKey
-                    && lidAwakeOperations.applying) || marketplace.downloadingID != nil)
+                disabled: entry.defaultsKey == LidAwakeState.enabledKey
+                    && lidAwakeOperations.applying)
 
             Divider()
 
@@ -746,15 +614,6 @@ struct ExtensionSettingsSheet: View {
         } message: {
             Text(lidAwakeErrorMessage ?? "")
         }
-        .alert(
-            "Extension download",
-            isPresented: Binding(
-                get: { marketplace.error != nil }, set: { if !$0 { marketplace.clearError() } })
-        ) {
-            Button("OK") { marketplace.clearError() }
-        } message: {
-            Text(marketplace.error ?? "")
-        }
         .frame(
             width: PresentationMetrics.width(560),
             height: PresentationMetrics.height(Double(idealHeight)))
@@ -766,16 +625,6 @@ struct ExtensionSettingsSheet: View {
             set: { wanted in
                 if entry.defaultsKey == LidAwakeState.enabledKey, !wanted {
                     disableLidAwake()
-                    return
-                }
-                if wanted, MarketplaceServices.downloadableIDs.contains(entry.id),
-                    MarketplaceServices.installedPackage(id: entry.id) == nil
-                {
-                    Task {
-                        if await marketplace.download(id: entry.id) {
-                            enabledBinding.wrappedValue = true
-                        }
-                    }
                     return
                 }
                 grantedPermissions = ExtensionPermissionState.readGrantedPermissions()

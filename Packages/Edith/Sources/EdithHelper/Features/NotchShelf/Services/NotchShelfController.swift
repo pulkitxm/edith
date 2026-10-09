@@ -64,7 +64,28 @@ final class NotchShelfController: FeatureModule {
     private(set) var hoverDisplay: CGDirectDisplayID?
     private(set) var nowPlaying: NotchNowPlaying?
     private(set) var nowPlayingArtwork: NSImage?
+    private(set) var nowPlayingAppIcon: NSImage?
+    let agentActivity = AgentActivityMonitor.shared
+    private var agentActivityTask: Task<Void, Never>?
+    private var glanceRefreshTask: Task<Void, Never>?
+    private var monitorsAgentActivity = true
+    private var lastGlanceWidth: CGFloat = 0
+    private var knownApprovalIDs: Set<UUID> = []
+    private(set) var glanceFocus: AttentionFocusSession?
     var activeTab: NotchTab = .home
+    var layoutEditing = false {
+        didSet {
+            homeContentHeight = nil
+            updatePanelFrames()
+            if !layoutEditing, surfaceLayout.notchExpandPermissions,
+                !agentActivity.activity.approvals.isEmpty,
+                let id = expandedDisplay ?? builtinDisplayID ?? panels.keys.min()
+            {
+                expand(on: id, preferredTab: .agents)
+            }
+        }
+    }
+    private var homeContentHeight: CGFloat?
     private(set) var currentAlert: NotchAlert?
     weak var clipboardStore: ClipboardStore?
     private weak var colorPickerStore: DownloadedHelperService?
@@ -75,7 +96,8 @@ final class NotchShelfController: FeatureModule {
     private(set) var usageStore: UsageStore?
     private(set) weak var browser: NotchBrowserStore?
     private(set) var calendarStore: CalendarStore?
-    private var externalVolume: Double = 0.7
+    private var previewPlayback: ExternalPlayback?
+    private let startsPlaybackServices: Bool
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -100,6 +122,7 @@ final class NotchShelfController: FeatureModule {
     private var screenObserver: NSObjectProtocol?
     private var spaceObserver: NSObjectProtocol?
     private var shelfOperationObserver: NSObjectProtocol?
+    private var surfaceSettingsObserver: NSObjectProtocol?
     private var dragMonitor: Any?
     private var moveMonitorGlobal: Any?
     private var moveMonitorLocal: Any?
@@ -122,8 +145,17 @@ final class NotchShelfController: FeatureModule {
     private var dragStartPositions: [UUID: CGPoint] = [:]
     private var dragPointerStart: CGPoint?
 
-    init() {
+    convenience init() {
+        self.init(nowPlaying: nil, startsServices: true)
+    }
+
+    init(nowPlaying: NotchNowPlaying?, startsServices: Bool, playback: ExternalPlayback? = nil) {
+        previewPlayback = playback
+        startsPlaybackServices = startsServices
+        self.nowPlaying = nowPlaying
         items = store.items
+        loadArtwork(for: nowPlaying)
+        guard startsServices else { return }
         store.onExternalChange = { [weak self] in
             guard let self else { return }
             self.items = self.store.items
@@ -135,6 +167,11 @@ final class NotchShelfController: FeatureModule {
             })
         purgeExpired()
         rebuildPanels()
+        surfaceSettingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            SurfaceLayoutStore.shared.reload()
+            self?.homeContentHeight = nil
+            self?.updatePanelFrames()
+        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -155,6 +192,116 @@ final class NotchShelfController: FeatureModule {
         }
         startMoveMonitor()
         startAlertsIfEnabled()
+        startAgentActivity()
+    }
+
+    var surfaceLayout: SurfaceLayout { SurfaceLayoutStore.shared.notch }
+
+    var visibleTabs: [NotchTab] {
+        var tabs = NotchTab.currentVisible
+        if (!agentActivity.activity.approvals.isEmpty && surfaceLayout.notchPrioritizePermissions)
+            || activeTab == .agents
+        {
+            if !tabs.contains(.agents) { tabs.insert(.agents, at: min(1, tabs.count)) }
+        }
+        return tabs
+    }
+
+    var agentPresentation: AgentActivityPresentation {
+        var tile = SurfaceTile(.agents)
+        tile.sourceIDs = surfaceLayout.notchAgentSources
+        tile.includeSubagents = surfaceLayout.notchIncludeSubagents
+        var presentation = AgentActivityPresentation(
+            activity: agentActivity.activity, terminals: agentActivity.terminals,
+            tile: tile, now: agentActivity.now, observedAt: agentActivity.observedAt)
+        presentation.approvals = agentActivity.activity.approvals
+        return presentation
+    }
+
+    var glanceContext: SurfaceGlanceContext {
+        let windows = [
+            usageStore?.session, usageStore?.week, usageStore?.fableWeek,
+            usageStore?.codexSession, usageStore?.codexWeek, usageStore?.cursorSession,
+            usageStore?.cursorWeek, usageStore?.grokWeek,
+        ]
+        var quota: Double?
+        for case let window? in windows
+        where (window.resetsAt ?? .distantFuture) > agentActivity.now {
+            quota = min(quota ?? .infinity, 100 - window.percent)
+        }
+        var meeting: Date?
+        for event in calendarStore?.events ?? []
+        where !event.isAllDay && event.end > agentActivity.now {
+            meeting = min(meeting ?? .distantFuture, event.start)
+        }
+        return SurfaceGlanceContext(
+            agents: agentPresentation,
+            observing: agentActivity.activity.settings.enabled
+                || SharedDefaults.store.bool(forKey: AppStorageKeys.Tabs.herdrEnabled),
+            monitoringStalls: AgentAttentionSettings(defaults: SharedDefaults.store)
+                .stuckMonitoring,
+            hasMusic: nowPlaying != nil, playingMusic: nowPlaying?.isPlaying == true,
+            files: items.count, now: agentActivity.now, focus: glanceFocus,
+            quotaRemaining: quota, nextMeeting: meeting)
+    }
+
+    var leadingGlance: SurfaceGlance? {
+        glanceContext.resolve(surfaceLayout.notchLeadingGlance, leading: true)
+    }
+    var trailingGlance: SurfaceGlance? {
+        glanceContext.resolve(surfaceLayout.notchTrailingGlance, leading: false)
+    }
+    var glanceWingWidth: CGFloat {
+        leadingGlance == nil && trailingGlance == nil ? 0 : CGFloat(surfaceLayout.notchWingWidth)
+    }
+
+    func openGlance(_ glance: SurfaceGlance, on displayID: CGDirectDisplayID) {
+        expand(on: displayID, preferredTab: glance.tab)
+    }
+
+    private func startAgentActivity() {
+        agentActivityTask = Task { [agentActivity] in await agentActivity.observe() }
+        observeAgentActivity()
+        glanceRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let focus = await Task.detached(priority: .utility) {
+                    AttentionRepository().activeFocus()
+                }.value
+                guard !Task.isCancelled else { return }
+                self.glanceFocus = focus
+                do { try await Task.sleep(for: .seconds(15)) } catch { return }
+            }
+        }
+    }
+
+    private func observeAgentActivity() {
+        guard monitorsAgentActivity else { return }
+        withObservationTracking {
+            _ = agentActivity.activity
+            _ = agentActivity.terminals
+            _ = agentActivity.now
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.monitorsAgentActivity else { return }
+                self.agentActivityChanged()
+                self.observeAgentActivity()
+            }
+        }
+    }
+
+    private func agentActivityChanged() {
+        let width = glanceWingWidth
+        if width != lastGlanceWidth { lastGlanceWidth = width; updatePanelFrames() }
+        let requests = Set(agentActivity.activity.approvals.map(\.id))
+        let newRequests = requests.subtracting(knownApprovalIDs)
+        knownApprovalIDs = requests
+        if !newRequests.isEmpty, surfaceLayout.notchExpandPermissions, !layoutEditing,
+            let id = builtinDisplayID ?? panels.keys.min()
+        {
+            activeTab = .agents
+            expand(on: id)
+        }
     }
 
     private var alertsEnabled: Bool { flag(AppStorageKeys.Notch.alertsEnabled, default: true) }
@@ -236,6 +383,9 @@ final class NotchShelfController: FeatureModule {
     }
 
     func shutdown() {
+        monitorsAgentActivity = false
+        agentActivityTask?.cancel(); agentActivityTask = nil
+        glanceRefreshTask?.cancel(); glanceRefreshTask = nil
         if let dragMonitor { NSEvent.removeMonitor(dragMonitor) }
         dragMonitor = nil
         stopMoveMonitor()
@@ -257,6 +407,8 @@ final class NotchShelfController: FeatureModule {
         spaceObserver = nil
         if let shelfOperationObserver { IPC.stopObserving(shelfOperationObserver) }
         shelfOperationObserver = nil
+        if let surfaceSettingsObserver { IPC.stopObserving(surfaceSettingsObserver) }
+        surfaceSettingsObserver = nil
         collapseWorkItem?.cancel()
         collapseWorkItem = nil
         panelSettleWorkItem?.cancel()
@@ -298,7 +450,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     func rebuildPanels() {
-        activeTab = NotchTab.validSelection(activeTab, visible: NotchTab.currentVisible)
+        activeTab = NotchTab.validSelection(activeTab, visible: visibleTabs)
         let builtin = NSScreen.screens.first {
             $0.displayID.map { CGDisplayIsBuiltin($0) != 0 } ?? false
         }
@@ -399,7 +551,7 @@ final class NotchShelfController: FeatureModule {
             backing: .buffered, defer: true)
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        panel.hasShadow = true
+        panel.hasShadow = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.isMovable = false
         panel.ignoresMouseEvents = true
@@ -436,22 +588,39 @@ final class NotchShelfController: FeatureModule {
     }()
 
     private func shapeSize(
-        for id: CGDirectDisplayID, expanded: Bool, alert: NotchAlert?, music: Bool
+        for id: CGDirectDisplayID, expanded: Bool, alert: NotchAlert?
     ) -> CGSize {
         let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
         if expanded {
-            return NotchGeometry.expandedShapeSize(
-                tab: activeTab, hasMusic: music, notchHeight: base.height,
-                browserSize: browserSize(on: id))
+            return expandedSize(on: id)
         }
         if alert != nil, id == builtinDisplayID { return NotchGeometry.alertDropSize }
-        return NotchGeometry.collapsedSize(base: base, hasLiveActivity: music)
+        return NotchGeometry.collapsedSize(base: base, wingWidth: glanceWingWidth)
     }
 
     private func targetShapeSize(for id: CGDirectDisplayID) -> CGSize {
         shapeSize(
-            for: id, expanded: expandedDisplay == id, alert: currentAlert,
-            music: nowPlaying != nil)
+            for: id, expanded: expandedDisplay == id, alert: currentAlert)
+    }
+
+    func measureHomeContent(_ height: Double) {
+        let value = CGFloat(height) + 14
+        guard homeContentHeight.map({ abs($0 - value) >= 1 }) ?? true else { return }
+        homeContentHeight = value
+        updatePanelFrames()
+    }
+
+    func expandedSize(on id: CGDirectDisplayID) -> CGSize {
+        let base = collapsedSizes[id] ?? NotchGeometry.fallbackSize
+        let requested = NotchGeometry.expandedShapeSize(
+            tab: activeTab, hasMusic: nowPlaying != nil, notchHeight: base.height,
+            browserSize: browserSize(on: id), editing: layoutEditing, homeHeight: homeContentHeight)
+        guard let screen = NSScreen.screens.first(where: { $0.displayID == id }) else {
+            return requested
+        }
+        return CGSize(
+            width: min(requested.width, screen.frame.width - 48),
+            height: min(requested.height, screen.frame.height - 48))
     }
 
     private func applyExactFrame(_ panel: NSPanel, screen: NSScreen, id: CGDirectDisplayID) {
@@ -469,11 +638,19 @@ final class NotchShelfController: FeatureModule {
 
     private func panelShape(for id: CGDirectDisplayID) -> CGSize {
         let notchHeight = (collapsedSizes[id] ?? NotchGeometry.fallbackSize).height
-        return NotchGeometry.panelShape(
-            browserShape: browser.map { _ in
-                NotchBrowserGeometry.shapeSize(
-                    browser: browserSize(on: id), notchHeight: notchHeight)
-            })
+        let screenSize =
+            NSScreen.screens.first(where: { $0.displayID == id })?.frame.size
+            ?? CGSize(width: 1248, height: 900)
+        let capacity = CGSize(
+            width: min(1200, screenSize.width - 48),
+            height: min(notchHeight + 760, screenSize.height - 48))
+        return NotchGeometry.union(
+            capacity,
+            NotchGeometry.panelShape(
+                browserShape: browser.map { _ in
+                    NotchBrowserGeometry.shapeSize(
+                        browser: browserSize(on: id), notchHeight: notchHeight)
+                }))
     }
 
     func browserSize(on id: CGDirectDisplayID) -> CGSize {
@@ -564,6 +741,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func syncFrames() {
+        syncPlaybackObservation()
         updatePanelFrames()
         for screen in NSScreen.screens {
             guard let id = screen.displayID, let panel = panels[id] else { continue }
@@ -590,7 +768,7 @@ final class NotchShelfController: FeatureModule {
                 allowMouse = NotchGeometry.expandedAcceptsPointer(
                     cursor, shapeFrame: shapeFrame(of: panel),
                     buttonPressed: NSEvent.pressedMouseButtons != 0,
-                    heldOpen: isSharing || browserHoldsOpen)
+                    heldOpen: isSharing || browserHoldsOpen || layoutEditing)
             } else if currentAlert != nil, id == builtinDisplayID {
                 allowMouse = shapeFrame(of: panel).contains(cursor)
             } else {
@@ -611,7 +789,7 @@ final class NotchShelfController: FeatureModule {
 
     func isHovering(on id: CGDirectDisplayID) -> Bool { hoverDisplay == id }
 
-    func expand(on id: CGDirectDisplayID) {
+    func expand(on id: CGDirectDisplayID, preferredTab: NotchTab? = nil) {
         collapseWorkItem?.cancel()
         gateWorkItem?.cancel()
         gateWorkItem = nil
@@ -620,7 +798,14 @@ final class NotchShelfController: FeatureModule {
         alertWorkItem = nil
         gate.forceOpen()
         gateDisplay = id
-        guard expandedDisplay != id else { return }
+        if let preferredTab {
+            activeTab = preferredTab
+        } else if expandedDisplay == nil, surfaceLayout.notchPrioritizePermissions,
+            !agentActivity.activity.approvals.isEmpty
+        {
+            activeTab = .agents
+        }
+        guard expandedDisplay != id else { syncFrames(); return }
         hoverDisplay = nil
         currentAlert = nil
         expandedDisplay = id
@@ -637,6 +822,7 @@ final class NotchShelfController: FeatureModule {
 
     func collapseNow() {
         guard isExpanded, !isSharing else { return }
+        layoutEditing = false
         expandedDisplay = nil
         selectedIDs = []
         gate.forceClosed()
@@ -689,7 +875,7 @@ final class NotchShelfController: FeatureModule {
         case .opened:
             if let gateDisplay { expand(on: gateDisplay) }
         case .closed:
-            if isSharing || browserHoldsOpen {
+            if isSharing || browserHoldsOpen || layoutEditing {
                 gate.forceOpen()
             } else {
                 collapseNow()
@@ -734,12 +920,12 @@ final class NotchShelfController: FeatureModule {
         else { return nil }
         let collapsedSize = NotchGeometry.collapsedSize(
             base: collapsedSizes[id] ?? NotchGeometry.fallbackSize,
-            hasLiveActivity: nowPlaying != nil)
+            wingWidth: glanceWingWidth)
         let collapsed = CGRect(
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: collapsedSize),
             size: collapsedSize)
         let expandedSize = shapeSize(
-            for: id, expanded: true, alert: nil, music: nowPlaying != nil)
+            for: id, expanded: true, alert: nil)
         let expanded = CGRect(
             origin: NotchGeometry.origin(screenFrame: screen.frame, panelSize: expandedSize),
             size: expandedSize)
@@ -872,20 +1058,30 @@ final class NotchShelfController: FeatureModule {
         let trackChanged =
             active?.title != nowPlaying?.title || active?.source != nowPlaying?.source
         nowPlaying = active
+        syncPlaybackObservation()
         if trackChanged { loadArtwork(for: active) }
         if (active != nil) != hadActivity, !isExpanded { syncFrames() }
+    }
+
+    private func syncPlaybackObservation() {
+        external.observePlayback(
+            startsPlaybackServices && isExpanded && showMusic && nowPlaying?.source != .local
+                && previewPlayback == nil)
     }
 
     private func loadArtwork(for track: NotchNowPlaying?) {
         artworkTask?.cancel()
         guard let track else {
             nowPlayingArtwork = nil
+            nowPlayingAppIcon = nil
             return
         }
         switch track.source {
         case .external(let app):
-            nowPlayingArtwork = Self.appIcon(for: app)
+            nowPlayingAppIcon = Self.appIcon(for: app)
+            nowPlayingArtwork = nowPlayingAppIcon
         case .local:
+            nowPlayingAppIcon = nil
             nowPlayingArtwork = nil
             guard let player = localMusic, let current = player.current else { return }
             artworkTask = Task { [weak self] in
@@ -925,40 +1121,85 @@ final class NotchShelfController: FeatureModule {
         calendarStore = store
     }
 
-    var nowPlayingSeekable: Bool {
-        if case .local = nowPlaying?.source { return true }
-        return false
-    }
+    private var currentPlayback: ExternalPlayback? { previewPlayback ?? external.playback }
 
-    func nowPlayingProgress() -> Double {
-        nowPlayingSeekable ? (localMusic?.progressNow() ?? 0) : 0
-    }
-
-    func nowPlayingSeek(_ fraction: Double) {
-        guard nowPlayingSeekable else { return }
-        localMusic?.perform(.seek(fraction))
-    }
-
-    var nowPlayingVolume: Double {
+    var nowPlayingDuration: Double {
         switch nowPlaying?.source {
-        case .local: return localMusic?.volume ?? 0
-        case .external: return externalVolume
+        case .local: return localMusic?.trackDuration ?? 0
+        case .external: return currentPlayback?.track.duration ?? external.current?.duration ?? 0
         case .none: return 0
         }
     }
 
-    func setNowPlayingVolume(_ value: Double) {
+    func nowPlayingElapsed() -> Double {
         switch nowPlaying?.source {
-        case .local: localMusic?.perform(.volume(value))
+        case .local: return nowPlayingDuration * (localMusic?.progressNow() ?? 0)
+        case .external: return currentPlayback?.elapsed() ?? 0
+        case .none: return 0
+        }
+    }
+
+    var nowPlayingSeekable: Bool {
+        nowPlayingDuration > 0 && (nowPlaying?.source == .local || currentPlayback != nil)
+    }
+
+    func nowPlayingProgress() -> Double {
+        nowPlayingDuration > 0 ? nowPlayingElapsed() / nowPlayingDuration : 0
+    }
+
+    func nowPlayingSeek(_ fraction: Double) {
+        guard nowPlayingSeekable else { return }
+        performNowPlayingTransport(.seek(fraction))
+    }
+
+    var nowPlayingVolume: Double? {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.volume
+        case .external: return currentPlayback?.volume
+        case .none: return nil
+        }
+    }
+
+    func setNowPlayingVolume(_ value: Double) { performNowPlayingTransport(.volume(value)) }
+
+    var nowPlayingShuffle: Bool? {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.isShuffling
         case .external:
-            externalVolume = value
-            external.perform(.volume(value))
+            return currentPlayback?.canShuffle == true ? currentPlayback?.shuffling : nil
+        case .none: return nil
+        }
+    }
+
+    var nowPlayingRepeat: Bool? {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.isLooping
+        case .external: return currentPlayback?.canRepeat == true ? currentPlayback?.repeating : nil
+        case .none: return nil
+        }
+    }
+
+    var nowPlayingControlError: String? {
+        nowPlaying?.source == .local ? nil : external.lastError
+    }
+    func retryNowPlayingControls() { external.retryPlayback() }
+    func setNowPlayingShuffle(_ enabled: Bool) { performNowPlayingTransport(.shuffle(enabled)) }
+    func setNowPlayingRepeat(_ enabled: Bool) { performNowPlayingTransport(.repeat(enabled)) }
+    func skipNowPlaying(_ seconds: Double) {
+        guard nowPlayingSeekable else { return }
+        nowPlayingSeek((nowPlayingElapsed() + seconds) / nowPlayingDuration)
+    }
+
+    private func performNowPlayingTransport(_ request: MusicTransportRequest) {
+        switch nowPlaying?.source {
+        case .local: localMusic?.perform(request)
+        case .external: external.perform(request)
         case .none: break
         }
     }
 
     func selectTab(_ tab: NotchTab) {
-        activeTab = NotchTab.validSelection(tab, visible: NotchTab.currentVisible)
+        activeTab = NotchTab.validSelection(tab, visible: visibleTabs)
         if isExpanded { syncFrames() }
     }
 

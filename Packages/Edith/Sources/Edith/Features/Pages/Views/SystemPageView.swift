@@ -2,11 +2,15 @@ import EdithKit
 import SwiftUI
 
 struct SystemPage: View {
-    @State private var model = RunningAppsModel()
+    @State private var model: RunningAppsModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
     @State private var confirmQuitAll = false
     @State private var pendingQuit: RunningAppRow?
+
+    init(model: RunningAppsModel? = nil) {
+        _model = State(initialValue: model ?? RunningAppsModel())
+    }
 
     private var dark: Bool { scheme == .dark }
     private var hidesRunningApps: Bool { PresenterState.shared.hides(.runningApps) }
@@ -43,6 +47,7 @@ struct SystemPage: View {
         } message: {
             Text("The app will close. Unsaved changes will prompt you first.")
         }
+        .onDisappear { model.setScrolling(false) }
         .pageRefresh(interval: { .seconds(2) }, cancel: { model.loading.cancel() }) {
             if !model.scrolling { await model.refresh() }
         }
@@ -67,6 +72,9 @@ struct SystemPage: View {
                 } message: {
                     Text("Finder and Edith stay open. Apps with unsaved changes will ask first.")
                 }
+            },
+            accessory: {
+                SearchField(placeholder: "Filter app, bundle identifier or PID", text: $model.query)
             })
     }
 
@@ -168,24 +176,28 @@ struct SystemPage: View {
     }
 
     private var appList: some View {
-        VStack(spacing: UIScale.pt(0)) {
+        let apps = model.visibleApps
+        return VStack(spacing: UIScale.pt(0)) {
             columnHeaders
             Divider().opacity(0.4)
             if !model.loaded {
                 SystemAppRowsSkeleton(dark: dark)
-            } else if model.apps.isEmpty {
-                Text("No user applications are running.")
-                    .font(.system(size: UIScale.pt(12)))
-                    .foregroundStyle(DashSkin.inkFaint(dark))
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, UIScale.pt(24))
+            } else if apps.isEmpty {
+                Text(
+                    model.query.isEmpty
+                        ? "No user applications are running." : "No apps match this search."
+                )
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, UIScale.pt(24))
             }
             LazyVStack(spacing: UIScale.pt(0)) {
-                ForEach(model.apps) { app in
+                ForEach(apps) { app in
                     SystemAppRow(app: app, dark: dark, canQuit: model.canQuit(app)) {
                         pendingQuit = app
                     }
-                    if app.id != model.apps.last?.id {
+                    if app.id != apps.last?.id {
                         Divider().opacity(0.3)
                     }
                 }

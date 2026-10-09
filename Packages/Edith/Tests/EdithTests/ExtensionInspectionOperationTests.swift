@@ -85,7 +85,8 @@ import Testing
                 "EdithCLI/Commands/ExtensionCommands.swift"),
             encoding: .utf8)
 
-        #expect(pane.contains("inspectionCenter.list().map(\\.entry)"))
+        #expect(pane.contains("entries: ExtensionRegistry.entries"))
+        #expect(!pane.contains("inspectionCenter.list()"))
         #expect(pane.contains("inspectionCenter.info(entry).entry"))
         #expect(pane.contains("readiness.refresh(.verify)"))
         #expect(pane.contains("readiness.refresh(.status)"))

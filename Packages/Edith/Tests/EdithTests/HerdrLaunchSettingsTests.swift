@@ -77,7 +77,8 @@ import Testing
         #expect(
             launch.local
                 == [
-                    "agent", "start", "claude-w5-p1", "--kind", "claude", "--pane", "w5:p1",
+                    "--session", "default", "agent", "start", "claude-w5-p1", "--kind", "claude",
+                    "--pane", "w5:p1",
                     "--timeout", "30000", "--", "--model", "opus", "--effort", "high",
                     "--settings", #"{"fastMode":true}"#,
                 ])
@@ -90,7 +91,7 @@ import Testing
             HerdrLaunchOperations.agentLaunch(
                 kind: "OpenCode", name: "opencode", pane: pane, options: .none,
                 defaults: defaults
-            ).local[2]
+            ).local[4]
         }
         #expect(names == ["opencode-w5-pq", "opencode-w5-pr"])
     }
@@ -104,7 +105,7 @@ import Testing
         #expect(
             launch.local
                 == [
-                    "pane", "run", "w5:p1",
+                    "--session", "default", "pane", "run", "w5:p1",
                     #"cx --yolo -m gpt-6-sol -c 'service_tier="fast"'"#,
                 ])
     }

@@ -701,6 +701,7 @@ final class SettingsBackup {
 
     nonisolated static let registryV2Keys =
         SuiteRegistry.defaultsKeys + [
+            AppStorageKeys.Surfaces.profiles, AppStorageKeys.Surfaces.agentActivity,
             AppStorageKeys.Homebrew.enabled, AppStorageKeys.Cleaner.enabled,
             AppStorageKeys.Downloads.enabled, AppStorageKeys.Music.barCollapsed,
             AppStorageKeys.Music.barAutoHide, AgentSettingsKeys.pauseAmbientOnBattery,
@@ -852,6 +853,7 @@ final class SettingsBackup {
         AppStorageKeys.Emoji.usage, AppStorageKeys.Emoji.hotKeyCode,
         AppStorageKeys.Emoji.hotKeyMods, AppStorageKeys.Emoji.hotKeyLabel,
         AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
+        SurfaceTarget.home.key, SurfaceTarget.notch.key,
         AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.Presenter.blurAttention,
         AppStorageKeys.Presenter.blurCamera, AppStorageKeys.Presenter.blurStudio,
         AppStorageKeys.Presenter.blurDatabase, AppStorageKeys.Presenter.blurMemory,
@@ -1021,6 +1023,7 @@ final class SettingsBackup {
         AppStorageKeys.Emoji.usage, AppStorageKeys.Emoji.hotKeyCode,
         AppStorageKeys.Emoji.hotKeyMods, AppStorageKeys.Emoji.hotKeyLabel,
         AppStorageKeys.General.creditHidden, AppStorageKeys.General.homeClockZones,
+        SurfaceTarget.home.key, SurfaceTarget.notch.key,
         AppStorageKeys.Presenter.blurCalendar, AppStorageKeys.Presenter.blurAgents,
         AppStorageKeys.Presenter.blurAttention, AppStorageKeys.Presenter.blurCamera,
         AppStorageKeys.Presenter.blurStudio, AppStorageKeys.Presenter.blurDatabase,

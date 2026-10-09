@@ -30,38 +30,43 @@ struct CodeStatsKPIGrid: View {
     let dark: Bool
 
     var body: some View {
-        let totals = report.totals
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), spacing: UIScale.pt(10))],
-            spacing: UIScale.pt(10)
-        ) {
-            CodeStatsTile(
-                label: "Commits", value: CodeStatsNumberFormat.compact(totals.commits),
-                symbol: "point.3.connected.trianglepath.dotted",
-                change: report.momentum?.commitChange, dark: dark)
-            CodeStatsTile(
-                label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
-                symbol: "text.line.first.and.arrowtriangle.forward",
-                change: report.momentum?.lineChange,
-                detail:
-                    "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
-                dark: dark)
-            CodeStatsTile(
-                label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
-                symbol: "calendar",
-                detail:
-                    "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
-                dark: dark)
-            CodeStatsTile(
-                label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",
-                symbol: "flame",
-                detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days",
-                dark: dark)
-            CodeStatsTile(
-                label: "Repositories", value: CodeStatsNumberFormat.grouped(totals.repositories),
-                symbol: "shippingbox",
-                detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: UIScale.pt(10)) { tiles }
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: UIScale.pt(170)), spacing: UIScale.pt(10))],
+                spacing: UIScale.pt(10)
+            ) { tiles }
         }
+    }
+
+    @ViewBuilder private var tiles: some View {
+        let totals = report.totals
+        CodeStatsTile(
+            label: "Commits", value: CodeStatsNumberFormat.compact(totals.commits),
+            symbol: "point.3.connected.trianglepath.dotted",
+            change: report.momentum?.commitChange, dark: dark)
+        CodeStatsTile(
+            label: "Lines authored", value: CodeStatsNumberFormat.compact(totals.authored),
+            symbol: "text.line.first.and.arrowtriangle.forward",
+            change: report.momentum?.lineChange,
+            detail:
+                "+\(CodeStatsNumberFormat.grouped(totals.added)) / -\(CodeStatsNumberFormat.grouped(totals.deleted))",
+            dark: dark)
+        CodeStatsTile(
+            label: "Active days", value: CodeStatsNumberFormat.grouped(totals.activeDays),
+            symbol: "calendar",
+            detail:
+                "\(CodeStatsNumberFormat.decimal(totals.averagePerActiveDay)) lines per active day",
+            dark: dark)
+        CodeStatsTile(
+            label: "Streak", value: CodeStatsNumberFormat.grouped(totals.currentStreak) + "d",
+            symbol: "flame",
+            detail: "Longest " + CodeStatsNumberFormat.grouped(totals.longestStreak) + " days",
+            dark: dark)
+        CodeStatsTile(
+            label: "Repositories", value: CodeStatsNumberFormat.grouped(totals.repositories),
+            symbol: "shippingbox",
+            detail: "Net " + CodeStatsNumberFormat.grouped(totals.net) + " lines", dark: dark)
     }
 }
 
@@ -78,7 +83,9 @@ struct CodeStatsTile: View {
             title: label, value: value,
             detail: detail ?? (change == nil ? " " : "vs previous period"), symbol: symbol,
             tint: DashSkin.accent(dark), trend: change.map { CodeStatsNumberFormat.percent($0) },
-            trendPositive: (change ?? 0) >= 0)
+            trendPositive: (change ?? 0) >= 0
+        )
+        .frame(minWidth: UIScale.pt(170))
     }
 }
 

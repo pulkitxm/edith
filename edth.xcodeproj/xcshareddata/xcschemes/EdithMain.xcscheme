@@ -28,34 +28,6 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "edith-database"
-               BuildableName = "edith-database"
-               BlueprintName = "edith-database"
-               ReferencedContainer = "container:Packages/Edith">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "NO"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "edithd"
-               BuildableName = "edithd"
-               BlueprintName = "edithd"
-               ReferencedContainer = "container:Packages/Edith">
-            </BuildableReference>
-         </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "NO"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
                BlueprintIdentifier = "EdithLidAwakeHelper"
                BuildableName = "EdithLidAwakeHelper"
                BlueprintName = "EdithLidAwakeHelper"

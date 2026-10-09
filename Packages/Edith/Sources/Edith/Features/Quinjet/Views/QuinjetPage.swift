@@ -69,7 +69,7 @@ struct QuinjetPage: View {
 
     private var tabBar: some View {
         HStack(spacing: UIScale.pt(5)) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            PageTabStrip(selection: model.selected) {
                 HStack(spacing: UIScale.pt(4)) {
                     ForEach(model.tabs) { tab in
                         QuinjetTabButton(
@@ -88,7 +88,8 @@ struct QuinjetPage: View {
                                         QuinjetSessionRequest(
                                             operation: .close, session: tab.id.uuidString))
                                 }
-                            })
+                            }
+                        ).id(tab.id)
                     }
                 }
             }

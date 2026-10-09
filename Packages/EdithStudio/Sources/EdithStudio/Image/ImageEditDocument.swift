@@ -265,6 +265,7 @@ public struct ImageLayer: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var id: UUID
+    public var name: String?
     public var content: Content
     public var frame: StudioRect
     public var rotation: Double
@@ -272,10 +273,12 @@ public struct ImageLayer: Codable, Equatable, Identifiable, Sendable {
     public var isHidden: Bool
 
     public init(
-        id: UUID = UUID(), content: Content, frame: StudioRect, rotation: Double = 0,
+        id: UUID = UUID(), name: String? = nil, content: Content, frame: StudioRect,
+        rotation: Double = 0,
         opacity: Double = 1, isHidden: Bool = false
     ) {
         self.id = id
+        self.name = name
         self.content = content
         self.frame = frame
         self.rotation = rotation
@@ -289,7 +292,8 @@ public struct ImageLayer: Codable, Equatable, Identifiable, Sendable {
     }
 
     public var title: String {
-        switch content {
+        if let name, !name.isEmpty { return name }
+        return switch content {
         case let .text(style): style.text.isEmpty ? "Text" : style.text
         case let .shape(style): style.shape.rawValue.capitalized
         case .drawing: "Drawing"

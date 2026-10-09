@@ -332,6 +332,7 @@ import Testing
     }
 
     @Test func notchShapeGrowsToTheBrowserAndThePanelNeverShrinksBelowTheShelf() {
+        let layout = SurfaceLayout.standard(.notch)
         let shape = NotchGeometry.expandedShapeSize(
             tab: .browser, hasMusic: false, notchHeight: 32,
             browserSize: CGSize(width: 1000, height: 640))
@@ -343,8 +344,9 @@ import Testing
             NotchGeometry.union(CGSize(width: 1, height: 9), CGSize(width: 5, height: 2))
                 == CGSize(width: 5, height: 9))
         #expect(
-            NotchGeometry.expandedShapeSize(tab: .files, hasMusic: false, notchHeight: 32).width
-                == NotchGeometry.expandedWidth)
+            NotchGeometry.expandedShapeSize(
+                tab: .files, hasMusic: false, notchHeight: 32, layout: layout
+            ).width == CGFloat(layout.expandedNotchWidth))
     }
 }
 

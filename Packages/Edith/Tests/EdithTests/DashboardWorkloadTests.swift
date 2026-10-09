@@ -140,16 +140,17 @@ import Testing
         cachedDetail.tokens = 9
         cachedDetail.cost = 2
         cachedDetail.models = [NamedValue(id: "cached", name: "Cached", value: 9)]
+        let cachedDay = DayPoint(
+            id: "2026-01-01", date: cachedDetail.date, cost: cachedDetail.cost,
+            tokens: cachedDetail.tokens)
         let cached = HomeUsageSnapshot(
-            calendarDays: [
-                DayPoint(
-                    id: "2026-01-01", date: cachedDetail.date, cost: cachedDetail.cost)
-            ],
+            calendarDays: [cachedDay],
             heatDetail: ["2026-01-01": cachedDetail],
-            heatCuts: [1, 2, 3])
+            heatScale: UsageCalendarScale(days: [cachedDay]))
         await store.store(cached)
         let roundTrip = try #require(await store.load())
         #expect(roundTrip == cached)
+        #expect(roundTrip.heatScale.level(for: cachedDay) > 0)
 
         let suite = "test.dashboard-home-cache.\(UUID().uuidString)"
         let preferences = try #require(UserDefaults(suiteName: suite))

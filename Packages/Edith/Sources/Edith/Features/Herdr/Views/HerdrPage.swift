@@ -427,15 +427,17 @@ struct HerdrPage: View {
                 railToggle
                     .padding(.leading, PageMetrics.gutter(compact))
                 sessionFilterButton
-                ScrollView(.horizontal, showsIndicators: false) {
+                PageTabStrip(selection: store.selectedTab) {
                     HStack(spacing: UIScale.pt(6)) {
-                        tabButton(id: HerdrStore.boardID, title: "Board", closable: false)
+                        tabButton(id: HerdrStore.boardID, title: "Board", closable: false).id(
+                            HerdrStore.boardID)
                         ForEach(store.tabs) { tab in
                             let agents = tab.agentIDs.compactMap { store.session($0)?.agent }
                             tabButton(
                                 id: tab.id,
                                 title: agents.first?.title ?? "Agent",
-                                closable: true, agents: agents, blurTitle: hideAgents)
+                                closable: true, agents: agents, blurTitle: hideAgents
+                            ).id(tab.id)
                         }
                     }
                     .padding(.leading, 0)
@@ -586,7 +588,9 @@ struct HerdrPage: View {
         .herdrDropFrame(HerdrDropGeometry.chipPrefix + id)
         .onTapGesture { store.selectedTab = id }
         .modifier(HerdrTabDrag(id: id))
-        .contextMenu { tabContextMenu(id: id, closable: closable) }
+        .herdrAgentContextMenu(agents: agents, store: store) {
+            tabContextMenu(id: id, closable: closable)
+        }
         .help(
             agents.isEmpty
                 ? "Board"
@@ -787,6 +791,7 @@ struct HerdrPage: View {
         }
         .animation(Motion.animation(Motion.snap, reduceMotion: reduceMotion), value: hovered)
         .herdrDraggable(.agent(agent), simultaneous: true)
+        .herdrAgentContextMenu(agent, store: store)
     }
 
     private var agentList: some View {
@@ -1047,7 +1052,7 @@ struct HerdrPage: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
         .help(rowHelp(agent, highlight: highlight, selected: selected))
         .herdrDraggable(.agent(agent), simultaneous: true)
-        .contextMenu { agentRowMenu(agent) }
+        .herdrAgentContextMenu(agent, store: store)
         .herdrDropFrame(HerdrDropGeometry.agentPrefix + agent.id)
     }
 
@@ -1072,40 +1077,6 @@ struct HerdrPage: View {
         }
         return
             "\(agent.title). Drag in the sidebar to reorder, or onto the right side to place it beside other agents."
-    }
-
-    @ViewBuilder
-    private func agentRowMenu(_ agent: HerdrAgent) -> some View {
-        Button("Open") { openAgent(agent) }
-        if let tab = store.currentTab, !onBoard, !tab.layout.contains(agent.id) {
-            Menu("Open Beside") {
-                Button("Right") { openBeside(agent, .right) }
-                Button("Left") { openBeside(agent, .left) }
-                Button("Below") { openBeside(agent, .bottom) }
-                Button("Above") { openBeside(agent, .top) }
-            }
-        }
-        Button("Open in New Window") {
-            if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-            store.close(agent.id, rememberingPlacement: false)
-            HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
-        }
-        if !agent.isTerminal {
-            Divider()
-            Button("Send Message…") { store.messaging.compose(to: agent) }
-            if let hook = store.messaging.armedHook(for: agent.id) {
-                Button("Cancel Waiting Message") {
-                    Task { await store.messaging.remove(hook.id) }
-                }
-                .help(hook.schedule.sendsPhrase(now: Date()))
-            }
-        }
-    }
-
-    private func openBeside(_ agent: HerdrAgent, _ side: InsertSide) {
-        if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-        HerdrAgentWindow.close(agent.id)
-        animate { store.open(agent, beside: side) }
     }
 
     private func rowDetail(_ agent: HerdrAgent) -> String {

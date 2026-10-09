@@ -380,6 +380,18 @@ import Testing
         #expect(created == HerdrCreatedPane(workspaceID: "w7", tabID: "w7:t2", paneID: "w7:p2"))
     }
 
+    @Test func terminalAttachmentResolvesTheExactPane() {
+        let response =
+            #"{"result":{"type":"pane_info","pane":{"pane_id":"w1:p2","terminal_id":"term-shell"}}}"#
+        #expect(HerdrListParser.terminalID(from: response, pane: "w1:p2") == "term-shell")
+        #expect(HerdrListParser.terminalID(from: response, pane: "w1:p3") == nil)
+        #expect(HerdrListParser.terminalID(from: "{}", pane: "w1:p2") == nil)
+        #expect(
+            HerdrListParser.terminalID(
+                from: #"{"result":{"pane":{"pane_id":"w1:p2","terminal_id":""}}}"#,
+                pane: "w1:p2") == nil)
+    }
+
     @Test func createdPaneReturnsNilForMalformedInput() {
         #expect(HerdrListParser.createdPane(from: "not json") == nil)
         #expect(HerdrListParser.createdPane(from: #"{"result":{"type":"ok"}}"#) == nil)

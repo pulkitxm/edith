@@ -142,6 +142,12 @@ public enum HerdrPaneCategory: String, Codable, Sendable, Hashable, CaseIterable
     }
 }
 
+public struct HerdrNativeSession: Codable, Equatable, Hashable, Sendable {
+    public var provider: String
+    public var value: String
+    public init(provider: String, value: String) { self.provider = provider; self.value = value }
+}
+
 public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var id: String
     public var machineID: String
@@ -157,12 +163,14 @@ public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
     public var cwd: String
     public var category: HerdrPaneCategory
     public var stateSequence: Int?
+    public var nativeSession: HerdrNativeSession?
 
     public init(
         id: String, machineID: String, machineName: String, machineIsLocal: Bool,
         sshTarget: String?, session: String, pane: String, kind: String,
         status: HerdrAgentStatus, title: String, workspace: String, cwd: String,
-        category: HerdrPaneCategory = .agent, stateSequence: Int? = nil
+        category: HerdrPaneCategory = .agent, stateSequence: Int? = nil,
+        nativeSession: HerdrNativeSession? = nil
     ) {
         self.id = id
         self.machineID = machineID
@@ -178,20 +186,21 @@ public struct HerdrAgent: Identifiable, Codable, Equatable, Hashable, Sendable {
         self.cwd = cwd
         self.category = category
         self.stateSequence = stateSequence
+        self.nativeSession = nativeSession
     }
 
     public static func make(
         machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
         session: String, pane: String, kind: String, status: HerdrAgentStatus, title: String,
         workspace: String, cwd: String, category: HerdrPaneCategory = .agent,
-        stateSequence: Int? = nil
+        stateSequence: Int? = nil, nativeSession: HerdrNativeSession? = nil
     ) -> HerdrAgent {
         HerdrAgent(
             id: "\(machineID)|\(session)|\(pane)",
             machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
             sshTarget: sshTarget, session: session, pane: pane, kind: kind, status: status,
             title: title, workspace: workspace, cwd: cwd, category: category,
-            stateSequence: stateSequence)
+            stateSequence: stateSequence, nativeSession: nativeSession)
     }
 
     public var isTerminal: Bool { category == .terminal }
@@ -308,11 +317,12 @@ public struct HerdrPaneRecord: Equatable, Sendable {
     public var cwd: String?
     public var revision: Int?
     public var stateSequence: Int?
+    public var nativeSession: HerdrNativeSession?
 
     public init(
         pane: String, kindRaw: String? = nil, statusRaw: String? = nil, title: String? = nil,
         workspaceID: String? = nil, cwd: String? = nil, revision: Int? = nil,
-        stateSequence: Int? = nil
+        stateSequence: Int? = nil, nativeSession: HerdrNativeSession? = nil
     ) {
         self.pane = pane
         self.kindRaw = kindRaw
@@ -322,6 +332,7 @@ public struct HerdrPaneRecord: Equatable, Sendable {
         self.cwd = cwd
         self.revision = revision
         self.stateSequence = stateSequence
+        self.nativeSession = nativeSession
     }
 
     public var looksLikeAgent: Bool {
@@ -357,7 +368,8 @@ public struct HerdrPaneRecord: Equatable, Sendable {
             workspaceID: incoming.workspaceID ?? workspaceID,
             cwd: incoming.cwd ?? cwd,
             revision: incoming.revision ?? revision,
-            stateSequence: incoming.stateSequence ?? stateSequence)
+            stateSequence: incoming.stateSequence ?? stateSequence,
+            nativeSession: incoming.nativeSession ?? nativeSession)
     }
 }
 

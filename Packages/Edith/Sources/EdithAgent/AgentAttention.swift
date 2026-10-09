@@ -14,6 +14,9 @@ struct AttentionOutcome: Equatable, Sendable {
     var hostID: String
     var fingerprint: UInt64?
     var notification: AgentNotification?
+    var state: HerdrAttentionState?
+    var status: HerdrAgentStatus
+    var sequence: Int?
 }
 
 public struct AgentAttention: Sendable {
@@ -119,7 +122,8 @@ public struct AgentAttention: Sendable {
                 fingerprint: evidence[check.agent.id]?.screen?.fingerprint,
                 notification: verdicts[index].flatMap {
                     notification(for: check, verdict: $0, settings: settings)
-                })
+                }, state: verdicts[index]?.state, status: check.agent.status,
+                sequence: check.agent.stateSequence)
         }
     }
 

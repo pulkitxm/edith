@@ -6,6 +6,7 @@ import sys
 
 MODULES = (
     'EdithKit',
+    'EdithDatabase',
     'EdithCore',
     'EdithCameraSupport',
     'EdithLidAwakeSupport',
@@ -13,6 +14,8 @@ MODULES = (
 )
 SHARED_ID = '@rpath/EdithShared.framework/Versions/A/EdithShared'
 REDIRECT = {
+    '@rpath/EdithDatabase.framework/Versions/A/EdithDatabase':
+        '@rpath/EdithShared.framework/Versions/A/EdithDatabase',
     '@rpath/EdithKit.framework/Versions/A/EdithKit':
         '@rpath/EdithShared.framework/Versions/A/EdithKit',
     '@rpath/EdithCore.framework/Versions/A/EdithCore':
@@ -208,7 +211,7 @@ def main():
     camera_path = pathlib.Path(camera_binary)
     add_rpath(camera_path, '@executable_path/../Frameworks')
     drop_build_rpaths(camera_path)
-    for name in ('EdithKit', 'EdithCore', 'EdithCameraSupport', 'EdithLidAwakeSupport'):
+    for name in ('EdithKit', 'EdithDatabase', 'EdithCore', 'EdithCameraSupport', 'EdithLidAwakeSupport'):
         leftover = app_path / 'Contents/Frameworks' / f'{name}.framework'
         if leftover.exists():
             shutil.rmtree(leftover)

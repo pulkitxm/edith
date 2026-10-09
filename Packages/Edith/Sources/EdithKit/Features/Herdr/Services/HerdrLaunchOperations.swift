@@ -10,21 +10,40 @@ public enum HerdrLaunchOperations {
     private static let defaultTimeout: TimeInterval = 15
     private static let agentStartTimeoutMS = 30_000
 
-    public static func listWorkspaces(on machine: Machine?) async throws -> [HerdrWorkspaceSummary]
-    {
+    public static func startupMessage(for error: Error) -> String {
+        if case HerdrCommandError.commandFailed(let response) = error,
+            let object = HerdrListParser.firstJSON(in: response) as? [String: Any],
+            let detail = object["error"] as? [String: Any]
+        {
+            switch detail["code"] as? String {
+            case "agent_not_ready":
+                return "The agent needs input. Continue in this terminal."
+            case "timeout":
+                return
+                    "Startup could not be confirmed. Check this terminal before creating another agent."
+            default:
+                return HerdrListParser.errorMessage(in: response) ?? error.localizedDescription
+            }
+        }
+        return error.localizedDescription
+    }
+
+    public static func listWorkspaces(
+        session: String = HerdrTerminalSpace.defaultSession, on machine: Machine?
+    ) async throws -> [HerdrWorkspaceSummary] {
         let output = try await HerdrCommand.run(
-            local: HerdrWorkspaceListCommand.arguments,
-            remote: { HerdrWorkspaceListCommand.shellLine(platform: $0) },
+            HerdrSessionCommand.scoped(HerdrWorkspaceListCommand.arguments, session: session),
             timeout: defaultTimeout, on: machine)
         return HerdrListParser.workspaces(from: output)
     }
 
     public static func createWorkspace(
-        label: String, cwd: String? = nil, on machine: Machine?
+        label: String, cwd: String? = nil, session: String = HerdrTerminalSpace.defaultSession,
+        on machine: Machine?
     ) async throws -> HerdrCreatedPane {
         let output = try await HerdrCommand.run(
-            local: HerdrWorkspaceCreateCommand.arguments(label: label, cwd: cwd),
-            remote: { HerdrWorkspaceCreateCommand.shellLine(label: label, cwd: cwd, platform: $0) },
+            HerdrSessionCommand.scoped(
+                HerdrWorkspaceCreateCommand.arguments(label: label, cwd: cwd), session: session),
             timeout: defaultTimeout, on: machine)
         guard let created = HerdrListParser.createdPane(from: output) else {
             throw HerdrCommandError.malformedResponse
@@ -33,13 +52,15 @@ public enum HerdrLaunchOperations {
     }
 
     public static func createTab(
-        workspaceID: String, cwd: String? = nil, on machine: Machine?
+        workspaceID: String, cwd: String? = nil,
+        session: String = HerdrTerminalSpace.defaultSession,
+        on machine: Machine?
     ) async throws -> HerdrCreatedPane {
         let output = try await HerdrCommand.run(
-            local: HerdrTabCreateCommand.arguments(workspaceID: workspaceID, cwd: cwd),
-            remote: {
-                HerdrTabCreateCommand.shellLine(workspaceID: workspaceID, cwd: cwd, platform: $0)
-            }, timeout: defaultTimeout, on: machine)
+            HerdrSessionCommand.scoped(
+                HerdrTabCreateCommand.arguments(workspaceID: workspaceID, cwd: cwd),
+                session: session),
+            timeout: defaultTimeout, on: machine)
         guard let created = HerdrListParser.createdPane(from: output) else {
             throw HerdrCommandError.malformedResponse
         }
@@ -47,30 +68,34 @@ public enum HerdrLaunchOperations {
     }
 
     public static func launchAgent(
-        kind: String, name: String, pane: String, on machine: Machine?
+        kind: String, name: String, pane: String,
+        session: String = HerdrTerminalSpace.defaultSession,
+        on machine: Machine?
     ) async throws {
         try await launchAgent(
             kind: kind, name: name, pane: pane, options: HerdrLaunchSettings.options(for: kind),
-            on: machine)
+            session: session, on: machine)
     }
 
     public static func launchAgent(
         kind: String, name: String, pane: String, options: AgentLaunchOptions,
-        on machine: Machine?
+        session: String = HerdrTerminalSpace.defaultSession, on machine: Machine?
     ) async throws {
         var catalog: AgentLaunchCatalog?
         if let launchKind = AgentLaunchKind(kind: kind) {
             catalog = await AgentLaunchCatalogs.shared.cached(for: launchKind, on: machine)
         }
         let launch = agentLaunch(
-            kind: kind, name: name, pane: pane, options: options, catalog: catalog)
+            kind: kind, name: name, pane: pane, options: options, catalog: catalog, session: session
+        )
         _ = try await HerdrCommand.run(
             local: launch.local, remote: launch.remote, timeout: launch.timeout, on: machine)
     }
 
     public static func agentLaunch(
         kind: String, name: String, pane: String, options: AgentLaunchOptions,
-        catalog: AgentLaunchCatalog? = nil, defaults: UserDefaults = SharedDefaults.store
+        catalog: AgentLaunchCatalog? = nil, session: String = HerdrTerminalSpace.defaultSession,
+        defaults: UserDefaults = SharedDefaults.store
     ) -> HerdrAgentLaunch {
         let agentArguments = AgentLaunchArguments.launchArguments(
             kind: kind, options: options, catalog: catalog)
@@ -80,25 +105,33 @@ public enum HerdrLaunchOperations {
             let timeoutMS = agentStartTimeoutMS
             let agentName = HerdrAgentStartCommand.name(name, pane: pane)
             return HerdrAgentLaunch(
-                local: HerdrAgentStartCommand.arguments(
-                    name: agentName, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
-                    agentArguments: agentArguments),
-                remote: {
-                    HerdrAgentStartCommand.shellLine(
+                local: HerdrSessionCommand.scoped(
+                    HerdrAgentStartCommand.arguments(
                         name: agentName, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
-                        agentArguments: agentArguments, platform: $0)
+                        agentArguments: agentArguments), session: session),
+                remote: {
+                    remoteHerdrCommand(
+                        arguments: HerdrSessionCommand.scoped(
+                            HerdrAgentStartCommand.arguments(
+                                name: agentName, kindSlug: slug, pane: pane, timeoutMS: timeoutMS,
+                                agentArguments: agentArguments), session: session), platform: $0)
                 }, timeout: TimeInterval(timeoutMS / 1_000) + 5)
         }
         let command = HerdrLaunchSettings.command(for: kind, in: defaults)
         return HerdrAgentLaunch(
-            local: HerdrPaneRunCommand.arguments(
-                pane: pane,
-                command: HerdrPaneRunCommand.commandText(command, appending: agentArguments)),
-            remote: {
-                HerdrPaneRunCommand.shellLine(
+            local: HerdrSessionCommand.scoped(
+                HerdrPaneRunCommand.arguments(
                     pane: pane,
-                    command: HerdrPaneRunCommand.commandText(
-                        command, appending: agentArguments, platform: $0),
+                    command: HerdrPaneRunCommand.commandText(command, appending: agentArguments)),
+                session: session),
+            remote: {
+                remoteHerdrCommand(
+                    arguments: HerdrSessionCommand.scoped(
+                        HerdrPaneRunCommand.arguments(
+                            pane: pane,
+                            command: HerdrPaneRunCommand.commandText(
+                                command, appending: agentArguments, platform: $0)), session: session
+                    ),
                     platform: $0)
             }, timeout: defaultTimeout)
     }

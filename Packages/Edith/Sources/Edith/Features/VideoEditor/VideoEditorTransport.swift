@@ -6,46 +6,64 @@ struct VideoEditorTransport: View {
     let model: VideoEditorModel
 
     var body: some View {
-        HStack(spacing: UIScale.pt(14)) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: UIScale.pt(14)) {
+                playbackControls.fixedSize()
+                seekControls.frame(minWidth: UIScale.pt(180))
+            }
+            VStack(spacing: UIScale.pt(8)) {
+                playbackControls.fixedSize()
+                seekControls
+            }
+        }
+        .buttonStyle(.edith(.iconOnly))
+        .padding(.horizontal, UIScale.pt(14))
+        .padding(.vertical, UIScale.pt(8))
+    }
+
+    private var playbackControls: some View {
+        HStack(spacing: UIScale.pt(10)) {
             Button {
                 model.seek(to: model.playhead - frameDuration)
             } label: {
                 Image(systemName: "backward.frame")
             }
+            .accessibilityLabel("Previous frame").help("Previous frame")
             Button(action: model.togglePlayback) {
                 Image(systemName: model.player.rate == 0 ? "play.fill" : "pause.fill")
                     .frame(width: UIScale.pt(30))
             }
-            .help("Play or pause (Space)")
+            .accessibilityLabel("Play or pause").help("Play or pause (Space)")
             Button {
                 model.seek(to: model.playhead + frameDuration)
             } label: {
                 Image(systemName: "forward.frame")
             }
+            .accessibilityLabel("Next frame").help("Next frame")
             Button {
                 model.loopPlayback.toggle()
             } label: {
                 Image(systemName: model.loopPlayback ? "repeat.circle.fill" : "repeat")
             }
             .disabled(model.pipeline == nil)
-            .help("Loop playback")
+            .accessibilityLabel("Loop playback").help("Loop playback")
+        }
+    }
+
+    private var seekControls: some View {
+        HStack(spacing: UIScale.pt(8)) {
             Text(timestamp(model.playhead))
-                .font(.edithText(.caption, design: .monospaced))
-                .frame(width: UIScale.pt(65), alignment: .trailing)
+                .font(.edithText(.caption, design: .monospaced)).fixedSize()
             Slider(
                 value: Binding(
                     get: { min(model.playhead, model.duration) },
                     set: { model.seek(to: $0) }
                 ), in: 0...max(0.001, model.duration)
             )
-            .disabled(model.duration <= 0)
+            .disabled(model.duration <= 0).accessibilityLabel("Playback position")
             Text(timestamp(model.duration))
-                .font(.edithText(.caption, design: .monospaced))
-                .frame(width: UIScale.pt(65), alignment: .leading)
+                .font(.edithText(.caption, design: .monospaced)).fixedSize()
         }
-        .buttonStyle(.edith(.borderless))
-        .padding(.horizontal, UIScale.pt(22))
-        .frame(height: UIScale.pt(42))
     }
 
     private var frameDuration: Double {

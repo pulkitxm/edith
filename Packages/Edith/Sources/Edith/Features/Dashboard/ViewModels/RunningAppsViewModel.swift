@@ -75,6 +75,17 @@ final class RunningAppsModel {
     private(set) var sortKey: AppSortKey = .cpu
     private(set) var ascending = false
     private(set) var actionStatus: RunningAppActionStatus?
+    var query = ""
+    var visibleApps: [RunningAppRow] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty
+            ? apps
+            : apps.filter {
+                $0.name.localizedCaseInsensitiveContains(query)
+                    || $0.bundleID?.localizedCaseInsensitiveContains(query) == true
+                    || String($0.pid).contains(query)
+            }
+    }
     let loading = ContentLoad()
     var loaded: Bool { loading.hasContent }
     var refreshing: Bool { loading.isRunning }

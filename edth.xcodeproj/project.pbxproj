@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E95772B4B9A14C8DA28B3F10 = {isa = PBXBuildFile; productRef = E95772B4B9A14C8DA28B3F11; };
 		086A0082815C2A9D91ECFD02 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F7FD5DA1D56566638BEC52FB /* Cocoa.framework */; };
 		2B8D44E9C70B5F3DAE1F8024 /* Edith in Frameworks */ = {isa = PBXBuildFile; productRef = 0F4B21C7A5E94D3B8C1D6E22 /* Edith */; };
 		5A455842DEDC4A4C97F744E6 /* Highlighter in Frameworks */ = {isa = PBXBuildFile; productRef = D09B7FAF0E894B2E88306846 /* Highlighter */; };
@@ -80,6 +81,7 @@
 				E342837369B43CEB0E422EE8 /* Cocoa.framework in Frameworks */,
 				F52F2ACA3C74115D1EADA87B /* EdithShared in Frameworks */,
                 39E6A240BF644377A7C2A010,
+				E95772B4B9A14C8DA28B3F10,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -226,6 +228,7 @@
 			);
 			name = EdithHelper;
 			packageProductDependencies = (
+				E95772B4B9A14C8DA28B3F11,
 				92CD22FFF15A7E58164A819B /* EdithShared */,
                 39E6A240BF644377A7C2A012,
 			);
@@ -707,6 +710,7 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		E95772B4B9A14C8DA28B3F11 = {isa = XCSwiftPackageProductDependency; package = 4DAF66ABE92D715FC0312046; productName = EdithKit; };
 		0F4B21C7A5E94D3B8C1D6E22 /* Edith */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 4DAF66ABE92D715FC0312046 /* XCLocalSwiftPackageReference "Packages/Edith" */;

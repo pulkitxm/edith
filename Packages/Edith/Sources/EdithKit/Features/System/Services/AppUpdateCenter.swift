@@ -166,9 +166,7 @@ public struct AppUpdatePersistence: Sendable {
     }
 
     public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Edith", isDirectory: true)
-            .appendingPathComponent("app-update-center.json")
+        AppData.supportDir.appendingPathComponent("app-update-center.json")
     }
 
     public func load() -> AppUpdateCenterState {
@@ -271,9 +269,7 @@ public actor AppMaintenanceSnapshotStore {
     }
 
     public static var defaultURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Edith", isDirectory: true)
-            .appendingPathComponent("app-maintenance-snapshot.json")
+        AppData.supportDir.appendingPathComponent("app-maintenance-snapshot.json")
     }
 
     public func load() -> AppMaintenanceSnapshot? {

@@ -114,6 +114,66 @@ describe("build install lifecycle", () => {
     }
   });
 
+  test("builds database executables separately and stops before packaging on failure", () => {
+    const phase = script.slice(
+      script.indexOf("for BUILD_SCHEME in "),
+      script.indexOf("\n\nBUILT="),
+    );
+    const scheme = readFileSync(
+      resolve("edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme"),
+      "utf8",
+    );
+    expect(scheme).not.toContain('BlueprintIdentifier = "edithd"');
+    expect(scheme).not.toContain('BlueprintIdentifier = "edith-database"');
+    for (const [name, product] of [
+      ["EdithAgentRuntime", "edithd"],
+      ["EdithDatabaseRuntime", "edith-database"],
+    ]) {
+      const runtime = readFileSync(
+        resolve(`edth.xcodeproj/xcshareddata/xcschemes/${name}.xcscheme`),
+        "utf8",
+      );
+      const roots = [
+        ...runtime.matchAll(/BlueprintIdentifier\s*=\s*"([^"]+)"/g),
+      ].map((match) => match[1]);
+      expect(roots).toEqual(["9E41503E3A9738BFE160D1F8", product]);
+    }
+    for (const failure of ["", "EdithAgentRuntime", "EdithDatabaseRuntime"]) {
+      const result = Bun.spawnSync(
+        [
+          "bash",
+          "-c",
+          `set -euo pipefail
+CONFIG=Release
+DERIVED=fixture
+SIGN_IDENTITY=-
+TEAM_ID=fixture
+XCODE_BUILD_SETTINGS=(ARCHS=arm64)
+xcodebuild() {
+  while [ "$1" != -scheme ]; do shift; done
+  printf '%s\\n' "$2"
+  [ "$2" != "$FAILURE" ]
+}
+${phase}`,
+        ],
+        {
+          env: { ...process.env, FAILURE: failure },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const builds = new TextDecoder().decode(result.stdout).trim().split("\n");
+      expect(builds).toEqual(
+        failure === "EdithAgentRuntime"
+          ? ["EdithAgentRuntime"]
+          : failure === "EdithDatabaseRuntime"
+            ? ["EdithAgentRuntime", "EdithDatabaseRuntime"]
+            : ["EdithAgentRuntime", "EdithDatabaseRuntime", "EdithMain"],
+      );
+      expect(result.exitCode).toBe(failure ? 1 : 0);
+    }
+  });
+
   test("routes CLI names through the application executable", () => {
     const removal = script.indexOf('rm -f "$APP/Contents/MacOS/edh"');
     const install = script.indexOf(

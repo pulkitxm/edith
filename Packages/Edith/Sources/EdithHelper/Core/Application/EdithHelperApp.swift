@@ -181,6 +181,9 @@ struct EdithApp {
             let query = info[BifrostPanelIPC.queryKey] as? String ?? ""
             MainActor.assumeIsolated { BifrostPanel.shared.toggle(query: query) }
         }
+        _ = IPC.observe(IPC.Name.requestMicrophoneMute) {
+            MainActor.assumeIsolated { services.micMute?.toggle() }
+        }
         _ = IPC.observe(IPC.Name.requestEmojiPanel) {
             MainActor.assumeIsolated { EmojiPanel.shared.toggle() }
         }

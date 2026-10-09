@@ -35,7 +35,7 @@ struct StudioImageEditorView: View {
                         .buttonStyle(.edith(.iconOnly))
                         .popover(isPresented: $showsInspector) {
                             StudioImageInspector(editor: editor)
-                                .frame(width: UIScale.pt(280), height: UIScale.pt(320))
+                                .frame(width: UIScale.pt(280), height: UIScale.pt(480))
                         }
                     }
                     Button {
@@ -152,8 +152,8 @@ struct StudioImageEditorView: View {
     }
 
     private var sizeText: String? {
-        guard let info = StudioImageIO.info(editor.url) else { return nil }
-        return "\(info.width)×\(info.height)"
+        guard let size = editor.source?.originalSize else { return nil }
+        return "\(Int(size.width))×\(Int(size.height))"
     }
 }
 
@@ -195,177 +195,6 @@ struct StudioImageToolRail: View {
             .padding(UIScale.pt(6))
         }
         .frame(width: UIScale.pt(72))
-    }
-}
-
-struct StudioImageCanvas: View {
-    let editor: StudioImageEditorModel
-    @State private var dragStart: CGPoint?
-    @State private var dragCurrent: CGPoint?
-    @State private var stroke: [CGPoint] = []
-    @State private var moveOrigin: (layer: UUID, frame: StudioRect, document: ImageEditDocument)?
-
-    var body: some View {
-        GeometryReader { geometry in
-            let bounds = CGRect(origin: .zero, size: geometry.size).insetBy(dx: 24, dy: 24)
-            if editor.panel == .crop, let image = editor.geometry {
-                let size = CGSize(width: image.width, height: image.height)
-                let rect = ImageEditGeometry.fittedRect(content: size, in: bounds)
-                ZStack(alignment: .topLeading) {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .frame(width: rect.width, height: rect.height)
-                        .offset(x: rect.minX, y: rect.minY)
-                    StudioImageCropOverlay(editor: editor, imageRect: rect)
-                }
-            } else if let image = editor.preview {
-                let size = CGSize(width: image.width, height: image.height)
-                let rect = ImageEditGeometry.fittedRect(content: size, in: bounds)
-                ZStack(alignment: .topLeading) {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .frame(width: rect.width, height: rect.height)
-                        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
-                        .offset(x: rect.minX, y: rect.minY)
-                    overlay(in: rect)
-                }
-                .contentShape(Rectangle())
-                .gesture(gesture(in: rect))
-            } else {
-                LoadingIndicator().frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-
-    @ViewBuilder private func overlay(in rect: CGRect) -> some View {
-        if let selected = editor.selected {
-            let frame = ImageEditGeometry.viewRect(for: selected.frame, in: rect)
-            Rectangle()
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
-                .frame(width: max(frame.width, 6), height: max(frame.height, 6))
-                .offset(x: frame.minX, y: frame.minY)
-                .allowsHitTesting(false)
-            Circle()
-                .fill(Color.white)
-                .overlay(Circle().strokeBorder(Color.accentColor, lineWidth: 2))
-                .frame(width: UIScale.pt(12), height: UIScale.pt(12))
-                .offset(x: frame.maxX - 6, y: frame.maxY - 6)
-                .gesture(resizeGesture(in: rect, layer: selected))
-        }
-        if let start = dragStart, let current = dragCurrent,
-            editor.panel == .shapes || editor.panel == .blur
-        {
-            let a = ImageEditGeometry.viewPoint(start, in: rect)
-            let b = ImageEditGeometry.viewPoint(current, in: rect)
-            Rectangle()
-                .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 1.5, dash: [5, 3]))
-                .background(editor.panel == .blur ? Color.black.opacity(0.25) : Color.clear)
-                .frame(width: abs(b.x - a.x), height: abs(b.y - a.y))
-                .offset(x: min(a.x, b.x), y: min(a.y, b.y))
-                .allowsHitTesting(false)
-        }
-        if editor.panel == .draw, stroke.count > 1 {
-            Path { path in
-                path.addLines(stroke.map { ImageEditGeometry.viewPoint($0, in: rect) })
-            }
-            .stroke(
-                Color(cgColor: (StudioColor(hex: editor.drawColor) ?? .black).cgColor)
-                    .opacity(editor.highlighter ? 0.45 : 1),
-                style: StrokeStyle(
-                    lineWidth: max(1, editor.drawWidth * rect.height), lineCap: .round,
-                    lineJoin: .round)
-            )
-            .allowsHitTesting(false)
-        }
-    }
-
-    private func gesture(in rect: CGRect) -> some Gesture {
-        DragGesture(minimumDistance: 0)
-            .onChanged { value in
-                let point = clamp(ImageEditGeometry.normalized(value.location, in: rect))
-                let start = clamp(ImageEditGeometry.normalized(value.startLocation, in: rect))
-                switch editor.panel {
-                case .draw:
-                    stroke.append(point)
-                case .shapes, .blur:
-                    dragStart = start
-                    dragCurrent = point
-                default:
-                    if moveOrigin == nil {
-                        let hit = editor.document.hitTest(
-                            CGPoint(
-                                x: start.x * editor.canvasSize.width,
-                                y: start.y * editor.canvasSize.height),
-                            canvas: editor.canvasSize)
-                        editor.selectedLayer = hit
-                        if let hit, let layer = editor.document.layer(hit) {
-                            moveOrigin = (hit, layer.frame, editor.document)
-                        }
-                    }
-                    if let origin = moveOrigin {
-                        let delta = CGPoint(x: point.x - start.x, y: point.y - start.y)
-                        editor.preview { document in
-                            document.updateLayer(origin.layer) {
-                                $0.frame = origin.frame.moved(by: delta)
-                            }
-                        }
-                    }
-                }
-            }
-            .onEnded { value in
-                let point = clamp(ImageEditGeometry.normalized(value.location, in: rect))
-                let start = clamp(ImageEditGeometry.normalized(value.startLocation, in: rect))
-                switch editor.panel {
-                case .draw:
-                    editor.addStroke(stroke)
-                    stroke = []
-                case .shapes:
-                    editor.addShape(from: start, to: point)
-                case .blur:
-                    editor.addRedaction(from: start, to: point)
-                case .text
-                where moveOrigin == nil && hypot(point.x - start.x, point.y - start.y) < 0.01:
-                    if editor.document.hitTest(
-                        CGPoint(
-                            x: point.x * editor.canvasSize.width,
-                            y: point.y * editor.canvasSize.height),
-                        canvas: editor.canvasSize) == nil
-                    {
-                        editor.addText(at: point)
-                    }
-                default:
-                    break
-                }
-                if let origin = moveOrigin { editor.commitPreview(from: origin.document) }
-                moveOrigin = nil
-                dragStart = nil
-                dragCurrent = nil
-            }
-    }
-
-    private func resizeGesture(in rect: CGRect, layer: ImageLayer) -> some Gesture {
-        DragGesture()
-            .onChanged { value in
-                if moveOrigin == nil { moveOrigin = (layer.id, layer.frame, editor.document) }
-                guard let origin = moveOrigin else { return }
-                let point = clamp(ImageEditGeometry.normalized(value.location, in: rect))
-                editor.preview { document in
-                    document.updateLayer(origin.layer) { layer in
-                        layer.frame = StudioRect(
-                            x: origin.frame.x, y: origin.frame.y,
-                            width: max(0.02, point.x - origin.frame.x),
-                            height: max(0.02, point.y - origin.frame.y))
-                    }
-                }
-            }
-            .onEnded { _ in
-                if let origin = moveOrigin { editor.commitPreview(from: origin.document) }
-                moveOrigin = nil
-            }
-    }
-
-    private func clamp(_ point: CGPoint) -> CGPoint {
-        CGPoint(x: min(max(point.x, 0), 1), y: min(max(point.y, 0), 1))
     }
 }
 
@@ -428,8 +257,13 @@ struct StudioImageCropOverlay: View {
                             .onChanged { value in
                                 begin()
                                 guard let origin else { return }
+                                let anchor = CanvasSelectionGeometry.anchor(
+                                    corner,
+                                    in: ImageEditGeometry.viewRect(for: origin, in: imageRect))
                                 let point = ImageEditGeometry.normalized(
-                                    value.location, in: imageRect)
+                                    CGPoint(
+                                        x: anchor.x + value.translation.width,
+                                        y: anchor.y + value.translation.height), in: imageRect)
                                 editor.preview { document in
                                     document.crop = StudioCropMath.drag(
                                         corner: corner, of: origin, to: point)

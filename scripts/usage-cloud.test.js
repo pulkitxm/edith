@@ -177,7 +177,7 @@ describe("Codex cloud usage", () => {
 });
 
 describe("Claude Code cloud receipts", () => {
-  test("deduplicates streaming receipts and excludes exactly matching local requests", () => {
+  test("deduplicates streaming receipts and excludes matching local messages", () => {
     const local = new Set([claudeReceiptIdentity(receipt("local"))]);
     const rows = claudeCloudReceipts(
       [
@@ -194,6 +194,46 @@ describe("Claude Code cloud receipts", () => {
     expect(rows.map((r) => r.message.id)).toEqual(["cloud", "distinct"]);
     expect(rows[0].sessionId).toBe("session-cloud");
     expect(JSON.stringify(rows)).not.toContain("content");
+  });
+
+  test("counts receipts without request IDs and deduplicates streamed request metadata", () => {
+    const larger = receipt("stream", { requestId: undefined });
+    larger.message.usage.output_tokens = 80;
+    const rows = claudeCloudReceipts(
+      [receipt("stream"), larger, receipt("stream", { requestId: "other" })],
+      "session",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].message.usage.output_tokens).toBe(80);
+    expect(rows[0].requestId).toBeUndefined();
+    expect(
+      claudeReceiptIdentity(receipt("", { requestId: undefined })),
+    ).toBeNull();
+    expect(
+      claudeReceiptIdentity({ message: { id: 42, usage: {} } }),
+    ).toBeNull();
+  });
+
+  test("excludes resumed messages when one copy lacks a request ID", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-identity-test-"));
+    try {
+      await writeFile(
+        join(root, "session.jsonl"),
+        [receipt("local"), receipt("missing", { requestId: undefined })]
+          .map(JSON.stringify)
+          .join("\n") + "\n",
+      );
+      const local = await localClaudeReceipts(root);
+      expect(
+        claudeCloudReceipts(
+          [receipt("local", { requestId: undefined }), receipt("missing")],
+          "session",
+          local,
+        ),
+      ).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   test("excludes local receipts after the billing archive removes transcript fields", async () => {
@@ -381,6 +421,40 @@ describe("Claude Code cloud receipts", () => {
           fetcher: async () => reply({}, 401),
         }),
       ).rejects.toThrow("HTTP 401");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test("refetches unchanged sessions from an incomplete receipt cache", async () => {
+    const root = await mkdtemp(join(tmpdir(), "edith-cloud-version-test-"));
+    const cache = join(root, "receipts.json");
+    let eventCalls = 0;
+    const fetcher = async (url) => {
+      if (url.pathname.endsWith("/sessions"))
+        return reply({
+          data: [{ id: "cloud", last_event_at: "2026-10-01T12:00:00Z" }],
+        });
+      eventCalls++;
+      return reply({ data: [receipt("complete", { requestId: undefined })] });
+    };
+    try {
+      await collectClaudeCloud("synthetic", join(root, "first"), {
+        cache,
+        fetcher,
+      });
+      const saved = JSON.parse(await readFile(cache, "utf8"));
+      delete saved.version;
+      saved.sessions[0].rows = [];
+      await writeFile(cache, JSON.stringify(saved));
+      const result = await collectClaudeCloud(
+        "synthetic",
+        join(root, "second"),
+        { cache, fetcher },
+      );
+      expect(eventCalls).toBe(2);
+      expect(result.receipts).toBe(1);
+      expect(JSON.parse(await readFile(cache, "utf8")).version).toBe(2);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
