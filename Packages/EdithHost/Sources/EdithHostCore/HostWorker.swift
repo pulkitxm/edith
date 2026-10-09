@@ -111,13 +111,13 @@ public final class HostWorker {
         return try await request(HostWorkerRequest(operation: "status"))
     }
 
-    public func prepareDisable() async throws {
+    public func prepareDisable(timeout: Duration? = nil) async throws {
         guard ready else { return }
         guard preparationToken == nil else { throw HostWorkerError.rejected }
         let request = HostWorkerRequest(operation: "prepareDisable")
         preparationToken = request.token
         defer { preparationToken = nil }
-        _ = try await self.request(request)
+        _ = try await self.request(request, timeout: timeout)
     }
 
     public func stop() async throws {

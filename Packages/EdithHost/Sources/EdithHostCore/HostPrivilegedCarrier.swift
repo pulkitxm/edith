@@ -56,8 +56,7 @@ import Security
 @MainActor private final class HostPrivilegedSession: NSObject, ExtensionPrivilegedProtocol {
     private let admission: HostPrivilegedAdmission
     private let ended: @MainActor () -> Void
-    private var object: NSObject?
-    private var image: UnsafeMutableRawPointer?
+    private var worker: HostPrivilegedProcess?
     private var payload: URL?
     private var restoration: Task<Void, Never>?
     private var releasing = false
@@ -72,25 +71,20 @@ import Security
     ) {
         Task { @MainActor in
             do {
-                guard self.object == nil, !self.releasing else {
+                guard self.worker == nil, !self.releasing else {
                     throw MarketplaceError.invalidBundle
                 }
                 let payload = try self.admission.admit(
                     source: URL(fileURLWithPath: source), owner: owner, version: version)
                 self.payload = payload
-                guard let bundle = Bundle(url: payload), let executable = bundle.executableURL,
-                    let image = dlopen(executable.path, RTLD_NOW | RTLD_LOCAL),
-                    let symbol = dlsym(image, "edith_extension_create")
-                else { throw MarketplaceError.invalidBundle }
-                self.image = image
-                let factory = unsafeBitCast(
-                    symbol, to: (@convention(c) () -> UnsafeMutableRawPointer?).self)
-                guard let pointer = factory() else { throw MarketplaceError.invalidBundle }
-                let object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
-                guard object.responds(to: NSSelectorFromString("invoke:completion:")),
-                    object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
-                else { throw MarketplaceError.invalidBundle }
-                self.object = object; reply(nil)
+                guard let executable = Bundle.main.executableURL else {
+                    throw MarketplaceError.invalidBundle
+                }
+                let worker = HostPrivilegedProcess(
+                    executable: executable, arguments: ["--extension-carrier-worker", payload.path])
+                self.worker = worker
+                try await worker.start()
+                reply(nil)
             } catch { reply(error as NSError); self.finish() }
         }
     }
@@ -99,35 +93,12 @@ import Security
         _ command: String, payload: Data, reply: @escaping @Sendable (Data?, NSError?) -> Void
     ) {
         Task { @MainActor in
-            guard !self.releasing, let object = self.object, !command.isEmpty,
-                command.utf8.count <= 256, !command.utf8.contains(0), payload.count <= 65_536
+            guard !self.releasing, let worker = self.worker, !command.isEmpty,
+                command.utf8.count <= 256, !command.utf8.contains(0), payload.count <= 32_768
             else { reply(nil, MarketplaceError.invalidBundle as NSError); return }
-            let selector = NSSelectorFromString("invoke:completion:")
-            typealias Invoke =
-                @convention(c) (
-                    AnyObject, Selector, NSDictionary,
-                    @convention(block) (NSData?, NSString?) -> Void
-                ) -> Void
-            let invoke = unsafeBitCast(object.method(for: selector), to: Invoke.self)
-            let callback: @convention(block) (NSData?, NSString?) -> Void = { data, message in
-                if let message {
-                    reply(
-                        nil,
-                        NSError(
-                            domain: "EdithExtensionPrivilege", code: 1,
-                            userInfo: [
-                                NSLocalizedDescriptionKey: String(message).prefix(1024).description
-                            ]))
-                } else if let data, data.length <= 65_536 {
-                    reply(data as Data, nil)
-                } else {
-                    reply(nil, MarketplaceError.invalidBundle as NSError)
-                }
+            do { reply(try await worker.invoke(command, payload: payload), nil) } catch {
+                reply(nil, error as NSError)
             }
-            invoke(
-                object, selector,
-                ["command": command, "payload": payload as NSData, "token": UUID().uuidString],
-                callback)
         }
     }
 
@@ -158,23 +129,10 @@ import Security
         }
     }
 
-    private func prepare() async throws {
-        guard let object else { return }
-        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
-        typealias Prepare =
-            @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void) -> Void
-        let function = unsafeBitCast(object.method(for: selector), to: Prepare.self)
-        try await withCheckedThrowingContinuation {
-            (continuation: CheckedContinuation<Void, Error>) in
-            let completion: @convention(block) (NSError?) -> Void = { error in
-                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
-            }
-            function(object, selector, completion)
-        }
-    }
+    private func prepare() async throws { try await worker?.stop() }
 
     private func finish() {
-        object = nil
+        worker = nil
         if let payload { try? admission.remove(payload); self.payload = nil }
         ended()
     }
