@@ -36,6 +36,7 @@ struct HostEntry {
 }
 
 struct HostApplication: App {
+    @State private var updater = HostUpdater()
     @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @State private var marketplace: HostMarketplace?
     @State private var startupError = false
@@ -68,7 +69,14 @@ struct HostApplication: App {
                     delegate.shutdown = { await loaded.sessions.shutdown() }
                     await loaded.loadCachedCatalog()
                     await loaded.restoreEnabledExtensions()
+                    await loaded.updateInstalledIfDue()
                 } catch { startupError = true }
+            }
+        }
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for App Updates") { updater.checkForUpdates() }.disabled(
+                    !updater.available)
             }
         }
     }
@@ -113,7 +121,10 @@ struct MarketplacePage: View {
                                 "\(marketplace.sessions.states[entry.id] == .active ? "Enabled" : "Disabled") · \(package.version)"
                             ).foregroundStyle(.secondary)
                         } else {
-                            Text("Not installed").foregroundStyle(.secondary)
+                            Text(
+                                marketplace.downloadedIDs.contains(entry.id)
+                                    ? "Needs a compatible update" : "Not installed"
+                            ).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
@@ -132,14 +143,20 @@ struct MarketplacePage: View {
                         }
                         Button("Remove") { Task { await marketplace.remove(id: entry.id) } }
                     } else {
-                        Button("Download") { Task { await marketplace.download(id: entry.id) } }
-                            .disabled(marketplace.operationID != nil)
+                        Button(marketplace.downloadedIDs.contains(entry.id) ? "Update" : "Download")
+                        { Task { await marketplace.download(id: entry.id) } }
+                        .disabled(marketplace.operationID != nil)
                     }
                 }
                 .disabled(marketplace.operationID != nil)
                 .padding(.vertical, 10)
             }
             .searchable(text: $search, prompt: "Find extensions")
+            Toggle(
+                "Automatically update installed extensions",
+                isOn: $marketplace.automaticallyUpdatesExtensions
+            )
+            .padding(16)
         }
     }
 }

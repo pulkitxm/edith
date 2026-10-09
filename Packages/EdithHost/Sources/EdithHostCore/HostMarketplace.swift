@@ -9,11 +9,19 @@ public final class HostMarketplace {
     public let identity: HostIdentity
     public let sessions: HostExtensionSessions
     public private(set) var installed: [String: ExtensionPackage] = [:]
+    public private(set) var downloadedIDs: Set<String> = []
     public private(set) var available: [String: ExtensionPackage] = [:]
     public private(set) var operationID: String?
     public private(set) var error: String?
     public private(set) var offline = false
     public private(set) var progress = 0.0
+    public var automaticallyUpdatesExtensions: Bool {
+        didSet {
+            preferences.set(
+                automaticallyUpdatesExtensions, forKey: "automaticallyUpdatesExtensions")
+        }
+    }
+    @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let store: ExtensionPackageStore
     @ObservationIgnored private let catalogClient: ExtensionCatalogClient
     @ObservationIgnored private let installer: ExtensionPackageInstaller
@@ -33,6 +41,12 @@ public final class HostMarketplace {
         self.catalogClient = catalogClient
         self.installer = installer
         self.sessions = sessions
+        guard let preferences = UserDefaults(suiteName: identity.defaultsSuite) else {
+            throw CocoaError(.validationMissingMandatoryProperty)
+        }
+        self.preferences = preferences
+        automaticallyUpdatesExtensions =
+            preferences.object(forKey: "automaticallyUpdatesExtensions") as? Bool ?? true
         try store.completePendingRemovals()
         try reloadInstalled()
     }
@@ -91,7 +105,28 @@ public final class HostMarketplace {
     }
 
     public func restoreEnabledExtensions() async {
+        guard operationID == nil else { return }
+        operationID = "restore"
+        defer { operationID = nil }
         await sessions.restore(packages: installed)
+    }
+
+    public func updateInstalledIfDue(now: Date = Date()) async {
+        guard automaticallyUpdatesExtensions, !downloadedIDs.isEmpty, operationID == nil else {
+            return
+        }
+        if let checked = preferences.object(forKey: "lastAutomaticExtensionCheck") as? Date,
+            now.timeIntervalSince(checked) < 8 * 60 * 60
+        {
+            return
+        }
+        await checkForUpdates()
+        guard error == nil, !offline else { return }
+        for id in downloadedIDs.sorted() where updateAvailable(id: id) {
+            await download(id: id)
+            if error != nil { return }
+        }
+        preferences.set(now, forKey: "lastAutomaticExtensionCheck")
     }
 
     public func enable(id: String) async {
@@ -116,12 +151,15 @@ public final class HostMarketplace {
 
     public func show(id: String) async {
         guard operationID == nil else { return }
+        operationID = id
+        defer { operationID = nil }
         do { try await sessions.show(id: id) } catch {
             self.error = "The extension could not open. Try again."
         }
     }
 
     public func updateAvailable(id: String) -> Bool {
+        if downloadedIDs.contains(id), installed[id] == nil, available[id] != nil { return true }
         guard let package = installed[id], let next = available[id] else { return false }
         return package.version.compare(next.version, options: .numeric) == .orderedAscending
     }
@@ -162,7 +200,13 @@ public final class HostMarketplace {
             }
             try reloadInstalled()
             if let package = installed[id] {
-                do { try await sessions.applyUpdate(package) } catch {
+                do {
+                    if sessions.enabledIDs.contains(id), sessions.states[id] != .active {
+                        try await sessions.enable(package)
+                    } else {
+                        try await sessions.applyUpdate(package)
+                    }
+                } catch {
                     self.error =
                         "The update could not start. The previous version will keep running if available."
                 }
@@ -209,6 +253,7 @@ public final class HostMarketplace {
 
     private func reloadInstalled() throws {
         let pending = try store.pendingRemovals()
+        downloadedIDs = Set(try store.installedPackages().map(\.id)).subtracting(pending)
         var selected: [String: ExtensionPackage] = [:]
         for entry in entries where !pending.contains(entry.id) {
             if let package = try store.installedPackage(

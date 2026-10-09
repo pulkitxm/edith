@@ -1,0 +1,70 @@
+{
+  "baseline": {
+    "installedBytes": 116465201,
+    "comparisonZipBytes": 52271486
+  },
+  "appWithoutExtensions": {
+    "installedBytes": 2694380,
+    "comparisonZipBytes": 1175240
+  },
+  "savedBytes": {
+    "installedBytes": 113770821,
+    "comparisonZipBytes": 51096246
+  },
+  "savedPercent": {
+    "installedBytes": 97.69,
+    "comparisonZipBytes": 97.75
+  },
+  "packages": [
+    {
+      "id": "focusDim",
+      "version": "1.0.0",
+      "downloadBytes": 153004,
+      "installedBytes": 400946,
+      "sha256": "e172c623d14d66044437fd0c526367fc434420aed5738695336a2a078d64d3a5",
+      "releaseMetadataBytes": 509
+    },
+    {
+      "id": "keepAwake",
+      "version": "1.0.0",
+      "downloadBytes": 18214,
+      "installedBytes": 79205,
+      "sha256": "1e8435fcbeb9f0d61f8a36e5dc3164dde79dbd54e48faab16f3e9f8b11eb22f2",
+      "releaseMetadataBytes": 510
+    }
+  ],
+  "migratedExtensionPackages": {
+    "downloadBytes": 171218,
+    "installedBytes": 480151,
+    "releaseMetadataBytes": 1019,
+    "releaseAssetBytes": 172237
+  },
+  "appWithMigratedExtensions": {
+    "installedBytes": 3174531,
+    "comparisonZipAndPackageBytes": 1346458
+  },
+  "status": "migration-in-progress",
+  "migratedExtensions": 2,
+  "indexedExtensions": 38,
+  "hostExecutableSHA256": "fb919e257e0be22743d52b059740e8f386af3595716f9d242266242a3f8f0e54",
+  "measurement": {
+    "architecture": "arm64",
+    "signature": "development",
+    "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
+    "included": [
+      "host executable",
+      "marketplace runtime",
+      "Sparkle updater and its helpers",
+      "application icon",
+      "extension index",
+      "code signatures"
+    ],
+    "outstanding": [
+      "remaining feature migrations",
+      "shared navigation and theme integration",
+      "required platform carriers",
+      "shipping release packaging",
+      "final release-host measurements"
+    ]
+  }
+}
