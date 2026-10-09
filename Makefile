@@ -191,6 +191,13 @@ ci-music-native:
 	cargo fmt --manifest-path Extensions/music/Native/Cargo.toml --check
 	cargo test --locked --jobs $(EXTENSION_SWIFT_JOBS) --manifest-path Extensions/music/Native/Cargo.toml
 
+.PHONY: ci-extension-studio ci-extension-studio-native
+ci-extension-studio:
+	$(MAKE) -C Extensions/studio ci-studio-extension
+
+ci-extension-studio-native:
+	swift test --package-path Extensions/studio/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
 ci-extension-commands:
 	bun scripts/test-extension-commands.mjs
 
