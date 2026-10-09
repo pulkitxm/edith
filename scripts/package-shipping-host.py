@@ -34,6 +34,7 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
     run('ditto', str(source), str(bundle))
     plist_path = bundle / 'Contents/Info.plist'
     plist = plistlib.loads(plist_path.read_bytes())
+    plist.update({key: value for key, value in version.items() if key.startswith('NS') and key.endswith('UsageDescription')})
     plist.update(CFBundleIdentifier=identifier, CFBundleName=name, CFBundleDisplayName=name)
     for key in ('CFBundleShortVersionString', 'CFBundleVersion', 'SUFeedURL', 'SUPublicEDKey'):
         plist[key] = version[key]
@@ -56,12 +57,12 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
         run('codesign', '--force', '--sign', args.identity, *runtime, '--preserve-metadata=entitlements', str(path))
     entitlement_path = temporary / 'host.entitlements'
     inherited = subprocess.run(['codesign', '-d', '--entitlements', '-', '--xml', str(source)], capture_output=True, check=True).stdout
-    entitlements = Path(os.environ['EDITH_HOST_ENTITLEMENTS']).read_bytes() if os.environ.get('EDITH_HOST_ENTITLEMENTS') else inherited
-    entitlement_flags = []
-    if entitlements.strip():
-        plistlib.loads(entitlements)
-        entitlement_path.write_bytes(entitlements)
-        entitlement_flags = ['--entitlements', str(entitlement_path)]
+    configured = Path(os.environ['EDITH_HOST_ENTITLEMENTS']).read_bytes() if os.environ.get('EDITH_HOST_ENTITLEMENTS') else inherited
+    entitlements = plistlib.loads(configured) if configured.strip() else {}
+    required = plistlib.loads(Path('Resources/Host.entitlements').read_bytes())
+    entitlements.update(required)
+    entitlement_path.write_bytes(plistlib.dumps(entitlements))
+    entitlement_flags = ['--entitlements', str(entitlement_path)]
     requirement = []
     if args.identity != '-':
         details = run('codesign', '-dvv', str(bundle / 'Contents/MacOS/Edith'))

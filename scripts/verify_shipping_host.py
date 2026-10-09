@@ -78,6 +78,13 @@ def inspect_host(bundle, release=False, launcher_required=True):
     for feature in ('EdithKit', 'EdithShared', 'MeetingVoice', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
         assert feature not in closure, f'Feature dependency in host: {feature}'
     run('codesign', '--verify', '--deep', '--strict', str(bundle))
+    if launcher_required:
+        signed = subprocess.run(['codesign', '-d', '--entitlements', '-', '--xml', str(executable)], capture_output=True, check=True).stdout
+        entitlements = plistlib.loads(signed)
+        for key in ('com.apple.security.automation.apple-events', 'com.apple.security.device.audio-input', 'com.apple.security.device.camera'):
+            assert entitlements.get(key) is True, f'Missing worker entitlement: {key}'
+        for key in ('NSAppleEventsUsageDescription', 'NSMicrophoneUsageDescription', 'NSCameraUsageDescription', 'NSLocalNetworkUsageDescription'):
+            assert isinstance(plist.get(key), str) and plist[key].strip(), f'Missing worker usage description: {key}'
     catalog = json.loads(run(str(executable), 'extensions', 'catalog', '--json'))
     assert len(catalog) >= 35
     assert run(str(executable), '--version').strip() == plist['CFBundleShortVersionString']
