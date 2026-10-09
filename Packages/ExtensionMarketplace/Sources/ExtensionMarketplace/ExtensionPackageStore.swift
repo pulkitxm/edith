@@ -116,18 +116,20 @@ public struct ExtensionPackageStore: Sendable {
         try PackageFileLock(url: leaseURL(for: package), exclusive: false)
     }
 
-    public func prune() throws {
+    public func prune(hostABI: String) throws {
         let operation = try PackageFileLock(
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)
         defer { operation.close() }
         let packages = try installedPackages()
-        let groups = Dictionary(grouping: packages) { "\($0.id)/\($0.hostABI)/\($0.architecture)" }
+        let groups = Dictionary(grouping: packages) { "\($0.id)/\($0.architecture)" }
         var retained = packages
         for group in groups.values {
             let ordered = group.sorted {
                 $0.version.compare($1.version, options: .numeric) == .orderedDescending
             }
-            for package in ordered.dropFirst(2) {
+            let compatible = ordered.filter { $0.hostABI == hostABI }
+            let keep = compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2))
+            for package in ordered where !keep.contains(package) {
                 guard let lease = try? PackageFileLock(url: leaseURL(for: package), exclusive: true)
                 else { continue }
                 defer { lease.close() }

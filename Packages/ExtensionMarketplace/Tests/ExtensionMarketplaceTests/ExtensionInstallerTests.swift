@@ -242,13 +242,13 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
         _ = try await installer.install([item.0], repository: "example/app")
     }
     let lease = try fixture.store.lease(first.0)
-    try fixture.store.prune()
+    try fixture.store.prune(hostABI: "host-1")
     #expect(
         try fixture.store.installedPackages().map(\.version).sorted() == [
             "1.0.0", "1.2.0", "1.3.0",
         ])
     lease.close()
-    try fixture.store.prune()
+    try fixture.store.prune(hostABI: "host-1")
     #expect(try fixture.store.installedPackages().map(\.version).sorted() == ["1.2.0", "1.3.0"])
     #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: first.0).path))
     #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: second.0).path))
@@ -270,4 +270,30 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     #expect(try fixture.store.installedPackages().isEmpty)
     #expect(try fixture.store.pendingRemovals().isEmpty)
     #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: package).path))
+}
+
+@Test func appUpdatesBoundIncompatibleCopiesUntilACompatibleReplacementArrives() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let first = try fixture.archive("1.0.0", hostABI: "host-1")
+    let second = try fixture.archive("1.1.0", hostABI: "host-2")
+    let third = try fixture.archive("1.2.0", hostABI: "host-3")
+    let current = try fixture.archive("2.0.0", hostABI: "host-4")
+    let items = [first, second, third, current]
+    let installer = fixture.installer(
+        archives: Dictionary(uniqueKeysWithValues: items.map { ($0.0.downloadURL, $0.1) }))
+    for item in [first, second, third] {
+        _ = try await installer.install([item.0], repository: "example/app")
+    }
+    try fixture.store.prune(hostABI: "host-4")
+    #expect(try fixture.store.installedPackages().map(\.version).sorted() == ["1.1.0", "1.2.0"])
+    let lease = try fixture.store.lease(second.0)
+    _ = try await installer.install([current.0], repository: "example/app")
+    try fixture.store.prune(hostABI: "host-4")
+    #expect(try fixture.store.installedPackages().map(\.version).sorted() == ["1.1.0", "2.0.0"])
+    #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: third.0).path))
+    lease.close()
+    try fixture.store.prune(hostABI: "host-4")
+    #expect(try fixture.store.installedPackages() == [current.0])
+    #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: second.0).path))
 }

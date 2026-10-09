@@ -77,7 +77,7 @@ final class AppServices {
 
     func start() {
         try? MarketplaceServices.store.completePendingRemovals()
-        try? MarketplaceServices.store.prune()
+        try? MarketplaceServices.store.prune(hostABI: MarketplaceServices.helperRuntime.hostABI)
         startup.start([
             StartupPhase(name: "helper.services.media") { [weak self] in
                 self?.reconcileMediaServices()
