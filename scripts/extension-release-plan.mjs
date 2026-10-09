@@ -80,6 +80,8 @@ export async function extensionFingerprint(root, definition, definitions) {
           "node_modules",
           "dist",
           "build",
+          "Tests",
+          "tests",
         ].includes(entry.name)
       )
         continue;
