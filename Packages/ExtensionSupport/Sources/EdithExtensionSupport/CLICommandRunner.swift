@@ -523,16 +523,17 @@ public enum CLICommandRunner {
             if process.ownsProcessGroup, process.groupIsAlive {
                 terminateProcessGroup(process, processFinished: processFinished)
             }
-            let streamsOnly = !output.retainsOutput
-            guard
-                drain(
-                    outputReader,
-                    patience: streamsOnly ? streamedDrainPatience : terminationGrace,
-                    requiresEnd: streamsOnly),
-                drain(errorReader)
-            else {
-                throw CLICommandRunnerError.streamFailed
+            do {
+                if output.retainsOutput {
+                    guard drain(outputReader) else { throw CLICommandRunnerError.streamFailed }
+                } else {
+                    try drainStreamingOutput()
+                }
+            } catch {
+                _ = drain(errorReader)
+                throw error
             }
+            guard drain(errorReader) else { throw CLICommandRunnerError.streamFailed }
             guard inputFinished.wait(timeout: .now() + terminationGrace) == .success else {
                 try? input?.fileHandleForWriting.close()
                 throw CLICommandRunnerError.streamFailed
@@ -562,6 +563,30 @@ public enum CLICommandRunner {
                 standardOutputData: finishedOutput.output,
                 standardErrorData: finishedError.output)
         }
+
+        private func drainStreamingOutput() throws {
+            let drainDeadline =
+                deadline
+                ?? ProcessInfo.processInfo.systemUptime + streamedDrainPatience
+            while true {
+                if outputReader.finished.wait(timeout: .now()) == .success { return }
+                let cancelled = cancellationRequested()
+                let remaining = drainDeadline - ProcessInfo.processInfo.systemUptime
+                if cancelled || remaining <= 0 {
+                    outputReader.cancel()
+                    _ = outputReader.finished.wait(timeout: .now() + terminationGrace)
+                    if cancelled { throw CancellationError() }
+                    throw deadline == nil
+                        ? CLICommandRunnerError.streamFailed : CLICommandRunnerError.timedOut
+                }
+                if outputReader.finished.wait(timeout: .now() + min(lifecyclePoll, remaining))
+                    == .success
+                {
+                    return
+                }
+            }
+        }
+
     }
 
     enum ExitPollResult: Equatable { case finished, timedOut, running }
@@ -591,13 +616,11 @@ public enum CLICommandRunner {
 
     @discardableResult
     private static func drain(
-        _ reader: CLIProcessOutputReader?, patience: TimeInterval = terminationGrace,
-        requiresEnd: Bool = false
+        _ reader: CLIProcessOutputReader?, patience: TimeInterval = terminationGrace
     ) -> Bool {
         guard let reader else { return true }
         if reader.finished.wait(timeout: .now() + patience) == .success { return true }
         reader.cancel()
         return reader.finished.wait(timeout: .now() + terminationGrace) == .success
-            && !requiresEnd
     }
 }
