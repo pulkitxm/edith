@@ -1,5 +1,5 @@
 import Foundation
-import EdithExtensionArchive
+import ZIPFoundation
 
 public struct OOXMLPackage {
     public var parts: [(path: String, data: Data)] = []

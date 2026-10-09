@@ -4,7 +4,7 @@ import Foundation
 import ImageIO
 import PDFKit
 import UniformTypeIdentifiers
-import EdithExtensionArchive
+import ZIPFoundation
 
 @testable import EdithStudio
 

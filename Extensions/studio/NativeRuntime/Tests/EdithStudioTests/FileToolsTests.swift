@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import EdithExtensionArchive
+import ZIPFoundation
 
 @testable import EdithStudio
 

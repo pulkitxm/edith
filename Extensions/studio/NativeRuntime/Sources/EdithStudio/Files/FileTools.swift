@@ -1,5 +1,5 @@
 import Foundation
-import EdithExtensionArchive
+import ZIPFoundation
 
 enum FileTools {
     static var all: [StudioTool] { [zip, unzip, tar] }
