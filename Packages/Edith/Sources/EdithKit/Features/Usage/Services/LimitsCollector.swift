@@ -77,14 +77,17 @@ public enum LimitsCollector {
         connectClaude: @Sendable () -> Void = { LimitsCollector.connectClaudeStatusLine() },
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
-        await collect(
+        let connectBrowser = await ClaudeWebLimitsReader.takeConnection()
+        return await collect(
             providers: enabledProviders(defaults: defaults), force: force,
             refreshSession: refreshSession, announce: announce
         ) { provider in
             switch provider {
             case .claude:
                 connectClaude()
-                return await fetchClaude()
+                return await fetchClaude(fetch: {
+                    try await ClaudeWebLimitsReader.fetch(allowPrompt: connectBrowser)
+                })
             case .codex:
                 return (await fetchCodex(), nil)
             case .cursor:

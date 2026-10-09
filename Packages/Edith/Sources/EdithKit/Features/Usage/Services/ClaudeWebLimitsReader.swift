@@ -57,6 +57,7 @@ public enum ClaudeWebLimitsReader {
 
     public static func requestConnection() async { await connectionRequest.request() }
     public static func discardConnection() async { await connectionRequest.discard() }
+    public static func takeConnection() async -> Bool { await connectionRequest.take() }
 
     private static let credentialLookup = BoundedKeychainAccess<Result<Credential, Failure>>()
 
@@ -71,8 +72,7 @@ public enum ClaudeWebLimitsReader {
             configuration: configuration, delegate: RedirectPolicy(), delegateQueue: nil)
     }()
 
-    public static func fetch() async throws -> LimitsProviderSnapshot {
-        let allowPrompt = await connectionRequest.take()
+    public static func fetch(allowPrompt: Bool = false) async throws -> LimitsProviderSnapshot {
         let lookup = await credentialLookup.run(
             timeout: allowPrompt ? 60 : 3, fallback: .failure(.credentialTimeout)
         ) {
