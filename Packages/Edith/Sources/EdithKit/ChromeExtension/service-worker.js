@@ -12,6 +12,7 @@ const searchHosts = ["google.", "bing.com", "duckduckgo.com", "kagi.com", "searc
 const githubReserved = new Set(["settings", "notifications", "orgs", "marketplace", "explore", "topics", "search", "login", "sponsors", "features", "pulls", "issues", "new", "codespaces", "dashboard", "trending", "collections", "enterprise", "pricing", "about", "apps", "copilot"])
 
 let work = Promise.resolve()
+let detectionInterval = null
 
 async function config() {
   return { ...defaults, ...(await chrome.storage.local.get(defaults)) }
@@ -137,23 +138,87 @@ async function tabCount() {
   }
 }
 
+function idleThreshold(value) {
+  const seconds = Number(value)
+  return Number.isFinite(seconds) ? Math.max(15, Math.round(seconds)) : defaults.idleThreshold
+}
+
+async function systemActivity(settings, now, page) {
+  const threshold = idleThreshold(settings.idleThreshold)
+  if (detectionInterval !== threshold) {
+    chrome.idle.setDetectionInterval(threshold)
+    detectionInterval = threshold
+  }
+  const { attentionSystemActivity: cached, attentionPresenceRetryAt = 0 } = await chrome.storage.session.get(["attentionSystemActivity", "attentionPresenceRetryAt"])
+  let sample = cached && now >= cached.timestamp && now - cached.timestamp < 5000 ? cached : null
+  if (!sample && now >= attentionPresenceRetryAt) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${settings.port}/v1/presence`, {
+        headers: { "X-Edith-Token": settings.token },
+        signal: AbortSignal.timeout(1000)
+      })
+      if (!response.ok) throw new Error("Presence unavailable")
+      const body = await response.json()
+      const seconds = body.idleSeconds == null ? null : Number(body.idleSeconds)
+      if (!["active", "idle", "locked"].includes(body.presence)) throw new Error("Invalid presence")
+      sample = {
+        timestamp: now,
+        presence: body.presence,
+        idleSeconds: seconds !== null && Number.isFinite(seconds) && seconds >= 0 ? seconds : null,
+        idleThreshold: idleThreshold(body.idleThreshold)
+      }
+      await chrome.storage.session.set({ attentionSystemActivity: sample, attentionPresenceRetryAt: 0 })
+    } catch {
+      await chrome.storage.session.set({ attentionPresenceRetryAt: now + 30000 })
+    }
+  }
+  if (sample) {
+    const seconds = sample.idleSeconds === null ? null : sample.idleSeconds + (now - sample.timestamp) / 1000
+    return {
+      presence: sample.presence === "locked" ? "locked" : seconds === null || seconds >= sample.idleThreshold ? "idle" : "active",
+      idleSeconds: seconds,
+      idleThreshold: sample.idleThreshold
+    }
+  }
+  const presence = await chrome.idle.queryState(threshold)
+  const lastInput = Number(page.lastInputAt)
+  const seconds = Number.isFinite(lastInput) && lastInput > 0 && lastInput <= now ? (now - lastInput) / 1000 : null
+  return {
+    presence: presence === "locked" ? "locked" : presence === "idle" || seconds !== null && seconds >= threshold ? "idle" : "active",
+    idleSeconds: seconds,
+    idleThreshold: threshold
+  }
+}
+
+function withPresence(observation, presence) {
+  const tags = { ...observation.tags }
+  delete tags.passive
+  if (presence === "idle" && (observation.media.some(item => item.playing && item.kind === "video") || observation.audible)) {
+    tags.passive = observation.media.some(item => item.playing && item.kind === "video") ? "video" : "audio"
+  }
+  const result = { ...observation, presence, tags }
+  result.identity = JSON.stringify([
+    presence, result.url, result.title,
+    result.media.map(item => [item.title, item.kind, item.playing]),
+    Object.entries(tags).sort()
+  ])
+  return result
+}
+
 async function observe(settings, now) {
   const tab = await activeTab()
   if (!tab?.url || !/^https?:/.test(tab.url) || tab.incognito) return null
-  const idle = await chrome.idle.queryState(Number(settings.idleThreshold))
   const page = await pageFor(tab)
+  const activity = await systemActivity(settings, now, page)
   const media = Array.isArray(page.media) ? page.media : []
   const tags = { ...urlTags(tab.url), ...(page.tags || {}) }
   const group = await groupTitle(tab)
   if (group) tags.group = group
-  const presence = idle === "active" ? "active" : idle === "locked" ? "locked" : "idle"
-  if (presence === "idle" && (media.some(item => item.playing && item.kind === "video") || tab.audible)) {
-    tags.passive = media.some(item => item.kind === "video") ? "video" : "audio"
-  }
   const observation = {
     tabId: tab.id,
     timestamp: now,
-    presence,
+    ...activity,
+    audible: tab.audible === true,
     appName: browserName(),
     url: tab.url,
     domain: new URL(tab.url).hostname,
@@ -164,14 +229,7 @@ async function observe(settings, now) {
     tags,
     tabs: await tabCount()
   }
-  observation.identity = JSON.stringify([
-    observation.presence,
-    observation.url,
-    observation.title,
-    media.map(item => [item.title, item.kind, item.playing]),
-    Object.entries(tags).sort()
-  ])
-  return observation
+  return withPresence(observation, activity.presence)
 }
 
 async function takeSignals(tabId) {
@@ -194,7 +252,7 @@ function addSignals(left, right) {
 }
 
 function payloadFor(previous, segment) {
-  const { tabId, identity, tabs, timestamp, ...fields } = previous
+  const { tabId, identity, tabs, timestamp, idleSeconds, idleThreshold, audible, ...fields } = previous
   return {
     ...fields,
     id: segment.id,
@@ -268,20 +326,32 @@ async function capture() {
   const { attentionPrevious: previous, attentionSegment: stored } = await chrome.storage.session.get(["attentionPrevious", "attentionSegment"])
   const elapsed = previous ? (now - previous.timestamp) / 1000 : 0
   let segment = null
-  let payload = null
+  const payloads = []
   if (previous && elapsed > 0 && elapsed <= 60) {
     const signals = addSignals(await takeSignals(previous.tabId), previous.tabs ? { tabs: previous.tabs } : null)
-    if (stored && stored.identity === previous.identity && stored.endedAt === previous.timestamp && now - stored.startedAt <= segmentLimit) {
-      segment = { ...stored, endedAt: now, signals: addSignals(stored.signals, signals) }
+    const intervals = []
+    if (current && current.idleSeconds !== null && current.presence !== previous.presence && current.presence !== "locked" && previous.presence !== "locked") {
+      const transition = now - current.idleSeconds * 1000 + (current.presence === "idle" ? current.idleThreshold * 1000 : 0)
+      const boundary = Math.min(now, Math.max(previous.timestamp, transition))
+      if (boundary > previous.timestamp) intervals.push({ observation: previous, start: previous.timestamp, end: boundary })
+      if (boundary < now) intervals.push({ observation: withPresence(previous, current.presence), start: boundary, end: now })
     } else {
-      segment = { id: crypto.randomUUID(), identity: previous.identity, startedAt: previous.timestamp, endedAt: now, signals }
+      intervals.push({ observation: previous, start: previous.timestamp, end: now })
     }
-    payload = payloadFor(previous, segment)
+    for (const interval of intervals) {
+      const credited = interval.observation.presence === "active" ? signals : previous.tabs ? { tabs: previous.tabs } : null
+      if (stored && stored.identity === interval.observation.identity && stored.endedAt === interval.start && interval.end - stored.startedAt <= segmentLimit) {
+        segment = { ...stored, endedAt: interval.end, signals: addSignals(stored.signals, credited) }
+      } else {
+        segment = { id: crypto.randomUUID(), identity: interval.observation.identity, startedAt: interval.start, endedAt: interval.end, signals: credited }
+      }
+      payloads.push(payloadFor(interval.observation, segment))
+    }
   }
   const audible = await audibleSegments(now, current?.tabId ?? previous?.tabId, previous?.tabId, elapsed)
-  if (payload) {
-    if (audible.length) payload.audible = audible
-    await enqueue(payload)
+  if (payloads.length) {
+    if (audible.length) payloads[payloads.length - 1].audible = audible
+    for (const payload of payloads) await enqueue(payload)
   } else if (audible.length) {
     await enqueue({
       id: crypto.randomUUID(),
@@ -373,6 +443,9 @@ async function recordPage(tabId, message) {
   const page = { ...(stored[key] || {}) }
   page.url = message.url
   page.title = message.title
+  if (Number.isFinite(message.lastInputAt) && message.lastInputAt > 0 && message.lastInputAt <= Date.now()) {
+    page.lastInputAt = Math.max(page.lastInputAt || 0, message.lastInputAt)
+  }
   if (Array.isArray(message.media)) page.media = message.media
   if (message.tags && typeof message.tags === "object") page.tags = message.tags
   const updates = { [key]: page }
@@ -413,7 +486,8 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   }
   if (message.type !== "edith-page" || sender.tab?.id == null) return
   work = work.catch(() => {}).then(() => recordPage(sender.tab.id, message))
-  if (message.changed) scheduleHeartbeat()
+  if (message.inputResumed) work = work.catch(() => {}).then(() => chrome.storage.session.remove("attentionSystemActivity"))
+  if (message.changed || message.inputResumed) scheduleHeartbeat()
 })
 
 ensureHeartbeatAlarm()

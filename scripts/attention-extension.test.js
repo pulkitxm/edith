@@ -12,6 +12,9 @@ function fixture() {
   let focused = true;
   let url = "https://first.example/";
   let presence = "active";
+  let nativeActivity = null;
+  let presenceRequests = 0;
+  const intervals = [];
   let offline = false;
   let sequence = 0;
   let title = "Fixture";
@@ -58,6 +61,14 @@ function fixture() {
     crypto: { randomUUID: () => `fixture-${++sequence}` },
     navigator: { userAgent: "Chrome/" },
     fetch: async (_url, options) => {
+      if (_url.endsWith("/v1/presence")) {
+        presenceRequests += 1;
+        if (offline) throw new Error("Offline fixture");
+        return {
+          ok: nativeActivity !== null,
+          json: async () => nativeActivity,
+        };
+      }
       if (!options.body) {
         health.push(now);
         if (offline) throw new Error("Offline fixture");
@@ -90,6 +101,7 @@ function fixture() {
         onRemoved: listener("removed"),
       },
       idle: {
+        setDetectionInterval: (seconds) => intervals.push(seconds),
         queryState: async () => presence,
         onStateChanged: listener("idle"),
       },
@@ -111,6 +123,11 @@ function fixture() {
   return {
     local,
     session,
+    intervals,
+    presenceRequests: () => presenceRequests,
+    native(value) {
+      nativeActivity = value;
+    },
     sent,
     health,
     reload,
@@ -452,4 +469,210 @@ test("page metadata never follows a tab to another URL or title", async () => {
   f.advance(10);
   await f.tick();
   expect(f.sent.at(-1).tags.channel).toBeUndefined();
+});
+
+test("native hardware idle wins over false active browser state and splits the threshold", async () => {
+  const f = fixture();
+  f.native({ presence: "active", idleSeconds: "298", idleThreshold: "300" });
+  await f.tick();
+  f.advance(5);
+  f.native({ presence: "idle", idleSeconds: "303", idleThreshold: "300" });
+  await f.tick();
+  expect(f.sent.map((event) => event.presence)).toEqual(["active", "idle"]);
+  expect(f.sent.map((event) => event.duration)).toEqual([2, 3]);
+  f.advance(5);
+  f.native({ presence: "active", idleSeconds: "1", idleThreshold: "300" });
+  await f.tick();
+  expect(f.sent.at(-2).presence).toBe("idle");
+  expect(f.sent.at(-2).duration).toBe(7);
+  expect(f.sent.at(-1).presence).toBe("active");
+  expect(f.sent.at(-1).duration).toBe(1);
+  expect(f.sent.at(-1).idleSeconds).toBeUndefined();
+});
+
+test("metadata and playback never reset hardware idle and locked remains locked", async () => {
+  const f = fixture();
+  f.native({ presence: "idle", idleSeconds: "900", idleThreshold: "300" });
+  await f.tick();
+  await f.message({
+    type: "edith-page",
+    changed: true,
+    media: [{ title: "Video", kind: "video", playing: true }],
+  });
+  f.advance(30);
+  await f.tick();
+  expect(f.sent.at(-1).presence).toBe("idle");
+  f.advance(30);
+  f.native({ presence: "locked", idleSeconds: "930", idleThreshold: "300" });
+  await f.tick();
+  f.advance(30);
+  await f.tick();
+  expect(f.sent.at(-1).presence).toBe("locked");
+  expect(f.sent.at(-1).tags.passive).toBeUndefined();
+});
+
+test("native reads are bounded during bursts and failed reads back off", async () => {
+  const f = fixture();
+  f.native({ presence: "active", idleSeconds: "0", idleThreshold: "300" });
+  await f.tick();
+  for (let index = 0; index < 10; index++) {
+    f.advance(0.1);
+    await f.tick();
+  }
+  expect(f.presenceRequests()).toBe(1);
+  f.advance(5);
+  f.native(null);
+  await f.tick();
+  await f.tick();
+  expect(f.presenceRequests()).toBe(2);
+  f.advance(30);
+  await f.tick();
+  expect(f.presenceRequests()).toBe(3);
+});
+
+test("offline page input expires even when the browser reports active", async () => {
+  const f = fixture();
+  await f.message({ type: "edith-page", lastInputAt: 1_800_000_000_000 });
+  await f.tick();
+  for (let index = 0; index < 11; index++) {
+    f.advance(30);
+    await f.tick();
+  }
+  expect(f.sent.at(-1).presence).toBe("idle");
+  await f.message({
+    type: "edith-page",
+    changed: true,
+    tags: { site: "Updated title" },
+  });
+  f.advance(30);
+  await f.tick();
+  expect(f.sent.at(-1).presence).toBe("idle");
+  await f.message({ type: "edith-page", lastInputAt: 1_800_000_359_000 });
+  await f.tick();
+  f.advance(10);
+  await f.tick();
+  expect(f.sent.at(-1).presence).toBe("active");
+});
+
+test("Chrome idle event detection follows the configured threshold", async () => {
+  const f = fixture();
+  await f.tick();
+  expect(f.intervals).toEqual([300]);
+  f.local.idleThreshold = 120;
+  await f.tick();
+  expect(f.intervals).toEqual([300, 120]);
+  f.local.idleThreshold = "bad";
+  await f.tick();
+  expect(f.intervals).toEqual([300, 120, 300]);
+});
+
+function contentFixture() {
+  let now = 1_800_000_000_000;
+  let visible = true;
+  let focused = true;
+  const listeners = {};
+  const messages = [];
+  let publish;
+  runInContext(
+    readFileSync(
+      "Packages/Edith/Sources/EdithKit/ChromeExtension/content.js",
+      "utf8",
+    ),
+    createContext({
+      Date: { now: () => now },
+      URL,
+      navigator: {},
+      location: {
+        href: "https://fixture.example/",
+        hostname: "fixture.example",
+        pathname: "/",
+      },
+      document: {
+        title: "Fixture page",
+        get visibilityState() {
+          return visible ? "visible" : "hidden";
+        },
+        hasFocus: () => focused,
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        addEventListener: (name, callback) => {
+          listeners[name] = callback;
+        },
+      },
+      chrome: {
+        runtime: {
+          id: "fixture",
+          sendMessage: async (message) => {
+            messages.push(structuredClone(message));
+          },
+        },
+      },
+      setInterval: (callback) => {
+        publish = callback;
+      },
+    }),
+  );
+  return {
+    messages,
+    publish: () => publish(),
+    advance: (seconds) => {
+      now += seconds * 1000;
+    },
+    visibility: (value) => {
+      visible = value;
+    },
+    focus: (value) => {
+      focused = value;
+    },
+    input: (name, trusted = true) => listeners[name]({ isTrusted: trusted }),
+  };
+}
+
+test("content collection rejects synthetic, hidden, and unfocused input", () => {
+  const f = contentFixture();
+  const initial = f.messages[0].lastInputAt;
+  f.advance(600);
+  f.input("keydown", false);
+  f.visibility(false);
+  f.input("pointerdown");
+  f.visibility(true);
+  f.focus(false);
+  f.input("wheel");
+  f.publish();
+  expect(f.messages).toHaveLength(1);
+  f.focus(true);
+  f.input("keydown");
+  expect(f.messages.at(-1).lastInputAt).toBe(initial + 600_000);
+  expect(f.messages.at(-1).signals).toEqual({ keys: 1, clicks: 0, scrolls: 0 });
+  expect(f.messages.at(-1).inputResumed).toBe(true);
+});
+
+test("pointer and touch movement restore activity without counting clicks", () => {
+  const f = contentFixture();
+  f.advance(600);
+  f.input("pointermove");
+  expect(f.messages).toHaveLength(2);
+  expect(f.messages.at(-1).signals).toBeNull();
+  expect(f.messages.at(-1).inputResumed).toBe(true);
+  for (let index = 0; index < 100; index++) {
+    f.advance(0.01);
+    f.input("pointermove");
+  }
+  expect(f.messages).toHaveLength(2);
+  f.publish();
+  expect(f.messages).toHaveLength(3);
+  f.advance(600);
+  f.input("touchmove");
+  expect(f.messages.at(-1).inputResumed).toBe(true);
+  expect(f.messages.at(-1).signals).toBeNull();
+});
+
+test("media notifications never extend the page input clock", () => {
+  const f = contentFixture();
+  const initial = f.messages[0].lastInputAt;
+  f.advance(600);
+  f.input("play");
+  f.input("loadedmetadata");
+  expect(f.messages.at(-1).lastInputAt).toBe(initial);
+  expect(f.messages.at(-1).inputResumed).toBe(false);
 });
