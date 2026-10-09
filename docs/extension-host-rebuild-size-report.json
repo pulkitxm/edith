@@ -4,64 +4,80 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 3657523,
-    "comparisonZipBytes": 1569954
+    "installedBytes": 3674499,
+    "comparisonZipBytes": 1571950
   },
   "savedBytes": {
-    "installedBytes": 112807678,
-    "comparisonZipBytes": 50701532
+    "installedBytes": 112790702,
+    "comparisonZipBytes": 50699536
   },
   "savedPercent": {
-    "installedBytes": 96.86,
-    "comparisonZipBytes": 97.0
+    "installedBytes": 96.84,
+    "comparisonZipBytes": 96.99
   },
   "packages": [
     {
+      "id": "appMaintenance",
+      "version": "1.0.0",
+      "downloadBytes": 611268,
+      "installedBytes": 1408623,
+      "sha256": "d5ee8355609fd6747008b45872d01fec29347e675616c73ed229ae21f9c87281",
+      "releaseMetadataBytes": 528
+    },
+    {
       "id": "calendar",
       "version": "1.0.0",
-      "downloadBytes": 409393,
+      "downloadBytes": 409786,
       "installedBytes": 983151,
-      "sha256": "9dc6edb1ba8c167f81a4d78ffffb4981d8d22c6478864e8a65b6da08d617e542",
+      "sha256": "bc6fe4747de7ecd519f2a1213bbf36fb6988c7cae6377dc71f948927a2275c02",
       "releaseMetadataBytes": 509
+    },
+    {
+      "id": "cleaner",
+      "version": "1.0.0",
+      "downloadBytes": 444570,
+      "installedBytes": 1066572,
+      "sha256": "878763a0876eabbc383c79d614bcb420707c8e834aeae1bf81dea3c296500d75",
+      "releaseMetadataBytes": 507
     },
     {
       "id": "colorPicker",
       "version": "1.0.0",
-      "downloadBytes": 347697,
-      "installedBytes": 864507,
-      "sha256": "cf1113d5d383a0d025bb790d9c938926c244c14f36c5fdfb37ccc76b59ddfdb7",
+      "downloadBytes": 349124,
+      "installedBytes": 881099,
+      "sha256": "4aff498ecec3af45ba8ed1fdc4a1d308a374ae287f2a405e33749b7f53133fae",
       "releaseMetadataBytes": 518
     },
     {
       "id": "emoji",
       "version": "1.0.0",
-      "downloadBytes": 469144,
+      "downloadBytes": 469637,
       "installedBytes": 1225185,
-      "sha256": "2f4d4120ecd87acfbcd49a8b53eb248c073fc69c44db43fbcb1a31ab21773980",
+      "sha256": "d312a0f93b2339ccdfeb4713e505218b445fce1c524e67deb942d043af9526b1",
       "releaseMetadataBytes": 501
     },
     {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 330088,
-      "installedBytes": 829026,
-      "sha256": "171646218050f5d66ea2406c6d8a24b6aa39a7bce2162fe0bb03bb9318aee363",
+      "downloadBytes": 331588,
+      "installedBytes": 829218,
+      "sha256": "d90689a33f2d5de0b4144e3a6a2050548b998dce7d5be52f333ef09fb204d7d9",
       "releaseMetadataBytes": 509
     },
     {
       "id": "homebrew",
       "version": "1.0.0",
-      "downloadBytes": 409201,
+      "downloadBytes": 409959,
       "installedBytes": 981647,
-      "sha256": "8e318375cb862088060af12e2b9dd65e9810a3988cdc90d63635c107d3af992d",
+      "sha256": "063366d5961c17eec2be6f8de7cec118e9278a3dd33d94bbb16e0a69ce427e2e",
       "releaseMetadataBytes": 509
     },
     {
       "id": "jev",
       "version": "1.0.0",
-      "downloadBytes": 432399,
+      "downloadBytes": 432779,
       "installedBytes": 1035200,
-      "sha256": "8dd19f2502e19cb0b5cee8960004605b78ed46aa6df6fe4013b8f83668cd07ba",
+      "sha256": "7a8e2315f8074dd6fd03b0636c77c2f12cdbe0b5902335ae9d2b04daa373373c",
       "releaseMetadataBytes": 495
     },
     {
@@ -69,81 +85,81 @@
       "version": "1.0.0",
       "downloadBytes": 18173,
       "installedBytes": 79141,
-      "sha256": "0ad410401ec0f1f30614c20265b559f123825de29571977c4b81bee6eedac8c4",
+      "sha256": "d2408bc1cecad47500d1b5a788376c9082e8c9cd7c765196c50ffd1327d26416",
       "releaseMetadataBytes": 510
     },
     {
       "id": "keystrokeHighlight",
       "version": "1.0.0",
-      "downloadBytes": 347605,
-      "installedBytes": 867008,
-      "sha256": "da83e0bb733e29026531442994b622e88a2b137a7d4456531d15ebc15226b227",
+      "downloadBytes": 349108,
+      "installedBytes": 867184,
+      "sha256": "63e61343a29bbb766fe7629d4a5be931145bfa2476c109f17007a484cd1d07b6",
       "releaseMetadataBytes": 539
     },
     {
       "id": "micMute",
       "version": "1.0.0",
-      "downloadBytes": 326965,
-      "installedBytes": 828863,
-      "sha256": "bc069ab6b8ceca877506b99427047c5c7dbc03a5eebccc5a91d419fdf9b43918",
+      "downloadBytes": 328541,
+      "installedBytes": 829023,
+      "sha256": "87988847641f6ca107ca9eeb779e9876f41030838f1b24bea631ed28c858c879",
       "releaseMetadataBytes": 506
     },
     {
       "id": "presenter",
       "version": "1.0.0",
-      "downloadBytes": 368002,
-      "installedBytes": 897989,
-      "sha256": "ce28319a63fc94d109f0c6122694196361012a2cc3671ef994bfbbbdf7e949fa",
+      "downloadBytes": 369569,
+      "installedBytes": 914597,
+      "sha256": "dd5e4fecb587841027ad919493230a7a504111cb7d5f805328a05de0ccca3785",
       "releaseMetadataBytes": 512
     },
     {
       "id": "system",
       "version": "1.0.0",
-      "downloadBytes": 382324,
+      "downloadBytes": 382685,
       "installedBytes": 929849,
-      "sha256": "1226d8fb936dee4903b13b366627ca2756c7cfb4748f34c2f661e5749635bf4c",
+      "sha256": "8c631d5cb0e8262b05bc8eefb76740ca83a5102d8cbded54e24e31447cff36e3",
       "releaseMetadataBytes": 503
     },
     {
       "id": "systemStats",
       "version": "1.0.0",
-      "downloadBytes": 319166,
-      "installedBytes": 811099,
-      "sha256": "6c9aac139955f181d5582dd991ff2802c719dde3485386db8d1f161561f5311e",
+      "downloadBytes": 320615,
+      "installedBytes": 811291,
+      "sha256": "26d99bb19e48fb2c7e67277100976dc17c7bba844adfd31e01cfa08d31e20bb3",
       "releaseMetadataBytes": 518
     },
     {
       "id": "timeLapse",
       "version": "1.0.0",
-      "downloadBytes": 547446,
+      "downloadBytes": 548005,
       "installedBytes": 1277858,
-      "sha256": "4498f1bacc19b12733f30498e52c0ffdc5d5bce4d8f3aadd369b46b3418fc36f",
+      "sha256": "74308218ff4c81b6ea21397121d5474fa64b3b60e68a4a3291582127a6c792a6",
       "releaseMetadataBytes": 513
     },
     {
       "id": "windowSweaters",
       "version": "1.0.0",
-      "downloadBytes": 400786,
-      "installedBytes": 970258,
-      "sha256": "afc648a7fb2b96bf8fcc3d660be7d91511d38a1c03c91124a82c023f175d28a6",
+      "downloadBytes": 402084,
+      "installedBytes": 970434,
+      "sha256": "43a4a153ad8b52a56d92c02f40f3a55a16fe764a048d2678454b973e084cd723",
       "releaseMetadataBytes": 527
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 5108389,
-    "installedBytes": 12580781,
-    "releaseMetadataBytes": 7169,
-    "releaseAssetBytes": 5115558
+    "downloadBytes": 6177491,
+    "installedBytes": 15090072,
+    "releaseMetadataBytes": 8204,
+    "releaseAssetBytes": 6185695
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 16238304,
-    "comparisonZipAndPackageBytes": 6678343
+    "installedBytes": 18764571,
+    "comparisonZipAndPackageBytes": 7749441
   },
-  "measuredAtUTC": "2026-10-09T05:45:22+00:00",
+  "measuredAtUTC": "2026-10-09T06:49:48+00:00",
   "status": "migration-in-progress",
-  "migratedExtensions": 14,
+  "migratedExtensions": 16,
   "indexedExtensions": 39,
-  "hostExecutableSHA256": "ffa01fe48433a5748bd3ce90640cf34ad6acfb21a6fa5b6c101d53974aa92df5",
+  "hostExecutableSHA256": "a7c7d497c538c3506e81673bc359b43c0dd5ce8c2bcf6bb319f51bc0054d7a73",
   "measurement": {
     "baselineSourceCommit": "9c6b7ae8a4827578c99dbe5a3df433a19293311b",
     "architecture": "arm64",
