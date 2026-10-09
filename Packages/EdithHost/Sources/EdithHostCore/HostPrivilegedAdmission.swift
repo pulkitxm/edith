@@ -35,6 +35,14 @@ public struct HostPrivilegedAdmission {
         }
     }
 
+    public func validateProtected(_ bundle: URL) throws {
+        guard bundle.deletingLastPathComponent().standardizedFileURL == root.standardizedFileURL
+        else { throw MarketplaceError.invalidBundle }
+        try ensureRoot()
+        try validateTree(bundle, immutable: true)
+        try verify(bundle)
+    }
+
     public func remove(_ bundle: URL) throws {
         guard bundle.deletingLastPathComponent().standardizedFileURL == root.standardizedFileURL
         else { throw MarketplaceError.invalidBundle }

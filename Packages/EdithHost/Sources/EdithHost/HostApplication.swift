@@ -18,6 +18,17 @@ struct HostEntry {
                 Data("Install Edith in /Applications before starting the release app.\n".utf8))
             exit(1)
         }
+        if arguments.count == 2,
+            ["--extension-carrier-worker", "--extension-privileged-fixture"].contains(arguments[0])
+        {
+            do {
+                try HostPrivilegedWorker(
+                    bundle: URL(fileURLWithPath: arguments[1]),
+                    fixture: arguments[0] == "--extension-privileged-fixture"
+                ).run()
+            } catch { exit(1) }
+            return
+        }
         if arguments == ["--extension-carrier"] {
             do { try HostPrivilegedCarrier(approved: true).run() } catch { exit(1) }
             return

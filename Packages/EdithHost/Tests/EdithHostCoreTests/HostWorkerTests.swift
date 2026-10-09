@@ -154,10 +154,12 @@ import Testing
     }
 
     @Test func restorationTimeoutPreservesTheWorkerAndAcceptsTheLateReply() async throws {
-        let worker = try fixture("late-disable", timeout: .milliseconds(120))
+        let worker = try fixture("late-disable")
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
-        await #expect(throws: HostWorkerError.timedOut) { try await worker.stop() }
+        await #expect(throws: HostWorkerError.timedOut) {
+            try await worker.prepareDisable(timeout: .milliseconds(120))
+        }
         #expect(worker.ready)
         #expect(worker.processIdentifier == pid)
         try await Task.sleep(for: .milliseconds(300))
