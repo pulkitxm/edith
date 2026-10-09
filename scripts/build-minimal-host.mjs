@@ -90,6 +90,8 @@ const plist = {
   CFBundleShortVersionString: "0.1.0",
   CFBundleVersion: "1",
   NSPrincipalClass: "NSApplication",
+  NSCalendarsFullAccessUsageDescription:
+    "Show your upcoming events in the Calendar extension.",
   LSMinimumSystemVersion: "14.0",
   SUFeedURL:
     "https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml",
