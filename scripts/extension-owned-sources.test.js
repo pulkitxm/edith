@@ -24,10 +24,8 @@ test("every owned worker source is included in a downloaded role", async () => {
   for (const definition of definitions.filter(
     ({ contractVersion }) => contractVersion === 1,
   )) {
-    const listed = new Set([
-      ...Object.values(definition.roles).flat(),
-      ...(definition.nativeSources ?? []),
-    ]);
+    const listed = new Set(Object.values(definition.roles).flat());
+    const nativeSources = new Set(definition.nativeSources ?? []);
     expect(listed.size).toBeGreaterThan(0);
     if (definition.nativePackage) {
       expect(definition.nativeProduct).toBeTruthy();
@@ -38,6 +36,12 @@ test("every owned worker source is included in a downloaded role", async () => {
           listed.has(source),
           `${definition.id} compiles native ${source} twice`,
         ).toBe(false);
+      if (nativeSources.size)
+        for (const source of native)
+          expect(
+            nativeSources.has(source),
+            `${definition.id} omits native ${source} from its source inventory`,
+          ).toBe(true);
     }
     for (const source of await files(
       `Extensions/${definition.id}`,
@@ -52,7 +56,8 @@ test("every owned worker source is included in a downloaded role", async () => {
       expect(definition.nativePackage).toBeTruthy();
       expect(source.startsWith(`${definition.nativePackage}/Sources/`)).toBe(true);
     }
-    for (const source of listed) await readFile(resolve(root, source));
+    for (const source of new Set([...listed, ...nativeSources]))
+      await readFile(resolve(root, source));
   }
 });
 
