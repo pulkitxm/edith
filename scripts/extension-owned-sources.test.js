@@ -23,13 +23,20 @@ test("every owned worker source is included in a downloaded role", async () => {
   for (const definition of definitions.filter(
     ({ contractVersion }) => contractVersion === 1,
   )) {
-    const listed = new Set(Object.values(definition.roles).flat());
+    const listed = new Set([
+      ...Object.values(definition.roles).flat(),
+      ...(definition.nativeSources ?? []),
+    ]);
     expect(listed.size).toBeGreaterThan(0);
     for (const source of await files(`Extensions/${definition.id}`)) {
       expect(
         listed.has(source),
         `${definition.id} omits ${source} from downloaded roles`,
       ).toBe(true);
+    }
+    for (const source of definition.nativeSources ?? []) {
+      expect(definition.nativePackage).toBeTruthy();
+      expect(source.startsWith(`${definition.nativePackage}/Sources/`)).toBe(true);
     }
     for (const source of listed) await readFile(resolve(root, source));
   }
