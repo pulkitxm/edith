@@ -720,7 +720,6 @@
         "Extensions/clipboard/ClipboardColorValue.swift",
         "Extensions/clipboard/ClipboardCopyPayload.swift",
         "Extensions/clipboard/ClipboardEntry.swift",
-        "Extensions/clipboard/ClipboardField.swift",
         "Extensions/clipboard/ClipboardFiles.swift",
         "Extensions/clipboard/ClipboardHistoryModel.swift",
         "Extensions/clipboard/ClipboardHistoryProjection.swift",
