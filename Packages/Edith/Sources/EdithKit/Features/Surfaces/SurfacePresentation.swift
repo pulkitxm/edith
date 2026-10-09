@@ -16,7 +16,10 @@ extension SurfaceTile {
     public var highlightColor: Color {
         guard accent else { return .secondary }
         guard let accentHex, accentHex.utf8.count == 6, let value = UInt32(accentHex, radix: 16)
-        else { return .accentColor }
+        else {
+            return themeColor(
+                SharedDefaults.store.string(forKey: AppStorageKeys.General.theme) ?? "accent")
+        }
         return Color(
             red: Double((value >> 16) & 255) / 255,
             green: Double((value >> 8) & 255) / 255, blue: Double(value & 255) / 255)

@@ -976,7 +976,7 @@ struct SurfaceEditorPane: View {
                     isOn: Binding(
                         get: { selection?.accentHex != nil },
                         set: { custom in
-                            edit(tile.id) { $0.accentHex = custom ? Color.accentColor.hex6 : nil }
+                            edit(tile.id) { $0.accentHex = custom ? $0.highlightColor.hex6 : nil }
                         }
                     )
                 ).disabled(!tile.accent)

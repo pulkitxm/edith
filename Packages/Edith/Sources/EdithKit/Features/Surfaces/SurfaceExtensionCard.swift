@@ -104,8 +104,7 @@ public struct SurfaceExtensionCard: View {
                         Text(metric.title).font(.edithText(.caption)).foregroundStyle(.secondary)
                             .lineLimit(2)
                         if tile.shows("progress"), let fraction = metric.fraction {
-                            ProgressView(value: fraction).tint(
-                                tile.highlightColor)
+                            progressBar(fraction)
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -139,7 +138,7 @@ public struct SurfaceExtensionCard: View {
                         }
                     }
                     if tile.shows("progress"), let progress = row.progress {
-                        ProgressView(value: progress).tint(tile.highlightColor)
+                        progressBar(progress)
                     }
                     if tile.showActions, tile.shows("volume"), let volume = row.volume {
                         SurfaceAudioSlider(control: volume, title: row.title) {
@@ -163,6 +162,18 @@ public struct SurfaceExtensionCard: View {
             Text("Updated " + date.formatted(.dateTime.hour().minute())).font(.edithText(.caption2))
                 .foregroundStyle(.secondary)
         }
+    }
+    private func progressBar(_ fraction: Double) -> some View {
+        GeometryReader { geometry in
+            Capsule().fill(Color.secondary.opacity(0.2))
+                .overlay(alignment: .leading) {
+                    Capsule().fill(tile.highlightColor)
+                        .frame(width: geometry.size.width * fraction)
+                }
+        }.frame(height: UIScale.pt(5))
+            .accessibilityElement()
+            .accessibilityLabel("Progress")
+            .accessibilityValue("\(Int((fraction * 100).rounded())) percent")
     }
     private func actions(_ items: [SurfaceRowAction]) -> some View {
         ViewThatFits(in: .horizontal) {

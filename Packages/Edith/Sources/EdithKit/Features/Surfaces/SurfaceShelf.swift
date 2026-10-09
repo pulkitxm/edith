@@ -201,7 +201,7 @@ private struct SurfaceShelfTile<Content: View>: View {
                 .font(.edithText(.caption)).padding(.horizontal, UIScale.pt(8))
                 .padding(.top, UIScale.pt(8)).contentShape(Rectangle())
                 .onTapGesture(perform: select)
-                .gesture(
+                .highPriorityGesture(
                     DragGesture(
                         minimumDistance: tile.locked ? .infinity : 3, coordinateSpace: .global
                     )
@@ -233,7 +233,7 @@ private struct SurfaceShelfTile<Content: View>: View {
                     Spacer(minLength: 0)
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .padding(UIScale.pt(6)).contentShape(Rectangle())
-                        .gesture(
+                        .highPriorityGesture(
                             DragGesture(
                                 minimumDistance: tile.locked ? .infinity : 2,
                                 coordinateSpace: .global
