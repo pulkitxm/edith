@@ -184,6 +184,11 @@ ci-extension-camera:
 	swift format lint --strict --recursive Extensions/virtualCamera
 	swift test --package-path Extensions/virtualCamera --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --no-parallel
 
+.PHONY: ci-extension-camera-carrier
+ci-extension-camera-carrier: host
+	bun test scripts/camera-carrier.test.js
+	bun scripts/test-camera-carrier.mjs
+
 ci-extension-docs:
 	swift test --package-path Packages/EdithDocsWorker --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 

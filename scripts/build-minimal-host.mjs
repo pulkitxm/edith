@@ -53,7 +53,8 @@ await mkdir(join(contents, "Resources"), { recursive: true });
 await copyFile(join(products, "EdithHost"), executable);
 await copyFile(join(products, "libExtensionMarketplace.dylib"), library);
 const sparkle = join(contents, "Frameworks/Sparkle.framework");
-execFileSync("ditto", [join(products, "Sparkle.framework"), sparkle]);
+execFileSync("/bin/cp", ["-RL", join(products, "Sparkle.framework"), sparkle]);
+await rm(join(sparkle, "Versions"), { recursive: true, force: true });
 async function prepareFramework(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
@@ -63,13 +64,35 @@ async function prepareFramework(directory) {
     }
     if (entry.isDirectory()) await prepareFramework(path);
     else if (entry.isFile()) {
-      const kind = execFileSync("file", ["-b", path], { encoding: "utf8" });
+      const kind = execFileSync("file", ["-b", path], {
+        encoding: "utf8",
+      });
       if (!kind.includes("Mach-O")) continue;
       if (kind.includes("universal binary")) {
         const thin = `${path}.arm64`;
         execFileSync("lipo", [path, "-thin", "arm64", "-output", thin]);
         execFileSync("mv", [thin, path]);
       }
+      const links = execFileSync("otool", ["-L", path], {
+        encoding: "utf8",
+      });
+      for (const line of links.split("\n").slice(1)) {
+        const dependency = line.trim().split(" ")[0];
+        if (dependency.endsWith("/Sparkle.framework/Versions/B/Sparkle")) {
+          execFileSync("install_name_tool", [
+            "-change",
+            dependency,
+            "@rpath/Sparkle.framework/Sparkle",
+            path,
+          ]);
+        }
+      }
+      if (entry.name === "Sparkle")
+        execFileSync("install_name_tool", [
+          "-id",
+          "@rpath/Sparkle.framework/Sparkle",
+          path,
+        ]);
       execFileSync("codesign", ["--force", "--sign", "-", path]);
     }
   }
@@ -130,6 +153,14 @@ execFileSync("install_name_tool", [
 const linked = execFileSync("otool", ["-L", executable], { encoding: "utf8" });
 for (const line of linked.split("\n").slice(1)) {
   const dependency = line.trim().split(" ")[0];
+  if (dependency.endsWith("/Sparkle.framework/Versions/B/Sparkle")) {
+    execFileSync("install_name_tool", [
+      "-change",
+      dependency,
+      "@rpath/Sparkle.framework/Sparkle",
+      executable,
+    ]);
+  }
   if (
     dependency.endsWith("/libExtensionMarketplace.dylib") &&
     dependency !== "@rpath/libExtensionMarketplace.dylib"
