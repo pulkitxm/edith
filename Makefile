@@ -161,6 +161,14 @@ ci-swift-build: approve-package-plugins ci-meeting-microphone
 ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
 
+.PHONY: ci-host host
+ci-host:
+	swift format lint --strict --parallel --recursive Packages/EdithHost/Sources Packages/EdithHost/Tests Packages/EdithHost/Package.swift
+	swift test --package-path Packages/EdithHost --build-system native --jobs 2 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+host:
+	bun scripts/build-minimal-host.mjs
+
 ci-swift-test-batch:
 	@test -n "$(BATCH)" || { echo "set BATCH to a swift test batch" >&2; exit 1; }
 	cd $(PKG) && ./test.sh --batch "$(BATCH)"
