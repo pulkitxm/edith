@@ -10,6 +10,7 @@ import Testing
         let definitions = try #require(
             JSONSerialization.jsonObject(with: Data(contentsOf: manifestURL)) as? [[String: Any]])
         let manifest = try #require(definitions.first { $0["id"] as? String == "machines" })
+        #expect(manifest["testTargets"] as? [String] == ["ci-extension-machines"])
         #expect(manifest["contractVersion"] as? Int == 1)
         #expect(manifest["surfaceContractVersion"] as? Int == 1)
         #expect(manifest["usesHostFramework"] == nil)
