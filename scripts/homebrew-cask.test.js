@@ -53,13 +53,13 @@ test("uninstalling quits every bundle and zapping clears Edith's own state", () 
 });
 
 test("the release mirrors the bumped cask to the tap repository", () => {
-  expect(releaseWorkflow).toContain("github.com/pulkitxm/homebrew-tap.git");
+  expect(releaseWorkflow).toContain("gh repo clone pulkitxm/homebrew-tap");
   expect(releaseWorkflow).toContain("TAP_PUSH_TOKEN");
   expect(releaseWorkflow).toContain(
     "cp release-source/Casks/edith.rb tap/Casks/edith.rb",
   );
   expect(releaseWorkflow).toContain(
-    `git commit -m "Update the Edith cask to ${releaseTagRef}"`,
+    `--message "Update the Edith cask to ${releaseTagRef}"`,
   );
 });
 
@@ -75,9 +75,12 @@ test("the unified publisher updates and mirrors the cask", () => {
   expect(releaseWorkflow).toContain("sha256sum ../release-assets/Edith.dmg");
   expect(releaseStateScript).toContain("Casks/edith.rb");
   expect(releaseWorkflow).toContain(
-    `git commit -m "Update the Edith cask to ${releaseTagRef}"`,
+    `--message "Update the Edith cask to ${releaseTagRef}"`,
   );
-  expect(releaseWorkflow).toContain("git push origin HEAD:main");
+  expect(releaseWorkflow).toContain(
+    "pukbot commit create --repo pulkitxm/homebrew-tap",
+  );
+  expect(releaseWorkflow).not.toContain("git push");
 });
 
 test("the deep dive is linked and explains the resolution rules", () => {

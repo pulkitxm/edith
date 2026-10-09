@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 export function mergeExtensionCatalog(previous, records, revision) {
@@ -56,26 +56,16 @@ function release(repository, tag) {
 }
 
 async function upload(repository, releaseID, file, name) {
-  if ((await stat(file)).size <= 40_000) {
-    mutate(
-      "release",
-      "upload-asset",
-      "--repo",
-      repository,
-      String(releaseID),
-      file,
-      "--name",
-      name,
-    );
-  } else {
-    const item = JSON.parse(
-      gh("api", `repos/${repository}/releases/${releaseID}`),
-    );
-    const uploadPath = resolve(file, "..", ".upload", name);
-    await mkdir(resolve(uploadPath, ".."), { recursive: true });
-    await copyFile(file, uploadPath);
-    gh("release", "upload", item.tag_name, uploadPath, "--repo", repository);
-  }
+  mutate(
+    "release",
+    "upload-asset",
+    "--repo",
+    repository,
+    String(releaseID),
+    file,
+    "--name",
+    name,
+  );
 }
 
 export async function publishExtensions({
@@ -96,6 +86,23 @@ export async function publishExtensions({
     await readFile(resolve(directory, "plan.json"), "utf8"),
   );
   if (include.length === 0) return { published: [], revision: old.revision };
+  for (const entry of include) {
+    for (const suffix of ["zip", "json"]) {
+      const result = mutate(
+        "release",
+        "upload-asset",
+        "--repo",
+        repository,
+        "1",
+        resolve(directory, `${entry.id}.${suffix}`),
+        "--dry-run",
+      );
+      if (result.ok === false)
+        throw new Error(
+          result.error?.message ?? "Extension asset preflight failed",
+        );
+    }
+  }
   const records = [];
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);

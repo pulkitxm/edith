@@ -15,6 +15,9 @@ on:
       - 'Packages/Edith/Package.swift'
       - 'scripts/link-shared-framework.py'
       - 'scripts/*extension*'
+      - 'scripts/build-minimal-host.mjs'
+      - 'apps/music-player/**'
+      - '.github/actions/cache-host/**'
       - '.github/workflows/extensions.yml'
   push:
     branches: [main]
@@ -31,6 +34,9 @@ on:
       - 'Packages/Edith/Package.swift'
       - 'scripts/link-shared-framework.py'
       - 'scripts/*extension*'
+      - 'scripts/build-minimal-host.mjs'
+      - 'apps/music-player/**'
+      - '.github/actions/cache-host/**'
       - '.github/workflows/extensions.yml'
   workflow_dispatch:
 
@@ -54,7 +60,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/extension-host-abi.mjs --write
       - run: bun install --frozen-lockfile
-      - run: make ci-marketplace-host
+      - run: make ci-host host ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
       - run: bun scripts/test-extension-marketplace.mjs
 
@@ -63,7 +69,6 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       changed: ${{ steps.plan.outputs.changed }}
-      host: ${{ steps.plan.outputs.host }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -86,7 +91,6 @@ jobs:
           bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
           {
             echo "matrix=$(cat dist/extensions/plan.json)"
-            echo "host=$(bun -e 'const selected=JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include; const definitions=JSON.parse(await Bun.file("Extensions/manifest.json").text()); console.log(selected.some(entry=>definitions.find(item=>item.id===entry.id)?.usesHostFramework))')"
             echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -97,41 +101,11 @@ jobs:
             dist/extensions/plan.json
           retention-days: 7
 
-  host:
-    needs: [plan]
-    if: needs.plan.outputs.host == 'true'
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
-      - run: bun scripts/extension-host-abi.mjs --write
-      - run: bun scripts/extension-host-build.mjs
-      - run: >-
-          swift test --package-path build/extension-host --build-system native
-          --configuration release --jobs 2
-          -Xswiftc -plugin-path -Xswiftc
-          "$(xcode-select -p)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
-      - name: Exercise downloaded helper lifecycles with isolated preferences
-        env:
-          EXTENSION_HOST_PRODUCTS: ${{ github.workspace }}/build/extension-host/.build/release
-        run: bun scripts/test-extension-helpers.mjs local/fixtures/Edith.app --host-fixture
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: host-interfaces
-          include-hidden-files: true
-          path: |
-            build/extension-host/.build/release/Modules
-            build/extension-host/.build/release/*.dylib
-          retention-days: 1
-
   build:
-    needs: [tests, plan, host]
+    needs: [tests, plan]
     if: >-
       !cancelled() && needs.tests.result == 'success'
       && needs.plan.outputs.changed == 'true'
-      && contains(fromJSON('["success","skipped"]'), needs.host.result)
     env:
       HAS_NOTARY: ${{ secrets.NOTARY_KEY_ID != '' && secrets.NOTARY_ISSUER_ID != '' && secrets.NOTARY_KEY != '' }}
     strategy:
@@ -144,11 +118,29 @@ jobs:
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/extension-host-abi.mjs --write
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        if: needs.plan.outputs.host == 'true'
+      - name: Require a native worker package
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+        run: |
+          bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); if (entry?.contractVersion!==1 || entry.surfaceContractVersion!==1 || entry.usesHostFramework) throw new Error("Only native extension workers can ship")'
+      - name: Identify optional native prerequisites
+        id: native
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+        run: |
+          ghostty="$(bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); console.log(entry?.nativeProduct==="GhosttyTerminal")')"
+          echo "ghostty=$ghostty" >> "$GITHUB_OUTPUT"
+      - name: Cache the optional terminal library
+        if: steps.native.outputs.ghostty == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          name: host-interfaces
-          path: dist/host-interfaces
+          path: Extensions/terminal/Native/vendor
+          key: ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh', 'Extensions/terminal/Native/Package.swift') }}
+      - name: Build the optional terminal library
+        if: steps.native.outputs.ghostty == 'true'
+        run: |
+          command -v zig >/dev/null 2>&1 || brew install zig
+          make ghostty-extension
       - name: Identify the support build toolchain
         id: support-toolchain
         run: |
@@ -159,6 +151,16 @@ jobs:
         with:
           path: local/extension-support/${{ matrix.id }}_*
           key: extension-support-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}
+      - name: Cache the worker host
+        uses: ./.github/actions/cache-host
+      - name: Test this extension's optional native packages
+        env:
+          EXTENSION_ID: ${{ matrix.id }}
+        run: bun scripts/test-extension-package.mjs "$EXTENSION_ID"
+      - name: Build the isolated host and exercise this worker's lifecycle
+        run: |
+          make host
+          make ci-extension-workers EXTENSION=${{ matrix.id }}
       - name: Import the release signing certificate
         if: github.event_name != 'pull_request'
         env:
@@ -185,7 +187,6 @@ jobs:
         env:
           EXTENSION_ID: ${{ matrix.id }}
           EXTENSION_VERSION: ${{ matrix.version }}
-          EXTENSION_HOST_PRODUCTS: ${{ github.workspace }}/dist/host-interfaces
           DEVELOPMENT: ${{ github.event_name == 'pull_request' }}
         run: |
           if [ "$DEVELOPMENT" = true ]; then
@@ -235,16 +236,7 @@ jobs:
           path: dist/extensions
           merge-multiple: true
       - name: Install the release client
-        run: |
-          curl --fail --silent --show-error --location https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/pukbot-macos-aarch64 --output "$RUNNER_TEMP/pukbot"
-          curl --fail --silent --show-error --location https://github.com/pulkitxm/pukbot/releases/download/v0.3.32/SHA256SUMS --output "$RUNNER_TEMP/SHA256SUMS"
-          cd "$RUNNER_TEMP"
-          mv pukbot pukbot-macos-aarch64
-          shasum -a 256 -c <(rg '  pukbot-macos-aarch64$' SHA256SUMS)
-          chmod +x pukbot-macos-aarch64
-          mkdir -p "$RUNNER_TEMP/bin"
-          mv pukbot-macos-aarch64 "$RUNNER_TEMP/bin/pukbot"
-          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+        run: bash scripts/install-release-client.sh
       - name: Inspect release capabilities
         run: |
           pukbot capabilities --json

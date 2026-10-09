@@ -98,43 +98,11 @@ print(json.dumps(dict(
   expect(result.expired).toEqual(["profile expired on 2026-01-01"]);
 });
 
-test("build.sh embeds the extension and signs it before the app", () => {
-  const assemble = buildScript.indexOf(
-    'CAMERA="$APP/Contents/Library/SystemExtensions/$CAMERA_IDENTIFIER.systemextension"',
-  );
-  const thin = buildScript.indexOf('lipo "$binary" -thin arm64');
-  const helper = buildScript.indexOf('sign "$HELPER"');
-  const camera = buildScript.indexOf(
-    'sign "$CAMERA" "$CAMERA_ENTITLEMENTS" "$CAMERA_RUNTIME"',
-  );
-  const app = buildScript.indexOf('sign "$APP" "$APP_ENTITLEMENTS"');
-  expect(assemble).toBeGreaterThan(-1);
-  expect(thin).toBeGreaterThan(assemble);
-  expect(camera).toBeGreaterThan(helper);
-  expect(app).toBeGreaterThan(camera);
-  expect(buildScript).toContain('CAMERA_IDENTIFIER="$APP_IDENTIFIER.camera"');
-  expect(buildScript).toContain(
-    'cp "$EDITH_APP_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"',
-  );
-  expect(buildScript).toContain(
-    'cp "$EDITH_CAMERA_PROVISIONING_PROFILE" "$CAMERA/Contents/embedded.provisionprofile"',
-  );
-});
-
-test("the install entitlement is only added with a verified profile", () => {
-  const profileBlock = buildScript.slice(
-    buildScript.indexOf('APP_ENTITLEMENTS=""'),
-    buildScript.indexOf('sign "$APP" "$APP_ENTITLEMENTS"'),
-  );
-  expect(profileBlock).toContain(
-    'if [ -n "${EDITH_APP_PROVISIONING_PROFILE:-}" ]; then',
-  );
-  expect(profileBlock).toContain(
-    "com.apple.developer.system-extension.install",
-  );
-  expect(profileBlock.indexOf("camera_extension.py profile")).toBeLessThan(
-    profileBlock.indexOf("camera_extension.py app-entitlements"),
-  );
+test("the empty host excludes the camera carrier and its provisioning", () => {
+  expect(buildScript).not.toContain("Library/SystemExtensions");
+  expect(buildScript).not.toContain("camera_extension.py profile");
+  expect(buildScript).not.toContain("camera_extension.py app-entitlements");
+  expect(buildScript).toContain("package-shipping-host.py");
 });
 
 test("profiles must include this Mac and the signing certificate", () => {
@@ -228,23 +196,8 @@ with tempfile.TemporaryDirectory() as folder:
   expect(result.source).toContain("@main");
 });
 
-test("build.sh looks for profiles only when installing locally", () => {
-  const discovery = buildScript.slice(
-    buildScript.indexOf('if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then'),
-    buildScript.indexOf(
-      'CAMERA_ENTITLEMENTS="$DERIVED/EdithCamera.entitlements"',
-    ),
-  );
-  expect(discovery).toContain(
-    ': "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find',
-  );
-  expect(discovery).toContain(
-    ': "${EDITH_CAMERA_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find',
-  );
-  expect(discovery).toContain('"$SIGN_IDENTITY"');
-  expect(buildScript.indexOf("camera_extension.py find")).toBeLessThan(
-    buildScript.indexOf("camera_extension.py profile"),
-  );
+test("camera profile tooling remains available outside host packaging", () => {
+  expect(buildScript).not.toContain("camera_extension.py find");
   const makefile = readFileSync("Makefile", "utf8");
   expect(makefile).toContain(
     "camera-profiles:\n\t./scripts/camera-profiles.sh",
