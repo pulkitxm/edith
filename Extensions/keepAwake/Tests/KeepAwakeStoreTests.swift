@@ -55,6 +55,10 @@ private final class KeepAwakeTestWorld {
 }
 
 @Suite @MainActor struct KeepAwakeStoreTests {
+    private func advanceMainRunLoop() {
+        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+
     @Test func helperRestartRestoresRequestedProtection() {
         let world = KeepAwakeTestWorld()
         defer { world.finish() }
@@ -123,7 +127,11 @@ private final class KeepAwakeTestWorld {
         world.failuresRemaining = 1
         let store = world.start(interval: 0.01)
         #expect(!store.preventingSleep)
-        try await Task.sleep(for: .milliseconds(100))
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while !store.preventingSleep, ContinuousClock.now < deadline {
+            advanceMainRunLoop()
+            await Task.yield()
+        }
         #expect(store.preventingSleep)
         #expect(world.creations == 2)
         #expect(world.defaults.bool(forKey: "preventSleep"))

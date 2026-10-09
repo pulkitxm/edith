@@ -240,5 +240,45 @@
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI"
+  },
+  {
+    "id": "emoji",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "helper": [
+        "Extensions/emoji/EdithHelper/Services/EmojiTypeSynth.swift",
+        "Extensions/emoji/EdithHelper/ViewModels/EmojiPanelModel.swift",
+        "Extensions/emoji/EdithHelper/ViewModels/EmojiStore.swift",
+        "Extensions/emoji/EdithHelper/Views/EmojiPanel.swift",
+        "Extensions/emoji/EdithHelper/Views/EmojiPanelView.swift",
+        "Extensions/emoji/EdithKit/Models/Emoji.swift",
+        "Extensions/emoji/EdithKit/Services/EmojiCatalog.swift",
+        "Extensions/emoji/EdithKit/Services/EmojiGlyphSupport.swift",
+        "Extensions/emoji/EdithKit/Services/EmojiOperation.swift",
+        "Extensions/emoji/EdithKit/Services/EmojiSearch.swift",
+        "Extensions/emoji/EdithKit/Services/EmojiUsageLedger.swift",
+        "Extensions/emoji/EmojiResources.swift",
+        "Extensions/emoji/Runtime.swift",
+        "Extensions/emoji/Views/EmojiSettingsRows.swift"
+      ]
+    },
+    "resources": {
+      "helper": [
+        "Extensions/emoji/Resources/emoji-catalog.json"
+      ]
+    },
+    "inputs": [
+      "Extensions/emoji"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
   }
 ]

@@ -4,32 +4,40 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 3209628,
-    "comparisonZipBytes": 1381116
+    "installedBytes": 3247420,
+    "comparisonZipBytes": 1395660
   },
   "savedBytes": {
-    "installedBytes": 113255573,
-    "comparisonZipBytes": 50890370
+    "installedBytes": 113217781,
+    "comparisonZipBytes": 50875826
   },
   "savedPercent": {
-    "installedBytes": 97.24,
-    "comparisonZipBytes": 97.36
+    "installedBytes": 97.21,
+    "comparisonZipBytes": 97.33
   },
   "packages": [
     {
       "id": "colorPicker",
       "version": "1.0.0",
-      "downloadBytes": 200061,
-      "installedBytes": 512459,
-      "sha256": "8a9c83e7c7185e1cd9bfd3d7cd02f44905a21da65b606ec75f019c8789d9f920",
+      "downloadBytes": 214719,
+      "installedBytes": 548715,
+      "sha256": "d3ce503316e999c8e7a76dd60fea347453c6608e2a488c305e018bba62f78bf5",
       "releaseMetadataBytes": 518
+    },
+    {
+      "id": "emoji",
+      "version": "1.0.0",
+      "downloadBytes": 343599,
+      "installedBytes": 927969,
+      "sha256": "e20d82e08cd3e267b7b7c5a289a70b701ddc508012e3fbea573e252346b9f0f3",
+      "releaseMetadataBytes": 500
     },
     {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 182286,
-      "installedBytes": 474946,
-      "sha256": "ba45bf0c36bff53e4718d6bcaa26c227fb4d2d6e5233fb1ee0b8c2d440dbdd4d",
+      "downloadBytes": 196619,
+      "installedBytes": 509906,
+      "sha256": "50e22aa36729a4a407123ec52d9d8fddd74647e0c382f197da03aef5c34135ea",
       "releaseMetadataBytes": 509
     },
     {
@@ -37,57 +45,59 @@
       "version": "1.0.0",
       "downloadBytes": 18173,
       "installedBytes": 79141,
-      "sha256": "093f1e2241a50d36e1749ebf7a6495b713567db4af22dcfc3e1994b4c10c7ef3",
+      "sha256": "329805de1246eb878de60f7972dafdbe389851726a0b1700cee3ba8096f946bd",
       "releaseMetadataBytes": 510
     },
     {
       "id": "keystrokeHighlight",
       "version": "1.0.0",
-      "downloadBytes": 199904,
-      "installedBytes": 512496,
-      "sha256": "1d735f8d85c3d83a4d7b35e78a733219e074bce9361eeac48fba3c3b0794d10e",
+      "downloadBytes": 213971,
+      "installedBytes": 548496,
+      "sha256": "a3137d2c485359c71e19b5f337ac7969aba9d551274fce7caf9988d7247af4d3",
       "releaseMetadataBytes": 539
     },
     {
       "id": "micMute",
       "version": "1.0.0",
-      "downloadBytes": 178048,
-      "installedBytes": 473247,
-      "sha256": "1faf2c1ca0448235d221da12488f84718f491748da87e0d34e8c545bc6e827a9",
+      "downloadBytes": 192785,
+      "installedBytes": 493103,
+      "sha256": "b42c58f19806ce11365199297ec7683638981d3f0cf732ee5cb0fda12d4968b2",
       "releaseMetadataBytes": 506
     },
     {
       "id": "systemStats",
       "version": "1.0.0",
-      "downloadBytes": 168196,
-      "installedBytes": 455755,
-      "sha256": "85c3fb094f15087efdda0366739443013625e31990880112096aba461a5f1d9c",
+      "downloadBytes": 179193,
+      "installedBytes": 475195,
+      "sha256": "d82ab6a1e45aab98115eda436679e6ad8c557f597e9768fbbd9b9e1be125b7f5",
       "releaseMetadataBytes": 518
     },
     {
       "id": "windowSweaters",
       "version": "1.0.0",
-      "downloadBytes": 248256,
-      "installedBytes": 616674,
-      "sha256": "f65405e3833193e8afdcb419a7f590676058f5dcf2259d05985b038cedd1401c",
+      "downloadBytes": 261442,
+      "installedBytes": 635298,
+      "sha256": "6c555ec5fd3ab028ac14a39ccb4ce0b2e52ee931318c37ea8d6ab6b32c044907",
       "releaseMetadataBytes": 527
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 1194924,
-    "installedBytes": 3124718,
-    "releaseMetadataBytes": 3627,
-    "releaseAssetBytes": 1198551
+    "downloadBytes": 1620501,
+    "installedBytes": 4217823,
+    "releaseMetadataBytes": 4127,
+    "releaseAssetBytes": 1624628
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 6334346,
-    "comparisonZipAndPackageBytes": 2576040
+    "installedBytes": 7465243,
+    "comparisonZipAndPackageBytes": 3016161
   },
+  "measuredAtUTC": "2026-10-09T03:05:41+00:00",
   "status": "migration-in-progress",
-  "migratedExtensions": 7,
+  "migratedExtensions": 8,
   "indexedExtensions": 38,
-  "hostExecutableSHA256": "6e3cfab6299c9ddcdb1f0b063afd422f564c65a044b48453ab4d793d84014e40",
+  "hostExecutableSHA256": "44e4fedfd1f16b6d19ed04ad390ba540d5ddd505f4797d5d1878e53319384415",
   "measurement": {
+    "baselineSourceCommit": "9c6b7ae8a4827578c99dbe5a3df433a19293311b",
     "architecture": "arm64",
     "signature": "development",
     "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",

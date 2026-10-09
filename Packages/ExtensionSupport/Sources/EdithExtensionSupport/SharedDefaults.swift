@@ -11,6 +11,10 @@ public enum SharedDefaults {
 
 public enum IPC {
     public enum Name {
+        public static let emojiUsageChanged = "emojiUsageChanged"
+        public static let requestEmojiPanel = "requestEmojiPanel"
+        public static let requestEmojiInsert = "requestEmojiInsert"
+        public static let emojiInsertResult = "emojiInsertResult"
         public static let settingsChanged = "settingsChanged"
         public static let requestColorPick = "requestColorPick"
         public static let presenterPauseAuto = "presenterPauseAuto"
