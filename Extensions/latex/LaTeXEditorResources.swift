@@ -1,7 +1,5 @@
 import Foundation
 
-private final class LaTeXResourceMarker: NSObject {}
-
 public enum LaTeXEditorResources {
     public static var url: URL? { resource("index") }
     public static var reviewURL: URL? { resource("review") }
@@ -9,7 +7,7 @@ public enum LaTeXEditorResources {
         #if SWIFT_PACKAGE
         return Bundle.module.url(forResource: name, withExtension: "html")
         #else
-        return Bundle(for: LaTeXResourceMarker.self).url(forResource: name, withExtension: "html")
+        return Bundle(for: ExtensionRuntime.self).url(forResource: name, withExtension: "html")
         #endif
     }
 }

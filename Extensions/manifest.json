@@ -925,15 +925,17 @@
         "Extensions/latex/Runtime.swift"
       ]
     },
-    "resources": [
-      "Extensions/latex/Resources/LICENSES.txt",
-      "Extensions/latex/Resources/ZIPFoundation-LICENSE.txt",
-      "Extensions/latex/Resources/editor.js",
-      "Extensions/latex/Resources/index.html",
-      "Extensions/latex/Resources/review.css",
-      "Extensions/latex/Resources/review.html",
-      "Extensions/latex/Resources/review.js"
-    ],
+    "resources": {
+      "app": [
+        "Extensions/latex/Resources/LICENSES.txt",
+        "Extensions/latex/Resources/ZIPFoundation-LICENSE.txt",
+        "Extensions/latex/Resources/editor.js",
+        "Extensions/latex/Resources/index.html",
+        "Extensions/latex/Resources/review.css",
+        "Extensions/latex/Resources/review.html",
+        "Extensions/latex/Resources/review.js"
+      ]
+    },
     "minimumSystemVersion": 14
   }
 ]

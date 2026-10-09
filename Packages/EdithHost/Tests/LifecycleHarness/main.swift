@@ -120,7 +120,9 @@ struct HostLifecycleHarness {
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
-            if extensionID == "clipboard" {
+            if extensionID == "latex" {
+                try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
+            } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
@@ -160,7 +162,9 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "clipboard" {
+            if extensionID == "latex" {
+                try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
+            } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
@@ -222,7 +226,9 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "clipboard" {
+            if extensionID == "latex" {
+                try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
+            } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
@@ -278,7 +284,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -328,6 +334,75 @@ struct HostLifecycleHarness {
             } catch HostWorkerError.invalidResponse { throw HostWorkerError.invalidResponse } catch
             {}
         }
+    }
+
+    @MainActor private static func verifyLaTeX(
+        _ endpoint: ExtensionPeerEndpoint, fixture: URL, seed: Bool
+    ) async throws {
+        _ = try await endpoint.invoke("extension.open")
+        let projectID = "20000000-0000-0000-0000-000000000001"
+        let source = fixture.appendingPathComponent("synthetic-paper.tex")
+        let original =
+            "\\documentclass{article}\n\\begin{document}Synthetic original\\end{document}\n"
+        let draft =
+            "\\documentclass{article}\n\\begin{document}Synthetic unsaved draft\\end{document}\n"
+        if seed {
+            try original.write(to: source, atomically: true, encoding: .utf8)
+            let empty = try await endpoint.invoke("latex.projects")
+            guard (try JSONSerialization.jsonObject(with: empty) as? [Any])?.isEmpty == true else {
+                throw HostWorkerError.invalidResponse
+            }
+            let payload = try JSONSerialization.data(withJSONObject: [
+                "id": projectID, "name": "Synthetic paper", "location": "disk",
+                "compiler": "tectonic", "sourcePath": source.path, "repository": "",
+                "baseBranch": "",
+            ])
+            _ = try await endpoint.invoke("latex.addProject", payload: payload)
+            _ = try await endpoint.invoke(
+                "latex.openProject", payload: JSONEncoder().encode(projectID))
+            let document = try await endpoint.invoke("latex.document")
+            guard let value = try JSONSerialization.jsonObject(with: document) as? [String: Any],
+                value["text"] as? String == original,
+                let revision = value["revision"] as? String, !revision.isEmpty
+            else { throw LaTeXFixtureError.invalidData }
+            _ = try await endpoint.invoke(
+                "latex.setDraft",
+                payload: JSONSerialization.data(withJSONObject: [
+                    "projectID": projectID, "revision": revision, "text": draft,
+                ]))
+        }
+        let projects = try await endpoint.invoke("latex.projects")
+        guard let library = try JSONSerialization.jsonObject(with: projects) as? [[String: Any]],
+            library.count == 1, library.first?["id"] as? String == projectID
+        else { throw LaTeXFixtureError.invalidData }
+        let document = try await endpoint.invoke("latex.document")
+        guard let value = try JSONSerialization.jsonObject(with: document) as? [String: Any],
+            value["text"] as? String == draft,
+            value["revision"] as? String != nil,
+            try String(contentsOf: source, encoding: .utf8) == original
+        else { throw LaTeXFixtureError.invalidData }
+        var ready = false
+        for _ in 0..<100 {
+            let status = try await endpoint.invoke("latex.editorStatus")
+            let value = try JSONSerialization.jsonObject(with: status) as? [String: Any]
+            guard value?["dirty"] as? Bool == true, value?["toolProcesses"] as? Int == 0 else {
+                throw HostWorkerError.invalidResponse
+            }
+            if value?["ready"] as? Bool == true { ready = true; break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        guard ready else { throw LaTeXFixtureError.invalidData }
+        var tile = SurfaceTile(.ability("latex"))
+        tile.itemLimit = 1
+        tile.sourceIDs = [projectID]
+        let request = SurfaceSnapshotRequest(target: .home, tile: tile)
+        let data = try await endpoint.invoke(
+            "surface.snapshot", payload: request.encoded(providerID: "latex"))
+        let snapshot = try SurfaceSnapshot.decode(data, providerID: "latex")
+        guard snapshot.rows.count == 1, snapshot.sources.count == 1,
+            snapshot.rows.first?.title == "Synthetic paper",
+            snapshot.rows.first?.actions.isEmpty == true
+        else { throw LaTeXFixtureError.invalidData }
     }
 
     @MainActor private static func verifyClipboard(_ endpoint: ExtensionPeerEndpoint, seed: Bool)
@@ -666,4 +741,9 @@ struct HostLifecycleHarness {
             })
         _ = try await installer.install([package], repository: MarketplaceConfiguration.repository)
     }
+}
+
+private enum LaTeXFixtureError: Error {
+    case invalidData
+    case editorNotReady
 }
