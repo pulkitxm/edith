@@ -198,7 +198,7 @@ public final class ExtensionBundleRuntime {
     }
 
     public func nativeTask(id: String, payload: Data) throws -> Int32 {
-        guard !payload.isEmpty, payload.count <= 65_536 else {
+        guard role == .app, !payload.isEmpty, payload.count <= 65_536 else {
             throw MarketplaceError.invalidBundle
         }
         let instance = try load(id: id)

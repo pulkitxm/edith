@@ -28,6 +28,8 @@ public enum ExtensionNativeTask {
             throw ExtensionPeerError.unavailable
         }
         try result.value().get()
+        NotificationCenter.default.post(
+            name: ExtensionNativeTaskGroups.registered, object: nil, userInfo: ["pid": pid])
     }
 
     public static func isDescendant(_ pid: Int32, of parent: Int32) -> Bool {

@@ -17,13 +17,29 @@ import Foundation
             encoded.utf8.count <= 87_384, let payload = Data(base64Encoded: encoded),
             !payload.isEmpty, payload.count <= 65_536
         else { throw HostWorkerError.rejected }
-        let next = try JSONDecoder().decode(HostWorkerConfiguration.self, from: configurationBytes)
+        guard setpgid(0, 0) == 0 || getpgrp() == getpid() else { throw HostWorkerError.rejected }
+        let supplied = try JSONDecoder().decode(
+            HostWorkerConfiguration.self, from: configurationBytes)
+        let authoritative = try ExtensionNativeTaskAuthorization.request(parent: parent)
+        let next = try JSONDecoder().decode(HostWorkerConfiguration.self, from: authoritative)
+        guard supplied.identifier == next.identifier, supplied.extensionID == next.extensionID,
+            supplied.version == next.version, supplied.supportDirectory == next.supportDirectory
+        else {
+            throw HostWorkerError.rejected
+        }
         guard next.identifier == Bundle.main.bundleIdentifier,
             environment["EDITH_EXTENSION_ID"] == next.extensionID,
             try HostIndex.bundled().contains(where: { $0.id == next.extensionID })
         else { throw HostWorkerError.rejected }
         let identity = try next.identity()
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
+        setenv("EDITH_APPLICATION_IDENTIFIER", identity.identifier, 1)
+        setenv("EDITH_EXTENSION_DATA_ROOT", identity.extensionDirectory(next.extensionID).path, 1)
+        setenv(
+            "EDITH_EXTENSION_STATE_ROOT",
+            identity.root.appendingPathComponent("ExtensionState").path, 1)
+        setenv("EDITH_SHARED_DEFAULTS_SUITE", identity.extensionDefaultsSuite(next.extensionID), 1)
+        setenv("EDITH_SURFACE_DEFAULTS_SUITE", identity.identifier, 1)
         let team = ExtensionCodeSignature.teamIdentifier()
         guard identity.development || team != nil else { throw MarketplaceError.invalidSignature }
         let runtime = ExtensionBundleRuntime(
@@ -37,15 +53,39 @@ import Foundation
                     try ExtensionCodeSignature.verify(url, teamIdentifier: team)
                 }
             })
+        let groups = ExtensionNativeTaskGroups()
+        let terminate: @Sendable () -> Void = {
+            groups.terminate()
+            kill(-getpid(), SIGKILL)
+        }
+        var signals: [DispatchSourceSignal] = []
+        for value in [SIGTERM, SIGINT, SIGHUP, SIGQUIT] {
+            signal(value, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: value, queue: .global())
+            source.setEventHandler(handler: terminate)
+            source.activate()
+            signals.append(source)
+        }
         let watcher = DispatchSource.makeProcessSource(
             identifier: parent, eventMask: .exit, queue: .global())
-        watcher.setEventHandler { kill(getpid(), SIGTERM) }
+        watcher.setEventHandler(handler: terminate)
         watcher.resume()
-        defer { watcher.cancel() }
+        let direct = DispatchSource.makeProcessSource(
+            identifier: getppid(), eventMask: .exit, queue: .global())
+        direct.setEventHandler(handler: terminate)
+        direct.activate()
+        defer {
+            groups.terminate()
+            watcher.cancel(); direct.cancel()
+            for source in signals { source.cancel() }
+        }
+        guard sameExecutable(parent), descended(from: parent) else {
+            throw HostWorkerError.rejected
+        }
         return try runtime.nativeTask(id: next.extensionID, payload: payload)
     }
 
-    private static func sameExecutable(_ pid: Int32) -> Bool {
+    static func sameExecutable(_ pid: Int32) -> Bool {
         func path(_ pid: Int32) -> String? {
             var bytes = [CChar](repeating: 0, count: 4_096)
             guard proc_pidpath(pid, &bytes, UInt32(bytes.count)) > 0 else { return nil }

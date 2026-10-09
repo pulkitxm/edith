@@ -189,6 +189,21 @@ final class HostWorkerApplication {
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
                 guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                if command == "extension.native.authorize" {
+                    guard !self.preparingDisable, payload.count <= 128,
+                        let object = try JSONSerialization.jsonObject(with: payload)
+                            as? [String: Any],
+                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32,
+                        HostNativeTask.sameExecutable(pid),
+                        self.runtimes.contains(where: {
+                            $0.role == .app && (try? $0.snapshot(id: package.id)?.active) == true
+                        }),
+                        UserDefaults(suiteName: identity.defaultsSuite)?.stringArray(
+                            forKey: "enabledExtensions")?.contains(package.id) == true
+                    else { throw ExtensionPeerError.unavailable }
+                    try ExtensionNativeTask.registerDescendant(pid)
+                    return try JSONEncoder().encode(next)
+                }
                 if command == "extension.process.register" {
                     guard payload.count <= 128,
                         let object = try JSONSerialization.jsonObject(with: payload)
