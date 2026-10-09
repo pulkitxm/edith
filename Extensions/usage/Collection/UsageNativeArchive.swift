@@ -11,8 +11,17 @@ final class UsageNativeArchive {
 
     let database: UsageNativeDatabase
     private let limits: UsageNativeFileLimits
+    let remoteContext: UsageRemoteCollectionContext?
+    let remoteProjects: [String: UsageRemoteProjectMetadata]
 
-    init(dataDirectory: URL, limits: UsageNativeFileLimits = .init()) throws {
+    init(
+        dataDirectory: URL, limits: UsageNativeFileLimits = .init(),
+        remoteContext: UsageRemoteCollectionContext? = nil
+    ) throws {
+        try remoteContext?.validate()
+        self.remoteContext = remoteContext
+        remoteProjects = Dictionary(
+            uniqueKeysWithValues: (remoteContext?.projects ?? []).map { ($0.cwd, $0) })
         self.limits = limits
         let root = dataDirectory.appendingPathComponent("native-usage-history", isDirectory: true)
         try UsageNativeFileIO.privateDirectory(root)
@@ -37,6 +46,14 @@ final class UsageNativeArchive {
             CREATE TABLE IF NOT EXISTS cloud_cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL);
             PRAGMA user_version=1;
             """)
+        let owner = remoteContext?.machineID.uuidString.lowercased() ?? "local"
+        let previousOwner = try database.rows(
+            "SELECT value FROM metadata WHERE key='collectionOwner'"
+        ).first?["value"]
+        guard previousOwner == nil || previousOwner == owner else {
+            throw UsageNativeFailure.invalidInput("archive belongs to a different machine")
+        }
+        try database.run("INSERT OR IGNORE INTO metadata VALUES('collectionOwner',?)", [owner])
         let payloadTables = [
             "records", "candidates", "baselines", "aggregate_candidates", "cloud_cache",
         ]
@@ -66,6 +83,13 @@ final class UsageNativeArchive {
                 """)
         }
 
+    }
+
+    func journalKey(source: String, file: URL, home: URL) throws -> String {
+        if let remoteContext {
+            return try remoteContext.journalKey(source: source, file: file, home: home)
+        }
+        return source + ":" + UsageNativeJSON.hash(file.path)
     }
 
     func known(_ path: String) throws -> KnownFile? {

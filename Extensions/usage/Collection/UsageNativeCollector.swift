@@ -11,13 +11,28 @@ public enum UsageNativeCollector {
             network: UsageNativeNetwork(), onEvent: onEvent)
     }
 
+    public static func collectRemote(
+        home: URL, dataDirectory: URL, context: UsageRemoteCollectionContext,
+        now: Date = Date(), onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+    ) async throws -> Data {
+        try context.validate()
+        try context.validateStagedHome(home)
+        var environment = ["EDITH_USAGE_OFFLINE": "1"]
+        if let zone = context.timeZone { environment["TZ"] = zone }
+        return try await collect(
+            home: home, dataDirectory: dataDirectory, environment: environment, now: now,
+            network: UsageNativeNetwork(), remoteContext: context, onEvent: onEvent)
+    }
+
     static func collect(
         home: URL, dataDirectory: URL, environment: [String: String], now: Date,
-        network: UsageNativeNetwork, onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
+        network: UsageNativeNetwork, remoteContext: UsageRemoteCollectionContext? = nil,
+        onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> Data {
         let started = ContinuousClock.now
         try Task.checkCancellation()
-        let archive = try UsageNativeArchive(dataDirectory: dataDirectory)
+        let archive = try UsageNativeArchive(
+            dataDirectory: dataDirectory, remoteContext: remoteContext)
         let previous = try UsageNativeFileIO.optionalObject(
             dataDirectory.appendingPathComponent("usage.json"))
         try archive.bootstrap(previous?.objectSchema8)
@@ -39,7 +54,7 @@ public enum UsageNativeCollector {
                     continue
                 }
                 if root.source == "kimi", file.lastPathComponent != "wire.jsonl" { continue }
-                let key = root.source + ":" + UsageNativeJSON.hash(file.path)
+                let key = try archive.journalKey(source: root.source, file: file, home: home)
                 guard seen.insert(key).inserted else { continue }
                 let previous = try archive.known(key)
                 var status = stat()
@@ -281,7 +296,8 @@ public enum UsageNativeCollector {
                         \.event))
             }
         }
-        try archive.admitRemote(events, key: "opencode-db:" + UsageNativeJSON.hash(file.path))
+        try archive.admitRemote(
+            events, key: archive.journalKey(source: "opencode-db", file: file, home: home))
     }
 
     private static func elapsed(since start: ContinuousClock.Instant) -> Double {

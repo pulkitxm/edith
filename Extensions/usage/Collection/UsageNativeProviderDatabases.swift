@@ -52,7 +52,8 @@ enum UsageNativeProviderDatabases {
             case "kilo": events = try kilo(database)
             default: events = try openClaw(database)
             }
-            try archive.admitRemote(events, key: source + "-db:" + UsageNativeJSON.hash(path.path))
+            try archive.admitRemote(
+                events, key: archive.journalKey(source: source + "-db", file: path, home: home))
         }
     }
 
