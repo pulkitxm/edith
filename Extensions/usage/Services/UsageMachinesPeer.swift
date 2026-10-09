@@ -4,6 +4,7 @@ import EdithExtensionSupport
 import Foundation
 
 struct UsageMachinesPeer: Sendable {
+    static let selectedDefaultsKey = "usageMachines"
     struct Receipt: Codable, Sendable {
         let collectionID: UUID
         let byteCount: Int
@@ -103,7 +104,7 @@ struct UsageMachinesPeer: Sendable {
         onEvent: @escaping @Sendable (UsageRefreshEvent) -> Void
     ) async throws -> Data {
         let selected = Set(
-            (defaults.stringArray(forKey: "usageMachines") ?? []).prefix(128).compactMap(
+            (defaults.stringArray(forKey: selectedDefaultsKey) ?? []).prefix(128).compactMap(
                 UUID.init(uuidString:)))
         let registry = await MainActor.run { MachineRegistry.machines() }
         let machines = registry.filter { selected.contains($0.id) && $0.id != Machine.localID }

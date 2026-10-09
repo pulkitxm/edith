@@ -35,8 +35,9 @@ struct UsageMachineSettingsRows: View {
             guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else { return }
             machines = MachineRegistry.machines().filter { $0.id != Machine.localID }
             selected = Set(
-                (SharedDefaults.store.stringArray(forKey: "usageMachines") ?? []).compactMap(
-                    UUID.init(uuidString:)))
+                (SharedDefaults.store.stringArray(forKey: UsageMachinesPeer.selectedDefaultsKey)
+                    ?? []).compactMap(
+                        UUID.init(uuidString:)))
         }
         .onDisappear {
             operation?.cancel(); operation = nil
@@ -62,7 +63,8 @@ struct UsageMachineSettingsRows: View {
 
     private func include(_ machine: Machine, _ included: Bool) {
         if included { selected.insert(machine.id) } else { selected.remove(machine.id) }
-        SharedDefaults.store.set(selected.map(\.uuidString).sorted(), forKey: "usageMachines")
+        SharedDefaults.store.set(
+            selected.map(\.uuidString).sorted(), forKey: UsageMachinesPeer.selectedDefaultsKey)
         if let group = DashboardModel.shared.machineGroups.first(where: {
             $0.id.lowercased() == machine.id.uuidString.lowercased()
         }) {

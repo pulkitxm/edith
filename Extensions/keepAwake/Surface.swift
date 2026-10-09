@@ -11,10 +11,10 @@ enum KeepAwakeSurface {
             snapshot: { _ in
                 snapshot(
                     preventingSleep: store.preventingSleep,
-                    requested: defaults.bool(forKey: "preventSleep"))
+                    requested: defaults.bool(forKey: AppStorageKeys.General.preventSleep))
             },
             perform: { action in
-                defaults.set(action == "enable", forKey: "preventSleep")
+                defaults.set(action == "enable", forKey: AppStorageKeys.General.preventSleep)
                 store.syncPreventSleep()
             })
     }
