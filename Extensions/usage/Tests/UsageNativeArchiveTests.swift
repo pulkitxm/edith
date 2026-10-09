@@ -8,14 +8,18 @@ import Testing
             let archive = try UsageNativeArchive(dataDirectory: root)
             try archive.cache(["value": "mock-one"], key: "cache")
             try archive.cache(["value": "mock-two-longer"], key: "cache")
-            let event = try UsageNativeParser(source: "cli").consume(UsageNativeJSON.object(line(id: "one").dropLast())).map(\.event)
+            let event = try UsageNativeParser(source: "cli").consume(
+                UsageNativeJSON.object(line(id: "one").dropLast())
+            ).map(\.event)
             try archive.replaceRemote(event, key: "remote", account: "one")
             let before = try archive.database.rows("SELECT bytes,records FROM capacity").first!
             #expect(before["records"] == "1")
             try archive.replaceRemote([], key: "remote", account: "one")
             let after = try archive.database.rows("SELECT bytes,records FROM capacity").first!
             #expect(after["records"] == "0")
-            let actual = try archive.database.rows("SELECT SUM(length(CAST(payload AS BLOB))) AS bytes FROM cloud_cache").first!["bytes"]!
+            let actual = try archive.database.rows(
+                "SELECT SUM(length(CAST(payload AS BLOB))) AS bytes FROM cloud_cache"
+            ).first!["bytes"]!
             #expect(after["bytes"] == actual)
             #expect(Int(before["bytes"]!)! > Int(after["bytes"]!)!)
         }
@@ -162,6 +166,37 @@ import Testing
             #expect(
                 (try reopened.cached("mock-account")?["sessions"] as? [[String: Any]])?.isEmpty
                     == true)
+        }
+    }
+
+    @Test func canonicalOverlapIgnoresModelOrderAndPricingPresentationMetadata() throws {
+        try fixture { root in
+            let archive = try UsageNativeArchive(dataDirectory: root)
+            let zero: [String: Any] = ["tokens": 0, "cost": 0, "bySource": [:], "byPath": [:]]
+            let baseline: [String: Any] = [
+                "period": "2026-09-05",
+                "bySource": [
+                    "cli": [
+                        ["modelName": "second", "inputTokens": 10, "cost": 1],
+                        ["modelName": "first", "outputTokens": 2, "cost": 2],
+                    ]
+                ], "hours": (0..<24).map { _ in zero }, "projects": [],
+            ]
+            try archive.bootstrap(["generatedAt": "2026-09-06T00:00:00Z", "daily": [baseline]])
+            var updated = baseline
+            updated["bySource"] = [
+                "cli": [
+                    [
+                        "modelName": "first", "outputTokens": 2, "cost": 2, "costMissing": false,
+                        "unpricedTokens": 0, "tokens": 2,
+                    ],
+                    ["modelName": "second", "inputTokens": 10, "cost": 1, "isFallback": true],
+                ]
+            ]
+            #expect(
+                (try archive.reconcile([updated])["blocks"] as? [[String: Any]])?.isEmpty == true)
+            updated["bySource"] = ["cli": [["modelName": "second", "inputTokens": 11, "cost": 1]]]
+            #expect((try archive.reconcile([updated])["blocks"] as? [[String: Any]])?.count == 1)
         }
     }
 

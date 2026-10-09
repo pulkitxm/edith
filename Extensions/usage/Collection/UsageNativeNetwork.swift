@@ -28,7 +28,8 @@ final class UsageNativeNetwork: @unchecked Sendable {
             configuration.urlCache = nil
             configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
             configuration.timeoutIntervalForResource = remaining
-            let session = URLSession(configuration: configuration, delegate: RedirectGuard(), delegateQueue: nil)
+            let session = URLSession(
+                configuration: configuration, delegate: RedirectGuard(), delegateQueue: nil)
             defer { session.invalidateAndCancel() }
             (data, status) = try await withTaskCancellationHandler {
                 let (stream, response) = try await session.bytes(for: request)

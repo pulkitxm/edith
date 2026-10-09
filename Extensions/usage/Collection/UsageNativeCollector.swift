@@ -32,6 +32,13 @@ public enum UsageNativeCollector {
                 try Task.checkCancellation()
                 if root.source == "opencode", !file.path.contains("/message/") { continue }
                 if root.source == "grok", file.lastPathComponent != "updates.jsonl" { continue }
+                if root.source == "droid", !file.lastPathComponent.hasSuffix(".settings.json") {
+                    continue
+                }
+                if root.source == "codebuff", file.lastPathComponent != "chat-messages.json" {
+                    continue
+                }
+                if root.source == "kimi", file.lastPathComponent != "wire.jsonl" { continue }
                 let key = root.source + ":" + UsageNativeJSON.hash(file.path)
                 guard seen.insert(key).inserted else { continue }
                 let previous = try archive.known(key)
@@ -39,15 +46,15 @@ public enum UsageNativeCollector {
                 guard lstat(file.path, &status) == 0 else { continue }
                 let modified =
                     Double(status.st_mtimespec.tv_sec) + Double(status.st_mtimespec.tv_nsec) / 1e9
-                if let previous, previous.size == Int(status.st_size), previous.modified == modified { continue }
+                if let previous, previous.size == Int(status.st_size), previous.modified == modified
+                {
+                    continue
+                }
                 if file.pathExtension.lowercased() == "json" {
                     let data = try UsageNativeFileIO.read(file)
-                    let object: [String: Any]? = try UsageNativeJSON.object(data)
+                    let object = try JSONSerialization.jsonObject(with: data)
                     let parser = UsageNativeParser(source: root.source)
-                    let records =
-                        try object.map {
-                            try parser.consume($0, offset: 0, end: Int(status.st_size))
-                        } ?? []
+                    let records = try parser.document(object, path: file, modified: modified)
                     let prefix =
                         previous.map { UsageNativeJSON.hash(Data(data.prefix($0.size))) }
                         ?? UsageNativeJSON.hash(Data())
@@ -71,6 +78,8 @@ public enum UsageNativeCollector {
             timestamp = .now
         }
         try collectOpenCodeDatabases(home: home, environment: environment, archive: archive)
+        try UsageNativeProviderDatabases.collect(
+            home: home, environment: environment, archive: archive)
         let candidates = try archive.unresolvedCandidates()
         let retained = try archive.retainedFiles(seen: seen)
         if candidates > 0 {
@@ -178,23 +187,50 @@ public enum UsageNativeCollector {
             ("pi", "PI_CODING_AGENT_DIR", ".pi/agent/sessions"),
             ("commandcode", "COMMAND_CODE_HOME", ".commandcode/projects"),
             ("amp", "AMP_DATA_DIR", ".local/share/amp"),
-            ("droid", "DROID_DATA_DIR", ".factory/sessions"),
-            ("codebuff", "CODEBUFF_DATA_DIR", ".codebuff"),
+            ("droid", "DROID_SESSIONS_DIR", ".factory/sessions"),
+            ("codebuff", "CODEBUFF_DATA_DIR", ".config/manicode/projects"),
             ("hermes", "HERMES_HOME", ".hermes/sessions"),
             ("goose", "GOOSE_DATA_DIR", ".local/share/goose/sessions"),
-            ("kilo", "KILO_DATA_DIR", ".kilo"),
-            ("gemini", "GEMINI_CLI_HOME", ".gemini/tmp"),
-            ("copilot", "COPILOT_HOME", ".copilot/session-state"),
-            ("kimi", "KIMI_HOME", ".kimi/sessions"), ("qwen", "QWEN_HOME", ".qwen/projects"),
-            ("openclaw", "OPENCLAW_STATE_DIR", ".openclaw/agents"),
+            ("kilo", "KILO_DATA_DIR", ".local/share/kilo"),
+            ("gemini", "GEMINI_DATA_DIR", ".gemini/tmp"),
+            ("copilot", "COPILOT_HOME", ".copilot"),
+            ("kimi", "KIMI_DATA_DIR", ".kimi/sessions"),
+            ("qwen", "QWEN_DATA_DIR", ".qwen/projects"),
+            ("openclaw", "OPENCLAW_DIR", ".openclaw"),
             ("grok", "GROK_HOME", ".grok/sessions"),
         ]
         for (source, key, fallback) in additional {
             for path in configured(key, fallback: fallback) {
-                let suffix = ["pi": "sessions", "commandcode": "projects", "grok": "sessions", "hermes": "sessions", "gemini": "tmp", "kimi": "sessions", "qwen": "projects", "copilot": "session-state", "openclaw": "agents"][source]
-                let path = environment[key] != nil && suffix != nil ? path.appendingPathComponent(suffix!) : path
+                let suffix = [
+                    "pi": "sessions", "commandcode": "projects", "grok": "sessions",
+                    "hermes": "sessions", "kimi": "sessions", "qwen": "projects",
+                    "codebuff": "projects",
+                ][source]
+                let path =
+                    environment[key] != nil && suffix != nil
+                    ? path.appendingPathComponent(suffix!) : path
                 roots.append(.init(source: source, path: path))
             }
+        }
+        if environment["CODEBUFF_DATA_DIR"] == nil {
+            for channel in ["manicode-dev", "manicode-staging"] {
+                roots.append(
+                    .init(
+                        source: "codebuff",
+                        path: home.appendingPathComponent(".config/" + channel + "/projects")))
+            }
+        }
+        if environment["KIMI_DATA_DIR"] == nil {
+            roots.append(
+                .init(source: "kimi", path: home.appendingPathComponent(".kimi-code/sessions")))
+        }
+        if environment["OPENCLAW_DIR"] == nil {
+            for alias in [".clawdbot", ".moltbot", ".moldbot"] {
+                roots.append(.init(source: "openclaw", path: home.appendingPathComponent(alias)))
+            }
+        }
+        if let path = environment["COPILOT_OTEL_FILE_EXPORTER_PATH"] {
+            roots.append(.init(source: "copilot", path: URL(fileURLWithPath: path)))
         }
         return roots
     }
