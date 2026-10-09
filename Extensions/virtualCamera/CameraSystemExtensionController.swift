@@ -58,14 +58,31 @@ final class CameraSystemExtensionController {
         self.phase = initiallyActive ? .active : .idle; self.providerExited = providerExited
     }
 
-    func activate() async throws { try await request(.activate) }
-    func deactivate() async throws { try await request(.deactivate) }
+    func activate() async throws {
+        guard !wantsInactive, phase != .deactivating, phase != .restartRequired else {
+            throw failure(
+                "Finish disabling the camera or restart macOS before activating it again.")
+        }
+        try await request(.activate)
+    }
+    func deactivate() async throws {
+        guard phase != .restartRequired else {
+            throw failure("Restart macOS before finishing the camera extension change.")
+        }
+        try await request(.deactivate)
+    }
 
     private func request(_ operation: CameraSystemExtensionOperation) async throws {
         let token = UUID()
         try await withTaskCancellationHandler {
             try Task.checkCancellation()
-            try await withCheckedThrowingContinuation { continuation in
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<Void, Error>) in
+                guard waiters.count < 8 else {
+                    continuation.resume(
+                        throwing: failure("Another camera request is still in progress."))
+                    return
+                }
                 waiters[token] = .init(operation: operation, continuation: continuation)
                 if operation == .deactivate { wantsInactive = true }
                 advance()
