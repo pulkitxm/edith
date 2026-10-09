@@ -37,7 +37,7 @@ final class ExtensionRuntime: NSObject {
             }
         case "view":
             UIScale.install(from: SharedDefaults.store)
-            return NSHostingController(rootView: FocusDimSettings())
+            return NSHostingController(rootView: ExtensionPageHost { FocusDimSettings() })
         case "synchronize": service?.applySettings()
         case "stop":
             service?.shutdown()

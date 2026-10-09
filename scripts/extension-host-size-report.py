@@ -23,7 +23,7 @@ def build_report(baseline, app, packages, definitions, index):
         "signature": "development",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
         "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "code signatures"],
-        "outstanding": ["remaining feature migrations", "shared navigation and theme integration", "required platform carriers", "shipping release packaging", "final release-host measurements"],
+        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "required platform carriers", "shipping release packaging", "final release-host measurements"],
     }
     return result
 

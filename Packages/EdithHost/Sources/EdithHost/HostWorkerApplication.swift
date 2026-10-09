@@ -1,6 +1,7 @@
 import AppKit
 import Darwin
 import EdithHostCore
+import EdithExtensionUI
 import ExtensionMarketplace
 import Foundation
 
@@ -84,6 +85,7 @@ final class HostWorkerApplication {
                 throw MarketplaceError.invalidSignature
             }
             configuration = next
+            try applyAppearance(next)
             let context: NSDictionary = [
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
                 "dataDirectory": identity.extensionDirectory(package.id).path,
@@ -143,6 +145,13 @@ final class HostWorkerApplication {
             }
             throw HostWorkerError.rejected
         case "synchronize":
+            if let next = request.configuration {
+                guard next.identifier == configuration.identifier,
+                    next.extensionID == configuration.extensionID,
+                    next.version == configuration.version
+                else { throw HostWorkerError.rejected }
+                try applyAppearance(next)
+            }
             for runtime in runtimes {
                 try runtime.synchronize(id: configuration.extensionID, context: [:])
             }
@@ -169,5 +178,18 @@ final class HostWorkerApplication {
         window?.close()
         try? control.close()
         exit(0)
+    }
+
+    private func applyAppearance(_ configuration: HostWorkerConfiguration) throws {
+        let identity = try configuration.identity()
+        guard
+            let defaults = UserDefaults(
+                suiteName: identity.extensionDefaultsSuite(configuration.extensionID))
+        else { throw HostWorkerError.rejected }
+        defaults.set(configuration.theme, forKey: "theme")
+        defaults.set(configuration.appearance, forKey: "appearance")
+        defaults.set(configuration.zoom, forKey: "mainWindowZoom")
+        UIScale.apply(configuration.zoom)
+        EdithExtensionUI.applyAppearance(configuration.appearance)
     }
 }

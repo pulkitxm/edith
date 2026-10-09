@@ -18,6 +18,26 @@ import Testing
         }
     }
 
+    @Test func workerAppearanceUsesTheHostPreferencesAndClampsZoom() throws {
+        let identifier = "com.pulkit.edith.tests.appearance-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: identifier))
+        defer { defaults.removePersistentDomain(forName: identifier) }
+        defaults.set("blue", forKey: "theme")
+        defaults.set("dark", forKey: "appearance")
+        defaults.set(2.0, forKey: "mainWindowZoom")
+        let identity = try HostIdentity(
+            identifier: identifier, supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let configuration = HostWorkerConfiguration(
+            identity: identity, extensionID: "sample", version: "1.0.0")
+        #expect(configuration.theme == "blue")
+        #expect(configuration.appearance == "dark")
+        #expect(configuration.zoom == 1.6)
+        defaults.set(Double.nan, forKey: "mainWindowZoom")
+        #expect(
+            HostWorkerConfiguration(identity: identity, extensionID: "sample", version: "1.0.0")
+                .zoom == 1)
+    }
+
     @Test func partialAndMultipleFramesAreDecoded() throws {
         var frames = HostWorkerFrames()
         #expect(try frames.append(Data("first".utf8)).isEmpty)
@@ -69,6 +89,30 @@ import Testing
         try await worker.stop()
         #expect(worker.processIdentifier == nil)
         #expect(kill(pid, 0) == -1)
+    }
+
+    @Test func disablingAWorkerAlsoStopsItsOwnedChildProcesses() async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.children",
+            supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let script = try #require(
+            Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
+        let worker = HostWorker(
+            configuration: HostWorkerConfiguration(
+                identity: identity, extensionID: "sample", version: "1.0.0"),
+            executable: URL(fileURLWithPath: "/usr/bin/python3"),
+            arguments: [script.path, "child", file.path], requestTimeout: .seconds(2))
+        try await worker.start()
+        let childPID = try #require(Int32(String(contentsOf: file, encoding: .utf8)))
+        #expect(kill(childPID, 0) == 0)
+        try await worker.stop()
+        let deadline = ContinuousClock.now + .seconds(2)
+        while kill(childPID, 0) == 0, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(kill(childPID, 0) == -1)
     }
 
     private func fixture(_ mode: String) throws -> HostWorker {

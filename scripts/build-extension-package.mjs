@@ -159,6 +159,16 @@ export async function buildExtensionPackage({
         "-install_name",
         "-Xlinker",
         `@rpath/EdithExtension_${id}_${role}`,
+        ...(definition.contractVersion === 1
+          ? [
+              "-Xlinker",
+              "-dead_strip",
+              "-Xlinker",
+              "-exported_symbol",
+              "-Xlinker",
+              "_edith_extension_create",
+            ]
+          : []),
         "-o",
         executable,
       ],

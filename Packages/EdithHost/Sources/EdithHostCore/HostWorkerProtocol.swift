@@ -5,6 +5,9 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     public let supportDirectory: URL
     public let extensionID: String
     public let version: String
+    public let theme: String
+    public let appearance: String
+    public let zoom: Double
 
     public init(identity: HostIdentity, extensionID: String, version: String) {
         identifier = identity.identifier
@@ -14,6 +17,11 @@ public struct HostWorkerConfiguration: Codable, Sendable {
             : identity.root.deletingLastPathComponent()
         self.extensionID = extensionID
         self.version = version
+        let preferences = UserDefaults(suiteName: identity.identifier)
+        theme = preferences?.string(forKey: "theme") ?? "accent"
+        appearance = preferences?.string(forKey: "appearance") ?? "system"
+        let storedZoom = preferences?.double(forKey: "mainWindowZoom") ?? 1
+        zoom = storedZoom.isFinite && storedZoom > 0 ? min(1.6, max(0.8, storedZoom)) : 1
     }
 
     public func identity() throws -> HostIdentity {

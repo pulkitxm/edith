@@ -95,6 +95,14 @@ public final class HostExtensionSessions {
         try await worker.show()
     }
 
+    public func synchronizeAppearance(identity: HostIdentity) async {
+        for (id, worker) in workers where worker.ready {
+            try? await worker.synchronize(
+                configuration: HostWorkerConfiguration(
+                    identity: identity, extensionID: id, version: worker.configuration.version))
+        }
+    }
+
     public func applyUpdate(_ package: ExtensionPackage) async throws {
         guard states[package.id] == .active, versions[package.id] != package.version else { return }
         let previous = packages[package.id]
