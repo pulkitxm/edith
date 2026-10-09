@@ -1,0 +1,110 @@
+{
+  "baseline": {
+    "installedBytes": 116465201,
+    "comparisonZipBytes": 52271486
+  },
+  "appWithoutExtensions": {
+    "installedBytes": 95696014,
+    "comparisonZipBytes": 44941865
+  },
+  "savedBytes": {
+    "installedBytes": 20769187,
+    "comparisonZipBytes": 7329621
+  },
+  "savedPercent": {
+    "installedBytes": 17.83,
+    "comparisonZipBytes": 14.02
+  },
+  "packages": [
+    {
+      "id": "audioMixer",
+      "version": "1.0.0",
+      "downloadBytes": 7354560,
+      "installedBytes": 20838072,
+      "sha256": "8173d2194328279e61adfccf46da033770af8ec7c46ef635c5f2ad612e475710",
+      "releaseMetadataBytes": 535
+    },
+    {
+      "id": "colorPicker",
+      "version": "1.0.0",
+      "downloadBytes": 14589,
+      "installedBytes": 95597,
+      "sha256": "b13d9d4e1060b3fcfb14c550334171957f8a58a83214f693993f78e005701c48",
+      "releaseMetadataBytes": 533
+    },
+    {
+      "id": "focusDim",
+      "version": "1.0.0",
+      "downloadBytes": 25410,
+      "installedBytes": 116564,
+      "sha256": "a8e19945bce4e3f7e37402b58f1fbfad7bfb3213f8eaad2e883da8a7eb3d8b98",
+      "releaseMetadataBytes": 525
+    },
+    {
+      "id": "keepAwake",
+      "version": "1.0.0",
+      "downloadBytes": 13873,
+      "installedBytes": 93671,
+      "sha256": "b4793cb001dadb9a76481fd6fe17ead645a0466aee4fd8fb807b10b37f8b7e43",
+      "releaseMetadataBytes": 527
+    },
+    {
+      "id": "keystrokeHighlight",
+      "version": "1.0.0",
+      "downloadBytes": 33043,
+      "installedBytes": 124052,
+      "sha256": "546b6901b3acee47f012101fb91b275476ab468475e657c06729fa6ed61e7afc",
+      "releaseMetadataBytes": 555
+    },
+    {
+      "id": "micMute",
+      "version": "1.0.0",
+      "downloadBytes": 22382,
+      "installedBytes": 98801,
+      "sha256": "a85b67bdea9c0c538ddb56160ed5cb275d2bf54da00cc505c685807f37c24edb",
+      "releaseMetadataBytes": 521
+    },
+    {
+      "id": "presenter",
+      "version": "1.0.0",
+      "downloadBytes": 40477,
+      "installedBytes": 136023,
+      "sha256": "d57d7668103fe44b2ae75dcc1c60a5209c062d3f7e9e96e78f1c27165126b125",
+      "releaseMetadataBytes": 528
+    },
+    {
+      "id": "systemStats",
+      "version": "1.0.0",
+      "downloadBytes": 35217,
+      "installedBytes": 139069,
+      "sha256": "ec07a0db4ff3088bfd0b0a25b366b7753e96f6f3809aa12afc2d87d3a9a574fe",
+      "releaseMetadataBytes": 534
+    },
+    {
+      "id": "windowSweaters",
+      "version": "1.0.0",
+      "downloadBytes": 48057,
+      "installedBytes": 152454,
+      "sha256": "55134f119c0e155fd65e21fa198651e1c275116aa8797e9530047d109126290b",
+      "releaseMetadataBytes": 543
+    }
+  ],
+  "allExtensionPackages": {
+    "downloadBytes": 7587608,
+    "installedBytes": 21794303,
+    "releaseMetadataBytes": 4801,
+    "releaseAssetBytes": 7592409
+  },
+  "appWithAllExtensions": {
+    "installedBytes": 117490317,
+    "comparisonZipAndPackageBytes": 52529473
+  },
+  "measurement": {
+    "baselineSourceCommit": "9c6b7ae8a4827578c99dbe5a3df433a19293311b",
+    "appSourceCommit": "3027ca05b00bcccb004cf4513a38a093b53669e8",
+    "packageSource": "https://github.com/pulkitxm/edith/actions/runs/37842032187",
+    "architecture": "arm64",
+    "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
+    "installedMethod": "Logical file bytes, excluding filesystem block rounding, receipts, caches, models, user data and retained previous versions."
+  }
+}
