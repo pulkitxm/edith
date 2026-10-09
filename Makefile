@@ -186,6 +186,10 @@ ci-extension-workers:
 	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostLifecycleHarness
 	bun scripts/test-extension-workers.mjs $(EXTENSION)
 
+.PHONY: ci-privileged-worker
+ci-privileged-worker:
+	python3 -B scripts/test-privileged-extension-worker.py
+
 .PHONY: ci-music-native
 ci-music-native:
 	cargo fmt --manifest-path Extensions/music/Native/Cargo.toml --check
