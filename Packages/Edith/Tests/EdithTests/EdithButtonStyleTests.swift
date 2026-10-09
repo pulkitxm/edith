@@ -33,13 +33,23 @@ import Testing
         }
     }
 
-    @Test func featureOwnedRolesPreserveTheirLabelSize() {
-        for role in [EdithButtonRole.iconOnly, .toolbar, .borderless] {
+    @Test func borderlessLabelsPreserveTheirSize() {
+        for role in [EdithButtonRole.borderless] {
             let label = CGSize(width: 10, height: 10)
             let size = EdithButtonMetrics.metrics(for: role).visibleSize(
                 label: label)
             #expect(role.usesFeatureAppearance)
             #expect(size == label)
+        }
+    }
+
+    @Test func smallToolbarIconsHaveUsableTargets() {
+        for role in [EdithButtonRole.iconOnly, .toolbar] {
+            let size = EdithButtonMetrics.metrics(for: role).visibleSize(
+                label: CGSize(width: 10, height: 10))
+            #expect(!role.usesFeatureAppearance)
+            #expect(size.width >= 28)
+            #expect(size.height >= 28)
         }
     }
 

@@ -113,7 +113,8 @@ public struct CodeStatsSeries: Codable, Equatable, Sendable {
     public var values: [CodeStatsSeriesValue]
 }
 
-public struct CodeStatsRepositorySummary: Codable, Equatable, Sendable {
+public struct CodeStatsRepositorySummary: Codable, Equatable, Identifiable, Sendable {
+    public var id: String { repository }
     public var repository: String
     public var commits: Int
     public var counts: CodeStatsLanguageCounts

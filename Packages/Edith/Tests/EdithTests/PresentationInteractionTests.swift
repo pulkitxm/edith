@@ -53,6 +53,50 @@ import Testing
         #expect(!monitor.shouldDismiss(for: try mouse(in: parent, at: outside)))
     }
 
+    @Test func escapeNavigatesTheAgentStepsBeforeClosing() throws {
+        let parent = TestWindowHost.window(
+            contentRect: NSRect(x: 0, y: 0, width: 900, height: 700),
+            styleMask: [.titled])
+        let sheet = TestWindowHost.window(
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 380),
+            styleMask: [.titled])
+        let monitor = SheetDismissalView()
+        sheet.contentView = monitor
+        parent.orderBack(nil)
+        parent.beginSheet(sheet)
+        sheet.makeKey()
+        defer {
+            monitor.stopMonitoring()
+            parent.endSheet(sheet)
+            sheet.orderOut(nil)
+            parent.orderOut(nil)
+        }
+        let model = HerdrNewAgentPopupModel()
+        model.step = .space
+        var dismissals = 0
+        monitor.onEscape = {
+            if !model.back() { dismissals += 1 }
+        }
+        monitor.dismiss = { dismissals += 1 }
+        let escape = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero,
+                modifierFlags: [], timestamp: 0, windowNumber: sheet.windowNumber, context: nil,
+                characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false,
+                keyCode: 53))
+        #expect(monitor.shouldDismiss(for: escape))
+        NSApp.sendEvent(escape)
+        #expect(model.step == .machine)
+        #expect(dismissals == 0)
+        NSApp.sendEvent(escape)
+        #expect(model.step == .kind)
+        #expect(dismissals == 0)
+        NSApp.sendEvent(escape)
+        #expect(dismissals == 1)
+        monitor.dismissible = false
+        #expect(!monitor.shouldDismiss(for: escape))
+    }
+
     @Test func disclosureRespondsAcrossLabelWhitespaceAndChevron() async throws {
         let probe = DisclosureProbe()
         let host = NSHostingView(rootView: DisclosureFixture(probe: probe))

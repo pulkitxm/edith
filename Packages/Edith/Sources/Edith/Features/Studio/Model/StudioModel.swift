@@ -101,6 +101,7 @@ final class StudioModel {
     var selection: Set<URL> = []
     var kindFilter: StudioKind?
     var toolQuery = ""
+    var toolFilter: StudioToolFilter = .all
     var toolFamily: StudioKind?
     var facts: [URL: StudioFileFacts] = [:]
     var jobs: [StudioJob] = []

@@ -279,6 +279,7 @@ final class StudioPDFEditorModel {
             var created: PDFAnnotation?
             mutate { created = $0.addText(text, in: bounds, page: page, style: style) }
             selected = created
+            tool = .select
         case .note:
             mutate { $0.addNote(pendingText, at: point, page: page, color: style.color) }
         case .image, .signature:
@@ -292,10 +293,18 @@ final class StudioPDFEditorModel {
             let height = width * Double(image.height) / Double(max(image.width, 1))
             let rect = CGRect(
                 x: point.x - width / 2, y: point.y - height / 2, width: width, height: height)
-            mutate { _ = $0.place(image, in: rect, page: page) }
+            placeImage(image, in: rect, page: page)
         default:
             break
         }
+    }
+
+    private func placeImage(_ image: CGImage, in rect: CGRect, page: Int) {
+        mutate { session in
+            guard session.place(image, in: rect, page: page) != nil else { return }
+            selected = session.page(page)?.annotations.last
+        }
+        tool = .select
     }
 
     func drag(from start: CGPoint, to end: CGPoint, page: Int) {
@@ -341,7 +350,7 @@ final class StudioPDFEditorModel {
                 click(at: start, page: page)
                 return
             }
-            mutate { _ = $0.place(image, in: rect, page: page) }
+            placeImage(image, in: rect, page: page)
         default:
             break
         }

@@ -21,6 +21,10 @@ enum PageMetrics {
         DashSkin.heading(compact ? compactTitleSize : titleSize)
     }
 
+    static func tableNameWidth(viewport: CGFloat, fixedWidth: Double, columnCount: Int) -> CGFloat {
+        max(UIScale.pt(140), viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16))
+    }
+
     static func cardColumns(
         _ compact: Bool, minimum: Double, maximum: Double = .infinity,
         spacing: Double? = nil, alignment: Alignment = .center
@@ -51,9 +55,12 @@ enum PageContentWidth {
 struct PageScaffold<Header: View, Content: View>: View {
     var width: PageContentWidth = .fluid
     var pinnedHeader = false
+    var scrollIdentity = ""
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
+    @Environment(\.pageLocation) private var location
+    @Environment(\.windowSessionOwner) private var sessions
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,12 +68,21 @@ struct PageScaffold<Header: View, Content: View>: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if !pinnedHeader { header() }
-                    VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing))
+                    {
                         content()
                     }
                     .pageContent(compact, width: width)
                 }
+                .background {
+                    if let location, let sessions {
+                        PageScrollPosition(
+                            positions: sessions.scrollPositions,
+                            key: location + "/" + scrollIdentity)
+                    }
+                }
             }
+            .scrollIndicators(.automatic)
         }
         .pageSurface()
     }
@@ -232,7 +248,7 @@ struct PageSectionHeader<Trailing: View>: View {
                 ScrollView(.horizontal) {
                     trailing()
                 }
-                .scrollIndicators(.hidden)
+                .scrollIndicators(.automatic)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -241,10 +257,10 @@ struct PageSectionHeader<Trailing: View>: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
             Text(title)
-                .font(.system(size: UIScale.pt(15), weight: .semibold))
+                .font(.edithText(.headline))
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: UIScale.pt(11)))
+                    .font(.edithText(.caption))
                     .foregroundStyle(.secondary)
             }
         }
@@ -282,7 +298,7 @@ struct PageHeader<Title: View, Trailing: View, Accessory: View>: View {
                     ScrollView(.horizontal) {
                         trailing()
                     }
-                    .scrollIndicators(.hidden)
+                    .scrollIndicators(.automatic)
                 }
             }
             accessory()

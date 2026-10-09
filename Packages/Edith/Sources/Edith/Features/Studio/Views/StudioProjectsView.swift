@@ -9,7 +9,7 @@ struct StudioProjectsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: UIScale.pt(22)) {
+            LazyVStack(alignment: .leading, spacing: UIScale.pt(22)) {
                 VStack(alignment: .leading, spacing: UIScale.pt(10)) {
                     PageSectionHeader(
                         "Video projects",
@@ -113,7 +113,8 @@ struct StudioProjectsView: View {
                     }
                 }
             }
-            .pageContent(compact, width: .readable)
+            .pageContent(compact)
+            .pageScrollPosition("studio/projects")
         }
         .pageTask { model.refreshProjects() }
     }

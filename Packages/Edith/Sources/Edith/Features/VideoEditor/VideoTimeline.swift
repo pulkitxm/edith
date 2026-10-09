@@ -5,6 +5,7 @@ struct VideoTimeline: View {
     let model: VideoEditorModel
     @State private var scale = 80.0
     @State private var snapping = true
+    @Environment(\.compactLayout) private var compact
 
     private struct Item: Identifiable {
         let id: String
@@ -16,21 +17,20 @@ struct VideoTimeline: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
+        let canDelete = model.selection != nil
+        return VStack(spacing: 0) {
+            WrapHStack(spacing: UIScale.pt(12)) {
                 Label("Timeline", systemImage: "rectangle.stack").font(.edithText(.headline))
+                    .fixedSize().help("Drag to move · edges to trim")
                 Button("Split", systemImage: "scissors", action: model.splitAtPlayhead)
                 Button("Delete", systemImage: "trash", action: model.deleteSelection)
-                    .disabled(model.selection == nil)
+                    .disabled(!canDelete)
                 Toggle("Snap", isOn: $snapping).toggleStyle(.button)
-                Spacer()
-                Text("Drag to move · edges to trim").font(.edithText(.caption)).foregroundStyle(
-                    .secondary)
                 Button("Fit") { scale = max(8, min(180, 900 / max(1, model.duration))) }
                 Slider(value: $scale, in: 8...240).frame(width: UIScale.pt(110)).accessibilityLabel(
                     "Timeline scale")
             }
-            .buttonStyle(.edith(.borderless)).padding(12)
+            .buttonStyle(.edith(.toolbar)).padding(UIScale.pt(12))
             Divider()
             ScrollView([.horizontal, .vertical]) {
                 let width = max(900, model.duration * scale + 80)
@@ -67,7 +67,10 @@ struct VideoTimeline: View {
             }
             .coordinateSpace(name: "editTimeline")
         }
-        .frame(minHeight: UIScale.pt(100), idealHeight: UIScale.pt(200), maxHeight: UIScale.pt(280))
+        .frame(
+            minHeight: UIScale.pt(compact ? 200 : 100),
+            idealHeight: UIScale.pt(compact ? 260 : 200),
+            maxHeight: UIScale.pt(320))
     }
 
     private func ruler(width: Double) -> some View {

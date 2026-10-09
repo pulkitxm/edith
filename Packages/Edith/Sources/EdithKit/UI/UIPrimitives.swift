@@ -13,9 +13,9 @@ public enum EdithButtonRole: Sendable, CaseIterable, Hashable {
 
     var usesFeatureAppearance: Bool {
         switch self {
-        case .borderless, .toolbar, .iconOnly:
+        case .borderless:
             true
-        case .primary, .secondary, .destructive, .row, .selection:
+        case .primary, .secondary, .destructive, .row, .selection, .toolbar, .iconOnly:
             false
         }
     }
@@ -34,10 +34,14 @@ struct EdithButtonMetrics: Equatable, Sendable {
             Self(
                 horizontalPadding: 12, verticalPadding: 6, minimumWidth: 32,
                 minimumHeight: 32, cornerRadius: 7)
-        case .borderless, .toolbar, .iconOnly:
+        case .borderless:
             Self(
                 horizontalPadding: 0, verticalPadding: 0, minimumWidth: 0,
                 minimumHeight: 0, cornerRadius: 6)
+        case .toolbar, .iconOnly:
+            Self(
+                horizontalPadding: 6, verticalPadding: 4, minimumWidth: 28,
+                minimumHeight: 28, cornerRadius: 6)
         case .row, .selection:
             Self(
                 horizontalPadding: 9, verticalPadding: 7, minimumWidth: 32,
@@ -140,7 +144,14 @@ private struct EdithButtonBody<Label: View>: View {
     @ViewBuilder var body: some View {
         if role.usesFeatureAppearance {
             label
+                .overlay {
+                    if focused, enabled {
+                        shape.strokeBorder(resolvedTint.opacity(0.8), lineWidth: 2)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .contentShape(Rectangle())
+                .opacity(enabled ? 1 : 0.42)
                 .accessibilityAddTraits(selected ? .isSelected : AccessibilityTraits())
         } else {
             label
@@ -173,6 +184,8 @@ private struct EdithButtonBody<Label: View>: View {
         switch role {
         case .primary, .destructive:
             return .white
+        case .toolbar, .iconOnly:
+            return tint ?? .primary
         default:
             return .primary
         }

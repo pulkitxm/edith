@@ -4,6 +4,8 @@ import Observation
 
 @MainActor @Observable
 final class BlitzTreeModel {
+    var list = BlitzTreeList.children
+    var rings = false
     private(set) var report: BlitzTreeReport?
     let loading = ContentLoad()
     var scanning: Bool { loading.isRunning }

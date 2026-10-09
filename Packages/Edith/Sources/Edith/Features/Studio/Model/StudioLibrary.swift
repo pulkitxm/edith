@@ -162,18 +162,20 @@ enum StudioThumbnailFallback {
     static func render(_ url: URL, pixels: Int) async -> StudioImageSource? {
         switch url.studioKind {
         case .image:
-            return (try? StudioImageIO.load(url, maxPixelSize: pixels)).map(StudioImageSource.init)
+            return (try? StudioImageIO.load(url, maxPixelSize: pixels)).map {
+                StudioImageSource(image: $0)
+            }
         case .pdf:
             guard let page = PDFDocument(url: url)?.page(at: 0) else { return nil }
             let size = StudioPDF.displaySize(page)
             let dpi = 72 * Double(pixels) / max(size.width, size.height, 1)
-            return (try? StudioPDF.render(page, dpi: dpi)).map(StudioImageSource.init)
+            return (try? StudioPDF.render(page, dpi: dpi)).map { StudioImageSource(image: $0) }
         case .video:
             let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
             generator.appliesPreferredTrackTransform = true
             generator.maximumSize = CGSize(width: pixels, height: pixels)
             let time = CMTime(seconds: 0.5, preferredTimescale: 600)
-            return (try? await generator.image(at: time).image).map(StudioImageSource.init)
+            return (try? await generator.image(at: time).image).map { StudioImageSource(image: $0) }
         default:
             return nil
         }

@@ -3,6 +3,8 @@ import SwiftUI
 
 struct MachineProcessRowsSkeleton: View {
     var rows = 8
+    var showsActions = true
+    @Environment(\.compactLayout) private var compact
 
     var body: some View {
         SkeletonGroup {
@@ -10,22 +12,24 @@ struct MachineProcessRowsSkeleton: View {
                 ForEach(0..<rows, id: \.self) { index in
                     HStack(spacing: UIScale.pt(10)) {
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
-                            SkeletonBlock(
-                                width: index.isMultiple(of: 3) ? 112 : 168,
-                                height: 10,
-                                corner: 2
-                            )
-                            SkeletonBlock(width: index.isMultiple(of: 2) ? 214 : 276, height: 8)
+                            SkeletonBlock(height: 10, corner: 2)
+                                .frame(maxWidth: UIScale.pt(index.isMultiple(of: 3) ? 112 : 168))
+                            SkeletonBlock(height: 8)
+                                .frame(maxWidth: UIScale.pt(index.isMultiple(of: 2) ? 214 : 276))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        SkeletonBlock(width: 58, height: 9)
-                            .frame(width: UIScale.pt(80), alignment: .leading)
+                        if !compact {
+                            SkeletonBlock(width: 58, height: 9)
+                                .frame(width: UIScale.pt(100), alignment: .leading)
+                        }
                         SkeletonBlock(width: 34, height: 9)
-                            .frame(width: UIScale.pt(56), alignment: .trailing)
+                            .frame(width: UIScale.pt(64), alignment: .trailing)
                         SkeletonBlock(width: 52, height: 9)
-                            .frame(width: UIScale.pt(80), alignment: .trailing)
-                        SkeletonBlock(width: 12, height: 12, corner: 6)
-                            .frame(width: UIScale.pt(20))
+                            .frame(width: UIScale.pt(90), alignment: .trailing)
+                        if showsActions {
+                            SkeletonBlock(width: 12, height: 12, corner: 6)
+                                .frame(width: UIScale.pt(44))
+                        }
                     }
                     .padding(.vertical, UIScale.pt(6))
                     .padding(.horizontal, UIScale.pt(4))
