@@ -43,8 +43,9 @@ public enum IPC {
     public static func observe(_ name: Name, info: @escaping ([AnyHashable: Any]) -> Void)
         -> NSObjectProtocol
     {
-        NotificationCenter.default.addObserver(forName: name.notification, object: nil, queue: nil)
-        {
+        NotificationCenter.default.addObserver(
+            forName: name.notification, object: nil, queue: .main
+        ) {
             info($0.userInfo ?? [:])
         }
     }
