@@ -336,14 +336,22 @@ enum SEOAuditStage: Equatable, Sendable {
 struct SEOAuditURLInput {
     static func normalize(_ input: String) -> URL? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        if let url = URL(string: trimmed), ["http", "https"].contains(url.scheme?.lowercased()) {
-            return url
+        guard !trimmed.isEmpty, trimmed.utf8.count <= 4_096, !trimmed.utf8.contains(0) else {
+            return nil
         }
-        let scheme =
-            trimmed.hasPrefix("localhost") || trimmed.hasPrefix("127.0.0.1")
-            ? "http" : "https"
-        return URL(string: "\(scheme)://\(trimmed)")
+        let candidate: String
+        if trimmed.contains("://") {
+            candidate = trimmed
+        } else {
+            let scheme =
+                trimmed.hasPrefix("localhost") || trimmed.hasPrefix("127.0.0.1") ? "http" : "https"
+            candidate = "\(scheme)://\(trimmed)"
+        }
+        guard let url = URL(string: candidate),
+            ["http", "https"].contains(url.scheme?.lowercased()),
+            let host = url.host, !host.isEmpty, url.user == nil, url.password == nil
+        else { return nil }
+        return url
     }
 
     static func projectName(for url: URL) -> String {

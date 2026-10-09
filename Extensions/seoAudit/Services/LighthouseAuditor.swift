@@ -42,8 +42,12 @@ struct LighthouseAuditor: Sendable {
         }
         do {
             try Task.checkCancellation()
+            guard SEOAuditOwnedIO.safeParents(cacheDirectory, root: cacheDirectory) else {
+                throw CocoaError(.fileWriteInvalidFileName)
+            }
             try FileManager.default.createDirectory(
-                at: cacheDirectory, withIntermediateDirectories: true)
+                at: cacheDirectory, withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
             let output = cacheDirectory.appendingPathComponent("\(UUID().uuidString).json")
             defer { try? FileManager.default.removeItem(at: output) }
             let result = try await run(
@@ -82,14 +86,10 @@ struct LighthouseAuditor: Sendable {
     }
 
     static func scores(fromReport url: URL) throws -> SEOAuditScores {
-        let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-        guard values.isRegularFile == true, let size = values.fileSize,
-            size <= maximumReportBytes
+        guard
+            let data = SEOAuditOwnedIO.read(
+                url, root: url.deletingLastPathComponent(), limit: maximumReportBytes)
         else { throw CocoaError(.fileReadTooLarge) }
-        let handle = try FileHandle(forReadingFrom: url)
-        defer { try? handle.close() }
-        let data = try handle.read(upToCount: maximumReportBytes + 1) ?? Data()
-        guard data.count <= maximumReportBytes else { throw CocoaError(.fileReadTooLarge) }
         return try scores(from: data)
     }
 

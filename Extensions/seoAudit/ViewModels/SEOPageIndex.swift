@@ -20,9 +20,18 @@ struct SEOPageIndexSnapshot: Sendable {
 enum SEOPageIndex {
     static var recordThread: (@Sendable () -> Void)?
 
+    static func work<T: Sendable>(_ operation: @escaping @Sendable () -> T) async -> T {
+        let task = Task.detached(priority: .utility, operation: operation)
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
     static func build(project: SEOAuditProject?, runID: UUID?) -> SEOPageIndexSnapshot {
         recordThread?()
-        guard let project else { return .empty }
+        guard let project, !Task.isCancelled else { return .empty }
         let run =
             runID.flatMap { id in project.runs.first { $0.id == id } } ?? project.latestRun
         guard let run else { return .empty }
@@ -36,6 +45,7 @@ enum SEOPageIndex {
         }
         var history: [String: [SEOAuditPageResult]] = [:]
         for previous in project.runs where previous.id != run.id {
+            guard !Task.isCancelled else { return .empty }
             for page in previous.pages {
                 history[page.url, default: []].append(page)
             }
@@ -54,6 +64,7 @@ enum SEOPageIndex {
         var ids: [UUID] = []
         ids.reserveCapacity(entries.count)
         for entry in entries {
+            guard !Task.isCancelled else { return [] }
             if !trimmed.isEmpty,
                 !entry.url.localizedCaseInsensitiveContains(trimmed),
                 !entry.title.localizedCaseInsensitiveContains(trimmed)

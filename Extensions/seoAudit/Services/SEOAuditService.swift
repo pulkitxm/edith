@@ -236,8 +236,9 @@ final class SEOAuditService {
         let draft = try await workflow.draft(id)
         let urls = SEOAuditSelection.auditURLs(
             discovered: draft.discoveredPageURLs, selected: Set(draft.selectedPageURLs))
-        guard !urls.isEmpty else {
-            throw SEOAuditInputError("Select at least one page to audit.")
+        guard !urls.isEmpty, urls.count <= SEOAuditWorkflow.maximumPages else {
+            throw SEOAuditInputError(
+                "Select between one and \(SEOAuditWorkflow.maximumPages) pages to audit.")
         }
         try requireIdle(id)
         let request = SEOAuditTaskRequest(
@@ -316,18 +317,20 @@ final class SEOAuditService {
         let gate = gate
         let total = request.urls.count
         let url = request.urls.first?.absoluteString ?? ""
+        let owner = self
         let job = submit(
             projectID: request.projectID, kind: scoresOnly ? .lighthouse : .audit,
             stage: scoresOnly
                 ? .lighthouse(url: url) : .auditing(current: 0, total: total, url: "Queued"),
             runID: request.runID, state: .queued
-        ) { [weak self] in
+        ) { [owner] in
             try await gate.acquire()
             do {
-                await self?.markRunning(request.projectID)
+                await owner.markRunning(request.projectID)
                 let project = try await workflow.run(request, scoresOnly: scoresOnly) {
                     progress in
-                    Task { @MainActor [weak self] in self?.report(progress, scoresOnly: scoresOnly)
+                    Task { @MainActor [weak owner] in
+                        owner?.report(progress, scoresOnly: scoresOnly)
                     }
                 }
                 await gate.release()

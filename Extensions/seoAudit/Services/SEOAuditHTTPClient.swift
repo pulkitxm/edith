@@ -1,12 +1,15 @@
 import Foundation
 
 final class SEOAuditHTTPClient: @unchecked Sendable {
-    private let delegate = Delegate()
+    private let delegate: Delegate
+    private let restrictToLoopback: Bool
     private let session: URLSession
     private let lock = NSLock()
     private var stopped = false
 
-    init(configuration: URLSessionConfiguration = .ephemeral) {
+    init(configuration: URLSessionConfiguration = .ephemeral, restrictToLoopback: Bool = false) {
+        self.restrictToLoopback = restrictToLoopback
+        delegate = Delegate(restrictToLoopback: restrictToLoopback)
         let configuration = configuration.copy() as! URLSessionConfiguration
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
@@ -17,7 +20,9 @@ final class SEOAuditHTTPClient: @unchecked Sendable {
     deinit { shutdown() }
 
     func data(for request: URLRequest, maximumBytes: Int) async throws -> (Data, URLResponse) {
-        guard Self.allowed(request.url), maximumBytes > 0, maximumBytes <= 25 * 1_024 * 1_024 else {
+        guard Self.allowed(request.url, restrictToLoopback: restrictToLoopback), maximumBytes > 0,
+            maximumBytes <= 25 * 1_024 * 1_024
+        else {
             throw SEOAuditInputError("Unsupported site request.")
         }
         let waiter = Waiter()
@@ -46,12 +51,13 @@ final class SEOAuditHTTPClient: @unchecked Sendable {
         delegate.finishAll(); session.invalidateAndCancel()
     }
 
-    static func allowed(_ url: URL?) -> Bool {
+    static func allowed(_ url: URL?, restrictToLoopback: Bool = false) -> Bool {
         guard let url, ["http", "https"].contains(url.scheme?.lowercased()),
             let host = url.host, !host.isEmpty, url.user == nil, url.password == nil,
             url.absoluteString.utf8.count <= 4_096
         else { return false }
-        return true
+        return !restrictToLoopback
+            || ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host.lowercased())
     }
 
     private final class Waiter: @unchecked Sendable {
@@ -79,6 +85,8 @@ final class SEOAuditHTTPClient: @unchecked Sendable {
             var bytes = Data()
             var response: URLResponse?
         }
+        private let restrictToLoopback: Bool
+        init(restrictToLoopback: Bool) { self.restrictToLoopback = restrictToLoopback }
         private let lock = NSLock()
         private var flights: [Int: Flight] = [:]
 
@@ -104,7 +112,7 @@ final class SEOAuditHTTPClient: @unchecked Sendable {
             willPerformHTTPRedirection response: HTTPURLResponse,
             newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
         ) {
-            if SEOAuditHTTPClient.allowed(request.url) {
+            if SEOAuditHTTPClient.allowed(request.url, restrictToLoopback: restrictToLoopback) {
                 completionHandler(request)
             } else {
                 completionHandler(nil);
@@ -119,7 +127,8 @@ final class SEOAuditHTTPClient: @unchecked Sendable {
         ) {
             let accepted = lock.withLock { () -> Bool in
                 guard var flight = flights[dataTask.taskIdentifier],
-                    SEOAuditHTTPClient.allowed(response.url),
+                    SEOAuditHTTPClient.allowed(
+                        response.url, restrictToLoopback: restrictToLoopback),
                     response.expectedContentLength <= flight.maximumBytes
                 else { return false }
                 flight.response = response; flights[dataTask.taskIdentifier] = flight; return true

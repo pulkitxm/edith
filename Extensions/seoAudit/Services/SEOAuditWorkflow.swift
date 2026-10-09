@@ -54,6 +54,7 @@ actor SEOAuditWorkflow {
 
     func recoverInterruptedRuns() throws {
         for summary in try repository.loadSummaries() {
+            try Task.checkCancellation()
             guard var project = try? repository.loadProject(id: summary.id),
                 !active.contains(project.id)
             else { continue }

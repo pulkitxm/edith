@@ -22,10 +22,16 @@ struct SEOAuditRepository {
 
     func loadProject(id: UUID) throws -> SEOAuditProject {
         let file = projectFile(id: id)
-        return try decoder.decode(SEOAuditProject.self, from: read(file))
+        let project = try decoder.decode(SEOAuditProject.self, from: read(file))
+        try validate(project)
+        guard project.id == id else {
+            throw SEOAuditInputError("That project file has an invalid identity.")
+        }
+        return project
     }
 
     func save(_ project: SEOAuditProject) throws {
+        try validate(project)
         try validate(root)
         try fileManager.createDirectory(
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -67,6 +73,26 @@ struct SEOAuditRepository {
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try SEOAuditOwnedIO.write(
             encoder.encode(summaries), to: root.appendingPathComponent("projects.json"), root: root)
+    }
+
+    private func validate(_ project: SEOAuditProject) throws {
+        guard !project.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            project.name.utf8.count <= 1_024,
+            SEOAuditURLInput.normalize(project.baseURL)?.absoluteString == project.baseURL,
+            project.updatedAt.timeIntervalSince1970.isFinite, project.runs.count <= 10_000,
+            Set(project.runs.map(\.id)).count == project.runs.count
+        else { throw SEOAuditInputError("That project contains invalid saved audit data.") }
+        var count = 0
+        for run in project.runs {
+            count += run.pages.count
+            guard count <= 100_000, Set(run.pages.map(\.id)).count == run.pages.count,
+                run.startedAt.timeIntervalSince1970.isFinite,
+                run.pages.allSatisfy({
+                    SEOAuditURLInput.normalize($0.url)?.absoluteString == $0.url && $0.bytes >= 0
+                        && $0.auditedAt.timeIntervalSince1970.isFinite
+                })
+            else { throw SEOAuditInputError("That project contains invalid saved audit pages.") }
+        }
     }
 
     private func validate(_ directory: URL) throws {

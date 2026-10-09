@@ -22,6 +22,27 @@ import Testing
         #expect(try repository.loadProject(id: project.id) == original)
     }
 
+    @Test func malformedSavedIdentitiesCannotReachThePageIndex() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repository = SEOAuditRepository(root: root)
+        let page = SEOAuditPageResult(
+            url: "https://synthetic.example.invalid/page", statusCode: 200, responseMilliseconds: 1,
+            bytes: 10, metadata: .empty, issues: [])
+        let duplicate = SEOAuditProject(
+            name: "Synthetic", baseURL: "https://synthetic.example.invalid",
+            runs: [.init(state: .completed, pages: [page, page])])
+        #expect(throws: SEOAuditInputError.self) { try repository.save(duplicate) }
+        let project = SEOAuditProject(
+            name: "Synthetic", baseURL: "https://synthetic.example.invalid")
+        try repository.save(project)
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let file = root.appendingPathComponent(
+            "project-" + project.id.uuidString.lowercased() + ".json")
+        try encoder.encode(duplicate).write(to: file)
+        #expect(throws: SEOAuditInputError.self) { try repository.loadProject(id: project.id) }
+    }
+
     @Test func stateReadsRejectOversizedAndSymbolicFiles() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

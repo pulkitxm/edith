@@ -78,6 +78,7 @@ actor SEOAuditImageStore {
                 "\(digest).\(fileExtension(mimeType: mimeType, source: source))")
             try Task.checkCancellation()
             try SEOAuditOwnedIO.write(data, to: file, root: root)
+            if cachedURLs.count >= 2_048 { cachedURLs.removeAll(keepingCapacity: true) }
             cachedURLs[cacheKey] = file
             return file
         } catch {

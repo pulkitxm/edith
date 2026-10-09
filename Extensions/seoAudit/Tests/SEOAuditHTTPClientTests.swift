@@ -38,6 +38,22 @@ import Testing
         }
     }
 
+    @Test func isolatedFixturesAdmitOnlyLoopbackAndRejectExternalRequests() async throws {
+        #expect(
+            SEOAuditHTTPClient.allowed(
+                URL(string: "http://127.0.0.1:3210/page"), restrictToLoopback: true))
+        #expect(
+            SEOAuditHTTPClient.allowed(
+                URL(string: "http://localhost/page"), restrictToLoopback: true))
+        let client = SEOAuditHTTPClient(restrictToLoopback: true)
+        defer { client.shutdown() }
+        await #expect(throws: SEOAuditInputError.self) {
+            _ = try await client.data(
+                for: URLRequest(url: URL(string: "https://example.invalid/page")!), maximumBytes: 16
+            )
+        }
+    }
+
     @Test func rejectsFileAndCredentialBearingURLs() async throws {
         let client = makeClient()
         defer { client.shutdown() }
