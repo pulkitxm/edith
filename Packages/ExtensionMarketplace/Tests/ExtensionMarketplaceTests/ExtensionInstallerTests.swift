@@ -18,20 +18,27 @@ struct PackageFixture {
 
     func archive(
         _ version: String = "1.0.0", hostABI: String = "host-1", id: String = "keepAwake",
-        unsafePath: String? = nil, symlink: Bool = false
+        unsafePath: String? = nil, symlink: Bool = false, carrier: Bool = false
     ) throws -> (ExtensionPackage, URL) {
         let placeholder = fixturePackage(id, version: version, hostABI: hostABI)
         let manifest = try JSONEncoder().encode(ExtensionPayloadManifest(package: placeholder))
         let source = directory.appendingPathComponent(
             "\(id)-\(hostABI)-\(version)-\(UUID().uuidString).zip")
         let zip = try Archive(url: source, accessMode: .create)
-        let entries: [(String, Data)] = [
+        var entries: [(String, Data)] = [
             ("\(id)/package.json", manifest),
             (
                 unsafePath ?? "\(id)/helper.bundle/Contents/MacOS/Runtime",
                 Data("fixture runtime \(version)".utf8)
             ),
         ]
+        if carrier {
+            entries.append(
+                (
+                    "\(id)/CameraCarrier.app/Contents/MacOS/Edith",
+                    Data("sealed fixture carrier".utf8)
+                ))
+        }
         for (path, bytes) in entries {
             try zip.addEntry(
                 with: path, type: symlink && path != entries[0].0 ? .symlink : .file,
@@ -296,4 +303,34 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     try fixture.store.prune(hostABI: "host-4")
     #expect(try fixture.store.installedPackages() == [current.0])
     #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: second.0).path))
+}
+
+@Test func sealedCameraCarrierIsAcceptedOnlyForItsOwningPackage() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (camera, cameraArchive) = try fixture.archive(id: "virtualCamera", carrier: true)
+    _ = try await fixture.installer(archives: [camera.downloadURL: cameraArchive]).install(
+        [camera], repository: "example/app")
+    #expect(
+        FileManager.default.fileExists(
+            atPath: fixture.store.directory(for: camera)
+                .appendingPathComponent("virtualCamera/CameraCarrier.app/Contents/MacOS/Edith").path
+        ))
+    let (other, otherArchive) = try fixture.archive(id: "calendar", carrier: true)
+    await #expect(throws: MarketplaceError.invalidArchive) {
+        try await fixture.installer(archives: [other.downloadURL: otherArchive]).install(
+            [other], repository: "example/app")
+    }
+    #expect(try fixture.store.installedPackages() == [camera])
+}
+
+@Test func carrierSymlinksRemainRejected() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (camera, archive) = try fixture.archive(id: "virtualCamera", symlink: true, carrier: true)
+    await #expect(throws: MarketplaceError.invalidArchive) {
+        try await fixture.installer(archives: [camera.downloadURL: archive]).install(
+            [camera], repository: "example/app")
+    }
+    #expect(try fixture.store.installedPackages().isEmpty)
 }

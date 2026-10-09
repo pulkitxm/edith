@@ -75,7 +75,9 @@ public final class HostMarketplace {
                 verify: { directory in
                     for bundle in try FileManager.default.contentsOfDirectory(
                         at: directory, includingPropertiesForKeys: nil)
-                    where bundle.pathExtension == "bundle" {
+                    where bundle.pathExtension == "bundle"
+                        || bundle.lastPathComponent == "CameraCarrier.app"
+                    {
                         try ExtensionCodeSignature.verifyDevelopment(bundle)
                     }
                 })
