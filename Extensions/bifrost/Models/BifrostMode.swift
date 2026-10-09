@@ -57,14 +57,17 @@ public struct BifrostDetail: Equatable, Sendable {
     public let title: String
     public let rows: [BifrostDetailRow]
     public let imagePath: String?
+    public let clipboardPreviewID: String?
     public let text: String?
 
     public init(
-        title: String, rows: [BifrostDetailRow], imagePath: String? = nil, text: String? = nil
+        title: String, rows: [BifrostDetailRow], imagePath: String? = nil, text: String? = nil,
+        clipboardPreviewID: String? = nil
     ) {
         self.title = title
         self.rows = rows
         self.imagePath = imagePath
+        self.clipboardPreviewID = clipboardPreviewID
         self.text = text
     }
 }

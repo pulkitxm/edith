@@ -11,6 +11,7 @@ import Foundation
     private var stopped = false
 
     init() {
+        BifrostClipboardPreviewService.shared.resume()
         if BifrostFixture.enabled {
             SharedDefaults.store.set(true, forKey: AppStorageKeys.Bifrost.enabled)
             BifrostIndexStore.shared.save(
@@ -22,7 +23,7 @@ import Foundation
             BifrostPanel.shared.toggle()
         }
         hostObserver = ExtensionSharedState.current?.observe { owner in
-            guard owner == "host" else { return }
+            guard owner == "host" || owner == "presenter" else { return }
             Task { @MainActor in BifrostIPC.post(BifrostIPC.Name.settingsChanged) }
         }
         configureHotKey()
@@ -37,7 +38,10 @@ import Foundation
         HotKeyRegistrar.install("bifrost") { BifrostPanel.shared.toggle() }
     }
 
-    func prepareDisable() async throws { try await store.prepareDisable() }
+    func prepareDisable() async throws {
+        try await store.prepareDisable()
+        await BifrostClipboardPreviewService.shared.shutdown()
+    }
 
     func shutdown() {
         guard !stopped else { return }; stopped = true

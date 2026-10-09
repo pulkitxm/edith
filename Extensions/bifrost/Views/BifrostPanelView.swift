@@ -335,6 +335,7 @@ struct BifrostPanelView: View {
 
 struct BifrostDetailPane: View {
     let detail: BifrostDetail?
+    @State private var loadedPreview: (id: String, data: Data)?
 
     var body: some View {
         ScrollView(.vertical) {
@@ -367,11 +368,21 @@ struct BifrostDetailPane: View {
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .task(id: detail?.clipboardPreviewID) {
+            loadedPreview = nil
+            guard let id = detail?.clipboardPreviewID else { return }
+            let value = await BifrostClipboardPreviewService.shared.load(id)
+            guard !Task.isCancelled else { return }
+            loadedPreview = value.map { (id, $0) }
+        }
     }
 
     @ViewBuilder
     private func preview(_ detail: BifrostDetail) -> some View {
-        if let path = detail.imagePath, let image = NSImage(contentsOfFile: path) {
+        if let image = (loadedPreview?.id == detail.clipboardPreviewID ? loadedPreview?.data : nil)
+            .flatMap(NSImage.init(data:))
+            ?? detail.imagePath.flatMap({ NSImage(contentsOfFile: $0) })
+        {
             Image(nsImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
