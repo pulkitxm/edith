@@ -135,7 +135,7 @@ let package = Package(
         .target(
             name: "BlitzTreeExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "blitztree", exclude: ["Tests"],
+            path: "blitztree", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "BlitzTreeExtensionTests", dependencies: ["BlitzTreeExtension"],
