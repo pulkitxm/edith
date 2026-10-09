@@ -34,6 +34,8 @@ struct HostLifecycleHarness {
         let identity = try HostIdentity(identifier: identifier, supportDirectory: fixture)
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
         let suite = identity.defaultsSuite
+        UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
+            false, forKey: "windowSweatersActive")
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
