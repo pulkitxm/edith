@@ -154,6 +154,20 @@ import Testing
         }
         let tier = root.appendingPathComponent(".codex/config.toml")
         try Data("service_tier = \"fast\"\napi_key = \"synthetic secret\"\n".utf8).write(to: tier)
+        let git = root.appendingPathComponent("git")
+        let remoteCWD = "C:/Synthetic Projects/Repository's Worktree"
+        let gitFixture = """
+            #!/bin/bash
+            [ "$1" = '-C' ] && [ "$2" = \(POSIXQuote.quote(remoteCWD)) ] || exit 1
+            case "$3" in
+                rev-parse) printf '%s\\n' "D:/Remote Projects/Repository's Root" ;;
+                remote) printf '%s\\n' 'git@example.com:team/repository.git' ;;
+                branch) printf '%s\\n' 'feature/synthetic' ;;
+                *) exit 1 ;;
+            esac
+            """
+        try Data(gitFixture.utf8).write(to: git)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: git.path)
         let output = Pipe(); let errors = Pipe(); let input = Pipe()
         let process = Process(); process.executableURL = try sqlitePython();
         process.arguments = ["-"]
@@ -185,7 +199,12 @@ import Testing
         let projects = try #require(context["projects"] as? [[String: Any]])
         #expect(projects.count == 1)
         #expect(projects.first?["cwd"] as? String == "C:/Synthetic Projects/Repository's Worktree")
-        #expect(projects.first?["root"] as? String == "C:/Synthetic Projects/Repository's Worktree")
+        #expect(projects.first?["root"] as? String == "D:/Remote Projects/Repository's Root")
+        #expect(projects.first?["repositoryID"] as? String == "example.com/team/repository")
+        #expect(projects.first?["repositoryName"] as? String == "repository")
+        #expect(
+            projects.first?["repositoryURL"] as? String == "https://example.com/team/repository")
+        #expect(projects.first?["worktree"] as? String == "feature/synthetic")
         #expect(projects.first?["folderName"] as? String == "Repository's Worktree")
     }
 
