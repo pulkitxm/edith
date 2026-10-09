@@ -232,13 +232,30 @@ public final class CameraSealedInstallation {
     }
 
     private func protectedDirectory(_ directory: URL) throws {
+        if configuration.owner == 0,
+            configuration.destination.path == "/Applications/Edith Extensions",
+            directory.path == configuration.destination.path
+                || directory.path.hasPrefix(configuration.destination.path + "/")
+        {
+            try prepareApplicationsAnchor()
+        }
         guard
             canonical(directory.deletingLastPathComponent())
                 == directory.deletingLastPathComponent().path
         else { throw failure("The camera installation parent path is invalid.") }
         var parent = directory.deletingLastPathComponent()
         while parent.path != "/" {
-            try protectedTree(parent, recursive: false)
+            if parent.path == "/Applications", configuration.owner == 0,
+                configuration.destination.path == "/Applications/Edith Extensions"
+            {
+                var platform = stat(), anchor = stat()
+                guard lstat(parent.path, &platform) == 0,
+                    lstat(configuration.destination.path, &anchor) == 0,
+                    Self.admitsApplicationsParent(platform, anchor: anchor)
+                else { throw failure("The protected camera installation directory is invalid.") }
+            } else {
+                try protectedTree(parent, recursive: false)
+            }
             if parent == configuration.protectedBoundary { break }
             parent.deleteLastPathComponent()
         }
@@ -250,6 +267,50 @@ public final class CameraSealedInstallation {
                 ])
         }
         try protectedTree(directory, recursive: false)
+    }
+
+    static func admitsApplicationsParent(_ platform: stat, anchor: stat) -> Bool {
+        platform.st_uid == 0 && platform.st_gid == 80
+            && [0o755, 0o775].contains(platform.st_mode & 0o7777)
+            && platform.st_mode & S_IFMT == S_IFDIR
+            && anchor.st_uid == 0 && anchor.st_mode & 0o022 == 0
+            && anchor.st_mode & S_IFMT == S_IFDIR
+            && anchor.st_flags & UInt32(SF_NOUNLINK) != 0
+    }
+
+    private func prepareApplicationsAnchor() throws {
+        let parent = open("/Applications", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { throw CocoaError(.fileWriteNoPermission) }
+        defer { close(parent) }
+        var platform = stat()
+        guard fstat(parent, &platform) == 0, platform.st_uid == 0, platform.st_gid == 80,
+            [0o755, 0o775].contains(platform.st_mode & 0o7777),
+            platform.st_mode & S_IFMT == S_IFDIR
+        else { throw CocoaError(.fileWriteNoPermission) }
+        if mkdirat(parent, "Edith Extensions", 0o755) != 0, errno != EEXIST {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+        let descriptor = openat(
+            parent, "Edith Extensions", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { throw CocoaError(.fileWriteNoPermission) }
+        defer { close(descriptor) }
+        var anchor = stat()
+        guard fstat(descriptor, &anchor) == 0, anchor.st_uid == 0,
+            anchor.st_mode & S_IFMT == S_IFDIR, anchor.st_mode & 0o022 == 0
+        else { throw CocoaError(.fileWriteNoPermission) }
+        let previousFlags = anchor.st_flags
+        var accepted = false
+        defer { if !accepted { _ = fchflags(descriptor, previousFlags) } }
+        guard fchown(descriptor, 0, 0) == 0, fchmod(descriptor, 0o755) == 0,
+            fchflags(descriptor, previousFlags | UInt32(SF_NOUNLINK)) == 0,
+            fstat(descriptor, &anchor) == 0
+        else { throw failure("macOS could not protect the camera installation directory.") }
+        var published = stat()
+        guard lstat(configuration.destination.path, &published) == 0,
+            published.st_dev == anchor.st_dev, published.st_ino == anchor.st_ino,
+            Self.admitsApplicationsParent(platform, anchor: published)
+        else { throw CocoaError(.fileWriteNoPermission) }
+        accepted = true
     }
 
     private func protectedTree(_ url: URL, recursive: Bool = true) throws {
