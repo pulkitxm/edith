@@ -74,6 +74,7 @@ try {
     assert.equal(result.companionDataValidated, id === "companion");
     assert.equal(result.terminalDataValidated, id === "terminal");
     assert.equal(result.studioDataValidated, id === "studio");
+    assert.equal(result.audioMixerDataValidated, id === "audioMixer");
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });
