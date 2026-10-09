@@ -44,6 +44,10 @@ struct HostLifecycleHarness {
             false, forKey: "windowSweatersActive")
         UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
             false, forKey: "keystrokeHighlightActive")
+        if extensionID == "clipboard" {
+            UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
+                false, forKey: AppStorageKeys.Clipboard.enabled)
+        }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -110,7 +114,9 @@ struct HostLifecycleHarness {
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
-            if extensionID == "blitztree" {
+            if extensionID == "clipboard" {
+                try await verifyClipboard(endpoint, seed: true)
+            } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
                 try await verifyMaintenance(endpoint)
@@ -148,7 +154,9 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "blitztree" {
+            if extensionID == "clipboard" {
+                try await verifyClipboard(endpoint, seed: false)
+            } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
                 try await verifyMaintenance(endpoint)
@@ -181,7 +189,9 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "blitztree" {
+            if extensionID == "clipboard" {
+                try await verifyClipboard(endpoint, seed: false)
+            } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
                 try await verifyMaintenance(endpoint)
@@ -235,7 +245,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface)}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -285,6 +295,123 @@ struct HostLifecycleHarness {
             } catch HostWorkerError.invalidResponse { throw HostWorkerError.invalidResponse } catch
             {}
         }
+    }
+
+    @MainActor private static func verifyClipboard(_ endpoint: ExtensionPeerEndpoint, seed: Bool)
+        async throws
+    {
+        let statusData = try await endpoint.invoke("clipboard.captureStatus")
+        let status = try JSONSerialization.jsonObject(with: statusData) as? [String: Any]
+        guard status?["enabled"] as? Bool == false, status?["monitoring"] as? Bool == false else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 1,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Capture monitoring was enabled in the synthetic fixture."
+                ])
+        }
+        let fixtures = [
+            ("10000000-0000-0000-0000-000000000001", "synthetic native note one"),
+            ("10000000-0000-0000-0000-000000000002", "synthetic native note two"),
+            ("10000000-0000-0000-0000-000000000003", "https://example.com/mock-clipboard"),
+        ]
+        let query = try JSONSerialization.data(withJSONObject: [
+            "offset": 0, "limit": 10, "recentlyCreated": false,
+        ])
+        if seed {
+            let empty = try await endpoint.invoke("clipboard.snapshot", payload: query)
+            guard
+                (try JSONSerialization.jsonObject(with: empty) as? [String: Any])?["total"] as? Int
+                    == 0
+            else {
+                throw NSError(
+                    domain: "ClipboardFixture", code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "New clipboard archive was not empty."])
+            }
+            for (id, text) in fixtures {
+                let payload = try JSONSerialization.data(withJSONObject: [
+                    "id": id, "data": Data(text.utf8).base64EncodedString(),
+                    "types": ["public.text"],
+                    "ext": "txt", "preview": text, "sourceApp": "Mock Notes",
+                    "sourceBundleID": "example.mock.notes",
+                    "capturedAt": Date().timeIntervalSinceReferenceDate,
+                ])
+                let output = try await endpoint.invoke("clipboard.capture", payload: payload)
+                guard
+                    (try JSONSerialization.jsonObject(with: output) as? [String: Any])?["changed"]
+                        as? Int == 1
+                else {
+                    throw NSError(
+                        domain: "ClipboardFixture", code: 3,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "Synthetic clipboard capture was not acknowledged."
+                        ])
+                }
+            }
+            _ = try await endpoint.invoke(
+                "clipboard.mutate",
+                payload: JSONSerialization.data(withJSONObject: [
+                    "kind": "pin", "ids": [fixtures[0].0],
+                    "copiedAt": Date().timeIntervalSinceReferenceDate,
+                ]))
+        }
+        let storedData = try await endpoint.invoke("clipboard.snapshot", payload: query)
+        guard let stored = try JSONSerialization.jsonObject(with: storedData) as? [String: Any],
+            stored["total"] as? Int == 3, let entries = stored["entries"] as? [[String: Any]],
+            Set(entries.compactMap { $0["preview"] as? String }) == Set(fixtures.map(\.1)),
+            entries.first(where: { $0["id"] as? String == fixtures[0].0 })?["pinned"] as? Bool
+                == true
+        else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 4,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Synthetic clipboard history or pin was not retained."
+                ])
+        }
+        let copied = try await endpoint.invoke(
+            "clipboard.copyPayload",
+            payload: JSONSerialization.data(withJSONObject: [
+                "id": fixtures[0].0, "plainTextOnly": false,
+            ]))
+        guard let payload = try JSONSerialization.jsonObject(with: copied) as? [String: Any],
+            payload["data"] as? String == Data(fixtures[0].1.utf8).base64EncodedString(),
+            payload["text"] as? String == fixtures[0].1
+        else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 5,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Synthetic clipboard payload was not retained."
+                ])
+        }
+        var tile = SurfaceTile(.ability("clipboard")); tile.sourceIDs = ["text"];
+        tile.itemLimit = 1; tile.showDetails = false
+        let request = SurfaceSnapshotRequest(target: .notch, tile: tile)
+        let data = try await endpoint.invoke(
+            "surface.snapshot", payload: request.encoded(providerID: "clipboard"))
+        let snapshot = try SurfaceSnapshot.decode(data, providerID: "clipboard")
+        guard snapshot.rows.count == 1, snapshot.rows[0].id == fixtures[0].0,
+            snapshot.rows[0].sourceID == "text", snapshot.rows[0].detail.isEmpty,
+            snapshot.rows[0].value == "Pinned", snapshot.rows[0].actions.count == 3
+        else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 6,
+                userInfo: [
+                    NSLocalizedDescriptionKey:
+                        "Clipboard category, item limit, or opaque actions were invalid."
+                ])
+        }
+        tile.showActions = false
+        let hidden = SurfaceActionRequest(
+            snapshot: .init(target: .notch, tile: tile), actionID: "delete/" + fixtures[0].0)
+        do {
+            _ = try await endpoint.invoke(
+                "surface.perform", payload: hidden.encoded(providerID: "clipboard"))
+            throw NSError(
+                domain: "ClipboardFixture", code: 7,
+                userInfo: [NSLocalizedDescriptionKey: "Hidden clipboard deletion was accepted."])
+        } catch is ExtensionPeerError {}
     }
 
     private static func verifyBlitzTree(_ endpoint: ExtensionPeerEndpoint, fixture: URL)
