@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 
 @MainActor
@@ -40,6 +41,9 @@ public final class HostWorker {
                 configuration.extensionID)
             environment["EDITH_EXTENSION_DATA_ROOT"] =
                 identity.extensionDirectory(configuration.extensionID).path
+            environment["EDITH_EXTENSION_ID"] = configuration.extensionID
+            environment["EDITH_EXTENSION_STATE_ROOT"] =
+                identity.root.appendingPathComponent("ExtensionState").path
             process.environment = environment
         }
         process.standardInput = input
@@ -66,6 +70,7 @@ public final class HostWorker {
             Task { @MainActor [weak self] in self?.finish() }
         }
         do {
+            try sharedState()?.clear(configuration.extensionID)
             try process.run()
             processGroup = process.processIdentifier
             try input.fileHandleForReading.close()
@@ -254,6 +259,13 @@ public final class HostWorker {
         }
     }
 
+    private func sharedState() -> ExtensionSharedState? {
+        guard let identity = try? configuration.identity() else { return nil }
+        return ExtensionSharedState(
+            root: identity.root.appendingPathComponent("ExtensionState"),
+            namespace: identity.identifier)
+    }
+
     private func finish() {
         guard !exited else { return }
         drainOutput()
@@ -270,7 +282,8 @@ public final class HostWorker {
             request.timeout.cancel()
             request.continuation.resume(throwing: HostWorkerError.exited)
         }
-        didExit?()
         terminateGroup()
+        try? sharedState()?.clear(configuration.extensionID)
+        didExit?()
     }
 }

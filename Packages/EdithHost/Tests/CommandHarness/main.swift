@@ -1,5 +1,6 @@
 import Darwin
 import EdithHostCore
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
@@ -58,6 +59,12 @@ struct HostCommandHarness {
                 try await wait {
                     FileManager.default.fileExists(
                         atPath: data.appendingPathComponent("child.pid").path)
+                }
+                let sharedState = ExtensionSharedState(
+                    root: identity.root.appendingPathComponent("ExtensionState"),
+                    namespace: identifier)
+                guard sharedState.values(for: package.id) == ["busy": "1"] else {
+                    throw HostWorkerError.rejected
                 }
                 let parent = try readPID(data.appendingPathComponent("parent.pid"))
                 let child = try readPID(data.appendingPathComponent("child.pid"))

@@ -17,7 +17,10 @@ let package = Package(
     targets: [
         .target(
             name: "EdithHostCore",
-            dependencies: [.product(name: "ExtensionMarketplace", package: "ExtensionMarketplace")],
+            dependencies: [
+                .product(name: "ExtensionMarketplace", package: "ExtensionMarketplace"),
+                .product(name: "EdithExtensionSupport", package: "ExtensionSupport"),
+            ],
             resources: [.process("Resources")]),
         .executableTarget(
             name: "EdithHost",
