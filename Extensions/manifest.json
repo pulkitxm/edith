@@ -27,15 +27,18 @@
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "host-f9f2d6ffd5bfa72aa5851dcc",
+    "hostABI": "edith-host-1",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
-        "Extensions/audioMixer/Runtime.swift"
+        "Extensions/audioMixer/AudioMixerSurface.swift",
+        "Extensions/audioMixer/Models/AudioMixer.swift",
+        "Extensions/audioMixer/Models/AudioMixerAction.swift",
+        "Extensions/audioMixer/Models/AudioMixerCommand.swift",
+        "Extensions/audioMixer/Runtime.swift",
+        "Extensions/audioMixer/Views/AudioMixerView.swift"
       ]
     },
-    "nativePackage": "Extensions/audioMixer/NativeRuntime",
-    "nativeProduct": "MeetingVoice",
     "inputs": [
       "Extensions/audioMixer"
     ],
@@ -43,12 +46,13 @@
       "scripts/build-extension-package.mjs"
     ],
     "dependencies": [],
-    "nativeLicenses": [
-      {
-        "source": "Extensions/audioMixer/NativeRuntime/.build/artifacts/onnxruntime-swift-package-manager/onnxruntime/LICENSE",
-        "destination": "onnxruntime-LICENSE"
-      }
-    ]
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProducts": {
+      "app": [
+        "EdithExtensionUI"
+      ]
+    }
   },
   {
     "id": "focusDim",
