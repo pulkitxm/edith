@@ -191,6 +191,16 @@ final class UsageNativeCloud {
                             UsageNativeJSON.date(row["timestamp"]) != nil else {
                             throw UsageNativeFailure.invalidInput("cloud receipt metadata")
                         }
+                        let usage = message["usage"] as? [String: Any] ?? [:]
+                        guard usage["input_tokens"] != nil, usage["output_tokens"] != nil else {
+                            throw UsageNativeFailure.invalidInput("cloud receipt token count")
+                        }
+                        if let cache = usage["cache_creation"] as? [String: Any] {
+                            let expected = try UsageNativeTokens.number(cache["ephemeral_5m_input_tokens"]) + UsageNativeTokens.number(cache["ephemeral_1h_input_tokens"])
+                            guard expected == (try UsageNativeTokens.number(usage["cache_creation_input_tokens"])) else {
+                                throw UsageNativeFailure.invalidInput("cloud receipt cache total")
+                            }
+                        }
                         events.append(contentsOf: try parser.consume(row).map(\.event))
                         guard events.count <= 100_000 else { throw UsageNativeFailure.capacity }
                     }
@@ -249,6 +259,7 @@ final class UsageNativeCloud {
             }
         }
         var events: [UsageNativeEvent] = []
+        var receivedCount = 0
         var pages: Set<String> = []
         for page in 1...50 {
             var request = request("https://api2.cursor.sh/aiserver.v1.DashboardService/GetFilteredUsageEvents", token: token,
@@ -272,7 +283,8 @@ final class UsageNativeCloud {
                 let parser = UsageNativeParser(source: "cursor")
                 events.append(contentsOf: try parser.consume(row).map(\.event))
             }
-            if batch.isEmpty || page * 100 >= Int(total) { break }
+            receivedCount += batch.count
+            if batch.isEmpty || receivedCount >= Int(total) { break }
             if page == 50 { throw UsageNativeFailure.capacity }
         }
         try archive.replaceRemote(events, key: "remote:cursor", account: UsageNativeJSON.hash(jwtSubject(token) ?? token))

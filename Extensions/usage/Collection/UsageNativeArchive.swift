@@ -37,6 +37,29 @@ final class UsageNativeArchive {
             CREATE TABLE IF NOT EXISTS cloud_cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL);
             PRAGMA user_version=1;
             """)
+        let payloadTables = ["records", "candidates", "baselines", "aggregate_candidates", "cloud_cache"]
+        let byteCount = payloadTables.map { "COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM " + $0 + "),0)" }.joined(separator: "+")
+        try database.execute("""
+            CREATE TABLE IF NOT EXISTS capacity(singleton INTEGER PRIMARY KEY CHECK(singleton=1),files INTEGER NOT NULL,records INTEGER NOT NULL,bytes INTEGER NOT NULL);
+            INSERT INTO capacity SELECT 1,(SELECT COUNT(*) FROM files),
+                (SELECT COUNT(*) FROM records)+(SELECT COUNT(*) FROM candidates),\(byteCount)
+                WHERE NOT EXISTS(SELECT 1 FROM capacity);
+            CREATE TRIGGER IF NOT EXISTS capacity_files_insert AFTER INSERT ON files BEGIN UPDATE capacity SET files=files+1; END;
+            CREATE TRIGGER IF NOT EXISTS capacity_files_delete AFTER DELETE ON files BEGIN UPDATE capacity SET files=files-1; END;
+            """)
+        for table in payloadTables {
+            let insertCount = ["records", "candidates"].contains(table) ? ",records=records+1" : ""
+            let deleteCount = ["records", "candidates"].contains(table) ? ",records=records-1" : ""
+            try database.execute("""
+                CREATE TRIGGER IF NOT EXISTS capacity_\(table)_insert AFTER INSERT ON \(table) BEGIN
+                    UPDATE capacity SET bytes=bytes+length(CAST(new.payload AS BLOB))\(insertCount); END;
+                CREATE TRIGGER IF NOT EXISTS capacity_\(table)_delete AFTER DELETE ON \(table) BEGIN
+                    UPDATE capacity SET bytes=bytes-length(CAST(old.payload AS BLOB))\(deleteCount); END;
+                CREATE TRIGGER IF NOT EXISTS capacity_\(table)_update AFTER UPDATE OF payload ON \(table) BEGIN
+                    UPDATE capacity SET bytes=bytes+length(CAST(new.payload AS BLOB))-length(CAST(old.payload AS BLOB)); END;
+                """)
+        }
+
     }
 
     func known(_ path: String) throws -> KnownFile? {
@@ -316,18 +339,7 @@ final class UsageNativeArchive {
     }
 
     private func enforceCapacity() throws {
-        let record =
-            try database.rows(
-                """
-                SELECT (SELECT COUNT(*) FROM files) AS files,
-                (SELECT COUNT(*) FROM records)+(SELECT COUNT(*) FROM candidates) AS records,
-                COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM records),0)+
-                COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM candidates),0)+
-                COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM baselines),0)+
-                COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM aggregate_candidates),0)+
-                COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM cloud_cache),0) AS bytes
-                """
-            ).first ?? [:]
+        let record = try database.rows("SELECT files,records,bytes FROM capacity WHERE singleton=1", maximum: 1).first ?? [:]
         guard (Int(record["files"] ?? "0") ?? .max) <= limits.files,
             (Int(record["records"] ?? "0") ?? .max) <= limits.records,
             (Int(record["bytes"] ?? "0") ?? .max) <= limits.bytes

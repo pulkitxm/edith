@@ -24,6 +24,12 @@ final class UsageNativeParser {
         limits: UsageNativeFileLimits = .init()
     ) throws -> UsageNativeFileSnapshot {
         session = path.deletingPathExtension().lastPathComponent
+        if source == "grok" {
+            cwd = path.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent.removingPercentEncoding ?? ""
+            if let summary = try UsageNativeFileIO.optionalObject(path.deletingLastPathComponent().appendingPathComponent("summary.json")) {
+                title = UsageNativeJSON.title(summary["generated_title"])
+            }
+        }
         let properties = try UsageNativeFileIO.lines(
             path, previousBytes: previous?.size ?? 0, limits: limits
         ) {
@@ -70,6 +76,9 @@ final class UsageNativeParser {
                 titles[session] = text
             }
             return []
+        }
+        if source == "grok" {
+            return try grok(row).map { .init(offset: offset, end: end, event: $0) }
         }
         let event: UsageNativeEvent?
         switch source {
@@ -265,6 +274,28 @@ final class UsageNativeParser {
             session: session,
             model: UsageNativeJSON.text(message["model"] ?? row["model"]) ?? "unknown",
             timestamp: timestamp, cwd: cwd, title: title, tokens: tokens, recordedCost: cost)
+    }
+
+    private func grok(_ row: [String: Any]) throws -> [UsageNativeEvent] {
+        guard let params = row["params"] as? [String: Any], let update = params["update"] as? [String: Any],
+            update["sessionUpdate"] as? String == "turn_completed", let usage = update["usage"] as? [String: Any],
+            let session = UsageNativeJSON.text(params["sessionId"]),
+            let timestamp = UsageNativeJSON.date((params["_meta"] as? [String: Any])?["agentTimestampMs"] ?? row["timestamp"]) else { return [] }
+        let models = usage["modelUsage"] as? [String: [String: Any]] ?? [:]
+        let selected = models.isEmpty ? ["unknown": usage] : models
+        return try selected.keys.sorted().compactMap { model in
+            let values = selected[model]!
+            let input = try UsageNativeTokens.number(values["inputTokens"])
+            let read = try UsageNativeTokens.number(values["cachedReadTokens"])
+            let creation = try UsageNativeTokens.number(values["cacheCreationTokens"])
+            guard read + creation <= input else { throw UsageNativeFailure.invalidInput("cached input count") }
+            let tokens = try UsageNativeTokens(input: input - read - creation,
+                output: UsageNativeTokens.number(values["outputTokens"]), creation: creation, read: read)
+            let cost = try UsageNativeTokens.number(values["costUsdTicks"]) / 10_000_000_000
+            guard tokens.total > 0 || cost > 0 else { return nil }
+            return .init(source: source, identity: session + ":" + String(timestamp.timeIntervalSince1970) + ":" + model,
+                session: session, model: model, timestamp: timestamp, cwd: cwd, title: title, tokens: tokens, recordedCost: cost)
+        }
     }
 
     private static func contentTitle(_ value: Any?) -> String? {

@@ -3,6 +3,24 @@ import Testing
 @testable import UsageExtension
 
 @Suite(.serialized) struct UsageNativeArchiveTests {
+    @Test func capacityCountersTrackUpsertDeleteAndRollbackExactly() throws {
+        try fixture { root in
+            let archive = try UsageNativeArchive(dataDirectory: root)
+            try archive.cache(["value": "mock-one"], key: "cache")
+            try archive.cache(["value": "mock-two-longer"], key: "cache")
+            let event = try UsageNativeParser(source: "cli").consume(UsageNativeJSON.object(line(id: "one").dropLast())).map(\.event)
+            try archive.replaceRemote(event, key: "remote", account: "one")
+            let before = try archive.database.rows("SELECT bytes,records FROM capacity").first!
+            #expect(before["records"] == "1")
+            try archive.replaceRemote([], key: "remote", account: "one")
+            let after = try archive.database.rows("SELECT bytes,records FROM capacity").first!
+            #expect(after["records"] == "0")
+            let actual = try archive.database.rows("SELECT SUM(length(CAST(payload AS BLOB))) AS bytes FROM cloud_cache").first!["bytes"]!
+            #expect(after["bytes"] == actual)
+            #expect(Int(before["bytes"]!)! > Int(after["bytes"]!)!)
+        }
+    }
+
     @Test func deletedFilesRemainBilledAfterRestartAndIdenticalReplayDoesNotDuplicate() throws {
         try fixture { root in
             let path = root.appendingPathComponent("journal.jsonl")
