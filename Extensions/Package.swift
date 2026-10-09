@@ -176,5 +176,13 @@ let package = Package(
         .testTarget(
             name: "PluginsExtensionTests", dependencies: ["PluginsExtension"],
             path: "plugins/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "MusicExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "music", exclude: ["Tests", "Runtime.swift", "Native"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "MusicExtensionTests", dependencies: ["MusicExtension"],
+            path: "music/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
