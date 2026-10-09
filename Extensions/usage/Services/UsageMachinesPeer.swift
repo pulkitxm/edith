@@ -78,10 +78,16 @@ struct UsageMachinesPeer: Sendable {
     static func current() async -> UsageMachinesPeer? {
         await MainActor.run {
             guard let context = SurfaceHostContext.current, context.activeIDs.contains("machines"),
-                let endpoint = ExtensionPeerEndpoint.current(owner: "machines")
+                let endpoint = ExtensionPeerEndpoint.current(owner: "machines"),
+                let version = context.activeVersions["machines"]
             else { return nil }
             return UsageMachinesPeer(
-                active: { await MainActor.run { context.activeIDs.contains("machines") } },
+                active: {
+                    await MainActor.run {
+                        context.activeIDs.contains("machines")
+                            && context.activeVersions["machines"] == version
+                    }
+                },
                 invoke: { command, data in
                     try await endpoint.invoke(
                         command, payload: data,

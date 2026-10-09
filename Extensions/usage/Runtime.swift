@@ -11,6 +11,7 @@ final class ExtensionRuntime: NSObject {
     private var surface: UsageSurface?
     private var statusLine: UsageStatusLineCommands?
     private var reports: UsageReportCommands?
+    private var machinesProjection: UsageMachinesProjection?
     private var alerts: UsageLimitAlerts?
     private var alertsTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
@@ -24,6 +25,12 @@ final class ExtensionRuntime: NSObject {
             }
             if command.hasPrefix("usage.statusline."), let statusLine = self.statusLine {
                 return try await statusLine.execute(command, payload: payload)
+            }
+            if ["usage.machines.project", "usage.machines.result", "usage.machines.cancel"]
+                .contains(command),
+                let projection = self.machinesProjection
+            {
+                return try await projection.execute(command, payload: payload)
             }
             guard let reports = self.reports else { throw ExtensionPeerError.unavailable }
             return try await reports.execute(command, payload: payload)
@@ -45,12 +52,14 @@ final class ExtensionRuntime: NSObject {
         let alerts = alerts; self.alerts = nil
         let task = alertsTask; alertsTask = nil
         let reports = reports; self.reports = nil
+        let projection = machinesProjection; machinesProjection = nil
         surface = nil; statusLine = nil; usageStore = nil
         Task {
             await controller?.shutdown()
             await task?.value
             await alerts?.shutdown()
             await reports?.shutdown()
+            await projection?.shutdown()
             if UsageExecutionEnvironment.fixtureHome == nil {
                 await UsageLimitAlerts.removePending()
                 LimitNotifier.shared.shutdown()
@@ -89,6 +98,7 @@ final class ExtensionRuntime: NSObject {
             surface = UsageSurface(store: cache, controller: controller)
             statusLine = UsageStatusLineCommands()
             reports = UsageReportCommands(controller: controller, store: cache)
+            machinesProjection = UsageMachinesProjection()
             usageStore = UsageStore(showMenuBar: !fixture)
             if !fixture {
                 let alerts = UsageLimitAlerts(); self.alerts = alerts
