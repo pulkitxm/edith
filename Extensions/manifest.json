@@ -280,5 +280,31 @@
       "Packages/ExtensionSupport"
     ],
     "dependencies": []
+  },
+  {
+    "id": "homebrew",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/homebrew/Models/HomebrewModels.swift",
+        "Extensions/homebrew/Runtime.swift",
+        "Extensions/homebrew/Services/HomebrewOperations.swift",
+        "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
+        "Extensions/homebrew/Views/HomebrewPage.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/homebrew"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
   }
 ]

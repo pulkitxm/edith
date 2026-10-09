@@ -161,7 +161,7 @@ ci-swift-build: approve-package-plugins ci-meeting-microphone
 ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
 
-.PHONY: ci-host host ci-marketplace-host extension-dev ci-extension-support ci-extension-commands
+.PHONY: ci-host host ci-marketplace-host extension-dev ci-extension-support ci-extension-commands ci-extension-workers
 ci-host:
 	swift format lint --strict --parallel --recursive Packages/EdithHost/Sources Packages/EdithHost/Tests Packages/EdithHost/Package.swift
 	swift test --package-path Packages/EdithHost --build-system native --jobs 2 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
@@ -173,9 +173,12 @@ extension-dev:
 	bun scripts/build-extension-package.mjs $(EXTENSION) --development
 
 ci-extension-support:
-	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/Package.swift
+	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/Package.swift
 	swift test --package-path Packages/ExtensionSupport --build-system native --jobs 2 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 	swift test --package-path Extensions --build-system native --jobs 2 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-workers:
+	bun scripts/test-extension-workers.mjs $(EXTENSION)
 
 ci-extension-commands:
 	bun scripts/test-extension-commands.mjs
@@ -188,7 +191,7 @@ ci-marketplace-host: ci-host host
 	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
 	$(MAKE) ci-extension-support
 	$(MAKE) ci-extension-commands
-	bun scripts/test-extension-workers.mjs
+	$(MAKE) ci-extension-workers
 	$(MAKE) ci-comments
 
 ci-swift-test-batch:

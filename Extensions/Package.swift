@@ -67,5 +67,13 @@ let package = Package(
         .testTarget(
             name: "EmojiExtensionTests", dependencies: ["EmojiExtension"],
             path: "emoji/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "HomebrewExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "homebrew", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "HomebrewExtensionTests", dependencies: ["HomebrewExtension"],
+            path: "homebrew/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
