@@ -376,5 +376,31 @@
       "Packages/ExtensionSupport"
     ],
     "dependencies": []
+  },
+  {
+    "id": "system",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/system/Runtime.swift",
+        "Extensions/system/Services/RunningApps.swift",
+        "Extensions/system/ViewModels/RunningAppsModel.swift",
+        "Extensions/system/ViewModels/SystemPresentationState.swift",
+        "Extensions/system/Views/SystemPage.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/system"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
   }
 ]
