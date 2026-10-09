@@ -42,7 +42,13 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "nativeLicenses": [
+      {
+        "source": "Extensions/audioMixer/NativeRuntime/.build/artifacts/onnxruntime-swift-package-manager/onnxruntime/LICENSE",
+        "destination": "onnxruntime-LICENSE"
+      }
+    ]
   },
   {
     "id": "focusDim",
