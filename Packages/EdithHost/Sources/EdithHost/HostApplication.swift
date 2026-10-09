@@ -67,6 +67,7 @@ struct HostApplication: App {
                     }
                 }
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
+                .tint(themeColor(theme))
                 .tracksWindowVisibility()
                 .task {
                     guard marketplace == nil, !startupError else { return }
@@ -115,13 +116,14 @@ struct HostApplication: App {
 }
 
 private enum HostWorkspacePage: String, CaseIterable {
+    case home = "Home"
     case extensions = "Extensions"
     case customize = "Customize Home and Notch"
 }
 
 private struct HostWorkspace: View {
     let marketplace: HostMarketplace
-    @State private var page = HostWorkspacePage.extensions
+    @State private var page = HostWorkspacePage.home
 
     var body: some View {
         VStack(spacing: 0) {
@@ -131,6 +133,10 @@ private struct HostWorkspace: View {
             ).padding(UIScale.pt(12))
             Divider()
             switch page {
+            case .home:
+                HostHomePage(
+                    marketplace: marketplace, customize: { page = .customize },
+                    extensions: { page = .extensions })
             case .extensions: MarketplacePage(marketplace: marketplace)
             case .customize: HostSurfaceEditor(marketplace: marketplace)
             }

@@ -41,6 +41,39 @@ import Testing
         #expect(restarted.profiles(.home).first?.layout == store.home)
     }
 
+    @Test func onlyPublishedActiveProvidersHaveVersionsAndTheClientObservesUpdates() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.host.publish([
+            "surface.activeIDs": "[\"calendar\"]",
+            "surface.activeVersions": "{\"calendar\":\"1.0\"}",
+        ])
+        #expect(fixture.context.activeVersions == ["calendar": "1.0"])
+        let client = SurfaceSnapshotClient(context: fixture.context)
+        defer { client.shutdown() }
+        #expect(client.versions == ["calendar": "1.0"])
+        try fixture.host.publish([
+            "surface.activeIDs": "[\"calendar\"]",
+            "surface.activeVersions": "{\"calendar\":\"1.1\"}",
+        ])
+        let deadline = Date().addingTimeInterval(5)
+        while client.versions != ["calendar": "1.1"] {
+            guard Date() < deadline else { throw ExtensionPeerError.timedOut }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        client.shutdown()
+        try fixture.host.publish([
+            "surface.activeIDs": "[\"calendar\"]",
+            "surface.activeVersions": "{\"music\":\"1.0\"}",
+        ])
+        #expect(fixture.context.activeVersions.isEmpty)
+        #expect(client.versions.isEmpty)
+        await #expect(throws: (any Error).self) {
+            try await client.snapshot(providerID: "calendar", target: .home, tile: .init(.calendar))
+        }
+        #expect(client.pendingCount == 0)
+    }
+
     @MainActor private struct Fixture {
         let suite: String
         let defaults: UserDefaults

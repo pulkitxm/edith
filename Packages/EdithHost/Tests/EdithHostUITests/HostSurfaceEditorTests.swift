@@ -10,6 +10,68 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HostSurfaceEditorTests {
+    @Test func emptyHomeRendersOnlyTheBuiltInClockAndOffersExtensionDiscovery() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let restore = enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: HostHomePage(marketplace: fixture.marketplace, customize: {}, extensions: {})
+                .environment(\.compactLayout, false).environment(
+                    \.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 1200, height: 900)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "World clocks") != nil)
+        #expect(find(host, label: "Customize") != nil)
+        #expect(find(host, label: "Extensions") != nil)
+        #expect(find(host, label: "Meetings") == nil)
+        #expect(find(host, label: "Open Calendar") == nil)
+        #expect(fixture.marketplace.surfaces.requests.pendingCount == 0)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func sharedCardRendererShowsRealContractDataAndDispatchesOnlyItsActionID() async throws {
+        let restore = enableAccessibility()
+        defer { restore() }
+        let action = SurfaceAction("join:synthetic-meeting", "Join", "video.fill", field: "join")
+        let snapshot = SurfaceSnapshot(
+            providerID: "calendar",
+            rows: [
+                .init(
+                    "synthetic-meeting", sourceID: "synthetic-calendar",
+                    title: "Synthetic design review", detail: "Synthetic calendar", value: "10:00",
+                    icon: "calendar", actions: [action])
+            ])
+        var performed: [String] = []
+        let host = NSHostingView(
+            rootView: SurfaceSnapshotContent(
+                tile: .init(.calendar), snapshot: snapshot, perform: { performed.append($0.id) }
+            ).padding(16).frame(width: 420))
+        host.frame = CGRect(x: 0, y: 0, width: 420, height: 240)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Synthetic design review") != nil)
+        let join = try #require(find(host, label: "Join"))
+        #expect((join as AnyObject).accessibilityPerformPress?() == true)
+        #expect(performed == ["join:synthetic-meeting"])
+        var hidden = SurfaceTile(.calendar)
+        hidden.hiddenFields = ["join"]
+        let restricted = NSHostingView(
+            rootView: SurfaceSnapshotContent(
+                tile: hidden, snapshot: snapshot,
+                perform: { _ in Issue.record("Hidden action was executed") }))
+        restricted.frame = host.frame
+        window.contentView = restricted
+        await settle(window, host: restricted)
+        #expect(find(restricted, label: "Join") == nil)
+    }
+
     @Test func selectingAWidgetRetainsCanvasGeometryAndNeverStartsAnExtension() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -136,6 +198,12 @@ import Testing
     private func find(_ node: NSObject, label: String, depth: Int = 0) -> NSObject? {
         guard depth < 64 else { return nil }
         if (node as AnyObject).accessibilityLabel?() == label { return node }
+        let valueSelector = NSSelectorFromString("accessibilityValue")
+        if node.responds(to: valueSelector),
+            node.perform(valueSelector)?.takeUnretainedValue() as? String == label
+        {
+            return node
+        }
         for child in (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? [] {
             if let result = find(child, label: label, depth: depth + 1) { return result }
         }
@@ -204,6 +272,8 @@ import Testing
 
         func clean() {
             let identity = marketplace.identity
+            marketplace.surfaces.requests.shutdown()
+            marketplace.surfaces.privacy.shutdown()
             UserDefaults(suiteName: identity.identifier)?.removePersistentDomain(
                 forName: identity.identifier)
             UserDefaults(suiteName: identity.defaultsSuite)?.removePersistentDomain(

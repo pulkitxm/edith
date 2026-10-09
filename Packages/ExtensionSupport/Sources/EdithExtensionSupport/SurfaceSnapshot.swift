@@ -49,9 +49,10 @@ public struct SurfaceAction: Codable, Equatable, Identifiable, Sendable {
     public let id: String
     public let title: String
     public let icon: String
+    public let field: String?
 
-    public init(_ id: String, _ title: String, _ icon: String) {
-        self.id = id; self.title = title; self.icon = icon
+    public init(_ id: String, _ title: String, _ icon: String, field: String? = nil) {
+        self.id = id; self.title = title; self.icon = icon; self.field = field
     }
 }
 
@@ -145,6 +146,7 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
             && values.allSatisfy {
                 validText($0.id, maximum: 512) && validText($0.title, maximum: 256)
                     && validText($0.icon, maximum: 128)
+                    && ($0.field.map { validText($0, maximum: 80) } ?? true)
             }
     }
 

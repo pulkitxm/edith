@@ -73,7 +73,7 @@ final class CalendarSurface {
             guard !event.id.isEmpty, event.id.utf8.count <= 480 else { return nil }
             let actions: [SurfaceAction] =
                 tile.showActions && tile.shows("join") && MeetingLink.url(for: event) != nil
-                ? [.init("join:" + event.id, "Join", "video.fill")] : []
+                ? [.init("join:" + event.id, "Join", "video.fill", field: "join")] : []
             return .init(
                 event.id,
                 sourceID: privateContent

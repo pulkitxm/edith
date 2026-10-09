@@ -19,6 +19,7 @@ struct HostSurfaceEditor: View {
     @State private var libraryCategory = "All"
     @State private var enabledOnly = false
     @State private var previewCompact = false
+    @State private var livePreview = false
     @State private var previewWidth: Double?
     @State private var editorPanel: SurfaceEditorPanel?
     @State private var glancesExpanded = true
@@ -132,7 +133,51 @@ struct HostSurfaceEditor: View {
             .padding(UIScale.pt(20))
             .frame(width: UIScale.pt(440), height: UIScale.pt(560))
         }
+        .pageTask(
+            id: sourceRequestID,
+            active: selection.map {
+                $0.widget.supportsSourceFilters && !marketplace.surfaces.privacy.hides($0.widget)
+            } ?? false,
+            cancel: {
+                sourceLoad.reset(); sourceChoices = []
+            }
+        ) {
+            sourceChoices = []
+            guard var tile = selection, !tile.hidden else { return }
+            let ids = tile.widget.providerIDs.intersection(availability.activeIDs).sorted()
+            guard !ids.isEmpty else { return }
+            tile.sourceIDs = nil
+            let queryTile = tile
+            let requests = marketplace.surfaces.requests
+            let queryTarget = target
+            await sourceLoad.perform(
+                operation: {
+                    try await withThrowingTaskGroup(of: [SurfaceSourceChoice].self) { group in
+                        for id in ids {
+                            group.addTask {
+                                try await requests.snapshot(
+                                    providerID: id, target: queryTarget, tile: queryTile
+                                ).sources
+                            }
+                        }
+                        var choices: [String: SurfaceSourceChoice] = [:]
+                        for try await values in group {
+                            for value in values { choices[value.id] = value }
+                        }
+                        return choices.values.sorted {
+                            $0.title.localizedStandardCompare($1.title) == .orderedAscending
+                        }
+                    }
+                }, apply: { sourceChoices = $0 })
+        }
 
+    }
+
+    private var sourceRequestID: String {
+        targetRaw + ":" + selectedRaw + ":"
+            + availability.activeIDs.sorted().map {
+                $0 + "/" + (marketplace.sessions.versions[$0] ?? "")
+            }.joined(separator: ",")
     }
 
     private func widgetTitle(_ widget: SurfaceWidget) -> String {
@@ -597,7 +642,9 @@ struct HostSurfaceEditor: View {
                 .frame(width: target == .notch ? UIScale.pt(layout.expandedNotchWidth) : nil)
                 .frame(maxWidth: target == .home ? .infinity : nil)
             Text(
-                "Layout preview. Missing or disabled extensions keep their saved positions and filters."
+                livePreview
+                    ? "Live widgets use enabled extensions. Missing or disabled extensions show samples."
+                    : "Sample content. Previewing a layout does not start extensions."
             )
             .font(.edithText(.caption)).foregroundStyle(.secondary)
             if target == .notch { glanceSettings }
@@ -612,7 +659,7 @@ struct HostSurfaceEditor: View {
                 reorder: { id, anchor in store.update(target) { $0.move(id, before: anchor) } },
                 configure: { tile in edit(tile.id) { $0 = tile } },
                 add: { widget in store.update(target) { selected = $0.add(widget) } }
-            ) { tile in SurfaceWidgetPreview(tile: tile, notch: true) }
+            ) { tile in preview(tile) }
         } else {
             SurfaceCanvas(
                 layout: layout, singleColumn: compact || previewCompact,
@@ -646,6 +693,19 @@ struct HostSurfaceEditor: View {
                     }
                 }
             ) { tile in
+                preview(tile)
+            }
+        }
+    }
+
+    @ViewBuilder private func preview(_ tile: SurfaceTile) -> some View {
+        if livePreview, availability.status(tile.widget) == .active,
+            target == .home || availability.activeIDs.contains("notchShelf")
+        {
+            HostSurfaceCard(marketplace: marketplace, target: target, tile: tile)
+        } else {
+            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                Text("Sample preview").font(.edithText(.caption2)).foregroundStyle(.secondary)
                 SurfaceWidgetPreview(tile: tile, notch: target == .notch)
             }
         }
@@ -777,6 +837,7 @@ struct HostSurfaceEditor: View {
     }
     private var previewToggle: some View {
         HStack {
+            Toggle("Live content", isOn: $livePreview)
             if !compact, target == .home {
                 Menu(previewWidth.map { "\(Int($0)) pt" } ?? "Fit") {
                     Button("Fit workspace") { previewWidth = nil }
@@ -1119,7 +1180,10 @@ struct HostSurfaceEditor: View {
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
-            if tile.sourceIDs != nil {
+            if marketplace.surfaces.privacy.hides(tile.widget) {
+                Text("Sources are hidden while presenting.").font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
+            } else if tile.sourceIDs != nil {
                 let available =
                     sourceChoices
                 let known = Set(available.map(\.id))
@@ -1169,7 +1233,10 @@ struct HostSurfaceEditor: View {
                 isOn: Binding(
                     get: { selection?.sourceIDs == nil },
                     set: { all in edit(tile.id) { $0.sourceIDs = all ? nil : [] } }))
-            if tile.sourceIDs != nil {
+            if marketplace.surfaces.privacy.hides(tile.widget) {
+                Text("Providers are hidden while presenting.").font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
+            } else if tile.sourceIDs != nil {
                 ForEach(agentProviderChoices, id: \.id) { provider in
                     Toggle(
                         provider.title,

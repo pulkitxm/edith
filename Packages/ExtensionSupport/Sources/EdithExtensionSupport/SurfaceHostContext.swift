@@ -28,6 +28,21 @@ public struct SurfaceHostContext {
         return Set(ids)
     }
 
+    public var activeVersions: [String: String] {
+        let values = sharedState.values(for: "host")
+        let active = activeIDs
+        guard let raw = values["surface.activeVersions"], raw.utf8.count <= 32_768,
+            let data = raw.data(using: .utf8),
+            let versions = try? JSONDecoder().decode([String: String].self, from: data),
+            versions.count <= 128,
+            versions.allSatisfy({
+                active.contains($0.key) && !$0.value.isEmpty && $0.value.utf8.count <= 128
+                    && !$0.value.utf8.contains(0)
+            })
+        else { return [:] }
+        return versions
+    }
+
     public func layout(_ target: SurfaceTarget) -> SurfaceLayout {
         SurfaceLayout.decode(defaults.string(forKey: target.key), target: target)
     }
@@ -44,12 +59,14 @@ public struct SurfaceHostContext {
 public struct SurfaceContextSnapshot: Codable, Equatable, Sendable {
     public let contractVersion: Int
     public let activeIDs: Set<String>
+    public let activeVersions: [String: String]
     public let home: SurfaceLayout
     public let notch: SurfaceLayout
 
     @MainActor public init(_ context: SurfaceHostContext) {
         contractVersion = 1
         activeIDs = context.activeIDs
+        activeVersions = context.activeVersions
         home = context.layout(.home)
         notch = context.layout(.notch)
     }
