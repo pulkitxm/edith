@@ -51,7 +51,7 @@ struct SitemapCrawler: Sendable {
     private func crawl(_ sitemap: URL, visited: inout Set<URL>) async throws -> [URL] {
         guard visited.count < maximumSitemaps, visited.insert(sitemap).inserted else { return [] }
         let data = try await fetch(sitemap)
-        let document = try SitemapDocument.parse(data)
+        let document = try SitemapDocument.parse(data, maximumLocations: maximumPages)
         if !document.isIndex { return document.locations }
         var pages: [URL] = []
         for child in document.locations where pages.count < maximumPages {
@@ -108,9 +108,12 @@ private final class SitemapDocument: NSObject, XMLParserDelegate {
     var isIndex = false
     private var currentElement = ""
     private var text = ""
+    private var oversized = false
+    private var maximumLocations = 20_000
 
-    static func parse(_ data: Data) throws -> SitemapDocument {
+    static func parse(_ data: Data, maximumLocations: Int) throws -> SitemapDocument {
         let document = SitemapDocument()
+        document.maximumLocations = max(0, min(20_000, maximumLocations))
         let parser = XMLParser(data: data)
         parser.delegate = document
         guard parser.parse() else {
@@ -127,19 +130,24 @@ private final class SitemapDocument: NSObject, XMLParserDelegate {
     ) {
         currentElement = elementName.lowercased()
         if currentElement == "sitemapindex" { isIndex = true }
-        if currentElement == "loc" { text = "" }
+        if currentElement == "loc" { text = ""; oversized = false }
     }
 
-    func parser(_: XMLParser, foundCharacters string: String) {
-        if currentElement == "loc" { text += string }
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if Task.isCancelled { parser.abortParsing(); return }
+        guard currentElement == "loc", !oversized else { return }
+        guard string.utf8.count <= 4_096 - text.utf8.count else {
+            oversized = true; text = ""; return
+        }
+        text += string
     }
 
     func parser(
         _: XMLParser, didEndElement elementName: String, namespaceURI _: String?,
         qualifiedName _: String?
     ) {
-        if elementName.lowercased() == "loc",
-            let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        if elementName.lowercased() == "loc", !oversized, locations.count < maximumLocations,
+            let url = SEOAuditURLInput.normalize(text)
         {
             locations.append(url)
         }

@@ -16,6 +16,41 @@ import Testing
                 repository: SEOAuditRepository(root: root),
                 lighthouse: LighthouseAuditor(locate: { nil })))
     }
+    @Test func commandsUpdateAnAlreadyOpenProjectListAndStopObservingOnDisable() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = service(root)
+        let model = SEOAuditModel(service: service)
+        await model.refreshProjects()
+        let project = try await service.create(
+            url: "https://synthetic.example.invalid", name: "Created externally")
+        #expect(model.projects.map(\.id) == [project.id])
+        await model.selectProject(id: project.id)
+        _ = try await service.rename(project.id, name: "Renamed externally")
+        #expect(model.selectedProject?.name == "Renamed externally")
+        try await service.delete(project.id)
+        #expect(model.projects.isEmpty && model.selectedProject == nil)
+        #expect(service.listenerCount == 1)
+        model.shutdown()
+        #expect(service.listenerCount == 0)
+        await service.shutdown(); await model.drain()
+    }
+
+    @Test func disablingCancelsPendingFiltersAndReleasesLoadedHistory() async throws {
+        let root = root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = service(root)
+        let model = SEOAuditModel(service: service)
+        await model.open(seoProject(pages: 1_000))
+        model.query = "p/12"
+        model.shutdown(); await service.shutdown(); await model.drain()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(
+            model.visiblePages.isEmpty && model.historyByURL.isEmpty && model.selectedProject == nil
+        )
+        #expect(model.completedFilters.isEmpty)
+    }
+
     @Test func pageIndexFiltersOffMainAndCollapsesKeystrokes() async throws {
         let model = SEOAuditModel(service: service(root()))
         let thread = SEOThreadFlag()

@@ -38,6 +38,7 @@ final class SEOAuditModel {
     var errorMessage: String?
 
     @ObservationIgnored private let service: SEOAuditService
+    @ObservationIgnored private var observerID: UUID?
     @ObservationIgnored private var draftTask: Task<Void, Never>?
     private(set) var lighthouseAvailable = false
     @ObservationIgnored private var auditTask: Task<Void, Never>?
@@ -55,6 +56,30 @@ final class SEOAuditModel {
 
     init(service: SEOAuditService? = nil) {
         self.service = service ?? SEOAuditWorkerOperations.service ?? SEOAuditService()
+        observerID = self.service.observe { [weak self] event in self?.receive(event) }
+    }
+
+    private func receive(_ event: SEOAuditEvent) {
+        switch event {
+        case .project(let project):
+            refreshSummary(project)
+            guard selectedProject?.id == project.id else { return }
+            selectedProject = project
+            if let id = selectedRunID, !project.runs.contains(where: { $0.id == id }) {
+                selectedRunID = project.latestRun?.id
+            }
+            stage = service.activity(for: project.id)?.stage ?? .idle
+            scheduleIndexRebuild()
+        case .draft(let id, let draft):
+            guard let project = selectedProject, project.id == id else { return }
+            applyDraft(draft, fallback: project)
+        case .deleted(let id):
+            projects.removeAll { $0.id == id }
+            guard selectedProject?.id == id else { return }
+            selectedProject = nil; selectedRunID = nil; projectDetailPresented = false
+            discoveredPageURLs = []; selectedPageURLs = []; stage = .idle
+            scheduleIndexRebuild()
+        }
     }
 
     var isRunning: Bool { stage != .idle || isMutatingProject }
@@ -297,6 +322,7 @@ final class SEOAuditModel {
     }
 
     func shutdown() {
+        service.stopObserving(observerID); observerID = nil
         projectsLoad.cancel(); auditTask?.cancel(); progressTask?.cancel()
         indexTask?.cancel(); filterTask?.cancel(); draftTask?.cancel()
         projectRequestID = UUID(); indexGeneration += 1; filterGeneration += 1
@@ -451,6 +477,7 @@ final class SEOAuditModel {
                 includeLighthouse: request.lighthouse)
             _ = try await service.setDraft(projectID, draft)
             let launch = try await service.start(projectID, lighthouse: request.lighthouse)
+            if selectedProject?.id == projectID { selectedRunID = launch.request.runID }
             activeTaskID = launch.job.id
             progressTask?.cancel()
             progressTask = Task { [weak self] in await self?.observeProject(launch.request) }

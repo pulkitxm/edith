@@ -48,10 +48,13 @@ struct SEOAuditRepository {
     func loadDraft(id: UUID) throws -> SEOAuditDraft {
         let file = draftFile(id: id)
         guard fileManager.fileExists(atPath: file.path) else { return SEOAuditDraft() }
-        return try decoder.decode(SEOAuditDraft.self, from: read(file))
+        let draft = try decoder.decode(SEOAuditDraft.self, from: read(file))
+        try validate(draft)
+        return draft
     }
 
     func saveDraft(id: UUID, _ draft: SEOAuditDraft) throws {
+        try validate(draft)
         try validate(root)
         try fileManager.createDirectory(
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -73,6 +76,19 @@ struct SEOAuditRepository {
             at: root, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try SEOAuditOwnedIO.write(
             encoder.encode(summaries), to: root.appendingPathComponent("projects.json"), root: root)
+    }
+
+    private func validate(_ draft: SEOAuditDraft) throws {
+        let discovered = Set(draft.discoveredPageURLs)
+        guard draft.discoveredPageURLs.count <= 20_000,
+            discovered.count == draft.discoveredPageURLs.count,
+            draft.selectedPageURLs.count <= 20_000,
+            Set(draft.selectedPageURLs).count == draft.selectedPageURLs.count,
+            Set(draft.selectedPageURLs).isSubset(of: discovered),
+            draft.discoveredPageURLs.allSatisfy({
+                SEOAuditURLInput.normalize($0)?.absoluteString == $0
+            })
+        else { throw SEOAuditInputError("That draft contains invalid selected pages.") }
     }
 
     private func validate(_ project: SEOAuditProject) throws {
