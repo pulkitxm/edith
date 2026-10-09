@@ -9,6 +9,7 @@ public final class ExtensionBundleRuntime {
         case helper
         case agent
         case cli
+        case privileged
     }
 
     public struct Snapshot: Equatable, Sendable {

@@ -18,6 +18,10 @@ struct HostEntry {
                 Data("Install Edith in /Applications before starting the release app.\n".utf8))
             exit(1)
         }
+        if arguments == ["--extension-carrier"] {
+            do { try HostPrivilegedCarrier(approved: true).run() } catch { exit(1) }
+            return
+        }
         if arguments == ["--extension-command"] {
             do { try ExtensionCommandSpecification.runWrapper() } catch { exit(1) }
         }
