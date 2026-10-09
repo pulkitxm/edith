@@ -53,7 +53,6 @@ def render_markdown(report, index):
         f"| {titles[entry['id']]} | {entry['downloadBytes']:,} | {entry['installedBytes']:,} | {entry['releaseMetadataBytes']:,} |"
         for entry in report["packages"]
     )
-    commands = "\n".join(f"make extension-dev EXTENSION={entry['id']}" for entry in report["packages"])
     return f"""# Lightweight host rebuild measurements
 
 Measured on {report['measuredAtUTC'].split('T')[0]}. The rebuild is in progress and the PR is not ready to merge. {count} of the {indexed} indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
@@ -86,7 +85,7 @@ Exact byte counts, package checksums, and the host executable checksum are in [t
 
 ```sh
 make ci-marketplace-host
-{commands}
+make ci-extension-workers EXTENSION=--retain-packages
 python3 -B scripts/extension-host-size-report.py --baseline local/baseline/size.json --output docs/extension-host-rebuild-size-report.json --markdown-output docs/extension-host-rebuild-size-report.md
 ```
 
