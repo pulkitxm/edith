@@ -19,6 +19,41 @@ import Testing
         #expect(marketplace.error == nil)
     }
 
+    @Test func anEmptyMarketplaceDoesNotFetchAutomaticUpdates() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let marketplace = try fixture.marketplace()
+        await marketplace.updateInstalledIfDue()
+        #expect(await fixture.network.count == 0)
+    }
+
+    @Test func automaticUpdatePreferencesPersistAcrossAppUpdates() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace()
+        marketplace.automaticallyUpdatesExtensions = false
+        let restarted = try fixture.marketplace()
+        #expect(!restarted.automaticallyUpdatesExtensions)
+        await restarted.updateInstalledIfDue()
+        #expect(await fixture.network.count == 0)
+    }
+
+    @Test func automaticChecksAreRateLimitedAndDoNotEnableDisabledExtensions() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        await fixture.network.set(data: try fixture.envelope(packages: [fixture.package("1.0.0")]))
+        let marketplace = try fixture.marketplace()
+        let now = Date()
+        await marketplace.updateInstalledIfDue(now: now)
+        await marketplace.updateInstalledIfDue(now: now.addingTimeInterval(60))
+        #expect(await fixture.network.count == 1)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        await marketplace.updateInstalledIfDue(now: now.addingTimeInterval(9 * 60 * 60))
+        #expect(await fixture.network.count == 2)
+    }
+
     @Test func cachedInformationIsVerifiedWithoutFetchingItAgain() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }

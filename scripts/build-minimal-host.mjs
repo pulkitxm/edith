@@ -50,6 +50,31 @@ await mkdir(join(contents, "Frameworks"), { recursive: true });
 await mkdir(join(contents, "Resources"), { recursive: true });
 await copyFile(join(products, "EdithHost"), executable);
 await copyFile(join(products, "libExtensionMarketplace.dylib"), library);
+const sparkle = join(contents, "Frameworks/Sparkle.framework");
+execFileSync("ditto", [join(products, "Sparkle.framework"), sparkle]);
+async function prepareFramework(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) await prepareFramework(path);
+    else if (entry.isFile()) {
+      const kind = execFileSync("file", ["-b", path], { encoding: "utf8" });
+      if (!kind.includes("Mach-O")) continue;
+      if (kind.includes("universal binary")) {
+        const thin = `${path}.arm64`;
+        execFileSync("lipo", [path, "-thin", "arm64", "-output", thin]);
+        execFileSync("mv", [thin, path]);
+      }
+      execFileSync("codesign", ["--force", "--sign", "-", path]);
+    }
+  }
+  if (["framework", "xpc", "app"].includes(directory.split(".").at(-1)))
+    execFileSync("codesign", ["--force", "--sign", "-", directory]);
+}
+await prepareFramework(sparkle);
+await copyFile(
+  resolve(root, "Resources/AppIcon.icns"),
+  join(contents, "Resources/AppIcon.icns"),
+);
 await copyFile(
   join(packageDirectory, "Sources/EdithHostCore/Resources/index.json"),
   join(contents, "Resources/index.json"),
@@ -60,11 +85,17 @@ const plist = {
   CFBundleName: `Edith (${basename(root)})`,
   CFBundleDisplayName: `Edith (${basename(root)})`,
   CFBundleExecutable: "Edith",
+  CFBundleIconFile: "AppIcon",
   CFBundlePackageType: "APPL",
   CFBundleShortVersionString: "0.1.0",
   CFBundleVersion: "1",
   NSPrincipalClass: "NSApplication",
   LSMinimumSystemVersion: "14.0",
+  SUFeedURL:
+    "https://github.com/pulkitxm/edith/releases/latest/download/appcast.xml",
+  SUPublicEDKey: "qz/e9EfPlNiHqJC9JA9RazcXGgnH2wxwpS+uw+x9qBM=",
+  SUEnableAutomaticChecks: true,
+  SUScheduledCheckInterval: 86400,
 };
 execFileSync("python3", [
   "-c",

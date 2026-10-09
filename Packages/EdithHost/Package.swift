@@ -8,13 +8,18 @@ let package = Package(
         .executable(name: "EdithHost", targets: ["EdithHost"]),
         .executable(name: "HostLifecycleHarness", targets: ["HostLifecycleHarness"]),
     ],
-    dependencies: [.package(path: "../ExtensionMarketplace")],
+    dependencies: [
+        .package(path: "../ExtensionMarketplace"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
+    ],
     targets: [
         .target(
             name: "EdithHostCore",
             dependencies: [.product(name: "ExtensionMarketplace", package: "ExtensionMarketplace")],
             resources: [.process("Resources")]),
-        .executableTarget(name: "EdithHost", dependencies: ["EdithHostCore"]),
+        .executableTarget(
+            name: "EdithHost",
+            dependencies: ["EdithHostCore", .product(name: "Sparkle", package: "Sparkle")]),
         .executableTarget(
             name: "HostLifecycleHarness", dependencies: ["EdithHostCore"],
             path: "Tests/LifecycleHarness"),
