@@ -68,6 +68,21 @@ import Testing
         #expect(saved.tiles.first?.contentKinds == ["future-content-kind"])
     }
 
+    @Test func runtimeProjectionKeepsNormalizationLimitsAndUniqueInstances() throws {
+        var tile = SurfaceTile(.music)
+        tile.span = 900
+        tile.height = 12_000
+        tile.title = String(repeating: "x", count: 200)
+        let layout = SurfaceLayout(tiles: Array(repeating: tile, count: 300))
+        let availability = try fixture(installed: ["music"], states: ["music": .active])
+        let projected = availability.projected(layout, target: .home)
+        #expect(projected == layout.normalized())
+        #expect(projected.tiles.count == 1)
+        #expect(projected.tiles.first?.span == 24)
+        #expect(projected.tiles.first?.height == 1200)
+        #expect(projected.tiles.first?.title.count == 64)
+    }
+
     @Test func hiddenWidgetsMakeNoQueriesEvenWhenEnabled() throws {
         var tile = SurfaceTile(.music)
         tile.hidden = true
