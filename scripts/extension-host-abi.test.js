@@ -108,6 +108,30 @@ test("unrelated feature changes leave the shared contract unchanged", async () =
   });
 });
 
+test("isolated worker contracts survive unrelated legacy feature changes", async () => {
+  await fixture(async ({ root, manifest }) => {
+    await writeFile(
+      manifest,
+      JSON.stringify([
+        { id: "isolated", contractVersion: 1, hostABI: "stale" },
+        { id: "legacy", hostABI: "stale" },
+      ]),
+    );
+    const previous = await writeHostABI(root);
+    await writeFile(
+      join(root, "Packages/Edith/Sources/EdithKit/Merged.swift"),
+      "changed legacy feature",
+    );
+    const next = await writeHostABI(root);
+    expect(next).not.toBe(previous);
+    expect(
+      JSON.parse(await readFile(manifest, "utf8")).map(
+        (entry) => entry.hostABI,
+      ),
+    ).toEqual(["edith-host-1", next]);
+  });
+});
+
 test("build preparation refuses a missing host declaration", async () => {
   await fixture(async ({ root, configuration }) => {
     await writeFile(configuration, "invalid configuration");

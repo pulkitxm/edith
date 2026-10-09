@@ -72,7 +72,8 @@ struct MarketplaceHarness {
             _ = try await installer.install(
                 catalog.installationPlan(
                     for: operation == "voice" ? "audioMixer" : "keepAwake",
-                    hostABI: MarketplaceConfiguration.hostABI,
+                    hostABI: operation == "voice"
+                        ? MarketplaceConfiguration.hostABI : MarketplaceConfiguration.workerHostABI,
                     architecture: "arm64",
                     systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
                 repository: "pulkitxm/edith")
@@ -98,7 +99,7 @@ struct MarketplaceHarness {
             return
         }
         let runtime = ExtensionBundleRuntime(
-            store: store, role: .helper, hostABI: MarketplaceConfiguration.hostABI,
+            store: store, role: .helper, hostABI: MarketplaceConfiguration.workerHostABI,
             verify: ExtensionCodeSignature.verifyDevelopment)
         try runtime.start(id: "keepAwake", context: ["defaultsSuite": suite])
         let initial = try runtime.snapshot(id: "keepAwake")!
@@ -107,7 +108,7 @@ struct MarketplaceHarness {
             _ = try await installer.install(
                 catalog.installationPlan(
                     for: operation == "voice" ? "audioMixer" : "keepAwake",
-                    hostABI: MarketplaceConfiguration.hostABI,
+                    hostABI: MarketplaceConfiguration.workerHostABI,
                     architecture: "arm64",
                     systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
                 repository: "pulkitxm/edith")
@@ -123,7 +124,8 @@ struct MarketplaceHarness {
             "loadedVersion": initial.version, "activeAfterStop": final.active,
             "restartRequired": final.restartRequired,
             "installedVersion": try store.installedPackage(
-                id: "keepAwake", hostABI: MarketplaceConfiguration.hostABI, architecture: "arm64")!
+                id: "keepAwake", hostABI: MarketplaceConfiguration.workerHostABI,
+                architecture: "arm64")!
                 .version,
         ]
         print(

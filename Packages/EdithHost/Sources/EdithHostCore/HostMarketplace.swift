@@ -7,6 +7,7 @@ import Observation
 public final class HostMarketplace {
     public let entries: [HostExtension]
     public let identity: HostIdentity
+    public let sessions: HostExtensionSessions
     public private(set) var installed: [String: ExtensionPackage] = [:]
     public private(set) var available: [String: ExtensionPackage] = [:]
     public private(set) var operationID: String?
@@ -23,13 +24,15 @@ public final class HostMarketplace {
         entries: [HostExtension],
         store: ExtensionPackageStore,
         catalogClient: ExtensionCatalogClient,
-        installer: ExtensionPackageInstaller
+        installer: ExtensionPackageInstaller,
+        sessions: HostExtensionSessions
     ) throws {
         self.identity = identity
         self.entries = entries
         self.store = store
         self.catalogClient = catalogClient
         self.installer = installer
+        self.sessions = sessions
         try store.completePendingRemovals()
         try reloadInstalled()
     }
@@ -63,10 +66,19 @@ public final class HostMarketplace {
             }
             installer = .live(store: store, teamIdentifier: team)
         }
+        guard let executable = Bundle.main.executableURL,
+            let defaults = UserDefaults(suiteName: identity.defaultsSuite)
+        else { throw CocoaError(.fileNoSuchFile) }
+        let sessions = HostExtensionSessions(defaults: defaults) { package in
+            HostWorker(
+                configuration: HostWorkerConfiguration(
+                    identity: identity, extensionID: package.id, version: package.version),
+                executable: executable)
+        }
         return try HostMarketplace(
             identity: identity, entries: HostIndex.bundled(), store: store,
             catalogClient: .live(cache: identity.root.appendingPathComponent("catalog.json")),
-            installer: installer)
+            installer: installer, sessions: sessions)
     }
 
     public func loadCachedCatalog() async {
@@ -76,6 +88,42 @@ public final class HostMarketplace {
             self.error =
                 "Saved extension information could not be verified. Check for updates to try again."
         }
+    }
+
+    public func restoreEnabledExtensions() async {
+        await sessions.restore(packages: installed)
+    }
+
+    public func enable(id: String) async {
+        guard operationID == nil, let package = installed[id] else { return }
+        operationID = id
+        error = nil
+        defer { operationID = nil }
+        do { try await sessions.enable(package) } catch {
+            self.error = "The extension could not start. Try enabling it again."
+        }
+    }
+
+    public func disable(id: String) async {
+        guard operationID == nil else { return }
+        operationID = id
+        error = nil
+        defer { operationID = nil }
+        do { try await sessions.disable(id: id) } catch {
+            self.error = "The extension could not stop. Try again."
+        }
+    }
+
+    public func show(id: String) async {
+        guard operationID == nil else { return }
+        do { try await sessions.show(id: id) } catch {
+            self.error = "The extension could not open. Try again."
+        }
+    }
+
+    public func updateAvailable(id: String) -> Bool {
+        guard let package = installed[id], let next = available[id] else { return false }
+        return package.version.compare(next.version, options: .numeric) == .orderedAscending
     }
 
     public func checkForUpdates() async {
@@ -113,14 +161,25 @@ public final class HostMarketplace {
                 }
             }
             try reloadInstalled()
+            if let package = installed[id] {
+                do { try await sessions.applyUpdate(package) } catch {
+                    self.error =
+                        "The update could not start. The previous version will keep running if available."
+                }
+            }
+            try store.prune()
         } catch {
             self.error = "The extension could not be downloaded. Try again."
         }
     }
 
-    public func remove(id: String) {
+    public func remove(id: String) async {
         guard operationID == nil else { return }
+        operationID = id
+        error = nil
+        defer { operationID = nil }
         do {
+            try await sessions.disable(id: id)
             _ = try store.requestRemoval(id: id)
             try reloadInstalled()
         } catch {

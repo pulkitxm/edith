@@ -60,8 +60,14 @@ export async function writeHostABI(root = process.cwd()) {
   )
     throw new Error("Missing host ABI declaration");
   if (source !== nextSource) await writeFile(configuration, nextSource);
-  if (manifest.some((entry) => entry.hostABI !== abi)) {
-    for (const entry of manifest) entry.hostABI = abi;
+  if (
+    manifest.some(
+      (entry) =>
+        entry.hostABI !== (entry.contractVersion === 1 ? "edith-host-1" : abi),
+    )
+  ) {
+    for (const entry of manifest)
+      entry.hostABI = entry.contractVersion === 1 ? "edith-host-1" : abi;
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   }
   return abi;
@@ -86,7 +92,10 @@ if (
   if (process.argv.includes("--write")) await writeHostABI(root);
   else if (
     !source.includes(`public static let hostABI = "${abi}"`) ||
-    manifest.some((entry) => entry.hostABI !== abi)
+    manifest.some(
+      (entry) =>
+        entry.hostABI !== (entry.contractVersion === 1 ? "edith-host-1" : abi),
+    )
   ) {
     throw new Error(
       "Host contract changed. Run bun scripts/extension-host-abi.mjs --write before committing.",

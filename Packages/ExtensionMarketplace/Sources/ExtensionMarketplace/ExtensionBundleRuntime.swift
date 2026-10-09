@@ -42,6 +42,7 @@ public final class ExtensionBundleRuntime {
     public let role: Role
     public let hostABI: String
     public let architecture: String
+    private let packageVersion: String?
     private let verify: (URL) throws -> Void
     private var loaded: [String: Loaded] = [:]
     private var retainedImages: [(Bundle, UnsafeMutableRawPointer, PackageFileLock)] = []
@@ -49,12 +50,13 @@ public final class ExtensionBundleRuntime {
 
     public init(
         store: ExtensionPackageStore, role: Role, hostABI: String, architecture: String = "arm64",
-        verify: @escaping (URL) throws -> Void
+        packageVersion: String? = nil, verify: @escaping (URL) throws -> Void
     ) {
         self.store = store
         self.role = role
         self.hostABI = hostABI
         self.architecture = architecture
+        self.packageVersion = packageVersion
         self.verify = verify
     }
 
@@ -118,8 +120,10 @@ public final class ExtensionBundleRuntime {
         if let instance = loaded[id] { return instance }
         guard !failedLoads.contains(id) else { throw MarketplaceError.invalidBundle }
         guard
-            let package = try store.installedPackage(
-                id: id, hostABI: hostABI, architecture: architecture)
+            let package = try store.installedPackages().filter({
+                $0.id == id && $0.hostABI == hostABI && $0.architecture == architecture
+                    && (packageVersion == nil || $0.version == packageVersion)
+            }).max(by: { $0.version.compare($1.version, options: .numeric) == .orderedAscending })
         else {
             throw MarketplaceError.packageNotInstalled
         }
@@ -130,6 +134,11 @@ public final class ExtensionBundleRuntime {
         guard let bundle = Bundle(url: url), let executable = bundle.executableURL else {
             throw MarketplaceError.invalidBundle
         }
+        guard bundle.bundleIdentifier == "com.pulkit.edith.extensions.\(id).\(role.rawValue)",
+            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                == package.version,
+            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == hostABI
+        else { throw MarketplaceError.invalidBundle }
         try bundle.loadAndReturnError()
         guard let handle = dlopen(executable.path, RTLD_NOW | RTLD_LOCAL) else {
             throw MarketplaceError.invalidBundle

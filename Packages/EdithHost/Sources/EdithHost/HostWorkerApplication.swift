@@ -73,9 +73,10 @@ final class HostWorkerApplication {
             let store = ExtensionPackageStore(
                 root: identity.root.appendingPathComponent("Extensions"))
             guard
-                let package = try store.installedPackage(
-                    id: next.extensionID, hostABI: HostContract.compatibility, architecture: "arm64"
-                ), package.version == next.version
+                let package = try store.installedPackages().first(where: {
+                    $0.id == next.extensionID && $0.hostABI == HostContract.compatibility
+                        && $0.architecture == "arm64" && $0.version == next.version
+                })
             else { throw HostWorkerError.rejected }
             let directory = store.directory(for: package).appendingPathComponent(package.id)
             let team = ExtensionCodeSignature.teamIdentifier()
@@ -95,11 +96,13 @@ final class HostWorkerApplication {
                 else { continue }
                 let runtime = ExtensionBundleRuntime(
                     store: store, role: role, hostABI: HostContract.compatibility,
+                    packageVersion: next.version,
                     verify: { url in
                         if identity.development {
                             try ExtensionCodeSignature.verifyDevelopment(url)
                         } else {
-                            try ExtensionCodeSignature.verify(url, teamIdentifier: team!)
+                            guard let team else { throw MarketplaceError.invalidSignature }
+                            try ExtensionCodeSignature.verify(url, teamIdentifier: team)
                         }
                     })
                 runtimes.append(runtime)

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 @MainActor
 @objc(EdithKeepAwakeExtensionRuntime)
@@ -24,7 +25,18 @@ final class KeepAwakeRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             if store == nil { store = KeepAwakeStore(defaults: defaults) }
+            defaults.set(true, forKey: "keepAwakeEnabled")
+            store?.syncPreventSleep()
             return ["ok": true] as NSDictionary
+        case "view":
+            guard let suite = input["defaultsSuite"] as? String,
+                let defaults = UserDefaults(suiteName: suite), let store
+            else {
+                return ["ok": false] as NSDictionary
+            }
+            return NSHostingController(
+                rootView: KeepAwakeSettings(
+                    defaults: defaults, synchronize: { [weak store] in store?.syncPreventSleep() }))
         case "synchronize":
             store?.syncPreventSleep()
             return ["ok": true] as NSDictionary
@@ -40,6 +52,33 @@ final class KeepAwakeRuntime: NSObject {
         default:
             return ["ok": false] as NSDictionary
         }
+    }
+}
+
+private struct KeepAwakeSettings: View {
+    @AppStorage private var preventSleep: Bool
+    let synchronize: @MainActor () -> Void
+
+    init(defaults: UserDefaults, synchronize: @escaping @MainActor () -> Void) {
+        _preventSleep = AppStorage(wrappedValue: false, "preventSleep", store: defaults)
+        self.synchronize = synchronize
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Keep awake", isOn: $preventSleep)
+                Text(
+                    "Keeps the Mac and display awake until turned off. Closing the lid still sleeps the Mac; use Lid Awake for that."
+                )
+                .foregroundStyle(.secondary)
+            } header: {
+                Text("Keep Awake").font(.title.bold())
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: preventSleep) { synchronize() }
+        .frame(minWidth: 400, minHeight: 200)
     }
 }
 

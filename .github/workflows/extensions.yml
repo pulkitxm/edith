@@ -56,6 +56,7 @@ jobs:
       - run: python3 -B scripts/test-extension-size-report.py
       - run: make ci-host
       - run: make host
+      - run: bun scripts/test-extension-workers.mjs
       - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
       - run: swift test --package-path Extensions --build-system native --jobs 2
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
