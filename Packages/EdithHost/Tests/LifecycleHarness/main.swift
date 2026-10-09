@@ -47,7 +47,9 @@ struct HostLifecycleHarness {
             UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?
                 .removePersistentDomain(forName: identity.extensionDefaultsSuite(extensionID))
         }
-        let endpoint = try ExtensionPeerEndpoint(namespace: identifier, owner: extensionID)
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: identifier, owner: extensionID,
+            directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
         defer {
             if extensionID == "jev" {
                 let context = LAContext()

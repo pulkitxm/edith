@@ -1,15 +1,30 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildExtensionSupport } from "./build-extension-support.mjs";
+import {
+  buildExtensionSupport,
+  rewriteSupportImports,
+} from "./build-extension-support.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "extension-command-fixture-"));
 try {
   const products = buildExtensionSupport(
     process.cwd(),
     "EdithExtensionSupport",
+    "CommandFixture_helper",
+  );
+  const source = join(root, "Runtime.swift");
+  await writeFile(
+    source,
+    rewriteSupportImports(
+      await readFile(
+        "Packages/EdithHost/Tests/CommandFixture/Runtime.swift",
+        "utf8",
+      ),
+      products.modules,
+    ),
   );
   const bundle = join(root, "helper.bundle");
   const contents = join(bundle, "Contents");
@@ -29,12 +44,12 @@ try {
       "EdithCommandFixture",
       "-target",
       "arm64-apple-macos14.0",
-      resolve("Packages/EdithHost/Tests/CommandFixture/Runtime.swift"),
+      source,
       "-I",
-      join(products, "Modules"),
+      join(products.products, "Modules"),
       "-L",
-      products,
-      "-lEdithExtensionSupport",
+      products.products,
+      `-l${products.product}`,
       "-Xlinker",
       "-dead_strip",
       "-Xlinker",
@@ -79,7 +94,7 @@ try {
     .map((line) => JSON.parse(line));
   assert.deepEqual(
     results.map(({ mode }) => mode),
-    ["disable", "crash", "hang", "completed"],
+    ["disable", "crash", "hang", "completed", "asyncStop", "asyncHang"],
   );
   for (const result of results) {
     assert.equal(result.sameAppExecutable, true);
@@ -87,6 +102,8 @@ try {
     assert.equal(result.argumentsAndEnvironment, true);
     assert.equal(result.peerCommands, true);
     assert.equal(result.commandCancellation, true);
+    assert.equal(result.boundedShutdown, true);
+    assert.equal(result.isolatedSupportTypes, true);
     assert.equal(result.remainingProcesses, 0);
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }

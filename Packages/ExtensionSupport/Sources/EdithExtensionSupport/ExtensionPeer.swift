@@ -21,11 +21,14 @@ public enum ExtensionPeerError: Error, LocalizedError, Sendable {
 
 public struct ExtensionPeerEndpoint: Sendable {
     public let name: String
+    public let directory: URL
+    var registrationURL: URL { directory.appendingPathComponent(name + ".json") }
     public static let maximumPayloadBytes = 8 * 1_024 * 1_024
     static let maximumMessageBytes = 12 * 1_024 * 1_024
 
-    public init(namespace: String, owner: String) throws {
-        guard !namespace.isEmpty, namespace.utf8.count <= 256, !namespace.utf8.contains(0),
+    public init(namespace: String, owner: String, directory: URL) throws {
+        guard directory.isFileURL, directory.path.hasPrefix("/"), !directory.path.utf8.contains(0),
+            !namespace.isEmpty, namespace.utf8.count <= 256, !namespace.utf8.contains(0),
             !owner.isEmpty, owner.count <= 96,
             owner.utf8.allSatisfy({
                 (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
@@ -35,13 +38,17 @@ public struct ExtensionPeerEndpoint: Sendable {
         let hash = SHA256.hash(data: Data((namespace + "\0" + owner).utf8)).map {
             String(format: "%02x", $0)
         }.joined()
+        self.directory = directory.standardizedFileURL
         name = "edith.extension.v1.\(getuid()).\(hash)"
     }
 
     public static func current(owner: String) -> Self? {
         guard let namespace = ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"]
         else { return nil }
-        return try? Self(namespace: namespace, owner: owner)
+        guard let channel = ExtensionSharedState.current else { return nil }
+        return try? Self(
+            namespace: namespace, owner: owner,
+            directory: channel.root.appendingPathComponent("Commands"))
     }
 
     public func invoke(_ command: String, payload: Data = Data(), timeout: TimeInterval = 30)
@@ -78,6 +85,7 @@ struct ExtensionPeerResponse: Codable, Sendable {
 private final class ExtensionPeerCall: @unchecked Sendable {
     private let endpoint: ExtensionPeerEndpoint
     private let request: ExtensionPeerRequest
+    private let physicalName: String?
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
     private var result: Result<Data, any Error>?
@@ -87,6 +95,9 @@ private final class ExtensionPeerCall: @unchecked Sendable {
 
     init(endpoint: ExtensionPeerEndpoint, command: String, payload: Data, timeout: TimeInterval) {
         self.endpoint = endpoint
+        physicalName =
+            ExtensionPeerRegistration.read(
+                at: endpoint.registrationURL, logicalName: endpoint.name)?.physicalName
         let token = UUID()
         request = ExtensionPeerRequest(
             token: token, reply: "edith.extension.reply.\(getuid()).\(token.uuidString)",
@@ -110,7 +121,9 @@ private final class ExtensionPeerCall: @unchecked Sendable {
     private func stop(_ error: any Error) {
         guard finish(.failure(error)) else { return }
         DispatchQueue.global(qos: .utility).async { [self] in
-            guard let remote = CFMessagePortCreateRemote(nil, endpoint.name as CFString) else {
+            guard let physicalName,
+                let remote = CFMessagePortCreateRemote(nil, physicalName as CFString)
+            else {
                 return
             }
             let data = Data(request.token.uuidString.utf8)
@@ -121,7 +134,9 @@ private final class ExtensionPeerCall: @unchecked Sendable {
     private func send() {
         do {
             let data = try JSONEncoder().encode(request)
-            guard let remote = CFMessagePortCreateRemote(nil, endpoint.name as CFString) else {
+            guard let physicalName,
+                let remote = CFMessagePortCreateRemote(nil, physicalName as CFString)
+            else {
                 throw ExtensionPeerError.unavailable
             }
             var context = CFMessagePortContext(
@@ -229,6 +244,7 @@ public final class ExtensionPeerServer {
     private let execute: Execute
     private var port: CFMessagePort?
     private var jobs: [UUID: Job] = [:]
+    private var registration: ExtensionPeerRegistrationLease?
 
     public init(endpoint: ExtensionPeerEndpoint, execute: @escaping Execute) {
         self.endpoint = endpoint
@@ -237,6 +253,7 @@ public final class ExtensionPeerServer {
 
     public func start() throws {
         guard port == nil else { throw ExtensionPeerError.invalidRequest }
+        let registration = try ExtensionPeerRegistrationLease(endpoint: endpoint)
         var context = CFMessagePortContext(
             version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
             retain: { pointer in
@@ -250,7 +267,7 @@ public final class ExtensionPeerServer {
         var reused = DarwinBoolean(false)
         guard
             let port = CFMessagePortCreateLocal(
-                nil, endpoint.name as CFString,
+                nil, registration.registration.physicalName as CFString,
                 { _, kind, data, info in
                     guard let data, let info else { return nil }
                     return MainActor.assumeIsolated {
@@ -262,12 +279,16 @@ public final class ExtensionPeerServer {
                 }, &context, &reused), !reused.boolValue
         else { throw ExtensionPeerError.unavailable }
         self.port = port
+        self.registration = registration
         CFMessagePortSetDispatchQueue(port, .main)
+        do { try registration.publish() } catch { shutdown(); throw error }
     }
 
     public func shutdown() {
         if let port { CFMessagePortInvalidate(port) }
         port = nil
+        registration?.release()
+        registration = nil
         let outstanding = jobs.values
         jobs.removeAll()
         for job in outstanding {

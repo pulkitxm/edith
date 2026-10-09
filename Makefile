@@ -193,7 +193,7 @@ ci-marketplace-host: ci-host host
 	python3 -B scripts/test-extension-size-report.py
 	python3 -B scripts/test-extension-host-size-report.py
 	bun scripts/extension-host-abi.mjs --write
-	bun test scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
+	bun test scripts/build-extension-support.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
 	$(MAKE) ci-marketplace-runtime
 	$(MAKE) ci-extension-support
 	$(MAKE) ci-extension-commands

@@ -18,6 +18,7 @@ final class HostWorkerApplication {
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
     private var peerServer: ExtensionPeerServer?
+    private var shutdownTask: Task<Void, Never>?
 
     init() throws {
         let descriptor = dup(STDOUT_FILENO)
@@ -75,6 +76,10 @@ final class HostWorkerApplication {
         do {
             for frame in try frames.append(bytes) {
                 let request = try JSONDecoder().decode(HostWorkerRequest.self, from: frame)
+                if request.operation == "stop" {
+                    shutdown(token: request.token)
+                    return
+                }
                 let response: HostWorkerResponse
                 do {
                     try execute(request)
@@ -86,7 +91,6 @@ final class HostWorkerApplication {
                         message: "The extension could not complete this action.")
                 }
                 try control.send(response)
-                if request.operation == "stop" { shutdown(); return }
                 if !response.ok, request.operation == "start" { shutdown(); return }
             }
         } catch { shutdown() }
@@ -142,7 +146,8 @@ final class HostWorkerApplication {
             }
             guard !runtimes.isEmpty else { throw HostWorkerError.rejected }
             let endpoint = try ExtensionPeerEndpoint(
-                namespace: identity.identifier, owner: package.id)
+                namespace: identity.identifier, owner: package.id,
+                directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
                 guard let self, !self.stopping,
@@ -179,8 +184,6 @@ final class HostWorkerApplication {
                     throw HostWorkerError.rejected
                 }
             }
-        case "stop":
-            for runtime in runtimes { try runtime.stopAll() }
         default:
             throw HostWorkerError.rejected
         }
@@ -218,7 +221,7 @@ final class HostWorkerApplication {
         throw HostWorkerError.rejected
     }
 
-    private func shutdown() {
+    private func shutdown(token: UUID? = nil) {
         guard !stopping else { return }
         stopping = true
         peerServer?.shutdown()
@@ -230,10 +233,18 @@ final class HostWorkerApplication {
         windowObserver = nil
         resourceObservers.forEach(NotificationCenter.default.removeObserver)
         resourceObservers.removeAll()
-        for runtime in runtimes { try? runtime.stopAll() }
-        window?.close()
-        try? control.close()
-        exit(0)
+        window?.orderOut(nil)
+        shutdownTask = Task { [self] in
+            for runtime in runtimes { try? await runtime.prepareToStopAll() }
+            for runtime in runtimes { try? runtime.stopAll() }
+            window?.close()
+            if let token {
+                try? control.send(
+                    HostWorkerResponse(token: token, ok: true, version: configuration?.version))
+            }
+            try? control.close()
+            exit(0)
+        }
     }
 
     private func applyAppearance(_ configuration: HostWorkerConfiguration) throws {

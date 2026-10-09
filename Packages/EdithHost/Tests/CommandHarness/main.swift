@@ -45,16 +45,24 @@ struct HostCommandHarness {
         let suite = identity.extensionDefaultsSuite(package.id)
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer { defaults.removePersistentDomain(forName: suite) }
-        for mode in ["disable", "crash", "hang", "completed"] {
+        for mode in ["disable", "crash", "hang", "completed", "asyncStop", "asyncHang"] {
+
             defaults.set(mode, forKey: "commandFixtureMode")
             let data = identity.extensionDirectory(package.id)
             try? FileManager.default.removeItem(at: data)
+            try FileManager.default.createDirectory(at: data, withIntermediateDirectories: true)
+            let log = data.appendingPathComponent("worker.log")
+            FileManager.default.createFile(atPath: log.path, contents: nil)
+            let errorOutput = try FileHandle(forWritingTo: log)
+            defer { try? errorOutput.close() }
             let worker = HostWorker(
                 configuration: HostWorkerConfiguration(
                     identity: identity, extensionID: package.id, version: package.version),
-                executable: executable, requestTimeout: .seconds(2))
+                executable: executable, requestTimeout: .seconds(2), errorOutput: errorOutput)
+            var stage = "start"
             do {
                 try await worker.start()
+                stage = "child command"
                 guard let pid = worker.processIdentifier else { throw HostWorkerError.rejected }
                 try await wait {
                     FileManager.default.fileExists(
@@ -95,13 +103,17 @@ struct HostCommandHarness {
                         throw HostWorkerError.rejected
                     }
                 }
-                let endpoint = try ExtensionPeerEndpoint(namespace: identifier, owner: package.id)
+                let endpoint = try ExtensionPeerEndpoint(
+                    namespace: identifier, owner: package.id,
+                    directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
+                stage = "peer commands"
                 try await verifyCommands(endpoint, data: data)
                 let pending = Task { try await endpoint.invoke("wait", timeout: 30) }
                 try await wait {
                     FileManager.default.fileExists(
                         atPath: data.appendingPathComponent("peer.ready").path)
                 }
+                stage = "shutdown"
                 let stoppedAt = ContinuousClock.now
                 if mode == "crash" {
                     kill(pid, SIGKILL)
@@ -115,22 +127,49 @@ struct HostCommandHarness {
                 guard ContinuousClock.now - stoppedAt < .seconds(5) else {
                     throw HostWorkerError.timedOut
                 }
+                if mode == "asyncStop" {
+                    guard
+                        try Data(contentsOf: data.appendingPathComponent("finalized"))
+                            == Data("finalized".utf8)
+                    else { throw HostWorkerError.rejected }
+                } else if mode == "asyncHang" {
+                    guard
+                        !FileManager.default.fileExists(
+                            atPath: data.appendingPathComponent("finalized").path)
+                    else { throw HostWorkerError.rejected }
+                }
                 do {
                     _ = try await endpoint.invoke("echo", timeout: 1)
                     throw HostWorkerError.rejected
                 } catch is ExtensionPeerError {}
+                stage = "process cleanup"
                 try await wait {
                     [pid, parent, child].allSatisfy { kill($0, 0) == -1 && errno == ESRCH }
                 }
                 guard sharedState.values(for: package.id).isEmpty else {
                     throw HostWorkerError.rejected
                 }
+                try errorOutput.close()
+                guard
+                    !(try String(contentsOf: log, encoding: .utf8)).contains(
+                        "is implemented in both")
+                else {
+                    throw HostWorkerError.invalidResponse
+                }
                 print(
-                    "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"peerCommands\":true,\"commandCancellation\":true,\"remainingProcesses\":0}"
+                    "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"peerCommands\":true,\"commandCancellation\":true,\"boundedShutdown\":true,\"isolatedSupportTypes\":true,\"remainingProcesses\":0}"
                 )
             } catch {
                 try? await worker.stop()
-                throw error
+                try? errorOutput.close()
+                let detail = (try? String(contentsOf: log, encoding: .utf8)) ?? ""
+                throw NSError(
+                    domain: "ExtensionFixture", code: 1,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Worker \(mode) failed during \(stage): \(error). \(detail)"
+                    ])
+
             }
         }
     }
@@ -138,11 +177,14 @@ struct HostCommandHarness {
     @MainActor private static func verifyCommands(_ endpoint: ExtensionPeerEndpoint, data: URL)
         async throws
     {
+
         let payload = Data((0..<(1_024 * 1_024)).map { UInt8(truncatingIfNeeded: $0) })
         guard try await endpoint.invoke("echo", payload: payload) == payload else {
             throw HostWorkerError.rejected
         }
-        let wrong = try ExtensionPeerEndpoint(namespace: UUID().uuidString, owner: "keepAwake")
+        let wrong = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "keepAwake",
+            directory: data.appendingPathComponent("isolated"))
         do {
             _ = try await wrong.invoke("echo", timeout: 1)
             throw HostWorkerError.rejected
@@ -151,6 +193,7 @@ struct HostCommandHarness {
             _ = try await endpoint.invoke("unknown")
             throw HostWorkerError.rejected
         } catch is ExtensionPeerError {}
+
         let marker = data.appendingPathComponent("peer.ready")
         let cancelled = Task { try await endpoint.invoke("wait") }
         try await wait { FileManager.default.fileExists(atPath: marker.path) }
@@ -165,6 +208,7 @@ struct HostCommandHarness {
             throw HostWorkerError.rejected
         } catch is ExtensionPeerError {}
         try await wait { !FileManager.default.fileExists(atPath: marker.path) }
+
         guard try await endpoint.invoke("echo", payload: payload) == payload else {
             throw HostWorkerError.rejected
         }

@@ -24,6 +24,22 @@ final class CommandFixtureRuntime: NSObject {
         }
     }
 
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        commands.shutdown()
+        task?.cancel()
+        Task {
+            if mode == "asyncHang" { try? await Task.sleep(for: .seconds(30)) }
+            if mode == "asyncStop" {
+                try? await Task.sleep(for: .milliseconds(300))
+                try? Data("finalized".utf8).write(
+                    to: ExtensionData.root.appendingPathComponent("finalized"), options: .atomic)
+            }
+            completion()
+            completion()
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":

@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import { buildExtensionSupport } from "./build-extension-support.mjs";
+import {
+  buildExtensionSupport,
+  rewriteSupportImports,
+} from "./build-extension-support.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
@@ -42,9 +45,6 @@ export async function buildExtensionPackage({
   const hostProducts = definition.usesHostFramework
     ? (process.env.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
     : undefined;
-  const supportProducts = definition.supportProduct
-    ? buildExtensionSupport(root, definition.supportProduct)
-    : undefined;
   if (definition.nativePackage) {
     execFileSync(
       "swift",
@@ -68,6 +68,27 @@ export async function buildExtensionPackage({
   for (const [role, sources] of Object.entries(definition.roles)) {
     if (!["app", "helper", "agent", "cli"].includes(role))
       throw new Error(`Unknown host role ${role}`);
+    const support = definition.supportProduct
+      ? buildExtensionSupport(root, definition.supportProduct, `${id}_${role}`)
+      : undefined;
+    const compileSources = [];
+    for (const [index, path] of sources.entries()) {
+      if (!support) {
+        compileSources.push(resolve(root, path));
+        continue;
+      }
+      const sourceDirectory = resolve(staging, "sources", role);
+      await mkdir(sourceDirectory, { recursive: true });
+      const target = resolve(sourceDirectory, `${index}-${basename(path)}`);
+      await writeFile(
+        target,
+        rewriteSupportImports(
+          await readFile(resolve(root, path), "utf8"),
+          support.modules,
+        ),
+      );
+      compileSources.push(target);
+    }
     const bundle = resolve(payload, `${role}.bundle`);
     const contents = resolve(bundle, "Contents");
     await mkdir(resolve(contents, "MacOS"), { recursive: true });
@@ -148,16 +169,16 @@ export async function buildExtensionPackage({
         `EdithExtension_${id}_${role}`,
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}.0`,
-        ...sources.map((path) => resolve(root, path)),
-        ...(supportProducts
+        ...compileSources,
+        ...(support
           ? [
               "-swift-version",
               "5",
               "-I",
-              resolve(supportProducts, "Modules"),
+              resolve(support.products, "Modules"),
               "-L",
-              supportProducts,
-              `-l${definition.supportProduct}`,
+              support.products,
+              `-l${support.product}`,
               "-Xlinker",
               "-dead_strip",
             ]
