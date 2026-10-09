@@ -20,6 +20,10 @@ public enum HerdrCollector {
     }
 
     public static func executable() -> URL? {
+        if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+            let executable = URL(fileURLWithPath: fixture).appendingPathComponent("bin/herdr")
+            return FileManager.default.isExecutableFile(atPath: executable.path) ? executable : nil
+        }
         if let found = CLIToolEnvironment.executable(named: "herdr") { return found }
         let home = FileManager.default.homeDirectoryForCurrentUser
         let extras = [

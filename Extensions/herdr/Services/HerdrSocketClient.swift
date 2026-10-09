@@ -337,6 +337,10 @@ final class HerdrSocketClient: @unchecked Sendable {
 
 enum HerdrSocketDiscovery {
     static func local() -> [(name: String, path: String)] {
+        if let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] {
+            return sockets(
+                under: URL(fileURLWithPath: fixture).appendingPathComponent(".config/herdr"))
+        }
         let configHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
         let root =
             configHome.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) }

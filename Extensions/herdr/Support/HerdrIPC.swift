@@ -23,10 +23,11 @@ public enum HerdrIPC {
         }
     }
     public static func observe(
-        _ name: Notification.Name, _ action: @escaping (Notification) -> Void
+        _ name: Notification.Name, _ action: @escaping ([AnyHashable: Any]) -> Void
     ) -> NSObjectProtocol {
         NotificationCenter.default.addObserver(
-            forName: name, object: nil, queue: .main, using: action)
+            forName: name, object: nil, queue: .main
+        ) { action($0.userInfo ?? [:]) }
     }
     public static func stopObserving(_ observer: NSObjectProtocol?) {
         if let observer { NotificationCenter.default.removeObserver(observer) }
