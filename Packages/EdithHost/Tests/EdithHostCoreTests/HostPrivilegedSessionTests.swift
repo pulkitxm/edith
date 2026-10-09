@@ -5,6 +5,23 @@ import Testing
 @testable import EdithHostCore
 
 @Suite @MainActor struct HostPrivilegedSessionTests {
+    @Test func backgroundConnectionCallbacksBindOnTheMainActor() async {
+        let main = await withCheckedContinuation {
+            (continuation: CheckedContinuation<Bool, Never>) in
+            Task.detached {
+                let connection = NSXPCConnection(serviceName: "com.pulkit.edith.synthetic.fixture")
+                HostPrivilegedCarrier.bindAcceptedConnection(
+                    connection, requirement: "identifier \"synthetic\""
+                ) { box in
+                    let main = Thread.isMainThread
+                    box.connection.invalidate()
+                    continuation.resume(returning: main)
+                }
+            }
+        }
+        #expect(main)
+    }
+
     @Test func failedRestoreKeepsTheExclusiveLeaseUntilSuccess() async throws {
         let fixture = try Fixture(mode: "reject-once")
         defer { fixture.clean() }

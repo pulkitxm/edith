@@ -23,15 +23,14 @@ import Security
     public nonisolated func listener(
         _ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection
     ) -> Bool {
-        let box = HostPrivilegedConnection(connection)
-        return MainActor.assumeIsolated {
-            let connection = box.connection
-            guard sessions.count < 8, let identifier = Bundle.main.bundleIdentifier else {
-                return false
-            }
-            connection.setCodeSigningRequirement(
+        guard let identifier = Bundle.main.bundleIdentifier else { return false }
+        Self.bindAcceptedConnection(
+            connection,
+            requirement:
                 "identifier \"\(identifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(team)\""
-            )
+        ) { [self] box in
+            let connection = box.connection
+            guard sessions.count < 8 else { connection.invalidate(); return }
             let id = UUID()
             let admission = HostPrivilegedAdmission(
                 root: URL(fileURLWithPath: "/Library/Application Support/Edith Extension Carrier")
@@ -45,7 +44,7 @@ import Security
                 self?.sessions[id] = nil
                 guard self?.sessions.isEmpty == true else { return }
                 Task {
-                    try? await Task.sleep(for: .milliseconds(200));
+                    try? await Task.sleep(for: .milliseconds(200))
                     if self?.sessions.isEmpty == true { exit(0) }
                 }
             }
@@ -54,9 +53,20 @@ import Security
             connection.exportedObject = session
             connection.invalidationHandler = { Task { @MainActor in session.connectionLost() } }
             connection.interruptionHandler = connection.invalidationHandler
-            connection.resume(); return true
+            connection.resume()
         }
+        return true
     }
+
+    nonisolated static func bindAcceptedConnection(
+        _ connection: NSXPCConnection,
+        requirement: String, bind: @escaping @MainActor (HostPrivilegedConnection) -> Void
+    ) {
+        connection.setCodeSigningRequirement(requirement)
+        let box = HostPrivilegedConnection(connection)
+        Task { @MainActor in bind(box) }
+    }
+
 }
 
 @MainActor final class HostPrivilegedSession: NSObject, ExtensionPrivilegedProtocol {
@@ -178,7 +188,7 @@ import Security
     }
 }
 
-private final class HostPrivilegedConnection: @unchecked Sendable {
+final class HostPrivilegedConnection: @unchecked Sendable {
     let connection: NSXPCConnection
     init(_ connection: NSXPCConnection) { self.connection = connection }
 }
