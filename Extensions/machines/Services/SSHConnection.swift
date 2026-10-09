@@ -296,39 +296,15 @@ public actor SSHConnection {
         maximumOutputBytes: Int = 64 * 1_024 * 1_024
     ) async throws -> SSHExecResult {
 
-        let process = execProcess(command: command)
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        let stop: @Sendable () -> Void = { if process.isRunning { process.terminate() } }
-        let stdout = PipeCollector(
-            stdoutPipe.fileHandleForReading,
-            maximumBytes: maximumOutputBytes, onOverflow: stop)
-        let stderr = PipeCollector(
-            stderrPipe.fileHandleForReading,
-            maximumBytes: maximumOutputBytes, onOverflow: stop)
-        if let stdin {
-            let stdinPipe = Pipe()
-            process.standardInput = stdinPipe
-            try process.run()
-            stdinPipe.fileHandleForWriting.write(stdin)
-            try? stdinPipe.fileHandleForWriting.close()
-        } else {
-            process.standardInput = FileHandle.nullDevice
-            try process.run()
-        }
-        let status = await withTaskCancellationHandler {
-            await Self.waitForExit(process, timeout: timeout)
-        } onCancel: {
-            process.terminate()
-        }
-        let output = await stdout.collected()
-        let errors = await stderr.collected()
-        guard !stdout.exceededLimit, !stderr.exceededLimit else {
-            throw SSHConnectionError.transferFailed("The command exceeds its output limit.")
-        }
-        return SSHExecResult(status: status, stdout: output, stderr: errors)
+        let result = try await CLICommandRunner.run(
+            CLICommandRequest(
+                executableURL: Self.executable, arguments: execArguments(command: command),
+                environment: environment(), timeout: timeout,
+                maximumOutputBytes: maximumOutputBytes,
+                standardInputData: stdin, terminatesProcessGroup: true), onLine: { _ in })
+        return SSHExecResult(
+            status: result.terminationStatus, stdout: result.standardOutputData,
+            stderr: result.standardErrorData)
     }
 
     @discardableResult

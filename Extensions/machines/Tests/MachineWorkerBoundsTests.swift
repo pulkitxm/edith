@@ -65,9 +65,10 @@ import Testing
 
     @Test func remoteUsageOperationHasOnlyFixedNativeCommandsAndPaths() throws {
         let forced = try MachineRemoteUsageOperation.command(platform: .darwin, force: true)
-        #expect(forced.contains("ed usage refresh --no-machines --json"))
-        #expect(forced.contains("Data/usage/data/usage.json"))
+        #expect(forced.contains("exec python3 -c"))
+        #expect(forced.contains("sqlite3"))
         #expect(forced.contains("67108864"))
+        #expect(!forced.contains("ed usage"))
         #expect(!forced.contains("curl"))
         #expect(!forced.contains("bun"))
         #expect(!forced.contains("npm"))
