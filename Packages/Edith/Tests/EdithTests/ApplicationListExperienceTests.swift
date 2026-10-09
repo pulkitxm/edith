@@ -101,7 +101,13 @@ import Testing
             #expect(table.numberOfRows == 10_000)
             let visible = table.tableColumns.indices.filter { !table.tableColumns[$0].isHidden }
             let last = try #require(visible.last)
-            #expect(table.rect(ofColumn: last).maxX <= table.visibleRect.maxX + 2)
+            let scroll = try #require(table.enclosingScrollView)
+            for style in [NSScroller.Style.overlay, .legacy] {
+                scroll.scrollerStyle = style
+                scroll.tile()
+                host.layoutSubtreeIfNeeded()
+                #expect(table.rect(ofColumn: last).maxX <= table.visibleRect.maxX + 2)
+            }
             #expect(table.subviews.filter { $0 is NSTableRowView }.count < 100)
             #expect(table.enclosingScrollView?.bounds.height ?? 0 > 300)
             table.scrollRowToVisible(9999)
@@ -176,11 +182,17 @@ import Testing
             host.layoutSubtreeIfNeeded()
             #expect(abs(host.bounds.height - 900) < 2)
             let native = try #require(nativeTable(in: host))
+            let scroll = try #require(native.enclosingScrollView)
             #expect(native.numberOfRows == 10_000)
             #expect(native.subviews.filter { $0 is NSTableRowView }.count < 100)
             let last = try #require(
                 native.tableColumns.indices.last { !native.tableColumns[$0].isHidden })
-            #expect(native.rect(ofColumn: last).maxX <= native.visibleRect.maxX + 2)
+            for style in [NSScroller.Style.overlay, .legacy] {
+                scroll.scrollerStyle = style
+                scroll.tile()
+                host.layoutSubtreeIfNeeded()
+                #expect(native.rect(ofColumn: last).maxX <= native.visibleRect.maxX + 2)
+            }
             native.scrollRowToVisible(9999)
             host.layoutSubtreeIfNeeded()
             #expect(native.rows(in: native.visibleRect).contains(9999))
