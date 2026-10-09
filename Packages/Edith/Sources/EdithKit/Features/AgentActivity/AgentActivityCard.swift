@@ -8,6 +8,7 @@ public struct AgentActivityCard: View {
     private let fixtureTerminals: SessionsSnapshot?
     @State private var monitor: AgentActivityMonitor
     @Environment(\.surfacePresentation) private var surface
+    @Environment(\.surfaceFillHeight) private var fillHeight
 
     @MainActor public init(
         tile: SurfaceTile, active: Bool = true, activity: AgentActivitySnapshot? = nil,
@@ -89,7 +90,7 @@ public struct AgentActivityCard: View {
             }
         }
         .padding(UIScale.pt(surface?.padding ?? (tile.dense ? 10 : 14)))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
         .background(
             Color.secondary.opacity(0.08),
             in: RoundedRectangle(cornerRadius: UIScale.pt(surface?.cornerRadius ?? 12))

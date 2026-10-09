@@ -13,6 +13,7 @@ public struct SurfaceExtensionCard: View {
     @State private var actionError: String?
     @State private var acting = false
     @Environment(\.surfacePresentation) private var presentation
+    @Environment(\.surfaceFillHeight) private var fillHeight
 
     public init(
         tile: SurfaceTile, active: Bool = true, fixture: SurfaceExtensionSnapshot? = nil,
@@ -65,7 +66,7 @@ public struct SurfaceExtensionCard: View {
             }
         }
         .padding(UIScale.pt(presentation?.padding ?? (tile.dense ? 10 : 14)))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: fillHeight ? .infinity : nil, alignment: .topLeading)
         .background(
             Color.secondary.opacity(0.08),
             in: RoundedRectangle(cornerRadius: UIScale.pt(presentation?.cornerRadius ?? 12))

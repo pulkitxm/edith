@@ -9,7 +9,7 @@ import Testing
         var shelfHeight = 0.0
     }
 
-    @Test func shelfFitsShortContentAndRetainsExplicitScrollingHeight() async throws {
+    @Test func shelfAlignsCardsAndRetainsExplicitScrollingHeight() async throws {
         for explicit in [false, true] {
             let frames = Frames()
             var tile = SurfaceTile(.clocks)
@@ -44,15 +44,16 @@ import Testing
                 #expect(frames.shelfHeight >= 220)
                 #expect(frames.shelfHeight < 300)
             } else {
-                #expect(frames.shelfHeight >= 80)
-                #expect(frames.shelfHeight < 150)
+                #expect(frames.shelfHeight >= 400)
+                #expect(frames.shelfHeight < 450)
             }
         }
     }
 
     @Test func nativeGridPacksBelowShortCardsWithoutOverlappingTallNeighbors() async throws {
         let frames = Frames()
-        let layout = SurfaceLayout(tiles: [.init(.calendar), .init(.usage), .init(.music)])
+        var layout = SurfaceLayout(tiles: [.init(.calendar), .init(.usage), .init(.music)])
+        layout.balancedRows = false
         let host = NSHostingView(
             rootView: SurfaceCanvas(layout: layout, singleColumn: false) { tile in
                 Text(tile.displayTitle)
@@ -84,5 +85,42 @@ import Testing
         #expect(next.minX == short.minX)
         #expect(!next.intersects(tall))
         #expect(tall.maxX <= 800)
+    }
+
+    @Test func automaticRowsFillWidthAndStretchShortNeighbors() async throws {
+        for count in [3, 4, 5, 7] {
+            let frames = Frames()
+            var layout = SurfaceLayout(tiles: [])
+            for _ in 0..<count { layout.add(.clocks) }
+            let host = NSHostingView(
+                rootView: SurfaceCanvas(
+                    layout: layout, singleColumn: false,
+                    measured: { frames.values[$0] = $1 }
+                ) { tile in
+                    Text("Sample widget").frame(maxWidth: .infinity)
+                        .frame(height: tile.id == layout.tiles[1].id ? 240 : 100)
+                })
+            host.sizingOptions = []
+            host.frame = CGRect(x: 0, y: 0, width: 1200, height: 1000)
+            let window = TestWindowHost.window(contentRect: host.frame)
+            window.contentView = host
+            window.orderBack(nil)
+            defer { window.orderOut(nil) }
+            for _ in 0..<20 {
+                window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(frames.values.count == count)
+            let rows = Dictionary(grouping: frames.values.values, by: { $0.minY })
+            for row in rows.values {
+                #expect(abs((row.map(\.minX).min() ?? -1)) < 1)
+                #expect(abs((row.map(\.maxX).max() ?? 0) - 1200) < 1)
+                #expect(Set(row.map(\.height)).count == 1)
+            }
+            let first = try #require(frames.values[layout.tiles[0].id])
+            let second = try #require(frames.values[layout.tiles[1].id])
+            #expect(first.height == second.height)
+            #expect(first.height >= 240)
+        }
     }
 }

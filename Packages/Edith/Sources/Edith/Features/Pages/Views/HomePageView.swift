@@ -262,6 +262,12 @@ private struct HomeHeader: View {
 
     private var layoutControls: some View {
         HStack(spacing: UIScale.pt(8)) {
+            Button("Auto fit") {
+                SurfaceLayoutStore.shared.update(.home) {
+                    $0.arrangeAutomatically()
+                    $0.balancedRows = true
+                }
+            }
             Button(editing ? "Done" : "Edit layout") { editing.toggle() }
             Button("Widget editor") { MainApp.openSurfaceEditor(.home) }
         }

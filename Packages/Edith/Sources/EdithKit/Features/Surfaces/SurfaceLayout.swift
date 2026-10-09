@@ -236,6 +236,8 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     public var notchHorizontal = true
     public var notchWidth = 580.0
     public var notchShelfHeight = 240.0
+    public var balancedRows: Bool?
+    public var notchAutoWidth: Bool?
     public var notchLeadingGlance = SurfaceGlanceSource.automatic
     public var notchTrailingGlance = SurfaceGlanceSource.automatic
     public var notchWingWidth = 76.0
@@ -244,13 +246,25 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
     public var notchPrioritizePermissions = true
     public var notchExpandPermissions = false
     public var visible: [SurfaceTile] { tiles.filter { !$0.hidden } }
+    public var usesBalancedRows: Bool {
+        balancedRows != false
+            && !visible.contains { $0.column != nil || $0.row != nil || $0.locked }
+    }
+    public var expandedNotchWidth: Double {
+        guard notchAutoWidth != false else { return notchWidth }
+        let cards = visible.prefix(3)
+        let content =
+            cards.reduce(0) { $0 + ($1.shelfWidth ?? notchCardWidth) }
+            + Double(max(0, cards.count - 1)) * gap + 48
+        return min(1200, max(notchWidth, content))
+    }
     public init(tiles: [SurfaceTile]) { self.tiles = tiles }
 
     public static func standard(_ target: SurfaceTarget) -> Self {
         let widgets: [SurfaceWidget] =
             target == .home
             ? [.clocks, .actions, .activity, .calendar, .usage, .limits, .music, .codeStats]
-            : [.music, .limits, .actions]
+            : [.music, .actions, .limits, .calendar]
         return Self(
             tiles: widgets.map { widget in
                 var tile = SurfaceTile(widget)
@@ -318,6 +332,8 @@ public struct SurfaceLayout: Codable, Equatable, Sendable {
         result.notchWidth = notchWidth.isFinite ? min(1200, max(440, notchWidth)) : 580
         result.notchShelfHeight =
             notchShelfHeight.isFinite ? min(600, max(160, notchShelfHeight)) : 240
+        result.balancedRows = balancedRows
+        result.notchAutoWidth = notchAutoWidth
         result.notchLeadingGlance = notchLeadingGlance
         result.notchTrailingGlance = notchTrailingGlance
         result.notchWingWidth = notchWingWidth.isFinite ? min(140, max(42, notchWingWidth)) : 76

@@ -41,7 +41,8 @@ enum NotchGeometry {
             case .camera: 332
             }
         return CGSize(
-            width: CGFloat(layout.notchWidth), height: notchHeight + expandedHeaderBand + content)
+            width: CGFloat(layout.expandedNotchWidth),
+            height: notchHeight + expandedHeaderBand + content)
     }
 
     static func collapsedSize(

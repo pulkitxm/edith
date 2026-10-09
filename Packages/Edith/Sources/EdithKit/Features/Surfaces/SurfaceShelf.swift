@@ -13,6 +13,13 @@ public struct SurfaceShelf<Content: View>: View {
     let content: (SurfaceTile) -> Content
     @State private var focused: String?
     @State private var frames: [String: CGRect] = [:]
+    @State private var viewportWidth = 600.0
+
+    private var widths: [Double] {
+        SurfaceArrangement.shelfWidths(
+            tiles: layout.visible, available: max(160, viewportWidth - 4),
+            preferred: layout.notchCardWidth, gap: layout.gap)
+    }
 
     public init(
         layout: SurfaceLayout, editing: Bool = false, selected: String? = nil,
@@ -45,9 +52,11 @@ public struct SurfaceShelf<Content: View>: View {
             VStack(spacing: UIScale.pt(8)) {
                 ScrollView(.horizontal) {
                     HStack(alignment: .top, spacing: UIScale.pt(layout.gap)) {
-                        ForEach(layout.visible) { tile in
+                        ForEach(Array(layout.visible.enumerated()), id: \.element.id) {
+                            index, tile in
                             SurfaceShelfTile(
-                                tile: tile, layout: layout, editing: editing,
+                                tile: tile, layout: layout, fittedWidth: widths[index],
+                                editing: editing,
                                 selected: selected == tile.id, select: { select(tile.id) },
                                 inspect: { inspect(tile.id) },
                                 measured: { frame in
@@ -85,6 +94,7 @@ public struct SurfaceShelf<Content: View>: View {
                         }
                     }
                     .padding(UIScale.pt(2))
+                    .background(SurfaceShelfWheelRouter())
                 }
                 .frame(
                     height: UIScale.pt(
@@ -94,6 +104,11 @@ public struct SurfaceShelf<Content: View>: View {
                         ) + 4)
                 )
                 .coordinateSpace(name: "surfaceShelf")
+                .onGeometryChange(for: Double.self) {
+                    $0.size.width / UIScale.current
+                } action: {
+                    viewportWidth = $0
+                }
                 .onDrop(
                     of: [SurfaceDrag.type], delegate: SurfaceShelfDrop(enabled: editing, add: add)
                 )
@@ -167,6 +182,7 @@ private struct SurfaceShelfDrop: DropDelegate {
 private struct SurfaceShelfTile<Content: View>: View {
     let tile: SurfaceTile
     let layout: SurfaceLayout
+    let fittedWidth: Double
     let editing: Bool
     let selected: Bool
     let select: () -> Void
@@ -182,11 +198,11 @@ private struct SurfaceShelfTile<Content: View>: View {
     @State private var contentHeight = 100.0
 
     private var width: Double {
-        sizingOrigin.map { Double($0.width) } ?? tile.shelfWidth ?? layout.notchCardWidth
+        sizingOrigin.map { Double($0.width) } ?? tile.shelfWidth ?? fittedWidth
     }
     private var height: Double {
         sizingOrigin.map { Double($0.height) } ?? tile.height
-            ?? min(layout.notchShelfHeight, max(64, contentHeight))
+            ?? layout.notchShelfHeight
     }
 
     var body: some View {
@@ -216,14 +232,17 @@ private struct SurfaceShelfTile<Content: View>: View {
                 .accessibilityLabel("Reorder \(tile.displayTitle)")
             }
             ScrollView {
-                content().frame(maxWidth: .infinity, alignment: .topLeading)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .onGeometryChange(for: Double.self) {
-                        $0.size.height / UIScale.current
-                    } action: {
-                        contentHeight = $0
-                    }
-                    .disabled(editing).allowsHitTesting(!editing)
+                content().frame(
+                    maxWidth: .infinity, minHeight: UIScale.pt(height), alignment: .topLeading
+                )
+                .environment(\.surfaceFillHeight, true)
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: Double.self) {
+                    $0.size.height / UIScale.current
+                } action: {
+                    contentHeight = $0
+                }
+                .disabled(editing).allowsHitTesting(!editing)
             }
             .frame(height: UIScale.pt(min(600, max(64, height + sizing.height / UIScale.current))))
             if editing {
@@ -264,7 +283,12 @@ private struct SurfaceShelfTile<Content: View>: View {
                 .padding(.bottom, UIScale.pt(6))
             }
         }
-        .frame(width: UIScale.pt(min(760, max(160, width + sizing.width / UIScale.current))))
+        .frame(
+            width: UIScale.pt(
+                min(
+                    tile.shelfWidth == nil ? 1200 : 760,
+                    max(160, width + sizing.width / UIScale.current)))
+        )
         .background(
             Color.secondary.opacity(editing ? 0.045 : 0),
             in: RoundedRectangle(cornerRadius: UIScale.pt(layout.cornerRadius))

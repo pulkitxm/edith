@@ -64,6 +64,7 @@ final class NotchShelfController: FeatureModule {
     private(set) var hoverDisplay: CGDirectDisplayID?
     private(set) var nowPlaying: NotchNowPlaying?
     private(set) var nowPlayingArtwork: NSImage?
+    private(set) var nowPlayingAppIcon: NSImage?
     let agentActivity = AgentActivityMonitor.shared
     private var agentActivityTask: Task<Void, Never>?
     private var glanceRefreshTask: Task<Void, Never>?
@@ -157,6 +158,8 @@ final class NotchShelfController: FeatureModule {
         purgeExpired()
         rebuildPanels()
         surfaceSettingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+            SurfaceLayoutStore.shared.reload()
+            self?.homeContentHeight = nil
             self?.updatePanelFrames()
         }
         screenObserver = NotificationCenter.default.addObserver(
@@ -625,8 +628,14 @@ final class NotchShelfController: FeatureModule {
 
     private func panelShape(for id: CGDirectDisplayID) -> CGSize {
         let notchHeight = (collapsedSizes[id] ?? NotchGeometry.fallbackSize).height
+        let screenSize =
+            NSScreen.screens.first(where: { $0.displayID == id })?.frame.size
+            ?? CGSize(width: 1248, height: 900)
+        let capacity = CGSize(
+            width: min(1200, screenSize.width - 48),
+            height: min(notchHeight + 760, screenSize.height - 48))
         return NotchGeometry.union(
-            expandedSize(on: id),
+            capacity,
             NotchGeometry.panelShape(
                 browserShape: browser.map { _ in
                     NotchBrowserGeometry.shapeSize(
@@ -1046,12 +1055,15 @@ final class NotchShelfController: FeatureModule {
         artworkTask?.cancel()
         guard let track else {
             nowPlayingArtwork = nil
+            nowPlayingAppIcon = nil
             return
         }
         switch track.source {
         case .external(let app):
-            nowPlayingArtwork = Self.appIcon(for: app)
+            nowPlayingAppIcon = Self.appIcon(for: app)
+            nowPlayingArtwork = nowPlayingAppIcon
         case .local:
+            nowPlayingAppIcon = nil
             nowPlayingArtwork = nil
             guard let player = localMusic, let current = player.current else { return }
             artworkTask = Task { [weak self] in

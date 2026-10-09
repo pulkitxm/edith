@@ -37,6 +37,7 @@ extension SurfaceTile {
 extension EnvironmentValues {
     @Entry public var surfacePresentation: SurfacePresentation?
     @Entry public var surfaceSampleContent = false
+    @Entry public var surfaceFillHeight = false
 }
 
 public struct SurfaceFittedGrid<Content: View>: View {

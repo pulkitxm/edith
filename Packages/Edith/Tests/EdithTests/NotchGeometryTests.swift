@@ -7,6 +7,7 @@ import Testing
     @Test func shelfGeometryTracksCustomDimensionsAndEditingChrome() {
         var layout = SurfaceLayout.standard(.notch)
         layout.notchWidth = 900
+        layout.notchAutoWidth = false
         layout.notchShelfHeight = 300
         let regular = NotchGeometry.expandedShapeSize(
             tab: .home, hasMusic: false, notchHeight: 32, layout: layout)

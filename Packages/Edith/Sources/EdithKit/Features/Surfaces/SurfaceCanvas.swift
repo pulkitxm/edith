@@ -184,6 +184,7 @@ public struct SurfaceCanvas<Content: View>: View {
                     }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) {
             $0.size.width
         } action: {
@@ -280,7 +281,7 @@ public struct SurfaceGridLayout: Layout {
     public func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ())
         -> CGSize
     {
-        let width = proposal.width ?? 600
+        let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? 600
         let frames = frames(width: width, subviews: subviews)
         return CGSize(width: width, height: frames.map(\.maxY).max() ?? 0)
     }
@@ -306,6 +307,29 @@ public struct SurfaceGridLayout: Layout {
                 defer { y += height + gap }
                 return CGRect(x: 0, y: y, width: width, height: height)
             }
+        }
+        if layout.usesBalancedRows {
+            let rows = SurfaceArrangement.rowCounts(
+                count: subviews.count, width: Double(width / UIScale.current), gap: layout.gap)
+            var result: [CGRect] = []
+            var offset = 0
+            var y: CGFloat = 0
+            for count in rows {
+                let cardWidth = max(1, (width - CGFloat(count - 1) * gap) / CGFloat(count))
+                let height =
+                    subviews[offset..<(offset + count)].map {
+                        $0.sizeThatFits(ProposedViewSize(width: cardWidth, height: nil)).height
+                    }.max() ?? 0
+                for column in 0..<count {
+                    result.append(
+                        CGRect(
+                            x: CGFloat(column) * (cardWidth + gap), y: y,
+                            width: cardWidth, height: height))
+                }
+                offset += count
+                y += height + gap
+            }
+            return result
         }
         let pitch = (width + gap) / CGFloat(layout.columns)
         let tiles = layout.visible
@@ -440,6 +464,8 @@ private struct SurfaceCanvasTile<Content: View>: View {
             } action: {
                 contentHeight = $0
             }
+            .environment(\.surfaceFillHeight, layout.usesBalancedRows && tile.height == nil)
+            .frame(maxHeight: layout.usesBalancedRows ? .infinity : nil, alignment: .topLeading)
             if editing {
                 HStack {
                     Button("Configure", action: inspect).font(.edithText(.caption))
@@ -513,6 +539,7 @@ private struct SurfaceCanvasTile<Content: View>: View {
                 .padding(.horizontal, UIScale.pt(10)).padding(.bottom, UIScale.pt(6))
             }
         }
+        .frame(maxHeight: layout.usesBalancedRows ? .infinity : nil, alignment: .topLeading)
         .onTapGesture { if editing { select() } }
         .onGeometryChange(for: CGRect.self) {
             $0.frame(in: .named("surfaceCanvas"))

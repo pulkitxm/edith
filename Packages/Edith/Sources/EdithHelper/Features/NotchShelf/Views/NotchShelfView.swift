@@ -18,18 +18,21 @@ struct NotchShelfContentView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .top) {
-                Color.black
-                layers
-                    .scaleEffect(
-                        x: 1 / hoverScale.width, y: 1 / hoverScale.height, anchor: .center)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .mask {
                 CenteredNotchShape(
                     width: shapeSize.width, height: shapeSize.height,
-                    topRadius: topRadius, bottomRadius: bottomRadius)
+                    topRadius: topRadius, bottomRadius: bottomRadius
+                )
+                .fill(.black)
+                .shadow(color: .black.opacity(isExpanded ? 0.3 : 0), radius: 14, y: 6)
+                layers
+                    .mask {
+                        CenteredNotchShape(
+                            width: shapeSize.width, height: shapeSize.height,
+                            topRadius: topRadius, bottomRadius: bottomRadius)
+                    }
             }
-            .scaleEffect(x: hoverScale.width, y: hoverScale.height, anchor: .top)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .animation(glide, value: shapeSize)
             .animation(glide, value: isExpanded)
             .animation(glide, value: controller.currentAlert)
             .animation(glide, value: controller.activeTab)
@@ -81,8 +84,10 @@ struct NotchShelfContentView: View {
     private var shapeSize: CGSize {
         if isExpanded { return expandedShape }
         if isBuiltin, controller.currentAlert != nil { return NotchGeometry.alertDropSize }
-        return NotchGeometry.collapsedSize(
+        let collapsed = NotchGeometry.collapsedSize(
             base: collapsedBase, wingWidth: controller.glanceWingWidth)
+        return isHovering && !reduceMotion
+            ? CGSize(width: collapsed.width + 16, height: collapsed.height + 6) : collapsed
     }
 
     private var alertHandoff: AnyTransition {
@@ -112,16 +117,6 @@ struct NotchShelfContentView: View {
         .insetBy(dx: -NotchGeometry.openMargin, dy: -NotchGeometry.openMargin)
     }
 
-    private var hoverScale: CGSize {
-        guard !reduceMotion, isHovering, !isExpanded,
-            controller.currentAlert == nil
-        else { return CGSize(width: 1, height: 1) }
-        let shape = shapeSize
-        return CGSize(
-            width: 1 + NotchGeometry.hoverGrow / shape.width,
-            height: 1 + NotchGeometry.hoverGrow / shape.height)
-    }
-
     private var topRadius: CGFloat {
         isExpanded || (isBuiltin && controller.currentAlert != nil)
             ? NotchGeometry.expandedTopRadius : 0
@@ -138,7 +133,7 @@ struct NotchShelfContentView: View {
     private var glide: Animation {
         if reduceMotion { return .easeInOut(duration: 0.2) }
         if controller.activeTab == .browser { return .easeOut(duration: 0.16) }
-        return .spring(response: 0.36, dampingFraction: 0.9)
+        return .spring(response: isExpanded ? 0.46 : 0.38, dampingFraction: 0.86)
     }
 
     private var contentTransition: AnyTransition {
@@ -149,7 +144,7 @@ struct NotchShelfContentView: View {
                 removal: .opacity.animation(.easeOut(duration: 0.06)))
         }
         return .asymmetric(
-            insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.08)),
+            insertion: .opacity.animation(.easeOut(duration: 0.2).delay(0.12)),
             removal: .opacity.animation(.easeOut(duration: 0.1)))
     }
 
@@ -239,6 +234,14 @@ struct NotchShelfContentView: View {
 
     private var header: some View {
         HStack(spacing: 4) {
+            if let icon = controller.nowPlayingAppIcon {
+                Button {
+                    controller.openNowPlayingApp()
+                } label: {
+                    Image(nsImage: icon).resizable().scaledToFit().frame(width: 24, height: 24)
+                }.buttonStyle(.edith(.borderless)).help("Open the current music player")
+                    .padding(.trailing, 6)
+            }
             ScrollViewReader { reader in
                 ScrollView(.horizontal) {
                     HStack(spacing: 4) {
@@ -252,6 +255,18 @@ struct NotchShelfContentView: View {
                     }
             }
             if controller.activeTab == .home {
+                Menu {
+                    ForEach(SurfacePreset.allCases) { preset in
+                        Button {
+                            surfaceLayouts.update(.notch) { $0 = preset.layout(for: .notch) }
+                        } label: {
+                            Label(preset.title, systemImage: preset.icon)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "rectangle.3.group").frame(width: 28, height: 24)
+                }
+                .menuStyle(.borderlessButton).fixedSize().help("Notch presets")
                 if controller.layoutEditing {
                     Button {
                         surfaceLayouts.undo(.notch)
@@ -644,70 +659,85 @@ private struct NotchHomeTab: View {
     }
 
     private func quickActions(_ tile: SurfaceTile) -> some View {
-        LazyVGrid(columns: tile.metricGrid(minimum: 95, spacing: 8), spacing: 8) {
-            if systemEnabled {
-                actionTile(tile, "keyboard", "Clean keys", active: false) {
-                    controller.cleanKeyboard()
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            if tile.showTitle {
+                Label(tile.displayTitle, systemImage: "bolt")
+                    .font(.edithText(.caption).weight(.semibold))
             }
-            if keepAwakeEnabled {
-                actionTile(
-                    tile,
-                    preventSleep ? "moon.zzz.fill" : "moon.zzz", "Keep awake", active: preventSleep
-                ) {
-                    try? ConfigurationExecutor.application.set(
-                        .bool(!preventSleep), forKey: AppStorageKeys.General.preventSleep)
-                    controller.collapseNow()
-                }
-            }
-            if controller.canToggleLidAwake {
-                actionTile(tile, "laptopcomputer", "Lid awake", active: lidAwakeActive) {
-                    if lidAwakeActive {
-                        controller.performLidAwake(.off)
-                    } else {
-                        pendingLidAwakeSession = .indefinite
+            SurfaceControlLayout(minimumWidth: 110, cellHeight: tile.dense ? 62 : 82) {
+                if systemEnabled {
+                    actionTile(tile, "keyboard", "Clean keys", active: false) {
+                        controller.cleanKeyboard()
                     }
                 }
-                .contextMenu {
-                    Button("Indefinitely") {
-                        pendingLidAwakeSession = .indefinite
+                if keepAwakeEnabled {
+                    actionTile(
+                        tile,
+                        preventSleep ? "moon.zzz.fill" : "moon.zzz", "Keep awake",
+                        active: preventSleep
+                    ) {
+                        try? ConfigurationExecutor.application.set(
+                            .bool(!preventSleep), forKey: AppStorageKeys.General.preventSleep)
+                        controller.collapseNow()
                     }
-                    Button("15 minutes") {
-                        pendingLidAwakeSession = .fifteenMinutes
-                    }
-                    Button("30 minutes") {
-                        pendingLidAwakeSession = .thirtyMinutes
-                    }
-                    Button("1 hour") {
-                        pendingLidAwakeSession = .oneHour
-                    }
-                    Button("2 hours") {
-                        pendingLidAwakeSession = .twoHours
-                    }
-                    Button("Until lid reopens") {
-                        pendingLidAwakeSession = .untilLidReopens
-                    }
-                    if lidAwakeActive {
-                        Divider()
-                        Button("Turn off") {
+                }
+                if controller.canToggleLidAwake {
+                    actionTile(tile, "laptopcomputer", "Lid awake", active: lidAwakeActive) {
+                        if lidAwakeActive {
                             controller.performLidAwake(.off)
+                        } else {
+                            pendingLidAwakeSession = .indefinite
+                        }
+                    }
+                    .contextMenu {
+                        Button("Indefinitely") {
+                            pendingLidAwakeSession = .indefinite
+                        }
+                        Button("15 minutes") {
+                            pendingLidAwakeSession = .fifteenMinutes
+                        }
+                        Button("30 minutes") {
+                            pendingLidAwakeSession = .thirtyMinutes
+                        }
+                        Button("1 hour") {
+                            pendingLidAwakeSession = .oneHour
+                        }
+                        Button("2 hours") {
+                            pendingLidAwakeSession = .twoHours
+                        }
+                        Button("Until lid reopens") {
+                            pendingLidAwakeSession = .untilLidReopens
+                        }
+                        if lidAwakeActive {
+                            Divider()
+                            Button("Turn off") {
+                                controller.performLidAwake(.off)
+                            }
                         }
                     }
                 }
-            }
-            if presenterEnabled {
-                actionTile(tile, "person.wave.2", "Presenter", active: presenterMode) {
-                    _ = PresenterRuntimeOperationExecution.perform(
-                        presenterMode ? .stop : .start)
-                    controller.collapseNow()
+                if presenterEnabled {
+                    actionTile(tile, "person.wave.2", "Presenter", active: presenterMode) {
+                        _ = PresenterRuntimeOperationExecution.perform(
+                            presenterMode ? .stop : .start)
+                        controller.collapseNow()
+                    }
                 }
-            }
-            if controller.canPickColor {
-                actionTile(tile, "eyedropper", "Pick color", active: false) {
-                    controller.pickColor()
+                if controller.canPickColor {
+                    actionTile(tile, "eyedropper", "Pick color", active: false) {
+                        controller.pickColor()
+                    }
                 }
-            }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .padding(SurfacePresentation(tile: tile, layout: layoutStore.notch).padding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            .white.opacity(0.045),
+            in: RoundedRectangle(
+                cornerRadius: SurfacePresentation(tile: tile, layout: layoutStore.notch)
+                    .cornerRadius)
+        )
         .alert("Keep running with the lid closed?", isPresented: confirmingLidAwake) {
             Button("Turn On") {
                 guard let session = pendingLidAwakeSession else { return }
@@ -730,20 +760,34 @@ private struct NotchHomeTab: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            VStack(spacing: 6) {
                 if tile.shows("icons") {
-                    Image(systemName: icon).font(.edithText(.caption).weight(.medium))
+                    Image(systemName: icon).font(.system(size: 17, weight: .medium))
                 }
                 Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                if tile.showDetails, !tile.dense, tile.shows("descriptions") {
+                    Text(actionDetail(title)).font(.edithText(.caption2))
+                        .foregroundStyle(active ? .black.opacity(0.65) : .secondary)
+                        .lineLimit(2).multilineTextAlignment(.center)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .frame(height: 34)
+            .padding(8).frame(maxWidth: .infinity, maxHeight: .infinity)
             .foregroundStyle(active ? Color.black : Color.white.opacity(0.85))
             .background(
                 active ? tile.highlightColor : Color.white.opacity(0.055),
                 in: RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
+    }
+
+    private func actionDetail(_ title: String) -> String {
+        switch title {
+        case "Clean keys": "Lock the keyboard"
+        case "Keep awake": "Prevent sleep"
+        case "Lid awake": "Run with the lid closed"
+        case "Presenter": "Blur sensitive content"
+        default: "Pick a screen color"
+        }
     }
 
     private func emptyMusicCard(_ tile: SurfaceTile) -> some View {
@@ -777,53 +821,64 @@ private struct NotchNowPlayingCard: View {
     }
 
     var body: some View {
-        HStack(spacing: 11) {
-            if tile.shows("artwork") { artwork.disabled(!tile.showActions) }
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .center, spacing: 8) {
-                    Button {
-                        controller.openNowPlayingLocation()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(track.title)
-                                .font(.system(size: 12.5, weight: .semibold))
-                                .foregroundStyle(.white).lineLimit(1)
-                                .presenterBlur(presenterState.active && presenterBlurMusic)
-                            if tile.showDetails, tile.shows("artist") {
-                                Text(sourceLabel)
-                                    .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.55))
-                                    .lineLimit(1)
-                                    .presenterBlur(presenterState.active && presenterBlurMusic)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .disabled(!tile.showActions)
-                    .help(isLocal ? "Show this track in Music" : "Open the app playing this")
-                    Spacer(minLength: 4)
-                    if tile.showActions {
-                        HStack(spacing: 6) {
-                            control("backward.fill", 12) { controller.nowPlayingPrevious() }
-                            control(track.isPlaying ? "pause.fill" : "play.fill", 15) {
-                                controller.nowPlayingPlayPause()
-                            }
-                            control("forward.fill", 12) { controller.nowPlayingNext() }
-                        }
+        VStack(alignment: .leading, spacing: 14) {
+            if tile.showTitle {
+                HStack {
+                    Label(tile.displayTitle, systemImage: "music.note")
+                        .font(.edithText(.caption).weight(.semibold))
+                    Spacer()
+                    if let icon = controller.nowPlayingAppIcon {
+                        Image(nsImage: icon).resizable().scaledToFit().frame(width: 18, height: 18)
+                        Text(sourceName).font(.edithText(.caption2)).foregroundStyle(.secondary)
                     }
                 }
-                if tile.showDetails, tile.shows("progress"), controller.nowPlayingSeekable {
-                    NotchSeekBar(controller: controller).allowsHitTesting(tile.showActions)
+            }
+            HStack(spacing: 12) {
+                if tile.shows("artwork") { artwork.disabled(!tile.showActions) }
+                Button {
+                    controller.openNowPlayingLocation()
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(track.title).font(.edithText(.headline)).foregroundStyle(.white)
+                            .lineLimit(2).presenterBlur(presenterState.active && presenterBlurMusic)
+                        if tile.showDetails, tile.shows("artist") {
+                            Text(sourceLabel).font(.edithText(.caption)).foregroundStyle(.secondary)
+                                .lineLimit(2).presenterBlur(
+                                    presenterState.active && presenterBlurMusic)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
+                    .help(isLocal ? "Show this track in Music" : "Open the app playing this")
+            }
+            Spacer(minLength: 4)
+            if tile.showDetails, tile.shows("progress"), controller.nowPlayingSeekable {
+                NotchSeekBar(controller: controller).allowsHitTesting(tile.showActions)
+            }
+            if tile.showActions {
+                HStack(spacing: 24) {
+                    Spacer(minLength: 0)
+                    control("backward.fill", 15) { controller.nowPlayingPrevious() }
+                    control(track.isPlaying ? "pause.fill" : "play.fill", 20) {
+                        controller.nowPlayingPlayPause()
+                    }
+                    control("forward.fill", 15) { controller.nowPlayingNext() }
+                    Spacer(minLength: 0)
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(presentation?.padding ?? tile.paddingOverride ?? 10)
+        .padding(presentation?.padding ?? tile.paddingOverride ?? 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             .white.opacity(0.055),
             in: RoundedRectangle(
                 cornerRadius: presentation?.cornerRadius ?? tile.cornerOverride ?? 12))
+    }
+
+    private var sourceName: String {
+        switch track.source {
+        case .local: "Music"
+        case .external(let app): app.displayName
+        }
     }
 
     private var isLocal: Bool {
@@ -856,7 +911,7 @@ private struct NotchNowPlayingCard: View {
                         .background(.white.opacity(0.08))
                 }
             }
-            .frame(width: 46, height: 46)
+            .frame(width: tile.dense ? 56 : 72, height: tile.dense ? 56 : 72)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
         }
@@ -870,7 +925,8 @@ private struct NotchNowPlayingCard: View {
         Button(action: action) {
             Image(systemName: name)
                 .font(.system(size: size, weight: .medium)).foregroundStyle(.white)
-                .frame(width: 22, height: 22)
+                .frame(width: 40, height: 36)
+                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))

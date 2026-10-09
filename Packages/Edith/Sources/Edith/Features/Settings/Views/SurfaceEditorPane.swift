@@ -56,7 +56,7 @@ struct SurfaceEditorPane: View {
                         if libraryVisible { ScrollView { library }.frame(height: UIScale.pt(220)) }
                         if target == .notch {
                             ScrollView(.horizontal) {
-                                canvas.frame(width: UIScale.pt(layout.notchWidth + 24))
+                                canvas.frame(width: UIScale.pt(layout.expandedNotchWidth + 24))
                             }
                         } else {
                             canvas
@@ -88,7 +88,7 @@ struct SurfaceEditorPane: View {
                         }
                         .frame(
                             width: target == .notch
-                                ? UIScale.pt(max(layout.notchWidth + 24, previewWidth ?? 0))
+                                ? UIScale.pt(max(layout.expandedNotchWidth + 24, previewWidth ?? 0))
                                 : previewWidth.map { CGFloat(UIScale.pt($0)) }
                         )
                         .padding(UIScale.pt(16))
@@ -184,6 +184,29 @@ struct SurfaceEditorPane: View {
 
     private var savedLayouts: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            Text("Start with a preset").font(.edithText(.headline))
+            ForEach(SurfacePreset.allCases) { preset in
+                Button {
+                    store.update(target) { $0 = preset.layout(for: target) }
+                    selected = nil
+                    editorPanel = nil
+                } label: {
+                    HStack(spacing: UIScale.pt(12)) {
+                        Image(systemName: preset.icon).font(.edithText(.title3))
+                            .frame(width: UIScale.pt(28))
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            Text(preset.title).font(.edithText(.headline))
+                            Text(preset.detail).font(.edithText(.caption)).foregroundStyle(
+                                .secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                    }.frame(maxWidth: .infinity, alignment: .leading).padding(UIScale.pt(10))
+                }.buttonStyle(.edith(.secondary))
+            }
+            Text("Every preset stays editable. Undo restores your previous layout.")
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            Divider().padding(.vertical, UIScale.pt(8))
             VStack(alignment: .leading, spacing: UIScale.pt(8)) {
                 HStack {
                     TextField("Layout name", text: $profileName).textFieldStyle(.roundedBorder)
@@ -296,9 +319,20 @@ struct SurfaceEditorPane: View {
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
                 if target == .notch {
                     Toggle("Horizontal widget shelf", isOn: canvasSetting(\.notchHorizontal))
+                    Toggle(
+                        "Grow horizontally with widgets",
+                        isOn: Binding(
+                            get: { layout.notchAutoWidth != false },
+                            set: { value in store.update(target) { $0.notchAutoWidth = value } }))
                     numberField("Shelf card width (pt)", value: canvasSetting(\.notchCardWidth))
                     numberField("Expanded width (pt)", value: canvasSetting(\.notchWidth))
                     numberField("Shelf height (pt)", value: canvasSetting(\.notchShelfHeight))
+                } else {
+                    Toggle(
+                        "Fill and align automatic rows",
+                        isOn: Binding(
+                            get: { layout.balancedRows != false },
+                            set: { value in store.update(target) { $0.balancedRows = value } }))
                 }
                 Button("Pack widgets automatically") {
                     store.update(target) { $0.arrangeAutomatically() }
@@ -394,21 +428,18 @@ struct SurfaceEditorPane: View {
                 Label("Layouts", systemImage: "rectangle.stack")
             }
             Menu("Presets") {
-                Button("Default layout") { store.update(target) { $0 = .standard(target) } }
-                Button("Developer") {
-                    preset([.agents, .limits, .codeStats, .github, .focus, .actions])
+                ForEach(SurfacePreset.allCases) { preset in
+                    Button {
+                        store.update(target) { $0 = preset.layout(for: target) }
+                        selected = nil
+                    } label: {
+                        Label(preset.title, systemImage: preset.icon)
+                    }
                 }
-                Button("Deep work") { preset([.focus, .calendar, .music, .clocks, .desk]) }
-                Button("Studio") { preset([.music, .media, .desk, .actions]) }
                 Divider()
                 Button("Empty canvas") { store.update(target) { $0.tiles = [] } }
             }
         }.buttonStyle(.edith(.secondary))
-    }
-
-    private func preset(_ widgets: [SurfaceWidget]) {
-        store.update(target) { $0.tiles = widgets.map { SurfaceTile($0) } }
-        selected = nil
     }
 
     private var libraryWidgets: [SurfaceWidget] {
@@ -531,7 +562,7 @@ struct SurfaceEditorPane: View {
                     in: RoundedRectangle(cornerRadius: UIScale.pt(target == .notch ? 22 : 14))
                 )
                 .environment(\.colorScheme, target == .notch ? .dark : scheme)
-                .frame(width: target == .notch ? UIScale.pt(layout.notchWidth) : nil)
+                .frame(width: target == .notch ? UIScale.pt(layout.expandedNotchWidth) : nil)
                 .frame(maxWidth: target == .home ? .infinity : nil)
             Text(
                 livePreview && target == .home

@@ -25,6 +25,7 @@ struct PageCard<Content: View>: View {
 
 struct PagePanel<Header: View, Content: View>: View {
     @Environment(\.surfacePresentation) private var presentation
+    @Environment(\.surfaceFillHeight) private var fillHeight
     var fill = false
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
@@ -35,7 +36,10 @@ struct PagePanel<Header: View, Content: View>: View {
             content()
         }
         .padding(UIScale.pt(presentation?.padding ?? 16))
-        .frame(maxWidth: .infinity, maxHeight: fill ? .infinity : nil, alignment: .topLeading)
+        .frame(
+            maxWidth: .infinity, maxHeight: fill || fillHeight ? .infinity : nil,
+            alignment: .topLeading
+        )
         .edithSurface(cornerRadius: presentation?.cornerRadius ?? 14)
     }
 }

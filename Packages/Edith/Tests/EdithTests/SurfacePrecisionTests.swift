@@ -120,7 +120,8 @@ struct SurfacePrecisionTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = SurfaceLayoutStore(defaults: defaults)
         for index in 0..<20 { #expect(store.saveProfile("Layout \(index)", target: .home)) }
-        #expect(store.profiles(.home).prefix(3).map(\.name) == ["Layout 0", "Layout 1", "Layout 2"])
+        #expect(
+            store.profiles(.home).prefix(3).map(\.name) == ["Layout 0", "Layout 1", "Layout 2"])
         #expect(!store.saveProfile("Overflow", target: .home))
         #expect(!store.saveProfile("  ", target: .home))
         let profile = try #require(store.profiles(.home).first)
