@@ -27,5 +27,21 @@ let package = Package(
         .testTarget(
             name: "WindowSweatersExtensionTests", dependencies: ["WindowSweatersExtension"],
             path: "windowSweaters/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "ColorPickerExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "colorPicker", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "ColorPickerExtensionTests", dependencies: ["ColorPickerExtension"],
+            path: "colorPicker/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "KeystrokeHighlightExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "keystrokeHighlight", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "KeystrokeHighlightExtensionTests", dependencies: ["KeystrokeHighlightExtension"],
+            path: "keystrokeHighlight/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
