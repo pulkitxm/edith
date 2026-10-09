@@ -49,14 +49,15 @@ final class ExtensionPeerRegistrationLease {
             at: endpoint.directory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700])
         file = endpoint.registrationURL
-        descriptor = open(
+        let acquiredDescriptor = open(
             file.appendingPathExtension("lock").path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW,
             0o600)
-        guard descriptor >= 0 else { throw ExtensionPeerError.unavailable }
-        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
-            close(descriptor)
+        guard acquiredDescriptor >= 0 else { throw ExtensionPeerError.unavailable }
+        guard flock(acquiredDescriptor, LOCK_EX | LOCK_NB) == 0 else {
+            close(acquiredDescriptor)
             throw ExtensionPeerError.unavailable
         }
+        descriptor = acquiredDescriptor
         if let previous = ExtensionPeerRegistration.read(
             at: file, logicalName: endpoint.name, requiresLiveProcess: false),
             !previous.process.isAlive
