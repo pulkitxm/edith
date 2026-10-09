@@ -72,6 +72,7 @@ try {
     assert.equal(result.clipboardDataValidated, id === "clipboard");
     assert.equal(result.latexDataValidated, id === "latex");
     assert.equal(result.companionDataValidated, id === "companion");
+    assert.equal(result.terminalDataValidated, id === "terminal");
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });

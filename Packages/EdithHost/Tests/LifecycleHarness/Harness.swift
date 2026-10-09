@@ -59,6 +59,15 @@ struct HostLifecycleHarness {
                 "http://127.0.0.1:\(companionServer.port)",
                 forKey: AppStorageKeys.Companion.endpoint)
         }
+        if extensionID == "terminal" {
+            let terminalDefaults = UserDefaults(
+                suiteName: identity.extensionDefaultsSuite(extensionID))
+            terminalDefaults?.set("/bin/sh", forKey: "terminalShell")
+            terminalDefaults?.set(false, forKey: "terminalLoginShell")
+            terminalDefaults?.set("custom", forKey: "terminalStartFolder")
+            terminalDefaults?.set(fixture.path, forKey: "terminalCustomFolder")
+            terminalDefaults?.set(false, forKey: "terminalConfirmClose")
+        }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -105,6 +114,7 @@ struct HostLifecycleHarness {
         guard surfaces.context.activeIDs.isEmpty else { throw HostWorkerError.rejected }
         defer { for handle in logHandles { try? handle.close() } }
         var stage = "installation"
+        var terminalChildren: [Int32] = []
         do {
             let first = try record(releases, id: extensionID, version: "1.0.0")
             let second = try record(releases, id: extensionID, version: "1.1.0")
@@ -132,6 +142,8 @@ struct HostLifecycleHarness {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
+            } else if extensionID == "terminal" {
+                terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "blitztree" {
@@ -172,10 +184,13 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
+            try await requireExited(terminalChildren)
             if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
+            } else if extensionID == "terminal" {
+                terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "blitztree" {
@@ -201,6 +216,7 @@ struct HostLifecycleHarness {
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
             }
+            try await requireExited(terminalChildren)
             guard surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
@@ -235,13 +251,17 @@ struct HostLifecycleHarness {
             else { throw HostWorkerError.rejected }
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
-            guard sessions.versions[first.id] == second.version else {
+            guard sessions.versions[first.id] == second.version,
+                let restoredPID = sessions.processIdentifiers[first.id]
+            else {
                 throw HostWorkerError.rejected
             }
             if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
+            } else if extensionID == "terminal" {
+                terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "blitztree" {
@@ -291,6 +311,7 @@ struct HostLifecycleHarness {
                         "The disabled Companion worker kept contacting its backend.")
                 }
             }
+            try await requireExited(terminalChildren)
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
             guard surfaces.layouts.home == savedSurface,
@@ -306,7 +327,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -711,6 +732,95 @@ struct HostLifecycleHarness {
             _ = try await endpoint.invoke("apps.quit", payload: Data("{}".utf8), timeout: 5)
             throw HostWorkerError.rejected
         } catch ExtensionPeerError.rejected {
+        }
+    }
+
+    @MainActor private static func verifyTerminal(
+        _ endpoint: ExtensionPeerEndpoint, workerPID: Int32
+    ) async throws -> [Int32] {
+        func object(_ command: String, _ input: [String: Any] = [:]) async throws -> Any {
+            let data = try await endpoint.invoke(
+                command, payload: JSONSerialization.data(withJSONObject: input), timeout: 5)
+            return try JSONSerialization.jsonObject(with: data)
+        }
+        func settled(including id: String) async throws -> (Int, [Int32]) {
+            let deadline = Date().addingTimeInterval(20)
+            while true {
+                let status = try await object("terminal.status") as? [String: Any]
+                let listed = try await object("terminal.sessions") as? [[String: Any]] ?? []
+                let children = childProcesses(of: workerPID)
+                if let count = status?["sessions"] as? Int, count == listed.count,
+                    status?["running"] as? Int == count,
+                    listed.contains(where: { $0["id"] as? String == id }),
+                    children.count >= count
+                {
+                    return (count, children)
+                }
+                guard Date() < deadline else { throw HostWorkerError.invalidResponse }
+                try await Task.sleep(for: .milliseconds(200))
+            }
+        }
+        let opened = try await object("terminal.open") as? [String: Any]
+        guard opened?["opened"] as? Bool == true, let id = opened?["id"] as? String else {
+            throw HostWorkerError.invalidResponse
+        }
+        _ = try await settled(including: id)
+        let selected = try await object("terminal.select", ["id": id]) as? [[String: Any]]
+        guard
+            selected?.contains(where: {
+                $0["id"] as? String == id && $0["selected"] as? Bool == true
+            }) == true
+        else { throw HostWorkerError.invalidResponse }
+        var tile = SurfaceTile(.ability("terminal"))
+        tile.itemLimit = 20
+        let request = SurfaceSnapshotRequest(target: .home, tile: tile)
+        let created = try SurfaceSnapshot.decode(
+            try await endpoint.invoke(
+                "surface.perform",
+                payload: SurfaceActionRequest(snapshot: request, actionID: "new").encoded(
+                    providerID: "terminal")), providerID: "terminal")
+        guard let added = created.rows.last?.id, added != id,
+            created.rows.allSatisfy({ $0.title.utf8.count <= 512 })
+        else { throw HostWorkerError.invalidResponse }
+        let (count, children) = try await settled(including: added)
+        let broadcast =
+            try await object("terminal.broadcast", ["command": "true"]) as? [String: Any]
+        guard broadcast?["sent"] as? Int == count, broadcast?["unavailable"] as? Int == 0 else {
+            throw HostWorkerError.invalidResponse
+        }
+        for (command, input) in [
+            ("terminal.broadcast", ["command": " "]), ("terminal.select", ["id": "synthetic"]),
+            ("terminal.status", ["unexpected": true]), ("terminal.unknown", [:]),
+        ] as [(String, [String: Any])] {
+            do {
+                _ = try await object(command, input)
+                throw HostWorkerError.invalidResponse
+            } catch HostWorkerError.invalidResponse {
+                throw HostWorkerError.invalidResponse
+            } catch {}
+        }
+        return children
+    }
+
+    private static func childProcesses(of pid: Int32) -> [Int32] {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        process.arguments = ["-P", String(pid)]
+        process.standardOutput = output
+        guard (try? process.run()) != nil else { return [] }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap {
+            Int32($0.trimmingCharacters(in: .whitespaces))
+        }
+    }
+
+    private static func requireExited(_ pids: [Int32]) async throws {
+        let deadline = Date().addingTimeInterval(10)
+        while pids.contains(where: { kill($0, 0) == 0 }) {
+            guard Date() < deadline else { throw HostWorkerError.rejected }
+            try await Task.sleep(for: .milliseconds(100))
         }
     }
 
