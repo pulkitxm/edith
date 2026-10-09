@@ -82,7 +82,10 @@ public enum SurfaceCommandService {
                     value: tile.shows("status") ? row.value : "", icon: row.icon,
                     progress: tile.shows("progress") ? row.progress : nil, field: row.field,
                     actions: actions(row.actions, tile: tile),
-                    sliders: sliders(row.sliders, tile: tile) ?? [])
+                    sliders: sliders(row.sliders, tile: tile) ?? [],
+                    thumbnail: row.thumbnail.flatMap {
+                        $0.field.map(tile.shows) ?? true ? $0 : nil
+                    })
             } : []
         if !tile.shows("status") { projected.message = nil }
         if !tile.shows("updated") { projected.updatedAt = nil }

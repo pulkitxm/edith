@@ -67,15 +67,18 @@ public struct SurfaceDataRow: Codable, Equatable, Identifiable, Sendable {
     public let field: String?
     public let actions: [SurfaceAction]
     public let sliders: [SurfaceSlider]?
+    public let thumbnail: SurfaceThumbnail?
 
     public init(
         _ id: String, sourceID: String? = nil, title: String, detail: String = "",
         value: String = "", icon: String = "circle", progress: Double? = nil,
-        field: String? = nil, actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = []
+        field: String? = nil, actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = [],
+        thumbnail: SurfaceThumbnail? = nil
     ) {
         self.id = id; self.sourceID = sourceID ?? id; self.title = title; self.detail = detail
         self.value = value; self.icon = icon; self.progress = progress; self.field = field
         self.actions = actions; self.sliders = sliders.isEmpty ? nil : sliders
+        self.thumbnail = thumbnail
     }
 }
 
@@ -117,6 +120,11 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     }
 
     private func validate(providerID expected: String) throws {
+        let thumbnails = rows.compactMap(\.thumbnail)
+        guard thumbnails.reduce(0, { $0 + $1.data.count }) <= 524_288 else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        for thumbnail in thumbnails { try thumbnail.validate() }
         let controls = (sliders ?? []) + rows.flatMap { $0.sliders ?? [] }
         guard controls.count <= 32, Self.unique(controls.map(\.id)),
             Set(controls.map(\.id)).isDisjoint(

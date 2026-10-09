@@ -39,7 +39,13 @@ public struct SurfaceSnapshotContent: View {
                 ) { row in
                     VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                         HStack(alignment: .top) {
-                            Image(systemName: row.icon)
+                            if let thumbnail = row.thumbnail,
+                                thumbnail.field.map(tile.shows) ?? true
+                            {
+                                SurfaceThumbnailImage(thumbnail: thumbnail, dense: tile.dense)
+                            } else {
+                                Image(systemName: row.icon)
+                            }
                             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                                 Text(row.title).lineLimit(tile.dense ? 1 : 2).accessibilityLabel(
                                     row.title)
