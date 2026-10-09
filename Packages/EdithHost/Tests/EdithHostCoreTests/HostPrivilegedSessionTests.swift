@@ -22,6 +22,16 @@ import Testing
         #expect(main)
     }
 
+    @Test func unauthorizedCallersNeverReserveAnOwnerOrCopyTheirPayload() async throws {
+        let fixture = try Fixture(mode: "normal")
+        defer { fixture.clean() }
+        let session = fixture.session(authorized: false)
+        await #expect(throws: NSError.self) { try await activate(session, fixture.bundle) }
+        #expect(fixture.workers.isEmpty)
+        #expect(fixture.leases.reserve("sample"))
+        #expect(!FileManager.default.fileExists(atPath: fixture.admission.root.path))
+    }
+
     @Test func failedRestoreKeepsTheExclusiveLeaseUntilSuccess() async throws {
         let fixture = try Fixture(mode: "reject-once")
         defer { fixture.clean() }
@@ -108,9 +118,12 @@ import Testing
                 root: root.appendingPathComponent("Protected"), ownerUID: getuid(), verify: { _ in }
             )
         }
-        func session() -> HostPrivilegedSession {
+        func session(authorized: Bool = true) -> HostPrivilegedSession {
             HostPrivilegedSession(
-                admission: admission, reserveOwner: { [self] in leases.reserve($0) },
+                admission: admission,
+                authorize: { _, _, _ in
+                    guard authorized else { throw MarketplaceError.invalidSignature }
+                }, reserveOwner: { [self] in leases.reserve($0) },
                 releaseOwner: { [self] in leases.release($0) },
                 makeWorker: { [self] _ in
                     let script = try #require(
