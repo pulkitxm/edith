@@ -62,11 +62,17 @@ import Sparkle
         "-module-name",
         "CameraFixture",
         "-F",
-        join(hostApp, "Contents/Frameworks"),
+        resolve("Packages/EdithHost/.build/arm64-apple-macosx/release"),
         "-framework",
         "Sparkle",
         source,
         "-o",
+        join(contents, "MacOS/Runtime"),
+      ]);
+      execFileSync("install_name_tool", [
+        "-change",
+        "@rpath/Sparkle.framework/Versions/B/Sparkle",
+        "@rpath/Sparkle.framework/Sparkle",
         join(contents, "MacOS/Runtime"),
       ]);
     }

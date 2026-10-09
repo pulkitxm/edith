@@ -28,7 +28,7 @@ name = "Edith Microphone" if args.application == "com.pulkit.edith" else f"Edith
 factory = "1A9DB29B-7D06-41B3-921F-244565DD86D9"
 driver = args.output / (uid + ".driver")
 executable = driver / "Contents/MacOS/EdithMicrophone"
-executable.parent.mkdir(parents=True)
+executable.parent.mkdir(parents=True, exist_ok=True)
 info = {"CFBundleIdentifier": uid, "CFBundleName": name, "CFBundleExecutable": "EdithMicrophone",
         "CFBundlePackageType": "BNDL", "CFBundleShortVersionString": args.version,
         "CFBundleVersion": args.version, "CFPlugInDynamicRegistration": False,
