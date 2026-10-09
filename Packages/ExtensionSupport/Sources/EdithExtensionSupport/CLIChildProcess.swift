@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-final class CLIChildProcess: @unchecked Sendable {
+public final class CLIChildProcess: @unchecked Sendable {
     let processIdentifier: pid_t
     let ownsProcessGroup: Bool
     private let lock = NSLock()
@@ -9,10 +9,10 @@ final class CLIChildProcess: @unchecked Sendable {
     private var exitSource: DispatchSourceProcess?
     private let onExit: @Sendable () -> Void
 
-    var isRunning: Bool { lock.withLock { status == nil } }
-    var terminationStatus: Int32 { lock.withLock { status ?? 255 } }
+    public var isRunning: Bool { lock.withLock { status == nil } }
+    public var terminationStatus: Int32 { lock.withLock { status ?? 255 } }
 
-    init(
+    public init(
         request: CLICommandRequest, input: Int32, output: Int32, error: Int32,
         onExit: @escaping @Sendable () -> Void
     ) throws {
@@ -29,7 +29,7 @@ final class CLIChildProcess: @unchecked Sendable {
 
     deinit { exitSource?.cancel() }
 
-    func signal(_ signal: Int32) {
+    public func signal(_ signal: Int32) {
         if ownsProcessGroup {
             _ = kill(-processIdentifier, signal)
             if isRunning, getpgid(processIdentifier) != processIdentifier {
@@ -40,7 +40,7 @@ final class CLIChildProcess: @unchecked Sendable {
         }
     }
 
-    var groupIsAlive: Bool {
+    public var groupIsAlive: Bool {
         guard ownsProcessGroup else { return isRunning }
         if isRunning || kill(-processIdentifier, 0) == 0 { return true }
         return errno == EPERM
