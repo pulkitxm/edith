@@ -46,7 +46,7 @@ public struct HostSurfaceAvailability: Sendable {
 
     public func projected(_ layout: SurfaceLayout, target: SurfaceTarget) -> SurfaceLayout {
         var projected = layout.normalized()
-        projected.tiles = layout.visible.filter { status($0.widget) == .active }
+        projected.tiles = projected.visible.filter { status($0.widget) == .active }
         if target == .notch, !activeIDs.contains("notchShelf") { projected.tiles = [] }
         return projected
     }
