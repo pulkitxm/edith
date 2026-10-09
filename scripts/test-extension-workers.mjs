@@ -71,6 +71,7 @@ try {
     assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
     assert.equal(result.clipboardDataValidated, id === "clipboard");
     assert.equal(result.latexDataValidated, id === "latex");
+    assert.equal(result.companionDataValidated, id === "companion");
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });
