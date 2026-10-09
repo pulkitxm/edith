@@ -5,6 +5,7 @@ final class CameraCarrierSession {
     private let controller: CameraSystemExtensionController
     private let send: (Data) throws -> Void
     private let prepareMicrophone: @MainActor () async throws -> Void
+    private let prepareDisableResources: @MainActor () async throws -> Void
     private let releaseResources: @MainActor () async throws -> Void
     private let exited: () -> Void
     private var frames = CameraCarrierFrames()
@@ -17,11 +18,13 @@ final class CameraCarrierSession {
     init(
         controller: CameraSystemExtensionController, send: @escaping (Data) throws -> Void,
         prepareMicrophone: @escaping @MainActor () async throws -> Void,
+        prepareDisableResources: @escaping @MainActor () async throws -> Void = {},
         releaseResources: @escaping @MainActor () async throws -> Void, exited: @escaping () -> Void
     ) {
         self.controller = controller
         self.send = send
         self.prepareMicrophone = prepareMicrophone
+        self.prepareDisableResources = prepareDisableResources
         self.releaseResources = releaseResources
         self.exited = exited
         controller.changed = { [weak self] _ in self?.publish(token: nil) }
@@ -50,7 +53,7 @@ final class CameraCarrierSession {
                         do {
                             switch request.operation {
                             case .activate: try await controller.activate()
-                            case .deactivate: try await controller.deactivate()
+                            case .deactivate: try await deactivateOwnedResources()
                             case .microphonePrepare: try await prepareMicrophone()
                             default: throw CocoaError(.fileReadCorruptFile)
                             }
@@ -72,7 +75,7 @@ final class CameraCarrierSession {
             guard let self else { return }
             defer { cleaning = false }
             do {
-                try await controller.deactivate()
+                try await deactivateOwnedResources()
                 let pending = Array(requests.values)
                 for request in pending { await request.value }
                 guard !controller.ownsProvider, !controller.pendingRequest else { return }
@@ -92,12 +95,20 @@ final class CameraCarrierSession {
             guard let self else { return }
             defer { cleaning = false }
             do {
-                try await controller.deactivate()
+                try await deactivateOwnedResources()
                 guard !controller.ownsProvider, !controller.pendingRequest else { return }
                 try await releaseResources()
                 released = true
                 exited()
             } catch {}
+        }
+    }
+
+    private func deactivateOwnedResources() async throws {
+        try await controller.deactivate()
+        do { try await prepareDisableResources() } catch let error as CameraCarrierRestartRequired {
+            controller.retainUntilRestart(error.message)
+            throw error
         }
     }
 

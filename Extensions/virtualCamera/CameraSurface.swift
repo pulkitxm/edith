@@ -50,6 +50,10 @@ final class CameraSurface {
                 detail: "Camera scene", icon: "rectangle.stack.fill",
                 actions: [.init("scene:" + identifier, "Apply scene", "rectangle.stack.fill")])
         }
+        let selected = tile.sourceIDs ?? []
+        rows = Array(
+            (rows.filter { selected.contains($0.sourceID) }
+                + rows.filter { !selected.contains($0.sourceID) }).prefix(100))
         var actions: [SurfaceAction] = []
         if current.state.privacy != .live {
             actions.append(.init("resume", "Go live", "video.fill"))
@@ -67,7 +71,7 @@ final class CameraSurface {
             providerID: "virtualCamera",
             metrics: [
                 .init("scenes", "Scenes", String(scenes.count)),
-                .init("status", "Camera", Self.text(current.headline)),
+                .init("status", "Camera", Self.text(current.headline, maximumBytes: 256)),
             ], rows: rows, actions: actions,
             sliders: [
                 .init(
@@ -75,7 +79,7 @@ final class CameraSurface {
                     value: (current.state.composition.framing.zoom - zoom.lowerBound)
                         / (zoom.upperBound - zoom.lowerBound))
             ], sources: rows.map { .init($0.sourceID, $0.title) },
-            message: current.message.map(Self.text), updatedAt: Date())
+            message: current.message.map { Self.text($0) }, updatedAt: Date())
     }
 
     private func perform(_ identifier: String) async throws {
@@ -111,9 +115,9 @@ final class CameraSurface {
         SHA256.hash(data: Data(value.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func text(_ value: String) -> String {
+    private static func text(_ value: String, maximumBytes: Int = 1024) -> String {
         var bounded = String(value.filter { $0 != "\0" }.prefix(250))
-        while bounded.utf8.count > 1024 { bounded.removeLast() }
+        while bounded.utf8.count > maximumBytes { bounded.removeLast() }
         return bounded.isEmpty ? "Camera" : bounded
     }
 }

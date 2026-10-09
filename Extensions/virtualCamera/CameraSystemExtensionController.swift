@@ -72,6 +72,12 @@ final class CameraSystemExtensionController {
         try await request(.deactivate)
     }
 
+    func retainUntilRestart(_ message: String) {
+        guard flight == nil, verification == nil else { return }
+        ownsProvider = true; wantsInactive = false
+        setPhase(.restartRequired)
+    }
+
     private func request(_ operation: CameraSystemExtensionOperation) async throws {
         let token = UUID()
         try await withTaskCancellationHandler {

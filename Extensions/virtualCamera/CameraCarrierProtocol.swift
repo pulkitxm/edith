@@ -1,5 +1,10 @@
 import Foundation
 
+struct CameraCarrierRestartRequired: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
 enum CameraCarrierOperation: String, Codable, Sendable {
     case activate, deactivate, status, cancel, microphonePrepare
 }

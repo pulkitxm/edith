@@ -92,6 +92,35 @@ import Testing
         }
     }
 
+    @Test func largeSourceCatalogRemainsBoundedAndRetainsSelectedScene() async throws {
+        let sources = (0..<100).map {
+            VirtualCameraSource(
+                id: "synthetic-\($0)", name: String(repeating: "🟢", count: 300), kind: .external)
+        }
+        let scenes = (0..<100).map {
+            VirtualCameraScene(name: "Synthetic scene \($0)", composition: .init())
+        }
+        let engine = VirtualCameraEngine(
+            state: .init(scenes: scenes),
+            environment: .init(
+                authorization: { .denied }, obsRunning: { false }, frontmostApplication: { nil },
+                sources: { sources }))
+        defer { engine.shutdown() }
+        let surface = CameraSurface(engine: engine, privacyValues: { [:] })
+        var tile = SurfaceTile(.ability("virtualCamera"))
+        tile.sourceIDs = [CameraSurface.identity("scene:" + scenes[99].id.uuidString)]
+        let request = SurfaceSnapshotRequest(target: .notch, tile: tile)
+        let snapshot = try SurfaceSnapshot.decode(
+            await surface.execute(
+                "surface.snapshot", payload: request.encoded(providerID: "virtualCamera")),
+            providerID: "virtualCamera")
+        #expect(snapshot.sources.count == 100)
+        #expect(snapshot.rows.count == 1)
+        #expect(snapshot.rows.first?.title == "Synthetic scene 99")
+        #expect(snapshot.sources.allSatisfy { $0.title.utf8.count <= 1024 })
+        #expect(snapshot.metrics.allSatisfy { $0.value.utf8.count <= 256 })
+    }
+
     @Test func awaitedShutdownClearsWorkAndRejectsLateCommands() async throws {
         let engine = engine()
         let surface = CameraSurface(engine: engine, privacyValues: { [:] })

@@ -208,6 +208,34 @@ private final class CarrierBrokerProbe: CameraSystemExtensionSubmitting {
         #expect(session.disconnected)
     }
 
+    @Test func microphoneRetirementKeepsCarrierOwnedUntilRestart() async throws {
+        let broker = CarrierBrokerProbe()
+        let controller = CameraSystemExtensionController(
+            identifier: "org.example.fixture.camera", broker: broker, providerExited: { true })
+        var replies: [CameraCarrierReply] = []
+        var releases = 0
+        let session = CameraCarrierSession(
+            controller: controller, send: { replies.append(try decode($0)) }, prepareMicrophone: {},
+            prepareDisableResources: {
+                throw CameraCarrierRestartRequired(
+                    message: "Restart macOS to release the loaded microphone driver.")
+            }, releaseResources: { releases += 1 },
+            exited: { Issue.record("A pending driver must not release its carrier") })
+        let token = UUID()
+        session.receive(
+            try CameraCarrierFrames.encode(
+                CameraCarrierRequest(token: token, operation: .deactivate)))
+        try await wait { replies.contains { $0.token == token } }
+        let reply = try #require(replies.first { $0.token == token })
+        #expect(reply.status.phase == "restartRequired")
+        #expect(reply.status.ownsProvider)
+        #expect(reply.error?.contains("Restart") == true)
+        session.disconnect(); session.retryDisconnectedCleanup()
+        try await Task.sleep(for: .milliseconds(5))
+        #expect(releases == 0 && !session.released)
+        #expect(broker.requests.isEmpty)
+    }
+
     @Test func microphoneFailureIsBoundedAndCannotActivateProvider() async throws {
         let broker = CarrierBrokerProbe()
         var replies: [CameraCarrierReply] = []
