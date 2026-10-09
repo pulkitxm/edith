@@ -193,7 +193,8 @@
         "Extensions/presenter/Models/PresenterState.swift",
         "Extensions/presenter/Models/PresenterText.swift",
         "Extensions/presenter/Runtime.swift",
-        "Extensions/presenter/Views/PresenterRows.swift"
+        "Extensions/presenter/Views/PresenterRows.swift",
+        "Extensions/presenter/Surface.swift"
       ]
     },
     "inputs": [
@@ -318,7 +319,8 @@
         "Extensions/homebrew/Runtime.swift",
         "Extensions/homebrew/Services/HomebrewOperations.swift",
         "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
-        "Extensions/homebrew/Views/HomebrewPage.swift"
+        "Extensions/homebrew/Views/HomebrewPage.swift",
+        "Extensions/homebrew/Surface.swift"
       ]
     },
     "inputs": [
@@ -387,7 +389,8 @@
         "Extensions/jev/Services/JevRouter.swift",
         "Extensions/jev/Services/JevSecrets.swift",
         "Extensions/jev/ViewModels/JevSettingsModel.swift",
-        "Extensions/jev/Views/JevSettingsPane.swift"
+        "Extensions/jev/Views/JevSettingsPane.swift",
+        "Extensions/jev/Surface.swift"
       ]
     },
     "inputs": [
@@ -414,7 +417,8 @@
         "Extensions/system/Services/RunningApps.swift",
         "Extensions/system/ViewModels/RunningAppsModel.swift",
         "Extensions/system/ViewModels/SystemPresentationState.swift",
-        "Extensions/system/Views/SystemPage.swift"
+        "Extensions/system/Views/SystemPage.swift",
+        "Extensions/system/Surface.swift"
       ]
     },
     "inputs": [
@@ -447,7 +451,8 @@
         "Extensions/timeLapse/TimeLapseRecordingRow.swift",
         "Extensions/timeLapse/TimeLapseSourcePicker.swift",
         "Extensions/timeLapse/TimeLapseSources.swift",
-        "Extensions/timeLapse/TimeLapseWriter.swift"
+        "Extensions/timeLapse/TimeLapseWriter.swift",
+        "Extensions/timeLapse/Surface.swift"
       ]
     },
     "inputs": [
@@ -477,7 +482,8 @@
         "Extensions/cleaner/CleanerServices.swift",
         "Extensions/cleaner/CleanerViews.swift",
         "Extensions/cleaner/JunkScanner.swift",
-        "Extensions/cleaner/Runtime.swift"
+        "Extensions/cleaner/Runtime.swift",
+        "Extensions/cleaner/Surface.swift"
       ]
     },
     "inputs": [
@@ -506,7 +512,8 @@
         "Extensions/appMaintenance/AppUpdateCenter.swift",
         "Extensions/appMaintenance/MaintenanceCommands.swift",
         "Extensions/appMaintenance/MaintenancePreferences.swift",
-        "Extensions/appMaintenance/Runtime.swift"
+        "Extensions/appMaintenance/Runtime.swift",
+        "Extensions/appMaintenance/Surface.swift"
       ]
     },
     "inputs": [
@@ -537,7 +544,8 @@
         "Extensions/blitztree/BlitzTreePage.swift",
         "Extensions/blitztree/BlitzTreeRings.swift",
         "Extensions/blitztree/BlitzTreeScanner.swift",
-        "Extensions/blitztree/Runtime.swift"
+        "Extensions/blitztree/Runtime.swift",
+        "Extensions/blitztree/Surface.swift"
       ]
     },
     "inputs": [
