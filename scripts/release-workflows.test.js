@@ -234,21 +234,14 @@ test("release builds and publishes only empty-host macOS assets", () => {
   expect(jobText(publish)).not.toContain("git commit");
 });
 
-test("swift tests leave enough time for a cold libghostty build", () => {
-  const swiftTestJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  swift-test:"),
-    ciWorkflow.indexOf("\n  companion:"),
-  );
-  expect(swiftTestJob).toContain("timeout-minutes: 90");
+test("host test lanes exclude optional terminal dependencies", () => {
   const job = workflow.jobs["swift-test"];
-  const build = job.steps.find((step) => step.name === "Build tests");
   const tests = job.steps.find((step) => step.name === "Tests");
-  expect(build["timeout-minutes"]).toBeGreaterThanOrEqual(45);
-  expect(job["timeout-minutes"]).toBeGreaterThanOrEqual(
-    build["timeout-minutes"] + tests["timeout-minutes"] + 15,
-  );
-  expect(swiftTestJob).toContain("name: Cache libghostty");
-  expect(swiftTestJob).toContain("name: Build libghostty");
+  expect(job["timeout-minutes"]).toBeGreaterThan(tests["timeout-minutes"]);
+  expect(JSON.stringify(job)).not.toContain("make ghostty");
+  expect(JSON.stringify(job)).not.toContain("Packages/Edith/");
+  expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
+  expect(tests.run).toContain('make "${targets[@]}"');
 });
 
 test("superseded release builds yield the lane before packaging", () => {

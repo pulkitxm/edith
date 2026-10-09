@@ -88,7 +88,7 @@ jobs:
             fi
           }
           area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/(Edith|EdithHost|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|edth\.xcodeproj/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
-          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
+          area host '^(Packages/(EdithHost|ExtensionMarketplace)/(Package\.(swift|resolved)$|Sources/)|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|Host.entitlements|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -231,87 +231,44 @@ jobs:
     concurrency:
       group: ci-swift-test-${{ matrix.lane }}-${{ github.ref }}-${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' && 'product' || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && needs.changes.outputs.swift == 'true' }}
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 3
       matrix:
         include:
-          - lane: core-cli
-            batches: core database database-mcp cli
-          - lane: herdr-clipboard
-            batches: herdr agent machines bifrost clipboard
-          - lane: usage-media
-            batches: usage attention companion browser media
-          - lane: dashboard-app
-            batches: dashboard extensions files database-ui studio time-lapse app
+          - lane: host-runtime
+            targets: ci-host ci-marketplace-runtime
+          - lane: feature-models
+            targets: ci-extension-support ci-extension-docs
+          - lane: native-music
+            targets: ci-music-native
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Install Fish
-        run: |
-          command -v fish >/dev/null 2>&1 || brew install fish
-          fish --version
-      - name: Cache libghostty
-        id: ghostty-cache
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Cache host products
+        uses: ./.github/actions/cache-host
+      - name: Cache independent test products
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: |
-            Packages/Edith/vendor/GhosttyKit.xcframework
-            Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
-      - name: Build libghostty
-        run: |
-          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
-            || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
-            || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
-            command -v zig >/dev/null 2>&1 || brew install zig
-            make ghostty
-          fi
-      - name: Save validated libghostty
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            Packages/Edith/vendor/GhosttyKit.xcframework
-            Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
-
-      - name: Cache Swift build products
-        id: swift-cache
-        uses: ./.github/actions/cache-swift
-        with:
-          variant: tests-debug
-      - name: Verify test isolation
-        run: python3 -B scripts/test-swift-test-isolation.py
-      - name: Build tests
-        timeout-minutes: 45
-        run: ./test.sh --build-only
-        working-directory: Packages/Edith
-      - name: Save compiled tests
-        if: matrix.lane == 'core-cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            Packages/Edith/.build/*-apple-macosx
-            Packages/Edith/.build/plugins
-            Packages/Edith/.build/*.db
-            Packages/Edith/.build/*.yaml
-          key: ${{ steps.swift-cache.outputs.compiled-cache-key }}
+            Packages/ExtensionMarketplace/.build
+            Packages/ExtensionSupport/.build
+            Packages/EdithDocsWorker/.build
+            Extensions/.build
+            Extensions/music/Native/target
+          key: native-tests-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: native-tests-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.lane }}-${{ hashFiles('Packages/ExtensionMarketplace/Package.*', 'Packages/ExtensionSupport/Package.*', 'Packages/EdithDocsWorker/Package.*', 'Extensions/Package.*', 'Extensions/music/Native/Cargo.lock') }}-
       - name: Tests
-        timeout-minutes: 30
-        run: |
-          for batch in ${{ matrix.batches }}; do
-            timeout=480
-            if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi
-            events="$RUNNER_TEMP/test-events-$batch.jsonl"
-            python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"
-          done
-        working-directory: Packages/Edith
+        timeout-minutes: 40
         env:
-          EDITH_REQUIRE_FISH_COMPLETION_TEST: "1"
+          TARGETS: ${{ matrix.targets }}
+        run: |
+          read -r -a targets <<< "$TARGETS"
+          make "${targets[@]}"
 
   companion:
     name: companion

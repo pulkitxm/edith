@@ -95,3 +95,13 @@ test("terminal dependencies are restored before native lifecycle builds", () => 
   expect(build.steps[bootstrap].if).toBe(build.steps[cache].if);
   expect(build.steps[bootstrap].run).toContain("make ghostty-extension");
 });
+
+test("common extension checks do not repeat every native release build", () => {
+  const checks = text(workflow.jobs.tests);
+  expect(checks).toContain("ci-extension-support");
+  expect(checks).toContain("ci-marketplace-runtime");
+  expect(checks).toContain("ci-extension-commands");
+  expect(checks).not.toContain("ci-marketplace-host");
+  expect(checks).not.toContain("ci-extension-workers");
+  expect(text(build)).toContain("ci-extension-workers EXTENSION=");
+});

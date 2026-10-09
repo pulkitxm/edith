@@ -149,19 +149,14 @@ ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
 ci-swift-lint:
-	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
-	cd $(STUDIO_PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
+	rg --files Packages/EdithHost Packages/ExtensionMarketplace Packages/ExtensionSupport Packages/EdithDocsWorker Extensions | rg '\.swift$$' | xargs swift format lint --strict --parallel
 
-ci-meeting-microphone:
-	python3 scripts/build-meeting-microphone.py --test --output .build/meeting-microphone
+ci-swift-build:
+	EDITH_RELEASE_ALLOW_DEV_SIGNING=1 ./build.sh --no-open --release
+	$(MAKE) verify-bundle
 
-ci-swift-build: approve-package-plugins ci-meeting-microphone
-	@test -n "$(DEVELOPER_DIR)" \
-	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
-	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
-
-ci-swift-test: ci-studio
-	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
+ci-swift-test:
+	$(MAKE) ci-marketplace-host ci-music-native
 
 .PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-extension-commands ci-extension-workers
 ci-host:

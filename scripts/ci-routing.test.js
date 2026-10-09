@@ -2,10 +2,6 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 const ciWorkflow = readFileSync(".github/workflows/ci.yml", "utf8");
-const packageManifest = readFileSync("Packages/Edith/Package.swift", "utf8");
-const swiftCache = Bun.YAML.parse(
-  readFileSync(".github/actions/cache-swift/action.yml", "utf8"),
-);
 const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
@@ -182,128 +178,60 @@ test("pull requests build the release app that main releases rebuild", () => {
   expect(releaseBuild).not.toContain("needs.swift-build");
 });
 
-test("Swift tests build their CLI fixture in one package graph", () => {
-  const testTarget = packageManifest.slice(
-    packageManifest.indexOf('name: "EdithTests"'),
-  );
-  expect(testTarget).toContain('"Highlighter", "ed"');
-});
-
-test("Swift tests cache a successful build before bounded execution", () => {
+test("Swift lanes exercise only independent host and extension packages", () => {
   const job = ciJobs["swift-test"];
-  const steps = job.steps;
-  const restore = steps.find((step) => step.id === "swift-cache");
-  const isolation = steps.find((step) => step.name === "Verify test isolation");
-  const build = steps.find((step) => step.name === "Build tests");
-  const save = steps.find((step) => step.name === "Save compiled tests");
-  const run = steps.find((step) => step.name === "Tests");
-  expect(job["timeout-minutes"]).toBe(90);
-  expect(restore.uses).toBe("./.github/actions/cache-swift");
-  expect(restore.with.variant).toBe("tests-debug");
-  expect(isolation.run).toBe("python3 -B scripts/test-swift-test-isolation.py");
-  expect(build.run).toBe("./test.sh --build-only");
-  expect(build["working-directory"]).toBe("Packages/Edith");
-  expect(build["timeout-minutes"]).toBe(45);
-  expect(build.if).toBeUndefined();
-  expect(run.run).toBe(
-    `for batch in \${{ matrix.batches }}; do\n  timeout=480\n  if [ "$batch" = cli ] || [ "$batch" = media ] || [ "$batch" = app ]; then timeout=1200; fi\n  events="$RUNNER_TEMP/test-events-$batch.jsonl"\n  python3 ../../scripts/run-test-with-timeout.py --timeout "$timeout" --events "$events" -- ./test.sh --skip-build --batch "$batch" --event-stream-output-path "$events"\ndone\n`,
-  );
   expect(job.strategy["fail-fast"]).toBe(false);
-  expect(job.strategy["max-parallel"]).toBe(4);
+  expect(job.strategy["max-parallel"]).toBe(3);
   expect(job.strategy.matrix.include).toEqual([
+    { lane: "host-runtime", targets: "ci-host ci-marketplace-runtime" },
     {
-      lane: "core-cli",
-      batches: "core database database-mcp cli",
+      lane: "feature-models",
+      targets: "ci-extension-support ci-extension-docs",
     },
-    {
-      lane: "herdr-clipboard",
-      batches: "herdr agent machines bifrost clipboard",
-    },
-    {
-      lane: "usage-media",
-      batches: "usage attention companion browser media",
-    },
-    {
-      lane: "dashboard-app",
-      batches: "dashboard extensions files database-ui studio time-lapse app",
-    },
+    { lane: "native-music", targets: "ci-music-native" },
   ]);
-  expect(run["working-directory"]).toBe(build["working-directory"]);
-  expect(run["timeout-minutes"]).toBe(30);
-  expect(run.if).toBeUndefined();
-  expect(run.env.EDITH_REQUIRE_FISH_COMPLETION_TEST).toBe("1");
-  expect(save.if).toBe(
-    "matrix.lane == 'core-cli' && steps.swift-cache.outputs.compiled-cache-hit != 'true'",
+  expect(JSON.stringify(job)).not.toContain("Packages/Edith/");
+  expect(JSON.stringify(job)).not.toContain("make ghostty");
+  const tests = job.steps.find((step) => step.name === "Tests");
+  expect(tests.run).toContain('read -r -a targets <<< "$TARGETS"');
+  expect(tests.run).toContain('make "${targets[@]}"');
+  expect(tests.env.TARGETS).toBe("${{ matrix.targets }}");
+  expect(job["timeout-minutes"]).toBeGreaterThan(tests["timeout-minutes"]);
+  const cache = job.steps.find(
+    (step) => step.name === "Cache independent test products",
   );
-  expect(save.uses).toBe(
-    "actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-  );
-  expect(save.with.key).toBe(
-    `\${{ steps.swift-cache.outputs.compiled-cache-key }}`,
-  );
-  for (const [before, after] of [
-    [restore, build],
-    [isolation, build],
-    [build, save],
-    [save, run],
-  ]) {
-    expect(steps.indexOf(before)).toBeLessThan(steps.indexOf(after));
-  }
-  const compiled = swiftCache.runs.steps.find(
-    (step) => step.id === "compiled-tests",
-  );
-  expect(save.with.path).toBe(compiled.with.path);
-  expect(swiftCache.outputs["compiled-cache-key"].value).toBe(
-    compiled.with.key,
-  );
-  expect(swiftCache.outputs["compiled-cache-hit"].value).toBe(
-    `\${{ steps.compiled-tests.outputs.cache-hit || steps.compiled.outputs.cache-hit }}`,
-  );
+  expect(cache.with.path).toContain("Packages/ExtensionSupport/.build");
+  expect(cache.with.path).toContain("Extensions/.build");
+  expect(cache.with.key).toContain("runner.arch");
+  expect(cache.with.key).toContain("matrix.lane");
 });
 
-test("Swift build consumers retain automatic compiled cache saves", () => {
-  const compiled = swiftCache.runs.steps.find((step) => step.id === "compiled");
-  const tests = swiftCache.runs.steps.find(
-    (step) => step.id === "compiled-tests",
-  );
-  expect(tests.if).toBe("inputs.variant == 'tests-debug'");
-  expect(tests.uses).toBe(
-    "actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-  );
-  expect(tests.with.key).toBe(compiled.with.key);
-  expect(tests.with["restore-keys"]).toBe(compiled.with["restore-keys"]);
-  expect(tests.with.path).toContain("Packages/Edith/.build/*-apple-macosx");
-  expect(compiled.if).toBe("inputs.variant != 'tests-debug'");
-  expect(compiled.uses).toBe(
-    "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
-  );
-  expect(compiled.with.path.trim().split("\n")).toEqual([
-    "build/Build",
-    "build/SDKExplicitPrecompiledModules",
-  ]);
-  for (const job of ["swift-build", "dmg"]) {
-    const cache = ciJobs[job].steps.find(
-      (step) => step.uses === "./.github/actions/cache-host",
-    );
-    expect(cache).toBeDefined();
+test("host build consumers use the narrow host cache", () => {
+  for (const job of ["swift-build", "dmg", "swift-test"]) {
+    expect(
+      ciJobs[job].steps.some(
+        (step) => step.uses === "./.github/actions/cache-host",
+      ),
+    ).toBe(true);
   }
   const hostCache = Bun.YAML.parse(
     readFileSync(".github/actions/cache-host/action.yml", "utf8"),
   );
-  const hostProducts = hostCache.runs.steps.find((step) =>
+  const products = hostCache.runs.steps.find((step) =>
     step.uses?.startsWith("actions/cache@"),
   );
-  expect(hostProducts.with.path).toBe("Packages/EdithHost/.build");
-  expect(hostProducts.with.key).toContain(
-    "Packages/ExtensionSupport/Sources/EdithExtensionSupport/**",
-  );
-  expect(hostProducts.with.key).not.toContain("Packages/Edith/");
-  expect(hostProducts.with.key).not.toContain("EdithExtensionDocuments");
+  expect(products.with.path).toBe("Packages/EdithHost/.build");
+  expect(products.with.key).not.toContain("Packages/Edith/");
+  expect(products.with.key).not.toContain("EdithExtensionDocuments");
 });
 
 test("Swift jobs restore commit times from full history before reusing builds", () => {
-  const [restoreTimes] = swiftCache.runs.steps;
-  expect(restoreTimes.run).toBe("python3 -B scripts/restore-source-mtimes.py");
+  const hostCache = Bun.YAML.parse(
+    readFileSync(".github/actions/cache-host/action.yml", "utf8"),
+  );
+  expect(hostCache.runs.steps[0].run).toBe(
+    "python3 -B scripts/restore-source-mtimes.py",
+  );
   for (const name of ["swift-build", "swift-test", "dmg"]) {
     const steps = ciJobs[name].steps;
     const checkout = steps.find((step) =>
