@@ -30,6 +30,68 @@ const definitions = [
 ];
 
 describe("independent extension releases", () => {
+  test("native Cargo sources rebuild Music while compiled Cargo outputs do not", async () => {
+    const root = await mkdtemp(join(tmpdir(), "extension-cargo-inputs-"));
+    const definition = {
+      id: "music",
+      inputs: ["Extensions/music"],
+      sharedInputs: [],
+      dependencies: [],
+      nativeCargo: {
+        manifest: "Extensions/music/Native/Cargo.toml",
+        library: "libedith_music_player.dylib",
+      },
+    };
+    try {
+      await mkdir(join(root, "Extensions/music/Native/src"), {
+        recursive: true,
+      });
+      await writeFile(join(root, definition.nativeCargo.manifest), "package");
+      await writeFile(
+        join(root, "Extensions/music/Native/Cargo.lock"),
+        "dependencies",
+      );
+      await writeFile(
+        join(root, "Extensions/music/Native/src/lib.rs"),
+        "library source",
+      );
+      const original = await extensionFingerprint(root, definition, [
+        definition,
+      ]);
+      await mkdir(join(root, "Extensions/music/Native/target/release"), {
+        recursive: true,
+      });
+      await writeFile(
+        join(
+          root,
+          "Extensions/music/Native/target/release/libedith_music_player.dylib",
+        ),
+        "compiled output",
+      );
+      expect(await extensionFingerprint(root, definition, [definition])).toBe(
+        original,
+      );
+      await writeFile(
+        join(root, "Extensions/music/Native/Cargo.lock"),
+        "new dependencies",
+      );
+      expect(
+        await extensionFingerprint(root, definition, [definition]),
+      ).not.toBe(original);
+      const dependenciesChanged = await extensionFingerprint(root, definition, [
+        definition,
+      ]);
+      await writeFile(
+        join(root, "Extensions/music/Native/src/lib.rs"),
+        "changed library source",
+      );
+      expect(
+        await extensionFingerprint(root, definition, [definition]),
+      ).not.toBe(dependenciesChanged);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   test("rebuilds only consumers of changed support products", async () => {
     const root = await mkdtemp(join(tmpdir(), "extension-support-inputs-"));
     const products = [

@@ -109,6 +109,7 @@ export async function extensionFingerprint(root, definition, definitions) {
           "node_modules",
           "dist",
           "build",
+          "target",
           "Tests",
           "tests",
         ].includes(entry.name)
