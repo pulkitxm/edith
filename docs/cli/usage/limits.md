@@ -3,13 +3,14 @@
 Prints the most recent rate limit observation for each provider Edith tracks.
 
 ```
-ed usage limits [--refresh] [--json]
+ed usage limits [--refresh] [--connect-browser] [--json]
 ```
 
 ## Options
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
+| `--connect-browser` | flag | off | Connect the signed-in Claude website session, allowing a macOS Keychain prompt, then wait up to 90 seconds for a limits refresh |
 | `--refresh` | flag | off | Ask the background agent to poll providers again and wait up to 20 seconds before reading the file. Fails when `edithd` is not running |
 | `--json` | flag | off | Emit JSON on stdout |
 
@@ -90,7 +91,11 @@ Chrome's active profile. It selects the website's active organization and saves
 session, weekly, and Fable limits, including usage from web and cloud tasks.
 It never sends browser cookies to another host or prompts for Keychain access
 in the background. Chrome data access and its Safe Storage key must already be
-available to Edith. Access failures appear in the limits menu.
+available to Edith. Access failures appear in the limits menu. To grant access,
+choose **Connect Claude website** in Agent Usage settings or run
+`ed usage limits --connect-browser`. Only this explicit connection may prompt
+for Keychain access; subsequent background refreshes remain noninteractive.
+A blocked credential lookup times out instead of stalling the limits job.
 
 Claude Code's status line through [`ed usage statusline record`](./statusline.md)
 remains a fallback while its session window is current. Once that window expires,

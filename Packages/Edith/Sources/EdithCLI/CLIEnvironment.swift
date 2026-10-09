@@ -80,6 +80,10 @@ public enum CLIEnvironment {
             try UsageAgentOperations.requestRefresh(machinePolicy: $0)
         }
 
+    nonisolated(unsafe) public static var requestLimitsRefresh: @Sendable (Bool) throws -> Void = {
+        try UsageAgentOperations.requestLimitsRefresh(connectBrowser: $0)
+    }
+
     nonisolated(unsafe) public static var verifyAgentHandshake:
         @Sendable () throws -> AgentHandshake = {
             try AgentClient.shared.verifyHandshake()
@@ -240,6 +244,8 @@ public enum CLIEnvironment {
         runningApps = { RunningAppOperationCenter.liveSnapshots() }
         runAppleScript = { try AppleScriptHost.execute($0, timeout: $1) }
         usageRefresh = UsageRefreshDriver.live
+        requestUsageRefresh = { try UsageAgentOperations.requestRefresh(machinePolicy: $0) }
+        requestLimitsRefresh = { try UsageAgentOperations.requestLimitsRefresh(connectBrowser: $0) }
         verifyAgentHandshake = { try AgentClient.shared.verifyHandshake() }
         performAgentOperation = { try AgentClient.shared.perform($0) }
         installTool = { try await ToolInstaller().install($0, log: $1) }

@@ -1691,6 +1691,37 @@ private struct ExtensionPermissionSheet: View {
     }
 }
 
+private struct ClaudeWebsiteConnectionRow: View {
+    @State private var load = ContentLoad()
+    @State private var requested = false
+
+    var body: some View {
+        LabeledContent("Claude website") {
+            VStack(alignment: .trailing, spacing: UIScale.pt(4)) {
+                Button("Connect Claude website") {
+                    Task {
+                        await load.perform {
+                            try UsageAgentOperations.requestLimitsRefresh(connectBrowser: true)
+                        } apply: { _ in
+                            requested = true
+                        }
+                    }
+                }
+                .disabled(load.isRunning)
+                Text(
+                    load.errorMessage
+                        ?? (requested
+                            ? "Refresh requested. Check the limits menu for the result."
+                            : "Uses your signed-in Chrome profile. macOS may ask for Keychain access.")
+                )
+                .settingsCaption()
+                .foregroundStyle(.secondary)
+            }
+        }
+        .onDisappear { load.cancel() }
+    }
+}
+
 private struct ClaudeStatusLineRow: View {
     @State private var connected: Bool?
     @State private var failure: String?
@@ -1827,6 +1858,7 @@ private struct UsageRows: View {
                     isOn: $claudeEnabled.configured(AppStorageKeys.Limits.claudeEnabled)
                 )
                 if claudeEnabled {
+                    ClaudeWebsiteConnectionRow()
                     ClaudeStatusLineRow()
                 }
                 Toggle(

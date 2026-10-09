@@ -6,6 +6,12 @@ public enum UsageMachineRefreshPolicy: Int, Codable, Sendable {
     case all
 }
 
+public struct UsageLimitsRefreshRequest: Codable, Equatable, Sendable {
+    public let connectBrowser: Bool
+
+    public init(connectBrowser: Bool = false) { self.connectBrowser = connectBrowser }
+}
+
 public enum UsageAgentOperations {
     @discardableResult
     public static func requestRefresh(
@@ -17,7 +23,11 @@ public enum UsageAgentOperations {
         return try? AgentPayload.decode(String.self, from: response)
     }
 
-    public static func requestLimitsRefresh(client: AgentClient = .shared) throws {
-        _ = try client.perform(UsageCollectionOperation.limitsRefresh.descriptor.id)
+    public static func requestLimitsRefresh(
+        connectBrowser: Bool = false, client: AgentClient = .shared
+    ) throws {
+        _ = try client.perform(
+            UsageCollectionOperation.limitsRefresh.descriptor.id,
+            payload: AgentPayload.encode(UsageLimitsRefreshRequest(connectBrowser: connectBrowser)))
     }
 }

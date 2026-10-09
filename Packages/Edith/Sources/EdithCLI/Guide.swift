@@ -450,6 +450,7 @@ public enum Guide {
 
         ```
         ed usage limits                 session and weekly, per provider
+        ed usage limits --connect-browser  connect website limits through Chrome
         ed usage alerts                 burn rate, projected cap and the alert due now
         ed usage summary --range week   cost and tokens for a window
         ed usage daily --range month

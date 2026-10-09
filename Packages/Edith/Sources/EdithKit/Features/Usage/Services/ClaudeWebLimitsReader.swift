@@ -24,9 +24,10 @@ public enum ClaudeWebLimitsReader {
                 "Sign in to claude.ai in your active Chrome profile, then refresh limits."
             case .browserAccess:
                 "Allow Edith to read Chrome data in macOS Privacy & Security, then refresh limits."
-            case .keychainAccess: "Unlock Chrome Safe Storage for Edith, then refresh limits."
+            case .keychainAccess:
+                "Choose Connect Claude website in Agent Usage settings to allow Chrome Safe Storage access."
             case .credentialTimeout:
-                "Chrome session lookup timed out. Unlock Chrome Safe Storage for Edith, then refresh limits."
+                "Chrome session lookup timed out. Choose Connect Claude website in Agent Usage settings."
             case .unauthorized:
                 "Your Claude website session expired. Sign in to claude.ai, then refresh limits."
             case .challenge:
@@ -39,6 +40,23 @@ public enum ClaudeWebLimitsReader {
             }
         }
     }
+
+    actor ConnectionRequest {
+        private var pending = false
+
+        func request() { pending = true }
+        func discard() { pending = false }
+        func take() -> Bool {
+            let result = pending
+            pending = false
+            return result
+        }
+    }
+
+    private static let connectionRequest = ConnectionRequest()
+
+    public static func requestConnection() async { await connectionRequest.request() }
+    public static func discardConnection() async { await connectionRequest.discard() }
 
     private static let credentialLookup = BoundedKeychainAccess<Result<Credential, Failure>>()
 
@@ -54,9 +72,13 @@ public enum ClaudeWebLimitsReader {
     }()
 
     public static func fetch() async throws -> LimitsProviderSnapshot {
-        let lookup = await credentialLookup.run(timeout: 3, fallback: .failure(.credentialTimeout))
-        {
-            do { return .success(try Self.credential()) } catch let failure as Failure {
+        let allowPrompt = await connectionRequest.take()
+        let lookup = await credentialLookup.run(
+            timeout: allowPrompt ? 60 : 3, fallback: .failure(.credentialTimeout)
+        ) {
+            do { return .success(try Self.credential(allowPrompt: allowPrompt)) } catch let failure
+                as Failure
+            {
                 return .failure(failure)
             } catch { return .failure(.browserAccess) }
         }
@@ -68,7 +90,9 @@ public enum ClaudeWebLimitsReader {
         }
     }
 
-    static func credential(userData: ChromeUserData = .standard) throws -> Credential {
+    static func credential(
+        userData: ChromeUserData = .standard, allowPrompt: Bool = false
+    ) throws -> Credential {
         let profiles: [ChromeProfile]
         let active: String?
         do {
@@ -83,7 +107,7 @@ public enum ClaudeWebLimitsReader {
             let database = userData.cookiesURL(for: profile)
         else { throw Failure.missingSession }
         let key: ChromeCookieKey
-        do { key = try ChromeSafeStorage.keychainKey(allowPrompt: false) } catch {
+        do { key = try ChromeSafeStorage.keychainKey(allowPrompt: allowPrompt) } catch {
             throw Failure.keychainAccess
         }
         let cookies: [ChromeCookie]

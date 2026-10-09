@@ -261,6 +261,10 @@ final class CLIWorld: @unchecked Sendable {
                 UsageCollectionOperation.refresh.descriptor.id)
             return try? AgentPayload.decode(String.self, from: response)
         }
+        CLIEnvironment.requestLimitsRefresh = { _ in
+            _ = try CLIEnvironment.performAgentOperation(
+                UsageCollectionOperation.limitsRefresh.descriptor.id)
+        }
         CLIEnvironment.installTool = { tool, _ in
             throw ToolInstallFailure.unverified(tool.displayName)
         }

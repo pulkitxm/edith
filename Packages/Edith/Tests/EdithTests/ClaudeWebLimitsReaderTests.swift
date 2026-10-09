@@ -15,6 +15,20 @@ import Testing
                     "scope":{"model":{"display_name":"Fable"}}}]}
         """.utf8)
 
+    @Test func connectionPermissionIsConsumedByOnlyOneRefresh() async throws {
+        let request = ClaudeWebLimitsReader.ConnectionRequest()
+        #expect(await request.take() == false)
+        await request.request()
+        #expect(await request.take() == true)
+        #expect(await request.take() == false)
+        await request.request()
+        await request.discard()
+        #expect(await request.take() == false)
+        let payload = try AgentPayload.encode(UsageLimitsRefreshRequest(connectBrowser: true))
+        #expect(
+            try AgentPayload.decode(UsageLimitsRefreshRequest.self, from: payload).connectBrowser)
+    }
+
     @Test func blockedCredentialReadsTimeOutWithoutStartingMoreWorkers() async {
         let lookup = BoundedKeychainAccess<Bool>()
         let release = DispatchSemaphore(value: 0)

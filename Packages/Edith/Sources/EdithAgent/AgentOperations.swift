@@ -94,8 +94,20 @@ public enum AgentOperations {
         }
         await runtime.register(
             operation: UsageCollectionOperation.limitsRefresh.descriptor.id.rawValue
-        ) { _ in
+        ) { payload in
+            let request =
+                payload.isEmpty
+                ? UsageLimitsRefreshRequest()
+                : try AgentPayload.decode(UsageLimitsRefreshRequest.self, from: payload)
+            if request.connectBrowser {
+                guard LimitsCollector.providerEnabled(.claude) else {
+                    throw AgentError(
+                        .refused, "Enable Claude limits before connecting the website.")
+                }
+                await ClaudeWebLimitsReader.requestConnection()
+            }
             guard await scheduler.enqueue("usage.limits") else {
+                if request.connectBrowser { await ClaudeWebLimitsReader.discardConnection() }
                 throw AgentError(.refused, "Usage collection is disabled.")
             }
             return Data()
