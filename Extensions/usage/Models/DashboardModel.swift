@@ -711,6 +711,8 @@ final class DashboardModel {
         ingestion.cancel()
         computeTask?.cancel()
         computeTask = nil
+        homeUsageStoreTask?.cancel()
+        homeUsageStoreTask = nil
     }
 
     static func agentName(_ entry: DashUsage.Meta?, id: String, local: Bool) -> String {

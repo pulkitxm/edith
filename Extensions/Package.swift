@@ -36,7 +36,7 @@ let package = Package(
         .target(
             name: "UsageExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "usage", exclude: ["Tests"],
+            path: "usage", exclude: ["Tests"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "UsageExtensionTests", dependencies: ["UsageExtension"],
