@@ -88,7 +88,7 @@ import Testing
                     .environment(\.automaticViewActionsEnabled, false)
                     .environment(\.loadingAnimationsEnabled, false))
             host.sizingOptions = []
-            host.frame = NSRect(x: 0, y: 0, width: compact ? 680 : 1280, height: 900)
+            host.frame = NSRect(x: 0, y: 0, width: compact ? 640 : 1280, height: 900)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
@@ -172,7 +172,7 @@ import Testing
                     .background(DashSkin.paper(scheme == .dark))
                     .environment(\.compactLayout, compact).environment(\.colorScheme, scheme))
             host.sizingOptions = []
-            host.frame = NSRect(x: 0, y: 0, width: compact ? 680 : 1280, height: 900)
+            host.frame = NSRect(x: 0, y: 0, width: compact ? 640 : 1280, height: 900)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.contentView = host
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)

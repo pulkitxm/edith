@@ -25,7 +25,7 @@ enum PageMetrics {
     static func tableNameWidth(viewport: CGFloat, fixedWidth: Double, columnCount: Int) -> CGFloat {
         let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
         return max(
-            UIScale.pt(140),
+            0,
             viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16) - scrollerWidth)
     }
 
