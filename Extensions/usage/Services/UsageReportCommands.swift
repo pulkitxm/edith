@@ -5,14 +5,19 @@ actor UsageReportCommands {
     private let controller: UsageWorkerController
     private let store: SurfaceUsageStore
     private let directory: URL
+    private let forgetMachine: @Sendable (UUID) async throws -> Void
     private var exported: Data?
     private var exportID: UUID?
     private var exportExpiry: Task<Void, Never>?
     private var stopped = false
 
-    init(controller: UsageWorkerController, store: SurfaceUsageStore, directory: URL = Repo.dataDir)
-    {
+    init(
+        controller: UsageWorkerController, store: SurfaceUsageStore, directory: URL = Repo.dataDir,
+        forgetMachine: (@Sendable (UUID) async throws -> Void)? = nil
+    ) {
         self.controller = controller; self.store = store; self.directory = directory
+        self.forgetMachine =
+            forgetMachine ?? { try UsageMachinesPeer.forget(machineID: $0, directory: directory) }
     }
 
     func shutdown() { stopped = true; clearExport() }
@@ -78,7 +83,7 @@ actor UsageReportCommands {
                 let text = object["machineID"] as? String, let id = UUID(uuidString: text)
             else { throw ExtensionPeerError.invalidRequest }
             await controller.cancelRefresh()
-            try UsageMachinesPeer.forget(machineID: id, directory: directory)
+            try await forgetMachine(id)
             await store.clear()
             return try encode(["forgotten": true])
         case "usage.sources":

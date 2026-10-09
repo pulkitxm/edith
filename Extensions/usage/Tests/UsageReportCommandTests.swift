@@ -50,6 +50,48 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: url.path))
         await controller.shutdown()
     }
+    @Test func confirmedMachineForgetCancelsRefreshBeforeRemovingItsArchive() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let machineID = UUID()
+        let archive = root.appendingPathComponent(
+            "remote-archives/" + machineID.uuidString.lowercased())
+        try UsageNativeFileIO.privateDirectory(archive)
+        try UsageDataFiles.write(
+            Data("fixture-delete".utf8), to: archive.appendingPathComponent("receipt"))
+        let controller = UsageWorkerController(dataDirectory: root) { _, _ in
+            try await Task.sleep(for: .seconds(30))
+            return Data()
+        }
+        let projection = UsageMachinesProjection(directory: root)
+        let commands = UsageReportCommands(
+            controller: controller,
+            store: .init(url: root.appendingPathComponent("usage.json")), directory: root,
+            forgetMachine: { id in
+                await MainActor.run { #expect(!controller.refreshing) }
+                try await projection.forget(machineID: id)
+            })
+        _ = try controller.requestRefresh(policy: .skip)
+        #expect(controller.refreshing)
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await commands.execute(
+                "usage.machines.forget",
+                payload: JSONSerialization.data(
+                    withJSONObject: ["machineID": machineID.uuidString, "confirm": false]))
+        }
+        #expect(FileManager.default.fileExists(atPath: archive.path))
+        let response = try await commands.execute(
+            "usage.machines.forget",
+            payload: JSONSerialization.data(
+                withJSONObject: ["machineID": machineID.uuidString, "confirm": true]))
+        #expect(
+            (try JSONSerialization.jsonObject(with: response) as? [String: Any])?["forgotten"]
+                as? Bool == true)
+        #expect(!controller.refreshing)
+        #expect(!FileManager.default.fileExists(atPath: archive.path))
+        await commands.shutdown(); await projection.shutdown(); await controller.shutdown()
+    }
+
     @Test func shareRepositoryCountRespectsSourcesDatesAndRepositoryIdentity() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

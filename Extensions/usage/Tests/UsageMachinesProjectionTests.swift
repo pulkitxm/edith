@@ -315,6 +315,126 @@ import Testing
         }
     }
 
+    @Test func forgettingHistoryRemovesThePrivateArchiveAndPreventsDeletedReceiptsReturning()
+        async throws
+    {
+        let directory = temporary()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let machine = sampleMachine()
+        let snapshot = try fixture(machine)
+        let transport = Transport(data: snapshot, machine: machine)
+        let service = service(directory, transport: transport)
+        let receipt = try JSONDecoder().decode(
+            UsageMachinesPeer.Receipt.self,
+            from: await service.execute(
+                "usage.machines.project", payload: request(machine, snapshot)))
+        let chunk = try JSONDecoder().decode(
+            UsageMachinesPeer.Chunk.self,
+            from: await service.execute(
+                "usage.machines.result",
+                payload: object([
+                    "collectionID": receipt.collectionID.uuidString, "offset": 0,
+                    "maximumBytes": 262_144,
+                ])))
+        #expect(chunk.finished)
+        let canonical = try UsageMachinesPeer.canonicalized(chunk.data, machine: machine)
+        let cache = directory.appendingPathComponent(
+            "machines/" + machine.id.uuidString.lowercased() + ".json")
+        try FileManager.default.createDirectory(
+            at: cache.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try UsageDataFiles.write(canonical, to: cache)
+        try UsageDataFiles.write(canonical, to: directory.appendingPathComponent("usage.json"))
+        let otherArchive = directory.appendingPathComponent(
+            "remote-archives/" + UUID().uuidString.lowercased())
+        try UsageNativeFileIO.privateDirectory(otherArchive)
+        try UsageDataFiles.write(
+            Data("fixture-keep".utf8), to: otherArchive.appendingPathComponent("receipt"))
+        try await service.forget(machineID: machine.id)
+        #expect(!FileManager.default.fileExists(atPath: cache.path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: directory.appendingPathComponent(
+                    "remote-archives/" + machine.id.uuidString.lowercased()
+                ).path))
+        #expect(
+            try UsageDataFiles.readRegularFile(at: otherArchive.appendingPathComponent("receipt"))
+                == Data("fixture-keep".utf8))
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await service.execute(
+                "usage.machines.result",
+                payload: object([
+                    "collectionID": receipt.collectionID.uuidString, "offset": 0,
+                    "maximumBytes": 113,
+                ]))
+        }
+        let published = try #require(
+            try UsageDataFiles.readRegularFile(at: directory.appendingPathComponent("usage.json")))
+        #expect(UsageHistory.isValidDocument(published))
+        #expect(
+            (try UsageNativeJSON.object(published)["totals"] as! [String: Any])["tokens"] as? Double
+                == 0)
+        await service.shutdown()
+        var empty = try UsageNativeJSON.object(snapshot); empty["files"] = []
+        let emptySnapshot = try object(empty)
+        let nextTransport = Transport(data: emptySnapshot, machine: machine)
+        let next = self.service(directory, transport: nextTransport)
+        let nextReceipt = try JSONDecoder().decode(
+            UsageMachinesPeer.Receipt.self,
+            from: await next.execute(
+                "usage.machines.project", payload: request(machine, emptySnapshot)))
+        let nextChunk = try JSONDecoder().decode(
+            UsageMachinesPeer.Chunk.self,
+            from: await next.execute(
+                "usage.machines.result",
+                payload: object([
+                    "collectionID": nextReceipt.collectionID.uuidString, "offset": 0,
+                    "maximumBytes": 262_144,
+                ])))
+        #expect(
+            (try UsageNativeJSON.object(nextChunk.data)["totals"] as! [String: Any])["tokens"]
+                as? Double == 0)
+        await next.shutdown()
+    }
+
+    @Test func forgettingDrainsActiveCollectorsAndCannotDeleteThroughAnArchiveSymlink() async throws
+    {
+        let directory = temporary()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let machine = sampleMachine()
+        let snapshot = try fixture(machine)
+        let transport = Transport(data: snapshot, machine: machine)
+        let slow = SlowCollector()
+        let service = service(
+            directory, transport: transport, collector: { _, _, _ in try await slow.collect() })
+        let payload = try request(machine, snapshot)
+        let task = Task { try await service.execute("usage.machines.project", payload: payload) }
+        try await waitFor(slow)
+        let archive = directory.appendingPathComponent(
+            "remote-archives/" + machine.id.uuidString.lowercased())
+        try UsageDataFiles.write(
+            Data("fixture-delete".utf8), to: archive.appendingPathComponent("receipt"))
+        try await service.forget(machineID: machine.id)
+        await #expect(throws: Error.self) { _ = try await task.value }
+        #expect(await slow.cancelled)
+        #expect(!FileManager.default.fileExists(atPath: archive.path))
+        #expect(
+            try FileManager.default.contentsOfDirectory(
+                atPath: directory.appendingPathComponent("remote-staging").path
+            ).isEmpty)
+        let outside = directory.appendingPathComponent("outside")
+        try UsageNativeFileIO.privateDirectory(outside)
+        try UsageDataFiles.write(
+            Data("fixture-keep".utf8), to: outside.appendingPathComponent("receipt"))
+        try FileManager.default.createSymbolicLink(at: archive, withDestinationURL: outside)
+        await #expect(throws: UsageNativeFailure.self) {
+            try await service.forget(machineID: machine.id)
+        }
+        #expect(
+            try UsageDataFiles.readRegularFile(at: outside.appendingPathComponent("receipt"))
+                == Data("fixture-keep".utf8))
+        await service.shutdown()
+    }
+
     private func service(
         _ directory: URL, transport: Transport, clock: Clock = Clock(),
         collector: UsageMachinesProjection.Collector? = nil

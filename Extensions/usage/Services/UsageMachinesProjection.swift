@@ -33,6 +33,8 @@ actor UsageMachinesProjection {
     private var entries: [UUID: Entry] = [:]
     private var jobs: [UUID: Job] = [:]
     private var stopped = false
+    private var forgetting: Set<UUID> = []
+    private var generations: [UUID: UInt64] = [:]
 
     init(
         directory: URL = Repo.dataDir,
@@ -62,6 +64,23 @@ actor UsageMachinesProjection {
         for job in pending { job.task.cancel() }
         for job in pending { _ = try? await job.task.value }
         jobs = [:]
+    }
+
+    func forget(machineID: UUID) async throws {
+        try Task.checkCancellation()
+        guard !stopped, machineID != Machine.localID, !forgetting.contains(machineID),
+            generations[machineID] != nil || generations.count < 128
+        else { throw ExtensionPeerError.unavailable }
+        forgetting.insert(machineID)
+        generations[machineID, default: 0] &+= 1
+        defer { forgetting.remove(machineID) }
+        let pending = jobs.values.filter { $0.machine.id == machineID }
+        for job in pending { job.task.cancel() }
+        for job in pending { _ = try? await job.task.value }
+        entries = entries.filter { $0.value.machine.id != machineID }
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        try UsageMachinesPeer.forget(machineID: machineID, directory: directory)
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -109,15 +128,20 @@ actor UsageMachinesProjection {
     }
 
     private func project(_ snapshot: Snapshot) async throws -> Data {
-        guard (1...67_108_864).contains(snapshot.byteCount), snapshot.sha256.utf8.count == 64,
+        let generation = generations[snapshot.machineID, default: 0]
+        guard !forgetting.contains(snapshot.machineID),
+            (1...67_108_864).contains(snapshot.byteCount), snapshot.sha256.utf8.count == 64,
             snapshot.sha256.allSatisfy({ $0.isHexDigit }), snapshot.machineID != Machine.localID,
             jobs[snapshot.collectionID] == nil, jobs.count + entries.count < 2,
             !jobs.values.contains(where: { $0.machine.id == snapshot.machineID }),
             let machine = await currentMachine(snapshot.machineID),
             let peer = await currentPeer(), await peer.active(), !stopped,
+            !forgetting.contains(snapshot.machineID),
+            generations[snapshot.machineID, default: 0] == generation,
             jobs[snapshot.collectionID] == nil, jobs.count + entries.count < 2,
             !jobs.values.contains(where: { $0.machine.id == snapshot.machineID })
         else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
         let directory = directory
         let collector = collector
         let currentMachine = currentMachine
@@ -179,7 +203,10 @@ actor UsageMachinesProjection {
             task.cancel()
         }
         try Task.checkCancellation()
-        guard !stopped, await peer.active(), await currentMachine(machine.id) == machine,
+        guard !stopped, !forgetting.contains(snapshot.machineID),
+            generations[snapshot.machineID, default: 0] == generation,
+            await peer.active(), await currentMachine(machine.id) == machine,
+            generations[snapshot.machineID, default: 0] == generation,
             jobs[snapshot.collectionID]?.task.isCancelled == false
         else { throw ExtensionPeerError.unavailable }
         let id = UUID()

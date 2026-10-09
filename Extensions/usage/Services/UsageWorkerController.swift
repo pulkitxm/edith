@@ -207,6 +207,14 @@ public final class UsageWorkerController {
 @MainActor
 public enum UsageWorkerOperations {
     public static weak var controller: UsageWorkerController?
+    static var machinesProjection: UsageMachinesProjection?
+
+    public static func forgetMachine(_ machineID: UUID) async throws {
+        guard let controller, let machinesProjection else { throw ExtensionPeerError.unavailable }
+        await controller.cancelRefresh()
+        try Task.checkCancellation()
+        try await machinesProjection.forget(machineID: machineID)
+    }
 
     @discardableResult
     public static func requestRefresh(machinePolicy: UsageMachineRefreshPolicy = .due) throws

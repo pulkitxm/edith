@@ -49,8 +49,7 @@ struct UsageMachineSettingsRows: View {
                 Button("Forget " + machine.name, role: .destructive) {
                     operation?.cancel()
                     operation = Task {
-                        await UsageWorkerOperations.controller?.cancelRefresh()
-                        do { try UsageMachinesPeer.forget(machineID: machine.id) } catch {
+                        do { try await UsageWorkerOperations.forgetMachine(machine.id) } catch {
                             if !Task.isCancelled { failure = error.localizedDescription }
                         }
                     }

@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import EdithExtensionSupport
 import Foundation
 
@@ -152,6 +153,25 @@ struct UsageMachinesPeer: Sendable {
                 machineID.uuidString.lowercased() + ".json")
             if try UsageDataFiles.readRegularFile(at: file, maximumBytes: 67_108_864) != nil {
                 try FileManager.default.removeItem(at: file)
+            }
+            let archives = directory.appendingPathComponent("remote-archives", isDirectory: true)
+            let archive = archives.appendingPathComponent(
+                machineID.uuidString.lowercased(), isDirectory: true)
+            var metadata = stat()
+            if lstat(archives.path, &metadata) == 0 {
+                guard metadata.st_mode & S_IFMT == S_IFDIR, metadata.st_uid == getuid(),
+                    metadata.st_mode & 0o077 == 0
+                else { throw UsageNativeFailure.unsafePath }
+                if lstat(archive.path, &metadata) == 0 {
+                    guard metadata.st_mode & S_IFMT == S_IFDIR, metadata.st_uid == getuid(),
+                        metadata.st_mode & 0o077 == 0
+                    else { throw UsageNativeFailure.unsafePath }
+                    try FileManager.default.removeItem(at: archive)
+                } else if errno != ENOENT {
+                    throw UsageNativeFailure.unsafePath
+                }
+            } else if errno != ENOENT {
+                throw UsageNativeFailure.unsafePath
             }
             let usage = directory.appendingPathComponent("usage.json")
             if let data = try UsageDataFiles.readRegularFile(at: usage, maximumBytes: 67_108_864) {

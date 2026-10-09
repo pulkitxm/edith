@@ -48,6 +48,7 @@ final class ExtensionRuntime: NSObject {
         DashboardModel.shared.shutdown()
         UsagePresenterState.shared.shutdown()
         UsageWorkerOperations.controller = nil
+        UsageWorkerOperations.machinesProjection = nil
         let controller = controller; self.controller = nil
         let alerts = alerts; self.alerts = nil
         let task = alertsTask; alertsTask = nil
@@ -97,8 +98,12 @@ final class ExtensionRuntime: NSObject {
             let cache = SurfaceUsageStore(url: Repo.usageJSON)
             surface = UsageSurface(store: cache, controller: controller)
             statusLine = UsageStatusLineCommands()
-            reports = UsageReportCommands(controller: controller, store: cache)
-            machinesProjection = UsageMachinesProjection()
+            let projection = UsageMachinesProjection()
+            machinesProjection = projection
+            UsageWorkerOperations.machinesProjection = projection
+            reports = UsageReportCommands(
+                controller: controller, store: cache,
+                forgetMachine: { try await projection.forget(machineID: $0) })
             usageStore = UsageStore(showMenuBar: !fixture)
             if !fixture {
                 let alerts = UsageLimitAlerts(); self.alerts = alerts
