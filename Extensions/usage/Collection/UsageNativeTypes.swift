@@ -37,6 +37,18 @@ struct UsageNativeTokens: Codable, Equatable, Sendable {
         return number.doubleValue
     }
 
+    static func wireNumber(_ value: Any?) throws -> Double {
+        if let text = value as? String {
+            guard text.range(of: "^(0|[1-9][0-9]{0,15})$", options: .regularExpression) != nil,
+                let number = Double(text)
+            else {
+                throw UsageNativeFailure.invalidInput("token count")
+            }
+            return try self.number(NSNumber(value: number))
+        }
+        return try number(value)
+    }
+
     static func amount(_ value: Any?) throws -> Double? {
         guard let value, !(value is NSNull) else { return nil }
         let number: Double?
@@ -95,6 +107,8 @@ struct UsageNativeEvent: Codable, Equatable, Sendable {
     var serviceTier: String?
     var detailAvailable = true
     var reportingDay: String?
+    var observationPriority: Int?
+    var traceID: String?
     var estimated = false
     var receiptID: String?
 
@@ -143,10 +157,12 @@ enum UsageNativeJSON {
 
     static func date(_ value: Any?) -> Date? {
         if let number = value as? NSNumber {
+            guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
             let seconds =
                 number.doubleValue > 100_000_000_000
                 ? number.doubleValue / 1000 : number.doubleValue
-            return seconds.isFinite && seconds > 0 ? Date(timeIntervalSince1970: seconds) : nil
+            return seconds.isFinite && seconds > 0 && seconds < 253_402_300_800
+                ? Date(timeIntervalSince1970: seconds) : nil
         }
         guard let value = value as? String else { return nil }
         if let number = Double(value), number > 0 { return date(NSNumber(value: number)) }

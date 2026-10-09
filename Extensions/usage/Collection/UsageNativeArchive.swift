@@ -37,9 +37,14 @@ final class UsageNativeArchive {
             CREATE TABLE IF NOT EXISTS cloud_cache(key TEXT PRIMARY KEY,payload TEXT NOT NULL);
             PRAGMA user_version=1;
             """)
-        let payloadTables = ["records", "candidates", "baselines", "aggregate_candidates", "cloud_cache"]
-        let byteCount = payloadTables.map { "COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM " + $0 + "),0)" }.joined(separator: "+")
-        try database.execute("""
+        let payloadTables = [
+            "records", "candidates", "baselines", "aggregate_candidates", "cloud_cache",
+        ]
+        let byteCount = payloadTables.map {
+            "COALESCE((SELECT SUM(length(CAST(payload AS BLOB))) FROM " + $0 + "),0)"
+        }.joined(separator: "+")
+        try database.execute(
+            """
             CREATE TABLE IF NOT EXISTS capacity(singleton INTEGER PRIMARY KEY CHECK(singleton=1),files INTEGER NOT NULL,records INTEGER NOT NULL,bytes INTEGER NOT NULL);
             INSERT INTO capacity SELECT 1,(SELECT COUNT(*) FROM files),
                 (SELECT COUNT(*) FROM records)+(SELECT COUNT(*) FROM candidates),\(byteCount)
@@ -50,7 +55,8 @@ final class UsageNativeArchive {
         for table in payloadTables {
             let insertCount = ["records", "candidates"].contains(table) ? ",records=records+1" : ""
             let deleteCount = ["records", "candidates"].contains(table) ? ",records=records-1" : ""
-            try database.execute("""
+            try database.execute(
+                """
                 CREATE TRIGGER IF NOT EXISTS capacity_\(table)_insert AFTER INSERT ON \(table) BEGIN
                     UPDATE capacity SET bytes=bytes+length(CAST(new.payload AS BLOB))\(insertCount); END;
                 CREATE TRIGGER IF NOT EXISTS capacity_\(table)_delete AFTER DELETE ON \(table) BEGIN
@@ -84,8 +90,12 @@ final class UsageNativeArchive {
             guard latest?.hash == previous?.hash, latest?.generation == previous?.generation else {
                 throw UsageNativeFailure.archive("admit a concurrently changed source")
             }
-            if snapshot.records.contains(where: { $0.event.source == "codex" && $0.event.receiptID != nil }) {
-                try database.run("DELETE FROM records WHERE path=? AND identity LIKE 'legacy:%'", [snapshot.path])
+            if snapshot.records.contains(where: {
+                $0.event.source == "codex" && $0.event.receiptID != nil
+            }) {
+                try database.run(
+                    "DELETE FROM records WHERE path=? AND identity LIKE 'legacy:%'", [snapshot.path]
+                )
             }
             let generation = (previous?.generation ?? 0) + (previous != nil && !appended ? 1 : 0)
             for record in snapshot.records {
@@ -147,7 +157,9 @@ final class UsageNativeArchive {
 
     func retainRemote(_ events: [UsageNativeEvent], key: String, account: String) throws {
         try database.transaction {
-            let previous = try database.rows("SELECT value FROM metadata WHERE key=?", ["account:" + key]).first?["value"]
+            let previous = try database.rows(
+                "SELECT value FROM metadata WHERE key=?", ["account:" + key]
+            ).first?["value"]
             if previous != nil, previous != account {
                 try database.run("DELETE FROM records WHERE path=?", [key])
             }
@@ -289,7 +301,7 @@ final class UsageNativeArchive {
                         ? Self.cliDetail(project, paths: false) : nil
                 }
                 let encoded = try UsageNativeJSON.encode(incoming)
-                if encoded != (try UsageNativeJSON.encode(original)) {
+                if try Self.contentIdentity(incoming) != Self.contentIdentity(original) {
                     try database.run(
                         "INSERT OR IGNORE INTO aggregate_candidates VALUES(?,?,?)",
                         [
@@ -339,11 +351,45 @@ final class UsageNativeArchive {
     }
 
     private func enforceCapacity() throws {
-        let record = try database.rows("SELECT files,records,bytes FROM capacity WHERE singleton=1", maximum: 1).first ?? [:]
+        let record =
+            try database.rows(
+                "SELECT files,records,bytes FROM capacity WHERE singleton=1", maximum: 1
+            ).first ?? [:]
         guard (Int(record["files"] ?? "0") ?? .max) <= limits.files,
             (Int(record["records"] ?? "0") ?? .max) <= limits.records,
             (Int(record["bytes"] ?? "0") ?? .max) <= limits.bytes
         else { throw UsageNativeFailure.capacity }
+    }
+
+    private static func contentIdentity(_ value: Any, ordered: Bool = false) throws -> Data {
+        if var object = value as? [String: Any] {
+            if object["modelName"] != nil {
+                object = Dictionary(
+                    uniqueKeysWithValues: [
+                        "modelName", "inputTokens", "outputTokens", "cacheCreationTokens",
+                        "cacheReadTokens", "cost",
+                    ].map {
+                        ($0, object[$0] ?? ($0 == "modelName" ? "" : 0))
+                    })
+            }
+            var result: [String: Any] = [:]
+            for (key, item) in object {
+                result[key] = try JSONSerialization.jsonObject(
+                    with: contentIdentity(item, ordered: key == "hours"),
+                    options: [.fragmentsAllowed])
+            }
+            return try UsageNativeJSON.encode(result)
+        }
+        if let array = value as? [Any] {
+            let encoded = try array.map { try contentIdentity($0) }
+            let sorted = ordered ? encoded : encoded.sorted { $0.lexicographicallyPrecedes($1) }
+            let values = try sorted.map {
+                try JSONSerialization.jsonObject(with: $0, options: [.fragmentsAllowed])
+            }
+            return try UsageNativeJSON.encode(values)
+        }
+        return try JSONSerialization.data(
+            withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
     }
 
     private static func cliDetail(_ node: [String: Any], paths: Bool) -> [String: Any] {
@@ -352,6 +398,22 @@ final class UsageNativeArchive {
         result["bySource"] = source.map { ["cli": $0] } ?? [:]
         result["tokens"] = source?["tokens"] ?? 0
         result["cost"] = source?["cost"] ?? 0
+        if let chats = node["chats"] as? [[String: Any]] {
+            result["chats"] = chats.filter { $0["source"] as? String == "cli" }
+        }
+        if let worktrees = node["worktrees"] as? [[String: Any]] {
+            result["worktrees"] = worktrees.compactMap { worktree -> [String: Any]? in
+                let chats = (worktree["chats"] as? [[String: Any]] ?? []).filter {
+                    $0["source"] as? String == "cli"
+                }
+                guard !chats.isEmpty else { return nil }
+                return [
+                    "name": worktree["name"] ?? "", "chats": chats,
+                    "tokens": chats.reduce(0.0) { $0 + ($1["tokens"] as? Double ?? 0) },
+                    "cost": chats.reduce(0.0) { $0 + ($1["cost"] as? Double ?? 0) },
+                ]
+            }
+        }
         if paths {
             result["byPath"] = (node["byPath"] as? [String: [String: Any]] ?? [:]).compactMapValues
             {
