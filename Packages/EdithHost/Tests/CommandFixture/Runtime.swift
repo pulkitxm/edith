@@ -7,6 +7,22 @@ import Foundation
 final class CommandFixtureRuntime: NSObject {
     private var task: Task<Void, Never>?
     private var mode = ""
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { command, payload in
+            switch command {
+            case "echo": return payload
+            case "wait":
+                let marker = ExtensionData.root.appendingPathComponent("peer.ready")
+                try Data("ready".utf8).write(to: marker, options: .atomic)
+                defer { try? FileManager.default.removeItem(at: marker) }
+                try await Task.sleep(for: .seconds(30))
+                return payload
+            default: throw ExtensionPeerError.rejected("Unknown fixture command.")
+            }
+        }
+    }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
@@ -64,7 +80,11 @@ final class CommandFixtureRuntime: NSObject {
                 }
             }
             return ["ok": true] as NSDictionary
+        case "cancelCommand":
+            commands.cancel(input["token"] as? String ?? "")
+            return ["ok": true] as NSDictionary
         case "stop":
+            commands.shutdown()
             if mode == "hang" { Thread.sleep(forTimeInterval: 30) }
             task?.cancel()
             return ["ok": true] as NSDictionary

@@ -98,6 +98,53 @@ public final class ExtensionBundleRuntime {
         try execute(load(id: id), operation: operation, context: context)
     }
 
+    public func supportsCommands(id: String) -> Bool {
+        guard let instance = loaded[id], instance.active else { return false }
+        return instance.object.responds(to: NSSelectorFromString("invoke:completion:"))
+    }
+
+    public func command(id: String, token: UUID, command: String, payload: Data) async throws
+        -> Data
+    {
+        guard let instance = loaded[id], instance.active, supportsCommands(id: id) else {
+            throw MarketplaceError.invalidBundle
+        }
+        let completion = BundleCommandCompletion()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                let selector = NSSelectorFromString("invoke:completion:")
+                typealias Invoke =
+                    @convention(c) (
+                        AnyObject, Selector, NSDictionary,
+                        @convention(block) (NSData?, NSString?) -> Void
+                    ) -> Void
+                let invoke = unsafeBitCast(instance.object.method(for: selector), to: Invoke.self)
+                let callback: @convention(block) (NSData?, NSString?) -> Void = {
+                    payload, message in
+                    if let payload {
+                        completion.finish(.success(payload as Data))
+                    } else {
+                        completion.finish(
+                            .failure(
+                                BundleCommandError.failed(
+                                    message as String? ?? "The extension command failed.")))
+                    }
+                }
+                invoke(
+                    instance.object, selector,
+                    ["token": token.uuidString, "command": command, "payload": payload]
+                        as NSDictionary, callback)
+            }
+        } onCancel: {
+            completion.finish(.failure(CancellationError()))
+            Task { @MainActor [weak self] in
+                _ = try? self?.response(
+                    id: id, operation: "cancelCommand", context: ["token": token.uuidString])
+            }
+        }
+    }
+
     public func snapshot(id: String) throws -> Snapshot? {
         guard let instance = loaded[id] else { return nil }
         let installed = try store.installedPackage(
@@ -184,5 +231,40 @@ public final class ExtensionBundleRuntime {
             throw MarketplaceError.invalidBundle
         }
         return result
+    }
+}
+
+private enum BundleCommandError: LocalizedError {
+    case failed(String)
+    var errorDescription: String? {
+        switch self {
+        case let .failed(message): message
+        }
+    }
+}
+
+private final class BundleCommandCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Data, any Error>?
+    private var result: Result<Data, any Error>?
+
+    func begin(_ continuation: CheckedContinuation<Data, any Error>) -> Bool {
+        let result = lock.withLock { () -> Result<Data, any Error>? in
+            if let result { return result }
+            self.continuation = continuation
+            return nil
+        }
+        if let result { continuation.resume(with: result); return false }
+        return true
+    }
+
+    func finish(_ result: Result<Data, any Error>) {
+        let continuation = lock.withLock { () -> CheckedContinuation<Data, any Error>? in
+            guard self.result == nil else { return nil }
+            self.result = result
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume(with: result)
     }
 }
