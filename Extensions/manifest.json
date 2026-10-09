@@ -7,17 +7,21 @@
     "roles": {
       "helper": [
         "Extensions/keepAwake/KeepAwakeStore.swift",
-        "Extensions/keepAwake/Runtime.swift"
+        "Extensions/keepAwake/Runtime.swift",
+        "Extensions/keepAwake/Surface.swift"
       ]
     },
     "inputs": [
       "Extensions/keepAwake"
     ],
     "sharedInputs": [
-      "scripts/build-extension-package.mjs"
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
     ],
     "dependencies": [],
-    "contractVersion": 1
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionSupport"
   },
   {
     "id": "audioMixer",
@@ -49,7 +53,8 @@
         "Extensions/focusDim/Helper/Services/FocusDimEngine.swift",
         "Extensions/focusDim/Runtime.swift",
         "Extensions/focusDim/Models/FocusDimMath.swift",
-        "Extensions/focusDim/Models/FocusDimState.swift"
+        "Extensions/focusDim/Models/FocusDimState.swift",
+        "Extensions/focusDim/Surface.swift"
       ]
     },
     "inputs": [
@@ -90,7 +95,8 @@
         "Extensions/windowSweaters/Rendering/KnitRenderer.swift",
         "Extensions/windowSweaters/Rendering/KnitTile.swift",
         "Extensions/windowSweaters/Runtime.swift",
-        "Extensions/windowSweaters/Views/WindowSweatersRows.swift"
+        "Extensions/windowSweaters/Views/WindowSweatersRows.swift",
+        "Extensions/windowSweaters/Surface.swift"
       ]
     },
     "inputs": [
@@ -116,7 +122,8 @@
         "Extensions/micMute/Models/CoreAudioMicrophones.swift",
         "Extensions/micMute/Models/MicrophoneMuteSession.swift",
         "Extensions/micMute/Runtime.swift",
-        "Extensions/micMute/Views/MicMuteRows.swift"
+        "Extensions/micMute/Views/MicMuteRows.swift",
+        "Extensions/micMute/Surface.swift"
       ]
     },
     "inputs": [
@@ -143,7 +150,8 @@
         "Extensions/keystrokeHighlight/Models/KeystrokeEventLabelReader.swift",
         "Extensions/keystrokeHighlight/Models/KeystrokeHighlightModels.swift",
         "Extensions/keystrokeHighlight/Runtime.swift",
-        "Extensions/keystrokeHighlight/Views/KeystrokeHighlightRows.swift"
+        "Extensions/keystrokeHighlight/Views/KeystrokeHighlightRows.swift",
+        "Extensions/keystrokeHighlight/Surface.swift"
       ]
     },
     "inputs": [
@@ -206,7 +214,8 @@
         "Extensions/colorPicker/Models/RGBHex.swift",
         "Extensions/colorPicker/Models/UnitInterval.swift",
         "Extensions/colorPicker/Runtime.swift",
-        "Extensions/colorPicker/Views/ColorPickerRows.swift"
+        "Extensions/colorPicker/Views/ColorPickerRows.swift",
+        "Extensions/colorPicker/Surface.swift"
       ]
     },
     "inputs": [
@@ -230,7 +239,8 @@
       "helper": [
         "Extensions/systemStats/Helper/SystemStatsStatusItem.swift",
         "Extensions/systemStats/Models/SystemStatsReader.swift",
-        "Extensions/systemStats/Runtime.swift"
+        "Extensions/systemStats/Runtime.swift",
+        "Extensions/systemStats/Surface.swift"
       ]
     },
     "inputs": [
@@ -267,7 +277,8 @@
         "Extensions/emoji/EdithKit/Services/EmojiUsageLedger.swift",
         "Extensions/emoji/EmojiResources.swift",
         "Extensions/emoji/Runtime.swift",
-        "Extensions/emoji/Views/EmojiSettingsRows.swift"
+        "Extensions/emoji/Views/EmojiSettingsRows.swift",
+        "Extensions/emoji/Surface.swift"
       ]
     },
     "resources": {

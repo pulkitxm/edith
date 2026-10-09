@@ -10,6 +10,28 @@ final class ExtensionRuntime: NSObject {
     private var service: KeystrokeHighlightRuntime?
     private var observer: NSObjectProtocol?
 
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, self.observer != nil else { throw ExtensionPeerError.unavailable }
+            return try await SurfaceCommandService.execute(
+                providerID: "keystrokeHighlight", command: command,
+                payload: payload,
+                snapshot: { _ in
+                    KeystrokeHighlightSurface.snapshot(
+                        active: SharedDefaults.store.bool(
+                            forKey: AppStorageKeys.KeystrokeHighlight.active))
+                },
+                perform: { action in
+                    SharedDefaults.store.set(
+                        action == "enable", forKey: AppStorageKeys.KeystrokeHighlight.active)
+                    self.synchronize()
+                    IPC.post(IPC.Name.settingsChanged)
+                })
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -50,7 +72,9 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "synchronize": synchronize()
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
             service?.shutdown()
             service = nil
             IPC.stopObserving(observer)

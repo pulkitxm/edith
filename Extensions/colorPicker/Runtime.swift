@@ -10,6 +10,30 @@ final class ExtensionRuntime: NSObject {
     private var service: ColorPickerStore?
     private var observer: NSObjectProtocol?
 
+    private let commands = ExtensionCommandRegistry()
+
+    @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
+        commands.invoke(request, completion: completion) { [weak self] command, payload in
+            guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
+            return try await SurfaceCommandService.execute(
+                providerID: "colorPicker", command: command, payload: payload,
+                snapshot: { _ in
+                    ColorPickerSurface.snapshot(history: service.history, error: service.copyError)
+                },
+                perform: { action in
+                    if action == "pick" {
+                        service.pick()
+                    } else if let color = service.history.first(where: {
+                        "copy:" + $0.id.uuidString == action
+                    }) {
+                        service.copyDefault(color)
+                    } else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                })
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -46,7 +70,9 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "synchronize": service?.registerHotKey()
+        case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            commands.shutdown()
             service?.shutdown()
             service = nil
             IPC.stopObserving(observer)
