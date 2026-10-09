@@ -2,14 +2,14 @@ import Foundation
 
 @MainActor final class LidAwakePrivilegedController {
     private let read: @Sendable () async throws -> Bool
-    private let apply: @Sendable (Bool) async throws -> Void
+    private let apply: @MainActor @Sendable (Bool) async throws -> Void
     private let save: @Sendable (Bool?) throws -> Void
     private var original: Bool?
     private var tail: Task<Void, Never>?
 
     init(
         original: Bool? = nil, read: @escaping @Sendable () async throws -> Bool,
-        apply: @escaping @Sendable (Bool) async throws -> Void,
+        apply: @escaping @MainActor @Sendable (Bool) async throws -> Void,
         save: @escaping @Sendable (Bool?) throws -> Void = { _ in }
     ) {
         self.original = original; self.read = read; self.apply = apply; self.save = save

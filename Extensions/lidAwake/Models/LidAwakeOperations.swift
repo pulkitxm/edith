@@ -284,7 +284,8 @@ public struct LidAwakeOperationFailure: LocalizedError, Equatable, Sendable {
 
 @MainActor
 public final class LidAwakeOperationModel: ObservableObject {
-    public typealias Performer = @Sendable (LidAwakeRequest) async throws -> LidAwakeSnapshot
+    public typealias Performer =
+        @MainActor @Sendable (LidAwakeRequest) async throws -> LidAwakeSnapshot
 
     @Published public private(set) var applying = false
     @Published public private(set) var errorMessage: String?
