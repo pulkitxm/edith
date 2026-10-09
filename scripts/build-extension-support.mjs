@@ -18,26 +18,37 @@ export function supportModules(scope) {
       "EdithExtensionSupport",
       "EdithExtensionUI",
       "EdithExtensionDocuments",
+      "EdithExtensionArchive",
+      "ZIPFoundation",
     ].map((name) => [name, `${name}_${scope}`]),
   );
 }
 
 export function rewriteSupportImports(source, modules) {
   return source.replace(
-    /^(\s*(?:@testable\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments)(?=\s|$)/gm,
+    /^(\s*(?:@testable\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments|EdithExtensionArchive)(?=\s|$)/gm,
     (_, prefix, name) => `${prefix}${modules[name]}`,
   );
 }
 
 export function supportProducts(product) {
-  const products = [
-    "EdithExtensionSupport",
-    "EdithExtensionUI",
-    "EdithExtensionDocuments",
-  ];
-  const index = products.indexOf(product);
-  if (index < 0) throw new Error("Unknown extension support product");
-  return products.slice(0, index + 1);
+  const products = {
+    EdithExtensionSupport: ["EdithExtensionSupport"],
+    EdithExtensionUI: ["EdithExtensionSupport", "EdithExtensionUI"],
+    EdithExtensionDocuments: [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionDocuments",
+    ],
+    EdithExtensionArchive: [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionArchive",
+    ],
+  };
+  if (!Object.hasOwn(products, product))
+    throw new Error("Unknown extension support product");
+  return products[product];
 }
 
 export function supportSourceInputs(product) {
@@ -139,9 +150,16 @@ export function buildExtensionSupport(root, product, scope) {
       `.target(name: "${documents}", dependencies: ["${ui}"], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
   }
+  const archiveDependencies = selected.includes("EdithExtensionArchive")
+    ? '.package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.19")'
+    : "";
+  if (selected.includes("EdithExtensionArchive"))
+    targets.push(
+      `.target(name: "${modules.EdithExtensionArchive}", dependencies: ["${ui}", .product(name: "ZIPFoundation", package: "ZIPFoundation", moduleAliases: ["ZIPFoundation": "${modules.ZIPFoundation}"])], swiftSettings: [.swiftLanguageMode(.v5)])`,
+    );
   writeFileSync(
     join(directory, "Package.swift"),
-    `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "ExtensionSupport_${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${modules[product]}", type: .static, targets: ["${modules[product]}"])], targets: [${targets.join(", ")}])\n`,
+    `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "ExtensionSupport_${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${modules[product]}", type: .static, targets: ["${modules[product]}"])], dependencies: [${archiveDependencies}], targets: [${targets.join(", ")}])\n`,
   );
   execFileSync(
     "swift",

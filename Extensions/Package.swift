@@ -10,6 +10,14 @@ let package = Package(
     ],
     targets: [
         .target(
+            name: "LaTeXExtension",
+            dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
+            path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "LaTeXExtensionTests", dependencies: ["LaTeXExtension"],
+            path: "latex/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "clipboard", exclude: ["Tests", "Runtime.swift"],

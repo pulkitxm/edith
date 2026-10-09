@@ -34,3 +34,25 @@ test("every owned worker source is included in a downloaded role", async () => {
     for (const source of listed) await readFile(resolve(root, source));
   }
 });
+
+test("downloaded resources are assigned to declared worker roles", async () => {
+  const root = resolve(import.meta.dir, "..");
+  const definitions = JSON.parse(
+    await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
+  );
+  for (const definition of definitions.filter(
+    ({ contractVersion }) => contractVersion === 1,
+  )) {
+    const resources = definition.resources ?? {};
+    expect(
+      Array.isArray(resources),
+      `${definition.id} resources need role keys`,
+    ).toBe(false);
+    for (const [role, paths] of Object.entries(resources)) {
+      expect(Object.hasOwn(definition.roles, role)).toBe(true);
+      expect(Array.isArray(paths)).toBe(true);
+      expect(new Set(paths).size).toBe(paths.length);
+      for (const path of paths) await readFile(resolve(root, path));
+    }
+  }
+});

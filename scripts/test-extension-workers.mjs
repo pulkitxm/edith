@@ -70,6 +70,7 @@ try {
     assert.equal(result.disabledProcesses, 0);
     assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
     assert.equal(result.clipboardDataValidated, id === "clipboard");
+    assert.equal(result.latexDataValidated, id === "latex");
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });

@@ -886,5 +886,56 @@
         "destination": "swift-markdown-notice.txt"
       }
     ]
+  },
+  {
+    "id": "latex",
+    "version": "1.0.0",
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "hostABI": "edith-host-1",
+    "supportProduct": "EdithExtensionArchive",
+    "inputs": [
+      "Extensions/latex"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "Packages/ExtensionSupport/Sources/EdithExtensionArchive"
+    ],
+    "dependencies": [],
+    "roles": {
+      "app": [
+        "Extensions/latex/EditorWebView.swift",
+        "Extensions/latex/LaTeXAddProject.swift",
+        "Extensions/latex/LaTeXEditorResources.swift",
+        "Extensions/latex/LaTeXModel.swift",
+        "Extensions/latex/LaTeXPDFPane.swift",
+        "Extensions/latex/LaTeXPage.swift",
+        "Extensions/latex/LaTeXProject.swift",
+        "Extensions/latex/LaTeXService.swift",
+        "Extensions/latex/LaTeXSourceEditor.swift",
+        "Extensions/latex/LaTeXSurface.swift",
+        "Extensions/latex/LaTeXTools.swift",
+        "Extensions/latex/LaTeXWorker.swift",
+        "Extensions/latex/LaTeXWrappingLayout.swift",
+        "Extensions/latex/QuinjetDiffView.swift",
+        "Extensions/latex/Runtime.swift"
+      ]
+    },
+    "resources": {
+      "app": [
+        "Extensions/latex/Resources/LICENSES.txt",
+        "Extensions/latex/Resources/ZIPFoundation-LICENSE.txt",
+        "Extensions/latex/Resources/editor.js",
+        "Extensions/latex/Resources/index.html",
+        "Extensions/latex/Resources/review.css",
+        "Extensions/latex/Resources/review.html",
+        "Extensions/latex/Resources/review.js"
+      ]
+    },
+    "minimumSystemVersion": 14
   }
 ]
