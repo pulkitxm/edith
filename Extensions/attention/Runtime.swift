@@ -3,11 +3,10 @@ import Foundation
 
 @_cdecl("edith_extension_create")
 public func createExtension() -> UnsafeMutableRawPointer? {
-    MainActor.assumeIsolated {
-        Unmanaged.passRetained(
-            AttentionExtensionController(bundle: Bundle(for: AttentionRuntimeBundle.self))
-        ).toOpaque()
+    let controller = MainActor.assumeIsolated {
+        AttentionExtensionController(bundle: Bundle(for: AttentionRuntimeBundle.self))
     }
+    return Unmanaged.passRetained(controller).toOpaque()
 }
 
 private final class AttentionRuntimeBundle: NSObject {}

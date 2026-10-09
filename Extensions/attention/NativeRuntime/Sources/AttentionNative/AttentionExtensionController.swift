@@ -15,6 +15,8 @@ public final class AttentionExtensionController: NSObject {
     private var surface: AttentionSurface?
     private var startup: Task<Void, Never>?
     private var stopped = false
+    private var stoppingTask: Task<Void, Never>?
+    private var activeCalls = 0
     private let commands = ExtensionCommandRegistry()
 
     public init(bundle: Bundle) {
@@ -29,6 +31,8 @@ public final class AttentionExtensionController: NSObject {
             guard let self, !self.stopped, let service = self.service else {
                 throw ExtensionPeerError.unavailable
             }
+            self.activeCalls += 1
+            defer { self.activeCalls -= 1 }
             await self.startup?.value
             try Task.checkCancellation()
             if command.hasPrefix("surface.") {
@@ -48,20 +52,37 @@ public final class AttentionExtensionController: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     public func prepareToStop(completion: @escaping () -> Void) {
-        guard !stopped else { completion(); return }
+        if let stoppingTask {
+            Task {
+                await stoppingTask.value; completion()
+            }
+            return
+        }
         stopped = true
         commands.shutdown()
         startup?.cancel()
-        model?.shutdown()
+        let model = model
         let service = service
         let favicon = favicon
-        Task {
+        let startup = startup
+        let task = Task {
+            await startup?.value
+            await model?.shutdown()
             await service?.stop()
             await favicon?.stop()
+            while self.activeCalls > 0 { await Task.yield() }
             try? self.database?.close()
             self.database = nil
-            completion()
         }
+        stoppingTask = task
+        Task {
+            await task.value; completion()
+        }
+    }
+
+    @objc(prepareDisableWithCompletion:)
+    public func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        prepareToStop { completion(nil) }
     }
 
     @objc public func execute(_ input: NSDictionary) -> NSObject {

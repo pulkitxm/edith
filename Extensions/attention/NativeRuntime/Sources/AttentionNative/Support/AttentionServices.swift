@@ -36,6 +36,9 @@ enum AttentionPeer {
 
 enum AttentionCloudStorage {
     static var directory: URL {
+        if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil {
+            return AttentionPaths.root.appendingPathComponent("fixture-cloud", isDirectory: true)
+        }
         if let path = ProcessInfo.processInfo.environment["EDITH_ATTENTION_CLOUD_ROOT"],
             path.hasPrefix("/")
         {
@@ -46,7 +49,10 @@ enum AttentionCloudStorage {
                 "Library/Mobile Documents/com~apple~CloudDocs/Edith/Attention", isDirectory: true)
     }
     static var available: Bool {
-        FileManager.default.fileExists(atPath: directory.deletingLastPathComponent().path)
+        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil else {
+            return false
+        }
+        return FileManager.default.fileExists(atPath: directory.deletingLastPathComponent().path)
     }
 }
 

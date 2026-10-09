@@ -82,7 +82,7 @@ actor AttentionBackgroundService {
                 }
             }
         }
-        maintenanceTask = Task { [weak self] in
+        maintenanceTask = Task {
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
                 guard !Task.isCancelled else { return }

@@ -216,10 +216,15 @@ final class AttentionPageModel {
         await breakdownTask?.value
     }
 
-    func shutdown() {
+    func shutdown() async {
+        let pending = [
+            categorizeTask, backupTask, reloadTask, timelineTask, breakdownTask, searchTask,
+        ].compactMap { $0 }
         cancelLoading()
         categorizeTask?.cancel(); categorizeTask = nil
         backupTask?.cancel(); backupTask = nil
+        for task in pending { task.cancel() }
+        for task in pending { await task.value }
     }
 
     func cancelLoading() {
