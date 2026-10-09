@@ -1007,5 +1007,55 @@
       ]
     },
     "minimumSystemVersion": 14
+  },
+  {
+    "id": "terminal",
+    "version": "1.0.0",
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "hostABI": "edith-host-1",
+    "supportProduct": "EdithExtensionUI",
+    "nativePackage": "Extensions/terminal/Native",
+    "nativeProduct": "GhosttyTerminal",
+    "nativeResources": [
+      "TerminalNative_GhosttyTerminal.bundle"
+    ],
+    "nativeLicenses": [
+      {
+        "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
+        "destination": "Ghostty-LICENSE"
+      }
+    ],
+    "inputs": [
+      "Extensions/terminal"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-ghostty.sh"
+    ],
+    "dependencies": [],
+    "roles": {
+      "app": [
+        "Extensions/terminal/Runtime.swift",
+        "Extensions/terminal/TerminalLaunchPlan.swift",
+        "Extensions/terminal/TerminalLoadingSkeleton.swift",
+        "Extensions/terminal/TerminalPage.swift",
+        "Extensions/terminal/TerminalPalette.swift",
+        "Extensions/terminal/TerminalPane.swift",
+        "Extensions/terminal/TerminalSessionHolder.swift",
+        "Extensions/terminal/TerminalSessionView.swift",
+        "Extensions/terminal/TerminalSettings.swift",
+        "Extensions/terminal/TerminalSettingsView.swift",
+        "Extensions/terminal/TerminalSurface.swift",
+        "Extensions/terminal/TerminalTabsModel.swift",
+        "Extensions/terminal/TerminalTabsView.swift",
+        "Extensions/terminal/TerminalWorker.swift"
+      ]
+    },
+    "minimumSystemVersion": 14
   }
 ]

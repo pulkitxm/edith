@@ -426,3 +426,12 @@ ci-tools:
 	cargo install cargo-audit --locked || true
 
 endif
+
+.PHONY: ghostty-extension ci-extension-terminal
+ghostty-extension:
+	test -d Extensions/terminal/Native/vendor/GhosttyKit.xcframework -a -f Extensions/terminal/Native/vendor/GhosttyResources/terminfo/78/xterm-ghostty || $(MAKE) ghostty
+
+ci-extension-terminal: ghostty-extension
+	swift format lint --strict --parallel --recursive Extensions/terminal
+	swift test --package-path Extensions/terminal/Native --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	swift test --package-path Extensions/terminal --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)')
