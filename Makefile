@@ -34,7 +34,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-scripts-batch ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-swift-test-batch ci-studio ci-studio-batch ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-scripts-batch ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-swift-test-batch ci-studio ci-studio-batch ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
@@ -247,107 +247,19 @@ ci-swift: ci-swift-check
 	$(MAKE) verify-bundle
 
 verify-release-build-settings:
-	@for target in EdithMain EdithHelper; do \
-	  settings="$$(xcodebuild -project edth.xcodeproj -scheme $$target -configuration Release -derivedDataPath build \
-	    -onlyUsePackageVersionsFromResolvedFile -showBuildSettings)" || exit 1; \
-	  test "$$(printf '%s\n' "$$settings" | awk '$$1 == "DEAD_CODE_STRIPPING" { print $$3; exit }')" = YES \
-	    || { echo "$$target Release DEAD_CODE_STRIPPING must be YES" >&2; exit 1; }; \
-	  test "$$(printf '%s\n' "$$settings" | awk '$$1 == "SWIFT_OPTIMIZATION_LEVEL" { print $$3; exit }')" = -Osize \
-	    || { echo "$$target Release SWIFT_OPTIMIZATION_LEVEL must be -Osize" >&2; exit 1; }; \
-	done
+	bun test scripts/shipping-host.test.js
 
-verify-bundle: verify-release-build-settings
-	test -f dist/Edith.app/Contents/MacOS/Edith
-	test ! -L dist/Edith.app/Contents/MacOS/Edith
-	test -x dist/Edith.app/Contents/MacOS/Edith
-	file -b dist/Edith.app/Contents/MacOS/Edith | grep -q '^Mach-O'
-	test -L dist/Edith.app/Contents/MacOS/ed
-	test -x dist/Edith.app/Contents/MacOS/ed
-	test "$$(readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher
-	test -f dist/Edith.app/Contents/Resources/ed-launcher
-	test -x dist/Edith.app/Contents/Resources/ed-launcher
-	head -n 1 dist/Edith.app/Contents/Resources/ed-launcher | grep -qx '#!/bin/sh'
-	test ! -e dist/Edith.app/Contents/MacOS/edh
-	test ! -L dist/Edith.app/Contents/MacOS/edh
-	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type l -name ed | wc -l | tr -d ' ')"
-	codesign --verify --strict dist/Edith.app/Contents/MacOS/Edith
-	@set -e; install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
-	  trap 'rm -rf "$$install_dir"' EXIT; \
-	  dist/Edith.app/Contents/MacOS/ed install --directory "$$install_dir" >/dev/null; \
-	  target="$$(pwd)/dist/Edith.app/Contents/MacOS/ed"; \
-	  version="$$($$install_dir/ed --version)"; \
-	  test -n "$$version"; \
-	  test "$$version" != development; \
-	  for name in ed edith; do \
-	    test -L "$$install_dir/$$name"; \
-	    test "$$(readlink "$$install_dir/$$name")" = "$$target"; \
-	    test -x "$$install_dir/$$name"; \
-	    test "$$version" = "$$($$install_dir/$$name --version)"; \
-	  done; \
-	  test ! -e "$$install_dir/edh"; \
-	  test ! -L "$$install_dir/edh"
-	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
-	test 1 -eq "$$(find dist/Edith.app -name EdithShared.framework | wc -l | tr -d ' ')"
-	test 1 -eq "$$(find dist/Edith.app -name ExtensionMarketplace.framework | wc -l | tr -d ' ')"
-	test 0 -eq "$$(find dist/Edith.app -name MeetingVoice.framework | wc -l | tr -d ' ')"
-	test 0 -eq "$$(find dist/Edith.app -name onnxruntime.framework | wc -l | tr -d ' ')"
-	test -x dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver/Contents/MacOS/EdithMicrophone
-	codesign --verify --strict dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver
-	test -x dist/Edith.app/Contents/Frameworks/EdithShared.framework/Versions/A/EdithShared
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithKit.framework
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithCore.framework
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithCameraSupport.framework
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithLidAwakeSupport.framework
-	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Frameworks
-	test -d dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/Frameworks/EdithCameraSupport.framework
-	otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithShared.framework/'
-	otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/Sparkle.framework/'
-	! otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithKit.framework/'
-	! otool -L dist/Edith.app/Contents/MacOS/edithd | grep -q '@rpath/EdithKit.framework/'
-	otool -L dist/Edith.app/Contents/MacOS/edithd | grep -q '@rpath/EdithShared.framework/'
-	otool -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithShared.framework/'
-	! otool -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithKit.framework/'
-	otool -L dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@rpath/EdithShared.framework/'
-	! otool -L dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@rpath/EdithLidAwakeSupport.framework/'
-	otool -l dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@executable_path/../../Frameworks'
-	otool -L dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '@rpath/EdithCameraSupport.framework/'
-	! otool -L dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '@rpath/EdithShared.framework/'
-	! otool -l dist/Edith.app/Contents/MacOS/Edith dist/Edith.app/Contents/MacOS/edithd dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '/Users/'
-	@! find dist/Edith.app -type f -perm -u+x -exec file {} + | grep -q 'universal binary'
-	test ! -e dist/Edith.app/Contents/Resources/Edith_Edith.bundle
-	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/ghostty/shell-integration/zsh/ghostty-integration' -type f | grep -q .
-	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/terminfo/78/xterm-ghostty' -type f | grep -q .
-	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
-	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/ChromeExtension/manifest.json
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/MenuBar.png
-	test -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
-	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns)" = ../../../../../Resources/AppIcon.icns
-	test -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle
-	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle)" = ../../../../../Resources/Edith_EdithKit.bundle
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-	python3 scripts/verify-app-identity.py dist/Edith.app
-	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist
-	test -x dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	test "$$(stat -f %z dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake)" -le 500000
-	test -f dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist
-	test -x dist/Edith.app/Contents/MacOS/edithd
-	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx com.pulkit.edith
-	codesign -dvv dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake 2>&1 | grep -qx Identifier=com.pulkit.edith.lidawake
-	@for plist in dist/Edith.app/Contents/Info.plist dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist; do \
-	  for field in CFBundleName CFBundleDisplayName; do \
-	    /usr/libexec/PlistBuddy -c "Print :$$field" "$$plist" | grep -q Helper \
-	      && { echo "$$plist $$field mentions Helper" >&2; exit 1; }; \
-	  done; \
-	done; exit 0
-	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
-	test 1 -eq "$$(find dist/Edith.app/Contents/Library/SystemExtensions -maxdepth 1 -name '*.camera.systemextension' | wc -l | tr -d ' ')"
-	codesign --verify --strict dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension
-	codesign --verify --deep --strict dist/Edith.app
+verify-bundle:
+	python3 scripts/verify-shipping-host.py dist/Edith.app
+
+ci-shipping:
+	bun test scripts/shipping-host.test.js scripts/build-install.test.js scripts/local-install-signing.test.js scripts/release-workflows.test.js scripts/ci-routing.test.js scripts/camera-extension.test.js
+
+shipping-fixture:
+	@test -n "$(HOST_FIXTURE)" || { echo "set HOST_FIXTURE to a signed empty host" >&2; exit 1; }
+	python3 scripts/package-shipping-host.py "$(HOST_FIXTURE)" local/shipping-fixture/Edith.app --identity - --release
+	python3 scripts/verify-shipping-host.py local/shipping-fixture/Edith.app --release
+	python3 scripts/package-host-dmg.py local/shipping-fixture/Edith.app local/shipping-fixture/Edith.dmg
 
 
 ghostty:

@@ -39,7 +39,7 @@ resolve_developer_dir() {
 
 DEVELOPER_DIR="$(resolve_developer_dir)"
 if [ -z "$DEVELOPER_DIR" ]; then
-  echo "Xcode is required to build edth.xcodeproj, Command Line Tools alone cannot." >&2
+  echo "Xcode is required to build the host, Command Line Tools alone cannot." >&2
   echo "Install Xcode, or point at it with xcode-select -s or DEVELOPER_DIR." >&2
   exit 1
 fi
@@ -48,12 +48,6 @@ export DEVELOPER_DIR
 find_identity() {
   security find-identity -v -p codesigning 2>/dev/null \
     | awk -F'"' -v pat="$1" '$0 ~ pat {print $2; exit}'
-}
-
-team_id_for() {
-  security find-certificate -c "$1" -p 2>/dev/null \
-    | openssl x509 -noout -subject 2>/dev/null \
-    | sed -n 's/.*OU *= *\([^,/]*\).*/\1/p'
 }
 
 INSTALL=0 NO_OPEN=0 BACKGROUND=0 PR="" BRANCH="" RELEASE="${EDITH_RELEASE:-0}"
@@ -79,7 +73,6 @@ if [ "$INSTALL" = 1 ] && [ "$RELEASE" != 1 ]; then
   exit 1
 fi
 
-SIGN_FLAGS=""
 if [ -n "$PREBUILT" ]; then
   if [ "$INSTALL" != 1 ] || [ "$RELEASE" != 1 ] || [ -n "$PR$BRANCH" ]; then
     echo "--from-app requires --release --install without --pr or --branch." >&2
@@ -90,6 +83,7 @@ if [ -n "$PREBUILT" ]; then
     REQUIREMENT+=' and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists'
   fi
   codesign --verify --deep --strict --test-requirement "=$REQUIREMENT" "$PREBUILT"
+  python3 scripts/verify-shipping-host.py "$PREBUILT" --release
   python3 scripts/install_app.py "$PREBUILT" "/Applications/Edith.app"
   if [ "$NO_OPEN" != 1 ]; then open -n "/Applications/Edith.app"; fi
   exit 0
@@ -109,7 +103,7 @@ if [ "$RELEASE" = 1 ]; then
   SIGN_IDENTITY="${EDITH_SIGN_IDENTITY:-$(find_identity 'Developer ID Application')}"
   case "$SIGN_IDENTITY" in
     *"Developer ID Application"*)
-      SIGN_FLAGS="--options runtime --timestamp"
+      :
       ;;
     *)
       if [ "${EDITH_RELEASE_ALLOW_DEV_SIGNING:-0}" = 1 ]; then
@@ -169,279 +163,19 @@ if [ "$INSTALL" = 1 ] && [ -n "${EDITH_SIGN_IDENTITY:-}" ]; then
   signing_keychain_open "$SIGN_IDENTITY"
 fi
 
-CONFIG=Debug
-[ "$RELEASE" = 1 ] && CONFIG=Release
-XCODE_BUILD_SETTINGS=(ARCHS=arm64)
-[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize DEAD_CODE_STRIPPING=YES
-  GCC_GENERATE_DEBUGGING_SYMBOLS=NO DEBUG_INFORMATION_FORMAT=dwarf)
-AGENT_IDENTIFIER=com.pulkit.edith.agent
-if [ "$CONFIG" = Debug ]; then
+SLOT=""
+if [ "$RELEASE" != 1 ]; then
   SLOT="$(scripts/dev-slots.sh claim)"
-  AGENT_IDENTIFIER="com.pulkit.edith.dev.$SLOT.agent"
-  XCODE_BUILD_SETTINGS+=(EDITH_DEV_SLOT="$SLOT")
   echo "development slot $SLOT (com.pulkit.edith.dev.$SLOT)"
 fi
 
-TEAM_ID=""
-[ "$SIGN_IDENTITY" = "-" ] || TEAM_ID="$(team_id_for "$SIGN_IDENTITY" || true)"
-
-node scripts/extension-host-abi.mjs --write
-
-DERIVED=build
-python3 scripts/approve-package-plugins.py
-for BUILD_SCHEME in EdithAgentRuntime EdithDatabaseRuntime EdithMain; do
-  xcodebuild -project edth.xcodeproj -scheme "$BUILD_SCHEME" -configuration "$CONFIG" \
-    -derivedDataPath "$DERIVED" \
-    -destination 'platform=macOS,arch=arm64' \
-    -quiet \
-    -onlyUsePackageVersionsFromResolvedFile \
-    COMPILER_INDEX_STORE_ENABLE=NO \
-    CODE_SIGNING_ALLOWED=NO \
-    CODE_SIGN_STYLE=Manual \
-    CODE_SIGN_IDENTITY="$SIGN_IDENTITY" \
-    DEVELOPMENT_TEAM="$TEAM_ID" \
-    "${XCODE_BUILD_SETTINGS[@]}" \
-    build
-done
-
-BUILT="$DERIVED/Build/Products/$CONFIG/Edith.app"
-BUILT_HELPER="$DERIVED/Build/Products/$CONFIG/EdithHelper.app"
-test -d "$BUILT" || { echo "build did not produce $BUILT" >&2; exit 1; }
-test -d "$BUILT_HELPER" || { echo "build did not produce $BUILT_HELPER" >&2; exit 1; }
-
-PRIVILEGED_HELPER_BUILD="$DERIVED/Build/Products/$CONFIG/EdithLidAwakeHelper"
-AGENT_BUILD="$DERIVED/Build/Products/$CONFIG/edithd"
-PACK_BUILD="$DERIVED/Build/Products/$CONFIG/edith-database"
-test -f "$PRIVILEGED_HELPER_BUILD" || { echo "build did not produce $PRIVILEGED_HELPER_BUILD" >&2; exit 1; }
-test -f "$AGENT_BUILD" || { echo "build did not produce $AGENT_BUILD" >&2; exit 1; }
-test -f "$PACK_BUILD" || { echo "build did not produce $PACK_BUILD" >&2; exit 1; }
-
+node scripts/build-minimal-host.mjs
+python3 scripts/package-shipping-host.py local/minimal-host/Edith.app dist/Edith.app \
+  --identity "$SIGN_IDENTITY" ${SLOT:+--slot "$SLOT"} \
+  $([ "$RELEASE" != 1 ] || printf '%s' '--release')
 APP="dist/Edith.app"
-HELPER="$APP/Contents/Library/LoginItems/Edith.app"
-PRIVILEGED_HELPER="$APP/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake"
-LAUNCH_DAEMONS="$APP/Contents/Library/LaunchDaemons"
-LAUNCH_AGENTS="$APP/Contents/Library/LaunchAgents"
-AGENT="$APP/Contents/MacOS/edithd"
-rm -rf dist && mkdir -p dist
-ditto "$BUILT" "$APP"
-cargo build --locked --release --manifest-path apps/music-player/Cargo.toml
-install -m 755 apps/music-player/target/release/edith-music-player "$APP/Contents/MacOS/edith-music-player"
-rm -f "$APP/Contents/MacOS/edh"
-rm -f "$APP/Contents/MacOS/ed"
-install -m 755 Resources/ed-launcher "$APP/Contents/Resources/ed-launcher"
-ln -s ../Resources/ed-launcher "$APP/Contents/MacOS/ed"
-
-rm -rf "$HELPER"
-ditto "$BUILT_HELPER" "$HELPER"
-mv "$HELPER/Contents/MacOS/EdithHelper" "$HELPER/Contents/MacOS/Edith"
-/usr/libexec/PlistBuddy -c 'Set :CFBundleExecutable Edith' "$HELPER/Contents/Info.plist"
-rm -f "$HELPER/Contents/Resources/AppIcon.icns"
-ln -s ../../../../../Resources/AppIcon.icns "$HELPER/Contents/Resources/AppIcon.icns"
-rm -rf "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
-ln -s ../../../../../Resources/Edith_EdithKit.bundle \
-  "$HELPER/Contents/Resources/Edith_EdithKit.bundle"
-mkdir -p "$APP/Contents/Frameworks"
-ditto "$DERIVED/Build/Products/$CONFIG/PackageFrameworks/ExtensionMarketplace.framework" "$APP/Contents/Frameworks/ExtensionMarketplace.framework"
-for source in "$HELPER"/Contents/Frameworks/*.framework; do
-  [ -d "$source" ] || continue
-  destination="$APP/Contents/Frameworks/$(basename "$source")"
-  if [ -d "$source" ] && [ ! -d "$destination" ]; then
-    mv "$source" "$destination"
-  else
-    rm -rf "$source"
-  fi
-done
-rm -rf "$APP/Contents/Frameworks/onnxruntime.framework" "$HELPER/Contents/Frameworks/onnxruntime.framework" \
-  "$APP/Contents/Frameworks/MeetingVoice.framework" "$HELPER/Contents/Frameworks/MeetingVoice.framework"
-rmdir "$HELPER/Contents/Frameworks" 2>/dev/null || true
-
-mkdir -p "$(dirname "$PRIVILEGED_HELPER")" "$LAUNCH_DAEMONS"
-cp "$PRIVILEGED_HELPER_BUILD" "$PRIVILEGED_HELPER"
-cp Resources/com.pulkit.edith.lidawake.v2.plist "$LAUNCH_DAEMONS/"
-cp "$AGENT_BUILD" "$AGENT"
-mkdir -p "$LAUNCH_AGENTS"
-if [ "$CONFIG" = Release ]; then
-  cp Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/"
-else
-  python3 - Resources/com.pulkit.edith.agent.plist "$LAUNCH_AGENTS/$AGENT_IDENTIFIER.plist" \
-    "$AGENT_IDENTIFIER" "$PWD/$AGENT" <<'PY'
-import plistlib
-import sys
-
-source, destination, label, program = sys.argv[1:]
-with open(source, 'rb') as handle:
-    value = plistlib.load(handle)
-for key in ('BundleProgram', 'KeepAlive', 'AssociatedBundleIdentifiers'):
-    value.pop(key)
-value['Label'] = label
-value['ProgramArguments'] = [program]
-value['MachServices'] = {label: True}
-with open(destination, 'wb') as handle:
-    plistlib.dump(value, handle)
-PY
-fi
-
-CAMERA_BUILD="$DERIVED/Build/Products/$CONFIG/EdithCameraExtension"
-test -f "$CAMERA_BUILD" || { echo "build did not produce $CAMERA_BUILD" >&2; exit 1; }
-APP_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")"
-CAMERA_IDENTIFIER="$APP_IDENTIFIER.camera"
-CAMERA="$APP/Contents/Library/SystemExtensions/$CAMERA_IDENTIFIER.systemextension"
-mkdir -p "$CAMERA/Contents/MacOS"
-cp "$CAMERA_BUILD" "$CAMERA/Contents/MacOS/$CAMERA_IDENTIFIER"
-python3 scripts/camera_extension.py info "$CAMERA/Contents/Info.plist" "$APP_IDENTIFIER" \
-  "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
-  "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" "$TEAM_ID"
-python3 scripts/link-shared-framework.py \
-  "$DERIVED" "$CONFIG" "$APP" "$HELPER/Contents/MacOS/Edith" "$AGENT" \
-  "$PRIVILEGED_HELPER" "$CAMERA" "$CAMERA/Contents/MacOS/$CAMERA_IDENTIFIER" \
-  "$RELEASE"
-
-find "$APP" -type f -perm -u+x -print0 \
-  | while IFS= read -r -d '' binary; do
-      case "$(file -b "$binary")" in
-        *"universal binary"*)
-          lipo "$binary" -thin arm64 -output "$binary.arm64"
-          mv "$binary.arm64" "$binary"
-          if [ "$RELEASE" = 1 ]; then
-            strip -rSTx "$binary" 2>/dev/null || true
-          fi
-          ;;
-        *Mach-O*)
-          if [ "$RELEASE" = 1 ]; then
-            strip -rSTx "$binary" 2>/dev/null || true
-          fi
-          ;;
-      esac
-    done
-
-find "$APP" -type f -name '._*' -delete
-
-if [ "$SIGN_IDENTITY" = "-" ]; then
-  echo "WARNING: no signing identity found; signing ad-hoc. The code signature" >&2
-  echo "         changes every build, so macOS TCC permission grants (Screen" >&2
-  echo "         Recording, Accessibility, Calendar, ...) reset on every reinstall." >&2
-  echo "         Use a Developer ID / Apple Development / self-signed 'Edith Dev'" >&2
-  echo "         identity, or set EDITH_SIGN_IDENTITY, so grants survive reinstalls." >&2
-fi
-
-sign() {
-  find "$APP" -type f -name '._*' -delete
-  dot_clean -m "$1"
-  local identifier flags="$SIGN_FLAGS"
-  identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$1/Contents/Info.plist")"
-  [ -z "${2:-}" ] || flags="$flags --entitlements $2"
-  [ -z "${3:-}" ] || flags="$flags $3"
-  if [ -n "$TEAM_ID" ]; then
-    codesign --force --sign "$SIGN_IDENTITY" $flags --requirements \
-      "=designated => identifier \"$identifier\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
-      "$1"
-  else
-    codesign --force --sign "$SIGN_IDENTITY" $flags "$1"
-  fi
-  find "$APP" -type f -name '._*' -delete
-}
-
-sign_tool() {
-  find "$APP" -type f -name '._*' -delete
-  if [ -d "$1" ]; then
-    dot_clean -m "$1"
-  fi
-  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS "$1"
-  find "$APP" -type f -name '._*' -delete
-}
-
-dot_clean -m "$APP"
-
-for library in "$APP"/Contents/Frameworks/*.dylib "$HELPER"/Contents/Frameworks/*.dylib; do
-  [ -e "$library" ] || continue
-  sign_tool "$library"
-done
-for framework in "$APP"/Contents/Frameworks/*.framework; do
-  [ -d "$framework" ] || continue
-  if [ -d "$framework/Versions/A" ]; then
-    find "$framework/Versions/A" -maxdepth 1 -type f -perm -u+x -print0 \
-      | while IFS= read -r -d '' binary; do
-          sign_tool "$binary"
-        done
-  fi
-  sign_tool "$framework"
-done
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-  --identifier com.pulkit.edith.lidawake "$PRIVILEGED_HELPER"
-codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-  --identifier "$AGENT_IDENTIFIER" "$AGENT"
-sign "$HELPER" "Resources/Helper.entitlements"
-python3 scripts/build-meeting-microphone.py --application "$APP_IDENTIFIER" \
-  --version "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" \
-  --identity "$SIGN_IDENTITY" --output "$APP/Contents/Library/Audio/Plug-Ins/HAL"
-python3 scripts/build-meeting-microphone.py --test --output "$DERIVED/MeetingMicrophoneTests" \
-  --driver "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
-if [ "$APP_IDENTIFIER" = "com.pulkit.edith" ] && [ -n "$TEAM_ID" ]; then
-  SIGNATURE_TEST="$DERIVED/MeetingMicrophoneTests/signature-check"
-  xcrun swiftc -parse-as-library \
-    Packages/Edith/Sources/EdithLidAwakeSupport/MeetingMicrophoneDeployment.swift \
-    scripts/verify-meeting-microphone-signature.swift -o "$SIGNATURE_TEST"
-  sign_tool "$SIGNATURE_TEST"
-  "$SIGNATURE_TEST" "$APP/Contents/Library/Audio/Plug-Ins/HAL/$APP_IDENTIFIER.microphone.driver"
-fi
-sign_tool "$APP/Contents/MacOS/edith-music-player"
-
-if [ "$INSTALL" = 1 ] && [ -n "$TEAM_ID" ]; then
-  : "${EDITH_APP_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \
-    "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install "$SIGN_IDENTITY")}"
-  : "${EDITH_CAMERA_PROVISIONING_PROFILE:=$(python3 scripts/camera_extension.py find \
-    "$CAMERA_IDENTIFIER" "$TEAM_ID" "" "$SIGN_IDENTITY")}"
-fi
-
-CAMERA_ENTITLEMENTS="$DERIVED/EdithCamera.entitlements"
-python3 scripts/camera_extension.py entitlements "$CAMERA_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
-if [ -n "${EDITH_CAMERA_PROVISIONING_PROFILE:-}" ]; then
-  python3 scripts/camera_extension.py profile "$EDITH_CAMERA_PROVISIONING_PROFILE" \
-    "$CAMERA_IDENTIFIER" "$TEAM_ID" "" "$SIGN_IDENTITY"
-  cp "$EDITH_CAMERA_PROVISIONING_PROFILE" "$CAMERA/Contents/embedded.provisionprofile"
-fi
-CAMERA_RUNTIME=""
-case "$SIGN_FLAGS" in *runtime*) ;; *) CAMERA_RUNTIME="--options runtime" ;; esac
-sign_tool "$CAMERA/Contents/Frameworks/EdithCameraSupport.framework"
-sign "$CAMERA" "$CAMERA_ENTITLEMENTS" "$CAMERA_RUNTIME"
-
-APP_ENTITLEMENTS=""
-if [ -n "${EDITH_APP_PROVISIONING_PROFILE:-}" ]; then
-  [ -n "$TEAM_ID" ] || { echo "EDITH_APP_PROVISIONING_PROFILE needs a team signing identity" >&2; exit 1; }
-  python3 scripts/camera_extension.py profile "$EDITH_APP_PROVISIONING_PROFILE" \
-    "$APP_IDENTIFIER" "$TEAM_ID" com.apple.developer.system-extension.install "$SIGN_IDENTITY"
-  cp "$EDITH_APP_PROVISIONING_PROFILE" "$APP/Contents/embedded.provisionprofile"
-  APP_ENTITLEMENTS="$DERIVED/EdithApp.entitlements"
-  python3 scripts/camera_extension.py app-entitlements "$APP_ENTITLEMENTS" "$APP_IDENTIFIER" "$TEAM_ID"
-fi
-sign "$APP" "$APP_ENTITLEMENTS"
-
-PACK_IDENTIFIER="$APP_IDENTIFIER.database"
-PACK_DEST="dist/edith-database"
-cp "$PACK_BUILD" "$PACK_DEST"
-chmod 755 "$PACK_DEST"
-if [ -n "$TEAM_ID" ]; then
-  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-    --identifier "$PACK_IDENTIFIER" \
-    --requirements \
-    "=designated => identifier \"$PACK_IDENTIFIER\" and anchor apple generic and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
-    "$PACK_DEST"
-else
-  codesign --force --sign "$SIGN_IDENTITY" $SIGN_FLAGS \
-    --identifier "$PACK_IDENTIFIER" "$PACK_DEST"
-fi
-if [ "$CONFIG" = Debug ]; then
-  PACK_DIR="$HOME/Library/Application Support/Edith Dev/$SLOT/DatabasePack"
-  mkdir -p "$PACK_DIR"
-  cp "$PACK_DEST" "$PACK_DIR/edith-database"
-  chmod 755 "$PACK_DIR/edith-database"
-  PACK_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
-  printf '%s\n' "$PACK_VERSION" > "$PACK_DIR/version"
-fi
-
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 if [ "$RELEASE" = 1 ]; then
-  "$LSREGISTER" -u "$BUILT" 2>/dev/null || true
   "$LSREGISTER" -u "$APP" 2>/dev/null || true
 fi
 
