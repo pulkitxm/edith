@@ -20,6 +20,45 @@ import Testing
 }
 
 @Suite @MainActor struct ExtensionPrivilegedClientTests {
+    @Test func containedConnectionsNeverQueryOrRegisterAContainingAppService() async throws {
+        var queries = 0
+        var channels: [PrivilegedTransportFixture] = []
+        let client = ExtensionPrivilegedClient(
+            owner: "sample", source: URL(fileURLWithPath: "/synthetic/payload.bundle"),
+            version: "1.0.0", mode: .connectOnly(hostIdentifier: "com.example.host"),
+            status: {
+                queries += 1; return .requiresApproval
+            },
+            connect: { invalidated in
+                let created = PrivilegedTransportFixture(invalidated: invalidated)
+                channels.append(created); return created
+            })
+        #expect(client.status == .notFound)
+        #expect(throws: ExtensionPeerError.self) { try client.requestApproval() }
+        #expect(try await client.invoke("apply", payload: Data()).isEmpty)
+        #expect(client.status == .enabled && queries == 0)
+        channels[0].invalidate()
+        try await client.release()
+        #expect(channels.count == 2 && channels[1].releases == 1 && channels[1].closed)
+        #expect(client.status == .notFound && queries == 0)
+    }
+
+    @Test(arguments: ["", "com..host", "com.host\"", "com.host/other", "com.host\n"])
+    func invalidContainingHostIdentifiersNeverConnect(identifier: String) async {
+        var connections = 0
+        let client = ExtensionPrivilegedClient(
+            owner: "sample", source: URL(fileURLWithPath: "/synthetic/payload.bundle"),
+            version: "1.0.0", mode: .connectOnly(hostIdentifier: identifier),
+            status: { .enabled },
+            connect: { invalidated in
+                connections += 1; return PrivilegedTransportFixture(invalidated: invalidated)
+            })
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.invoke("apply", payload: Data())
+        }
+        #expect(connections == 0)
+    }
+
     @Test func disconnectedLeaseRequiresAConfirmedRestorationBeforeReleaseCompletes() async throws {
         var channels: [PrivilegedTransportFixture] = []
         let client = ExtensionPrivilegedClient(
