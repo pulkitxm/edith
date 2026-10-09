@@ -35,6 +35,8 @@ public enum SurfaceSampleData {
             value = github(tile)
         } else if tile.widget == .databases {
             value = databases(tile)
+        } else if tile.widget == .ability("audioMixer") || tile.widget == .ability("timeLapse") {
+            value = media(tile)
         } else {
             value = base(tile.widget)
         }
@@ -47,7 +49,7 @@ public enum SurfaceSampleData {
                 value.rows[index] = .init(
                     row.id, source: sources[index % sources.count].id, title: row.title,
                     detail: row.detail, value: row.value, icon: row.icon,
-                    progress: row.progress, actions: row.actions)
+                    progress: row.progress, actions: row.actions, volume: row.volume)
             }
         }
         if let selected = tile.sourceIDs {
@@ -58,6 +60,28 @@ public enum SurfaceSampleData {
             value.message = "No sample items match these sources."
         }
         return value
+    }
+
+    private static func media(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
+        if tile.widget == .ability("audioMixer") {
+            return SurfaceMediaProjection.audio(
+                .init(
+                    apps: [
+                        .init(
+                            objectID: 41, pid: 700, bundleID: "sample.music", name: "Music",
+                            volume: 0.65),
+                        .init(
+                            objectID: 42, pid: 701, bundleID: "sample.browser", name: "Browser",
+                            volume: 0),
+                    ], changed: false), tile: tile, now: date)
+        }
+        var status = SurfaceRecorderSnapshot()
+        status.sessionID = UUID(uuidString: "00000000-0000-0000-0000-000000000041")
+        status.recording = true; status.startedAt = date.addingTimeInterval(-320)
+        status.frames = 9600; status.bytes = 240_000_000; status.playbackSeconds = 320
+        status.sources = 1; status.systemAudio = true
+        return SurfaceMediaProjection.recorder(
+            status, library: .init(), tile: tile, now: date)
     }
 
     private static func base(_ widget: SurfaceWidget) -> SurfaceExtensionSnapshot {
@@ -114,6 +138,8 @@ public enum SurfaceSampleData {
                 .init("memory", "Memory used", "58%", fraction: 0.58),
                 .init("disk", "Storage free", "320 GB", fraction: 0.38),
             ])
+        case .ability("audioMixer"), .ability("timeLapse"):
+            return media(SurfaceTile(widget))
         case .ability("attention"):
             return .init(
                 metrics: [

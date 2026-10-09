@@ -139,6 +139,11 @@ public struct SurfaceExtensionCard: View {
                     if tile.shows("progress"), let progress = row.progress {
                         ProgressView(value: progress).tint(tile.accent ? .accentColor : .secondary)
                     }
+                    if tile.showActions, tile.shows("volume"), let volume = row.volume {
+                        SurfaceAudioSlider(control: volume, title: row.title) {
+                            perform(.audioVolume(volume.target, $0))
+                        }.disabled(acting || fixture != nil)
+                    }
                     if tile.showActions, !row.actions.isEmpty { actions(row.actions) }
                 }
                 .padding(.vertical, UIScale.pt(tile.dense ? 3 : 5))
@@ -180,7 +185,9 @@ public struct SurfaceExtensionCard: View {
         case .ability("seoAudit"): .siteAudit
         case .ability("system"), .ability("bifrost"): .runningApps
         case .ability("virtualCamera"): .camera
-        case .ability("studio"), .media, .ability("downloads"): .studio
+        case .ability("studio"), .media, .ability("downloads"), .ability("timeLapse"),
+            .ability("audioMixer"):
+            .studio
         default: .shelf
         }
     }
@@ -234,9 +241,40 @@ public struct SurfaceExtensionCard: View {
                         url.isFileURL || ["https", "http"].contains(url.scheme?.lowercased() ?? "")
                     else { return }
                     NSWorkspace.shared.open(url)
+                case .audioVolume(let target, let volume):
+                    let updated = try await SurfaceMediaClient.audio(
+                        .volume, target: target, volume: volume)
+                    await SurfaceExtensionClient.shared.invalidate(tile.widget)
+                    snapshot = SurfaceMediaProjection.audio(updated, tile: tile)
+                    return
+                case .stopRecording(let sessionID):
+                    _ = try await SurfaceMediaClient.recorder(.stop, sessionID: sessionID)
+                    await SurfaceExtensionClient.shared.invalidate(tile.widget)
                 }
                 await refresh(force: true)
             } catch is CancellationError {} catch { actionError = error.localizedDescription }
         }
+    }
+}
+
+private struct SurfaceAudioSlider: View {
+    let control: SurfaceVolumeControl
+    let title: String
+    let commit: (Double) -> Void
+    @State private var value: Double
+    @State private var editing = false
+    init(control: SurfaceVolumeControl, title: String, commit: @escaping (Double) -> Void) {
+        self.control = control; self.title = title; self.commit = commit
+        _value = State(initialValue: control.value)
+    }
+    var body: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            Slider(value: $value, in: 0...1, step: 0.01) { isEditing in
+                editing = isEditing
+                if !isEditing, abs(value - control.value) > 0.0001 { commit(value) }
+            }.accessibilityLabel("Volume for " + title)
+            Text("\(Int((value * 100).rounded()))%")
+                .font(.edithText(.caption)).monospacedDigit().frame(width: UIScale.pt(40))
+        }.onChange(of: control.value) { _, next in if !editing { value = next } }
     }
 }

@@ -4,10 +4,15 @@ import Foundation
 public actor SurfaceExtensionClient {
     public static let shared = SurfaceExtensionClient()
     private let client: AgentClient
+    private let reader: (@Sendable (SurfaceTile) async throws -> SurfaceExtensionSnapshot)?
     private var previousCPU: CPUTicks?
     private var cache: [SurfaceExtensionRequestKey: (Date, SurfaceExtensionSnapshot)] = [:]
-    private var requests: [SurfaceExtensionRequestKey: Task<SurfaceExtensionSnapshot, Error>] = [:]
-    public init(client: AgentClient = .shared) { self.client = client }
+    private var requests:
+        [SurfaceExtensionRequestKey: (UUID, Task<SurfaceExtensionSnapshot, Error>)] = [:]
+    public init(
+        client: AgentClient = .shared,
+        reader: (@Sendable (SurfaceTile) async throws -> SurfaceExtensionSnapshot)? = nil
+    ) { self.client = client; self.reader = reader }
 
     public func snapshot(_ tile: SurfaceTile, force: Bool = false) async throws
         -> SurfaceExtensionSnapshot
@@ -17,14 +22,28 @@ public actor SurfaceExtensionClient {
         if !force, let cached = cache[key], Date().timeIntervalSince(cached.0) < interval {
             return cached.1
         }
-        if let pending = requests[key] { return try await pending.value }
+        if let pending = requests[key] {
+            let value = try await pending.1.value
+            guard !pending.1.isCancelled else { throw CancellationError() }
+            return value
+        }
+        let id = UUID()
         let task = Task { try await self.read(tile) }
-        requests[key] = task
-        defer { requests[key] = nil }
+        requests[key] = (id, task)
+        defer { if requests[key]?.0 == id { requests[key] = nil } }
         let value = try await task.value
+        try Task.checkCancellation()
+        guard !task.isCancelled else { throw CancellationError() }
         if cache.count >= 100 { cache.removeAll() }
         cache[key] = (Date(), value)
         return value
+    }
+    public func invalidate(_ widget: SurfaceWidget) {
+        for key in cache.keys where key.widget == widget.rawValue { cache[key] = nil }
+        for key in requests.keys where key.widget == widget.rawValue {
+            requests[key]?.1.cancel()
+            requests[key] = nil
+        }
     }
     public static func interval(_ widget: SurfaceWidget) -> Double {
         switch widget {
@@ -35,6 +54,7 @@ public actor SurfaceExtensionClient {
         }
     }
     private func read(_ tile: SurfaceTile) async throws -> SurfaceExtensionSnapshot {
+        if let reader { return try await reader(tile) }
         guard tile.widget.available(in: SharedDefaults.store) else {
             return .init(message: "Enable this extension to show its data and controls.")
         }
@@ -43,6 +63,18 @@ public actor SurfaceExtensionClient {
             return try await SurfaceGitHubClient.live.snapshot(tile)
         case .databases:
             return try await SurfaceDatabaseClient().snapshot(tile)
+        case .ability("audioMixer"):
+            return SurfaceMediaProjection.audio(try await SurfaceMediaClient.audio(), tile: tile)
+        case .ability("timeLapse"):
+            let library = try SurfaceRecordingLibrary.read(root: SurfaceRecordingLibrary.root)
+            do {
+                return SurfaceMediaProjection.recorder(
+                    try await SurfaceMediaClient.recorder(), library: library, tile: tile)
+            } catch is CancellationError { throw CancellationError() } catch {
+                var value = SurfaceMediaProjection.recorder(nil, library: library, tile: tile)
+                value.message = error.localizedDescription
+                return value
+            }
         case .machines:
             return SurfaceExtensionProjection.machines(
                 try await client.snapshotAsync(MachineHealthSnapshot.self, topic: .machines),

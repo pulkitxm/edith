@@ -25,6 +25,8 @@ public enum SurfaceExtensionAction: Equatable, Sendable {
     case pinClipboard(String, Bool)
     case reveal(URL)
     case openURL(URL)
+    case audioVolume(AudioMixerTarget, Double)
+    case stopRecording(UUID)
 }
 
 public struct SurfaceRowAction: Equatable, Identifiable, Sendable {
@@ -46,15 +48,25 @@ public struct SurfaceDataRow: Equatable, Identifiable, Sendable {
     public var icon = "circle"
     public var progress: Double?
     public var actions: [SurfaceRowAction] = []
+    public var volume: SurfaceVolumeControl?
     public init(
         _ id: String, source: String? = nil, title: String, detail: String = "",
         value: String = "", icon: String = "circle", progress: Double? = nil,
-        actions: [SurfaceRowAction] = []
+        actions: [SurfaceRowAction] = [], volume: SurfaceVolumeControl? = nil
     ) {
         self.id = id; sourceID = source ?? id; self.title = title; self.detail = detail
         self.value = value; self.icon = icon
         self.progress = progress.flatMap { $0.isFinite ? min(1, max(0, $0)) : nil }
         self.actions = actions
+        self.volume = volume
+    }
+}
+
+public struct SurfaceVolumeControl: Equatable, Sendable {
+    public let target: AudioMixerTarget
+    public let value: Double
+    public init(_ app: AudioMixerAppRecord) {
+        target = app.target; value = app.normalizedVolume
     }
 }
 

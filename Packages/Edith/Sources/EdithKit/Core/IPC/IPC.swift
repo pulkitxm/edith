@@ -118,6 +118,10 @@ public enum IPC {
             "com.pulkit.edith.requestAudioMixerAction")
         public static let audioMixerActionResult = IPC.scopedName(
             "com.pulkit.edith.audioMixerActionResult")
+        public static let requestRecorderSurface = IPC.scopedName(
+            "com.pulkit.edith.requestRecorderSurface")
+        public static let recorderSurfaceResult = IPC.scopedName(
+            "com.pulkit.edith.recorderSurfaceResult")
         public static let virtualCameraActionResult = IPC.scopedName(
             "com.pulkit.edith.virtualCameraActionResult")
         public static let virtualCameraStateChanged = IPC.scopedName(

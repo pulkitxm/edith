@@ -1,3 +1,4 @@
+import EdithCore
 import Foundation
 
 extension SurfaceWidget {
@@ -13,7 +14,7 @@ extension SurfaceWidget {
             .ability("downloads"),
             .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
-            .ability("seoAudit"), .ability("latex"):
+            .ability("seoAudit"), .ability("latex"), .ability("audioMixer"), .ability("timeLapse"):
             true
         default: false
         }
@@ -30,6 +31,8 @@ extension SurfaceWidget {
                 .init("connections", "Connections"), .init("queries", "Saved queries"),
                 .init("operations", "Recent operations"),
             ]
+        case .ability("timeLapse"):
+            [.init("active", "Live recorder"), .init("recordings", "Saved recordings")]
         default: []
         }
     }
@@ -45,6 +48,8 @@ extension SurfaceWidget {
             AppUpdateSource.allCases.map { .init($0.rawValue, $0.title) }
         case .ability("homebrew"):
             HomebrewPackageKind.allCases.map { .init($0.rawValue, $0.pluralTitle) }
+        case .ability("timeLapse"):
+            ScreenRecordingMode.allCases.map { .init($0.rawValue, $0.rawValue) }
         default: []
         }
     }
@@ -65,6 +70,17 @@ extension SurfaceWidget {
                 [
                     ("running", "Downloading count"), ("queued", "Queued count"),
                     ("failed", "Retry count"), ("finished", "Completed count"),
+                ]
+            case .ability("audioMixer"):
+                [
+                    ("apps", "Playing app count"), ("muted", "Muted app count"),
+                    ("volume", "Volume sliders"),
+                ]
+            case .ability("timeLapse"):
+                [
+                    ("state", "Recorder state"), ("elapsed", "Elapsed time"),
+                    ("frames", "Captured frames"), ("size", "Captured size"),
+                    ("recordings", "Saved recording count"),
                 ]
             case .desk, .ability("clipboard"), .ability("colorPicker"):
                 [("total", "Recent item count"), ("pinned", "Pinned count")]

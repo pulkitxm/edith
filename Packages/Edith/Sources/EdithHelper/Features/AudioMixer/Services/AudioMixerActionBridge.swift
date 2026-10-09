@@ -31,6 +31,12 @@ final class AudioMixerActionBridge {
                 error: "The audio request expired before it ran.")
             return
         }
+        guard SharedDefaults.store.bool(forKey: AppStorageKeys.Notch.audioMixerEnabled) else {
+            reply(
+                requestID: runtime.requestID, ok: false, snapshot: nil,
+                error: "Enable Audio Mixer in Extensions to use these controls.")
+            return
+        }
         guard #available(macOS 14.4, *) else {
             reply(
                 requestID: runtime.requestID, ok: false, snapshot: nil,
@@ -72,7 +78,11 @@ enum AudioMixerAction {
         case .volume, .mute, .unmute:
             let records = records(engine)
             let match: AudioMixerAppRecord
-            do { match = try AudioMixerSelector.match(request.app, in: records) } catch {
+            do {
+                match =
+                    try request.target?.match(in: records)
+                    ?? AudioMixerSelector.match(request.app, in: records)
+            } catch {
                 return (snapshot(engine, changed: false), error.localizedDescription)
             }
             guard
