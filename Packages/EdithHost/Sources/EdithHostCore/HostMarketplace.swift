@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 import Observation
@@ -7,6 +8,8 @@ import Observation
 public final class HostMarketplace {
     public let entries: [HostExtension]
     public let identity: HostIdentity
+    public let surfaces: HostSurfaces
+    public var surfaceLayouts: SurfaceLayoutStore { surfaces.layouts }
     public let sessions: HostExtensionSessions
     public private(set) var installed: [String: ExtensionPackage] = [:]
     public private(set) var downloadedIDs: Set<String> = []
@@ -44,6 +47,7 @@ public final class HostMarketplace {
         guard let preferences = UserDefaults(suiteName: identity.defaultsSuite) else {
             throw CocoaError(.validationMissingMandatoryProperty)
         }
+        surfaces = try HostSurfaces(identity: identity, entries: entries, sessions: sessions)
         self.preferences = preferences
         automaticallyUpdatesExtensions =
             preferences.object(forKey: "automaticallyUpdatesExtensions") as? Bool ?? true

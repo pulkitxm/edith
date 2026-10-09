@@ -1,6 +1,11 @@
 import Foundation
 
 public enum SharedDefaults {
+    public static func applicationStore(identifier: String) -> UserDefaults? {
+        if Bundle.main.bundleIdentifier == identifier { return .standard }
+        return UserDefaults(suiteName: identifier)
+    }
+
     public static let store: UserDefaults = {
         guard let suite = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
             let defaults = UserDefaults(suiteName: suite)
