@@ -112,7 +112,12 @@ public struct SurfaceExtensionCard: View {
             }
         }
         if tile.showDetails, tile.shows("items") {
-            ForEach(Array(value.rows.prefix(tile.itemLimit))) { row in
+            ForEach(
+                Array(value.rows.filter { tile.shows($0.field ?? "items") }.prefix(tile.itemLimit))
+            ) { row in
+                let detail =
+                    ([row.detail] + row.details.filter { tile.shows($0.field) }.map(\.text)).filter
+                { !$0.isEmpty }.joined(separator: " · ")
                 VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                     HStack(alignment: .top, spacing: UIScale.pt(8)) {
                         Image(systemName: row.icon).foregroundStyle(
@@ -121,8 +126,8 @@ public struct SurfaceExtensionCard: View {
                         .frame(width: UIScale.pt(16))
                         VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                             Text(row.title).font(.edithText(.callout)).lineLimit(tile.dense ? 1 : 2)
-                            if tile.shows("metadata"), !row.detail.isEmpty {
-                                Text(row.detail).font(.edithText(.caption)).foregroundStyle(
+                            if tile.shows("metadata"), !detail.isEmpty {
+                                Text(detail).font(.edithText(.caption)).foregroundStyle(
                                     .secondary
                                 ).lineLimit(tile.dense ? 1 : 3)
                             }
@@ -176,6 +181,7 @@ public struct SurfaceExtensionCard: View {
     }
     private var privacy: PresenterPrivacy {
         switch tile.widget {
+        case .limits, .codeStats: .usage
         case .machines: .fleet
         case .ability("attention"): .attention
         case .ability("companion"): .memory

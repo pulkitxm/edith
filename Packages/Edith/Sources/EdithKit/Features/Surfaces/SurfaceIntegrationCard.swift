@@ -6,7 +6,6 @@ public struct SurfaceIntegrationCard: View {
     let open: (String) -> Void
     @State private var usage: UsageTopicSnapshot?
     @State private var load = ContentLoad()
-    @State private var report: CodeStatsReport?
     @State private var focus: AttentionFocusSession?
     @State private var error: String?
     @State private var loading = true
@@ -105,34 +104,6 @@ public struct SurfaceIntegrationCard: View {
                 }
             }
         case .agents: EmptyView()
-        case .codeStats:
-            if let report {
-                HStack {
-                    if tile.shows("commits") { metric("Commits", "\(report.totals.commits)") }
-                    if tile.shows("lines") {
-                        metric("Lines", CodeStatsNumberFormat.compact(report.totals.authored))
-                    }
-                    if tile.shows("streak") { metric("Streak", "\(report.totals.currentStreak)d") }
-                }
-                if tile.showDetails, tile.shows("repositories") {
-                    Text("Last \(tile.days) days · \(report.totals.repositories) repositories")
-                        .font(.edithText(.caption)).foregroundStyle(.secondary)
-                    ForEach(Array(report.repositories.prefix(tile.itemLimit)), id: \.repository) {
-                        repo in
-                        HStack {
-                            Text(repo.repository).lineLimit(1)
-                            Spacer()
-                            Text("\(repo.commits)")
-                        }
-                        .font(.edithText(.caption)).presenterCover(.usage)
-                    }
-                }
-            } else {
-                Text("Set up your code stats mirror to see commit activity.").font(
-                    .edithText(.caption)
-                ).foregroundStyle(.secondary)
-                Button("Set up Code Stats") { open("codeStats") }
-            }
         case .focus:
             if let focus {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -144,9 +115,11 @@ public struct SurfaceIntegrationCard: View {
                         Text(String(format: "%02d:%02d", seconds / 60, seconds % 60))
                             .font(.edithText(.title2)).monospacedDigit()
                         Spacer()
-                        Button("Finish") { finishFocus() }.buttonStyle(.edith(.secondary))
+                        if tile.showActions {
+                            Button("Finish") { finishFocus() }.buttonStyle(.edith(.secondary))
+                        }
                     }
-                    if !tile.dense {
+                    if tile.showDetails, !tile.dense, tile.shows("session") {
                         Text(focus.name.isEmpty ? "Deep work" : focus.name).font(
                             .edithText(.caption)
                         ).lineLimit(1)
@@ -156,7 +129,9 @@ public struct SurfaceIntegrationCard: View {
                 HStack {
                     Text("\(tile.focusMinutes) min").font(.edithText(.title2)).monospacedDigit()
                     Spacer()
-                    Button("Start focus") { startFocus() }.buttonStyle(.edith(.secondary))
+                    if tile.showActions {
+                        Button("Start focus") { startFocus() }.buttonStyle(.edith(.secondary))
+                    }
                 }
             }
         default:
@@ -188,10 +163,6 @@ public struct SurfaceIntegrationCard: View {
                         userInfo: [NSLocalizedDescriptionKey: failure])
                 }
             case .agents: break
-            case .codeStats:
-                let next = try await CodeStatsAgentClient().report(.days(tile.days))
-                guard load.isCurrent(request) else { return }
-                report = next
             case .focus: focus = repository.activeFocus()
             default: break
             }

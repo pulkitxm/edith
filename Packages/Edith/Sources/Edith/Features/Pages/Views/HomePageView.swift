@@ -140,9 +140,9 @@ struct HomeSurfaceWidget: View {
                     }
                 case .calendar: MeetingsCard(dark: dark)
                 case .usage: UsageSummaryCard(dark: dark)
-                case .limits: RateLimitsDialsView(dark: dark, showsJumpLink: true)
                 case .music: HomeMusicCard(dark: dark)
-                case .codeStats, .github, .agents, .focus, .databases, .machines, .desk, .media,
+                case .limits, .codeStats, .github, .agents, .focus, .databases, .machines, .desk,
+                    .media,
                     .ability:
                     SurfaceIntegrationCard(
                         tile: tile, active: automaticActionsEnabled,

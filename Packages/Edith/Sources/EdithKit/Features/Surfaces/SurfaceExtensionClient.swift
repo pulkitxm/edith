@@ -59,6 +59,18 @@ public actor SurfaceExtensionClient {
             return .init(message: "Enable this extension to show its data and controls.")
         }
         switch tile.widget {
+        case .limits:
+            return SurfaceCoreProjection.limits(
+                try await client.snapshotAsync(LimitsTopicSnapshot.self, topic: .limits), tile: tile
+            )
+        case .codeStats:
+            if tile.sourceIDs?.isEmpty == true {
+                return .init(message: "Select repositories to show their code stats.")
+            }
+            let filter = CodeStatsFilter(repositories: tile.sourceIDs ?? [])
+            return SurfaceCoreProjection.codeStats(
+                try await CodeStatsAgentClient().report(.days(tile.days), filter: filter),
+                tile: tile)
         case .github, .ability("quinjet"):
             return try await SurfaceGitHubClient.live.snapshot(tile)
         case .databases:

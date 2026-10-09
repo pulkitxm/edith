@@ -4,13 +4,14 @@ import Foundation
 extension SurfaceWidget {
     public var usesExtensionCard: Bool {
         switch self {
-        case .ability, .machines, .desk, .media, .github, .databases: true
+        case .ability, .machines, .desk, .media, .github, .databases, .limits, .codeStats: true
         default: false
         }
     }
     public var supportsSourceFilters: Bool {
         switch self {
-        case .github, .ability("quinjet"), .databases, .machines, .desk, .media,
+        case .github, .ability("quinjet"), .databases, .machines, .desk, .media, .limits,
+            .codeStats,
             .ability("downloads"),
             .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
@@ -56,6 +57,8 @@ extension SurfaceWidget {
     }
     public var sourceChoices: [SurfaceSourceChoice] {
         switch self {
+        case .limits:
+            LimitProvider.allCases.map { .init($0.rawValue, $0.label) }
         case .media, .ability("downloads"):
             DownloadKind.allCases.map { .init($0.rawValue, $0.title) }
         case .desk, .ability("clipboard"):

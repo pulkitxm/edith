@@ -31,6 +31,8 @@ public enum SurfaceSampleData {
 
     public static func snapshot(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
         var value: SurfaceExtensionSnapshot
+        if tile.widget == .limits { return limits(tile) }
+        if tile.widget == .codeStats { return codeStats(tile) }
         if tile.widget == .github || tile.widget == .ability("quinjet") {
             value = github(tile)
         } else if tile.widget == .databases {
@@ -62,6 +64,40 @@ public enum SurfaceSampleData {
             value.message = "No sample items match these sources."
         }
         return value
+    }
+
+    public static func limits(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
+        SurfaceCoreProjection.limits(
+            .init(
+                refreshedAt: date,
+                providers: [
+                    .init(
+                        provider: .claude,
+                        session: .init(percent: 63, resetsAt: date.addingTimeInterval(8040)),
+                        week: .init(percent: 34, resetsAt: date.addingTimeInterval(172800))),
+                    .init(
+                        provider: .codex,
+                        session: .init(percent: 18, resetsAt: date.addingTimeInterval(3600)),
+                        week: .init(percent: 52, resetsAt: date.addingTimeInterval(259200))),
+                ], failure: nil), tile: tile, now: date)
+    }
+    public static func codeStats(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {
+        guard tile.sourceIDs?.isEmpty != true else {
+            return .init(message: "Select repositories to show their code stats.")
+        }
+        let commits = (0..<24).map { index in
+            CodeStatsCommit(
+                sha: "sample-\(index)", day: index < 12 ? "2026-10-09" : "2026-10-08", hour: 9,
+                repository: index.isMultiple(of: 3) ? "sample/beacon" : "sample/atlas",
+                languages: ["Swift": .init(added: 100 + index, updated: 20, deleted: 5)])
+        }
+        var calendar = Calendar(identifier: .gregorian);
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let report = CodeStatsReportBuilder.build(
+            table: CodeStatsFactBuilder.build(commits: commits),
+            filter: .init(repositories: tile.sourceIDs ?? []),
+            range: .days(tile.days), today: date, calendar: calendar)
+        return SurfaceCoreProjection.codeStats(report, tile: tile)
     }
 
     private static func media(_ tile: SurfaceTile) -> SurfaceExtensionSnapshot {

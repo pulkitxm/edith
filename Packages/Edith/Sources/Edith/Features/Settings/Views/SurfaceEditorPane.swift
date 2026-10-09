@@ -38,6 +38,7 @@ struct SurfaceEditorPane: View {
     @State private var canvasViewport = CGRect.zero
     @Environment(\.compactLayout) private var compact
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.surfaceSampleContent) private var sampleContent
 
     private var layout: SurfaceLayout { store.layout(target) }
     private var selection: SurfaceTile? { layout.tiles.first { $0.id == selected } }
@@ -107,6 +108,7 @@ struct SurfaceEditorPane: View {
             }
         }
         .id(target)
+        .onAppear { if sampleContent { livePreview = false } }
         .edithSheet(item: $editorPanel) { panel in
             VStack(alignment: .leading, spacing: UIScale.pt(16)) {
                 HStack {
@@ -125,13 +127,14 @@ struct SurfaceEditorPane: View {
             .padding(UIScale.pt(20))
             .frame(width: UIScale.pt(440), height: UIScale.pt(560))
         }
-        .pageTask(id: livePreview, active: livePreview && target == .home) {
+        .pageTask(id: livePreview, active: livePreview && !sampleContent && target == .home) {
             await dashboard.restoreCachedHomeUsage()
             await dashboard.load()
         }
         .pageTask(
             id: "editor-agent-sources",
-            active: selection?.widget == .agents || (target == .notch && glancesExpanded)
+            active: !sampleContent
+                && (selection?.widget == .agents || (target == .notch && glancesExpanded))
         ) {
             await activity.observe()
         }
@@ -533,7 +536,9 @@ struct SurfaceEditorPane: View {
             Text(
                 livePreview && target == .home
                     ? "Live content. Controls are paused while editing."
-                    : "Sample content. Edit the Notch itself to preview live widgets."
+                    : target == .notch
+                        ? "Sample content. Edit the Notch itself to preview live widgets."
+                        : "Sample content. Turn on Live content to preview your widgets."
             )
             .font(.edithText(.caption)).foregroundStyle(.secondary)
             if target == .notch { glanceSettings }

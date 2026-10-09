@@ -10,9 +10,30 @@ import Testing
 @Suite(.serialized) struct SurfaceEditorRenderingTests {
     @Test func editorRendersInBothAppearancesAndCompactZoomedWindows() throws {
         let defaults = SharedDefaults.store
-        let previousSelection = defaults.string(forKey: AppStorageKeys.Surfaces.editorWidget)
-        defaults.set(SurfaceWidget.clocks.id, forKey: AppStorageKeys.Surfaces.editorWidget)
-        defer { defaults.set(previousSelection, forKey: AppStorageKeys.Surfaces.editorWidget) }
+        let keys = [
+            AppStorageKeys.Surfaces.editorWidget, AppStorageKeys.Surfaces.editorTarget,
+            SurfaceTarget.home.key,
+        ]
+        let original = Dictionary(
+            uniqueKeysWithValues: keys.map { ($0, defaults.string(forKey: $0)) })
+        var tiles = [
+            SurfaceWidget.agents, .limits, .codeStats, .github, .databases, .ability("companion"),
+        ].map { SurfaceTile($0) }
+        for index in tiles.indices { tiles[index].span = 12; tiles[index].itemLimit = 3 }
+        defaults.set(SurfaceLayout(tiles: tiles).encoded, forKey: SurfaceTarget.home.key)
+        defaults.set("home", forKey: AppStorageKeys.Surfaces.editorTarget)
+        defaults.set(tiles[0].id, forKey: AppStorageKeys.Surfaces.editorWidget)
+        SurfaceLayoutStore.shared.reload()
+        defer {
+            for key in keys {
+                if let value = original[key] ?? nil {
+                    defaults.set(value, forKey: key)
+                } else {
+                    defaults.removeObject(forKey: key)
+                }
+            }
+            SurfaceLayoutStore.shared.reload()
+        }
         let previousScale = UIScale.current
         defer { UIScale.apply(previousScale) }
         for dark in [true, false] {
@@ -21,6 +42,7 @@ import Testing
                 let size = CGSize(width: compact ? 620 : 1200, height: 900)
                 let view = SurfaceEditorPane()
                     .environment(\.compactLayout, compact)
+                    .environment(\.surfaceSampleContent, true)
                     .environment(\.colorScheme, dark ? .dark : .light)
                     .environment(\.automaticViewActionsEnabled, false)
                     .background(Color(nsColor: .windowBackgroundColor))
@@ -35,18 +57,15 @@ import Testing
         }
     }
 
-    @Test func liveNotchRendersAnIsolatedFocusSessionAndClock() throws {
+    @Test func liveNotchRendersSampleWidgetsWithEditingHandles() throws {
         let environment = ProcessInfo.processInfo.environment
         let runtime = try #require(environment["EDITH_TEST_RUNTIME_ROOT"])
         #expect(DataRoot.support.path.hasPrefix(runtime + "/"))
         guard DataRoot.support.path.hasPrefix(runtime + "/") else { return }
-        let repository = AttentionRepository()
-        _ = try repository.startFocus(name: "Sample deep work", duration: 1500)
-        defer { _ = try? repository.endFocus() }
         let defaults = SharedDefaults.store
         let original = defaults.string(forKey: SurfaceTarget.notch.key)
         defaults.set(
-            SurfaceLayout(tiles: [.init(.clocks), .init(.focus)]).encoded,
+            SurfaceLayout(tiles: [.init(.agents), .init(.limits), .init(.github)]).encoded,
             forKey: SurfaceTarget.notch.key)
         SurfaceLayoutStore.shared.reload()
         defer {
@@ -66,6 +85,7 @@ import Testing
             controller.expand(on: id)
             controller.layoutEditing = true
             let view = NotchShelfContentView(controller: controller, displayID: id)
+                .environment(\.surfaceSampleContent, true)
             _ = try render(
                 view, size: NotchGeometry.panelSize(forShape: controller.expandedSize(on: id)),
                 dark: true)

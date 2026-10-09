@@ -39,7 +39,7 @@ import Testing
             UIScale.apply(previousScale)
         }
         let widgets: [SurfaceWidget] = [
-            .agents, .github, .databases, .ability("systemStats"), .media, .machines,
+            .agents, .limits, .codeStats, .github, .databases, .ability("companion"),
         ]
         var tiles = widgets.map { SurfaceTile($0) }
         for index in tiles.indices {

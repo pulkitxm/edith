@@ -445,7 +445,8 @@ extension SurfaceWidget {
                 ("session", "Session limits"), ("weekly", "Weekly limits"),
                 ("additional", "Additional model limits"), ("remaining", "Remaining capacity"),
                 ("resets", "Reset countdowns"), ("account", "Account details"),
-                ("updated", "Last update"),
+                ("updated", "Last update"), ("providers", "Provider count"),
+                ("progress", "Quota bars"), ("errors", "Provider errors"),
             ]
         case .music:
             [
@@ -457,6 +458,8 @@ extension SurfaceWidget {
             [
                 ("commits", "Commit totals"), ("lines", "Authored lines"),
                 ("streak", "Current streak"), ("repositories", "Repository breakdown"),
+                ("activeDays", "Active day count"), ("net", "Net lines"),
+                ("languages", "Repository languages"),
             ]
         case .agents:
             [

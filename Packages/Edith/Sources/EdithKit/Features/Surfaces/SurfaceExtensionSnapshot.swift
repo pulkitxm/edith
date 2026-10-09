@@ -49,17 +49,26 @@ public struct SurfaceDataRow: Equatable, Identifiable, Sendable {
     public var progress: Double?
     public var actions: [SurfaceRowAction] = []
     public var volume: SurfaceVolumeControl?
+    public var field: String?
+    public var details: [SurfaceRowDetail] = []
     public init(
         _ id: String, source: String? = nil, title: String, detail: String = "",
         value: String = "", icon: String = "circle", progress: Double? = nil,
-        actions: [SurfaceRowAction] = [], volume: SurfaceVolumeControl? = nil
+        actions: [SurfaceRowAction] = [], volume: SurfaceVolumeControl? = nil,
+        field: String? = nil, details: [SurfaceRowDetail] = []
     ) {
         self.id = id; sourceID = source ?? id; self.title = title; self.detail = detail
         self.value = value; self.icon = icon
         self.progress = progress.flatMap { $0.isFinite ? min(1, max(0, $0)) : nil }
         self.actions = actions
-        self.volume = volume
+        self.volume = volume; self.field = field; self.details = details
     }
+}
+
+public struct SurfaceRowDetail: Equatable, Sendable {
+    public let field: String
+    public let text: String
+    public init(_ field: String, _ text: String) { self.field = field; self.text = text }
 }
 
 public struct SurfaceVolumeControl: Equatable, Sendable {
@@ -275,10 +284,12 @@ struct SurfaceExtensionRequestKey: Hashable {
     let widget: String
     let sources: Set<String>?
     let content: Set<String>?
+    let days: Int
     init(_ tile: SurfaceTile) {
         widget = tile.widget.rawValue
         sources = tile.sourceIDs
         content = tile.contentKinds
+        days = tile.days
     }
 }
 struct SurfaceExtensionRefreshKey: Hashable {

@@ -1,5 +1,13 @@
 import Foundation
 
+public struct CodeStatsReportQuery: Codable, Sendable {
+    public let range: CodeStatsRange
+    public let filter: CodeStatsFilter
+    public init(_ range: CodeStatsRange, filter: CodeStatsFilter = .default) {
+        self.range = range; self.filter = filter
+    }
+}
+
 public enum CodeStatsAgentOperation {
     public static let run = "codestats.run"
     public static let status = "codestats.status"
@@ -37,9 +45,12 @@ public struct CodeStatsAgentClient: Sendable {
         try await request(CodeStatsStatus.self, CodeStatsAgentOperation.status)
     }
 
-    public func report(_ range: CodeStatsRange) async throws -> CodeStatsReport? {
+    public func report(_ range: CodeStatsRange, filter: CodeStatsFilter = .default) async throws
+        -> CodeStatsReport?
+    {
         try await request(
-            CodeStatsReport?.self, CodeStatsAgentOperation.report, AgentPayload.encode(range),
+            CodeStatsReport?.self, CodeStatsAgentOperation.report,
+            AgentPayload.encode(CodeStatsReportQuery(range, filter: filter)),
             timeout: Self.reportTimeout)
     }
 

@@ -517,90 +517,121 @@ private struct NotchHomeTab: View {
 
     private func tileContent(_ tile: SurfaceTile) -> some View {
 
-        VStack(alignment: .leading, spacing: 5) {
-            if !tile.title.isEmpty {
-                Text(tile.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(
-                    .white.opacity(0.7))
-            }
-            widget(tile)
-        }
-        .contextMenu {
-            Button("Move to first") {
-                layoutStore.update(.notch) { $0.move(tile.id, before: $0.visible.first?.id) }
-            }.disabled(tile.locked)
-            Button(tile.locked ? "Unlock layout" : "Lock layout") {
-                layoutStore.update(.notch) { layout in
-                    guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                    else { return }
-                    layout.tiles[index].locked.toggle()
+        widget(tile)
+            .contextMenu {
+                Button("Move to first") {
+                    layoutStore.update(.notch) { $0.move(tile.id, before: $0.visible.first?.id) }
+                }.disabled(tile.locked)
+                Button(tile.locked ? "Unlock layout" : "Lock layout") {
+                    layoutStore.update(.notch) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        else { return }
+                        layout.tiles[index].locked.toggle()
+                    }
+                }
+                Button("Duplicate") { layoutStore.update(.notch) { $0.duplicate(tile.id) } }
+                Button("Hide") {
+                    layoutStore.update(.notch) { layout in
+                        guard
+                            let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        else { return }
+                        layout.tiles[index].hidden = true
+                    }
+                }
+                Button("Open widget editor") {
+                    controller.collapseNow()
+                    MainApp.openSurfaceEditor(.notch, tileID: tile.id)
                 }
             }
-            Button("Duplicate") { layoutStore.update(.notch) { $0.duplicate(tile.id) } }
-            Button("Hide") {
-                layoutStore.update(.notch) { layout in
-                    guard
-                        let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
-                    else { return }
-                    layout.tiles[index].hidden = true
-                }
-            }
-            Button("Open widget editor") {
-                controller.collapseNow()
-                MainApp.openSurfaceEditor(.notch, tileID: tile.id)
-            }
-        }
     }
 
     @ViewBuilder private func widget(_ tile: SurfaceTile) -> some View {
         switch tile.widget {
         case .music:
             if let track = controller.nowPlaying {
-                NotchNowPlayingCard(controller: controller, track: track).frame(
+                NotchNowPlayingCard(controller: controller, track: track, tile: tile).frame(
                     minHeight: tile.dense ? 62 : 92)
             } else {
-                emptyMusicCard.frame(height: tile.dense ? 62 : 92)
+                emptyMusicCard(tile).frame(height: tile.dense ? 62 : 92)
             }
-        case .limits:
-            if let usage = controller.usageStore {
-                ringsCard(usage).frame(height: tile.dense ? 80 : 106)
-            } else {
-                integration(tile)
-            }
-        case .actions: quickActions
+        case .actions: quickActions(tile)
         case .calendar:
-            VStack(alignment: .leading, spacing: 8) {
-                Label(tile.displayTitle, systemImage: "calendar").font(
-                    .system(size: 12, weight: .semibold))
-                if let event = controller.calendarStore?.events.first(where: { $0.end > Date() }) {
-                    Text(event.title).font(.system(size: 12)).lineLimit(1).presenterCover(.usage)
-                    Text(event.start.formatted(.dateTime.hour().minute())).font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                    Button("Open Calendar") {
-                        controller.collapseNow()
-                        MainApp.open(section: "calendar")
-                    }
-                } else {
-                    Button("Open Calendar") {
-                        controller.collapseNow()
-                        MainApp.open(section: "calendar")
+            VStack(alignment: .leading, spacing: tile.dense ? 6 : 10) {
+                if tile.showTitle {
+                    Label(tile.displayTitle, systemImage: "calendar")
+                        .font(.edithText(.caption).weight(.semibold))
+                }
+                let events = Array(
+                    (controller.calendarStore?.events ?? []).filter { $0.end > Date() }.prefix(
+                        tile.itemLimit))
+                if events.isEmpty {
+                    Text("No upcoming meetings").font(.edithText(.caption)).foregroundStyle(
+                        .secondary)
+                }
+                ForEach(events, id: \.id) { event in
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(event.title).font(.edithText(.caption)).lineLimit(
+                                tile.dense ? 1 : 2
+                            ).presenterCover(.usage)
+                            if tile.showDetails, tile.shows("time") {
+                                Text(
+                                    event.isAllDay
+                                        ? "All day"
+                                        : event.start.formatted(.dateTime.hour().minute()) + " to "
+                                            + event.end.formatted(.dateTime.hour().minute())
+                                )
+                                .font(.edithText(.caption2)).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 4)
+                        if tile.showActions, tile.shows("join"),
+                            let url = MeetingLink.url(for: event)
+                        {
+                            Button {
+                                NSWorkspace.shared.open(url)
+                            } label: {
+                                Image(systemName: "video.fill")
+                            }.help("Join meeting")
+                        }
                     }
                 }
-            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+                if tile.showActions {
+                    Button("Open Calendar") {
+                        controller.collapseNow()
+                        MainApp.open(section: "calendar")
+                    }.font(.edithText(.caption))
+                }
+            }.padding(SurfacePresentation(tile: tile, layout: layoutStore.notch).padding).frame(
+                maxWidth: .infinity, alignment: .leading
+            )
+            .background(
+                .white.opacity(0.055),
+                in: RoundedRectangle(
+                    cornerRadius: SurfacePresentation(tile: tile, layout: layoutStore.notch)
+                        .cornerRadius))
         case .clocks:
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 VStack(alignment: .leading, spacing: 5) {
-                    Label(tile.displayTitle, systemImage: "clock").font(
-                        .system(size: 12, weight: .semibold))
-                    Text(context.date.formatted(.dateTime.hour().minute().second())).font(
-                        .system(size: 22, weight: .medium)
-                    ).monospacedDigit()
-                    if !tile.dense {
-                        Text(TimeZone.current.identifier).font(.system(size: 10)).foregroundStyle(
-                            .secondary)
+                    if tile.showTitle {
+                        Label(tile.displayTitle, systemImage: "clock").font(
+                            .edithText(.caption).weight(.semibold))
                     }
-                }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
-            }.background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+                    Text(context.date.formatted(.dateTime.hour().minute().second())).font(
+                        .edithText(.title2).weight(.medium)
+                    ).monospacedDigit()
+                    if tile.showDetails, !tile.dense {
+                        Text(TimeZone.current.identifier).font(.edithText(.caption2))
+                            .foregroundStyle(.secondary)
+                    }
+                }.padding(SurfacePresentation(tile: tile, layout: layoutStore.notch).padding).frame(
+                    maxWidth: .infinity, alignment: .leading)
+            }.background(
+                .white.opacity(0.055),
+                in: RoundedRectangle(
+                    cornerRadius: SurfacePresentation(tile: tile, layout: layoutStore.notch)
+                        .cornerRadius)
+            )
         default: integration(tile)
         }
     }
@@ -612,15 +643,16 @@ private struct NotchHomeTab: View {
         }
     }
 
-    private var quickActions: some View {
-        HStack(spacing: 8) {
+    private func quickActions(_ tile: SurfaceTile) -> some View {
+        LazyVGrid(columns: tile.metricGrid(minimum: 95, spacing: 8), spacing: 8) {
             if systemEnabled {
-                actionTile("keyboard", "Clean keys", active: false) {
+                actionTile(tile, "keyboard", "Clean keys", active: false) {
                     controller.cleanKeyboard()
                 }
             }
             if keepAwakeEnabled {
                 actionTile(
+                    tile,
                     preventSleep ? "moon.zzz.fill" : "moon.zzz", "Keep awake", active: preventSleep
                 ) {
                     try? ConfigurationExecutor.application.set(
@@ -629,7 +661,7 @@ private struct NotchHomeTab: View {
                 }
             }
             if controller.canToggleLidAwake {
-                actionTile("laptopcomputer", "Lid awake", active: lidAwakeActive) {
+                actionTile(tile, "laptopcomputer", "Lid awake", active: lidAwakeActive) {
                     if lidAwakeActive {
                         controller.performLidAwake(.off)
                     } else {
@@ -664,14 +696,14 @@ private struct NotchHomeTab: View {
                 }
             }
             if presenterEnabled {
-                actionTile("person.wave.2", "Presenter", active: presenterMode) {
+                actionTile(tile, "person.wave.2", "Presenter", active: presenterMode) {
                     _ = PresenterRuntimeOperationExecution.perform(
                         presenterMode ? .stop : .start)
                     controller.collapseNow()
                 }
             }
             if controller.canPickColor {
-                actionTile("eyedropper", "Pick color", active: false) {
+                actionTile(tile, "eyedropper", "Pick color", active: false) {
                     controller.pickColor()
                 }
             }
@@ -694,25 +726,27 @@ private struct NotchHomeTab: View {
     }
 
     private func actionTile(
-        _ icon: String, _ title: String, active: Bool, action: @escaping () -> Void
+        _ tile: SurfaceTile, _ icon: String, _ title: String, active: Bool,
+        action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 11.5, weight: .medium))
+                if tile.shows("icons") {
+                    Image(systemName: icon).font(.edithText(.caption).weight(.medium))
+                }
                 Text(title).font(.system(size: 11, weight: .medium)).lineLimit(1)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 34)
             .foregroundStyle(active ? Color.black : Color.white.opacity(0.85))
             .background(
-                active
-                    ? Color(red: 0.79, green: 0.56, blue: 0.31) : Color.white.opacity(0.055),
+                active ? tile.highlightColor : Color.white.opacity(0.055),
                 in: RoundedRectangle(cornerRadius: 10))
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
     }
 
-    private var emptyMusicCard: some View {
+    private func emptyMusicCard(_ tile: SurfaceTile) -> some View {
         VStack(spacing: 5) {
             Image(systemName: "music.note")
                 .font(.system(size: 15))
@@ -725,29 +759,26 @@ private struct NotchHomeTab: View {
         .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func ringsCard(_ usage: UsageStore) -> some View {
-        NotchUsageRings(usage: usage)
-            .frame(maxWidth: .infinity)
-            .frame(maxHeight: .infinity)
-            .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
-    }
 }
 
 private struct NotchNowPlayingCard: View {
     var controller: NotchShelfController
     let track: NotchNowPlaying
+    let tile: SurfaceTile
+    @Environment(\.surfacePresentation) private var presentation
     private var presenterState = PresenterState.shared
     @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store)
     private var presenterBlurMusic = true
 
-    init(controller: NotchShelfController, track: NotchNowPlaying) {
+    init(controller: NotchShelfController, track: NotchNowPlaying, tile: SurfaceTile) {
         self.controller = controller
         self.track = track
+        self.tile = tile
     }
 
     var body: some View {
         HStack(spacing: 11) {
-            artwork
+            if tile.shows("artwork") { artwork.disabled(!tile.showActions) }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .center, spacing: 8) {
                     Button {
@@ -758,33 +789,41 @@ private struct NotchNowPlayingCard: View {
                                 .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(.white).lineLimit(1)
                                 .presenterBlur(presenterState.active && presenterBlurMusic)
-                            Text(sourceLabel)
-                                .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.55))
-                                .lineLimit(1)
-                                .presenterBlur(presenterState.active && presenterBlurMusic)
+                            if tile.showDetails, tile.shows("artist") {
+                                Text(sourceLabel)
+                                    .font(.system(size: 10.5)).foregroundStyle(.white.opacity(0.55))
+                                    .lineLimit(1)
+                                    .presenterBlur(presenterState.active && presenterBlurMusic)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.edith(.borderless))
+                    .disabled(!tile.showActions)
                     .help(isLocal ? "Show this track in Music" : "Open the app playing this")
                     Spacer(minLength: 4)
-                    HStack(spacing: 6) {
-                        control("backward.fill", 12) { controller.nowPlayingPrevious() }
-                        control(track.isPlaying ? "pause.fill" : "play.fill", 15) {
-                            controller.nowPlayingPlayPause()
+                    if tile.showActions {
+                        HStack(spacing: 6) {
+                            control("backward.fill", 12) { controller.nowPlayingPrevious() }
+                            control(track.isPlaying ? "pause.fill" : "play.fill", 15) {
+                                controller.nowPlayingPlayPause()
+                            }
+                            control("forward.fill", 12) { controller.nowPlayingNext() }
                         }
-                        control("forward.fill", 12) { controller.nowPlayingNext() }
                     }
                 }
-                if controller.nowPlayingSeekable {
-                    NotchSeekBar(controller: controller)
+                if tile.showDetails, tile.shows("progress"), controller.nowPlayingSeekable {
+                    NotchSeekBar(controller: controller).allowsHitTesting(tile.showActions)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(10)
-        .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 12))
+        .padding(presentation?.padding ?? tile.paddingOverride ?? 10)
+        .background(
+            .white.opacity(0.055),
+            in: RoundedRectangle(
+                cornerRadius: presentation?.cornerRadius ?? tile.cornerOverride ?? 12))
     }
 
     private var isLocal: Bool {
@@ -865,160 +904,6 @@ private struct NotchSeekBar: View {
             )
         }
         .frame(height: 10)
-    }
-}
-
-struct NotchLimitRingValue: Equatable {
-    let progress: Double
-    let text: String
-
-    init(_ window: LimitWindow?) {
-        progress = window?.percent ?? 0
-        text = window.map { "\(Int($0.percent.rounded()))%" } ?? "-"
-    }
-}
-
-private struct NotchUsageRings: View {
-    var usage: UsageStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(AppStorageKeys.Limits.provider, store: SharedDefaults.store) private
-        var selectedRaw =
-        LimitProvider.claude.rawValue
-    @AppStorage(AppStorageKeys.Limits.warnPercent, store: SharedDefaults.store) private var warn =
-        LimitRing.defaultWarnPercent
-    @AppStorage(AppStorageKeys.Limits.critPercent, store: SharedDefaults.store) private var crit =
-        LimitRing.defaultCriticalPercent
-
-    private var providers: [LimitProvider] { usage.enabledProviders }
-    private var selected: LimitProvider {
-        get {
-            let saved = LimitProvider(rawValue: selectedRaw) ?? .claude
-            return providers.contains(saved) ? saved : providers.first ?? saved
-        }
-        nonmutating set {
-            try? ConfigurationExecutor.application.set(
-                .string(newValue.rawValue), forKey: AppStorageKeys.Limits.provider)
-        }
-    }
-
-    private var limits: ProviderLimits { usage.limits(for: selected) }
-
-    var body: some View {
-        HStack(spacing: 20) {
-            if selected == .cursor {
-                ring("models", limits.session)
-                ring("other", limits.week)
-            } else if selected == .grok {
-                ring(GrokPeriod.mark(limits.week?.period), limits.week)
-            } else {
-                ring("5h", limits.session)
-                ring("7d", limits.week)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .overlay(alignment: .topLeading) {
-            ProviderSwitchButton(
-                selection: Binding(get: { selected }, set: { selected = $0 }),
-                providers: providers, color: .white.opacity(0.72), size: 14
-            )
-            .padding(8)
-        }
-        .overlay(alignment: .topTrailing) { refreshButton.padding(6) }
-    }
-
-    private var refreshButton: some View {
-        Button {
-            Task { await usage.refreshLimits(force: true) }
-        } label: {
-            Group {
-                if usage.refreshingLimits {
-                    SkeletonReplica("Refreshing limits") {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.55))
-                    }
-                } else {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.55))
-                }
-            }
-            .frame(width: 18, height: 18)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.edith(.borderless))
-        .disabled(usage.refreshingLimits)
-        .help("Refresh limits now")
-    }
-
-    private func ring(_ label: String, _ window: LimitWindow?) -> some View {
-        let value = NotchLimitRingValue(window)
-        let content = VStack(spacing: 0) {
-            ZStack {
-                Circle().stroke(.white.opacity(0.12), lineWidth: 4.5)
-                Circle()
-                    .trim(from: 0, to: min(1, value.progress / 100))
-                    .stroke(
-                        color(value.progress),
-                        style: StrokeStyle(lineWidth: 4.5, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .animation(
-                        LimitRing.animation(reduceMotion: reduceMotion), value: value.progress)
-                Text(window == nil && usage.refreshingLimits ? "00%" : value.text)
-                    .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(
-                        LimitRing.animation(reduceMotion: reduceMotion),
-                        value: value.text)
-            }
-            .frame(width: 52, height: 52)
-            .presenterCover(.usage)
-            Text(label)
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.white.opacity(0.6))
-                .padding(.top, 7)
-            resetLabel(window?.resetsAt)
-                .padding(.top, 2)
-        }
-        return Group {
-            if window == nil, usage.refreshingLimits {
-                SkeletonReplica("Loading \(label) limit") {
-                    content
-                }
-            } else {
-                content
-            }
-        }
-    }
-
-    @ViewBuilder private func resetLabel(_ resetsAt: Date?) -> some View {
-        if let reset = resetsAt, reset > Date() {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                Text(countdown(from: context.date, to: reset))
-                    .font(.system(size: 9)).monospacedDigit()
-                    .foregroundStyle(.white.opacity(0.4))
-                    .lineLimit(1)
-            }
-        } else {
-            Text(" ").font(.system(size: 9))
-        }
-    }
-
-    private func countdown(from now: Date, to reset: Date) -> String {
-        let s = max(0, Int(reset.timeIntervalSince(now)))
-        let d = s / 86400
-        let h = (s % 86400) / 3600
-        let m = (s % 3600) / 60
-        let sec = s % 60
-        if d > 0 { return String(format: "%dd %d:%02d:%02d", d, h, m, sec) }
-        if h > 0 { return String(format: "%d:%02d:%02d", h, m, sec) }
-        return String(format: "%d:%02d", m, sec)
-    }
-
-    private func color(_ percent: Double) -> Color {
-        LimitRing.color(percent: percent, warn: warn, critical: crit)
     }
 }
 
