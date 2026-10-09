@@ -5,6 +5,16 @@ import Testing
 @testable import CodeStatsExtension
 
 @Suite struct CodeStatsOwnedIOTests {
+    @Test func fixtureGitEnvironmentExcludesCredentialAndUserShellState() {
+        let home = URL(fileURLWithPath: "/tmp/synthetic-home")
+        let values = CodeStatsExecutionEnvironment.fixtureGitEnvironment(home: home)
+        #expect(values["HOME"] == home.path)
+        #expect(values["GIT_CONFIG_GLOBAL"] == "/dev/null")
+        #expect(values["PATH"] == "/usr/bin:/bin:/usr/sbin:/sbin")
+        #expect(values["GITHUB_TOKEN"] == nil && values["SSH_AUTH_SOCK"] == nil)
+        #expect(values["GIT_SSH_COMMAND"] == nil && values["GIT_SSH"] == nil)
+    }
+
     @Test func rejectsTraversalAndSymlinkPublication() throws {
         let fixture = try CodeStatsGitFixture()
         defer { fixture.remove() }

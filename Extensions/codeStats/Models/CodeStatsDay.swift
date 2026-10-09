@@ -9,7 +9,8 @@ public struct CodeStatsDay: Comparable, Hashable, Sendable, Strideable {
     public init?(_ string: String) {
         let parts = string.split(separator: "-")
         guard parts.count == 3, let year = Int(parts[0]), let month = Int(parts[1]),
-            let day = Int(parts[2]), (1...12).contains(month), (1...31).contains(day)
+            let day = Int(parts[2]), (1...9999).contains(year), (1...12).contains(month),
+            (1...31).contains(day)
         else { return nil }
         self.init(year: year, month: month, day: day)
     }

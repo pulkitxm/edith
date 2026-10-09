@@ -14,17 +14,23 @@ public enum CodeStatsExecutionEnvironment {
             return await CodeStatsGit.resolve(
                 credentialHelper: CLIToolEnvironment.executable(named: "gh"))
         }
-        var environment = CLIToolEnvironment.sanitized()
-        environment["HOME"] = fixtureHome.path
-        environment["XDG_CONFIG_HOME"] = fixtureHome.appendingPathComponent(".config").path
-        environment["GIT_CONFIG_NOSYSTEM"] = "1"
-        environment["GIT_CONFIG_GLOBAL"] = "/dev/null"
-        for key in ["GH_TOKEN", "GITHUB_TOKEN", "SSH_AUTH_SOCK", "GIT_SSH_COMMAND", "GIT_SSH"] {
-            environment.removeValue(forKey: key)
+        let environment = fixtureGitEnvironment(home: fixtureHome)
+        let candidate = [
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+            "/Library/Developer/CommandLineTools/usr/bin/git",
+        ].first { FileManager.default.isExecutableFile(atPath: $0) }.map {
+            URL(fileURLWithPath: $0)
         }
         return await CodeStatsGit.resolve(
-            candidate: CLIToolEnvironment.executable(named: "git"),
-            environment: environment,
-            developerDirectory: { await CodeStatsGit.activeDeveloperDirectory() })
+            candidate: candidate, environment: environment, developerDirectory: { nil })
+    }
+
+    static func fixtureGitEnvironment(home: URL) -> [String: String] {
+        [
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home.path,
+            "XDG_CONFIG_HOME": home.appendingPathComponent(".config").path,
+            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
+            "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8",
+        ]
     }
 }

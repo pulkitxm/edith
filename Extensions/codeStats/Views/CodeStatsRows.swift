@@ -25,11 +25,11 @@ struct CodeStatsRows: View {
         Section("Tools") {
             LabeledContent(
                 "Git",
-                value: CLIToolEnvironment.executable(named: "git") == nil
+                value: !toolAvailable("git")
                     ? "Not installed" : "Installed")
             LabeledContent(
                 "GitHub CLI",
-                value: CLIToolEnvironment.executable(named: "gh") == nil
+                value: !toolAvailable("gh")
                     ? "Optional, not installed" : "Installed")
         }
 
@@ -121,6 +121,13 @@ struct CodeStatsRows: View {
         .onDisappear {
             refreshTask?.cancel(); refreshTask = nil
         }
+    }
+
+    private func toolAvailable(_ name: String) -> Bool {
+        if CodeStatsExecutionEnvironment.fixtureHome != nil {
+            return name == "git" && FileManager.default.isExecutableFile(atPath: "/usr/bin/git")
+        }
+        return CLIToolEnvironment.executable(named: name) != nil
     }
 
     private func chooseFolder() {

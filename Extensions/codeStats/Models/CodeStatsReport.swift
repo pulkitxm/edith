@@ -11,7 +11,8 @@ public enum CodeStatsRange: Codable, Hashable, Sendable {
 
     public init?(argument: String) {
         let bounds = argument.components(separatedBy: "..")
-        if bounds.count == 2, let start = CodeStatsDay(bounds[0]), let end = CodeStatsDay(bounds[1])
+        if bounds.count == 2, let start = CodeStatsDay(bounds[0]),
+            let end = CodeStatsDay(bounds[1]), abs(start.distance(to: end)) <= 36_525
         {
             self =
                 start <= end
@@ -23,7 +24,7 @@ public enum CodeStatsRange: Codable, Hashable, Sendable {
         case "all": self = .all
         default:
             guard argument.lowercased().hasSuffix("d"), let count = Int(argument.dropLast()),
-                count > 0
+                (1...36_525).contains(count)
             else { return nil }
             self = .days(count)
         }
