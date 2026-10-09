@@ -5,16 +5,19 @@ public struct SurfaceSnapshotContent: View {
     let tile: SurfaceTile
     let snapshot: SurfaceSnapshot
     let perform: (SurfaceAction) -> Void
+    let adjust: ((SurfaceSlider, Double) -> Void)?
 
     public init(
-        tile: SurfaceTile, snapshot: SurfaceSnapshot, perform: @escaping (SurfaceAction) -> Void
+        tile: SurfaceTile, snapshot: SurfaceSnapshot, perform: @escaping (SurfaceAction) -> Void,
+        adjust: ((SurfaceSlider, Double) -> Void)? = nil
     ) {
-        self.tile = tile; self.snapshot = snapshot; self.perform = perform
+        self.tile = tile; self.snapshot = snapshot; self.perform = perform; self.adjust = adjust
     }
 
     public var body: some View {
+        let visible = SurfaceCommandService.project(snapshot, tile: tile)
         VStack(alignment: .leading, spacing: UIScale.pt(tile.dense ? 8 : 12)) {
-            let metrics = snapshot.metrics.filter { tile.shows($0.id) }
+            let metrics = visible.metrics.filter { tile.shows($0.id) }
             if !metrics.isEmpty {
                 LazyVGrid(columns: tile.metricGrid(minimum: 120)) {
                     ForEach(metrics) { metric in
@@ -32,12 +35,18 @@ public struct SurfaceSnapshotContent: View {
             if tile.shows("items") {
                 ForEach(
                     Array(
-                        snapshot.rows.filter { $0.field.map(tile.shows) ?? true }.prefix(
+                        visible.rows.filter { $0.field.map(tile.shows) ?? true }.prefix(
                             tile.itemLimit))
                 ) { row in
                     VStack(alignment: .leading, spacing: UIScale.pt(5)) {
                         HStack(alignment: .top) {
-                            Image(systemName: row.icon)
+                            if let thumbnail = row.thumbnail,
+                                thumbnail.field.map(tile.shows) ?? true
+                            {
+                                SurfaceThumbnailImage(thumbnail: thumbnail, dense: tile.dense)
+                            } else {
+                                Image(systemName: row.icon)
+                            }
                             VStack(alignment: .leading, spacing: UIScale.pt(3)) {
                                 Text(row.title).lineLimit(tile.dense ? 1 : 2).accessibilityLabel(
                                     row.title)
@@ -55,19 +64,37 @@ public struct SurfaceSnapshotContent: View {
                         if let progress = row.progress, tile.shows("progress") {
                             ProgressView(value: progress)
                         }
-                        if tile.showActions { actions(row.actions) }
+                        if tile.showActions {
+                            sliders(row.sliders)
+                            actions(row.actions)
+                        }
                     }
                 }
             }
-            if let message = snapshot.message {
+            if tile.showDetails, tile.shows("chart") {
+                ForEach((visible.charts ?? []).filter { $0.field.map(tile.shows) ?? true }) {
+                    chart in
+                    SurfaceChartContent(chart: chart, tile: tile)
+                }
+            }
+            if let message = visible.message {
                 Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
             }
-            if tile.showActions { actions(snapshot.actions) }
-            if tile.showDetails, tile.shows("updated"), let updatedAt = snapshot.updatedAt {
+            if tile.showActions {
+                sliders(visible.sliders)
+                actions(visible.actions)
+            }
+            if tile.showDetails, tile.shows("updated"), let updatedAt = visible.updatedAt {
                 Text("Updated " + updatedAt.formatted(date: .omitted, time: .shortened)).font(
                     .edithText(.caption2)
                 ).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func sliders(_ values: [SurfaceSlider]?) -> some View {
+        ForEach((values ?? []).filter { $0.field.map(tile.shows) ?? true }) { slider in
+            SurfaceSliderControl(slider: slider, adjust: adjust)
         }
     }
 
