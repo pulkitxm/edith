@@ -2,7 +2,6 @@ import AVFoundation
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
-import EdithExtensionSupport
 import Foundation
 
 struct VirtualCameraRunningApplication: Equatable {
@@ -14,6 +13,7 @@ struct VirtualCameraEngineEnvironment {
     var authorization: () -> AVAuthorizationStatus
     var obsRunning: () -> Bool
     var frontmostApplication: () -> VirtualCameraRunningApplication?
+    var sources: () -> [VirtualCameraSource] = { VirtualCameraDevices.sources() }
 
     static var live: VirtualCameraEngineEnvironment {
         VirtualCameraEngineEnvironment(
@@ -61,6 +61,8 @@ final class VirtualCameraEngine {
     private var recordingFinishing = false
     private let audioMixer = MeetingAudioMixer()
     private var audioBusy = false
+    private(set) var isStopped = false
+    private var recordingShutdown: Task<Void, Never>?
 
     var streaming: Bool { streamingRoute != nil }
 
@@ -93,6 +95,7 @@ final class VirtualCameraEngine {
     }
 
     func start() {
+        guard !isStopped, stateToken == nil else { return }
         audioMixer.configure(state.audio)
         stateToken = IPC.observe(
             IPC.Name.virtualCameraStateChanged,
@@ -124,9 +127,10 @@ final class VirtualCameraEngine {
     }
 
     func shutdown() {
+        isStopped = true
         audioMixer.shutdown()
         if recordingPath != nil {
-            Task { [pipeline] in _ = try? await pipeline.stopRecording() }
+            recordingShutdown = Task { [pipeline] in _ = try? await pipeline.stopRecording() }
             recordingPath = nil
         }
         stopWork?.cancel()
@@ -140,7 +144,17 @@ final class VirtualCameraEngine {
         stopStreaming()
     }
 
+    func finishShutdown() async {
+        shutdown()
+        await recordingShutdown?.value
+        recordingShutdown = nil
+        await pipeline.stopAndDrain()
+        await audioMixer.shutdownAndWait()
+        previewBus.close()
+    }
+
     func syncSettings(_ announced: VirtualCameraState? = nil) {
+        guard !isStopped else { return }
         let next = announced ?? VirtualCameraStore.load()
         guard next != state else { return }
         let outputChanged = next.output != state.output
@@ -156,6 +170,7 @@ final class VirtualCameraEngine {
     }
 
     func perform(_ request: VirtualCameraRequest) throws -> VirtualCameraSnapshot {
+        guard !isStopped else { throw ExtensionPeerError.unavailable }
         guard request.changesState else { return snapshot() }
         if case .pause(.stopped, _) = request, recordingPath != nil {
             throw MeetingAudioLibrary.error("Stop the recording before stopping the camera.")
@@ -163,7 +178,7 @@ final class VirtualCameraEngine {
         if request == .retry { stopStreaming() }
         var next = state
         let message = try VirtualCameraRequestReducer.apply(
-            request, to: &next, sources: VirtualCameraDevices.sources())
+            request, to: &next, sources: environment.sources())
         state = next.sanitized()
         VirtualCameraStore.save(state)
         VirtualCameraStore.announceChange(from: "helper", state: state)
@@ -183,13 +198,17 @@ final class VirtualCameraEngine {
     }
 
     func performRecording(_ request: VirtualCameraRequest) async throws -> VirtualCameraSnapshot {
+        guard !isStopped else { throw ExtensionPeerError.unavailable }
         if case .audio(let request) = request {
             guard !audioBusy else {
                 throw MeetingAudioLibrary.error("An audio change is still in progress.")
             }
             audioBusy = true
             defer { audioBusy = false }
-            state.audio = try await audioMixer.perform(request, state: state.audio)
+            let updated = try await audioMixer.perform(request, state: state.audio)
+            guard !isStopped else { throw ExtensionPeerError.unavailable }
+            try Task.checkCancellation()
+            state.audio = updated
             VirtualCameraStore.save(state)
             VirtualCameraStore.announceChange(from: "helper", state: state)
             publishIfChanged()
@@ -239,7 +258,7 @@ final class VirtualCameraEngine {
 
     func snapshot(message: String? = nil) -> VirtualCameraSnapshot {
         let statistics = pipeline.statistics
-        let sources = VirtualCameraDevices.sources()
+        let sources = environment.sources()
         let fallbackSource = sources.first { $0.id == state.sourceID } ?? sources.first
         var result = VirtualCameraSnapshot(
             enabled: true, helperRunning: true, extensionInstalled: edithInstalled,
@@ -299,6 +318,7 @@ final class VirtualCameraEngine {
     }
 
     func refreshExtension() {
+        guard !isStopped else { return }
         edithInstalled = edithSink.isInstalled
         obsInstalled = obsSink.isInstalled
         extensionStatus = edithInstalled ? edithSink.status() : nil

@@ -485,6 +485,16 @@ public final class MeetingAudioMixer: @unchecked Sendable {
 
     public func shutdown() { queue.async { [weak self] in self?.stop() } }
 
+    public func shutdownAndWait() async {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                stop()
+                lock.withLock { mixedOutput = nil }
+                continuation.resume()
+            }
+        }
+    }
+
     private func stop() {
         lock.withLock {
             generation += 1

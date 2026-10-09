@@ -9,6 +9,7 @@ final class VirtualCameraActionBridge {
         "Virtual Camera is off. Turn it on with ed camera on or in Edith's Extensions."
 
     private var token: NSObjectProtocol?
+    private var requests: [UUID: Task<Void, Never>] = [:]
 
     func install(engine: VirtualCameraEngine) {
         guard token == nil else { return }
@@ -19,6 +20,15 @@ final class VirtualCameraActionBridge {
                     self?.receive(info, engine: engine)
                 }
             })
+    }
+
+    func shutdown() async {
+        if let token { IPC.stopObserving(token) }
+        token = nil
+        let pending = requests.values
+        requests.removeAll()
+        for request in pending { request.cancel() }
+        for request in pending { await request.value }
     }
 
     static func reply(
@@ -58,9 +68,13 @@ final class VirtualCameraActionBridge {
         {
             switch runtime.request {
             case .recordStart, .recordStop, .screenSources, .audio:
-                Task { @MainActor in
+                guard requests.count < 8 else { return }
+                let token = UUID()
+                requests[token] = Task { @MainActor [weak self] in
+                    defer { self?.requests.removeValue(forKey: token) }
                     do {
                         let snapshot = try await engine.performRecording(runtime.request)
+                        try Task.checkCancellation()
                         IPC.post(
                             IPC.Name.virtualCameraActionResult,
                             userInfo: snapshot.resultPayload(requestID: runtime.requestID))

@@ -48,6 +48,7 @@ public final class VirtualCameraScreenCapture: NSObject, SCStreamOutput, SCStrea
     private var generation = 0
     private var frameHandler: ((CVPixelBuffer) -> Void)?
     private var audioHandler: ((CMSampleBuffer) -> Void)?
+    private var tasks: [UUID: Task<Void, Never>] = [:]
     private var failureHandler: ((String) -> Void)?
 
     public init(queue: DispatchQueue) { self.queue = queue }
@@ -57,14 +58,14 @@ public final class VirtualCameraScreenCapture: NSObject, SCStreamOutput, SCStrea
         audio: ((CMSampleBuffer) -> Void)? = nil,
         failed: @escaping (String) -> Void, frame: @escaping (CVPixelBuffer) -> Void
     ) {
-        guard configuration != media else { return }
+        guard configuration != media, tasks.count < 8 else { return }
         stop()
         configuration = media
         frameHandler = frame
         audioHandler = audio
         failureHandler = failed
         let generation = generation
-        Task {
+        track { [self] in
             do {
                 let content = try await VirtualCameraScreenCatalog.content()
                 let filter: SCContentFilter
@@ -140,7 +141,7 @@ public final class VirtualCameraScreenCapture: NSObject, SCStreamOutput, SCStrea
                 queue.async { [weak self] in
                     guard let self else { return }
                     if self.generation != generation {
-                        Task {
+                        self.track {
                             try? await stream.stopCapture(); try? await audioStream?.stopCapture()
                         }
                     }
@@ -157,13 +158,38 @@ public final class VirtualCameraScreenCapture: NSObject, SCStreamOutput, SCStrea
 
     public func stop() {
         generation += 1
-        if let stream { Task { try? await stream.stopCapture() } }
-        if let audioStream { Task { try? await audioStream.stopCapture() } }
+        if let stream { track { try? await stream.stopCapture() } }
+        if let audioStream { track { try? await audioStream.stopCapture() } }
         stream = nil
         audioStream = nil
         configuration = nil
         frameHandler = nil
         audioHandler = nil
+    }
+
+    private func track(_ operation: @escaping () async -> Void) {
+        let token = UUID()
+        tasks[token] = Task { [weak self] in
+            await operation()
+            self?.queue.async { [weak self] in self?.tasks.removeValue(forKey: token) }
+        }
+    }
+
+    public func shutdown() async {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                stop()
+                for task in tasks.values { task.cancel() }
+                continuation.resume()
+            }
+        }
+        while true {
+            let pending = await withCheckedContinuation { continuation in
+                queue.async { [self] in continuation.resume(returning: Array(tasks.values)) }
+            }
+            if pending.isEmpty { return }
+            for task in pending { await task.value }
+        }
     }
 
     public func stream(

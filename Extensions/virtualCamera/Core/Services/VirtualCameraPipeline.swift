@@ -176,6 +176,15 @@ public final class VirtualCameraPipeline: @unchecked Sendable {
         }
     }
 
+    public func stopAndDrain() async {
+        stop()
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume() }
+        }
+        await screen.shutdown()
+        await capture.shutdown()
+    }
+
     public func update(state next: VirtualCameraState) {
         queue.async { [weak self] in self?.apply(next.sanitized()) }
     }

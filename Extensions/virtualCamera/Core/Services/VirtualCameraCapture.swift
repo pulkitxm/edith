@@ -108,6 +108,13 @@ public final class VirtualCameraCapture: NSObject, AVCaptureVideoDataOutputSampl
         }
     }
 
+    public func shutdown() async {
+        stop()
+        await withCheckedContinuation { continuation in
+            sessionQueue.async { continuation.resume() }
+        }
+    }
+
     private func deviceDisconnected(_ id: String) {
         sessionQueue.async { [weak self] in
             guard let self, self.input?.device.uniqueID == id,

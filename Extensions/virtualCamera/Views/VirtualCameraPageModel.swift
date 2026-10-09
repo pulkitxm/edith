@@ -301,6 +301,15 @@ final class VirtualCameraPageModel: ObservableObject {
         stopPreview()
     }
 
+    func shutdown() async {
+        attachments = 1
+        if visible { disappear() }
+        flushSave()
+        await pipeline?.stopAndDrain()
+        previewBus.close()
+        display.onAvailabilityChanged = nil
+    }
+
     private func tick() {
         ticks += 1
         if ticks % Self.statusRefreshTicks == 0 || (!helperReachable && !statusPending) {
