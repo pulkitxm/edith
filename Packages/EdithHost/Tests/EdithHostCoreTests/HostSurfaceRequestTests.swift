@@ -134,8 +134,8 @@ import Testing
         #expect(await gate.started == 1)
     }
 
-    private func fixture(_ versions: Versions, _ gate: Gate) -> HostSurfaceRequests {
-        HostSurfaceRequests(activeVersions: { versions.value }) { id, _, _ in
+    private func fixture(_ versions: Versions, _ gate: Gate) -> SurfaceSnapshotClient {
+        SurfaceSnapshotClient(activeVersions: { versions.value }) { id, _, _ in
             try await gate.read(providerID: id)
         }
     }

@@ -6,7 +6,8 @@ public final class HostSurfaces {
     public let preferences: UserDefaults
     public let layouts: SurfaceLayoutStore
     public let context: SurfaceHostContext
-    public let requests: HostSurfaceRequests
+    public let requests: SurfaceSnapshotClient
+    public let privacy: SurfacePrivacyState
 
     public init(identity: HostIdentity, entries: [HostExtension], sessions: HostExtensionSessions)
         throws
@@ -19,6 +20,7 @@ public final class HostSurfaces {
             root: identity.root.appendingPathComponent("ExtensionState"),
             namespace: identity.identifier, owner: "host")
         context = SurfaceHostContext(defaults: defaults, sharedState: channel)
+        privacy = SurfacePrivacyState(channel: channel)
         let known = Set(entries.map(\.id))
         let activeVersions: @MainActor () -> [String: String] = { [weak sessions] in
             guard let sessions else { return [:] }
@@ -26,7 +28,8 @@ public final class HostSurfaces {
                 known.contains($0.key) && sessions.states[$0.key] == .active
             }
         }
-        let requests = HostSurfaceRequests(activeVersions: activeVersions) { id, command, payload in
+        let requests = SurfaceSnapshotClient(activeVersions: activeVersions) {
+            id, command, payload in
             let endpoint = try ExtensionPeerEndpoint(
                 namespace: identity.identifier, owner: id,
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
@@ -34,10 +37,13 @@ public final class HostSurfaces {
         }
         self.requests = requests
         let publish: @MainActor () -> Void = {
-            guard let data = try? JSONEncoder().encode(activeVersions().keys.sorted())
+            let versions = activeVersions()
+            guard let data = try? JSONEncoder().encode(versions.keys.sorted()),
+                let encodedVersions = try? JSONEncoder().encode(versions)
             else { return }
             try? channel.publish([
                 "surface.activeIDs": String(decoding: data, as: UTF8.self),
+                "surface.activeVersions": String(decoding: encodedVersions, as: UTF8.self),
                 "surface.revision": UUID().uuidString,
             ])
         }

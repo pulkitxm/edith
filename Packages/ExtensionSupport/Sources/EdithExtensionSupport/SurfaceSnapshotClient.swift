@@ -1,20 +1,29 @@
-import EdithExtensionSupport
 import Foundation
+import Observation
 
 @MainActor
-public final class HostSurfaceRequests {
+@Observable
+public final class SurfaceSnapshotClient {
     public typealias Execute = @Sendable (String, String, Data) async throws -> Data
-    private struct Job {
+    private struct Job: Sendable {
         let providerID: String
         let version: String
         let target: SurfaceTarget
         let task: Task<Data, Error>
     }
 
-    private let activeVersions: @MainActor () -> [String: String]
-    private let execute: Execute
-    private var jobs: [UUID: Job] = [:]
+    @ObservationIgnored private let activeVersions: @MainActor () -> [String: String]
+    @ObservationIgnored private let execute: Execute
+    @ObservationIgnored private var jobs: [UUID: Job] = [:]
+    @ObservationIgnored private nonisolated(unsafe) var stopObserving: (() -> Void)?
+    @ObservationIgnored private var stopped = false
+    public private(set) var versions: [String: String]
     public var pendingCount: Int { jobs.count }
+
+    deinit {
+        stopObserving?()
+        for job in jobs.values { job.task.cancel() }
+    }
 
     public init(
         activeVersions: @escaping @MainActor () -> [String: String],
@@ -22,6 +31,28 @@ public final class HostSurfaceRequests {
     ) {
         self.activeVersions = activeVersions
         self.execute = execute
+        versions = activeVersions()
+    }
+
+    public convenience init(context: SurfaceHostContext) {
+        let channel = context.sharedState
+        self.init(activeVersions: { context.activeVersions }) { id, command, payload in
+            let endpoint = try ExtensionPeerEndpoint(
+                namespace: channel.namespace, owner: id,
+                directory: channel.root.appendingPathComponent("Commands"))
+            return try await endpoint.invoke(command, payload: payload, timeout: 5)
+        }
+        let observer = channel.observe { [weak self] owner in
+            guard owner == "host" else { return }
+            MainActor.assumeIsolated { self?.retain(activeVersions: context.activeVersions) }
+        }
+        stopObserving = { channel.stopObserving(observer) }
+    }
+
+    public func shutdown() {
+        stopped = true
+        stopObserving?(); stopObserving = nil
+        retain(activeVersions: [:])
     }
 
     public func snapshot(providerID: String, target: SurfaceTarget, tile: SurfaceTile) async throws
@@ -52,9 +83,11 @@ public final class HostSurfaceRequests {
     }
 
     public func retain(activeVersions: [String: String]) {
+        let retainedVersions = stopped ? [:] : activeVersions
+        versions = retainedVersions
         for (token, job) in jobs
-        where activeVersions[job.providerID] != job.version
-            || (job.target == .notch && activeVersions["notchShelf"] == nil)
+        where retainedVersions[job.providerID] != job.version
+            || (job.target == .notch && retainedVersions["notchShelf"] == nil)
         {
             jobs[token] = nil
             job.task.cancel()
@@ -64,6 +97,7 @@ public final class HostSurfaceRequests {
     private func invoke(providerID: String, target: SurfaceTarget, command: String, payload: Data)
         async throws -> Data
     {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
         let active = activeVersions()
         guard let version = active[providerID], target != .notch || active["notchShelf"] != nil
         else {
