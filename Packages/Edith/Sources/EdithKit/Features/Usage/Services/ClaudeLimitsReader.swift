@@ -14,13 +14,13 @@ public enum ClaudeLimitsReader {
         public var errorDescription: String? {
             switch self {
             case .missingToken:
-                "Export CLAUDE_CODE_OAUTH_TOKEN in your login shell to read Claude limits."
+                "Sign in with Claude Code or export a profile-scoped CLAUDE_CODE_OAUTH_TOKEN to read limits."
             case .invalidToken:
                 "CLAUDE_CODE_OAUTH_TOKEN is not a valid OAuth token value."
             case .unauthorized:
-                "The Claude OAuth token expired or was rejected. Update CLAUDE_CODE_OAUTH_TOKEN."
+                "The Claude login expired or was rejected. Sign in again with Claude Code or update CLAUDE_CODE_OAUTH_TOKEN."
             case .missingProfileScope:
-                "The Claude OAuth token needs user:profile scope to read usage limits."
+                "Sign in with Claude Code to read limits. The current OAuth token lacks user:profile scope."
             case .forbidden:
                 "The Claude OAuth token is not permitted to read usage limits."
             case .unavailable: "Claude did not return usage limits."
@@ -42,12 +42,20 @@ public enum ClaudeLimitsReader {
     }()
 
     public static func fetch() async throws -> LimitsProviderSnapshot {
-        let token = try await resolveToken()
+        let token = try await resolveUsageToken(
+            savedLogin: { ClaudeSavedLogin.token() }, shellToken: { try await resolveToken() })
         return try await fetch(token: token) { request in
             let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
             return (data, response)
         }
+    }
+
+    static func resolveUsageToken(
+        savedLogin: () -> String?, shellToken: () async throws -> String
+    ) async throws -> String {
+        if let token = savedLogin() { return try validatedToken(token) }
+        return try await shellToken()
     }
 
     static func resolveToken(
@@ -64,7 +72,12 @@ public enum ClaudeLimitsReader {
         } else {
             value = await shell()?["CLAUDE_CODE_OAUTH_TOKEN"]
         }
-        guard let value, !value.isEmpty else { throw Failure.missingToken }
+        guard let value else { throw Failure.missingToken }
+        return try validatedToken(value)
+    }
+
+    static func validatedToken(_ value: String) throws -> String {
+        guard !value.isEmpty else { throw Failure.missingToken }
         guard value.utf8.count <= 8192,
             value.unicodeScalars.allSatisfy({ 0x21...0x7E ~= $0.value })
         else { throw Failure.invalidToken }
