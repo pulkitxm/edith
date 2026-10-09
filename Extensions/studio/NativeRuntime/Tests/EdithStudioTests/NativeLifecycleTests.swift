@@ -50,6 +50,27 @@ import Testing
         #expect(Date().timeIntervalSince(started) < 5)
     }
 
+    @Test func timedOutProcessIgnoringTerminationIsStillReaped() async throws {
+        let space = try Workspace()
+        defer { try? FileManager.default.removeItem(at: space.root) }
+        let marker = space.url("stubborn-pid")
+        await #expect(throws: StudioError.self) {
+            try await StudioProcess.run(
+                URL(fileURLWithPath: "/bin/sh"),
+                [
+                    "-c", "trap '' TERM; printf '%s' \"$$\" > \"$1\"; while :; do :; done",
+                    "studio-test", marker.path,
+                ], timeout: 0.1)
+        }
+        let pid = try #require(Int32(String(contentsOf: marker, encoding: .utf8)))
+        defer { if kill(pid, 0) == 0 { kill(pid, SIGKILL) } }
+        for _ in 0..<300 where kill(pid, 0) == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(kill(pid, 0) == -1)
+        #expect(errno == ESRCH)
+    }
+
     @Test func capturedOutputRespectsItsBudget() async throws {
         let result = try await StudioProcess.run(
             URL(fileURLWithPath: "/usr/bin/printf"),

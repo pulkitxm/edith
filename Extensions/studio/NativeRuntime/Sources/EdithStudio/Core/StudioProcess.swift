@@ -46,8 +46,8 @@ public enum StudioProcess {
         }
         let lifecycle = StudioProcessLifecycle(process: process)
         let exit = StudioProcessExit()
-        process.terminationHandler = { finished in
-            lifecycle.finish()
+        process.terminationHandler = { [weak lifecycle] finished in
+            lifecycle?.finish()
             exit.finish(finished.terminationStatus)
         }
         return try await withTaskCancellationHandler {
@@ -111,8 +111,7 @@ private final class StudioProcessLifecycle: @unchecked Sendable {
         guard process.isRunning, escalation == nil else { return }
         let pid = process.processIdentifier
         kill(pid, SIGTERM)
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
+        let work = DispatchWorkItem { [self] in
             self.lock.lock()
             defer { self.lock.unlock() }
             if self.process.isRunning { kill(pid, SIGKILL) }

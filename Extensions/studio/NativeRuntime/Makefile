@@ -1,4 +1,6 @@
 DEVELOPER_DIR ?= /Applications/Xcode.app/Contents/Developer
+export DEVELOPER_DIR
+export SDKROOT := $(shell DEVELOPER_DIR="$(DEVELOPER_DIR)" xcrun --sdk macosx --show-sdk-path)
 EXTENSION_SWIFT_JOBS ?= 1
 
 .PHONY: ci-native-studio native-studio
