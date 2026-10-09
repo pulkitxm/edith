@@ -13,6 +13,7 @@ final class HostWorkerApplication {
     private var configuration: HostWorkerConfiguration?
     private var window: NSWindow?
     private var parentWatcher: DispatchSourceProcess?
+    private var windowObserver: NSObjectProtocol?
     private var stopping = false
 
     init() throws {
@@ -25,6 +26,11 @@ final class HostWorkerApplication {
 
     func run() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        windowObserver = NotificationCenter.default.addObserver(
+            forName: ExtensionPresentation.showWindowNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { try? self?.showWindow() }
+        }
         let watcher = DispatchSource.makeProcessSource(
             identifier: getppid(), eventMask: .exit, queue: .main)
         watcher.setEventHandler { [weak self] in
@@ -115,35 +121,7 @@ final class HostWorkerApplication {
         }
         guard let configuration else { throw HostWorkerError.rejected }
         switch request.operation {
-        case "show":
-            if let window {
-                window.makeKeyAndOrderFront(nil);
-                NSApplication.shared.activate(ignoringOtherApps: true); return
-            }
-            let identity = try configuration.identity()
-            let context: NSDictionary = [
-                "defaultsSuite": identity.extensionDefaultsSuite(configuration.extensionID),
-                "dataDirectory": identity.extensionDirectory(configuration.extensionID).path,
-            ]
-            for runtime in runtimes {
-                if let controller = try runtime.viewController(
-                    id: configuration.extensionID, context: context)
-                {
-                    let window = NSWindow(contentViewController: controller)
-                    window.title =
-                        try HostIndex.bundled().first { $0.id == configuration.extensionID }?.title
-                        ?? "Edith"
-                    window.setContentSize(NSSize(width: 900, height: 650))
-                    window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-                    window.isReleasedWhenClosed = false
-                    window.center()
-                    self.window = window
-                    window.makeKeyAndOrderFront(nil)
-                    NSApplication.shared.activate(ignoringOtherApps: true)
-                    return
-                }
-            }
-            throw HostWorkerError.rejected
+        case "show": try showWindow()
         case "synchronize":
             if let next = request.configuration {
                 guard next.identifier == configuration.identifier,
@@ -168,12 +146,46 @@ final class HostWorkerApplication {
         }
     }
 
+    private func showWindow() throws {
+        guard !stopping, let configuration else { throw HostWorkerError.rejected }
+        if let window {
+            window.makeKeyAndOrderFront(nil);
+            NSApplication.shared.activate(ignoringOtherApps: true); return
+        }
+        let identity = try configuration.identity()
+        let context: NSDictionary = [
+            "defaultsSuite": identity.extensionDefaultsSuite(configuration.extensionID),
+            "dataDirectory": identity.extensionDirectory(configuration.extensionID).path,
+        ]
+        for runtime in runtimes {
+            if let controller = try runtime.viewController(
+                id: configuration.extensionID, context: context)
+            {
+                let window = NSWindow(contentViewController: controller)
+                window.title =
+                    try HostIndex.bundled().first { $0.id == configuration.extensionID }?.title
+                    ?? "Edith"
+                window.setContentSize(NSSize(width: 900, height: 650))
+                window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+                window.isReleasedWhenClosed = false
+                window.center()
+                self.window = window
+                window.makeKeyAndOrderFront(nil)
+                NSApplication.shared.activate(ignoringOtherApps: true)
+                return
+            }
+        }
+        throw HostWorkerError.rejected
+    }
+
     private func shutdown() {
         guard !stopping else { return }
         stopping = true
         FileHandle.standardInput.readabilityHandler = nil
         parentWatcher?.cancel()
         parentWatcher = nil
+        if let windowObserver { NotificationCenter.default.removeObserver(windowObserver) }
+        windowObserver = nil
         for runtime in runtimes { try? runtime.stopAll() }
         window?.close()
         try? control.close()

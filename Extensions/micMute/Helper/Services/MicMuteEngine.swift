@@ -1,6 +1,7 @@
 import AppKit
 import CoreAudio
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import Observation
 import SwiftUI
 
@@ -9,8 +10,10 @@ import SwiftUI
 final class MicMuteEngine: NSObject, FeatureModule {
     private(set) var muted = false
 
+    private var stopped = false
     private let panel = StatusItemPanel()
-    private var savedVolumes: [AudioDeviceID: [UInt32: Float]] = [:]
+    private let muting = MicrophoneMuteSession(access: CoreAudioMicrophones.access)
+    private(set) var error: String?
     private var deviceListListener: AudioObjectPropertyListenerBlock?
     private var statusItem: NSStatusItem?
 
@@ -23,9 +26,11 @@ final class MicMuteEngine: NSObject, FeatureModule {
     }
 
     func shutdown() {
+        guard !stopped else { return }
+        stopped = true
         panel.close()
         HotKeyRegistrar.clear(HotKeyCatalog.micMute)
-        if muted { apply(false) }
+        apply(false)
         if let listener = deviceListListener {
             var address = Self.deviceListAddress
             AudioObjectRemovePropertyListenerBlock(
@@ -38,13 +43,15 @@ final class MicMuteEngine: NSObject, FeatureModule {
 
     func toggle() { setMuted(!muted) }
 
+    func retry() { if !stopped { apply(muted) } }
+
     func syncSettings() {
         HotKeyRegistrar.install(HotKeyCatalog.micMute) { [weak self] in self?.toggle() }
         updateStatusItemPresence()
     }
 
     func setMuted(_ on: Bool) {
-        guard on != muted else { return }
+        guard !stopped, on != muted else { return }
         muted = on
         SharedDefaults.store.set(on, forKey: "micMuted")
         apply(on)
@@ -76,7 +83,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
                     .init(title: muted ? "Unmute microphone" : "Mute microphone") { [weak self] in
                         self?.toggle()
                     },
-                    .init(title: "Open Edith…") { MainApp.openDashboard() },
+                    .init(title: "Open Edith…") { ExtensionPresentation.showWindow() },
                 ]
             ) {
                 Label(
@@ -94,9 +101,8 @@ final class MicMuteEngine: NSObject, FeatureModule {
     }
 
     private func apply(_ on: Bool) {
-        for device in Self.inputDevices() {
-            Self.applyMute(on, to: device, saved: &savedVolumes)
-        }
+        error =
+            muting.setMuted(on) ? nil : "Some microphone controls could not be changed. Try again."
     }
 
     private static let deviceListAddress = AudioObjectPropertyAddress(
@@ -108,7 +114,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
         var address = Self.deviceListAddress
         let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             Task { @MainActor in
-                guard let self, self.muted else { return }
+                guard let self, !self.stopped, self.muted else { return }
                 self.apply(true)
             }
         }
@@ -117,84 +123,4 @@ final class MicMuteEngine: NSObject, FeatureModule {
             AudioObjectID(kAudioObjectSystemObject), &address, DispatchQueue.main, block)
     }
 
-    static func inputDevices() -> [AudioDeviceID] {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDevices,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard
-            AudioObjectGetPropertyDataSize(
-                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr
-        else { return [] }
-        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
-        var ids = [AudioDeviceID](repeating: 0, count: count)
-        guard
-            AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr
-        else { return [] }
-        return ids.filter { hasInputStreams($0) }
-    }
-
-    private static func hasInputStreams(_ device: AudioDeviceID) -> Bool {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreams,
-            mScope: kAudioObjectPropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr else {
-            return false
-        }
-        return size > 0
-    }
-
-    private static func applyMute(
-        _ on: Bool, to device: AudioDeviceID, saved: inout [AudioDeviceID: [UInt32: Float]]
-    ) {
-        for element in [kAudioObjectPropertyElementMain, 1, 2] {
-            var mute = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyMute,
-                mScope: kAudioObjectPropertyScopeInput, mElement: element)
-            if AudioObjectHasProperty(device, &mute) {
-                var settable: DarwinBoolean = false
-                if AudioObjectIsPropertySettable(device, &mute, &settable) == noErr,
-                    settable.boolValue
-                {
-                    var value: UInt32 = on ? 1 : 0
-                    AudioObjectSetPropertyData(
-                        device, &mute, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value)
-                    return
-                }
-            }
-        }
-        applyVolumeFallback(on, to: device, saved: &saved)
-    }
-
-    private static func applyVolumeFallback(
-        _ on: Bool, to device: AudioDeviceID, saved: inout [AudioDeviceID: [UInt32: Float]]
-    ) {
-        for element in [kAudioObjectPropertyElementMain, 1, 2] {
-            var volume = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyVolumeScalar,
-                mScope: kAudioObjectPropertyScopeInput, mElement: element)
-            var settable: DarwinBoolean = false
-            guard AudioObjectHasProperty(device, &volume),
-                AudioObjectIsPropertySettable(device, &volume, &settable) == noErr,
-                settable.boolValue
-            else { continue }
-            if on {
-                var current: Float = 0
-                var size = UInt32(MemoryLayout<Float>.size)
-                if AudioObjectGetPropertyData(device, &volume, 0, nil, &size, &current) == noErr {
-                    saved[device, default: [:]][element] = current
-                }
-                var zero: Float = 0
-                AudioObjectSetPropertyData(
-                    device, &volume, 0, nil, UInt32(MemoryLayout<Float>.size), &zero)
-            } else if var restore = saved[device]?[element] {
-                AudioObjectSetPropertyData(
-                    device, &volume, 0, nil, UInt32(MemoryLayout<Float>.size), &restore)
-            }
-        }
-    }
 }
