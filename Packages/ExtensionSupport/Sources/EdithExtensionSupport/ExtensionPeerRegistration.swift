@@ -7,7 +7,7 @@ struct ExtensionPeerRegistration: Codable {
     let physicalName: String
     let process: ExtensionProcessIdentity
 
-    static func read(at url: URL, logicalName: String) -> Self? {
+    static func read(at url: URL, logicalName: String, requiresLiveProcess: Bool = true) -> Self? {
         let descriptor = open(url.path, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
         guard descriptor >= 0 else { return nil }
         var attributes = stat()
@@ -24,7 +24,7 @@ struct ExtensionPeerRegistration: Codable {
             registration.physicalName.utf8.allSatisfy({
                 (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
                     || [45, 46].contains($0)
-            }), registration.process.isAlive
+            }), !requiresLiveProcess || registration.process.isAlive
         else { return nil }
         return registration
     }
@@ -56,6 +56,18 @@ final class ExtensionPeerRegistrationLease {
         guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
             close(descriptor)
             throw ExtensionPeerError.unavailable
+        }
+        if let previous = ExtensionPeerRegistration.read(
+            at: file, logicalName: endpoint.name, requiresLiveProcess: false),
+            !previous.process.isAlive
+        {
+            let path = ExtensionPeerSocket.path(previous.physicalName)
+            var attributes = stat()
+            if lstat(path, &attributes) == 0, attributes.st_mode & S_IFMT == S_IFSOCK,
+                attributes.st_uid == getuid()
+            {
+                unlink(path)
+            }
         }
     }
 

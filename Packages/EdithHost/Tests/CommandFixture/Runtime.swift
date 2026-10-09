@@ -13,6 +13,7 @@ final class CommandFixtureRuntime: NSObject {
         commands.invoke(request, completion: completion) { command, payload in
             switch command {
             case "echo": return payload
+            case "blockUI": return Self.blockUI()
             case "wait":
                 let marker = ExtensionData.root.appendingPathComponent("peer.ready")
                 try Data("ready".utf8).write(to: marker, options: .atomic)
@@ -22,6 +23,14 @@ final class CommandFixtureRuntime: NSObject {
             default: throw ExtensionPeerError.rejected("Unknown fixture command.")
             }
         }
+    }
+
+    private static func blockUI() -> Data {
+        let marker = ExtensionData.root.appendingPathComponent("ui-block.ready")
+        try? Data("busy".utf8).write(to: marker, options: .atomic)
+        Thread.sleep(forTimeInterval: 1.5)
+        try? FileManager.default.removeItem(at: marker)
+        return Data("ready".utf8)
     }
 
     @objc(prepareToStopWithCompletion:)
