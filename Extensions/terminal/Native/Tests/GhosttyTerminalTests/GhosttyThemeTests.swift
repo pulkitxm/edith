@@ -87,4 +87,12 @@ import Testing
         two.background = "#111111"
         #expect(one != two)
     }
+    @Test func explicitScrollbackKeepsAtLeastTenThousandLines() {
+        var theme = GhosttyTheme(background: "#000000", foreground: "#ffffff", cursor: "#ffffff")
+        #expect(!theme.configuration.contains("scrollback-limit-lines"))
+        theme.scrollbackLimitLines = 25_000
+        #expect(theme.configuration.contains("scrollback-limit-lines = 25000"))
+        theme.scrollbackLimitLines = 0
+        #expect(theme.configuration.contains("scrollback-limit-lines = 10000"))
+    }
 }

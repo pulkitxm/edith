@@ -11,12 +11,13 @@ public struct GhosttyTheme: Equatable, Sendable {
     public var palette: [String]
     public var fontSize: Double?
     public var fontFamily: String?
+    public var scrollbackLimitLines: Int?
 
     public init(
         background: String, foreground: String, cursor: String,
         selectionBackground: String? = nil, selectionForeground: String? = nil,
         palette: [String] = [],
-        fontSize: Double? = nil, fontFamily: String? = nil
+        fontSize: Double? = nil, fontFamily: String? = nil, scrollbackLimitLines: Int? = nil
     ) {
         self.background = background
         self.foreground = foreground
@@ -26,13 +27,14 @@ public struct GhosttyTheme: Equatable, Sendable {
         self.palette = palette
         self.fontSize = fontSize
         self.fontFamily = fontFamily
+        self.scrollbackLimitLines = scrollbackLimitLines
     }
 
     public init(
         background: NSColor, foreground: NSColor, cursor: NSColor,
         selectionBackground: NSColor? = nil, selectionForeground: NSColor? = nil,
         palette: [NSColor] = [],
-        fontSize: Double? = nil, fontFamily: String? = nil
+        fontSize: Double? = nil, fontFamily: String? = nil, scrollbackLimitLines: Int? = nil
     ) {
         self.init(
             background: Self.hex(background), foreground: Self.hex(foreground),
@@ -40,7 +42,7 @@ public struct GhosttyTheme: Equatable, Sendable {
             selectionBackground: selectionBackground.map(Self.hex),
             selectionForeground: selectionForeground.map(Self.hex),
             palette: palette.map(Self.hex),
-            fontSize: fontSize, fontFamily: fontFamily)
+            fontSize: fontSize, fontFamily: fontFamily, scrollbackLimitLines: scrollbackLimitLines)
     }
 
     public static func hex(_ color: NSColor) -> String {
@@ -83,6 +85,9 @@ public struct GhosttyTheme: Equatable, Sendable {
         }
         if let fontFamily, !fontFamily.isEmpty {
             lines.append("font-family = \(fontFamily)")
+        }
+        if let scrollbackLimitLines {
+            lines.append("scrollback-limit-lines = \(max(10_000, scrollbackLimitLines))")
         }
         return lines.joined(separator: "\n") + "\n"
     }
