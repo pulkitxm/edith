@@ -72,6 +72,9 @@ public struct SurfaceSnapshotContent: View {
                 }
             }
             if tile.showDetails, tile.shows("chart") {
+                ForEach(visible.calendars ?? []) { calendar in
+                    SurfaceCalendarContent(calendar: calendar, tile: tile, perform: perform)
+                }
                 ForEach((visible.charts ?? []).filter { $0.field.map(tile.shows) ?? true }) {
                     chart in
                     SurfaceChartContent(chart: chart, tile: tile)

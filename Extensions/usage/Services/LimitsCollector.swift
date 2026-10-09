@@ -76,7 +76,10 @@ public enum LimitsCollector {
         refreshSession: LimitsRefreshSession = .shared,
         announce: @Sendable (Notification.Name) -> Void = { UsageEvents.post($0) }
     ) async -> LimitsTopicSnapshot {
-        await collect(
+        if UsageExecutionEnvironment.fixtureHome != nil {
+            return LimitsTopicSnapshot(refreshedAt: Date(), providers: [], failure: nil)
+        }
+        return await collect(
             providers: enabledProviders(defaults: defaults), force: force,
             refreshSession: refreshSession, announce: announce
         ) { provider in

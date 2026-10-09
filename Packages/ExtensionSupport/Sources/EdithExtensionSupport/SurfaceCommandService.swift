@@ -31,7 +31,7 @@ public enum SurfaceCommandService {
                 else { throw ExtensionPeerError.invalidRequest }
             } else {
                 guard
-                    (current.actions + current.rows.flatMap(\.actions)).contains(where: {
+                    current.controlActions.contains(where: {
                         $0.id == action.actionID
                     })
                 else { throw ExtensionPeerError.invalidRequest }
@@ -69,6 +69,20 @@ public enum SurfaceCommandService {
         projected.actions = actions(snapshot.actions, tile: tile)
         projected.sliders = sliders(snapshot.sliders, tile: tile)
         projected.charts = charts(snapshot.charts, tile: tile)
+        projected.calendars =
+            tile.showDetails && tile.shows("chart")
+            ? snapshot.calendars?.compactMap { calendar in
+                guard calendar.field.map(tile.shows) ?? true,
+                    calendar.sourceID.map({ tile.sourceIDs?.contains($0) ?? true }) ?? true
+                else { return nil }
+                return SurfaceCalendar(
+                    calendar.id, calendar.title,
+                    days: calendar.days.map { day in
+                        SurfaceCalendarDay(
+                            day.id, date: day.date, level: day.level, value: day.value,
+                            action: day.action.flatMap { actions([$0], tile: tile).first })
+                    }, sourceID: calendar.sourceID, field: calendar.field)
+            } : nil
         projected.rows =
             tile.shows("items")
             ? Array(
