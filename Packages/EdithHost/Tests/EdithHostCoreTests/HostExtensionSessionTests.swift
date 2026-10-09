@@ -71,6 +71,9 @@ import Testing
             throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
         ) { try await fixture.sessions.disable(id: "sample") }
         #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.sessions.pendingDisableIDs == ["sample"])
+        #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
+        #expect(fixture.sessions.activeIDs.isEmpty)
         #expect(fixture.sessions.states["sample"] == .active)
         #expect(fixture.sessions.processIdentifiers["sample"] == pid)
         #expect(fixture.sessions.versions["sample"] == "1.0.0")
@@ -106,13 +109,105 @@ import Testing
         #expect(fixture.sessions.processIdentifiers.isEmpty)
     }
 
+    @Test func pendingDisableSurvivesFreshSessionAndRecoversWithoutNormalStartup() async throws {
+        let original = try Fixture(rejectDisable: true)
+        defer { original.clean() }
+        try await original.sessions.enable(original.package("1.0.0"))
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) {
+            try await original.sessions.disable(id: "sample")
+        }
+        let restarted = try Fixture(suite: original.suite, mode: "require-recovery")
+        #expect(restarted.sessions.pendingDisableIDs == ["sample"])
+        #expect(restarted.sessions.activeIDs.isEmpty)
+        await restarted.sessions.restore(packages: ["sample": restarted.package("1.1.0")])
+        #expect(restarted.sessions.pendingDisableIDs.isEmpty)
+        #expect(restarted.sessions.enabledIDs.isEmpty)
+        #expect(restarted.sessions.processIdentifiers.isEmpty)
+        #expect(restarted.sessions.states["sample"] == .disabled)
+        #expect(await original.sessions.shutdown())
+    }
+
+    @Test func failedRecoveryRetainsIntentUntilConfirmedRetry() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
+        let restarted = try Fixture(rejectDisable: true, suite: fixture.suite)
+        await restarted.sessions.restore(packages: ["sample": fixture.package("1.0.0")])
+        #expect(restarted.sessions.pendingDisableIDs == ["sample"])
+        #expect(restarted.sessions.states["sample"] == .failed)
+        #expect(restarted.sessions.activeIDs.isEmpty)
+        #expect(restarted.sessions.versions.isEmpty)
+        #expect(!restarted.sessions.processIdentifiers.isEmpty)
+        try await restarted.sessions.disable(id: "sample")
+        #expect(restarted.sessions.pendingDisableIDs.isEmpty)
+        #expect(restarted.sessions.enabledIDs.isEmpty)
+        #expect(restarted.sessions.processIdentifiers.isEmpty)
+    }
+
+    @Test func missingPackageRetainsIntentAndManualRetryCannotDiscardIt() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
+        let restarted = try Fixture(suite: fixture.suite)
+        await restarted.sessions.restore(packages: [:])
+        await #expect(throws: HostWorkerError.rejected) {
+            try await restarted.sessions.disable(id: "sample")
+        }
+        #expect(restarted.sessions.pendingDisableIDs == ["sample"])
+        #expect(restarted.sessions.processIdentifiers.isEmpty)
+    }
+
+    @Test func explicitManualEnableOverridesPendingIntent() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) {
+            try await fixture.sessions.disable(id: "sample")
+        }
+        let pid = fixture.sessions.processIdentifiers["sample"]
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        #expect(fixture.sessions.pendingDisableIDs.isEmpty)
+        #expect(fixture.sessions.activeIDs == ["sample"])
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func automaticUpdateCannotRevivePendingDisable() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) {
+            try await fixture.sessions.disable(id: "sample")
+        }
+        let pid = fixture.sessions.processIdentifiers["sample"]
+        try await fixture.sessions.applyUpdate(fixture.package("1.1.0"))
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.sessions.versions["sample"] == "1.0.0")
+        #expect(fixture.sessions.pendingDisableIDs == ["sample"])
+        #expect(fixture.sessions.automaticallyEnabledIDs.isEmpty)
+        #expect(await fixture.sessions.shutdown())
+        #expect(fixture.sessions.pendingDisableIDs.isEmpty)
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+    }
+
     @MainActor private struct Fixture {
-        let sessions: HostExtensionSessions
+        var sessions: HostExtensionSessions
         let suite: String
         let defaults: UserDefaults
 
-        init(rejectVersion: String? = nil, rejectDisable: Bool = false) throws {
-            suite = "com.pulkit.edith.tests.sessions.\(UUID().uuidString)"
+        init(
+            rejectVersion: String? = nil, rejectDisable: Bool = false,
+            suite existingSuite: String? = nil, mode: String? = nil
+        ) throws {
+            suite = existingSuite ?? "com.pulkit.edith.tests.sessions.\(UUID().uuidString)"
             defaults = try #require(UserDefaults(suiteName: suite))
             let script = try #require(
                 Bundle.module.url(
@@ -127,8 +222,9 @@ import Testing
                     executable: URL(fileURLWithPath: "/usr/bin/python3"),
                     arguments: [
                         script.path,
-                        package.version == rejectVersion
-                            ? "reject" : rejectDisable ? "reject-disable-once" : "normal",
+                        mode
+                            ?? (package.version == rejectVersion
+                                ? "reject" : rejectDisable ? "reject-disable-once" : "normal"),
                     ], requestTimeout: .seconds(2))
             }
         }

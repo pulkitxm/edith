@@ -50,6 +50,13 @@ for line in sys.stdin:
         if mode == "late-disable" and prepare_count == 1:
             time.sleep(0.3)
     if operation == "start":
+        recovery = request["configuration"]["recoveryOnly"]
+        if mode == "require-recovery" and not recovery:
+            response["ok"] = False
+        if mode == "require-normal" and recovery:
+            response["ok"] = False
+        if recovery != (os.environ.get("EDITH_EXTENSION_RECOVERY_ONLY") == "1"):
+            response["ok"] = False
         response["version"] = request["configuration"]["version"]
         if mode == "wrong-version":
             response["version"] = "99.0.0"

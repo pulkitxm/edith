@@ -210,7 +210,8 @@ public final class HostMarketplace {
             }
             if let package = plan.first(where: { $0.id == id }) {
                 do {
-                    if sessions.enabledIDs.contains(id), sessions.states[id] != .active {
+                    if sessions.automaticallyEnabledIDs.contains(id), sessions.states[id] != .active
+                    {
                         try await sessions.enable(package)
                     } else {
                         try await sessions.applyUpdate(package)

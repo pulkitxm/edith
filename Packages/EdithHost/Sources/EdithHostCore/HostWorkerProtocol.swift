@@ -9,6 +9,7 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     public let theme: String
     public let appearance: String
     public let zoom: Double
+    public var recoveryOnly: Bool = false
 
     public init(identity: HostIdentity, extensionID: String, version: String) {
         identifier = identity.identifier

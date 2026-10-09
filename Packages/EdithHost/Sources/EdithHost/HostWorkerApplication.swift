@@ -170,6 +170,7 @@ final class HostWorkerApplication {
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
                 "dataDirectory": identity.extensionDirectory(package.id).path,
                 "hostIdentifier": identity.identifier,
+                "recoveryOnly": next.recoveryOnly,
             ]
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
                 guard
@@ -191,6 +192,7 @@ final class HostWorkerApplication {
                 try runtime.start(id: package.id, context: context)
             }
             guard !runtimes.isEmpty else { throw HostWorkerError.rejected }
+            if next.recoveryOnly { return }
             let endpoint = try ExtensionPeerEndpoint(
                 namespace: identity.identifier, owner: package.id,
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))

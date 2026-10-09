@@ -27,7 +27,7 @@ public final class HostSurfaces {
         let activeVersions: @MainActor () -> [String: String] = { [weak sessions] in
             guard let sessions else { return [:] }
             return sessions.versions.filter {
-                known.contains($0.key) && sessions.states[$0.key] == .active
+                known.contains($0.key) && sessions.activeIDs.contains($0.key)
             }
         }
         let requests = SurfaceSnapshotClient(activeVersions: activeVersions) {
