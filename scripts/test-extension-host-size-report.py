@@ -43,6 +43,11 @@ class HostSizeReportTests(unittest.TestCase):
             self.assertIn("not ready to merge", rendered)
             self.assertIn("| Sample |", rendered)
             self.assertNotIn("| Remaining |", rendered)
+            self.assertIn("PR #1010", rendered)
+            self.assertIn("visual editor", rendered)
+            self.assertIn("Notch renderer", rendered)
+            self.assertEqual(result["surfaceCustomization"]["layoutContractVersion"], 1)
+            self.assertIn("Home card data and action adapters", result["surfaceCustomization"]["outstanding"])
 
     def test_stale_or_missing_fingerprints_cannot_produce_size_claims(self):
         with tempfile.TemporaryDirectory() as directory:

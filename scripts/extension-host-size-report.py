@@ -34,8 +34,15 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "architecture": "arm64",
         "signature": "development",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
-        "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "code signatures"],
-        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "required platform carriers", "shipping release packaging", "final release-host measurements"],
+        "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "shared Home and Notch layout contract", "code signatures"],
+        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "Home and Notch visual editor and worker card adapters", "Notch extension renderer", "required platform carriers", "shipping release packaging", "final release-host measurements"],
+    }
+    result["surfaceCustomization"] = {
+        "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
+        "reviewedCommit": "f7aa029b299e963262910ac37f6d78172819f1ac",
+        "layoutContractVersion": 1,
+        "implemented": ["host-owned layouts and profiles", "undo and redo", "availability for every indexed extension", "composite provider filtering", "read-only worker context", "layout retention through worker updates and app restarts"],
+        "outstanding": ["visual editor port", "Home card data and action adapters", "Notch renderer and integrations", "synthetic visual verification"],
     }
     return result
 
@@ -80,6 +87,31 @@ Each enabled extension runs in a worker launched from the same Edith executable.
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 
 Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All {count} migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
+
+Home and Notch customization from [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The shared layout contract, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. The original visual editor, card data/action adapters, and Notch renderer still need porting and visual verification.
+
+A card is active only when its provider is installed, compatible, and running. Downloaded or remembered-enabled extensions do not count as running. Runtime layouts omit inactive cards without changing the saved configuration. Disabled, removed, or temporarily incompatible extensions retain their positions, filters, and profiles for later restoration. The availability planner returns no provider queries for hidden surfaces and hidden cards. A widget cannot implicitly start an extension.
+
+| Customized content | Planned data and action owner |
+| --- | --- |
+| World clocks | Lightweight host |
+| Usage activity, agent usage, rate limits | Usage extension |
+| Live agents and permission approvals | Sessions extension |
+| Now playing | Music extension |
+| Meetings | Calendar extension |
+| Code stats | Code Stats extension |
+| Focus timer | Attention extension |
+| Databases | Database extension |
+| Machines | Machines extension |
+| GitHub activity | Review extension |
+| Quick actions | Running Keep Awake, Lid Awake, Presenter, System, and Mic Mute extensions |
+| Desk tools | Running Clipboard, Color Picker, Emoji Picker, and Bifrost extensions |
+| Media tools | Running Screen Recorder, Downloads, Virtual Camera, Music, and Studio extensions |
+| Individual extension card | Its own extension worker, covering every indexed extension |
+| Notch shell, files, browser, camera preview | Downloadable Notch extension |
+| Notch Clipboard and Audio tabs | Their own running extension workers |
+
+The Notch browser and camera preview are functions of the Notch package. They do not require Review or Virtual Camera. The Notch renderer will run only while its extension is enabled. External data and actions will cross the worker command boundary as versioned, bounded data; feature models and services stay outside the base app. The existing native runtime tests now also verify that each tested worker reads the same saved Home configuration after replacement and app restart, and that disabling or removing it leaves the layout intact.
 
 Exact byte counts, package checksums, and the host executable checksum are in [the measurement data](extension-host-rebuild-size-report.json). Regenerate both reports after a fresh host build and extension builds:
 
