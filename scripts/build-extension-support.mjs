@@ -14,23 +14,40 @@ export function supportModules(scope) {
   if (!/^[A-Za-z][A-Za-z0-9_]{0,160}$/.test(scope))
     throw new Error("Invalid extension support scope");
   return Object.fromEntries(
-    ["EdithExtensionSupport", "EdithExtensionUI"].map((name) => [
-      name,
-      `${name}_${scope}`,
-    ]),
+    [
+      "EdithExtensionSupport",
+      "EdithExtensionUI",
+      "EdithExtensionDocuments",
+    ].map((name) => [name, `${name}_${scope}`]),
   );
 }
 
 export function rewriteSupportImports(source, modules) {
   return source.replace(
-    /^(\s*(?:@testable\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI)(?=\s|$)/gm,
+    /^(\s*(?:@testable\s+)?import\s+)(EdithExtensionSupport|EdithExtensionUI|EdithExtensionDocuments)(?=\s|$)/gm,
     (_, prefix, name) => `${prefix}${modules[name]}`,
   );
 }
 
+export function supportProducts(product) {
+  const products = [
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionDocuments",
+  ];
+  const index = products.indexOf(product);
+  if (index < 0) throw new Error("Unknown extension support product");
+  return products.slice(0, index + 1);
+}
+
+export function supportSourceInputs(product) {
+  return supportProducts(product).map(
+    (name) => `Packages/ExtensionSupport/Sources/${name}`,
+  );
+}
+
 export function buildExtensionSupport(root, product, scope) {
-  if (!["EdithExtensionSupport", "EdithExtensionUI"].includes(product))
-    throw new Error("Unknown extension support product");
+  const selected = supportProducts(product);
   const modules = supportModules(scope);
   const developer =
     process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
@@ -53,7 +70,7 @@ export function buildExtensionSupport(root, product, scope) {
   );
   const sources = [];
   for (const [name, module] of Object.entries(modules)) {
-    if (name === "EdithExtensionUI" && product !== name) continue;
+    if (!selected.includes(name)) continue;
     const sourceRoot = resolve(root, "Packages/ExtensionSupport/Sources", name);
     function visit(relative = "") {
       for (const entry of readdirSync(join(sourceRoot, relative), {
@@ -61,7 +78,11 @@ export function buildExtensionSupport(root, product, scope) {
       }).sort((a, b) => a.name.localeCompare(b.name))) {
         const path = join(relative, entry.name);
         if (entry.isDirectory()) visit(path);
-        else if (entry.name.endsWith(".swift")) {
+        else if (!entry.name.endsWith(".swift")) {
+          hash
+            .update(`${name}/${path}\0`)
+            .update(readFileSync(join(sourceRoot, path)));
+        } else {
           const source = readFileSync(join(sourceRoot, path), "utf8");
           hash.update(`${name}/${path}\0`).update(source);
           sources.push({
@@ -96,10 +117,28 @@ export function buildExtensionSupport(root, product, scope) {
   const targets = [
     `.target(name: "${core}", swiftSettings: [.swiftLanguageMode(.v5)])`,
   ];
-  if (product === "EdithExtensionUI")
+  if (selected.includes("EdithExtensionUI"))
     targets.push(
       `.target(name: "${ui}", dependencies: ["${core}"], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
+  if (selected.includes("EdithExtensionDocuments")) {
+    const documents = modules.EdithExtensionDocuments;
+    const resourceRoot = resolve(
+      root,
+      "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/Resources",
+    );
+    const targetResources = join(directory, "Sources", documents, "Resources");
+    mkdirSync(targetResources, { recursive: true });
+    for (const resource of readdirSync(resourceRoot)) {
+      writeFileSync(
+        join(targetResources, resource),
+        readFileSync(join(resourceRoot, resource)),
+      );
+    }
+    targets.push(
+      `.target(name: "${documents}", dependencies: ["${ui}"], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)])`,
+    );
+  }
   writeFileSync(
     join(directory, "Package.swift"),
     `// swift-tools-version:6.0\nimport PackageDescription\nlet package = Package(name: "ExtensionSupport_${scope}", platforms: [.macOS(.v14)], products: [.library(name: "${modules[product]}", type: .static, targets: ["${modules[product]}"])], targets: [${targets.join(", ")}])\n`,

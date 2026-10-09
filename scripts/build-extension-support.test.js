@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
   rewriteSupportImports,
   supportModules,
+  supportProducts,
+  supportSourceInputs,
 } from "./build-extension-support.mjs";
 
 test("each extension role has independent Swift and Objective-C support types", () => {
@@ -27,4 +29,32 @@ test("only imports change when compiling private support copies", () => {
   expect(rewriteSupportImports(source, modules)).toBe(
     'import Foundation\nimport EdithExtensionSupport_calendar_app\n@testable import EdithExtensionUI_calendar_app\nlet label = "EdithExtensionSupport"\n',
   );
+});
+
+test("optional document code and resources are excluded from core and UI products", () => {
+  expect(supportProducts("EdithExtensionSupport")).toEqual([
+    "EdithExtensionSupport",
+  ]);
+  expect(supportProducts("EdithExtensionUI")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+  ]);
+  expect(supportProducts("EdithExtensionDocuments")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionDocuments",
+  ]);
+  expect(supportSourceInputs("EdithExtensionUI")).not.toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionDocuments",
+  );
+  expect(() => supportProducts("Invalid")).toThrow();
+});
+
+test("document imports also get private extension module names", () => {
+  expect(
+    rewriteSupportImports(
+      "import EdithExtensionDocuments\n",
+      supportModules("plugins_app"),
+    ),
+  ).toBe("import EdithExtensionDocuments_plugins_app\n");
 });
