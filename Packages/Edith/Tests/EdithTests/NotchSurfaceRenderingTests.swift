@@ -45,7 +45,8 @@ import Testing
                     .allowsHitTesting(false)
                     .background(Color.gray.opacity(0.3)))
             host.sizingOptions = []
-            host.frame = CGRect(x: 0, y: 0, width: 1280, height: 500)
+            host.frame = CGRect(
+                x: 0, y: 0, width: 1280, height: controller.expandedSize(on: 0).height + 24)
             let window = TestWindowHost.window(contentRect: host.frame)
             window.appearance = NSAppearance(named: .darkAqua)
             window.contentView = host

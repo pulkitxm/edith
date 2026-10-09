@@ -57,7 +57,7 @@ import Testing
                     .environment(\.automaticViewActionsEnabled, false)
                     .environment(\.colorScheme, dark ? .dark : .light)
                 let data = try render(
-                    view, size: CGSize(width: compact ? 620 : 1200, height: compact ? 1500 : 1250),
+                    view, size: CGSize(width: compact ? 620 : 1200, height: compact ? 1500 : 900),
                     dark: dark)
                 #expect(data.count > 10_000)
                 try save(
