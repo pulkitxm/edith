@@ -1,7 +1,8 @@
 import ApplicationServices
 import CoreGraphics
 import Darwin
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 
 struct SweaterSpawnPayload {

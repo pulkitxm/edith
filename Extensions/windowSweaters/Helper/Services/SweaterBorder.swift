@@ -1,5 +1,6 @@
 import CoreGraphics
-import EdithKit
+import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 
 @MainActor

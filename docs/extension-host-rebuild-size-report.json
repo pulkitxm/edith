@@ -4,24 +4,24 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 3152828,
-    "comparisonZipBytes": 1359314
+    "installedBytes": 3170812,
+    "comparisonZipBytes": 1363484
   },
   "savedBytes": {
-    "installedBytes": 113312373,
-    "comparisonZipBytes": 50912172
+    "installedBytes": 113294389,
+    "comparisonZipBytes": 50908002
   },
   "savedPercent": {
-    "installedBytes": 97.29,
-    "comparisonZipBytes": 97.4
+    "installedBytes": 97.28,
+    "comparisonZipBytes": 97.39
   },
   "packages": [
     {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 174503,
+      "downloadBytes": 174508,
       "installedBytes": 457234,
-      "sha256": "3bd21fb9643d308d10e97fcd348222e814292eed3778beab1c96e5f358807688",
+      "sha256": "8bd47f5958694547471f7d679c88f8374f5a926519c1d5fe704806257ff3ad3b",
       "releaseMetadataBytes": 509
     },
     {
@@ -29,24 +29,32 @@
       "version": "1.0.0",
       "downloadBytes": 18173,
       "installedBytes": 79141,
-      "sha256": "9379547ba5d6795286af423866d36dbe94c119f13ba2daaa48c19855bfe86e74",
+      "sha256": "3f556f6c281d6b921421dd7b2e0a46b5fa19a7b135950486c5e32b7669cfbaa8",
       "releaseMetadataBytes": 510
+    },
+    {
+      "id": "windowSweaters",
+      "version": "1.0.0",
+      "downloadBytes": 240196,
+      "installedBytes": 598962,
+      "sha256": "58907d480579813151ddfd4a21ad733687ea9d0a38cea44d0756a712dcec49ce",
+      "releaseMetadataBytes": 527
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 192676,
-    "installedBytes": 536375,
-    "releaseMetadataBytes": 1019,
-    "releaseAssetBytes": 193695
+    "downloadBytes": 432877,
+    "installedBytes": 1135337,
+    "releaseMetadataBytes": 1546,
+    "releaseAssetBytes": 434423
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 3689203,
-    "comparisonZipAndPackageBytes": 1551990
+    "installedBytes": 4306149,
+    "comparisonZipAndPackageBytes": 1796361
   },
   "status": "migration-in-progress",
-  "migratedExtensions": 2,
+  "migratedExtensions": 3,
   "indexedExtensions": 38,
-  "hostExecutableSHA256": "3a388491345aa9d82e40af3e572f27b5a57b51f53a9ef3183d2cc466af5b3ccf",
+  "hostExecutableSHA256": "15083c52b8ea973dd6c295a0175f2fc0a5da17b247339e43acb61b4823f64119",
   "measurement": {
     "architecture": "arm64",
     "signature": "development",

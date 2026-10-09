@@ -19,5 +19,13 @@ let package = Package(
         .testTarget(
             name: "FocusDimExtensionTests", dependencies: ["FocusDimExtension"],
             path: "focusDim/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "WindowSweatersExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "windowSweaters", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "WindowSweatersExtensionTests", dependencies: ["WindowSweatersExtension"],
+            path: "windowSweaters/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

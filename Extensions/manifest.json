@@ -67,7 +67,7 @@
   {
     "id": "windowSweaters",
     "version": "1.0.0",
-    "hostABI": "host-99450dc9914b4c354b695afe",
+    "hostABI": "edith-host-1",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -78,7 +78,19 @@
         "Extensions/windowSweaters/Helper/Services/SweaterRuntimeSettings.swift",
         "Extensions/windowSweaters/Helper/Services/SweaterWindowServer.swift",
         "Extensions/windowSweaters/Helper/Services/SweaterWindowTracker.swift",
-        "Extensions/windowSweaters/Runtime.swift"
+        "Extensions/windowSweaters/Models/SweaterChart.swift",
+        "Extensions/windowSweaters/Models/SweaterChartSpecs.swift",
+        "Extensions/windowSweaters/Models/SweaterCollection.swift",
+        "Extensions/windowSweaters/Models/SweaterCollectionData.swift",
+        "Extensions/windowSweaters/Models/SweaterSettings.swift",
+        "Extensions/windowSweaters/Models/SweaterState.swift",
+        "Extensions/windowSweaters/Models/SweaterTheme.swift",
+        "Extensions/windowSweaters/Models/SweaterYarn.swift",
+        "Extensions/windowSweaters/Rendering/KnitGauge.swift",
+        "Extensions/windowSweaters/Rendering/KnitRenderer.swift",
+        "Extensions/windowSweaters/Rendering/KnitTile.swift",
+        "Extensions/windowSweaters/Runtime.swift",
+        "Extensions/windowSweaters/Views/WindowSweatersRows.swift"
       ]
     },
     "inputs": [
@@ -86,14 +98,12 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
-      "scripts/extension-host-build.mjs",
-      "Packages/Edith/Sources/EdithKit",
-      "Packages/Edith/Sources/EdithCore",
-      "Packages/Edith/Sources/EdithCameraSupport",
-      "Packages/Edith/Sources/EdithLidAwakeSupport"
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
     ],
     "dependencies": [],
-    "usesHostFramework": true
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI"
   },
   {
     "id": "micMute",
