@@ -14,6 +14,7 @@ let package = Package(
         .target(
             name: "EdithStudio",
             dependencies: ["CPDFium", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
+            resources: [.copy("Resources/PDFium-Licenses.txt")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .target(name: "CPDFium", dependencies: ["PDFium"]),

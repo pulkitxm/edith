@@ -53,9 +53,14 @@ final class StudioPDFRasterizer {
                 throw StudioError.failed("The PDF page has an invalid size.")
             }
             let scale = min(dpi / 72, sqrt(Double(maxPixels) / (size.width * size.height)))
-            let width = max(1, Int((size.width * scale).rounded()))
-            let height = max(1, Int((size.height * scale).rounded()))
-            guard width <= Int32.max, height <= Int32.max,
+            let pixelWidth = max(1, (size.width * scale).rounded())
+            let pixelHeight = max(1, (size.height * scale).rounded())
+            guard pixelWidth <= Double(Int32.max), pixelHeight <= Double(Int32.max) else {
+                throw StudioError.failed("The PDF page is too large to render.")
+            }
+            let width = Int(pixelWidth)
+            let height = Int(pixelHeight)
+            guard
                 let bitmap = FPDFBitmap_Create(Int32(width), Int32(height), 0)
             else { throw StudioError.failed("Not enough memory to render the page.") }
             defer { FPDFBitmap_Destroy(bitmap) }
