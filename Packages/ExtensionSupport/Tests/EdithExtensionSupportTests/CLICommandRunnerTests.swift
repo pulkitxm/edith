@@ -124,6 +124,65 @@ private final class CommandLineRecorder: @unchecked Sendable {
         #expect(lines.snapshot == ["first", "late"])
     }
 
+    @Test func nonRetainingDrainHonorsTheDeadlineAfterItsParentExits() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let pidFile = fixture.directory.appendingPathComponent("drain-child.pid")
+        defer {
+            if let text = try? String(contentsOf: pidFile, encoding: .utf8),
+                let pid = Int32(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 1
+            {
+                kill(pid, SIGKILL)
+            }
+        }
+        let started = ContinuousClock.now
+        do {
+            _ = try await CLICommandRunner.runLocalSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: [
+                        "-c",
+                        "printf 'first\\n'; /bin/sleep 30 & printf '%s' \"$!\" > \"$1\"",
+                        "fixture", pidFile.path,
+                    ],
+                    environment: ["PATH": "/usr/bin:/bin"], timeout: 0.2),
+                retainsStandardOutput: false,
+                onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+            Issue.record("Expected the output drain to time out.")
+        } catch CLICommandRunnerError.timedOut {}
+        #expect(ContinuousClock.now - started < .seconds(2))
+    }
+
+    @Test func nonRetainingDrainHonorsCancellationAfterItsParentExits() async throws {
+        let fixture = try makeFixture()
+        defer {
+            if let child = identifier(at: fixture.child) { kill(child, SIGKILL) }
+            try? FileManager.default.removeItem(at: fixture.directory)
+        }
+        let task = Task {
+            try await CLICommandRunner.runLocalSeparated(
+                CLICommandRequest(
+                    executableURL: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: [
+                        "-c",
+                        "printf '%s' \"$$\" > \"$1\"; /bin/sleep 30 & printf '%s' \"$!\" > \"$2\"",
+                        "fixture", fixture.parent.path, fixture.child.path,
+                    ],
+                    environment: ["PATH": "/usr/bin:/bin"], timeout: 20),
+                retainsStandardOutput: false,
+                onStandardOutputLine: { _ in }, onStandardErrorLine: { _ in })
+        }
+        let identifiers = try await processIdentifiers(fixture)
+        try await expectGone([identifiers[0]])
+        let started = ContinuousClock.now
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("Expected output drain cancellation.")
+        } catch is CancellationError {}
+        #expect(ContinuousClock.now - started < .seconds(2))
+    }
+
     @Test func separatedRunnerDoesNotReturnWhileACompletedCommandCallbackIsBlocked() async throws {
         let callbackStarted = DispatchSemaphore(value: 0)
         let releaseCallback = DispatchSemaphore(value: 0)
