@@ -111,6 +111,145 @@ import EdithExtensionSupport
         """
 }
 
+@MainActor
+@Suite struct AppMaintenanceModelSnapshotTests {
+    @Test func cachedSnapshotShowsBeforeRefreshFinishes() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let snapshots = AppMaintenanceSnapshotStore(
+            fileURL: directory.appendingPathComponent("snapshot.json"))
+        let application = Self.application
+        try await snapshots.save(
+            AppMaintenanceSnapshot(applications: [application], updates: [Self.storeItem]))
+        let gate = DiscoveryGate()
+        let model = AppMaintenanceModel(
+            persistence: AppUpdatePersistence(
+                fileURL: directory.appendingPathComponent("state.json")),
+            snapshots: snapshots,
+            inventory: { _ in
+                await gate.wait()
+                return [application]
+            },
+            discover: { _, _, _, _ in [] })
+
+        model.refresh()
+        #expect(
+            await Self.wait {
+                model.phase == .ready && model.applications.map(\.name) == ["Example"]
+            })
+        #expect(model.checkingUpdates)
+        #expect(model.updates.map(\.id) == [Self.storeItem.id])
+        gate.open()
+        #expect(await Self.wait { !model.checkingUpdates })
+        #expect(model.phase == .ready)
+        #expect(model.applications.map(\.name) == ["Example"])
+    }
+
+    @Test func secondRefreshKeepsApplicationsVisible() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let gate = DiscoveryGate()
+        let passes = DiscoveryCounter()
+        let application = Self.application
+        let model = AppMaintenanceModel(
+            persistence: AppUpdatePersistence(
+                fileURL: directory.appendingPathComponent("state.json")),
+            snapshots: AppMaintenanceSnapshotStore(
+                fileURL: directory.appendingPathComponent("snapshot.json")),
+            inventory: { _ in
+                if passes.next() > 1 { await gate.wait() }
+                return [application]
+            },
+            discover: { _, _, _, _ in [] })
+
+        model.refresh()
+        #expect(await Self.wait { !model.checkingUpdates && model.phase == .ready })
+        model.refresh()
+
+        #expect(model.phase == .ready)
+        #expect(model.applications.map(\.name) == ["Example"])
+        try? await Task.sleep(for: .milliseconds(60))
+        #expect(model.phase == .ready)
+        #expect(model.checkingUpdates)
+        #expect(model.applications.map(\.name) == ["Example"])
+        gate.open()
+        #expect(await Self.wait { !model.checkingUpdates })
+    }
+
+    @Test func eachSourceAppearsBeforeTheNextSourceFinishes() async throws {
+        let directory = try Self.directory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let gate = DiscoveryGate()
+        let application = Self.application
+        let storeItem = Self.storeItem
+        let brewItem = Self.brewItem
+        let model = AppMaintenanceModel(
+            persistence: AppUpdatePersistence(
+                fileURL: directory.appendingPathComponent("state.json")),
+            snapshots: AppMaintenanceSnapshotStore(
+                fileURL: directory.appendingPathComponent("snapshot.json")),
+            inventory: { _ in [application] },
+            discover: { _, _, _, onBatch in
+                await onBatch(
+                    AppUpdateDiscoveryBatch(channel: .appStore, items: [storeItem]))
+                await gate.wait()
+                await onBatch(
+                    AppUpdateDiscoveryBatch(
+                        channel: .homebrew, items: [brewItem],
+                        homebrewData: Data(Self.brewJSON.utf8))
+                )
+                return [storeItem, brewItem]
+            })
+
+        model.refresh()
+        #expect(await Self.wait { model.updates.contains { $0.id == storeItem.id } })
+        #expect(!model.updates.contains { $0.source == .homebrewCask })
+        gate.open()
+        #expect(await Self.wait { model.updates.contains { $0.id == brewItem.id } })
+        #expect(model.phase == .ready)
+    }
+
+    private static func directory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private static func wait(timeout: Duration = .seconds(3), _ condition: @MainActor () -> Bool)
+        async -> Bool
+    {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return condition()
+    }
+
+    private static let application = InstalledApplication(
+        id: "/Applications/Example.app", name: "Example", bundleID: "com.example.app",
+        version: "1.0", url: URL(fileURLWithPath: "/Applications/Example.app"))
+
+    private static let storeItem = AppUpdateItem(
+        id: "mas:111", name: "Example", bundleID: "com.example.app",
+        applicationPath: "/Applications/Example.app", source: .appStore,
+        currentVersion: "1.0", availableVersion: "2.0", confidence: .high,
+        checkedAt: Date(timeIntervalSince1970: 1_700_000_000), action: .install,
+        executablePath: "/mas", arguments: ["upgrade", "111"])
+
+    private static let brewItem = AppUpdateItem(
+        id: "homebrewCask:example", name: "Example", bundleID: "com.example.app",
+        applicationPath: "/Applications/Example.app", source: .homebrewCask,
+        currentVersion: "1.0", availableVersion: "2.0", confidence: .high,
+        checkedAt: Date(timeIntervalSince1970: 1_700_000_000), action: .install,
+        executablePath: "/brew", arguments: ["upgrade", "example"])
+
+    private static let brewJSON = """
+        {"formulae":[],"casks":[{"name":"example","installed_versions":["1.0"],"current_version":"2.0"}]}
+        """
+}
+
 private final class DiscoveryCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0

@@ -91,8 +91,14 @@ struct HostLifecycleHarness {
             }
             stage = "window"
             try await sessions.show(id: first.id)
+            let opened = try await endpoint.invoke("extension.open")
+            guard String(decoding: opened, as: UTF8.self) == "{\"opened\":true}" else {
+                throw HostWorkerError.invalidResponse
+            }
             stage = "initial commands"
-            if extensionID == "cleaner" {
+            if extensionID == "appMaintenance" {
+                try await verifyMaintenance(endpoint)
+            } else if extensionID == "cleaner" {
                 try await verifyCleaner(endpoint)
             } else if extensionID == "timeLapse" {
                 try await verifyRecording(endpoint)
@@ -121,7 +127,9 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
-            if extensionID == "cleaner" {
+            if extensionID == "appMaintenance" {
+                try await verifyMaintenance(endpoint)
+            } else if extensionID == "cleaner" {
                 try await verifyCleaner(endpoint)
             } else if extensionID == "timeLapse" {
                 try await verifyRecording(endpoint)
@@ -145,7 +153,9 @@ struct HostLifecycleHarness {
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "cleaner" {
+            if extensionID == "appMaintenance" {
+                try await verifyMaintenance(endpoint)
+            } else if extensionID == "cleaner" {
                 try await verifyCleaner(endpoint)
             } else if extensionID == "timeLapse" {
                 try await verifyRecording(endpoint)
@@ -205,6 +215,21 @@ struct HostLifecycleHarness {
                         "\(extensionID) failed during \(stage): \(error). \(logs)"
                 ])
 
+        }
+    }
+
+    private static func verifyMaintenance(_ endpoint: ExtensionPeerEndpoint) async throws {
+        try await verify(
+            endpoint, command: "maintenance.status", input: [:], field: "enabled", expected: true)
+        let data = try await endpoint.invoke("maintenance.preview")
+        guard let preview = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let token = preview["previewToken"] as? String, UUID(uuidString: token) != nil
+        else { throw HostWorkerError.invalidResponse }
+        for command in ["maintenance.remove", "maintenance.update", "maintenance.install"] {
+            do {
+                _ = try await endpoint.invoke(command, payload: Data("{\"confirmed\":false}".utf8))
+                throw HostWorkerError.invalidResponse
+            } catch is ExtensionPeerError {}
         }
     }
 

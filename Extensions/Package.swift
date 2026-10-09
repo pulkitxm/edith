@@ -126,7 +126,7 @@ let package = Package(
         .target(
             name: "AppMaintenanceExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "appMaintenance", exclude: ["Tests"],
+            path: "appMaintenance", exclude: ["Tests", "Runtime.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "AppMaintenanceExtensionTests", dependencies: ["AppMaintenanceExtension"],
