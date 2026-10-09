@@ -272,12 +272,12 @@ private final class BundleCommandCompletion: @unchecked Sendable {
     private var result: Result<Data, any Error>?
 
     func begin(_ continuation: CheckedContinuation<Data, any Error>) -> Bool {
-        let result = lock.withLock { () -> Result<Data, any Error>? in
-            if let result { return result }
+        let completedResult = lock.withLock { () -> Result<Data, any Error>? in
+            if let result = self.result { return result }
             self.continuation = continuation
             return nil
         }
-        if let result { continuation.resume(with: result); return false }
+        if let completedResult { continuation.resume(with: completedResult); return false }
         return true
     }
 
