@@ -887,28 +887,24 @@ struct SurfaceEditorPane: View {
                             inherited: layout.notchCardWidth)
                     } else {
                         Stepper(
-                            "Width: \(tile.span) / \(layout.columns) columns",
-                            value: setting(tile.id, \.span, fallback: 12), in: 1...layout.columns)
+                            "Width: \(gridSpan(for: tile)) / \(layout.columns) columns",
+                            value: Binding(
+                                get: { gridSpan(for: selection ?? tile) },
+                                set: { setGridSpan(for: tile, to: $0) }), in: 1...layout.columns)
                         numberField(
                             "Grid width at this canvas (pt)",
                             value: Binding(
                                 get: {
-                                    Double(selection?.span ?? tile.span)
-                                        * (canvasWidth + layout.gap) / Double(layout.columns)
-                                        - layout.gap
+                                    gridWidth(for: selection ?? tile)
                                 },
                                 set: { value in
                                     guard value.isFinite else { return }
                                     let pitch = (canvasWidth + layout.gap) / Double(layout.columns)
-                                    edit(tile.id) {
-                                        $0.span = min(
-                                            layout.columns,
-                                            max(
-                                                1,
-                                                Int(
-                                                    ((min(10_000, max(1, value)) + layout.gap)
-                                                        / max(0.01, pitch)).rounded())))
-                                    }
+                                    setGridSpan(
+                                        for: tile,
+                                        to: Int(
+                                            ((min(10_000, max(1, value)) + layout.gap)
+                                                / max(0.01, pitch)).rounded()))
                                 }))
                     }
                     Toggle(
@@ -1294,6 +1290,22 @@ struct SurfaceEditorPane: View {
         store.update(target) { layout in
             guard let index = layout.tiles.firstIndex(where: { $0.id == id }) else { return }
             change(&layout.tiles[index])
+        }
+    }
+    private func gridWidth(for tile: SurfaceTile) -> Double {
+        if layout.usesBalancedRows, let frame = tileFrames[tile.id] { return frame.width }
+        return Double(tile.span) * (canvasWidth + layout.gap) / Double(layout.columns) - layout.gap
+    }
+    private func gridSpan(for tile: SurfaceTile) -> Int {
+        let pitch = max(0.01, (canvasWidth + layout.gap) / Double(layout.columns))
+        return min(
+            layout.columns, max(1, Int(((gridWidth(for: tile) + layout.gap) / pitch).rounded())))
+    }
+    private func setGridSpan(for tile: SurfaceTile, to span: Int) {
+        store.update(target) { layout in
+            guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id }) else { return }
+            layout.balancedRows = false
+            layout.tiles[index].span = min(layout.columns, max(1, span))
         }
     }
     private func setting<Value>(
