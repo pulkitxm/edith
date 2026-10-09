@@ -687,7 +687,7 @@ final class DashboardModel {
         homeUsage = HomeUsageSnapshot(
             calendarDays: digest.calendarDays,
             heatDetail: digest.heatDetail,
-            heatCuts: DashboardComputation.heatCuts(for: digest.calendarDays))
+            heatScale: DashboardComputation.heatScale(for: digest.calendarDays))
         persistHomeUsage()
         loaded = true
     }

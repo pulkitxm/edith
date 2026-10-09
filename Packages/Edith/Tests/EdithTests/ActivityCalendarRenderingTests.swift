@@ -7,6 +7,55 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct ActivityCalendarRenderingTests {
+    @Test func tokenOnlyCalendarRendersColoredCellsAndTheActualTooltip() async throws {
+        let suite = "test.token-calendar.\(UUID().uuidString)"
+        let preferences = try #require(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        let json = """
+            {"schemaVersion":7,"sources":["sample"],"daily":[
+              {"period":"2026-10-01","bySource":{"sample":[
+                {"modelName":"sample","inputTokens":100000,"cost":0}]}},
+              {"period":"2026-10-08","bySource":{"sample":[
+                {"modelName":"sample","inputTokens":18600000,"outputTokens":2800000,
+                  "cacheReadTokens":754100000,"cost":0}]}}
+            ]}
+            """
+        let model = DashboardModel(preferences: preferences)
+        model.ingest(try JSONDecoder().decode(DashUsage.self, from: Data(json.utf8)))
+        let detail = try #require(model.heatDetail["2026-10-08"])
+        let host = try auditHost(
+            HStack(alignment: .top, spacing: 20) {
+                PageCard(title: "Activity", note: "daily activity") {
+                    ActivityHeatmap(
+                        days: model.homeUsage.calendarDays, scale: model.homeUsage.heatScale,
+                        model: model, dark: true)
+                }
+                HeatCard(detail: detail, model: model, dark: true, blur: false, blurTokens: false)
+            }
+            .padding(20)
+            .environment(\.colorScheme, .dark)
+            .environment(\.automaticViewActionsEnabled, false)
+            .background(DashSkin.paper(true)), size: CGSize(width: 860, height: 440))
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(200))
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let point = try #require(model.homeUsage.calendarDays.first { $0.id == "2026-10-08" })
+        #expect(model.homeUsage.heatScale.level(for: point) > 0)
+        #expect(detail.cost == 0)
+        #expect(detail.tokens == 775_500_000)
+        if let path = ProcessInfo.processInfo.environment["EDITH_SURFACE_EVIDENCE_DIR"] {
+            let root = URL(fileURLWithPath: path)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: root.appendingPathComponent("token-only-calendar.png"))
+        }
+    }
+
     @Test func weekdayLabelsStayNextToCellsAtWideAndCompactWidths() async throws {
         let previous = UIScale.current
         defer { UIScale.apply(previous) }

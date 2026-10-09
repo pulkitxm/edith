@@ -127,10 +127,11 @@ struct HomeSurfaceWidget: View {
                 case .clocks: WorldClocksCard(dark: dark)
                 case .actions: QuickActionsCard(dark: dark)
                 case .activity:
-                    PageCard(title: "Activity", note: "daily cost") {
+                    PageCard(title: "Activity", note: "daily activity") {
                         if model.homeUsage.hasDays {
                             ActivityHeatmap(
-                                days: model.homeUsage.calendarDays, cuts: model.homeUsage.heatCuts,
+                                days: model.homeUsage.calendarDays,
+                                scale: model.homeUsage.heatScale,
                                 model: model, dark: dark, blur: blurMoney)
                         } else if !model.loadAttempted {
                             ActivityHeatmapSkeleton()
