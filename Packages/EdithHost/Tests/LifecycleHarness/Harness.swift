@@ -20,6 +20,10 @@ struct HostLifecycleHarness {
         let validateSurface = arguments[4] == "1"
         let extensionID = arguments[3]
         let fixture = URL(fileURLWithPath: arguments[0])
+        if extensionID == "studio" {
+            setenv(
+                "EDITH_TEST_RUNTIME_ROOT", fixture.appendingPathComponent("studio-runtime").path, 1)
+        }
         let sourceApp = URL(fileURLWithPath: arguments[1])
         let releases = URL(fileURLWithPath: arguments[2])
         let app = fixture.appendingPathComponent("Fixture.app")
@@ -146,6 +150,8 @@ struct HostLifecycleHarness {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
+            } else if extensionID == "studio" {
+                try await verifyStudio(endpoint, fixture: fixture, seed: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -193,6 +199,8 @@ struct HostLifecycleHarness {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
+            } else if extensionID == "studio" {
+                try await verifyStudio(endpoint, fixture: fixture, seed: false)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -264,6 +272,8 @@ struct HostLifecycleHarness {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
+            } else if extensionID == "studio" {
+                try await verifyStudio(endpoint, fixture: fixture, seed: false)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -327,7 +337,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio")}"
             )
         } catch {
             if extensionID == "jev" {
