@@ -84,7 +84,7 @@ public enum LimitsCollector {
             switch provider {
             case .claude:
                 connectClaude()
-                return (ClaudeStatusLine.snapshot(), nil)
+                return await fetchClaude()
             case .codex:
                 return (await fetchCodex(), nil)
             case .cursor:
@@ -135,6 +135,40 @@ public enum LimitsCollector {
         await refreshSession.finish(snapshot, retryNotBefore: deadlines)
         announce(IPC.Name.limitsUpdated)
         return snapshot
+    }
+
+    static func fetchClaude(
+        now: Date = Date(),
+        fetch: () async throws -> LimitsProviderSnapshot = {
+            try await ClaudeWebLimitsReader.fetch()
+        },
+        fallback: () -> LimitsProviderSnapshot = { ClaudeStatusLine.snapshot() },
+        persist: (LimitsProviderSnapshot) throws -> Void = { snapshot in
+            try persistHistory(
+                provider: .claude, session: snapshot.session, week: snapshot.week,
+                fable: snapshot.fable)
+        }
+    ) async -> (LimitsProviderSnapshot, Date?) {
+        do {
+            let snapshot = try await fetch()
+            try persist(snapshot)
+            return (snapshot, nil)
+        } catch {
+            let saved = fallback()
+            let message = error.localizedDescription
+            let deadline: Date?
+            if case ClaudeWebLimitsReader.Failure.rateLimited(let after) = error {
+                deadline = now.addingTimeInterval(max(after ?? 1800, 60))
+            } else {
+                deadline = nil
+            }
+            return (
+                LimitsProviderSnapshot(
+                    provider: .claude, session: saved.session,
+                    week: saved.session == nil ? nil : saved.week,
+                    fable: saved.session == nil ? nil : saved.fable, error: message), deadline
+            )
+        }
     }
 
     private static func fetchCursor() async -> (LimitsProviderSnapshot, Date?) {
