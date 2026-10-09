@@ -4,49 +4,49 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 2694380,
-    "comparisonZipBytes": 1175240
+    "installedBytes": 3152828,
+    "comparisonZipBytes": 1359314
   },
   "savedBytes": {
-    "installedBytes": 113770821,
-    "comparisonZipBytes": 51096246
+    "installedBytes": 113312373,
+    "comparisonZipBytes": 50912172
   },
   "savedPercent": {
-    "installedBytes": 97.69,
-    "comparisonZipBytes": 97.75
+    "installedBytes": 97.29,
+    "comparisonZipBytes": 97.4
   },
   "packages": [
     {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 153004,
-      "installedBytes": 400946,
-      "sha256": "e172c623d14d66044437fd0c526367fc434420aed5738695336a2a078d64d3a5",
+      "downloadBytes": 174503,
+      "installedBytes": 457234,
+      "sha256": "3bd21fb9643d308d10e97fcd348222e814292eed3778beab1c96e5f358807688",
       "releaseMetadataBytes": 509
     },
     {
       "id": "keepAwake",
       "version": "1.0.0",
-      "downloadBytes": 18214,
-      "installedBytes": 79205,
-      "sha256": "1e8435fcbeb9f0d61f8a36e5dc3164dde79dbd54e48faab16f3e9f8b11eb22f2",
+      "downloadBytes": 18173,
+      "installedBytes": 79141,
+      "sha256": "9379547ba5d6795286af423866d36dbe94c119f13ba2daaa48c19855bfe86e74",
       "releaseMetadataBytes": 510
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 171218,
-    "installedBytes": 480151,
+    "downloadBytes": 192676,
+    "installedBytes": 536375,
     "releaseMetadataBytes": 1019,
-    "releaseAssetBytes": 172237
+    "releaseAssetBytes": 193695
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 3174531,
-    "comparisonZipAndPackageBytes": 1346458
+    "installedBytes": 3689203,
+    "comparisonZipAndPackageBytes": 1551990
   },
   "status": "migration-in-progress",
   "migratedExtensions": 2,
   "indexedExtensions": 38,
-  "hostExecutableSHA256": "fb919e257e0be22743d52b059740e8f386af3595716f9d242266242a3f8f0e54",
+  "hostExecutableSHA256": "3a388491345aa9d82e40af3e572f27b5a57b51f53a9ef3183d2cc466af5b3ccf",
   "measurement": {
     "architecture": "arm64",
     "signature": "development",
@@ -61,7 +61,7 @@
     ],
     "outstanding": [
       "remaining feature migrations",
-      "shared navigation and theme integration",
+      "remaining feature navigation integration",
       "required platform carriers",
       "shipping release packaging",
       "final release-host measurements"

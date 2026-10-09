@@ -1,5 +1,7 @@
 import AppKit
 import EdithHostCore
+import EdithExtensionUI
+import EdithExtensionSupport
 import SwiftUI
 
 @main
@@ -8,6 +10,7 @@ struct HostEntry {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
         if arguments == ["--extension-worker"] {
+            guard setpgid(0, 0) == 0 || getpgrp() == getpid() else { exit(1) }
             do {
                 let worker = try HostWorkerApplication()
                 worker.run()
@@ -40,38 +43,57 @@ struct HostApplication: App {
     @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @State private var marketplace: HostMarketplace?
     @State private var startupError = false
+    @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
+        "accent"
+    @AppStorage(AppStorageKeys.General.appearance, store: SharedDefaults.store) private
+        var appearance = "system"
+    @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
 
     var body: some Scene {
         WindowGroup("Edith") {
-            Group {
-                if let marketplace {
-                    MarketplacePage(marketplace: marketplace)
-                } else if startupError {
-                    ContentUnavailableView(
-                        "Edith could not start", systemImage: "exclamationmark.triangle")
-                } else {
-                    Text("Opening Edith")
+            GeometryReader { geometry in
+                Group {
+                    if let marketplace {
+                        MarketplacePage(marketplace: marketplace)
+                    } else if startupError {
+                        ContentUnavailableView(
+                            "Edith could not start", systemImage: "exclamationmark.triangle")
+                    } else {
+                        Text("Opening Edith")
+                    }
+                }
+                .environment(\.compactLayout, geometry.size.width < 720)
+                .tracksWindowVisibility()
+                .task {
+                    guard marketplace == nil, !startupError else { return }
+                    do {
+                        let support = try FileManager.default.url(
+                            for: .applicationSupportDirectory, in: .userDomainMask,
+                            appropriateFor: nil, create: true)
+                        let identity = try HostIdentity(
+                            identifier: Bundle.main.bundleIdentifier
+                                ?? "com.pulkit.edith.dev.extension-host-rebuild",
+                            supportDirectory: support)
+                        let loaded = try HostMarketplace.live(identity: identity)
+                        marketplace = loaded
+                        delegate.shutdown = { await loaded.sessions.shutdown() }
+                        await loaded.loadCachedCatalog()
+                        await loaded.restoreEnabledExtensions()
+                        await loaded.updateInstalledIfDue()
+                    } catch { startupError = true }
                 }
             }
             .frame(minWidth: 540, minHeight: 400)
-            .task {
-                guard marketplace == nil, !startupError else { return }
-                do {
-                    let support = try FileManager.default.url(
-                        for: .applicationSupportDirectory, in: .userDomainMask,
-                        appropriateFor: nil, create: true)
-                    let identity = try HostIdentity(
-                        identifier: Bundle.main.bundleIdentifier
-                            ?? "com.pulkit.edith.dev.extension-host-rebuild",
-                        supportDirectory: support)
-                    let loaded = try HostMarketplace.live(identity: identity)
-                    marketplace = loaded
-                    delegate.shutdown = { await loaded.sessions.shutdown() }
-                    await loaded.loadCachedCatalog()
-                    await loaded.restoreEnabledExtensions()
-                    await loaded.updateInstalledIfDue()
-                } catch { startupError = true }
+            .onAppear {
+                UIScale.apply(zoom); applyAppearance(appearance)
             }
+            .onChange(of: zoom) {
+                UIScale.apply(zoom); synchronizeAppearance()
+            }
+            .onChange(of: appearance) {
+                applyAppearance(appearance); synchronizeAppearance()
+            }
+            .onChange(of: theme) { synchronizeAppearance() }
         }
         .commands {
             CommandGroup(after: .appInfo) {
@@ -79,12 +101,19 @@ struct HostApplication: App {
                     !updater.available)
             }
         }
+        Settings { HostSettingsPage() }
+    }
+
+    private func synchronizeAppearance() {
+        guard let marketplace else { return }
+        Task { await marketplace.sessions.synchronizeAppearance(identity: marketplace.identity) }
     }
 }
 
 struct MarketplacePage: View {
     @Bindable var marketplace: HostMarketplace
     @State private var search = ""
+    @Environment(\.compactLayout) private var compact
 
     private var filtered: [HostExtension] {
         marketplace.entries.filter {
@@ -93,70 +122,90 @@ struct MarketplacePage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Extensions").font(.largeTitle.bold())
-                    Text("Download the features you need.").foregroundStyle(.secondary)
-                }
-                Spacer()
+        PageWorkspace {
+            PageHeader("Extensions") {
                 Button("Check for Updates") { Task { await marketplace.checkForUpdates() } }
+                    .buttonStyle(.edith(.secondary))
                     .disabled(marketplace.operationID != nil)
-            }
-            .padding(24)
-            if let error = marketplace.error {
-                Text(error).foregroundStyle(.red).padding(.horizontal, 24).padding(.bottom, 12)
-            }
-            if marketplace.offline {
-                Text("You are offline. Installed extensions are still available.")
-                    .foregroundStyle(.secondary).padding(.bottom, 12)
-            }
-            List(filtered) { entry in
-                HStack(spacing: 14) {
-                    Image(systemName: entry.symbolName).font(.title2).frame(width: 32)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(entry.title).font(.headline)
-                        if let package = marketplace.installed[entry.id] {
-                            Text(
-                                "\(marketplace.sessions.states[entry.id] == .active ? "Enabled" : "Disabled") · \(package.version)"
-                            ).foregroundStyle(.secondary)
-                        } else {
-                            Text(
-                                marketplace.downloadedIDs.contains(entry.id)
-                                    ? "Needs a compatible update" : "Not installed"
-                            ).foregroundStyle(.secondary)
-                        }
+            } accessory: {
+                VStack(alignment: .leading, spacing: UIScale.pt(12)) {
+                    Text("Download the features you need.").font(.edithText(.body)).foregroundStyle(
+                        .secondary)
+                    TextField("Find extensions", text: $search).textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Find extensions")
+                    if let error = marketplace.error {
+                        Text(error).foregroundStyle(.red).font(.edithText(.callout))
                     }
-                    Spacer()
-                    if marketplace.operationID == entry.id {
-                        ProgressView(value: marketplace.progress).frame(width: 90)
-                            .accessibilityLabel("Downloading \(entry.title)")
-                    } else if marketplace.installed[entry.id] != nil {
-                        if marketplace.updateAvailable(id: entry.id) {
-                            Button("Update") { Task { await marketplace.download(id: entry.id) } }
-                        }
-                        if marketplace.sessions.states[entry.id] == .active {
-                            Button("Open") { Task { await marketplace.show(id: entry.id) } }
-                            Button("Disable") { Task { await marketplace.disable(id: entry.id) } }
-                        } else {
-                            Button("Enable") { Task { await marketplace.enable(id: entry.id) } }
-                        }
-                        Button("Remove") { Task { await marketplace.remove(id: entry.id) } }
-                    } else {
-                        Button(marketplace.downloadedIDs.contains(entry.id) ? "Update" : "Download")
-                        { Task { await marketplace.download(id: entry.id) } }
-                        .disabled(marketplace.operationID != nil)
+                    if marketplace.offline {
+                        Text("You are offline. Installed extensions are still available.")
+                            .foregroundStyle(.secondary).font(.edithText(.callout))
                     }
                 }
-                .disabled(marketplace.operationID != nil)
-                .padding(.vertical, 10)
             }
-            .searchable(text: $search, prompt: "Find extensions")
-            Toggle(
-                "Automatically update installed extensions",
-                isOn: $marketplace.automaticallyUpdatesExtensions
-            )
-            .padding(16)
+        } content: {
+            VStack(spacing: 0) {
+                List(filtered) { entry in
+                    VStack(alignment: .leading, spacing: UIScale.pt(10)) {
+                        HStack(spacing: UIScale.pt(14)) {
+                            Image(systemName: entry.symbolName).font(.edithText(.title2)).frame(
+                                width: UIScale.pt(32))
+                            VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+                                Text(entry.title).font(.edithText(.headline))
+                                Text(subtitle(entry)).font(.edithText(.caption)).foregroundStyle(
+                                    .secondary)
+                            }
+                            Spacer()
+                            if !compact { controls(entry) }
+                        }
+                        if compact {
+                            HStack {
+                                Spacer(); controls(entry)
+                            }
+                        }
+                    }
+                    .padding(.vertical, UIScale.pt(10))
+                    .disabled(marketplace.operationID != nil)
+                }
+                Toggle(
+                    "Automatically update installed extensions",
+                    isOn: $marketplace.automaticallyUpdatesExtensions
+                )
+                .font(.edithText(.callout)).padding(UIScale.pt(16))
+            }
         }
+    }
+
+    private func subtitle(_ entry: HostExtension) -> String {
+        if let package = marketplace.installed[entry.id] {
+            return
+                "\(marketplace.sessions.states[entry.id] == .active ? "Enabled" : "Disabled") · \(package.version)"
+        }
+        return marketplace.downloadedIDs.contains(entry.id)
+            ? "Needs a compatible update" : "Not installed"
+    }
+
+    @ViewBuilder private func controls(_ entry: HostExtension) -> some View {
+        HStack(spacing: UIScale.pt(8)) {
+            if marketplace.operationID == entry.id {
+                LoadingProgress(value: marketplace.progress).frame(width: UIScale.pt(90))
+                    .accessibilityLabel("Working on \(entry.title)")
+            } else if marketplace.installed[entry.id] != nil {
+                if marketplace.updateAvailable(id: entry.id) {
+                    Button("Update") { Task { await marketplace.download(id: entry.id) } }
+                }
+                if marketplace.sessions.states[entry.id] == .active {
+                    Button("Open") { Task { await marketplace.show(id: entry.id) } }
+                    Button("Disable") { Task { await marketplace.disable(id: entry.id) } }
+                } else {
+                    Button("Enable") { Task { await marketplace.enable(id: entry.id) } }
+                }
+                Button("Remove") { Task { await marketplace.remove(id: entry.id) } }
+            } else {
+                Button(marketplace.downloadedIDs.contains(entry.id) ? "Update" : "Download") {
+                    Task { await marketplace.download(id: entry.id) }
+                }
+            }
+        }
+        .buttonStyle(.edith(.secondary))
     }
 }

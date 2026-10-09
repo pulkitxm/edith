@@ -2,26 +2,26 @@
 
 Measured on 9 October 2026. The rebuild is in progress and the PR is not ready to merge. Two of the 38 indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
 
-The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Shared navigation and theme integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
+The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Feature navigation integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
 
 | Measured build | Installed MB | Comparison ZIP MB |
 | --- | ---: | ---: |
 | Original bundled app | 116.47 | 52.27 |
 | Superseded partial extraction | 95.70 | 44.94 |
-| Current host foundation with updater | 2.69 | 1.18 |
-| Host plus both migrated extensions | 3.17 | 1.35 |
+| Current host foundation with updater and shared UI | 3.15 | 1.36 |
+| Host plus both migrated extensions | 3.69 | 1.55 |
 
-MB means 1,000,000 bytes. The current host foundation is 97.69% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. The current host foundation is 97.29% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
 
 | Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
 | --- | ---: | ---: | ---: |
-| Keep Awake | 18,214 | 79,205 | 510 |
-| Focus Dim | 153,004 | 400,946 | 509 |
-| Both migrated packages | 171,218 | 480,151 | 1,019 |
+| Keep Awake | 18,173 | 79,141 | 510 |
+| Focus Dim | 174,503 | 457,234 | 509 |
+| Both migrated packages | 192,676 | 536,375 | 1,019 |
 
-The two ZIPs plus their metadata occupy 172,237 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
+The two ZIPs plus their metadata occupy 193,695 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
 
-Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
+Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. Its dedicated process group also stops owned child processes. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
 
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 

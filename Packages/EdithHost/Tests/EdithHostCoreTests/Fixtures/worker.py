@@ -1,8 +1,15 @@
 import json
+import os
+import subprocess
 import sys
 import time
 
 mode = sys.argv[1]
+os.setpgid(0, 0)
+if mode == "child":
+    child = subprocess.Popen(["/bin/sleep", "30"])
+    with open(sys.argv[2], "w") as stream:
+        stream.write(str(child.pid))
 for line in sys.stdin:
     request = json.loads(line)
     operation = request["operation"]

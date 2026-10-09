@@ -20,6 +20,7 @@ public final class HostWorker {
     private var pending: [UUID: Pending] = [:]
     private var launched = false
     private var exited = false
+    private var processGroup: Int32?
 
     public init(
         configuration: HostWorkerConfiguration, executable: URL,
@@ -55,11 +56,15 @@ public final class HostWorker {
         }
         do {
             try process.run()
+            processGroup = process.processIdentifier
             try input.fileHandleForReading.close()
             try output.fileHandleForWriting.close()
             let response = try await request(
                 HostWorkerRequest(operation: "start", configuration: configuration))
             guard response.version == configuration.version else {
+                throw HostWorkerError.invalidResponse
+            }
+            guard getpgid(process.processIdentifier) == process.processIdentifier else {
                 throw HostWorkerError.invalidResponse
             }
             ready = true
@@ -75,9 +80,10 @@ public final class HostWorker {
         _ = try await request(HostWorkerRequest(operation: "show"))
     }
 
-    public func synchronize() async throws {
+    public func synchronize(configuration: HostWorkerConfiguration? = nil) async throws {
         guard ready else { throw HostWorkerError.rejected }
-        _ = try await request(HostWorkerRequest(operation: "synchronize"))
+        _ = try await request(
+            HostWorkerRequest(operation: "synchronize", configuration: configuration))
     }
 
     public func status() async throws -> HostWorkerResponse {
@@ -96,6 +102,7 @@ public final class HostWorker {
             }
         }
         finish()
+        terminateGroup()
     }
 
     private func request(_ request: HostWorkerRequest) async throws -> HostWorkerResponse {
@@ -152,7 +159,20 @@ public final class HostWorker {
     }
 
     private func terminate() {
-        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        if process.isRunning {
+            let pid = process.processIdentifier
+            if getpgid(pid) == pid {
+                processGroup = pid; kill(-pid, SIGKILL)
+            } else {
+                kill(pid, SIGKILL)
+            }
+        }
+        terminateGroup()
+    }
+
+    private func terminateGroup() {
+        if let processGroup { kill(-processGroup, SIGKILL) }
+        processGroup = nil
     }
 
     private func awaitExit() async throws {
@@ -178,5 +198,6 @@ public final class HostWorker {
             request.continuation.resume(throwing: HostWorkerError.exited)
         }
         didExit?()
+        terminateGroup()
     }
 }
