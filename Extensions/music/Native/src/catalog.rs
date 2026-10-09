@@ -44,6 +44,100 @@ fn oauth() -> OAuth {
         .set_redirect_uri(RedirectUrl::new(REDIRECT.into()).unwrap())
 }
 
+fn open_browser(url: &str) -> Result<()> {
+    open::that(url).map_err(|_| "The Spotify sign-in browser could not open.".into())
+}
+
+pub async fn streaming_authorization(client_id: &str) -> Result<String> {
+    let client = BasicClient::new(ClientId::new(client_id.into()))
+        .set_auth_uri(AuthUrl::new("https://accounts.spotify.com/authorize".into()).unwrap())
+        .set_token_uri(TokenUrl::new("https://accounts.spotify.com/api/token".into()).unwrap())
+        .set_redirect_uri(RedirectUrl::new("http://127.0.0.1:8898/login".into()).unwrap());
+    let http = Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|_| "The Spotify authorization client could not start.")?;
+    let token = tokio::time::timeout(
+        Duration::from_secs(600),
+        authorize_with(
+            client,
+            &http,
+            "127.0.0.1:8898",
+            &["streaming"],
+            open_browser,
+        ),
+    )
+    .await
+    .map_err(|_| "Spotify authorization timed out.")??;
+    Ok(token.access_token().secret().clone())
+}
+
+async fn authorize_with(
+    client: OAuth,
+    http: &Client,
+    address: &str,
+    scopes: &[&str],
+    open_browser: impl FnOnce(&str) -> Result<()>,
+) -> Result<Token> {
+    let listener = TcpListener::bind(address).await.map_err(
+        |_| "Another Spotify sign-in is using the library callback. Close it and try again.",
+    )?;
+    let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
+    let (url, state) = client
+        .authorize_url(CsrfToken::new_random)
+        .add_scopes(scopes.iter().map(|s| Scope::new((*s).into())))
+        .set_pkce_challenge(challenge)
+        .url();
+    open_browser(url.as_str())?;
+    loop {
+        let (mut stream, _) = listener
+            .accept()
+            .await
+            .map_err(|_| "The Spotify callback could not be accepted.")?;
+        let mut line = String::new();
+        let read = tokio::time::timeout(
+            Duration::from_secs(5),
+            BufReader::new((&mut stream).take(4096)).read_line(&mut line),
+        )
+        .await;
+        let code = if matches!(read, Ok(Ok(_))) {
+            callback(&line, state.secret())
+        } else {
+            None
+        };
+        let body = match &code {
+            Some(Ok(_)) => "Connected. Return to Edith.",
+            Some(Err(_)) => "Sign-in declined. Return to Edith to retry.",
+            None => "This sign-in callback is invalid.",
+        };
+        let response = format!(
+            "HTTP/1.1 {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            if code.is_some() {
+                "200 OK"
+            } else {
+                "400 Bad Request"
+            },
+            body.len(),
+            body
+        );
+        let _ = tokio::time::timeout(
+            Duration::from_secs(5),
+            stream.write_all(response.as_bytes()),
+        )
+        .await;
+        if let Some(code) = code {
+            return client
+                .exchange_code(AuthorizationCode::new(code?))
+                .set_pkce_verifier(verifier)
+                .request_async(http)
+                .await
+                .map_err(|_| {
+                    "Spotify library authorization was declined. Connect again to retry.".into()
+                });
+        }
+    }
+}
+
 fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -220,64 +314,14 @@ impl Library {
     }
 
     async fn authorize(&self) -> Result<Token> {
-        let listener = TcpListener::bind("127.0.0.1:8989").await.map_err(
-            |_| "Another Spotify sign-in is using the library callback. Close it and try again.",
-        )?;
-        let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
-        let client = oauth();
-        let (url, state) = client
-            .authorize_url(CsrfToken::new_random)
-            .add_scopes(SCOPES.iter().map(|s| Scope::new((*s).into())))
-            .set_pkce_challenge(challenge)
-            .url();
-        open::that(url.as_str()).map_err(|_| "The Spotify sign-in browser could not open.")?;
-        loop {
-            let (mut stream, _) = listener
-                .accept()
-                .await
-                .map_err(|_| "The Spotify callback could not be accepted.")?;
-            let mut line = String::new();
-            let read = tokio::time::timeout(
-                Duration::from_secs(5),
-                BufReader::new((&mut stream).take(4096)).read_line(&mut line),
-            )
-            .await;
-            let code = if matches!(read, Ok(Ok(_))) {
-                callback(&line, state.secret())
-            } else {
-                None
-            };
-            let body = match &code {
-                Some(Ok(_)) => "Connected. Return to Edith.",
-                Some(Err(_)) => "Sign-in declined. Return to Edith to retry.",
-                None => "This sign-in callback is invalid.",
-            };
-            let response = format!(
-                "HTTP/1.1 {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                if code.is_some() {
-                    "200 OK"
-                } else {
-                    "400 Bad Request"
-                },
-                body.len(),
-                body
-            );
-            let _ = tokio::time::timeout(
-                Duration::from_secs(5),
-                stream.write_all(response.as_bytes()),
-            )
-            .await;
-            if let Some(code) = code {
-                return client
-                    .exchange_code(AuthorizationCode::new(code?))
-                    .set_pkce_verifier(verifier)
-                    .request_async(&self.client)
-                    .await
-                    .map_err(|_| {
-                        "Spotify library authorization was declined. Connect again to retry.".into()
-                    });
-            }
-        }
+        authorize_with(
+            oauth(),
+            &self.client,
+            "127.0.0.1:8989",
+            SCOPES,
+            open_browser,
+        )
+        .await
     }
 
     async fn token(&self, force: bool) -> Result<String> {
@@ -950,6 +994,28 @@ mod tests {
         });
         Client::new().get(url).send().await.unwrap()
     }
+    #[tokio::test]
+    async fn cancelling_authorization_closes_the_callback_listener() {
+        let reserved = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = reserved.local_addr().unwrap().to_string();
+        drop(reserved);
+        let bound_address = address.clone();
+        let (started, began) = tokio::sync::oneshot::channel();
+        let authorization = tokio::spawn(async move {
+            let http = Client::new();
+            authorize_with(oauth(), &http, &bound_address, &["streaming"], move |_| {
+                let _ = started.send(());
+                Ok(())
+            })
+            .await
+        });
+        began.await.unwrap();
+        assert!(TcpListener::bind(&address).await.is_err());
+        authorization.abort();
+        assert!(authorization.await.unwrap_err().is_cancelled());
+        assert!(TcpListener::bind(&address).await.is_ok());
+    }
+
     #[tokio::test]
     async fn successful_mutations_use_status_but_reads_require_valid_json() {
         assert!(

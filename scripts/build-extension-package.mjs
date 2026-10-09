@@ -204,6 +204,7 @@ export async function buildExtensionPackage({
       await mkdir(frameworks, { recursive: true });
       const library = resolve(frameworks, definition.nativeCargo.library);
       await copyFile(cargoLibrary, library);
+      execFileSync("strip", ["-x", library]);
       execFileSync("install_name_tool", [
         "-id",
         `@rpath/${definition.nativeCargo.library}`,

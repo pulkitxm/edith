@@ -220,7 +220,7 @@ pub unsafe extern "C" fn edith_music_player_start(
                 _ = &mut cancelled => {}
             }
         });
-            runtime.shutdown_timeout(std::time::Duration::from_millis(250));
+            drop(runtime);
             emit(json!({"event":"terminated"}));
         },
     );
@@ -363,19 +363,8 @@ async fn run(
                 return Err("sign-in is required".into());
             }
             emit(json!({"event": "authorizing"}));
-            let client_id = config.client_id.clone();
-            let token = tokio::task::spawn_blocking(move || {
-                librespot_oauth::OAuthClientBuilder::new(
-                    &client_id,
-                    "http://127.0.0.1:8898/login",
-                    vec!["streaming"],
-                )
-                .open_in_browser()
-                .build()?
-                .get_access_token()
-            })
-            .await??;
-            Credentials::with_access_token(token.access_token)
+            let token = catalog::streaming_authorization(&config.client_id).await?;
+            Credentials::with_access_token(token)
         }
     };
     let session = Session::new(config, None);
