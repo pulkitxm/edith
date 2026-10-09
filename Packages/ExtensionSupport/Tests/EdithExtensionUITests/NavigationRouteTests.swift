@@ -663,7 +663,7 @@ private struct RouteProbe: View {
     }
 }
 
-@Suite struct NavigationShortcutGateTests {
+@Suite @MainActor struct NavigationShortcutGateTests {
     @Test func commandBracketsAreHistoryKeys() {
         #expect(NavigationShortcutGate.direction(keyCharacter: "[", modifiers: .command) == .back)
         #expect(
