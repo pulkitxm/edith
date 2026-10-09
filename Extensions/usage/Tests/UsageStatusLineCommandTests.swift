@@ -17,12 +17,16 @@ import Testing
             UsageStatusLineChangeResponse.self,
             from: await service.execute("usage.statusline.install", payload: Data("{}".utf8)))
         #expect(change.change == "installed")
-        #expect(ClaudeStatusLine.installedCommand(settings: settings) == "'/fixture/Edith' extension command usage usage.statusline.record")
-        let input = Data(#"{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":4102444800}}}"#.utf8)
+        #expect(
+            ClaudeStatusLine.installedCommand(settings: settings)
+                == "'/fixture/Edith' extension command usage usage.statusline.record")
+        let input = Data(
+            #"{"rate_limits":{"five_hour":{"used_percentage":42,"resets_at":4102444800}}}"#.utf8)
         let result = try JSONDecoder().decode(
             UsageStatusLineRecordResponse.self,
             from: await service.execute(
-                "usage.statusline.record", payload: JSONEncoder().encode(UsageStatusLineRecordRequest(input: input))))
+                "usage.statusline.record",
+                payload: JSONEncoder().encode(UsageStatusLineRecordRequest(input: input))))
         #expect(result.recorded)
         #expect(result.line == "5h 42%")
         #expect(LimitsHistory.latest(provider: .claude, url: history)?.session?.percent == 42)
@@ -40,14 +44,21 @@ import Testing
         #expect(!ClaudeStatusLine.isInstalled(settings: settings))
     }
 
-    @Test(arguments: ["usage.statusline.status", "usage.statusline.install", "usage.statusline.remove", "usage.statusline.record"])
+    @Test(arguments: [
+        "usage.statusline.status", "usage.statusline.install", "usage.statusline.remove",
+        "usage.statusline.record",
+    ])
     func arbitraryPathsAndCommandsAreRejected(command: String) async throws {
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }
         let settings = root.appendingPathComponent("settings.json")
-        let service = UsageStatusLineCommands(settings: settings, history: root.appendingPathComponent("limits.jsonl"))
-        let forged = Data(#"{"settings":"/fixture/outside","executable":"/bin/sh","input":"e30="}"#.utf8)
-        await #expect(throws: ExtensionPeerError.self) { _ = try await service.execute(command, payload: forged) }
+        let service = UsageStatusLineCommands(
+            settings: settings, history: root.appendingPathComponent("limits.jsonl"))
+        let forged = Data(
+            #"{"settings":"/fixture/outside","executable":"/bin/sh","input":"e30="}"#.utf8)
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await service.execute(command, payload: forged)
+        }
         #expect(!FileManager.default.fileExists(atPath: settings.path))
     }
 
@@ -55,21 +66,26 @@ import Testing
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }
         let history = root.appendingPathComponent("limits.jsonl")
-        let service = UsageStatusLineCommands(settings: root.appendingPathComponent("settings.json"), history: history)
-        let oversized = UsageStatusLineRecordRequest(input: Data(repeating: 32, count: 1_024 * 1_024 + 1))
+        let service = UsageStatusLineCommands(
+            settings: root.appendingPathComponent("settings.json"), history: history)
+        let oversized = UsageStatusLineRecordRequest(
+            input: Data(repeating: 32, count: 1_024 * 1_024 + 1))
         await #expect(throws: ExtensionPeerError.self) {
-            _ = try await service.execute("usage.statusline.record", payload: JSONEncoder().encode(oversized))
+            _ = try await service.execute(
+                "usage.statusline.record", payload: JSONEncoder().encode(oversized))
         }
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
-            return try await service.execute("usage.statusline.record", payload: Data(#"{"input":"e30="}"#.utf8))
+            return try await service.execute(
+                "usage.statusline.record", payload: Data(#"{"input":"e30="}"#.utf8))
         }
         await #expect(throws: CancellationError.self) { _ = try await task.value }
         #expect(!FileManager.default.fileExists(atPath: history.path))
     }
 
     private func sandbox() throws -> URL {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("usage-command-\(UUID().uuidString)")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "usage-command-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
