@@ -25,6 +25,7 @@ import Testing
             ".openclaw/credentials/file.json", ".copilot/config.json", ".claude/projects/test.sock",
             ".local/share/kilo/private.db", ".kimi/sessions/settings.json",
             ".factory/sessions/session.jsonl",
+            ".codex/sessions/node_modules/receipt.jsonl", ".codex/sessions/.git/receipt.jsonl",
         ] {
             #expect(!MachineUsageReceiptSnapshot.allowed(path))
             #expect(throws: (any Error).self) {
@@ -57,6 +58,10 @@ import Testing
             try MachineUsageReceiptSnapshot.validate(JSONSerialization.data(withJSONObject: object))
         }
         object["files"] = files; object["command"] = "uname"
+        #expect(throws: (any Error).self) {
+            try MachineUsageReceiptSnapshot.validate(JSONSerialization.data(withJSONObject: object))
+        }
+        object.removeValue(forKey: "command"); object["version"] = true
         #expect(throws: (any Error).self) {
             try MachineUsageReceiptSnapshot.validate(JSONSerialization.data(withJSONObject: object))
         }
@@ -95,7 +100,9 @@ import Testing
         MachineRegistry.add(machine, files)
         var now = Date(timeIntervalSince1970: 1)
         let store = MachineUsageSnapshotStore(files: files, now: { now })
-        let bytes = try snapshot()
+        var receipt = try #require(JSONSerialization.jsonObject(with: snapshot()) as? [String: Any])
+        receipt["context"] = ["machineID": machine.id.uuidString, "projects": []]
+        let bytes = try JSONSerialization.data(withJSONObject: receipt)
         let descriptor = try store.insert(bytes, machine: machine)
         #expect(descriptor.sha256 == MachineUsageReceiptSnapshot.hash(bytes))
         #expect(descriptor.byteCount == bytes.count)

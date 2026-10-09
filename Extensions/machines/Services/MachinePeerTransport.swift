@@ -7,9 +7,25 @@ import Foundation
     private var forwards: [Int: PortForward] = [:]
     private var stopped = false
 
-    public let snapshots = MachineUsageSnapshotStore()
+    public typealias UsagePlatform =
+        @MainActor @Sendable (Machine) async throws -> RemoteMachinePlatform
+    public typealias UsageRun =
+        @MainActor @Sendable (Machine, String, Data, TimeInterval, Int) async throws ->
+        SSHExecResult
+    public typealias UsageInvoke =
+        @MainActor @Sendable (String, Data, TimeInterval) async throws -> Data
+    private let usagePlatform: UsagePlatform?
+    private let usageRun: UsageRun?
+    private let usageInvoke: UsageInvoke?
+    public let snapshots: MachineUsageSnapshotStore
 
-    public init() {}
+    public init(
+        files: MachineRegistry.Files = .init(), usagePlatform: UsagePlatform? = nil,
+        usageRun: UsageRun? = nil, usageInvoke: UsageInvoke? = nil
+    ) {
+        snapshots = MachineUsageSnapshotStore(files: files)
+        self.usagePlatform = usagePlatform; self.usageRun = usageRun; self.usageInvoke = usageInvoke
+    }
 
     public func run(_ machine: Machine, command: String, stdin: Data?, timeout: TimeInterval)
         async throws -> String
@@ -18,6 +34,7 @@ import Foundation
         let result = try await connection.run(
             command, stdin: stdin, timeout: timeout, maximumOutputBytes: 6 * 1_024 * 1_024)
         try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
         guard result.succeeded else { throw ExtensionPeerError.rejected(result.stderrText) }
         return result.successfulCommandText
     }
@@ -41,18 +58,42 @@ import Foundation
     }
 
     public func collectUsage(_ machine: Machine, force: Bool) async throws -> Data {
-        let connection = try await connected(machine)
-        guard let platform = await connection.remotePlatform else {
-            throw ExtensionPeerError.unavailable
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        let invoke: UsageInvoke
+        if let usageInvoke {
+            invoke = usageInvoke
+        } else {
+            guard let endpoint = ExtensionPeerEndpoint.current(owner: "usage") else {
+                throw ExtensionPeerError.rejected(
+                    "Enable Usage to collect receipts from saved machines.")
+            }
+            invoke = { command, payload, timeout in
+                try await endpoint.invoke(command, payload: payload, timeout: timeout)
+            }
         }
-        guard let endpoint = ExtensionPeerEndpoint.current(owner: "usage") else {
-            throw ExtensionPeerError.rejected(
-                "Enable Usage to collect receipts from saved machines.")
+        let connection: SSHConnection?
+        let platform: RemoteMachinePlatform
+        if let usagePlatform {
+            platform = try await usagePlatform(machine); connection = nil
+        } else {
+            connection = try await connected(machine)
+            guard let detected = await connection?.remotePlatform else {
+                throw ExtensionPeerError.unavailable
+            }
+            platform = detected
         }
         let command = try MachineRemoteUsageOperation.command(platform: platform, force: force)
-        let result = try await connection.run(
-            command, timeout: 900,
-            maximumOutputBytes: MachineUsageCollectionService.maximumDocumentBytes)
+        let input = try MachineRemoteUsageOperation.input()
+        let result: SSHExecResult
+        if let usageRun {
+            result = try await usageRun(
+                machine, command, input, 900, MachineUsageCollectionService.maximumDocumentBytes)
+        } else {
+            guard let connection else { throw ExtensionPeerError.unavailable }
+            result = try await connection.run(
+                command, stdin: input, timeout: 900,
+                maximumOutputBytes: MachineUsageCollectionService.maximumDocumentBytes)
+        }
         try Task.checkCancellation()
         guard result.succeeded else { throw ExtensionPeerError.rejected(result.stderrText) }
         guard var document = try JSONSerialization.jsonObject(with: result.stdout) as? [String: Any]
@@ -65,14 +106,23 @@ import Foundation
         let snapshot = try snapshots.insert(
             JSONSerialization.data(withJSONObject: document), machine: machine)
         defer { snapshots.remove(snapshot.collectionID) }
-        let projected = try await endpoint.invoke(
-            "usage.machines.project", payload: JSONEncoder().encode(snapshot), timeout: 900)
-        let descriptor = try JSONDecoder().decode(Projected.self, from: projected)
+        var collectionID = snapshot.collectionID
         do {
+            let projected = try await invoke(
+                "usage.machines.project", JSONEncoder().encode(snapshot), 900)
+            let descriptor = try MachineCommandPayload.decode(
+                Projected.self, data: projected,
+                required: ["collectionID", "byteCount", "sha256", "generatedAt"])
+            collectionID = descriptor.collectionID
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
             guard descriptor.byteCount > 0,
                 descriptor.byteCount <= MachineUsageCollectionService.maximumDocumentBytes,
                 descriptor.sha256.count == 64,
-                descriptor.sha256.allSatisfy({ $0.isNumber || ("a"..."f").contains(String($0)) })
+                descriptor.sha256.utf8.allSatisfy({
+                    (48...57).contains($0) || (97...102).contains($0)
+                }),
+                ISO8601DateFormatter().date(from: descriptor.generatedAt) != nil
             else { throw ExtensionPeerError.invalidRequest }
             var document = Data()
             while document.count < descriptor.byteCount {
@@ -80,9 +130,13 @@ import Foundation
                 let request = ResultRequest(
                     collectionID: descriptor.collectionID, offset: document.count,
                     maximumBytes: MachineUsageCollectionService.maximumChunkBytes)
-                let response = try await endpoint.invoke(
-                    "usage.machines.result", payload: JSONEncoder().encode(request), timeout: 60)
-                let chunk = try JSONDecoder().decode(Chunk.self, from: response)
+                let response = try await invoke(
+                    "usage.machines.result", JSONEncoder().encode(request), 60)
+                try Task.checkCancellation()
+                guard !stopped else { throw ExtensionPeerError.unavailable }
+                let chunk = try MachineCommandPayload.decode(
+                    Chunk.self, data: response,
+                    required: ["offset", "data", "finished"])
                 guard chunk.offset == document.count, !chunk.data.isEmpty,
                     chunk.data.count <= request.maximumBytes,
                     document.count + chunk.data.count <= descriptor.byteCount,
@@ -93,10 +147,10 @@ import Foundation
             guard MachineUsageReceiptSnapshot.hash(document) == descriptor.sha256 else {
                 throw ExtensionPeerError.invalidRequest
             }
-            await cancelProjection(endpoint, id: descriptor.collectionID)
+            await cancelProjection(invoke, id: collectionID)
             return document
         } catch {
-            await cancelProjection(endpoint, id: descriptor.collectionID)
+            await cancelProjection(invoke, id: collectionID)
             throw error
         }
     }
@@ -111,10 +165,10 @@ import Foundation
         let collectionID: UUID; let offset: Int; let maximumBytes: Int
     }
     private struct Chunk: Decodable { let offset: Int; let data: Data; let finished: Bool }
-    private func cancelProjection(_ endpoint: ExtensionPeerEndpoint, id: UUID) async {
+    private func cancelProjection(_ invoke: @escaping UsageInvoke, id: UUID) async {
         let payload = Data("{\"collectionID\":\"\(id.uuidString)\"}".utf8)
         await Task.detached {
-            _ = try? await endpoint.invoke("usage.machines.cancel", payload: payload, timeout: 15)
+            _ = try? await invoke("usage.machines.cancel", payload, 15)
         }.value
     }
 
@@ -173,18 +227,59 @@ import Foundation
 }
 
 public enum MachineRemoteUsageOperation {
-    public static func command(platform: RemoteMachinePlatform, force: Bool) throws -> String {
-        guard platform != .windows else {
-            throw ExtensionPeerError.rejected(
-                "Native Usage collection is unavailable on this machine.")
+    public static func input() throws -> Data {
+        guard let url = MachineResources.url(forResource: "usage-snapshot", withExtension: "py")
+        else {
+            throw ExtensionPeerError.unavailable
         }
-        guard
-            let scriptURL = MachineResources.url(
-                forResource: "usage-snapshot", withExtension: "py"),
-            let script = try? String(contentsOf: scriptURL, encoding: .utf8)
-        else { throw ExtensionPeerError.unavailable }
-        return
-            "command -v python3 >/dev/null 2>&1 || { printf '%s\\n' 'Install Python 3 on this saved machine to collect receipt snapshots.' >&2; exit 69; }; exec python3 -c "
-            + POSIXQuote.quote(script)
+        return try Data(contentsOf: url)
+    }
+
+    public static func shellScript(platform: RemoteMachinePlatform) -> String {
+        let prepare =
+            platform == .windows
+            ? """
+            export EDITH_USAGE_SNAPSHOT_WINDOWS=1 PYTHONUTF8=1
+            command -v cygpath >/dev/null 2>&1 || { printf '%s\\n' 'Git Bash cygpath is required to locate Windows receipts.' >&2; exit 69; }
+            nativeHome=$(cygpath -aw "$HOME") || { printf '%s\\n' 'Git Bash could not resolve the Windows receipt home.' >&2; exit 69; }
+            [ -n "$nativeHome" ] || exit 69
+            export EDITH_USAGE_SNAPSHOT_HOME="$nativeHome"
+            """ : ""
+        return prepare + "\n" + """
+            python=()
+            probe='import sys,sqlite3; sys.exit(0 if sys.version_info >= (3,8) else 1)'
+            if command -v python3 >/dev/null 2>&1 && python3 -c "$probe" >/dev/null 2>&1; then
+                python=(python3)
+            elif command -v python >/dev/null 2>&1 && python -c "$probe" >/dev/null 2>&1; then
+                python=(python)
+            elif command -v py >/dev/null 2>&1 && py -3 -c "$probe" >/dev/null 2>&1; then
+                python=(py -3)
+            else
+                printf '%s\\n' 'Install Python 3.8 or newer with sqlite3 support on this saved machine, and add it to the Git Bash PATH.' >&2
+                exit 69
+            fi
+            exec "${python[@]}" -
+            """
+    }
+
+    public static func command(platform: RemoteMachinePlatform, force: Bool) throws -> String {
+        let shell = shellScript(platform: platform)
+        guard platform == .windows else { return "bash -lc " + POSIXQuote.quote(shell) }
+        return PowerShell.command(
+            """
+            $gitCandidates = @(
+                (Join-Path $env:ProgramFiles 'Git/bin/bash.exe'),
+                (Join-Path $env:LOCALAPPDATA 'Programs/Git/bin/bash.exe')
+            )
+            $gitBash = $gitCandidates | Where-Object {
+                Test-Path -LiteralPath $_ -PathType Leaf
+            } | Select-Object -First 1
+            if ($null -eq $gitBash) {
+                [Console]::Error.Write('Git Bash is required to collect receipt snapshots on Windows.')
+                exit 69
+            }
+            & $gitBash -lc \(PowerShell.literal(shell))
+            exit $LASTEXITCODE
+            """)
     }
 }

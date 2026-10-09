@@ -85,15 +85,16 @@ import Testing
 
     @Test func remoteUsageOperationHasOnlyFixedNativeCommandsAndPaths() throws {
         let forced = try MachineRemoteUsageOperation.command(platform: .darwin, force: true)
-        #expect(forced.contains("exec python3 -c"))
-        #expect(forced.contains("sqlite3"))
-        #expect(forced.contains("67108864"))
+        #expect(forced.contains("bash -lc"))
+        let script = String(decoding: try MachineRemoteUsageOperation.input(), as: UTF8.self)
+        #expect(script.contains("sqlite3"))
+        #expect(script.contains("67108864"))
         #expect(!forced.contains("ed usage"))
         #expect(!forced.contains("curl"))
         #expect(!forced.contains("bun"))
         #expect(!forced.contains("npm"))
-        #expect(throws: ExtensionPeerError.self) {
-            try MachineRemoteUsageOperation.command(platform: .windows, force: true)
-        }
+        #expect(
+            try MachineRemoteUsageOperation.command(platform: .windows, force: true).contains(
+                "-EncodedCommand"))
     }
 }

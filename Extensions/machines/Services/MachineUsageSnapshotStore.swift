@@ -31,6 +31,12 @@ public struct MachineUsageSnapshotDescriptor: Codable, Sendable {
             throw ExtensionPeerError.unavailable
         }
         try MachineUsageReceiptSnapshot.validate(data)
+        guard let document = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(document.keys) == ["version", "files", "context"],
+            let context = document["context"] as? [String: Any],
+            let machineIDText = context["machineID"] as? String,
+            UUID(uuidString: machineIDText) == machine.id
+        else { throw ExtensionPeerError.invalidRequest }
         let id = UUID()
         entries[id] = Entry(machine: machine, data: data, expires: now().addingTimeInterval(900))
         return MachineUsageSnapshotDescriptor(
@@ -87,7 +93,7 @@ public enum MachineUsageReceiptSnapshot {
         guard data.count <= 67_108_864,
             let document = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             Set(document.keys).isSubset(of: ["version", "files", "context"]),
-            document["version"] as? Int == 1,
+            try JSONDecoder().decode(Version.self, from: data).version == 1,
             let files = document["files"] as? [[String: Any]], files.count <= 10_000
         else { throw ExtensionPeerError.invalidRequest }
         if let context = document["context"] {
@@ -137,6 +143,7 @@ public enum MachineUsageReceiptSnapshot {
             guard Set(file.keys) == ["path", "modifiedAt", "data"],
                 let path = file["path"] as? String, allowed(path), paths.insert(path).inserted,
                 let modified = file["modifiedAt"] as? Double, modified.isFinite, modified >= 0,
+                modified <= 253_402_300_799,
                 let encoded = file["data"] as? String, encoded.utf8.count <= 11_184_812,
                 let payload = Data(base64Encoded: encoded), payload.count <= 8_388_608
             else { throw ExtensionPeerError.invalidRequest }
@@ -162,7 +169,10 @@ public enum MachineUsageReceiptSnapshot {
         let lower = parts.map { $0.lowercased() }
         guard
             lower.allSatisfy({
-                !["credentials", "credential", "secrets", "auth", "plugins", "skills"].contains($0)
+                ![
+                    "credentials", "credential", "secrets", "auth", "plugins", "skills",
+                    "node_modules", ".git",
+                ].contains($0)
             }),
             let name = lower.last,
             !["credential", "secret", "auth", "token", "config"].contains(where: name.contains)
@@ -209,4 +219,5 @@ public enum MachineUsageReceiptSnapshot {
         }
         return true
     }
+    private struct Version: Decodable { let version: Int }
 }

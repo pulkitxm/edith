@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import pathlib
+import ntpath
 import re
 import subprocess
 import urllib.parse
@@ -15,7 +16,10 @@ import time
 MAX_FILE = 8388608
 MAX_TOTAL = 41943040
 MAX_COUNT = 10000
-home = pathlib.Path(os.environ['HOME'])
+windows = os.name == 'nt' or os.environ.get('EDITH_USAGE_SNAPSHOT_WINDOWS') == '1'
+home = pathlib.Path(os.environ.get('EDITH_USAGE_SNAPSHOT_HOME') or os.environ['HOME']).absolute()
+if not home.is_dir():
+    raise RuntimeError('The saved machine home is unavailable; check Git Bash HOME and cygpath')
 roots = [
     '.claude/projects', 'Library/Application Support/Claude/local-agent-mode-sessions',
     '.codex/sessions', '.codex/archived_sessions', '.local/share/opencode/storage/message',
@@ -37,9 +41,26 @@ def interrupted(signum, frame):
 
 signal.signal(signal.SIGTERM, interrupted)
 signal.signal(signal.SIGINT, interrupted)
-signal.signal(signal.SIGHUP, interrupted)
-signal.signal(signal.SIGALRM, interrupted)
-signal.alarm(880)
+if hasattr(signal, 'SIGHUP'):
+    signal.signal(signal.SIGHUP, interrupted)
+if hasattr(signal, 'SIGALRM'):
+    signal.signal(signal.SIGALRM, interrupted)
+    signal.alarm(880)
+
+
+def unsafe(path):
+    metadata = path.lstat()
+    return stat.S_ISLNK(metadata.st_mode) or bool(getattr(metadata, 'st_file_attributes', 0) & 0x400)
+
+
+def present(path):
+    try:
+        path.lstat()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as error:
+        raise RuntimeError('Cannot inspect a supported receipt source; check its read permissions') from error
 
 
 def regular(path):
@@ -48,7 +69,7 @@ def regular(path):
     for part in relative.parts:
         current = current / part
         metadata = current.lstat()
-        if stat.S_ISLNK(metadata.st_mode):
+        if stat.S_ISLNK(metadata.st_mode) or getattr(metadata, 'st_file_attributes', 0) & 0x400:
             return False
     return stat.S_ISREG(metadata.st_mode)
 
@@ -57,12 +78,12 @@ def admitted(path):
     relative = path.relative_to(home)
     name = path.name.lower()
     parts = [part.lower() for part in relative.parts]
-    if any(part in {'credentials', 'credential', 'secrets', 'auth', 'plugins', 'skills'} for part in parts):
+    if any(part in {'credentials', 'credential', 'secrets', 'auth', 'plugins', 'skills', 'node_modules', '.git'} for part in parts):
         return False
     if any(word in name for word in ['credential', 'secret', 'auth', 'token', 'config']):
         return False
     if name.endswith(('.sqlite', '.db')):
-        return str(relative) in databases or name == 'openclaw-agent.sqlite'
+        return relative.as_posix() in databases or name == 'openclaw-agent.sqlite'
     if path.suffix.lower() not in {'.json', '.jsonl'}:
         return False
     if parts[0] in {'.openclaw', '.clawdbot', '.moltbot', '.moldbot', '.copilot'} and 'sessions' not in parts and 'session-state' not in parts:
@@ -86,12 +107,13 @@ total = 0
 inspected = 0
 workdirs = set()
 
-with tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-') as temporary:
-    os.chmod(temporary, 0o700)
+with (contextlib.nullcontext(None) if windows else tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-')) as temporary:
+    if temporary is not None:
+        os.chmod(temporary, 0o700)
 
     def add(path):
         global total
-        relative = str(path.relative_to(home))
+        relative = path.relative_to(home).as_posix()
         if relative in seen or not regular(path) or not admitted(path):
             return
         seen.add(relative)
@@ -99,20 +121,32 @@ with tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-') as temporary:
         if before.st_size > MAX_FILE:
             raise ValueError('A receipt exceeds the 8 MiB per-file limit')
         if path.suffix.lower() in {'.db', '.sqlite'}:
-            backup = pathlib.Path(temporary) / 'snapshot.db'
+            backup = None if windows else pathlib.Path(temporary) / 'snapshot.db'
             with contextlib.closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=10)) as source:
                 page_count = source.execute('PRAGMA page_count').fetchone()[0]
                 page_size = source.execute('PRAGMA page_size').fetchone()[0]
                 if page_count * page_size > MAX_FILE:
                     raise ValueError('SQLite receipt exceeds its bounded capacity')
-                with contextlib.closing(sqlite3.connect(backup)) as destination:
-                    source.backup(destination, pages=256, sleep=0.01)
-            if backup.stat().st_size > MAX_FILE:
-                raise ValueError('SQLite backup exceeds its bounded capacity')
-            data = backup.read_bytes()
-            backup.unlink()
+                if windows:
+                    if not hasattr(sqlite3.Connection, 'serialize'):
+                        raise RuntimeError('Python 3.11 or newer with SQLite serialization is required for safe Windows SQLite receipt snapshots')
+                    with contextlib.closing(sqlite3.connect(':memory:')) as destination:
+                        source.backup(destination, pages=256, sleep=0.01)
+                        serialized = bytearray(destination.serialize())
+                        if serialized[:16] != b'SQLite format 3\x00' or len(serialized) < 100:
+                            raise ValueError('SQLite backup did not produce a valid database')
+                        serialized[18:20] = b'\x01\x01'
+                        data = bytes(serialized)
+                else:
+                    with contextlib.closing(sqlite3.connect(backup)) as destination:
+                        source.backup(destination, pages=256, sleep=0.01)
+            if not windows:
+                if backup.stat().st_size > MAX_FILE:
+                    raise ValueError('SQLite backup exceeds its bounded capacity')
+                data = backup.read_bytes()
+                backup.unlink()
         else:
-            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0))
             with os.fdopen(descriptor, 'rb') as stream:
                 opened = os.fstat(stream.fileno())
                 if not stat.S_ISREG(opened.st_mode) or opened.st_ino != before.st_ino or opened.st_dev != before.st_dev:
@@ -137,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-') as temporary:
                     if isinstance(record, dict):
                         for key in ['cwd', 'directory', 'projectPath']:
                             cwd = record.get(key)
-                            if isinstance(cwd, str) and cwd.startswith('/') and len(cwd.encode()) <= 4096 and not any(ord(char) < 32 for char in cwd):
+                            if isinstance(cwd, str) and (cwd.startswith('/') or re.match(r'^[A-Za-z]:[\\/]', cwd)) and len(cwd.encode()) <= 4096 and not any(ord(char) < 32 for char in cwd):
                                 workdirs.add(cwd)
                                 if len(workdirs) > MAX_COUNT:
                                     raise ValueError('Receipt projects exceed their bounded capacity')
@@ -150,19 +184,23 @@ with tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-') as temporary:
 
     for relative in roots:
         root = home / relative
-        if not root.exists():
+        if not present(root):
             continue
         current = home
         safe = True
         for part in pathlib.Path(relative).parts:
             current = current / part
-            if current.is_symlink():
+            if unsafe(current):
                 safe = False
                 break
         if not safe:
-            continue
-        for directory, children, names in os.walk(root, followlinks=False):
-            children[:] = sorted(child for child in children if not (pathlib.Path(directory) / child).is_symlink())
+            raise ValueError('A supported receipt root is a symbolic link or Windows junction; select a regular receipt home')
+        if not root.is_dir():
+            raise ValueError('A supported receipt root is not a directory; check its saved machine path')
+        def enumeration_error(error):
+            raise error
+        for directory, children, names in os.walk(root, followlinks=False, onerror=enumeration_error):
+            children[:] = sorted(child for child in children if child.lower() not in {'node_modules', '.git', 'credentials', 'secrets', 'auth', 'plugins', 'skills'} and not unsafe(pathlib.Path(directory) / child))
             for name in sorted(names):
                 inspected += 1
                 if inspected > 100000:
@@ -170,11 +208,11 @@ with tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-') as temporary:
                 add(pathlib.Path(directory) / name)
     for relative in databases:
         path = home / relative
-        if path.exists():
+        if present(path):
             add(path)
     config = home / '.codex/config.toml'
-    if config.exists() and regular(config) and config.stat().st_size <= 1048576:
-        descriptor = os.open(config, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    if present(config) and regular(config) and config.stat().st_size <= 1048576:
+        descriptor = os.open(config, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0))
         with os.fdopen(descriptor, 'r') as stream:
             text = stream.read(1048577)
         tier = re.search(r'^\s*service_tier\s*=\s*"(fast|flex|default|auto|priority)"\s*$', text, re.MULTILINE)
@@ -194,8 +232,9 @@ with tempfile.TemporaryDirectory(prefix='edith-receipt-snapshot-') as temporary:
     projects = []
     for cwd in sorted(workdirs):
         root = git(cwd, ['rev-parse', '--show-toplevel']) or cwd
-        folder = pathlib.Path(root).name or 'remote'
-        project = {'cwd': cwd, 'root': root, 'repositoryID': root, 'repositoryName': folder, 'folderName': pathlib.Path(cwd).name or folder}
+        folder = ntpath.basename(ntpath.normpath(root)) if re.match(r'^[A-Za-z]:', root) else pathlib.Path(root).name
+        folder = folder or 'remote'
+        project = {'cwd': cwd, 'root': root, 'repositoryID': root, 'repositoryName': folder, 'folderName': (ntpath.basename(ntpath.normpath(cwd)) if re.match(r'^[A-Za-z]:', cwd) else pathlib.Path(cwd).name) or folder}
         origin = git(cwd, ['remote', 'get-url', 'origin'])
         if origin:
             match = re.fullmatch(r'git@([^:]+):(.+?)(?:\.git)?', origin)
