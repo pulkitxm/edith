@@ -95,21 +95,75 @@ struct HostCommandHarness {
                         throw HostWorkerError.rejected
                     }
                 }
+                let endpoint = try ExtensionPeerEndpoint(namespace: identifier, owner: package.id)
+                try await verifyCommands(endpoint, data: data)
+                let pending = Task { try await endpoint.invoke("wait", timeout: 30) }
+                try await wait {
+                    FileManager.default.fileExists(
+                        atPath: data.appendingPathComponent("peer.ready").path)
+                }
+                let stoppedAt = ContinuousClock.now
                 if mode == "crash" {
                     kill(pid, SIGKILL)
                 } else {
                     try await worker.stop()
                 }
+                do {
+                    _ = try await pending.value
+                    throw HostWorkerError.rejected
+                } catch is ExtensionPeerError {} catch is CancellationError {}
+                guard ContinuousClock.now - stoppedAt < .seconds(5) else {
+                    throw HostWorkerError.timedOut
+                }
+                do {
+                    _ = try await endpoint.invoke("echo", timeout: 1)
+                    throw HostWorkerError.rejected
+                } catch is ExtensionPeerError {}
                 try await wait {
                     [pid, parent, child].allSatisfy { kill($0, 0) == -1 && errno == ESRCH }
                 }
                 print(
-                    "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"remainingProcesses\":0}"
+                    "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"peerCommands\":true,\"commandCancellation\":true,\"remainingProcesses\":0}"
                 )
             } catch {
                 try? await worker.stop()
                 throw error
             }
+        }
+    }
+
+    @MainActor private static func verifyCommands(_ endpoint: ExtensionPeerEndpoint, data: URL)
+        async throws
+    {
+        let payload = Data((0..<(1_024 * 1_024)).map { UInt8(truncatingIfNeeded: $0) })
+        guard try await endpoint.invoke("echo", payload: payload) == payload else {
+            throw HostWorkerError.rejected
+        }
+        let wrong = try ExtensionPeerEndpoint(namespace: UUID().uuidString, owner: "keepAwake")
+        do {
+            _ = try await wrong.invoke("echo", timeout: 1)
+            throw HostWorkerError.rejected
+        } catch is ExtensionPeerError {}
+        do {
+            _ = try await endpoint.invoke("unknown")
+            throw HostWorkerError.rejected
+        } catch is ExtensionPeerError {}
+        let marker = data.appendingPathComponent("peer.ready")
+        let cancelled = Task { try await endpoint.invoke("wait") }
+        try await wait { FileManager.default.fileExists(atPath: marker.path) }
+        cancelled.cancel()
+        do {
+            _ = try await cancelled.value
+            throw HostWorkerError.rejected
+        } catch is CancellationError {}
+        try await wait { !FileManager.default.fileExists(atPath: marker.path) }
+        do {
+            _ = try await endpoint.invoke("wait", timeout: 0.3)
+            throw HostWorkerError.rejected
+        } catch is ExtensionPeerError {}
+        try await wait { !FileManager.default.fileExists(atPath: marker.path) }
+        guard try await endpoint.invoke("echo", payload: payload) == payload else {
+            throw HostWorkerError.rejected
         }
     }
 

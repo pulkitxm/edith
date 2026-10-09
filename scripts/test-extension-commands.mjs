@@ -85,6 +85,8 @@ try {
     assert.equal(result.sameAppExecutable, true);
     assert.equal(result.binaryInput, true);
     assert.equal(result.argumentsAndEnvironment, true);
+    assert.equal(result.peerCommands, true);
+    assert.equal(result.commandCancellation, true);
     assert.equal(result.remainingProcesses, 0);
     process.stdout.write(`${JSON.stringify(result)}\n`);
   }

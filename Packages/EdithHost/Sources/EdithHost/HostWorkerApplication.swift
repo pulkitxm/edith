@@ -17,6 +17,7 @@ final class HostWorkerApplication {
     private var windowObserver: NSObjectProtocol?
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
+    private var peerServer: ExtensionPeerServer?
 
     init() throws {
         let descriptor = dup(STDOUT_FILENO)
@@ -140,6 +141,22 @@ final class HostWorkerApplication {
                 try runtime.start(id: package.id, context: context)
             }
             guard !runtimes.isEmpty else { throw HostWorkerError.rejected }
+            let endpoint = try ExtensionPeerEndpoint(
+                namespace: identity.identifier, owner: package.id)
+            let server = ExtensionPeerServer(endpoint: endpoint) {
+                [weak self] token, command, payload in
+                guard let self, !self.stopping,
+                    let runtime = self.runtimes.first(where: { $0.supportsCommands(id: package.id) }
+                    )
+                else {
+                    throw ExtensionPeerError.rejected(
+                        "This extension does not support that command.")
+                }
+                return try await runtime.command(
+                    id: package.id, token: token, command: command, payload: payload)
+            }
+            peerServer = server
+            try server.start()
             return
         }
         guard let configuration else { throw HostWorkerError.rejected }
@@ -204,6 +221,8 @@ final class HostWorkerApplication {
     private func shutdown() {
         guard !stopping else { return }
         stopping = true
+        peerServer?.shutdown()
+        peerServer = nil
         FileHandle.standardInput.readabilityHandler = nil
         parentWatcher?.cancel()
         parentWatcher = nil
