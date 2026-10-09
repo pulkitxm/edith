@@ -18,7 +18,7 @@ const swift = [
   "--configuration",
   "release",
   "--jobs",
-  "2",
+  process.env.EXTENSION_SWIFT_JOBS ?? "2",
   "--product",
   "EdithHost",
   "-Xswiftc",
