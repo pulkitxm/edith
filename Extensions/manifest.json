@@ -42,12 +42,14 @@
   {
     "id": "focusDim",
     "version": "1.0.0",
-    "hostABI": "host-99450dc9914b4c354b695afe",
+    "hostABI": "edith-host-1",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
         "Extensions/focusDim/Helper/Services/FocusDimEngine.swift",
-        "Extensions/focusDim/Runtime.swift"
+        "Extensions/focusDim/Runtime.swift",
+        "Extensions/focusDim/Models/FocusDimMath.swift",
+        "Extensions/focusDim/Models/FocusDimState.swift"
       ]
     },
     "inputs": [
@@ -55,14 +57,12 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
-      "scripts/extension-host-build.mjs",
-      "Packages/Edith/Sources/EdithKit",
-      "Packages/Edith/Sources/EdithCore",
-      "Packages/Edith/Sources/EdithCameraSupport",
-      "Packages/Edith/Sources/EdithLidAwakeSupport"
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
     ],
     "dependencies": [],
-    "usesHostFramework": true
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI"
   },
   {
     "id": "windowSweaters",

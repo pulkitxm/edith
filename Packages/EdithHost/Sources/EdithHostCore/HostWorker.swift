@@ -29,6 +29,15 @@ public final class HostWorker {
         self.requestTimeout = requestTimeout
         process.executableURL = executable
         process.arguments = arguments
+        if let identity = try? configuration.identity() {
+            var environment = ProcessInfo.processInfo.environment
+            environment["EDITH_APPLICATION_IDENTIFIER"] = identity.identifier
+            environment["EDITH_SHARED_DEFAULTS_SUITE"] = identity.extensionDefaultsSuite(
+                configuration.extensionID)
+            environment["EDITH_EXTENSION_DATA_ROOT"] =
+                identity.extensionDirectory(configuration.extensionID).path
+            process.environment = environment
+        }
         process.standardInput = input
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice

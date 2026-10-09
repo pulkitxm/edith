@@ -1,6 +1,6 @@
 import AppKit
 import CoreGraphics
-import EdithKit
+import EdithExtensionSupport
 
 final class FocusDimOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { false }
@@ -235,9 +235,9 @@ final class FocusDimEngine: FeatureModule {
 
     private func applyOrder(_ overlay: NSWindow, below windowNumber: Int?) {
         if let windowNumber {
-            WindowPresentation.orderBelow(overlay, windowNumber: windowNumber)
+            overlay.order(.below, relativeTo: windowNumber)
         } else {
-            WindowPresentation.orderFront(overlay)
+            overlay.orderFront(nil)
         }
     }
 
