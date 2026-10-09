@@ -227,6 +227,12 @@ public final class ExtensionBundleRuntime {
         guard object.responds(to: NSSelectorFromString("execute:")) else {
             throw MarketplaceError.invalidBundle
         }
+        let privileged = store.directory(for: package).appendingPathComponent(id)
+            .appendingPathComponent("privileged.bundle")
+        guard
+            !FileManager.default.fileExists(atPath: privileged.path)
+                || object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+        else { throw MarketplaceError.invalidBundle }
         let instance = Loaded(
             package: package, bundle: bundle, handle: handle, object: object, lease: lease)
         let description = try execute(instance, operation: "describe", context: [:])
