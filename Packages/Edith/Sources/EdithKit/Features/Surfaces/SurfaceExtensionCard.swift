@@ -96,7 +96,7 @@ public struct SurfaceExtensionCard: View {
             LazyVGrid(
                 columns: [
                     GridItem(
-                        .adaptive(minimum: UIScale.pt(tile.dense ? 76 : 100)),
+                        .adaptive(minimum: UIScale.pt(tile.dense ? 72 : 88)),
                         spacing: UIScale.pt(12))
                 ], alignment: .leading, spacing: UIScale.pt(10)
             ) {

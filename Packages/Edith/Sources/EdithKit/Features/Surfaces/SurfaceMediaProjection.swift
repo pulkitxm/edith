@@ -133,7 +133,7 @@ public enum SurfaceMediaProjection {
                     .init(
                         "active", source: status.mode.rawValue,
                         title: status.mode.rawValue + " recording",
-                        detail: "\(status.sources) \(status.sourceMode) · \(status.frameRate) fps"
+                        detail: sourceDescription(status) + " · \(status.frameRate) fps"
                             + (audio.isEmpty ? "" : " · " + audio.joined(separator: " + ")),
                         value: state, icon: "record.circle", actions: actions))
             }
@@ -169,6 +169,11 @@ public enum SurfaceMediaProjection {
         return bounded >= 3600
             ? "\(bounded / 3600)h \(bounded % 3600 / 60)m"
             : "\(bounded / 60)m \(bounded % 60)s"
+    }
+    private static func sourceDescription(_ status: SurfaceRecorderSnapshot) -> String {
+        let count = max(0, status.sources)
+        let singular = status.sourceMode == "windows" ? "window" : "display"
+        return "\(count) \(singular)" + (count == 1 ? "" : "s")
     }
     private static func bytes(_ count: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: max(0, count), countStyle: .file)

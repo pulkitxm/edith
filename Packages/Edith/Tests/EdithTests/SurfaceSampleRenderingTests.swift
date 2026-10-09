@@ -92,6 +92,21 @@ import Testing
         return try #require(bitmap.representation(using: .png, properties: [:]))
     }
 
+    @Test func actualMediaCardsRenderWithSampleControls() throws {
+        let cards = HStack(alignment: .top, spacing: 12) {
+            ForEach([SurfaceWidget.ability("audioMixer"), .ability("timeLapse")]) { widget in
+                let tile = SurfaceTile(widget)
+                SurfaceExtensionCard(
+                    tile: tile, fixture: SurfaceSampleData.snapshot(tile), open: { _ in }
+                )
+                .frame(width: 280)
+            }
+        }.padding(12).environment(\.colorScheme, .dark).background(Color.black)
+        let data = try render(cards, size: CGSize(width: 596, height: 430), dark: true)
+        #expect(data.count > 10_000)
+        try save(data, name: "media-sample-controls.png")
+    }
+
     private func save(_ data: Data, name: String) throws {
         guard let path = ProcessInfo.processInfo.environment["EDITH_SURFACE_EVIDENCE_DIR"] else {
             return
