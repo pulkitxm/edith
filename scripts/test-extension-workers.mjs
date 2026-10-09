@@ -76,6 +76,19 @@ try {
     assert.equal(result.studioDataValidated, id === "studio");
     assert.equal(result.audioMixerDataValidated, id === "audioMixer");
     assert.equal(result.usageDataValidated, id === "usage");
+    if (id === "lidAwake") {
+      const privileged = JSON.parse(execFileSync(
+        "python3",
+        ["scripts/test-privileged-extension-worker.py", "--app", resolve("local/minimal-host/Edith.app"),
+          "--package", join(releases, "1.0.0", `${id}.zip`)],
+        { encoding: "utf8", timeout: 60_000 },
+      ).trim());
+      for (const key of ["signedPayload", "sameExecutable", "isolatedPrivilegedWorkers", "restoredBeforeExit", "connectionLossExited"])
+        assert.equal(privileged[key], true);
+      assert.equal(privileged.disabledProcesses, 0);
+      assert.equal(privileged.productionSystemEffects, 0);
+      result.privilegedRuntimeValidated = true;
+    }
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });

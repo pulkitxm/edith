@@ -190,6 +190,15 @@ ci-extension-workers:
 ci-privileged-worker:
 	python3 -B scripts/test-privileged-extension-worker.py
 
+.PHONY: ci-extension-bifrost ci-extension-lid-awake
+ci-extension-bifrost:
+	swift format lint --strict --recursive Extensions/bifrost
+	swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter BifrostExtensionTests
+
+ci-extension-lid-awake:
+	swift format lint --strict --recursive Extensions/lidAwake
+	swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter LidAwakeExtensionTests
+
 .PHONY: ci-music-native
 ci-music-native:
 	cargo fmt --manifest-path Extensions/music/Native/Cargo.toml --check

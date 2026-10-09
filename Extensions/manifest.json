@@ -1507,7 +1507,10 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "testTargets": [
+      "ci-extension-bifrost"
+    ]
   },
   {
     "id": "lidAwake",
@@ -1555,6 +1558,9 @@
     "dependencies": [],
     "supportProducts": {
       "privileged": null
-    }
+    },
+    "testTargets": [
+      "ci-extension-lid-awake"
+    ]
   }
 ]
