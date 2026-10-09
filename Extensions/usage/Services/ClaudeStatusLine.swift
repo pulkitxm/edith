@@ -228,7 +228,8 @@ public enum ClaudeStatusLine {
     private static func readSettings(_ url: URL) throws -> [String: Any]? {
         let target = url.resolvingSymlinksInPath()
         guard FileManager.default.fileExists(atPath: target.path) else { return nil }
-        guard let data = try? UsageDataFiles.readRegularFile(at: target, maximumBytes: 1_024 * 1_024),
+        guard
+            let data = try? UsageDataFiles.readRegularFile(at: target, maximumBytes: 1_024 * 1_024),
             let document = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { throw Failure.unreadable(url.path) }
         return document

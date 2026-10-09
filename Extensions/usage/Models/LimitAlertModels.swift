@@ -265,7 +265,8 @@ public struct LimitAlertLedger: Codable, Equatable, Sendable {
 
     public static func load(from url: URL = outboxURL) -> LimitAlertLedger? {
         struct Outbox: Decodable { let ledger: LimitAlertLedger? }
-        guard let data = try? UsageDataFiles.readRegularFile(at: url, maximumBytes: 1_024 * 1_024) else { return nil }
+        guard let data = try? UsageDataFiles.readRegularFile(at: url, maximumBytes: 1_024 * 1_024)
+        else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return (try? decoder.decode(Outbox.self, from: data))?.ledger

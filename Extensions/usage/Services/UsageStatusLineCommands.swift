@@ -58,7 +58,8 @@ public actor UsageStatusLineCommands {
             switch command {
             case "usage.statusline.record":
                 guard Set(object.keys) == ["input"],
-                    let request = try? JSONDecoder().decode(UsageStatusLineRecordRequest.self, from: payload),
+                    let request = try? JSONDecoder().decode(
+                        UsageStatusLineRecordRequest.self, from: payload),
                     request.input.count <= Self.maximumInputBytes
                 else { throw ExtensionPeerError.invalidRequest }
                 let limits = ClaudeStatusLine.record(request.input, history: history)
@@ -73,7 +74,9 @@ public actor UsageStatusLineCommands {
                         installed: ClaudeStatusLine.isInstalled(settings: settings),
                         recordedAt: LimitsHistory.latest(provider: .claude, url: history)?.date))
             case "usage.statusline.install":
-                guard object.isEmpty, let executable else { throw ExtensionPeerError.invalidRequest }
+                guard object.isEmpty, let executable else {
+                    throw ExtensionPeerError.invalidRequest
+                }
                 let change = try ClaudeStatusLine.connect(
                     executable: executable, settings: settings, defaults: defaults)
                 result = try encoder.encode(UsageStatusLineChangeResponse(change: change.rawValue))
@@ -84,7 +87,9 @@ public actor UsageStatusLineCommands {
             default: throw ExtensionPeerError.invalidRequest
             }
             try Task.checkCancellation()
-            guard result.count <= Self.maximumResponseBytes else { throw ExtensionPeerError.invalidRequest }
+            guard result.count <= Self.maximumResponseBytes else {
+                throw ExtensionPeerError.invalidRequest
+            }
             return result
         }
         return try await withTaskCancellationHandler {

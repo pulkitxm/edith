@@ -6,7 +6,8 @@ import Testing
 @Suite struct UsageLimitsOwnershipTests {
     @Test func cancellingAFollowerDoesNotCancelTheOwner() async throws {
         let session = LimitsRefreshSession()
-        guard case .collect(let owner) = await session.begin(force: false, providers: [.codex]) else {
+        guard case .collect(let owner) = await session.begin(force: false, providers: [.codex])
+        else {
             Issue.record("Expected a collection owner")
             return
         }
@@ -21,7 +22,8 @@ import Testing
         let remaining = Task { await session.begin(force: false, providers: [.codex]) }
         try await waitForFollowers(1, session: session)
         let snapshot = LimitsTopicSnapshot(
-            refreshedAt: Date(), providers: [
+            refreshedAt: Date(),
+            providers: [
                 LimitsProviderSnapshot(
                     provider: .codex, session: LimitWindow(percent: 25, resetsAt: nil), week: nil)
             ], failure: nil)
@@ -47,7 +49,8 @@ import Testing
             }
         }
         #expect(await session.followerCount == 0)
-        guard case .collect(let owner) = await session.begin(force: false, providers: [.cursor]) else {
+        guard case .collect(let owner) = await session.begin(force: false, providers: [.cursor])
+        else {
             Issue.record("New worker retained a stopped collection")
             return
         }
@@ -60,7 +63,8 @@ import Testing
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
             return await LimitsCollector.collect(
-                providers: [.cursor], refreshSession: session, announce: { _ in
+                providers: [.cursor], refreshSession: session,
+                announce: { _ in
                     Issue.record("Cancelled refresh published a completion")
                 }
             ) { provider in
@@ -80,12 +84,14 @@ import Testing
 
     @Test func stoppedOwnerCannotPublishIntoANewCollection() async throws {
         let session = LimitsRefreshSession()
-        guard case .collect(let older) = await session.begin(force: false, providers: [.codex]) else {
+        guard case .collect(let older) = await session.begin(force: false, providers: [.codex])
+        else {
             Issue.record("Expected older owner")
             return
         }
         await session.clear()
-        guard case .collect(let newer) = await session.begin(force: false, providers: [.codex]) else {
+        guard case .collect(let newer) = await session.begin(force: false, providers: [.codex])
+        else {
             Issue.record("Expected newer owner")
             return
         }

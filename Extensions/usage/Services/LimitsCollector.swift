@@ -74,7 +74,7 @@ public enum LimitsCollector {
     public static func refresh(
         force: Bool = false, defaults: UserDefaults = SharedDefaults.store,
         refreshSession: LimitsRefreshSession = .shared,
-                announce: @Sendable (Notification.Name) -> Void = { UsageEvents.post($0) }
+        announce: @Sendable (Notification.Name) -> Void = { UsageEvents.post($0) }
     ) async -> LimitsTopicSnapshot {
         await collect(
             providers: enabledProviders(defaults: defaults), force: force,
@@ -130,7 +130,8 @@ public enum LimitsCollector {
         }
         let snapshot = LimitsTopicSnapshot(
             refreshedAt: now, providers: snapshots, failure: snapshots.compactMap(\.error).first)
-        guard await refreshSession.finish(snapshot, retryNotBefore: deadlines, lease: lease.id) else {
+        guard await refreshSession.finish(snapshot, retryNotBefore: deadlines, lease: lease.id)
+        else {
             return LimitsTopicSnapshot(refreshedAt: now, providers: [], failure: "Cancelled")
         }
         announce(UsageEvents.limitsUpdated)

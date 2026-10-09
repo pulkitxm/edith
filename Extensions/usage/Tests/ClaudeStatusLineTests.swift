@@ -213,7 +213,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let executable = root.appendingPathComponent("Edith")
         try Data("#!/bin/sh\n".utf8).write(to: executable)
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: executable.path)
         #expect(ClaudeStatusLine.launcher(beside: executable) == executable.path)
         #expect(ClaudeStatusLine.launcher(beside: root.appendingPathComponent("missing")) == nil)
     }
