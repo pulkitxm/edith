@@ -23,11 +23,13 @@ import Security
     public nonisolated func listener(
         _ listener: NSXPCListener, shouldAcceptNewConnection connection: NSXPCConnection
     ) -> Bool {
-        guard let identifier = Bundle.main.bundleIdentifier else { return false }
+        guard let identifier = Bundle.main.bundleIdentifier,
+            let requirement = try? HostPrivilegedCaller.requirement(
+                hostIdentifier: identifier, team: team)
+        else { return false }
         Self.bindAcceptedConnection(
             connection,
-            requirement:
-                "identifier \"\(identifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(team)\""
+            requirement: requirement
         ) { [self] box in
             let connection = box.connection
             guard sessions.count < 8 else { connection.invalidate(); return }
@@ -37,6 +39,12 @@ import Security
             ) { [team] in try ExtensionCodeSignature.verify($0, teamIdentifier: team) }
             let session = HostPrivilegedSession(
                 admission: admission,
+                authorize: { [team] source, owner, version in
+                    let caller = try HostPrivilegedCaller.read(
+                        processIdentifier: connection.processIdentifier,
+                        hostIdentifier: identifier, team: team)
+                    try caller.authorize(source: source, owner: owner, version: version)
+                },
                 reserveOwner: { [leases] in leases.reserve($0) },
                 releaseOwner: { [leases] in leases.release($0) }
             ) { [weak self] in
@@ -78,12 +86,14 @@ import Security
     private var releasing = false
     private var finished = false
     private var owner: String?
+    private let authorize: @MainActor (URL, String, String) throws -> Void
     private let reserveOwner: @MainActor (String) -> Bool
     private let releaseOwner: @MainActor (String) -> Void
     private let makeWorker: @MainActor (URL) throws -> HostPrivilegedProcess
 
     init(
         admission: HostPrivilegedAdmission,
+        authorize: @escaping @MainActor (URL, String, String) throws -> Void = { _, _, _ in },
         reserveOwner: @escaping @MainActor (String) -> Bool,
         releaseOwner: @escaping @MainActor (String) -> Void,
         makeWorker: @escaping @MainActor (URL) throws -> HostPrivilegedProcess = { payload in
@@ -95,7 +105,7 @@ import Security
                 arguments: ["--extension-carrier-worker", payload.path])
         }, ended: @escaping @MainActor () -> Void
     ) {
-        self.admission = admission; self.ended = ended
+        self.admission = admission; self.ended = ended; self.authorize = authorize
         self.reserveOwner = reserveOwner; self.releaseOwner = releaseOwner;
         self.makeWorker = makeWorker
     }
@@ -108,6 +118,9 @@ import Security
             guard self.worker == nil, !self.releasing, !self.finished else {
                 reply(MarketplaceError.invalidBundle as NSError); return
             }
+            do {
+                try self.authorize(URL(fileURLWithPath: source), owner, version)
+            } catch { reply(error as NSError); return }
             guard self.reserveOwner(owner) else {
                 reply(
                     ExtensionPeerError.rejected(
