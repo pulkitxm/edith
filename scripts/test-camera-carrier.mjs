@@ -20,6 +20,7 @@ const root = await realpath(
   await mkdtemp(join(tmpdir(), "edith-camera-fixture-")),
 );
 const roles = ["cameraCarrier", "cameraProvider"];
+const hostApp = resolve("local/minimal-host/Edith.app");
 try {
   const payloads = join(root, "payloads");
   for (const role of roles) {
@@ -29,17 +30,23 @@ try {
     await writeFile(
       source,
       `import Foundation
-@objc final class FixtureRuntime: NSObject {
+import AppKit
+import Sparkle
+@MainActor @objc final class FixtureRuntime: NSObject {
     @objc func execute(_ input: NSDictionary) -> NSObject {
-        let bundle = Bundle(for: Self.self)
         if input["operation"] as? String == "describe" {
             return ["id": "virtualCamera", "role": "${role}", "version": "1.0.0", "hostABI": "edith-host-1"] as NSDictionary
         }
-        return ["ok": true, "payloadLoaded": true, "role": "${role}"] as NSDictionary
+        let application = NSApplication.shared
+        application.setActivationPolicy(.prohibited)
+        let controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+        let framework = Bundle(for: SPUStandardUpdaterController.self)
+        let resourcesLoaded = NSNib(nibNamed: "SUUpdateAlert", bundle: framework) != nil
+        return ["ok": resourcesLoaded, "payloadLoaded": true, "role": "${role}", "sparkleGUIControllerInitialized": controller.userDriver.isKind(of: SPUStandardUserDriver.self), "sparkleGUIResourcesLoaded": resourcesLoaded, "exposedWindows": application.windows.filter { $0.isVisible }.count] as NSDictionary
     }
 }
 @_cdecl("edith_extension_create") public func create() -> UnsafeMutableRawPointer? {
-    Unmanaged.passRetained(FixtureRuntime()).toOpaque()
+    UnsafeMutableRawPointer(bitPattern: MainActor.assumeIsolated { UInt(bitPattern: Unmanaged.passRetained(FixtureRuntime()).toOpaque()) })
 }
 `,
     );
@@ -47,6 +54,10 @@ try {
       "-emit-library",
       "-module-name",
       "CameraFixture",
+      "-F",
+      join(hostApp, "Contents/Frameworks"),
+      "-framework",
+      "Sparkle",
       source,
       "-o",
       join(contents, "MacOS/Runtime"),
@@ -73,7 +84,6 @@ try {
       join(payloads, `${role}.bundle`),
     ]);
   }
-  const hostApp = resolve("local/minimal-host/Edith.app");
   const inputHash = createHash("sha256")
     .update(await readFile(join(hostApp, "Contents/MacOS/Edith")))
     .digest("hex");
@@ -110,6 +120,9 @@ try {
     assert.equal(result.ok, true);
     assert.equal(result.payloadLoaded, true);
     assert.equal(result.role, role);
+    assert.equal(result.sparkleGUIControllerInitialized, true);
+    assert.equal(result.sparkleGUIResourcesLoaded, true);
+    assert.equal(result.exposedWindows, 0);
     assert.equal(
       output.provenance.roles.find((item) => item.role === role)
         .executableBeforeSigningSHA256,
@@ -162,6 +175,7 @@ try {
       containedRolesLaunched: roles,
       hostExecutableProvenanceValidated: true,
       linkedRuntimeFrameworksValidated: true,
+      sparkleGUIControllerAndResourcesValidated: true,
       archiveSymlinks: 0,
       signatureTamperRejected: true,
       fixtureScopeRejected: true,
