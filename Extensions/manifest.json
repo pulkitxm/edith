@@ -1463,6 +1463,7 @@
         "Extensions/bifrost/Services/BifrostApplicationScanner.swift",
         "Extensions/bifrost/Services/BifrostCalculator.swift",
         "Extensions/bifrost/Services/BifrostClipboardFeed.swift",
+        "Extensions/bifrost/Services/BifrostClipboardPreviewService.swift",
         "Extensions/bifrost/Services/BifrostCommandExecution.swift",
         "Extensions/bifrost/Services/BifrostConversion.swift",
         "Extensions/bifrost/Services/BifrostEntryCatalog.swift",

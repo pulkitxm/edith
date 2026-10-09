@@ -91,7 +91,8 @@ public enum BifrostClipboardFeed {
         if entry.pinned { rows.append(BifrostDetailRow("Pinned", "Yes")) }
         return BifrostDetail(
             title: "Information", rows: rows, imagePath: imagePath,
-            text: kind == "image" ? nil : entry.preview)
+            text: kind == "image" ? nil : entry.preview,
+            clipboardPreviewID: ["image", "file"].contains(kind) ? entry.id : nil)
     }
 }
 
