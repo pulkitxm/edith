@@ -58,7 +58,7 @@ struct HostApplication: App {
             GeometryReader { geometry in
                 Group {
                     if let marketplace {
-                        MarketplacePage(marketplace: marketplace)
+                        HostWorkspace(marketplace: marketplace)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -66,7 +66,7 @@ struct HostApplication: App {
                         Text("Opening Edith")
                     }
                 }
-                .environment(\.compactLayout, geometry.size.width < 720)
+                .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
                 .tracksWindowVisibility()
                 .task {
                     guard marketplace == nil, !startupError else { return }
@@ -111,6 +111,30 @@ struct HostApplication: App {
     private func synchronizeAppearance() {
         guard let marketplace else { return }
         Task { await marketplace.sessions.synchronizeAppearance(identity: marketplace.identity) }
+    }
+}
+
+private enum HostWorkspacePage: String, CaseIterable {
+    case extensions = "Extensions"
+    case customize = "Customize Home and Notch"
+}
+
+private struct HostWorkspace: View {
+    let marketplace: HostMarketplace
+    @State private var page = HostWorkspacePage.extensions
+
+    var body: some View {
+        VStack(spacing: 0) {
+            EdithSegmentedPicker(
+                "Workspace", selection: $page, options: HostWorkspacePage.allCases,
+                label: { $0.rawValue }
+            ).padding(UIScale.pt(12))
+            Divider()
+            switch page {
+            case .extensions: MarketplacePage(marketplace: marketplace)
+            case .customize: HostSurfaceEditor(marketplace: marketplace)
+            }
+        }
     }
 }
 
