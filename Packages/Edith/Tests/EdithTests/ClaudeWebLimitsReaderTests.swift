@@ -15,6 +15,58 @@ import Testing
                     "scope":{"model":{"display_name":"Fable"}}}]}
         """.utf8)
 
+    @Test func connectionPermissionIsConsumedByOnlyOneRefresh() async throws {
+        let request = ClaudeWebLimitsReader.ConnectionRequest()
+        #expect(await request.take() == false)
+        await request.request()
+        #expect(await request.take() == true)
+        #expect(await request.take() == false)
+        await request.request()
+        await request.discard()
+        #expect(await request.take() == false)
+        let payload = try AgentPayload.encode(UsageLimitsRefreshRequest(connectBrowser: true))
+        #expect(
+            try AgentPayload.decode(UsageLimitsRefreshRequest.self, from: payload).connectBrowser)
+    }
+
+    @Test func skippedRefreshCannotDelayWebsitePermissionUntilALaterPoll() async throws {
+        let suite = "connection-refresh-tests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppStorageKeys.Limits.claudeEnabled)
+        defaults.set(false, forKey: AppStorageKeys.Limits.codexEnabled)
+        defaults.set(false, forKey: AppStorageKeys.Limits.cursorEnabled)
+        defaults.set(false, forKey: AppStorageKeys.Limits.grokEnabled)
+        let session = LimitsRefreshSession()
+        let snapshot = LimitsTopicSnapshot(
+            refreshedAt: Date(),
+            providers: [
+                .init(provider: .claude, session: nil, week: nil, error: "Rate limited")
+            ], failure: "Rate limited")
+        await session.finish(snapshot, retryNotBefore: [.claude: Date().addingTimeInterval(3600)])
+        await ClaudeWebLimitsReader.requestConnection()
+        let result = await LimitsCollector.refresh(
+            defaults: defaults, refreshSession: session, connectClaude: {}, announce: { _ in })
+        #expect(result == snapshot)
+        #expect(await ClaudeWebLimitsReader.takeConnection() == false)
+    }
+
+    @Test func blockedCredentialReadsTimeOutWithoutStartingMoreWorkers() async {
+        let lookup = BoundedKeychainAccess<Bool>()
+        let release = DispatchSemaphore(value: 0)
+        let result = await lookup.run(timeout: 0.02, fallback: false) {
+            release.wait()
+            return true
+        }
+        #expect(!result)
+        let second = await lookup.run(timeout: 0.02, fallback: false) {
+            Issue.record("A blocked credential read started another worker")
+            return true
+        }
+        #expect(!second)
+        release.signal()
+    }
+
     @Test func websiteRefreshUsesTheActiveOrganizationAndPersistsEveryWindow() async throws {
         var requested: [String] = []
         var persisted: LimitsProviderSnapshot?

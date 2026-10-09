@@ -6,10 +6,11 @@ public enum ClaudeWebLimitsReader {
         let organization: String?
     }
 
-    public enum Failure: LocalizedError, Equatable {
+    public enum Failure: LocalizedError, Equatable, Sendable {
         case missingSession
         case browserAccess
         case keychainAccess
+        case credentialTimeout
         case unauthorized
         case challenge
         case organization
@@ -23,7 +24,10 @@ public enum ClaudeWebLimitsReader {
                 "Sign in to claude.ai in your active Chrome profile, then refresh limits."
             case .browserAccess:
                 "Allow Edith to read Chrome data in macOS Privacy & Security, then refresh limits."
-            case .keychainAccess: "Unlock Chrome Safe Storage for Edith, then refresh limits."
+            case .keychainAccess:
+                "Choose Connect Claude website in Agent Usage settings to allow Chrome Safe Storage access."
+            case .credentialTimeout:
+                "Chrome session lookup timed out. Choose Connect Claude website in Agent Usage settings."
             case .unauthorized:
                 "Your Claude website session expired. Sign in to claude.ai, then refresh limits."
             case .challenge:
@@ -37,6 +41,26 @@ public enum ClaudeWebLimitsReader {
         }
     }
 
+    actor ConnectionRequest {
+        private var pending = false
+
+        func request() { pending = true }
+        func discard() { pending = false }
+        func take() -> Bool {
+            let result = pending
+            pending = false
+            return result
+        }
+    }
+
+    private static let connectionRequest = ConnectionRequest()
+
+    public static func requestConnection() async { await connectionRequest.request() }
+    public static func discardConnection() async { await connectionRequest.discard() }
+    public static func takeConnection() async -> Bool { await connectionRequest.take() }
+
+    private static let credentialLookup = BoundedKeychainAccess<Result<Credential, Failure>>()
+
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
@@ -48,10 +72,17 @@ public enum ClaudeWebLimitsReader {
             configuration: configuration, delegate: RedirectPolicy(), delegateQueue: nil)
     }()
 
-    public static func fetch() async throws -> LimitsProviderSnapshot {
-        let credential = try await Task.detached {
-            try Self.credential()
-        }.value
+    public static func fetch(allowPrompt: Bool = false) async throws -> LimitsProviderSnapshot {
+        let lookup = await credentialLookup.run(
+            timeout: allowPrompt ? 60 : 3, fallback: .failure(.credentialTimeout)
+        ) {
+            do { return .success(try Self.credential(allowPrompt: allowPrompt)) } catch let failure
+                as Failure
+            {
+                return .failure(failure)
+            } catch { return .failure(.browserAccess) }
+        }
+        let credential = try lookup.get()
         return try await fetch(credential: credential) { request in
             let (data, response) = try await session.data(for: request)
             guard let response = response as? HTTPURLResponse else { throw Failure.unavailable }
@@ -59,7 +90,9 @@ public enum ClaudeWebLimitsReader {
         }
     }
 
-    static func credential(userData: ChromeUserData = .standard) throws -> Credential {
+    static func credential(
+        userData: ChromeUserData = .standard, allowPrompt: Bool = false
+    ) throws -> Credential {
         let profiles: [ChromeProfile]
         let active: String?
         do {
@@ -74,7 +107,7 @@ public enum ClaudeWebLimitsReader {
             let database = userData.cookiesURL(for: profile)
         else { throw Failure.missingSession }
         let key: ChromeCookieKey
-        do { key = try ChromeSafeStorage.keychainKey(allowPrompt: false) } catch {
+        do { key = try ChromeSafeStorage.keychainKey(allowPrompt: allowPrompt) } catch {
             throw Failure.keychainAccess
         }
         let cookies: [ChromeCookie]
