@@ -36,6 +36,8 @@ EXACT = {
     "ci-swift-test": "swift-test",
     "ci-host": "swift-test",
     "ci-marketplace-host": "swift-test",
+    "extension-dev": "swift-test",
+    "ci-extension-support": "swift-test",
     "host": "swift-test",
     "ci-swift-test-batch": "swift-test",
     "ci-swift-lint": "swift-test",

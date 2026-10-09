@@ -8,7 +8,8 @@ struct HostLifecycleHarness {
     @MainActor static func main() async throws {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
-        guard arguments.count == 3 else { throw HostWorkerError.rejected }
+        guard arguments.count == 4 else { throw HostWorkerError.rejected }
+        let extensionID = arguments[3]
         let fixture = URL(fileURLWithPath: arguments[0])
         let sourceApp = URL(fileURLWithPath: arguments[1])
         let releases = URL(fileURLWithPath: arguments[2])
@@ -36,8 +37,8 @@ struct HostLifecycleHarness {
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
-            UserDefaults(suiteName: identity.extensionDefaultsSuite("keepAwake"))?
-                .removePersistentDomain(forName: identity.extensionDefaultsSuite("keepAwake"))
+            UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?
+                .removePersistentDomain(forName: identity.extensionDefaultsSuite(extensionID))
         }
         let sessions = HostExtensionSessions(defaults: defaults) { package in
             HostWorker(
@@ -46,8 +47,8 @@ struct HostLifecycleHarness {
                 executable: executable)
         }
         do {
-            let first = try record(releases, version: "1.0.0")
-            let second = try record(releases, version: "1.1.0")
+            let first = try record(releases, id: extensionID, version: "1.0.0")
+            let second = try record(releases, id: extensionID, version: "1.1.0")
             try await install(first, releases: releases, store: store)
             guard sessions.processIdentifiers.isEmpty else { throw HostWorkerError.rejected }
             try await sessions.enable(first)
@@ -87,12 +88,14 @@ struct HostLifecycleHarness {
         }
     }
 
-    private static func record(_ directory: URL, version: String) throws -> ExtensionPackage {
+    private static func record(_ directory: URL, id: String, version: String) throws
+        -> ExtensionPackage
+    {
         try JSONDecoder().decode(
             ExtensionPackage.self,
             from: Data(
                 contentsOf: directory.appendingPathComponent(version).appendingPathComponent(
-                    "keepAwake.json")))
+                    "\(id).json")))
     }
 
     private static func install(
@@ -105,7 +108,7 @@ struct HostLifecycleHarness {
                     UUID().uuidString)
                 try FileManager.default.copyItem(
                     at: releases.appendingPathComponent(package.version).appendingPathComponent(
-                        "keepAwake.zip"), to: temporary)
+                        "\(package.id).zip"), to: temporary)
                 return temporary
             },
             verify: { directory in

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { buildExtensionSupport } from "./build-extension-support.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
@@ -20,6 +21,10 @@ export async function buildExtensionPackage({
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  if (definition.contractVersion === 1 && definition.usesHostFramework)
+    throw new Error(
+      "Worker extensions must not depend on the legacy host framework",
+    );
   const releaseVersion = version ?? definition.version;
   const identity = process.env.EXTENSION_SIGN_IDENTITY;
   if (!development && (!identity || identity === "-"))
@@ -34,6 +39,9 @@ export async function buildExtensionPackage({
   await mkdir(payload);
   const hostProducts = definition.usesHostFramework
     ? (process.env.EXTENSION_HOST_PRODUCTS ?? (await buildHostInterfaces(root)))
+    : undefined;
+  const supportProducts = definition.supportProduct
+    ? buildExtensionSupport(root, definition.supportProduct)
     : undefined;
   if (definition.nativePackage) {
     execFileSync(
@@ -122,6 +130,19 @@ export async function buildExtensionPackage({
         "-target",
         `arm64-apple-macos${definition.minimumSystemVersion}.0`,
         ...sources.map((path) => resolve(root, path)),
+        ...(supportProducts
+          ? [
+              "-swift-version",
+              "5",
+              "-I",
+              resolve(supportProducts, "Modules"),
+              "-L",
+              supportProducts,
+              `-l${definition.supportProduct}`,
+              "-Xlinker",
+              "-dead_strip",
+            ]
+          : []),
         ...(hostProducts
           ? [
               "-swift-version",
@@ -168,6 +189,25 @@ export async function buildExtensionPackage({
       CFBundleVersion: releaseVersion,
       EdithHostABI: definition.hostABI,
     };
+    if (definition.contractVersion === 1) {
+      const linkage = execFileSync("otool", ["-L", executable], {
+        encoding: "utf8",
+      });
+      if (
+        linkage.includes("EdithShared.framework") ||
+        linkage.includes("libEdithShared.dylib")
+      )
+        throw new Error("Legacy host code leaked into a worker package");
+      for (const line of linkage.split("\n").slice(1)) {
+        const dependency = line.trim().split(" ")[0];
+        if (
+          dependency.startsWith("/") &&
+          !dependency.startsWith("/System/") &&
+          !dependency.startsWith("/usr/")
+        )
+          throw new Error("A worker package links a private build path");
+      }
+    }
     const infoJSON = resolve(staging, `${role}-info.json`);
     await writeFile(infoJSON, JSON.stringify(info));
     execFileSync("python3", [

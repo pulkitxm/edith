@@ -6,6 +6,7 @@ on:
       - 'Extensions/**'
       - 'Packages/ExtensionMarketplace/**'
       - 'Packages/EdithHost/**'
+      - 'Packages/ExtensionSupport/**'
       - 'Packages/Edith/Sources/EdithKit/**'
       - 'Packages/Edith/Sources/EdithCore/**'
       - 'Packages/Edith/Sources/EdithShared/**'
@@ -21,6 +22,7 @@ on:
       - 'Extensions/**'
       - 'Packages/ExtensionMarketplace/**'
       - 'Packages/EdithHost/**'
+      - 'Packages/ExtensionSupport/**'
       - 'Packages/Edith/Sources/EdithKit/**'
       - 'Packages/Edith/Sources/EdithCore/**'
       - 'Packages/Edith/Sources/EdithShared/**'
@@ -58,7 +60,7 @@ jobs:
       - run: make host
       - run: bun scripts/test-extension-workers.mjs
       - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
-      - run: swift test --package-path Extensions --build-system native --jobs 2
+      - run: make ci-extension-support
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
       - run: bun scripts/test-extension-marketplace.mjs
 
