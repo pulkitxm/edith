@@ -27,6 +27,11 @@ let package = Package(
             dependencies: [
                 "EdithHostCore", .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+            ],
+            linkerSettings: [
+                .unsafeFlags(
+                    ["-Xlinker", "-no_exported_symbols", "-Xlinker", "-dead_strip"],
+                    .when(configuration: .release))
             ]),
         .executableTarget(
             name: "HostLifecycleHarness", dependencies: ["EdithHostCore"],
