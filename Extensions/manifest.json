@@ -585,6 +585,7 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "Packages/ExtensionSupport/Sources/EdithExtensionDocuments"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "surfaceContractVersion": 1
   }
 ]
