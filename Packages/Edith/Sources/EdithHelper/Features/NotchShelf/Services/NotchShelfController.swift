@@ -97,6 +97,7 @@ final class NotchShelfController: FeatureModule {
     private(set) weak var browser: NotchBrowserStore?
     private(set) var calendarStore: CalendarStore?
     private var previewPlayback: ExternalPlayback?
+    private let startsPlaybackServices: Bool
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -150,6 +151,7 @@ final class NotchShelfController: FeatureModule {
 
     init(nowPlaying: NotchNowPlaying?, startsServices: Bool, playback: ExternalPlayback? = nil) {
         previewPlayback = playback
+        startsPlaybackServices = startsServices
         self.nowPlaying = nowPlaying
         items = store.items
         loadArtwork(for: nowPlaying)
@@ -1062,14 +1064,9 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func syncPlaybackObservation() {
-        let externalActive: Bool
-        if case .external = nowPlaying?.source {
-            externalActive = true
-        } else {
-            externalActive = false
-        }
         external.observePlayback(
-            isExpanded && showMusic && externalActive && previewPlayback == nil)
+            startsPlaybackServices && isExpanded && showMusic && nowPlaying?.source != .local
+                && previewPlayback == nil)
     }
 
     private func loadArtwork(for track: NotchNowPlaying?) {

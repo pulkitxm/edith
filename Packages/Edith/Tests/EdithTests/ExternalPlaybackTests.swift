@@ -5,6 +5,18 @@ import Testing
 @testable import EdithHelper
 
 @Suite struct ExternalPlaybackTests {
+    @Test func discoveryPrefersPlayingAppsAndRetainsThePausedSource() {
+        let paused = ExternalTrack(
+            app: .spotify, title: "Sample", artist: "Artist", isPlaying: false, duration: 200)
+        var playing = paused; playing.app = .music; playing.isPlaying = true
+        #expect(ExternalNowPlaying.accepts(app: .music, existing: paused, incoming: playing))
+        #expect(!ExternalNowPlaying.accepts(app: .spotify, existing: playing, incoming: paused))
+        playing.isPlaying = false
+        #expect(!ExternalNowPlaying.accepts(app: .music, existing: paused, incoming: playing))
+        #expect(ExternalNowPlaying.accepts(app: .spotify, existing: paused, incoming: nil))
+        #expect(ExternalNowPlaying.accepts(app: .music, existing: nil, incoming: playing))
+    }
+
     @Test func commandsUseTheCorrectPlayerPropertiesAndClampFractions() {
         #expect(
             ExternalPlaybackScript.command(["action": "seek", "value": 2.0], app: .spotify)

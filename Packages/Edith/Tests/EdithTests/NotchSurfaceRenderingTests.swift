@@ -74,7 +74,8 @@ import Testing
             }
             let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
             host.cacheDisplay(in: host.bounds, to: bitmap)
-            let data = try #require(bitmap.representation(using: .png, properties: [:]))
+            let export = try #require(bitmap.converting(to: .sRGB, renderingIntent: .default))
+            let data = try #require(export.representation(using: .png, properties: [:]))
             #expect(data.count > 10_000)
             #expect(controller.isExpanded(on: 0))
             #expect(controller.expandedSize(on: 0).width >= 960)

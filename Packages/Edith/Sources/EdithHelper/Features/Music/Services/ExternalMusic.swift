@@ -44,6 +44,13 @@ struct ExternalTrack: Equatable, Sendable {
 }
 
 enum ExternalNowPlaying {
+    static func accepts(app: ExternalApp, existing: ExternalTrack?, incoming: ExternalTrack?)
+        -> Bool
+    {
+        guard let existing, existing.app != app else { return true }
+        return !existing.isPlaying && incoming?.isPlaying == true
+    }
+
     static func parse(app: ExternalApp, userInfo: [AnyHashable: Any]) -> ExternalTrack? {
         let state = (userInfo["Player State"] as? String)?.lowercased()
         guard state != "stopped" else { return nil }
@@ -135,8 +142,21 @@ final class ExternalMusic {
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
-                if lastError == nil, let app = current?.app {
-                    await refreshPlayback(app: app)
+                if lastError == nil {
+                    let apps: [ExternalApp]
+                    if let track = current {
+                        apps = [track.app]
+                    } else {
+                        apps = ExternalApp.allCases.filter {
+                            !NSRunningApplication.runningApplications(
+                                withBundleIdentifier: $0.bundleID
+                            ).isEmpty
+                        }
+                    }
+                    for app in apps {
+                        await refreshPlayback(app: app)
+                        if current?.isPlaying == true || lastError != nil { break }
+                    }
                 }
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
@@ -157,11 +177,13 @@ final class ExternalMusic {
         }
         do {
             let next = try await runner.run(app: app, command: command)
-            guard current?.app == app, !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                ExternalNowPlaying.accepts(app: app, existing: current, incoming: next?.track)
+            else { return }
             playback = next; current = next?.track; lastError = nil
             broadcast()
         } catch {
-            guard current?.app == app, !Task.isCancelled else { return }
+            guard (current == nil || current?.app == app), !Task.isCancelled else { return }
             lastError = error.localizedDescription
         }
     }
@@ -197,7 +219,7 @@ final class ExternalMusic {
             if current?.app == app { current = nil; playback = nil }
             return
         }
-        if let existing = current, existing.app != app, existing.isPlaying, !track.isPlaying {
+        guard ExternalNowPlaying.accepts(app: app, existing: current, incoming: track) else {
             return
         }
         if current?.title != track.title || current?.artist != track.artist
