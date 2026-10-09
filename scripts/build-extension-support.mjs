@@ -19,6 +19,7 @@ export function supportModules(scope) {
       "EdithExtensionUI",
       "EdithExtensionDocuments",
       "EdithExtensionArchive",
+      "ZIPFoundation",
     ].map((name) => [name, `${name}_${scope}`]),
   );
 }
@@ -154,7 +155,7 @@ export function buildExtensionSupport(root, product, scope) {
     : "";
   if (selected.includes("EdithExtensionArchive"))
     targets.push(
-      `.target(name: "${modules.EdithExtensionArchive}", dependencies: ["${ui}", .product(name: "ZIPFoundation", package: "ZIPFoundation")], swiftSettings: [.swiftLanguageMode(.v5)])`,
+      `.target(name: "${modules.EdithExtensionArchive}", dependencies: ["${ui}", .product(name: "ZIPFoundation", package: "ZIPFoundation", moduleAliases: ["ZIPFoundation": "${modules.ZIPFoundation}"])], swiftSettings: [.swiftLanguageMode(.v5)])`,
     );
   writeFileSync(
     join(directory, "Package.swift"),

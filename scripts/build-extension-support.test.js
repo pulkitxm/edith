@@ -73,3 +73,13 @@ test("archive support stays separate from document rendering", () => {
     "import EdithExtensionArchive_latex_helper\n",
   );
 });
+
+test("archive dependency types are isolated from the host and other workers", () => {
+  const first = supportModules("latex_app");
+  const second = supportModules("downloads_app");
+  expect(first.ZIPFoundation).not.toBe("ZIPFoundation");
+  expect(first.ZIPFoundation).not.toBe(second.ZIPFoundation);
+  expect(rewriteSupportImports("import ZIPFoundation\n", first)).toBe(
+    "import ZIPFoundation\n",
+  );
+});
