@@ -42,8 +42,8 @@ public struct CodePreview: View {
     }
 }
 
-actor SyntaxHighlighting {
-    static let shared = SyntaxHighlighting()
+public actor SyntaxHighlighting {
+    public static let shared = SyntaxHighlighting()
 
     static let cacheLimit = 64
     static let cacheableBytes = 16_384
@@ -59,7 +59,7 @@ actor SyntaxHighlighting {
     private var cache: [CacheKey: NSAttributedString] = [:]
     private var cacheOrder: [CacheKey] = []
 
-    func highlight(text: String, language: String?, dark: Bool) -> NSAttributedString? {
+    public func highlight(text: String, language: String?, dark: Bool) -> NSAttributedString? {
         guard !Task.isCancelled, text.utf8.count < 400_000 else { return nil }
         let key =
             text.utf8.count <= Self.cacheableBytes

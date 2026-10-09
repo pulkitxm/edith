@@ -163,7 +163,7 @@ ci-swift-build: approve-package-plugins ci-meeting-microphone
 ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
 
-.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-commands ci-extension-workers
+.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-extension-commands ci-extension-workers
 ci-host:
 	swift format lint --strict --parallel --recursive Packages/EdithHost/Sources Packages/EdithHost/Tests Packages/EdithHost/Package.swift
 	swift test --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
@@ -175,9 +175,12 @@ extension-dev:
 	bun scripts/build-extension-package.mjs $(EXTENSION) --development
 
 ci-extension-support:
-	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/calendar Extensions/jev Extensions/presenter Extensions/system Extensions/timeLapse Extensions/cleaner Extensions/appMaintenance Extensions/blitztree Extensions/plugins Extensions/notchShelf Extensions/clipboard Extensions/music Extensions/Package.swift
+	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/calendar Extensions/jev Extensions/presenter Extensions/system Extensions/timeLapse Extensions/cleaner Extensions/appMaintenance Extensions/blitztree Extensions/plugins Extensions/notchShelf Extensions/clipboard Extensions/music Extensions/docs Extensions/Package.swift Packages/EdithDocsWorker/Sources Packages/EdithDocsWorker/Tests Packages/EdithDocsWorker/Package.swift
 	swift test --package-path Packages/ExtensionSupport --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 	swift test --package-path Extensions --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)')
+
+ci-extension-docs:
+	swift test --package-path Packages/EdithDocsWorker --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 
 ci-extension-workers:
 	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostLifecycleHarness
@@ -201,7 +204,7 @@ ci-marketplace-host: ci-host host
 	bun scripts/extension-host-abi.mjs --write
 	bun test scripts/build-extension-support.test.js scripts/extension-owned-sources.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
 	$(MAKE) ci-marketplace-runtime
-	$(MAKE) ci-extension-support
+	$(MAKE) ci-extension-support ci-extension-docs
 	$(MAKE) ci-extension-commands
 	$(MAKE) ci-extension-workers
 	$(MAKE) ci-comments
