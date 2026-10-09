@@ -489,7 +489,10 @@ chrome.windows.onFocusChanged.addListener(windowID => {
   work = work.catch(() => {}).then(() => rememberFocus(windowID))
   scheduleHeartbeat()
 })
-chrome.idle.onStateChanged.addListener(scheduleHeartbeat)
+chrome.idle.onStateChanged.addListener(() => {
+  work = work.catch(() => {}).then(() => chrome.storage.session.remove("attentionSystemActivity"))
+  scheduleHeartbeat()
+})
 
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message.type === "edith-heartbeat-now") {

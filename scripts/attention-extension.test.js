@@ -124,6 +124,7 @@ function fixture() {
     local,
     session,
     intervals,
+    notifyIdle: (value) => listeners.idle(value),
     presenceRequests: () => presenceRequests,
     native(value) {
       nativeActivity = value;
@@ -728,4 +729,22 @@ test("eight unattended hours credit only the initial grace period in the extensi
       "browser collector fixture: unattended 8h, active 5m, idle 7h 55m",
     );
   }
+});
+
+test("idle and lock notifications bypass a recently cached native snapshot", async () => {
+  const f = fixture();
+  f.native({ presence: "idle", idleSeconds: "900", idleThreshold: "300" });
+  await f.tick();
+  f.advance(1);
+  f.native({ presence: "active", idleSeconds: "0", idleThreshold: "300" });
+  f.notifyIdle("active");
+  await f.tick();
+  expect(f.session.attentionPrevious.presence).toBe("active");
+  expect(f.presenceRequests()).toBe(2);
+  f.advance(1);
+  f.native({ presence: "locked", idleSeconds: "1", idleThreshold: "300" });
+  f.notifyIdle("locked");
+  await f.tick();
+  expect(f.session.attentionPrevious.presence).toBe("locked");
+  expect(f.presenceRequests()).toBe(3);
 });
