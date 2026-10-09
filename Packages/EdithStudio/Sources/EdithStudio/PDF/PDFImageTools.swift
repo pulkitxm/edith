@@ -41,8 +41,8 @@ enum PDFImageTools {
         keywords: ["jpeg", "png", "export", "images", "extract", "pictures"], groupsOutputs: true,
         actionTitle: "Convert"
     ) { run in
-        let document = try StudioPDF.open(run.input, password: run.settings.text("password"))
         if run.settings.text("mode") == "extract" {
+            let document = try StudioPDF.open(run.input, password: run.settings.text("password"))
             let folder = run.workDirectory
             let files = try PDFImageExtractor.extract(
                 from: document, stem: run.input.studioStem, into: folder
@@ -52,6 +52,7 @@ enum PDFImageTools {
             }
             return files
         }
+        let document = try StudioPDFRasterizer(run.input, password: run.settings.text("password"))
         let format = StudioImageFormat(rawValue: run.settings.text("format")) ?? .jpeg
         let dpi = Double(run.settings.text("dpi")) ?? 150
         let pages = try StudioPageSelection.pages(
@@ -60,14 +61,13 @@ enum PDFImageTools {
         var outputs: [URL] = []
         for (step, index) in pages.enumerated() {
             try run.checkCancellation()
-            guard let page = document.page(at: index) else { continue }
             run.status("Rendering page \(index + 1)")
-            let image = try StudioPDF.render(page, dpi: dpi)
+            let rendered = try document.render(index, dpi: dpi)
             let label = "page-" + String(format: "%0\(width)d", index + 1)
             let output = run.output(for: run.input, suffix: label, ext: format.fileExtension)
             try StudioImageIO.write(
-                image, to: output, format: format,
-                options: .init(quality: run.settings.number("quality"), dpi: dpi))
+                rendered.image, to: output, format: format,
+                options: .init(quality: run.settings.number("quality"), dpi: rendered.dpi))
             outputs.append(output)
             run.progress(Double(step + 1) / Double(pages.count))
         }
