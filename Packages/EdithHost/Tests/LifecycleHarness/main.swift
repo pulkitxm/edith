@@ -1,5 +1,8 @@
 import Darwin
 import EdithHostCore
+import EdithExtensionSupport
+import LocalAuthentication
+import Security
 import ExtensionMarketplace
 import Foundation
 
@@ -44,6 +47,20 @@ struct HostLifecycleHarness {
             UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?
                 .removePersistentDomain(forName: identity.extensionDefaultsSuite(extensionID))
         }
+        let endpoint = try ExtensionPeerEndpoint(namespace: identifier, owner: extensionID)
+        defer {
+            if extensionID == "jev" {
+                let context = LAContext()
+                context.interactionNotAllowed = true
+                let query: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: identifier + ".extensions.jev",
+                    kSecAttrAccount as String: "typesafe-api-key",
+                    kSecUseAuthenticationContext as String: context,
+                ]
+                _ = SecItemDelete(query as CFDictionary)
+            }
+        }
         let sessions = HostExtensionSessions(defaults: defaults) { package in
             HostWorker(
                 configuration: HostWorkerConfiguration(
@@ -60,6 +77,18 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.rejected
             }
             try await sessions.show(id: first.id)
+            if extensionID == "jev" {
+                try await verify(
+                    endpoint, command: "jev.status", input: ["probe": false], field: "hasSavedKey",
+                    expected: false)
+                try await verify(
+                    endpoint, command: "jev.key.set", input: ["key": "synthetic-fixture-key"],
+                    field: "hasSavedKey", expected: true)
+            } else if extensionID == "presenter" {
+                try await verify(
+                    endpoint, command: "presenter.start", input: [:], field: "active",
+                    expected: true)
+            }
             try await install(second, releases: releases, store: store)
             guard sessions.versions[first.id] == first.version, kill(oldPID, 0) == 0 else {
                 throw HostWorkerError.rejected
@@ -69,6 +98,15 @@ struct HostLifecycleHarness {
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
+            if extensionID == "jev" {
+                try await verify(
+                    endpoint, command: "jev.status", input: ["probe": false], field: "hasSavedKey",
+                    expected: true)
+            } else if extensionID == "presenter" {
+                try await verify(
+                    endpoint, command: "presenter.status", input: [:], field: "active",
+                    expected: true)
+            }
             await sessions.shutdown()
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
@@ -76,6 +114,27 @@ struct HostLifecycleHarness {
             await sessions.restore(packages: [second.id: second])
             guard sessions.versions[first.id] == second.version else {
                 throw HostWorkerError.rejected
+            }
+            if extensionID == "jev" {
+                try await verify(
+                    endpoint, command: "jev.status", input: ["probe": false], field: "hasSavedKey",
+                    expected: true)
+                try await verify(
+                    endpoint, command: "jev.key.set", input: ["key": NSNull()],
+                    field: "hasSavedKey", expected: false)
+            } else if extensionID == "presenter" {
+                try await verify(
+                    endpoint, command: "presenter.status", input: [:], field: "active",
+                    expected: true)
+                try await verify(
+                    endpoint, command: "presenter.stop", input: [:], field: "active",
+                    expected: false)
+                let state = ExtensionSharedState(
+                    root: identity.root.appendingPathComponent("ExtensionState"),
+                    namespace: identifier)
+                guard state.values(for: "presenter")["active"] == "0" else {
+                    throw HostWorkerError.rejected
+                }
             }
             try await sessions.disable(id: first.id)
             guard sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty else {
@@ -87,8 +146,28 @@ struct HostLifecycleHarness {
                 "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true}"
             )
         } catch {
+            if extensionID == "jev" {
+                _ = try? await endpoint.invoke(
+                    "jev.key.set", payload: Data("{\"key\":null}".utf8), timeout: 2)
+            }
             await sessions.shutdown()
             throw error
+        }
+    }
+
+    @MainActor private static func verify(
+        _ endpoint: ExtensionPeerEndpoint, command: String, input: [String: Any], field: String,
+        expected: Bool
+    ) async throws {
+        let data = try await endpoint.invoke(
+            command, payload: JSONSerialization.data(withJSONObject: input), timeout: 5)
+        let result = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        if field == "hasSavedKey" {
+            guard result?["state"] as? String == (expected ? "ready" : "notConfigured") else {
+                throw HostWorkerError.rejected
+            }
+        } else {
+            guard result?[field] as? Bool == expected else { throw HostWorkerError.rejected }
         }
     }
 

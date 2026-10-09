@@ -1,4 +1,4 @@
-import EdithKit
+import EdithExtensionSupport
 import Foundation
 
 final class PresenterJevCheck: @unchecked Sendable {
@@ -10,16 +10,17 @@ final class PresenterJevCheck: @unchecked Sendable {
     static let question = "presenting"
 
     private let enabled: @Sendable () -> Bool
-    private let decider: @Sendable () -> JevDeciding?
+    private let decider: @Sendable () -> PresenterDeciding?
     private let now: @Sendable () -> Date
     private let lock = NSLock()
     private var askedAt: Date?
     private var answer: (fingerprint: String, reason: String?)?
     private var inFlight: Task<Void, Never>?
+    private var stopped = false
 
     init(
         enabled: @escaping @Sendable () -> Bool,
-        decider: @escaping @Sendable () -> JevDeciding?,
+        decider: @escaping @Sendable () -> PresenterDeciding?,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.enabled = enabled
@@ -27,15 +28,18 @@ final class PresenterJevCheck: @unchecked Sendable {
         self.now = now
     }
 
-    static let live = PresenterJevCheck(
-        enabled: { SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.askJev) },
-        decider: { AgentJevDecider.configured() })
+    static var live: PresenterJevCheck {
+        PresenterJevCheck(
+            enabled: { SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.askJev) },
+            decider: { PresenterJevClient.configured() })
+    }
 
     func reason(for windows: [PresenterWindowInfo]) -> String? {
         guard enabled(), let app = PresenterRules.meetingApp(in: windows),
             let decider = decider()
         else { return nil }
         return lock.withLock {
+            guard !stopped else { return nil }
             let moment = now()
             let due = askedAt.map { moment.timeIntervalSince($0) >= Self.interval } ?? true
             guard inFlight == nil, due else { return answer?.reason }
@@ -50,6 +54,15 @@ final class PresenterJevCheck: @unchecked Sendable {
         }
     }
 
+    func shutdown() {
+        let task = lock.withLock {
+            stopped = true
+            defer { inFlight = nil; answer = nil }
+            return inFlight
+        }
+        task?.cancel()
+    }
+
     func settle() async {
         let task = lock.withLock { inFlight }
         await task?.value
@@ -57,28 +70,17 @@ final class PresenterJevCheck: @unchecked Sendable {
 
     static func summary(of windows: [PresenterWindowInfo]) -> String {
         windows.lazy.filter(PresenterRules.isListed).prefix(windowLimit).map { window in
-            let title = JevText.compact(window.title, limit: titleLimit)
+            let title = PresenterText.compact(window.title, limit: titleLimit)
             return "\(window.ownerName) | \(title) | \(Int(window.width))x\(Int(window.height))"
         }.joined(separator: "\n")
     }
 
-    static func request(windows summary: String) -> JevRequest {
-        JevRequest(
-            state: .fields(["windows": summary]),
-            questions: [
-                question: .noul(
-                    "The user is sharing their screen or presenting in a call, judging by `windows`."
-                )
-            ])
-    }
-
-    private func ask(_ decider: JevDeciding, fingerprint: String, app: String) async {
-        let probability = try? await decider.decide(
-            Self.request(windows: fingerprint), purpose: Self.purpose
-        ).noul(Self.question)
+    private func ask(_ decider: PresenterDeciding, fingerprint: String, app: String) async {
+        let probability = try? await decider.probability(windows: fingerprint)
         let reason =
             (probability ?? 0) >= Self.threshold ? "Jev: screen sharing in \(app)" : nil
         lock.withLock {
+            guard !stopped, !Task.isCancelled else { return }
             answer = (fingerprint, reason)
             inFlight = nil
         }

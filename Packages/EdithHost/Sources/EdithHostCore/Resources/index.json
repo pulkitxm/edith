@@ -226,5 +226,11 @@
     "title": "Terminal",
     "symbolName": "terminal",
     "category": "tools"
+  },
+  {
+    "id": "jev",
+    "title": "Jev",
+    "symbolName": "sparkles",
+    "category": "agents"
   }
 ]

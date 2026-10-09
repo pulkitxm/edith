@@ -83,5 +83,21 @@ let package = Package(
         .testTarget(
             name: "CalendarExtensionTests", dependencies: ["CalendarExtension"],
             path: "calendar/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "JevExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "jev", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "JevExtensionTests", dependencies: ["JevExtension"],
+            path: "jev/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "PresenterExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "presenter", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "PresenterExtensionTests", dependencies: ["PresenterExtension"],
+            path: "presenter/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

@@ -1,6 +1,6 @@
 import AppKit
 import CoreGraphics
-import EdithKit
+import EdithExtensionSupport
 import Foundation
 
 struct PresenterSystem {
@@ -38,6 +38,7 @@ final class PresenterDetector: FeatureModule {
     private let system: PresenterSystem
     private let defaults: UserDefaults
     private let monitoring: Bool
+    private var stopped = false
 
     private var gateApps: Set<String>
     private var launchObserver: NSObjectProtocol?
@@ -101,10 +102,16 @@ final class PresenterDetector: FeatureModule {
     }
 
     func applySettings() {
+        guard !stopped else { return }
         syncSessionTimer()
+        refreshMirroring()
+        evaluate()
     }
 
     func shutdown() {
+        guard !stopped else { return }
+        stopped = true
+        scanner.jev.shutdown()
         if let launchObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(launchObserver)
         }
@@ -125,19 +132,21 @@ final class PresenterDetector: FeatureModule {
     }
 
     func pauseUntilShareEnds() {
+        guard !stopped else { return }
         signals.pause()
         defaults.set(true, forKey: AppStorageKeys.Presenter.autoPaused)
         evaluate()
     }
 
     func applyScan(_ outcome: PresenterScan) {
-        guard scanning else { return }
+        guard !stopped, scanning else { return }
         signals.windowReason = outcome.windowReason
         signals.recording = outcome.recordingHit
         evaluate(scan: true)
     }
 
     func tickSession() {
+        guard !stopped else { return }
         signals.sharing = detectsSharing && system.remoteSessionActive()
         refreshMirroring()
         evaluate()
@@ -150,6 +159,7 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func handleLaunch(_ note: Notification) {
+        guard !stopped else { return }
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
             let id = app.bundleIdentifier, PresenterRules.watchedBundleIDs.contains(id)
         else { return }
@@ -158,6 +168,7 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func handleTerminate(_ note: Notification) {
+        guard !stopped else { return }
         guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
             let id = app.bundleIdentifier
         else { return }
@@ -171,6 +182,7 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func syncWindowScanTimer() {
+        guard !stopped else { return }
         guard monitoring, scanning else {
             windowScanTimer?.cancel()
             windowScanTimer = nil
@@ -189,6 +201,7 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func syncSessionTimer() {
+        guard !stopped else { return }
         guard detectsSharing else {
             sessionTimer?.invalidate()
             sessionTimer = nil
@@ -207,12 +220,14 @@ final class PresenterDetector: FeatureModule {
     }
 
     private func refreshMirroring() {
+        guard !stopped else { return }
         let detectMirroring =
             defaults.object(forKey: AppStorageKeys.Presenter.detectMirroring) as? Bool ?? true
         signals.mirroring = detectMirroring && system.displayMirrored()
     }
 
     private func evaluate(scan: Bool = false) {
+        guard !stopped else { return }
         let wasPaused = signals.paused
         let verdict = signals.evaluate(completedScan: scan || !scanning)
         if wasPaused, !signals.paused {

@@ -161,8 +161,10 @@
   {
     "id": "presenter",
     "version": "1.0.0",
-    "hostABI": "host-67af3b05879bf14d112ff996",
+    "hostABI": "edith-host-1",
     "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
     "roles": {
       "helper": [
         "Extensions/presenter/Helper/Models/PresenterDebouncer.swift",
@@ -170,9 +172,15 @@
         "Extensions/presenter/Helper/Models/PresenterSignals.swift",
         "Extensions/presenter/Helper/Services/PresenterDetector.swift",
         "Extensions/presenter/Helper/Services/PresenterJevCheck.swift",
+        "Extensions/presenter/Helper/Services/PresenterJevClient.swift",
         "Extensions/presenter/Helper/Services/PresenterPauseGate.swift",
         "Extensions/presenter/Helper/Services/PresenterScanner.swift",
-        "Extensions/presenter/Runtime.swift"
+        "Extensions/presenter/Models/PresenterPrivacy.swift",
+        "Extensions/presenter/Models/PresenterRuntimeOperation.swift",
+        "Extensions/presenter/Models/PresenterState.swift",
+        "Extensions/presenter/Models/PresenterText.swift",
+        "Extensions/presenter/Runtime.swift",
+        "Extensions/presenter/Views/PresenterRows.swift"
       ]
     },
     "inputs": [
@@ -180,14 +188,10 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
-      "scripts/extension-host-build.mjs",
-      "Packages/Edith/Sources/EdithKit",
-      "Packages/Edith/Sources/EdithCore",
-      "Packages/Edith/Sources/EdithCameraSupport",
-      "Packages/Edith/Sources/EdithLidAwakeSupport"
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
     ],
-    "dependencies": [],
-    "usesHostFramework": true
+    "dependencies": []
   },
   {
     "id": "colorPicker",
@@ -331,6 +335,40 @@
     },
     "inputs": [
       "Extensions/calendar"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": []
+  },
+  {
+    "id": "jev",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "roles": {
+      "app": [
+        "Extensions/jev/Models/JevCommandPayloads.swift",
+        "Extensions/jev/Models/JevFeature.swift",
+        "Extensions/jev/Models/JevModels.swift",
+        "Extensions/jev/Models/JevText.swift",
+        "Extensions/jev/Runtime.swift",
+        "Extensions/jev/Services/JevClient.swift",
+        "Extensions/jev/Services/JevCommands.swift",
+        "Extensions/jev/Services/JevEngine.swift",
+        "Extensions/jev/Services/JevRedaction.swift",
+        "Extensions/jev/Services/JevRouter.swift",
+        "Extensions/jev/Services/JevSecrets.swift",
+        "Extensions/jev/ViewModels/JevSettingsModel.swift",
+        "Extensions/jev/Views/JevSettingsPane.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/jev"
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
