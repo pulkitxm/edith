@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import AppKit
 import SwiftUI
 
 public enum PageMetrics {
@@ -19,6 +20,14 @@ public enum PageMetrics {
 
     public static func titleFont(_ compact: Bool) -> Font {
         DashSkin.heading(compact ? compactTitleSize : titleSize)
+    }
+
+    public static func tableNameWidth(viewport: CGFloat, fixedWidth: Double, columnCount: Int)
+        -> CGFloat
+    {
+        let scrollerWidth = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)
+        return max(
+            0, viewport - UIScale.pt(fixedWidth) - CGFloat(columnCount * 16 + 16) - scrollerWidth)
     }
 
     public static func cardColumns(
@@ -51,16 +60,19 @@ public enum PageContentWidth {
 public struct PageScaffold<Header: View, Content: View>: View {
     var width: PageContentWidth = .fluid
     var pinnedHeader = false
+    var scrollIdentity = ""
+    @State private var scrollPositions = PageScrollPositions()
     @ViewBuilder let header: () -> Header
     @ViewBuilder let content: () -> Content
     @Environment(\.compactLayout) private var compact
 
     public init(
-        width: PageContentWidth = .fluid, pinnedHeader: Bool = false,
+        width: PageContentWidth = .fluid, pinnedHeader: Bool = false, scrollIdentity: String = "",
         @ViewBuilder header: @escaping () -> Header, @ViewBuilder content: @escaping () -> Content
     ) {
         self.width = width
         self.pinnedHeader = pinnedHeader
+        self.scrollIdentity = scrollIdentity
         self.header = header
         self.content = content
     }
@@ -76,6 +88,7 @@ public struct PageScaffold<Header: View, Content: View>: View {
                     }
                     .pageContent(compact, width: width)
                 }
+                .background { PageScrollPosition(positions: scrollPositions, key: scrollIdentity) }
             }
         }
         .pageSurface()
