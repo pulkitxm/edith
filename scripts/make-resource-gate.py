@@ -34,6 +34,8 @@ EXACT = {
     "verify-release-build-settings": "xcode",
     "ghostty": "ghostty",
     "ci-swift-test": "swift-test",
+    "ci-host": "swift-test",
+    "host": "swift-test",
     "ci-swift-test-batch": "swift-test",
     "ci-swift-lint": "swift-test",
     "ci-studio": "swift-test",

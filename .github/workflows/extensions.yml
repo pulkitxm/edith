@@ -5,6 +5,7 @@ on:
     paths:
       - 'Extensions/**'
       - 'Packages/ExtensionMarketplace/**'
+      - 'Packages/EdithHost/**'
       - 'Packages/Edith/Sources/EdithKit/**'
       - 'Packages/Edith/Sources/EdithCore/**'
       - 'Packages/Edith/Sources/EdithShared/**'
@@ -19,6 +20,7 @@ on:
     paths:
       - 'Extensions/**'
       - 'Packages/ExtensionMarketplace/**'
+      - 'Packages/EdithHost/**'
       - 'Packages/Edith/Sources/EdithKit/**'
       - 'Packages/Edith/Sources/EdithCore/**'
       - 'Packages/Edith/Sources/EdithShared/**'
@@ -52,6 +54,8 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun test scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
       - run: python3 -B scripts/test-extension-size-report.py
+      - run: make ci-host
+      - run: make host
       - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
       - run: swift test --package-path Extensions --build-system native --jobs 2
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
