@@ -77,15 +77,15 @@ public final class HostExtensionSessions {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
-        if remember { save(enabledIDs.subtracting([id])) }
         states[id] = .stopping
         do {
             if let worker = workers[id] { try await worker.stop() }
         } catch {
-            states[id] = .failed
+            states[id] = workers[id]?.ready == true ? .active : .failed
             failures.insert(id)
             throw error
         }
+        if remember { save(enabledIDs.subtracting([id])) }
         workers[id] = nil
         packages[id] = nil
         versions[id] = nil
@@ -116,15 +116,11 @@ public final class HostExtensionSessions {
         }
     }
 
-    public func shutdown() async {
-        for (id, worker) in workers {
-            states[id] = .stopping
-            try? await worker.stop()
-            states[id] = .disabled
+    @discardableResult public func shutdown() async -> Bool {
+        for id in Array(workers.keys) {
+            do { try await disable(id: id, remember: false) } catch { failures.insert(id) }
         }
-        workers.removeAll()
-        packages.removeAll()
-        versions.removeAll()
+        return workers.isEmpty
     }
 
     private func save(_ ids: Set<String>) {

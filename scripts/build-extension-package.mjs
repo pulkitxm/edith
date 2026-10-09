@@ -194,10 +194,11 @@ export async function buildExtensionPackage({
     );
   }
   for (const [role, sources] of Object.entries(definition.roles)) {
-    if (!["app", "helper", "agent", "cli"].includes(role))
+    if (!["app", "helper", "agent", "cli", "privileged"].includes(role))
       throw new Error(`Unknown host role ${role}`);
-    const support = definition.supportProduct
-      ? buildExtensionSupport(root, definition.supportProduct, `${id}_${role}`)
+    const supportProduct = definition.supportProducts && Object.hasOwn(definition.supportProducts, role) ? definition.supportProducts[role] : definition.supportProduct;
+    const support = supportProduct
+      ? buildExtensionSupport(root, supportProduct, `${id}_${role}`)
       : undefined;
     const compileSources = [];
     for (const [index, path] of sources.entries()) {

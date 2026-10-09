@@ -74,6 +74,8 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         };
         inspectLinks(sparkle);
         expect(readdirSync(sparkle)).not.toContain("Versions");
+        for (const name of ["Headers", "PrivateHeaders", "Modules"])
+          expect(readdirSync(sparkle)).not.toContain(name);
         const dependencies = run(
           "otool",
           "-L",
@@ -96,7 +98,6 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         expect(
           JSON.parse(catalog.stdout.toString()).length,
         ).toBeGreaterThanOrEqual(35);
-        mkdirSync(join(app, "Contents/Library"));
         writeFileSync(
           join(app, "Contents/Library/feature.bundle"),
           "synthetic payload",
@@ -104,7 +105,7 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         expect(
           run("python3", "scripts/verify-shipping-host.py", app).exitCode,
         ).not.toBe(0);
-        rmSync(join(app, "Contents/Library"), { recursive: true });
+        rmSync(join(app, "Contents/Library/feature.bundle"));
         symlinkSync("/bin/sleep", join(app, "Contents/MacOS/worker"));
         expect(
           run("python3", "scripts/verify-shipping-host.py", app).exitCode,

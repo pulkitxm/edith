@@ -62,12 +62,56 @@ import Testing
         await fixture.sessions.shutdown()
     }
 
+    @Test func failedDisablePreservesEnabledPreferenceAndProcessUntilRetry() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        let pid = fixture.sessions.processIdentifiers["sample"]
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) { try await fixture.sessions.disable(id: "sample") }
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.sessions.versions["sample"] == "1.0.0")
+        try await fixture.sessions.disable(id: "sample")
+        #expect(fixture.sessions.enabledIDs.isEmpty)
+        #expect(fixture.sessions.processIdentifiers.isEmpty)
+    }
+
+    @Test func failedRestorationBlocksUpdatingTheRunningVersion() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        let pid = fixture.sessions.processIdentifiers["sample"]
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) { try await fixture.sessions.applyUpdate(fixture.package("1.1.0")) }
+        #expect(fixture.sessions.versions["sample"] == "1.0.0")
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(await fixture.sessions.shutdown())
+    }
+
+    @Test func quittingIsVetoedUntilRestorationSucceeds() async throws {
+        let fixture = try Fixture(rejectDisable: true)
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        let pid = fixture.sessions.processIdentifiers["sample"]
+        #expect(await fixture.sessions.shutdown() == false)
+        #expect(fixture.sessions.states["sample"] == .active)
+        #expect(fixture.sessions.enabledIDs == ["sample"])
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(await fixture.sessions.shutdown())
+        #expect(fixture.sessions.processIdentifiers.isEmpty)
+    }
+
     @MainActor private struct Fixture {
         let sessions: HostExtensionSessions
         let suite: String
         let defaults: UserDefaults
 
-        init(rejectVersion: String? = nil) throws {
+        init(rejectVersion: String? = nil, rejectDisable: Bool = false) throws {
             suite = "com.pulkit.edith.tests.sessions.\(UUID().uuidString)"
             defaults = try #require(UserDefaults(suiteName: suite))
             let script = try #require(
@@ -82,7 +126,9 @@ import Testing
                         identity: identity, extensionID: package.id, version: package.version),
                     executable: URL(fileURLWithPath: "/usr/bin/python3"),
                     arguments: [
-                        script.path, package.version == rejectVersion ? "reject" : "normal",
+                        script.path,
+                        package.version == rejectVersion
+                            ? "reject" : rejectDisable ? "reject-disable-once" : "normal",
                     ], requestTimeout: .seconds(2))
             }
         }

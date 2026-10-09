@@ -9,6 +9,7 @@ public final class ExtensionBundleRuntime {
         case helper
         case agent
         case cli
+        case privileged
     }
 
     public struct Snapshot: Equatable, Sendable {
@@ -82,6 +83,34 @@ public final class ExtensionBundleRuntime {
         let response = try execute(instance, operation: "stop", context: [:])
         guard response["ok"] as? Bool == true else { throw MarketplaceError.invalidBundle }
         instance.active = false
+    }
+
+    public func prepareDisableAll() async throws {
+        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
+        for instance in loaded.values
+        where instance.active && instance.object.responds(to: selector) {
+            let completion = BundleCommandCompletion()
+            _ = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard completion.begin(continuation) else { return }
+                    typealias Prepare =
+                        @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
+                        -> Void
+                    let prepare = unsafeBitCast(
+                        instance.object.method(for: selector), to: Prepare.self)
+                    let callback: @convention(block) (NSError?) -> Void = { error in
+                        if let error {
+                            completion.finish(.failure(error))
+                        } else {
+                            completion.finish(.success(Data()))
+                        }
+                    }
+                    prepare(instance.object, selector, callback)
+                }
+            } onCancel: {
+                completion.finish(.failure(CancellationError()))
+            }
+        }
     }
 
     public func prepareToStopAll() async throws {

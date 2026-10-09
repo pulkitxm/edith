@@ -39,6 +39,12 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
         shutil.rmtree(canonical / 'Versions')
         shutil.rmtree(framework)
         canonical.rename(framework)
+    for interface_name in ('Headers', 'PrivateHeaders', 'Modules'):
+        interface = framework / interface_name
+        if interface.is_symlink():
+            interface.unlink()
+        elif interface.is_dir():
+            shutil.rmtree(interface)
     plist_path = bundle / 'Contents/Info.plist'
     plist = plistlib.loads(plist_path.read_bytes())
     plist.update({key: value for key, value in version.items() if key.startswith('NS') and key.endswith('UsageDescription')})
