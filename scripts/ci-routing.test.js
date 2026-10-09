@@ -7,7 +7,6 @@ const swiftCache = Bun.YAML.parse(
   readFileSync(".github/actions/cache-swift/action.yml", "utf8"),
 );
 const ciJobs = Bun.YAML.parse(ciWorkflow).jobs;
-const batches = JSON.parse(readFileSync("scripts/test-batches.json", "utf8"));
 const pagesWorkflow = readFileSync(".github/workflows/pages.yml", "utf8");
 const wikiWorkflow = readFileSync(".github/workflows/wiki-sync.yml", "utf8");
 
@@ -118,10 +117,10 @@ test("every change area covers its repository inputs", () => {
   }
 });
 
-test("a main push releases when the Swift area changed", () => {
+test("a main push releases when the host area changed", () => {
   const releaseBuildJob = ciWorkflow.slice(ciWorkflow.indexOf("\n  version:"));
   expect(releaseBuildJob).toContain(
-    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.swift == 'true')",
+    "&& ((github.event_name == 'push'\n      && needs.changes.outputs.host == 'true')",
   );
   expect(ciWorkflow).not.toContain("release_artifact");
   expect(ciWorkflow).not.toContain("release-artifact-changed.sh");
@@ -282,15 +281,24 @@ test("Swift build consumers retain automatic compiled cache saves", () => {
     "build/Build",
     "build/SDKExplicitPrecompiledModules",
   ]);
-  for (const [job, variant] of [
-    ["swift-build", "app-release"],
-    ["dmg", "app-release"],
-  ]) {
+  for (const job of ["swift-build", "dmg"]) {
     const cache = ciJobs[job].steps.find(
-      (step) => step.uses === "./.github/actions/cache-swift",
+      (step) => step.uses === "./.github/actions/cache-host",
     );
-    expect(cache.with.variant).toBe(variant);
+    expect(cache).toBeDefined();
   }
+  const hostCache = Bun.YAML.parse(
+    readFileSync(".github/actions/cache-host/action.yml", "utf8"),
+  );
+  const hostProducts = hostCache.runs.steps.find((step) =>
+    step.uses?.startsWith("actions/cache@"),
+  );
+  expect(hostProducts.with.path).toBe("Packages/EdithHost/.build");
+  expect(hostProducts.with.key).toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionSupport/**",
+  );
+  expect(hostProducts.with.key).not.toContain("Packages/Edith/");
+  expect(hostProducts.with.key).not.toContain("EdithExtensionDocuments");
 });
 
 test("Swift jobs restore commit times from full history before reusing builds", () => {
@@ -301,8 +309,11 @@ test("Swift jobs restore commit times from full history before reusing builds", 
     const checkout = steps.find((step) =>
       step.uses?.startsWith("actions/checkout@"),
     );
-    const cache = steps.findIndex(
-      (step) => step.uses === "./.github/actions/cache-swift",
+    const cache = steps.findIndex((step) =>
+      [
+        "./.github/actions/cache-swift",
+        "./.github/actions/cache-host",
+      ].includes(step.uses),
     );
     expect(checkout.with["fetch-depth"], name).toBe(0);
     expect(steps.indexOf(checkout), name).toBeLessThan(cache);
@@ -414,4 +425,24 @@ test("backend changes run the companion job", () => {
     "cargo clippy --all-targets --locked -- -D warnings",
   );
   expect(ciWorkflow).toContain("--migrate-only");
+});
+
+test("independent feature changes do not release or invalidate the host", () => {
+  for (const path of [
+    "Extensions/calendar/Runtime.swift",
+    "apps/music-player/src/main.rs",
+    "Packages/ExtensionSupport/Sources/EdithExtensionDocuments/DocumentRenderer.swift",
+  ]) {
+    expect(matchesArea("host", path), path).toBe(false);
+  }
+  for (const path of [
+    "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
+    "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/PackageStore.swift",
+    "Packages/ExtensionSupport/Sources/EdithExtensionUI/PageScaffold.swift",
+    "scripts/package-shipping-host.py",
+    "scripts/verify_shipping_host.py",
+    ".github/actions/cache-host/action.yml",
+  ]) {
+    expect(matchesArea("host", path), path).toBe(true);
+  }
 });

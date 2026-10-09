@@ -108,30 +108,11 @@ BUILT="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' dist/Edi
 [ "$BUILT" = "$RELEASE_VERSION" ] \
   || { echo "release blocked: built $BUILT, expected $RELEASE_VERSION" >&2; exit 1; }
 
-echo "==> packaging the database pack"
-./scripts/package-database-pack.sh dist/edith-database .
-
-echo "==> packaging the DMG"
-rm -rf dmg-root Edith.dmg && mkdir dmg-root
-ditto dist/Edith.app dmg-root/Edith.app
-ln -s /Applications dmg-root/Applications
-dmg_size_kb="$(du -Ask dmg-root | awk '{print $1}')"
-dmg_size_kb=$((dmg_size_kb + dmg_size_kb / 4 + 65536))
-hdiutil create -volname Edith -fs HFS+ -size "${dmg_size_kb}k" \
-  -srcfolder dmg-root -format ULMO Edith.dmg
-verify_status=1
-for attempt in 1 2 3 4 5; do
-  if hdiutil verify Edith.dmg; then verify_status=0; break; fi
-  verify_status=$?
-  [ "$attempt" -lt 5 ] && sleep 2
-done
-/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister \
-  -u "$PWD/dmg-root/Edith.app" 2>/dev/null || true
-rm -rf dmg-root
-[ "$verify_status" -eq 0 ] || { echo "release blocked: the DMG failed verification" >&2; exit 1; }
+echo "==> packaging the empty-host DMG"
+python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
 
 echo "==> generating the signed appcast"
-GENERATE_APPCAST="$(find build/SourcePackages/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
+GENERATE_APPCAST="$(find Packages/EdithHost/.build/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
 [ -n "$GENERATE_APPCAST" ] || { echo "release blocked: generate_appcast is missing" >&2; exit 1; }
 rm -rf dist/appcast && mkdir dist/appcast
 cp Edith.dmg dist/appcast/
@@ -157,19 +138,27 @@ grep -qx "  version \"$RELEASE_VERSION\"" Casks/edith.rb \
   || { echo "release blocked: the cask rewrite did not take" >&2; exit 1; }
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  echo "==> dry run complete: dist/Edith.app, Edith.dmg, edith-database.zip, and dist/appcast/appcast.xml are ready"
+  echo "==> dry run complete: dist/Edith.app, Edith.dmg, and dist/appcast/appcast.xml are ready"
   echo "    version files and cask are staged in the working tree and will be reverted on exit"
   exit 0
 fi
 
+node scripts/extension-release-ready.mjs .
+pukbot capabilities --json
+pukbot commit create --help
+pukbot tag create --help
+pukbot release create --help
+pukbot release upload-asset --help
+
 echo "==> committing the release through pukbot"
 git add "${STAGED_FILES[@]}"
-pukbot commit create --repo "$REPO" --branch main --as-app \
+pukbot commit create --repo "$REPO" --branch main \
   --message "Release ${RELEASE_TAG}" "${STAGED_FILES[@]}" --json
 COMMITTED=1
 git fetch origin main --tags --quiet
 RELEASE_SHA="$(git rev-parse origin/main)"
-git reset --hard origin/main --quiet
+git restore --source=origin/main --staged --worktree -- "${STAGED_FILES[@]}"
+git merge --ff-only origin/main --quiet
 
 echo "==> tagging ${RELEASE_TAG} through pukbot"
 pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
@@ -183,7 +172,5 @@ RELEASE_ID="$(gh api "repos/${REPO}/releases/tags/${RELEASE_TAG}" --jq .id)"
 [ -n "$RELEASE_ID" ] || { echo "release blocked: could not resolve the release id" >&2; exit 1; }
 pukbot release upload-asset "$RELEASE_ID" Edith.dmg --repo "$REPO" --json
 pukbot release upload-asset "$RELEASE_ID" dist/appcast/appcast.xml --repo "$REPO" --json
-pukbot release upload-asset "$RELEASE_ID" edith-database.zip --repo "$REPO" --json
-pukbot release upload-asset "$RELEASE_ID" edith-database.zip.sha256 --repo "$REPO" --json
 
 echo "==> released $RELEASE_TAG"

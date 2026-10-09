@@ -2,6 +2,7 @@ import argparse
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 
 from verify_shipping_host import inspect_host, run
 
@@ -20,7 +21,22 @@ with tempfile.TemporaryDirectory(prefix='edith-dmg-') as temporary:
     destination.unlink(missing_ok=True)
     run('hdiutil', 'create', '-volname', 'Edith', '-fs', 'HFS+', '-size', f'{kilobytes + kilobytes // 4 + 65536}k', '-srcfolder', str(root), '-format', 'ULMO', str(destination))
     try:
-        run('hdiutil', 'verify', str(destination))
+        for attempt in range(5):
+            try:
+                run('hdiutil', 'verify', str(destination))
+                break
+            except subprocess.CalledProcessError:
+                if attempt == 4:
+                    raise
+                time.sleep(2)
+        mounted = root / 'mounted'
+        mounted.mkdir()
+        run('hdiutil', 'attach', '-readonly', '-nobrowse', '-noautoopen', '-mountpoint', str(mounted), str(destination))
+        try:
+            assert (mounted / 'Applications').readlink() == Path('/Applications')
+            inspect_host(mounted / 'Edith.app', release=True)
+        finally:
+            run('hdiutil', 'detach', str(mounted))
     finally:
         subprocess.run(['/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister', '-u', str(root / 'Edith.app')], capture_output=True)
 print('Verified empty-host DMG: ' + destination.name)

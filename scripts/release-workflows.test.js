@@ -40,7 +40,7 @@ function releaseContext(overrides = {}) {
   return {
     github: { event_name: "push", ref: "refs/heads/main" },
     inputs: { release: false, rebuild: "" },
-    needs: { changes: { result: "success", outputs: { swift: "true" } } },
+    needs: { changes: { result: "success", outputs: { host: "true" } } },
     ...overrides,
   };
 }
@@ -75,7 +75,7 @@ test("release routing accepts only main product pushes or explicit manual releas
     condition(
       version.if,
       releaseContext({
-        needs: { changes: { result: "success", outputs: { swift: "false" } } },
+        needs: { changes: { result: "success", outputs: { host: "false" } } },
       }),
     ),
   ).toBe(false);
@@ -120,7 +120,7 @@ test("release routing accepts only main product pushes or explicit manual releas
       condition(
         version.if,
         releaseContext({
-          needs: { changes: { result, outputs: { swift: "true" } } },
+          needs: { changes: { result, outputs: { host: "true" } } },
         }),
       ),
     ).toBe(false);
@@ -204,45 +204,34 @@ test("publication depends directly on every required check in the current run", 
   ).toBe(false);
 });
 
-test("release builds and publishes the macOS assets", () => {
-  const dmgJob = ciWorkflow.slice(
-    ciWorkflow.indexOf("\n  dmg:"),
-    ciWorkflow.indexOf("\n  publish:"),
+test("release builds and publishes only empty-host macOS assets", () => {
+  const text = jobText(dmg);
+  expect(text).toContain("make verify-bundle");
+  expect(text.indexOf("make verify-bundle")).toBeLessThan(
+    text.indexOf("package-host-dmg.py"),
   );
-  expect(dmgJob).toContain("timeout-minutes: 60");
-  expect(dmgJob).toContain("name: Cache libghostty");
-  expect(dmgJob).toContain("name: Build libghostty");
-  expect(dmgJob).toContain("make ghostty");
-  expect(dmgJob).toContain("name: Verify the release bundle");
-  expect(dmgJob).toContain("run: make verify-bundle");
-  expect(dmgJob.indexOf("run: make verify-bundle")).toBeLessThan(
-    dmgJob.indexOf("name: Package the DMG"),
+  expect(text).toContain(
+    "python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg",
   );
-  expect(dmgJob).toContain("ditto dist/Edith.app dmg-root/Edith.app");
-  expect(dmgJob).toContain("-format ULMO Edith.dmg");
-  expect(dmgJob).toContain("hdiutil verify Edith.dmg");
-  expect(dmgJob).toContain("for attempt in 1 2 3 4 5; do");
-  expect(dmgJob).toContain("sleep 2");
-  expect(dmgJob).toContain('exit "$verify_status"');
-  expect(buildScript).toContain("XCODE_BUILD_SETTINGS=(ARCHS=arm64)");
-  expect(buildScript).toContain(
-    '[ "$RELEASE" = 1 ] && XCODE_BUILD_SETTINGS+=(SWIFT_OPTIMIZATION_LEVEL=-Osize DEAD_CODE_STRIPPING=YES\n  GCC_GENERATE_DEBUGGING_SYMBOLS=NO DEBUG_INFORMATION_FORMAT=dwarf)',
+  expect(text).not.toContain("ghostty");
+  expect(text).not.toContain("edith-database");
+  expect(text).toContain("Packages/EdithHost/.build/artifacts");
+  expect(text).toContain("SPARKLE_PRIVATE_KEY");
+  expect(text).toContain("xcrun notarytool submit Edith.dmg --wait");
+  expect(buildScript).toContain("scripts/build-minimal-host.mjs");
+  expect(buildScript).not.toContain("xcodebuild -project");
+  expect(buildScript).not.toContain("cargo build");
+  expect(jobText(publish)).toContain("release-assets/Edith.dmg");
+  expect(jobText(publish)).toContain("release-assets/appcast.xml");
+  expect(jobText(publish)).not.toContain("edith-database");
+  expect(jobText(publish)).toContain(
+    "node scripts/publish-host-release.mjs release-assets",
   );
-  expect(buildScript).not.toContain("swift build");
-  expect(makefile).toContain("Release SWIFT_OPTIMIZATION_LEVEL must be -Osize");
-  expect(dmgJob).toContain(
-    "./scripts/package-database-pack.sh dist/edith-database .",
+  expect(jobText(publish)).toContain(
+    "pukbot commit create --repo pulkitxm/homebrew-tap",
   );
-  expect(dmgJob).toContain("xcrun notarytool submit edith-database.zip --wait");
-  expect(dmgJob.indexOf("name: Package the database pack")).toBeLessThan(
-    dmgJob.indexOf("name: Notarize and staple"),
-  );
-  expect(releaseWorkflow).toContain("release-assets/Edith.dmg");
-  expect(releaseWorkflow).toContain("release-assets/appcast.xml");
-  expect(releaseWorkflow).toContain("release-assets/edith-database.zip");
-  expect(releaseWorkflow).toContain("release-assets/edith-database.zip.sha256");
-  expect(releaseWorkflow).toContain("gh release create");
-  expect(releaseWorkflow).toContain("gh release upload");
+  expect(jobText(publish)).not.toContain("git push");
+  expect(jobText(publish)).not.toContain("git commit");
 });
 
 test("swift tests leave enough time for a cold libghostty build", () => {
@@ -282,54 +271,20 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(11);
+  ).toBe(10);
   expect(publish.if).toContain("needs.dmg.outputs.superseded != 'true'");
 });
 
-test("Xcode schemes produce every bundled executable without colliding framework copies", () => {
-  const scheme = readFileSync(
-    "edth.xcodeproj/xcshareddata/xcschemes/EdithMain.xcscheme",
-    "utf8",
-  );
-  for (const product of [
-    "edithd",
-    "edith-database",
-    "EdithLidAwakeHelper",
-    "EdithCameraExtension",
-  ]) {
-    if (product === "edithd" || product === "edith-database") {
-      expect(scheme).not.toContain(`BlueprintIdentifier = "${product}"`);
-    } else {
-      expect(scheme).toContain(`BlueprintIdentifier = "${product}"`);
-    }
-    expect(buildScript).toContain(
-      `$DERIVED/Build/Products/$CONFIG/${product}"`,
-    );
-  }
-  expect(
-    scheme.match(/ReferencedContainer = "container:Packages\/Edith"/g),
-  ).toHaveLength(2);
-  expect(buildScript).toContain(
-    "for BUILD_SCHEME in EdithAgentRuntime EdithDatabaseRuntime EdithMain; do",
-  );
-  expect(makefile).toContain("for target in EdithMain EdithHelper; do");
-  expect(makefile).toContain("-derivedDataPath build");
-});
-
-test("bundle verification requires one executable and its CLI launcher", () => {
-  expect(makefile).toContain("test ! -L dist/Edith.app/Contents/MacOS/Edith");
-  expect(makefile).toContain("test -L dist/Edith.app/Contents/MacOS/ed");
+test("bundle verification enforces the empty host and same executable launcher", () => {
   expect(makefile).toContain(
-    'readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher',
+    "python3 scripts/verify-shipping-host.py dist/Edith.app",
   );
-  expect(makefile).toContain(
-    "test -f dist/Edith.app/Contents/Resources/ed-launcher",
-  );
-  expect(makefile).toContain("grep -qx '#!/bin/sh'");
-  expect(makefile).toContain("test ! -e dist/Edith.app/Contents/MacOS/edh");
-  expect(makefile).toContain("-type l -name ed");
-  expect(makefile).toContain("@set -e; install_dir=");
-  expect(makefile).toContain("for name in ed edith; do");
+  const verifier = readFileSync("scripts/verify_shipping_host.py", "utf8");
+  expect(verifier).toContain("Unexpected host executable");
+  expect(verifier).toContain("Feature resources in host");
+  expect(verifier).toContain("../Resources/ed-launcher");
+  expect(verifier).toContain("5_000_000");
+  expect(verifier).toContain("--deep");
 });
 
 test("macOS notarization is conditional on its optional credentials", () => {
@@ -350,7 +305,7 @@ test("the publisher uses a token that clears the ruleset", () => {
   expect(releaseWorkflow).toContain("RELEASE_PUSH_TOKEN is required");
   expect(releaseWorkflow).toContain("TAP_PUSH_TOKEN is required");
   expect(releaseWorkflow).not.toContain("create-github-app-token");
-  expect(releaseWorkflow).not.toContain("PUKBOT");
+  expect(releaseWorkflow).toContain("pukbot capabilities --json");
 });
 
 test("build jobs cannot retain write credentials", () => {
@@ -366,41 +321,28 @@ test("build jobs cannot retain write credentials", () => {
       expect(checkout.with["persist-credentials"]).toBe(false);
     }
   }
-  const retainedCredentials = publish.steps.filter(
-    (step) =>
-      step.uses?.startsWith("actions/checkout@") &&
-      step.with["persist-credentials"],
-  );
-  expect(retainedCredentials).toHaveLength(1);
-  expect(retainedCredentials[0].with.token).toBe(
+  for (const step of publish.steps.filter((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  )) {
+    expect(step.with["persist-credentials"]).toBe(false);
+  }
+  expect(publish.env.GH_TOKEN).toBe(
     ["$", "{{ secrets.RELEASE_PUSH_TOKEN }}"].join(""),
   );
 });
 
-test("the release commit carries every versioned file and its tag atomically", () => {
-  expect(releaseStateScript).toContain('-c user.name="github-actions[bot]"');
+test("release version commits and tags use the release client with source verification", () => {
+  expect(releaseStateScript).toContain("pukbot commit create");
+  expect(releaseStateScript).toContain("pukbot tag create");
   expect(releaseStateScript).toContain(
-    '-c user.email="41898282+github-actions[bot]@users.noreply.github.com"',
+    "git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
   );
   expect(releaseStateScript).toContain(
-    "commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb",
+    `--message "Release ${releaseTagRef} [skip ci]"`,
   );
-  expect(releaseStateScript).toContain(
-    `-m "Release ${releaseTagRef} [skip ci]"`,
-  );
-  expect(releaseStateScript).toContain(
-    'tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"',
-  );
-  expect(releaseStateScript).toContain(
-    'git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"',
-  );
-  expect(releaseStateScript).toContain(
-    '[[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]]',
-  );
-  expect(releaseStateScript).toContain(
-    '[[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]]',
-  );
-  expect(releaseStateScript).not.toContain("git reset --hard origin/main");
+  expect(releaseStateScript).toContain('git rev-parse "$RELEASE_SHA^"');
+  expect(releaseStateScript).not.toContain("git push");
+  expect(releaseStateScript).not.toContain("git reset --hard");
 });
 
 test("release publication can recover after a partial failure", () => {
@@ -410,7 +352,7 @@ test("release publication can recover after a partial failure", () => {
     "only the current release can be rebuilt",
   );
   expect(releaseStateScript).toContain(
-    `-m "Refresh ${releaseTagRef} release checksum"`,
+    `--message "Refresh ${releaseTagRef} release checksum"`,
   );
   const mirror = releaseWorkflow.slice(
     releaseWorkflow.indexOf("- name: Mirror the cask to the tap repository"),

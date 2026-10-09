@@ -40,6 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
+      host: ${{ steps.areas.outputs.host }}
       docs: ${{ steps.areas.outputs.docs }}
       workflows: ${{ steps.areas.outputs.workflows }}
       promo: ${{ steps.areas.outputs.promo }}
@@ -86,7 +87,8 @@ jobs:
               echo "$1: skip"
             fi
           }
-          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/(Edith|ExtensionMarketplace)/|Resources/|edth\.xcodeproj/|build\.sh$|Makefile$|\.swift-format$)'
+          area swift '^(apps/music-player/|scripts/test-swift-test-isolation\.py$|Packages/(Edith|EdithHost|ExtensionMarketplace|ExtensionSupport)/|Extensions/|Resources/|edth\.xcodeproj/|scripts/(build-minimal-host\.mjs|package-shipping-host\.py|verify.shipping.host\.py|package-host-dmg\.py)$|build\.sh$|Makefile$|\.swift-format$)'
+          area host '^(Packages/(EdithHost|ExtensionMarketplace)/|Packages/ExtensionSupport/(Package.swift|Sources/(EdithExtensionSupport|EdithExtensionUI)/)|Resources/(Info.plist|AppIcon.icns|ed-launcher)$|scripts/(build-minimal-host.mjs|package-shipping-host.py|verify.shipping.host.py|package-host-dmg.py|release-local.sh|publish-host-release.mjs|publish-release-state.sh)$|build.sh$|Makefile$|\.github/(workflows/ci.yml|actions/cache-host/))'
           area docs '^docs/'
           area workflows '^\.github/(workflows|actions)/'
           area promo '^apps/promo-video/'
@@ -207,38 +209,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Format and lint (swift-format)
-        run: swift format lint --strict --parallel --recursive Sources Tests Package.swift
-        working-directory: Packages/Edith
-      - name: Cache libghostty
-        id: ghostty-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            Packages/Edith/vendor/GhosttyKit.xcframework
-            Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
-      - name: Build libghostty
-        run: |
-          if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
-            || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
-            || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
-            command -v zig >/dev/null 2>&1 || brew install zig
-            make ghostty
-          fi
-      - name: Save validated libghostty
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            Packages/Edith/vendor/GhosttyKit.xcframework
-            Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
-
       - name: Cache Swift build products
-        uses: ./.github/actions/cache-swift
-        with:
-          variant: app-release
+        uses: ./.github/actions/cache-host
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+      - name: Check host ownership and lifecycle contracts
+        run: make ci-host
       - name: Build the release .app bundle
         env:
           EDITH_RELEASE_ALLOW_DEV_SIGNING: "1"
@@ -397,7 +372,7 @@ jobs:
       github.ref == 'refs/heads/main'
       && needs.changes.result == 'success'
       && ((github.event_name == 'push'
-      && needs.changes.outputs.swift == 'true')
+      && needs.changes.outputs.host == 'true')
       || (github.event_name == 'workflow_dispatch' && (inputs.release || inputs.rebuild != '')))
     runs-on: ubuntu-latest
     outputs:
@@ -474,39 +449,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Cache libghostty
-        id: ghostty-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            Packages/Edith/vendor/GhosttyKit.xcframework
-            Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
-
-      - name: Build libghostty
-        run: |
-          if grep -q 'name: "GhosttyKit"' Packages/Edith/Package.swift; then
-            if [ ! -d Packages/Edith/vendor/GhosttyKit.xcframework ] \
-              || [ ! -d Packages/Edith/vendor/GhosttyResources/ghostty/shell-integration ] \
-              || [ ! -f Packages/Edith/vendor/GhosttyResources/terminfo/78/xterm-ghostty ]; then
-              command -v zig >/dev/null 2>&1 || brew install zig
-              make ghostty
-            fi
-          fi
-
-      - name: Save validated libghostty
-        if: steps.ghostty-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
-        with:
-          path: |
-            Packages/Edith/vendor/GhosttyKit.xcframework
-            Packages/Edith/vendor/GhosttyResources
-          key: ghostty-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh') }}
-
       - name: Cache Swift build products
-        uses: ./.github/actions/cache-swift
-        with:
-          variant: app-release
+        uses: ./.github/actions/cache-host
 
       - name: Stamp the release version
         run: |
@@ -514,6 +458,8 @@ jobs:
             /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $RELEASE_VERSION" "$plist"
             /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $RELEASE_BUILD" "$plist"
           done
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
 
       - name: Import signing certificate
         env:
@@ -565,32 +511,7 @@ jobs:
 
       - name: Package the DMG
         if: steps.release_build.outputs.superseded != 'true'
-        run: |
-          rm -rf dmg-root && mkdir dmg-root
-          ditto dist/Edith.app dmg-root/Edith.app
-          ln -s /Applications dmg-root/Applications
-          dmg_size_kb="$(du -Ask dmg-root | awk '{print $1}')"
-          dmg_size_kb=$((dmg_size_kb + dmg_size_kb / 4 + 65536))
-          hdiutil create -volname Edith -fs HFS+ -size "${dmg_size_kb}k" \
-            -srcfolder dmg-root -format ULMO Edith.dmg
-          verify_status=1
-          for attempt in 1 2 3 4 5; do
-            if hdiutil verify Edith.dmg; then
-              verify_status=0
-              break
-            else
-              verify_status=$?
-            fi
-            if [ "$attempt" -lt 5 ]; then
-              sleep 2
-            fi
-          done
-          rm -rf dmg-root
-          exit "$verify_status"
-
-      - name: Package the database pack
-        if: steps.release_build.outputs.superseded != 'true'
-        run: ./scripts/package-database-pack.sh dist/edith-database .
+        run: python3 scripts/package-host-dmg.py dist/Edith.app Edith.dmg
 
       - name: Notarize and staple
         if: steps.release_build.outputs.superseded != 'true' && env.HAS_NOTARY == 'true'
@@ -605,10 +526,6 @@ jobs:
             --key-id "$NOTARY_KEY_ID" \
             --issuer "$NOTARY_ISSUER_ID"
           xcrun stapler staple Edith.dmg
-          xcrun notarytool submit edith-database.zip --wait \
-            --key "$RUNNER_TEMP/notary-key.p8" \
-            --key-id "$NOTARY_KEY_ID" \
-            --issuer "$NOTARY_ISSUER_ID"
           rm -f "$RUNNER_TEMP/notary-key.p8"
 
       - name: Generate the signed appcast
@@ -616,7 +533,7 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          GENERATE_APPCAST="$(find build/SourcePackages/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
+          GENERATE_APPCAST="$(find Packages/EdithHost/.build/artifacts -type f -name generate_appcast -perm -u+x -print -quit)"
           test -n "$GENERATE_APPCAST" \
             || { echo "release blocked: generate_appcast is missing" >&2; exit 1; }
           rm -rf dist/appcast && mkdir dist/appcast
@@ -647,8 +564,6 @@ jobs:
           mkdir release-macos
           cp Edith.dmg release-macos/
           cp dist/appcast/appcast.xml release-macos/
-          cp edith-database.zip release-macos/
-          cp edith-database.zip.sha256 release-macos/
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: steps.release_build.outputs.superseded != 'true'
@@ -693,6 +608,7 @@ jobs:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
       RELEASE_BUILD: ${{ needs.version.outputs.build }}
       BUILT_SHA: ${{ needs.version.outputs.sha }}
+      GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -704,7 +620,7 @@ jobs:
           path: release-source
           fetch-depth: 0
           token: ${{ secrets.RELEASE_PUSH_TOKEN }}
-          persist-credentials: true
+          persist-credentials: false
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -716,15 +632,22 @@ jobs:
           name: release-plists
           path: release-plists
 
+      - name: Install the release client
+        run: bash scripts/install-release-client.sh
+
+      - name: Inspect release capabilities
+        run: |
+          pukbot capabilities --json
+          pukbot commit create --help
+          pukbot tag create --help
+          pukbot release create --help
+          pukbot release edit --help
+          pukbot release upload-asset --help
+
       - name: Verify release assets
         run: |
           test -f release-assets/Edith.dmg
           test -f release-assets/appcast.xml
-          test -f release-assets/edith-database.zip
-          test -f release-assets/edith-database.zip.sha256
-          expected="$(awk '{print $1}' release-assets/edith-database.zip.sha256)"
-          actual="$(sha256sum release-assets/edith-database.zip | awk '{print $1}')"
-          test "$expected" = "$actual"
           test -f release-plists/Info.plist
           test -f release-plists/HelperInfo.plist
 
@@ -761,27 +684,14 @@ jobs:
 
       - name: Publish the release
         if: steps.release_state.outputs.superseded != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" --clobber \
-              release-assets/Edith.dmg release-assets/appcast.xml \
-              release-assets/edith-database.zip release-assets/edith-database.zip.sha256
-          else
-            gh release create "$RELEASE_TAG" --title "Edith $RELEASE_TAG" --generate-notes \
-              release-assets/Edith.dmg release-assets/appcast.xml \
-              release-assets/edith-database.zip release-assets/edith-database.zip.sha256
-          fi
+        run: node scripts/publish-host-release.mjs release-assets
 
       - name: Mirror the cask to the tap repository
         if: steps.release_state.outputs.superseded != 'true'
         env:
           TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
         run: |
-          git clone --depth 1 \
-            "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/pulkitxm/homebrew-tap.git" tap
+          GH_TOKEN="$TAP_PUSH_TOKEN" gh repo clone pulkitxm/homebrew-tap tap -- --depth 1
           mkdir -p tap/Casks
           cp release-source/Casks/edith.rb tap/Casks/edith.rb
           cd tap
@@ -789,10 +699,6 @@ jobs:
             echo "the tap already carries $RELEASE_TAG"
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add Casks/edith.rb
-          git commit -m "Update the Edith cask to ${RELEASE_TAG}"
-          git push origin HEAD:main
-          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$(git rev-parse HEAD)" \
-            || { echo "release blocked: the tap did not take $RELEASE_TAG" >&2; exit 1; }
+          GH_TOKEN="$TAP_PUSH_TOKEN" pukbot commit create --repo pulkitxm/homebrew-tap --branch main \
+            --message "Update the Edith cask to ${RELEASE_TAG}" Casks/edith.rb --json

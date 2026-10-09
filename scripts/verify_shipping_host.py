@@ -54,6 +54,18 @@ def inspect_host(bundle, release=False, launcher_required=True):
         commands = run('otool', '-l', str(path))
         for rpath in re.findall(r'cmd LC_RPATH\n\s+cmdsize \d+\n\s+path (\S+) \(offset', commands):
             assert not rpath.startswith('/') or rpath.startswith(('/System/', '/usr/')), f'Build path in {path.name}'
+    sparkle = (bundle / 'Contents/Frameworks/Sparkle.framework/Versions/Current').resolve()
+    expected_binaries = {
+        executable, bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib',
+        sparkle / 'Sparkle', sparkle / 'Autoupdate',
+        sparkle / 'Updater.app/Contents/MacOS/Updater',
+        sparkle / 'XPCServices/Downloader.xpc/Contents/MacOS/Downloader',
+        sparkle / 'XPCServices/Installer.xpc/Contents/MacOS/Installer',
+    }
+    assert set(binaries) == expected_binaries, 'Unexpected nested host executable'
+    symbols = run('nm', '-g', str(executable), str(bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib'))
+    for feature in ('HerdrStore', 'MusicPlayerEngine', 'MeetingVoice', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
+        assert feature not in symbols, f'Feature implementation in host: {feature}'
     assert bytes_installed < 5_000_000, f'Empty host exceeds 5 MB: {bytes_installed}'
     closure = run('otool', '-L', str(executable), str(bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib'))
     for feature in ('EdithKit', 'EdithShared', 'MeetingVoice', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):

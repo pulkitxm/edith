@@ -3,6 +3,7 @@
 set -euo pipefail
 
 MODE="${1:-}"
+REPO="${GITHUB_REPOSITORY:-pulkitxm/edith}"
 : "${RELEASE_TAG:?RELEASE_TAG is required}"
 : "${RELEASE_VERSION:?RELEASE_VERSION is required}"
 : "${RELEASE_BUILD:?RELEASE_BUILD is required}"
@@ -71,41 +72,48 @@ case "$MODE" in
       exit 0
     fi
 
-    [[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]] \
-      || { echo "release blocked: checkout does not match the built commit" >&2; exit 1; }
-    [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] \
-      || release_superseded
-    [[ -f "$RELEASE_PLISTS_DIR/Info.plist" && -f "$RELEASE_PLISTS_DIR/HelperInfo.plist" ]] \
-      || { echo "release blocked: release plists are missing" >&2; exit 1; }
-
-    cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
-    cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
-    rewrite_cask
-    verify_cask
-    git \
-      -c user.name="github-actions[bot]" \
-      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-      commit Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb \
-      -m "Release ${RELEASE_TAG} [skip ci]"
-    git \
-      -c user.name="github-actions[bot]" \
-      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-      tag -a "$RELEASE_TAG" -m "Edith $RELEASE_TAG build $RELEASE_BUILD"
-    if git push --atomic origin HEAD:main "refs/tags/$RELEASE_TAG"; then
-      exit 0
+    RELEASE_SHA="$(git rev-parse origin/main)"
+    if [[ "$RELEASE_SHA" != "$BUILT_SHA" ]]; then
+      if [[ "$(git rev-parse "$RELEASE_SHA^")" != "$BUILT_SHA" ]] \
+        || [[ "$(git show -s --format=%s "$RELEASE_SHA")" != "Release ${RELEASE_TAG} [skip ci]" ]]; then
+        release_superseded
+      fi
+      git switch --detach "$RELEASE_SHA"
+      verify_cask
+    else
+      [[ "$(git rev-parse HEAD)" == "$BUILT_SHA" ]] \
+        || { echo "release blocked: checkout does not match the built commit" >&2; exit 1; }
+      [[ -f "$RELEASE_PLISTS_DIR/Info.plist" && -f "$RELEASE_PLISTS_DIR/HelperInfo.plist" ]] \
+        || { echo "release blocked: release plists are missing" >&2; exit 1; }
+      cp "$RELEASE_PLISTS_DIR/Info.plist" Resources/Info.plist
+      cp "$RELEASE_PLISTS_DIR/HelperInfo.plist" Resources/HelperInfo.plist
+      rewrite_cask
+      verify_cask
+      git add Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+      RESULT="$(pukbot commit create --repo "$REPO" --branch main \
+        --message "Release ${RELEASE_TAG} [skip ci]" \
+        Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb --json)" \
+        || {
+          git fetch origin main --tags
+          [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] || release_superseded
+          echo "release blocked: release commit failed" >&2
+          exit 1
+        }
+      RELEASE_SHA="$(printf '%s' "$RESULT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["resourceUrl"].rsplit("/",1)[1])')"
+      [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] \
+        || { echo "release blocked: invalid release commit" >&2; exit 1; }
+      git fetch origin main --tags
+      [[ "$(git rev-parse "$RELEASE_SHA^")" == "$BUILT_SHA" ]] \
+        || release_superseded
+      [[ "$(git rev-parse origin/main)" == "$RELEASE_SHA" ]] \
+        || release_superseded
+      git restore --source="$RELEASE_SHA" --staged --worktree -- Resources/Info.plist Resources/HelperInfo.plist Casks/edith.rb
+      git switch --detach "$RELEASE_SHA"
+      verify_cask
     fi
-
-    git fetch origin main --tags
-    REMOTE_TAG_SHA="$(remote_tag_sha)"
-    if [[ -n "$REMOTE_TAG_SHA" ]]; then
-      [[ "$REMOTE_TAG_SHA" == "$(git rev-parse HEAD)" ]] \
-        || { echo "release blocked: $RELEASE_TAG was published from another commit" >&2; exit 1; }
-      exit 0
-    fi
-    [[ "$(git rev-parse origin/main)" == "$BUILT_SHA" ]] \
-      || release_superseded
-    echo "release blocked: release push failed" >&2
-    exit 1
+    pukbot tag create "$RELEASE_TAG" --repo "$REPO" --target "$RELEASE_SHA" \
+      --message "Edith $RELEASE_TAG build $RELEASE_BUILD" --json \
+      || { echo "release blocked: release tag failed; retry the same built source" >&2; exit 1; }
     ;;
   rebuild)
     git switch --detach origin/main
@@ -122,11 +130,9 @@ case "$MODE" in
       exit 0
     fi
 
-    git \
-      -c user.name="github-actions[bot]" \
-      -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-      commit Casks/edith.rb -m "Refresh ${RELEASE_TAG} release checksum"
-    git push origin HEAD:main
+    git add Casks/edith.rb
+    pukbot commit create --repo "$REPO" --branch main \
+      --message "Refresh ${RELEASE_TAG} release checksum" Casks/edith.rb --json
     ;;
   *)
     echo "usage: publish-release-state.sh cut|rebuild" >&2
