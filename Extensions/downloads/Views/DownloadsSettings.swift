@@ -37,7 +37,7 @@ struct DownloadsSettings: View {
                 }
                 Section("Download tools") {
                     Text(
-                        "Install tools explicitly when needed. Downloads never installs them in the background."
+                        "Add the tools required for the media you want to save."
                     ).font(.edithText(.caption)).foregroundStyle(.secondary)
                     ForEach(DownloadsTools.names, id: \.self) { name in
                         LabeledContent(name) {

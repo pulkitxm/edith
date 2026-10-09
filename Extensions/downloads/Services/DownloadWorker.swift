@@ -77,6 +77,7 @@ public actor DownloadWorker {
     private var revision = 0
     private var snapshotDirty = false
     private var publicationTask: Task<Void, Never>?
+    private var estimates: [UUID: Task<CLICommandResult, Error>] = [:]
 
     public init(
         file: URL = DownloadQueue.file,
@@ -125,6 +126,7 @@ public actor DownloadWorker {
             flight.progress?.cancel()
         }
         publicationTask?.cancel()
+        for task in estimates.values { task.cancel() }
     }
 
     public func start() throws {
@@ -151,11 +153,17 @@ public actor DownloadWorker {
         let running = Array(flights.keys)
         for id in running { interrupt(id, reason: "Downloads stopped.") }
         let tasks = flights.values.map(\.task)
+        let progressTasks = flights.values.compactMap(\.progress)
+        let estimates = Array(self.estimates.values)
+        for task in estimates { task.cancel() }
         for flight in flights.values {
             flight.task.cancel()
             flight.progress?.cancel()
         }
         for task in tasks { await task.value }
+        for task in progressTasks { await task.value }
+        for task in estimates { _ = await task.result }
+        self.estimates.removeAll()
         notify()
         await publicationTask?.value
         for continuation in subscribers.values { continuation.finish() }
@@ -268,16 +276,28 @@ public actor DownloadWorker {
             throw DownloadsError("Enter a valid download URL.")
         }
         guard let executable = executable() else { throw DownloadToolOperationError.missing }
-        let result = try await runCommand(
-            CLICommandRequest(
-                executableURL: executable,
-                arguments: [
-                    "--ignore-config", "--no-update", "--no-playlist", "--skip-download", "-J",
-                    "--", url.absoluteString,
-                ],
-                environment: CLIToolEnvironment.sanitized(), timeout: 30,
-                maximumOutputBytes: 2 << 20, discardsStandardError: true,
-                terminatesProcessGroup: true), { _ in })
+        guard estimates.count < 8 else { throw DownloadsError("The estimate queue is full.") }
+        let id = UUID()
+        let runCommand = runCommand
+        let task = Task {
+            try await runCommand(
+                CLICommandRequest(
+                    executableURL: executable,
+                    arguments: [
+                        "--ignore-config", "--no-update", "--no-playlist", "--skip-download", "-J",
+                        "--", url.absoluteString,
+                    ],
+                    environment: CLIToolEnvironment.sanitized(), timeout: 30,
+                    maximumOutputBytes: 2 << 20, discardsStandardError: true,
+                    terminatesProcessGroup: true), { _ in })
+        }
+        estimates[id] = task
+        defer { estimates[id] = nil }
+        let result = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
         try Task.checkCancellation()
         return result.terminationStatus == 0
             ? DownloadSizeParser.estimate(fromJSON: result.standardOutputData) : nil

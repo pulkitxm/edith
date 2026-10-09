@@ -45,9 +45,7 @@ final class DownloadsSurface {
             }
             return SurfaceDataRow(
                 item.id.uuidString, sourceID: (item.kind ?? .audio).rawValue,
-                title: String(
-                    YoutubeDownloader.DownloadItem(record: item).resolvedTitle?.prefix(300)
-                        ?? item.url.lastPathComponent.prefix(300)),
+                title: Self.title(item),
                 detail: tile.shows("url") ? String((item.url.host ?? "").prefix(256)) : "",
                 value: String(item.state.prefix(80)),
                 icon: item.kind == .audio ? "music.note" : "arrow.down.circle",
@@ -86,6 +84,13 @@ final class DownloadsSurface {
             }
         }
         throw ExtensionPeerError.invalidRequest
+    }
+    static func title(_ record: DownloadRecord) -> String {
+        let filename = record.url.lastPathComponent
+        let fallback =
+            filename.isEmpty || filename == "/" ? (record.url.host ?? "Download") : filename
+        return String(
+            (YoutubeDownloader.DownloadItem(record: record).resolvedTitle ?? fallback).prefix(300))
     }
     static func action(_ verb: String, _ id: UUID) -> String {
         SHA256.hash(data: Data((verb + ":" + id.uuidString).utf8)).map {

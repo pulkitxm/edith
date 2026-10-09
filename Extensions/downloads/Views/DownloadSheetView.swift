@@ -30,7 +30,7 @@ struct DownloadSheet: View {
     @State private var outputDirectory: URL?
     @State private var browser = ""
 
-    init(isPage: Bool = false, downloader: YoutubeDownloader = .shared) {
+    init(isPage: Bool = false, downloader: YoutubeDownloader) {
         self.isPage = isPage
         _downloader = State(initialValue: downloader)
     }

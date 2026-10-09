@@ -196,6 +196,7 @@ public final class YoutubeDownloader {
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     public var errorMessage: String?
     @ObservationIgnored private let client: DownloadsClient
+    @ObservationIgnored private let toolStatus: @Sendable (URL?) async -> DownloadToolStatus
     @ObservationIgnored private var streamTask: Task<Void, Never>?
     @ObservationIgnored private var availabilityTask: Task<Void, Never>?
     @ObservationIgnored private var provisioningObserver: NSObjectProtocol?
@@ -278,7 +279,13 @@ public final class YoutubeDownloader {
         return URL(string: "https://img.youtube.com/vi/\(id)/mqdefault.jpg")
     }
 
-    init(client: DownloadsClient = DownloadsClient(), start: Bool = true) {
+    init(
+        client: DownloadsClient = DownloadsClient(), start: Bool = true,
+        toolStatus: @escaping @Sendable (URL?) async -> DownloadToolStatus = {
+            await DownloadToolOperationExecution.status(executable: $0)
+        }
+    ) {
+        self.toolStatus = toolStatus
         self.client = client
         observesWorker = start
         guard start else { return }
@@ -331,8 +338,7 @@ public final class YoutubeDownloader {
                 try Task.checkCancellation()
                 apply(snapshot)
                 guard snapshot.enabled, snapshot.problem == nil else { return }
-                let status = await DownloadToolOperationExecution.status(
-                    executable: snapshot.executable)
+                let status = await toolStatus(snapshot.executable)
                 try Task.checkCancellation()
                 guard downloadsEnabled else { return }
                 unavailableReason =
