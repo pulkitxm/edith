@@ -1,7 +1,7 @@
-import CoreFoundation
 import CryptoKit
 import Darwin
 import Foundation
+import Network
 
 public enum ExtensionPeerError: Error, LocalizedError, Sendable {
     case unavailable
@@ -70,7 +70,6 @@ public struct ExtensionPeerEndpoint: Sendable {
 
 struct ExtensionPeerRequest: Codable, Sendable {
     let token: UUID
-    let reply: String
     let command: String
     let payload: Data
     let timeout: TimeInterval
@@ -82,26 +81,96 @@ struct ExtensionPeerResponse: Codable, Sendable {
     let message: String?
 }
 
+enum ExtensionPeerSocket {
+    static let directory = URL(fileURLWithPath: "/tmp/edith-extensions-\(getuid())")
+
+    static func path(_ name: String) -> String {
+        let hash = SHA256.hash(data: Data(name.utf8)).map { String(format: "%02x", $0) }.joined()
+        return directory.appendingPathComponent(String(hash.prefix(48)) + ".sock").path
+    }
+
+    static func prepare() throws {
+        if mkdir(directory.path, 0o700) != 0, errno != EEXIST {
+            throw ExtensionPeerError.unavailable
+        }
+        var attributes = stat()
+        guard lstat(directory.path, &attributes) == 0,
+            attributes.st_mode & S_IFMT == S_IFDIR, attributes.st_uid == getuid(),
+            attributes.st_mode & 0o777 == 0o700
+        else { throw ExtensionPeerError.unavailable }
+    }
+}
+
+enum ExtensionPeerFrame {
+    static func encode<T: Encodable>(_ value: T) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        let body = try encoder.encode(value)
+        guard body.count <= ExtensionPeerEndpoint.maximumMessageBytes else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        var length = UInt32(body.count).bigEndian
+        var frame = withUnsafeBytes(of: &length) { Data($0) }
+        frame.append(body)
+        return frame
+    }
+
+    static func receive(
+        from connection: NWConnection, completion: @escaping (Result<Data, any Error>) -> Void
+    ) {
+        read(from: connection, remaining: 4, buffer: Data()) { result in
+            switch result {
+            case let .failure(error): completion(.failure(error))
+            case let .success(header):
+                let count = header.reduce(0) { ($0 << 8) | Int($1) }
+                guard count > 0, count <= ExtensionPeerEndpoint.maximumMessageBytes else {
+                    completion(.failure(ExtensionPeerError.invalidRequest))
+                    return
+                }
+                read(from: connection, remaining: count, buffer: Data(), completion: completion)
+            }
+        }
+    }
+
+    private static func read(
+        from connection: NWConnection, remaining: Int, buffer: Data,
+        completion: @escaping (Result<Data, any Error>) -> Void
+    ) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: min(remaining, 65_536)) {
+            bytes, _, complete, error in
+            guard error == nil, let bytes, !bytes.isEmpty, bytes.count <= remaining else {
+                completion(.failure(ExtensionPeerError.unavailable))
+                return
+            }
+            var buffer = buffer
+            buffer.append(bytes)
+            if bytes.count == remaining {
+                completion(.success(buffer))
+            } else if complete {
+                completion(.failure(ExtensionPeerError.unavailable))
+            } else {
+                read(
+                    from: connection, remaining: remaining - bytes.count, buffer: buffer,
+                    completion: completion)
+            }
+        }
+    }
+}
+
 private final class ExtensionPeerCall: @unchecked Sendable {
     private let endpoint: ExtensionPeerEndpoint
     private let request: ExtensionPeerRequest
-    private let physicalName: String?
+    private let queue = DispatchQueue(label: "edith.extension.command", qos: .utility)
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Data, any Error>?
     private var result: Result<Data, any Error>?
-    private var receiver: CFMessagePort?
-    private var remote: CFMessagePort?
+    private var connection: NWConnection?
     private var timer: DispatchSourceTimer?
 
     init(endpoint: ExtensionPeerEndpoint, command: String, payload: Data, timeout: TimeInterval) {
         self.endpoint = endpoint
-        physicalName =
-            ExtensionPeerRegistration.read(
-                at: endpoint.registrationURL, logicalName: endpoint.name)?.physicalName
-        let token = UUID()
         request = ExtensionPeerRequest(
-            token: token, reply: "edith.extension.reply.\(getuid()).\(token.uuidString)",
-            command: command, payload: payload, timeout: timeout)
+            token: UUID(), command: command, payload: payload, timeout: timeout)
     }
 
     func run() async throws -> Data {
@@ -112,93 +181,57 @@ private final class ExtensionPeerCall: @unchecked Sendable {
                 return nil
             }
             if let previous { continuation.resume(with: previous); return }
-            DispatchQueue.global(qos: .utility).async { [self] in send() }
+            queue.async { [self] in send() }
         }
     }
 
-    func cancel() { stop(CancellationError()) }
-
-    private func stop(_ error: any Error) {
-        guard finish(.failure(error)) else { return }
-        DispatchQueue.global(qos: .utility).async { [self] in
-            guard let physicalName,
-                let remote = CFMessagePortCreateRemote(nil, physicalName as CFString)
-            else {
-                return
-            }
-            let data = Data(request.token.uuidString.utf8)
-            _ = CFMessagePortSendRequest(remote, 2, data as CFData, 0.25, 0, nil, nil)
-        }
-    }
+    func cancel() { finish(.failure(CancellationError())) }
 
     private func send() {
         do {
-            let data = try JSONEncoder().encode(request)
-            guard let physicalName,
-                let remote = CFMessagePortCreateRemote(nil, physicalName as CFString)
-            else {
-                throw ExtensionPeerError.unavailable
-            }
-            var context = CFMessagePortContext(
-                version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-                retain: { pointer in
-                    guard let pointer else { return nil }
-                    return UnsafeRawPointer(
-                        Unmanaged<ExtensionPeerCall>.fromOpaque(pointer).retain().toOpaque())
-                },
-                release: { pointer in
-                    if let pointer { Unmanaged<ExtensionPeerCall>.fromOpaque(pointer).release() }
-                }, copyDescription: nil)
             guard
-                let receiver = CFMessagePortCreateLocal(
-                    nil, request.reply as CFString,
-                    { _, _, data, info in
-                        guard let data, let info else { return nil }
-                        Unmanaged<ExtensionPeerCall>.fromOpaque(info).takeUnretainedValue().receive(
-                            data as Data)
-                        return nil
-                    }, &context, nil)
+                let registration = ExtensionPeerRegistration.read(
+                    at: endpoint.registrationURL, logicalName: endpoint.name)
             else { throw ExtensionPeerError.unavailable }
-            let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-            timer.schedule(deadline: .now() + .milliseconds(250), repeating: .milliseconds(250))
-            let deadline = ProcessInfo.processInfo.systemUptime + request.timeout
+            let frame = try ExtensionPeerFrame.encode(request)
+            let connection = NWConnection(
+                to: .unix(path: ExtensionPeerSocket.path(registration.physicalName)), using: .tcp)
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.schedule(deadline: .now() + request.timeout)
             timer.setEventHandler { [weak self] in
-                guard let self else { return }
-                if !CFMessagePortIsValid(remote) {
-                    self.stop(ExtensionPeerError.unavailable)
-                } else if ProcessInfo.processInfo.systemUptime >= deadline {
-                    self.stop(ExtensionPeerError.timedOut)
-                }
+                self?.finish(.failure(ExtensionPeerError.timedOut))
             }
-            timer.activate()
+            connection.stateUpdateHandler = { [weak self] state in
+                if case .failed = state { self?.finish(.failure(ExtensionPeerError.unavailable)) }
+            }
             let started = lock.withLock { () -> Bool in
                 guard result == nil else { return false }
-                self.receiver = receiver
-                self.remote = remote
+                self.connection = connection
                 self.timer = timer
-                CFMessagePortSetDispatchQueue(receiver, .global(qos: .utility))
                 return true
             }
-            guard started else { timer.cancel(); CFMessagePortInvalidate(receiver); return }
-            var acknowledgement: Unmanaged<CFData>?
-            let code = CFMessagePortSendRequest(
-                remote, 1, data as CFData, 1, 1, CFRunLoopMode.defaultMode.rawValue,
-                &acknowledgement)
-            let accepted = acknowledgement?.takeRetainedValue() as Data?
-            guard code == kCFMessagePortSuccess else { throw ExtensionPeerError.unavailable }
-            guard accepted == Data([1]) else {
-                throw ExtensionPeerError.rejected(
-                    "The extension could not accept this command. Try again when its current actions finish."
-                )
+            guard started else { connection.cancel(); return }
+            timer.activate()
+            connection.start(queue: queue)
+            connection.send(
+                content: frame,
+                completion: .contentProcessed { [weak self] error in
+                    if error != nil { self?.finish(.failure(ExtensionPeerError.unavailable)) }
+                })
+            ExtensionPeerFrame.receive(from: connection) { [weak self] result in
+                guard let self else { return }
+                switch result {
+                case let .failure(error): self.finish(.failure(error))
+                case let .success(data): self.receive(data)
+                }
             }
-        } catch { stop(error) }
+        } catch { finish(.failure(error)) }
     }
 
     private func receive(_ data: Data) {
-        guard data.count <= ExtensionPeerEndpoint.maximumMessageBytes,
-            let response = try? JSONDecoder().decode(ExtensionPeerResponse.self, from: data),
+        guard let response = try? JSONDecoder().decode(ExtensionPeerResponse.self, from: data),
             response.token == request.token
-        else { stop(ExtensionPeerError.invalidRequest); return }
+        else { finish(.failure(ExtensionPeerError.invalidRequest)); return }
         if let payload = response.payload,
             payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes
         {
@@ -206,43 +239,60 @@ private final class ExtensionPeerCall: @unchecked Sendable {
         } else {
             finish(
                 .failure(
-                    ExtensionPeerError.rejected(response.message ?? "The extension command failed.")
-                ))
+                    ExtensionPeerError.rejected(
+                        response.message ?? "The extension command failed.")))
         }
     }
 
-    @discardableResult
-    private func finish(_ result: Result<Data, any Error>) -> Bool {
+    private func finish(_ result: Result<Data, any Error>) {
         let resources = lock.withLock {
-            () -> (CheckedContinuation<Data, any Error>?, CFMessagePort?, DispatchSourceTimer?)? in
+            () -> (CheckedContinuation<Data, any Error>?, NWConnection?, DispatchSourceTimer?)? in
             guard self.result == nil else { return nil }
             self.result = result
-            let resources = (continuation, receiver, timer)
+            let resources = (continuation, connection, timer)
             continuation = nil
-            receiver = nil
-            remote = nil
+            connection = nil
             timer = nil
             return resources
         }
-        guard let resources else { return false }
-        if let receiver = resources.1 { CFMessagePortInvalidate(receiver) }
+        guard let resources else { return }
+        resources.1?.stateUpdateHandler = nil
+        resources.1?.cancel()
         resources.2?.cancel()
         resources.0?.resume(with: result)
-        return true
     }
+}
+
+private final class ExtensionPeerListenerReady: @unchecked Sendable {
+    let signal = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var ready = false
+
+    func update(_ state: NWListener.State) {
+        switch state {
+        case .ready:
+            lock.withLock { ready = true }
+            signal.signal()
+        case .failed, .cancelled: signal.signal()
+        default: break
+        }
+    }
+
+    var succeeded: Bool { lock.withLock { ready } }
 }
 
 @MainActor
 public final class ExtensionPeerServer {
     public typealias Execute = @MainActor @Sendable (UUID, String, Data) async throws -> Data
     private struct Job {
-        let request: ExtensionPeerRequest
-        let task: Task<Void, Never>
-        let monitor: Task<Void, Never>
+        let connection: NWConnection
+        var task: Task<Void, Never>?
+        var deadline: Task<Void, Never>
     }
     private let endpoint: ExtensionPeerEndpoint
     private let execute: Execute
-    private var port: CFMessagePort?
+    private let queue = DispatchQueue(label: "edith.extension.commands", qos: .utility)
+    private var listener: NWListener?
     private var jobs: [UUID: Job] = [:]
     private var registration: ExtensionPeerRegistrationLease?
 
@@ -252,125 +302,126 @@ public final class ExtensionPeerServer {
     }
 
     public func start() throws {
-        guard port == nil else { throw ExtensionPeerError.invalidRequest }
+        guard listener == nil else { throw ExtensionPeerError.invalidRequest }
         let registration = try ExtensionPeerRegistrationLease(endpoint: endpoint)
-        var context = CFMessagePortContext(
-            version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: { pointer in
-                guard let pointer else { return nil }
-                return UnsafeRawPointer(
-                    Unmanaged<ExtensionPeerServer>.fromOpaque(pointer).retain().toOpaque())
-            },
-            release: { pointer in
-                if let pointer { Unmanaged<ExtensionPeerServer>.fromOpaque(pointer).release() }
-            }, copyDescription: nil)
-        var reused = DarwinBoolean(false)
-        guard
-            let port = CFMessagePortCreateLocal(
-                nil, registration.registration.physicalName as CFString,
-                { _, kind, data, info in
-                    guard let data, let info else { return nil }
-                    return MainActor.assumeIsolated {
-                        let server = Unmanaged<ExtensionPeerServer>.fromOpaque(info)
-                            .takeUnretainedValue()
-                        let response = server.receive(kind, data: data as Data)
-                        return Unmanaged.passRetained(response as CFData)
-                    }
-                }, &context, &reused), !reused.boolValue
-        else { throw ExtensionPeerError.unavailable }
-        self.port = port
+        try ExtensionPeerSocket.prepare()
+        let path = ExtensionPeerSocket.path(registration.registration.physicalName)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .unix(path: path)
+        let listener = try NWListener(using: parameters)
+        let readiness = ExtensionPeerListenerReady()
+        listener.stateUpdateHandler = { readiness.update($0) }
+        listener.newConnectionHandler = { [weak self] connection in
+            Task { @MainActor in
+                guard let self else { connection.cancel(); return }
+                self.accept(connection)
+            }
+        }
+        self.listener = listener
         self.registration = registration
-        CFMessagePortSetDispatchQueue(port, .main)
+        listener.start(queue: queue)
+        guard readiness.signal.wait(timeout: .now() + 3) == .success, readiness.succeeded else {
+            shutdown()
+            throw ExtensionPeerError.unavailable
+        }
+        listener.stateUpdateHandler = { [weak self] state in
+            if case .failed = state { Task { @MainActor in self?.shutdown() } }
+        }
+        guard chmod(path, 0o600) == 0 else { shutdown(); throw ExtensionPeerError.unavailable }
         do { try registration.publish() } catch { shutdown(); throw error }
     }
 
     public func shutdown() {
-        if let port { CFMessagePortInvalidate(port) }
-        port = nil
-        registration?.release()
+        listener?.cancel()
+        listener = nil
+        if let registration {
+            unlink(ExtensionPeerSocket.path(registration.registration.physicalName))
+            registration.release()
+        }
         registration = nil
-        let outstanding = jobs.values
+        let pending = jobs.values
         jobs.removeAll()
-        for job in outstanding {
-            job.task.cancel()
-            job.monitor.cancel()
-            Self.reply(
-                job.request, payload: nil,
-                message: ExtensionPeerError.unavailable.localizedDescription)
+        for job in pending {
+            job.task?.cancel()
+            job.deadline.cancel()
+            job.connection.cancel()
         }
     }
 
-    private func receive(_ kind: Int32, data: Data) -> Data {
-        if kind == 2, data.count == 36,
-            let token = UUID(uuidString: String(decoding: data, as: UTF8.self)),
-            let job = jobs.removeValue(forKey: token)
-        {
-            job.task.cancel()
-            job.monitor.cancel()
-            Self.reply(job.request, payload: nil, message: "The extension command was cancelled.")
-            return Data([1])
+    private func accept(_ connection: NWConnection) {
+        guard listener != nil, jobs.count < 8 else { connection.cancel(); return }
+        let token = UUID()
+        let deadline = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(5))
+                self?.close(token)
+            } catch {}
         }
-        guard kind == 1, data.count <= ExtensionPeerEndpoint.maximumMessageBytes,
+        jobs[token] = Job(connection: connection, task: nil, deadline: deadline)
+        connection.start(queue: queue)
+        ExtensionPeerFrame.receive(from: connection) { [weak self] result in
+            Task { @MainActor in self?.receive(result, token: token) }
+        }
+    }
+
+    private func receive(_ result: Result<Data, any Error>, token: UUID) {
+        guard var job = jobs[token] else { return }
+        guard case let .success(data) = result,
             let request = try? JSONDecoder().decode(ExtensionPeerRequest.self, from: data),
-            request.reply == "edith.extension.reply.\(getuid()).\(request.token.uuidString)",
             !request.command.isEmpty, request.command.utf8.count <= 256,
             !request.command.utf8.contains(0),
             request.payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes,
-            request.timeout.isFinite, request.timeout > 0, request.timeout <= 1_800,
-            jobs[request.token] == nil, jobs.count < 8,
-            let receiver = CFMessagePortCreateRemote(nil, request.reply as CFString),
-            CFMessagePortIsValid(receiver)
-        else { return Data([0]) }
-        let task = Task { [weak self, execute] in
+            request.timeout.isFinite, request.timeout > 0, request.timeout <= 1_800
+        else { close(token); return }
+        job.deadline.cancel()
+        job.deadline = Task { [weak self] in
             do {
-                let result = try await execute(request.token, request.command, request.payload)
-                try Task.checkCancellation()
-                guard result.count <= ExtensionPeerEndpoint.maximumPayloadBytes else {
-                    throw ExtensionPeerError.invalidRequest
-                }
-                self?.complete(request, payload: result, message: nil)
-            } catch { self?.complete(request, payload: nil, message: error.localizedDescription) }
-        }
-        let deadline = ProcessInfo.processInfo.systemUptime + request.timeout
-        let monitor = Task { [weak self] in
-            do {
-                while true {
-                    try await Task.sleep(for: .milliseconds(250))
-                    if !CFMessagePortIsValid(receiver)
-                        || ProcessInfo.processInfo.systemUptime >= deadline
-                    {
-                        guard let job = self?.jobs.removeValue(forKey: request.token) else {
-                            return
-                        }
-                        job.task.cancel()
-                        Self.reply(
-                            request, payload: nil, message: "The extension command was cancelled.")
-                        return
-                    }
-                }
+                try await Task.sleep(for: .seconds(request.timeout))
+                self?.close(token)
             } catch {}
         }
-        jobs[request.token] = Job(request: request, task: task, monitor: monitor)
-        return Data([1])
-    }
-
-    private func complete(_ request: ExtensionPeerRequest, payload: Data?, message: String?) {
-        guard let job = jobs.removeValue(forKey: request.token) else { return }
-        job.monitor.cancel()
-        Self.reply(request, payload: payload, message: message)
-    }
-
-    private nonisolated static func reply(
-        _ request: ExtensionPeerRequest, payload: Data?, message: String?
-    ) {
-        DispatchQueue.global(qos: .utility).async {
-            guard let remote = CFMessagePortCreateRemote(nil, request.reply as CFString),
-                let data = try? JSONEncoder().encode(
-                    ExtensionPeerResponse(
-                        token: request.token, payload: payload,
-                        message: message.map { String($0.prefix(2_048)) }))
-            else { return }
-            _ = CFMessagePortSendRequest(remote, 1, data as CFData, 1, 0, nil, nil)
+        job.task = Task { [weak self, execute] in
+            do {
+                let payload = try await execute(request.token, request.command, request.payload)
+                try Task.checkCancellation()
+                guard payload.count <= ExtensionPeerEndpoint.maximumPayloadBytes else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                self?.complete(
+                    token,
+                    response: ExtensionPeerResponse(
+                        token: request.token, payload: payload, message: nil))
+            } catch {
+                self?.complete(
+                    token,
+                    response: ExtensionPeerResponse(
+                        token: request.token, payload: nil,
+                        message: String(error.localizedDescription.prefix(2_048))))
+            }
         }
+        jobs[token] = job
+        job.connection.receive(minimumIncompleteLength: 1, maximumLength: 1) {
+            [weak self] _, _, _, _ in
+            Task { @MainActor in self?.close(token) }
+        }
+    }
+
+    private func complete(_ token: UUID, response: ExtensionPeerResponse) {
+        guard let job = jobs[token], let frame = try? ExtensionPeerFrame.encode(response) else {
+            close(token)
+            return
+        }
+        job.connection.send(
+            content: frame, contentContext: .finalMessage, isComplete: true,
+            completion: .contentProcessed { [weak self] error in
+                if error != nil { Task { @MainActor in self?.close(token) } }
+            })
+    }
+
+    private func close(_ token: UUID) {
+        guard let job = jobs.removeValue(forKey: token) else { return }
+        job.task?.cancel()
+        job.deadline.cancel()
+        job.connection.cancel()
     }
 }

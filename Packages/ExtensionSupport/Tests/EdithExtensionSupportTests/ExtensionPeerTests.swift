@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Network
 import Testing
 @testable import EdithExtensionSupport
 
@@ -69,6 +70,187 @@ import Testing
         #expect(throws: ExtensionPeerError.self) { try second.start() }
         first.shutdown()
         try second.start()
+    }
+
+    @MainActor @Test func socketCommandsSupportMaximumPayloadsAndFreshRestarts() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let payload = Data(repeating: 255, count: ExtensionPeerEndpoint.maximumPayloadBytes)
+        for _ in 0..<3 {
+            let server = ExtensionPeerServer(endpoint: endpoint) { _, _, payload in payload }
+            try server.start()
+            defer { server.shutdown() }
+            #expect(
+                try await endpoint.invoke("echo", payload: Data("fixture".utf8))
+                    == Data("fixture".utf8))
+            #expect(try await endpoint.invoke("echo", payload: payload) == payload)
+            server.shutdown()
+            await #expect(throws: ExtensionPeerError.self) { try await endpoint.invoke("echo") }
+        }
+    }
+
+    @MainActor @Test func socketDisconnectCancelsOwnedCommandAndDeadlineAllowsRecovery()
+        async throws
+    {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let started = AsyncStream<Void>.makeStream()
+        let cancelled = AsyncStream<Void>.makeStream()
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, command, payload in
+            if command == "wait" {
+                started.continuation.yield(())
+                do { try await Task.sleep(for: .seconds(30)) } catch {
+                    cancelled.continuation.yield(()); throw error
+                }
+            }
+            return payload
+        }
+        try server.start()
+        defer { server.shutdown() }
+        var start = started.stream.makeAsyncIterator()
+        var cancellation = cancelled.stream.makeAsyncIterator()
+        let call = Task { try await endpoint.invoke("wait") }
+        _ = await start.next()
+        call.cancel()
+        await #expect(throws: CancellationError.self) { try await call.value }
+        _ = await cancellation.next()
+        let expired = Task { try await endpoint.invoke("wait", timeout: 0.2) }
+        _ = await start.next()
+        await #expect(throws: ExtensionPeerError.self) { try await expired.value }
+        _ = await cancellation.next()
+        #expect(
+            try await endpoint.invoke("echo", payload: Data("recovered".utf8))
+                == Data("recovered".utf8))
+    }
+
+    @MainActor @Test func shutdownDisconnectsAllPendingSocketCommands() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let started = AsyncStream<Void>.makeStream()
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, _, _ in
+            started.continuation.yield(())
+            try await Task.sleep(for: .seconds(30))
+            return Data()
+        }
+        try server.start()
+        defer { server.shutdown() }
+        let call = Task { try await endpoint.invoke("wait") }
+        var start = started.stream.makeAsyncIterator()
+        _ = await start.next()
+        server.shutdown()
+        await #expect(throws: ExtensionPeerError.self) { try await call.value }
+    }
+
+    @MainActor @Test func socketCapacityRejectsExcessCommandsAndRecovers() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let started = AsyncStream<Void>.makeStream()
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, command, payload in
+            if command == "wait" {
+                started.continuation.yield(())
+                try await Task.sleep(for: .seconds(30))
+            }
+            return payload
+        }
+        try server.start()
+        defer { server.shutdown() }
+        let calls = (0..<8).map { _ in Task { try await endpoint.invoke("wait") } }
+        var iterator = started.stream.makeAsyncIterator()
+        for _ in calls { _ = await iterator.next() }
+        await #expect(throws: ExtensionPeerError.self) { try await endpoint.invoke("echo") }
+        for call in calls { call.cancel() }
+        for call in calls {
+            await #expect(throws: CancellationError.self) { try await call.value }
+        }
+        server.shutdown()
+        try server.start()
+        #expect(
+            try await endpoint.invoke("echo", payload: Data("recovered".utf8))
+                == Data("recovered".utf8))
+    }
+
+    @MainActor @Test func malformedAndOversizedSocketFramesNeverExecute() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        var executed = 0
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, _, payload in
+            executed += 1
+            return payload
+        }
+        try server.start()
+        defer { server.shutdown() }
+        let registration = try #require(
+            ExtensionPeerRegistration.read(
+                at: endpoint.registrationURL, logicalName: endpoint.name))
+        for frame in [
+            Data([255, 255, 255, 255]), Data([0, 0, 0, 0]),
+            Data([0, 0, 0, 5]) + Data("wrong".utf8),
+        ] {
+            let connection = NWConnection(
+                to: .unix(path: ExtensionPeerSocket.path(registration.physicalName)), using: .tcp)
+            connection.start(queue: .global(qos: .utility))
+            defer { connection.cancel() }
+            connection.send(content: frame, completion: .contentProcessed { _ in })
+            await #expect(throws: ExtensionPeerError.self) {
+                try await withCheckedThrowingContinuation { continuation in
+                    ExtensionPeerFrame.receive(from: connection) { continuation.resume(with: $0) }
+                }
+            }
+        }
+        #expect(executed == 0)
+        #expect(
+            try await endpoint.invoke("echo", payload: Data("recovered".utf8))
+                == Data("recovered".utf8))
+        #expect(executed == 1)
+    }
+
+    @Test func restartingRemovesOnlyADeadWorkersSocket() throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let lease = try ExtensionPeerRegistrationLease(endpoint: endpoint)
+        defer { lease.release() }
+        try ExtensionPeerSocket.prepare()
+        let path = ExtensionPeerSocket.path(lease.registration.physicalName)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .unix(path: path)
+        let listener = try NWListener(using: parameters)
+        defer { listener.cancel(); unlink(path) }
+        let ready = DispatchSemaphore(value: 0)
+        listener.stateUpdateHandler = { state in if case .ready = state { ready.signal() } }
+        listener.newConnectionHandler = { $0.cancel() }
+        listener.start(queue: .global(qos: .utility))
+        try #require(ready.wait(timeout: .now() + 3) == .success)
+        let stale = ExtensionPeerRegistration(
+            logicalName: endpoint.name, physicalName: lease.registration.physicalName,
+            process: ExtensionProcessIdentity(
+                pid: getpid(), generation: lease.registration.process.generation + ".expired"))
+        try JSONEncoder().encode(stale).write(to: endpoint.registrationURL)
+        lease.release()
+        #expect(FileManager.default.fileExists(atPath: path))
+        let replacement = try ExtensionPeerRegistrationLease(endpoint: endpoint)
+        defer { replacement.release() }
+        #expect(!FileManager.default.fileExists(atPath: path))
+    }
+
+    @Test func commandFramesRemainBoundedAndSocketPathsFitSystemLimits() throws {
+        let payload = Data(repeating: 255, count: ExtensionPeerEndpoint.maximumPayloadBytes)
+        let frame = try ExtensionPeerFrame.encode(
+            ExtensionPeerRequest(
+                token: UUID(), command: "echo", payload: payload, timeout: 30))
+        let size = frame.prefix(4).reduce(0) { ($0 << 8) | Int($1) }
+        #expect(size == frame.count - 4)
+        #expect(size <= ExtensionPeerEndpoint.maximumMessageBytes)
+        let request = try JSONDecoder().decode(ExtensionPeerRequest.self, from: frame.dropFirst(4))
+        #expect(request.payload == payload)
+        let path = ExtensionPeerSocket.path(String(repeating: "x", count: 256))
+        #expect(path.utf8.count < 104)
+        #expect(path.hasPrefix(ExtensionPeerSocket.directory.path + "/"))
     }
 
     @Test func restartsUseFreshPhysicalPortsAndExclusiveRegistration() throws {

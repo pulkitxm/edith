@@ -86,7 +86,7 @@ try {
   const output = execFileSync(
     resolve("Packages/EdithHost/.build/debug/HostCommandHarness"),
     [fixture, resolve("local/minimal-host/Edith.app"), bundle],
-    { encoding: "utf8", timeout: 60_000 },
+    { encoding: "utf8", timeout: 120_000 },
   );
   const results = output
     .trim()

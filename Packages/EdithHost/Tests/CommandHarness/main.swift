@@ -178,39 +178,59 @@ struct HostCommandHarness {
         async throws
     {
 
-        let payload = Data((0..<(1_024 * 1_024)).map { UInt8(truncatingIfNeeded: $0) })
-        guard try await endpoint.invoke("echo", payload: payload) == payload else {
-            throw HostWorkerError.rejected
-        }
-        let wrong = try ExtensionPeerEndpoint(
-            namespace: UUID().uuidString, owner: "keepAwake",
-            directory: data.appendingPathComponent("isolated"))
+        var stage = "large echo"
         do {
-            _ = try await wrong.invoke("echo", timeout: 1)
-            throw HostWorkerError.rejected
-        } catch is ExtensionPeerError {}
-        do {
-            _ = try await endpoint.invoke("unknown")
-            throw HostWorkerError.rejected
-        } catch is ExtensionPeerError {}
+            let payload = Data((0..<(1_024 * 1_024)).map { UInt8(truncatingIfNeeded: $0) })
+            guard try await endpoint.invoke("echo", payload: payload) == payload else {
+                throw HostWorkerError.rejected
+            }
+            let wrong = try ExtensionPeerEndpoint(
+                namespace: UUID().uuidString, owner: "keepAwake",
+                directory: data.appendingPathComponent("isolated"))
+            do {
+                _ = try await wrong.invoke("echo", timeout: 1)
+                throw HostWorkerError.rejected
+            } catch is ExtensionPeerError {}
+            do {
+                _ = try await endpoint.invoke("unknown")
+                throw HostWorkerError.rejected
+            } catch is ExtensionPeerError {}
 
-        let marker = data.appendingPathComponent("peer.ready")
-        let cancelled = Task { try await endpoint.invoke("wait") }
-        try await wait { FileManager.default.fileExists(atPath: marker.path) }
-        cancelled.cancel()
-        do {
-            _ = try await cancelled.value
-            throw HostWorkerError.rejected
-        } catch is CancellationError {}
-        try await wait { !FileManager.default.fileExists(atPath: marker.path) }
-        do {
-            _ = try await endpoint.invoke("wait", timeout: 0.3)
-            throw HostWorkerError.rejected
-        } catch is ExtensionPeerError {}
-        try await wait { !FileManager.default.fileExists(atPath: marker.path) }
+            stage = "busy UI"
+            let blocked = Task { try await endpoint.invoke("blockUI", timeout: 5) }
+            try await wait {
+                FileManager.default.fileExists(
+                    atPath: data.appendingPathComponent("ui-block.ready").path)
+            }
+            guard
+                try await endpoint.invoke("echo", payload: Data("queued".utf8), timeout: 3)
+                    == Data("queued".utf8), try await blocked.value == Data("ready".utf8)
+            else { throw HostWorkerError.rejected }
+            stage = "cancellation"
+            let marker = data.appendingPathComponent("peer.ready")
+            let cancelled = Task { try await endpoint.invoke("wait") }
+            try await wait { FileManager.default.fileExists(atPath: marker.path) }
+            cancelled.cancel()
+            do {
+                _ = try await cancelled.value
+                throw HostWorkerError.rejected
+            } catch is CancellationError {}
+            try await wait { !FileManager.default.fileExists(atPath: marker.path) }
+            stage = "deadline"
+            do {
+                _ = try await endpoint.invoke("wait", timeout: 0.3)
+                throw HostWorkerError.rejected
+            } catch is ExtensionPeerError {}
+            try await wait { !FileManager.default.fileExists(atPath: marker.path) }
 
-        guard try await endpoint.invoke("echo", payload: payload) == payload else {
-            throw HostWorkerError.rejected
+            stage = "echo after cancellation"
+            guard try await endpoint.invoke("echo", payload: payload) == payload else {
+                throw HostWorkerError.rejected
+            }
+        } catch {
+            throw NSError(
+                domain: "ExtensionCommands", code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "\(stage): \(error)"])
         }
     }
 
