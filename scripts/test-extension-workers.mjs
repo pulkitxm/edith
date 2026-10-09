@@ -59,6 +59,7 @@ try {
       assert.equal(result[key], true);
     assert.equal(result.disabledProcesses, 0);
     assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
+    assert.equal(result.clipboardDataValidated, id === "clipboard");
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });
