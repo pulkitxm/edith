@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import Foundation
 import IOKit.pwr_mgt
 
@@ -64,7 +65,7 @@ final class KeepAwakeStore {
         guard !stopped else { return }
         let want =
             defaults.bool(forKey: KeepAwakeKeys.enabled)
-            && defaults.bool(forKey: "preventSleep")
+            && defaults.bool(forKey: AppStorageKeys.General.preventSleep)
         guard want else {
             releaseCurrentAssertion()
             return

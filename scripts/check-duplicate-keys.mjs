@@ -30,13 +30,20 @@ export function scanFiles(files) {
   return findings;
 }
 
+export function isShippingSource(path) {
+  return (
+    path.endsWith(".swift") &&
+    !path.startsWith("Packages/Edith/") &&
+    !/(^|\/)(Tests|Vendor|vendor)\//.test(path)
+  );
+}
+
 function main() {
   const files = execSync("git ls-files '*.swift'", { encoding: "utf8" })
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean)
-    .filter((f) => !/^Packages\/Edith\/Vendor\//.test(f))
-    .filter((f) => !/(^|\/)Tests\//.test(f));
+    .filter(isShippingSource);
 
   const loaded = files.map((path) => ({
     path,
@@ -61,7 +68,7 @@ function main() {
     `\n${findings.length} UserDefaults key(s) spelled out independently in more than one file.`,
   );
   console.error(
-    "Add one constant to AppStorageKeys (Packages/Edith/Sources/EdithKit/Core/Defaults/AppStorageKeys.swift) and reference it from every site instead.",
+    "Add one constant to the owning extension or ExtensionSupport and reference it from every site instead.",
   );
   process.exit(1);
 }

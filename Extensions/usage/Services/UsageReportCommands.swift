@@ -64,13 +64,16 @@ actor UsageReportCommands {
                 })
             else { throw ExtensionPeerError.invalidRequest }
             await MainActor.run {
-                var selected = Set(SharedDefaults.store.stringArray(forKey: "usageMachines") ?? [])
+                var selected = Set(
+                    SharedDefaults.store.stringArray(forKey: UsageMachinesPeer.selectedDefaultsKey)
+                        ?? [])
                 if included {
                     selected.insert(id.uuidString)
                 } else {
                     selected.remove(id.uuidString)
                 }
-                SharedDefaults.store.set(selected.sorted(), forKey: "usageMachines")
+                SharedDefaults.store.set(
+                    selected.sorted(), forKey: UsageMachinesPeer.selectedDefaultsKey)
                 if let group = DashboardModel.shared.machineGroups.first(where: {
                     $0.id.lowercased() == id.uuidString.lowercased()
                 }) {
