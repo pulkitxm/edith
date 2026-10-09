@@ -54,6 +54,26 @@ export async function copyNativeResources(
   }
 }
 
+export async function copyNativeFrameworks(root, definition, contents) {
+  const directory = resolve(contents, "Frameworks");
+  const names = new Set();
+  const binaries = [];
+  for (const source of definition.nativeFrameworks ?? []) {
+    const name = basename(source);
+    const packageRoot = resolve(root, definition.nativePackage);
+    const origin = resolve(packageRoot, source);
+    if (!name.endsWith(".framework") || names.has(name)
+      || !origin.startsWith(packageRoot + "/"))
+      throw new Error("Duplicate or invalid native framework");
+    names.add(name);
+    await mkdir(directory, { recursive: true });
+    const destination = resolve(directory, name);
+    await cp(origin, destination, { recursive: true, dereference: false });
+    binaries.push(resolve(destination, name.slice(0, -10)));
+  }
+  return binaries;
+}
+
 export async function buildExtensionPackage({
   root = process.cwd(),
   id,
@@ -227,6 +247,20 @@ export async function buildExtensionPackage({
       const frameworks = resolve(contents, "Frameworks");
       await mkdir(frameworks, { recursive: true });
       await copyNativeResources(root, definition, contents, resourceNames);
+      const frameworkBinaries = await copyNativeFrameworks(root, definition, contents);
+      for (const binary of frameworkBinaries) {
+        const architectures = execFileSync("lipo", ["-archs", binary], { encoding: "utf8" }).trim().split(/\s+/);
+        if (!architectures.includes("arm64")) throw new Error("A native framework lacks arm64");
+        if (architectures.length > 1) {
+          const temporary = binary + ".arm64";
+          execFileSync("lipo", [binary, "-thin", "arm64", "-output", temporary]);
+          await copyFile(temporary, binary);
+          await rm(temporary);
+        }
+        execFileSync("strip", ["-rSTx", binary]);
+        execFileSync("codesign", ["--force", "--sign", development ? "-" : identity,
+          ...(development ? [] : ["--options", "runtime", "--timestamp"]), resolve(binary, "..")], { stdio: "inherit" });
+      }
       const library = resolve(frameworks, libraryName);
       await copyFile(
         resolve(root, definition.nativePackage, ".build/release", libraryName),
@@ -237,6 +271,7 @@ export async function buildExtensionPackage({
         `@rpath/${libraryName}`,
         library,
       ]);
+      if (frameworkBinaries.length) execFileSync("install_name_tool", ["-add_rpath", "@loader_path", library]);
       execFileSync("strip", ["-rSTx", library]);
       execFileSync(
         "codesign",

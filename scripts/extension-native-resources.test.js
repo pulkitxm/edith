@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { copyNativeResources } from "./build-extension-package.mjs";
+import { copyNativeFrameworks, copyNativeResources } from "./build-extension-package.mjs";
 
 test("native Swift resources and explicit licenses retain their bundle structure", async () => {
   const root = await mkdtemp(join(tmpdir(), "extension-native-resources-"));
@@ -70,6 +70,25 @@ test("native resources reject collisions and destination paths outside Resources
           new Set(["existing.bundle"]),
         ),
       ).rejects.toThrow("invalid native resource");
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+
+test("native frameworks preserve versioned layout and reject unowned paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "extension-native-frameworks-"));
+  try {
+    const nativePackage = "Extensions/mock/Native";
+    const source = ".build/artifacts/Parser.framework";
+    await mkdir(join(root, nativePackage, source, "Versions/A"), { recursive: true });
+    await writeFile(join(root, nativePackage, source, "Versions/A/Parser"), "synthetic binary");
+    const contents = join(root, "mock.bundle/Contents");
+    await copyNativeFrameworks(root, { nativePackage, nativeFrameworks: [source] }, contents);
+    expect(await readFile(join(contents, "Frameworks/Parser.framework/Versions/A/Parser"), "utf8")).toBe("synthetic binary");
+    for (const nativeFrameworks of [["../Outside.framework"], [source, source], ["invalid.dylib"]]) {
+      await expect(copyNativeFrameworks(root, { nativePackage, nativeFrameworks }, contents)).rejects.toThrow("invalid native framework");
     }
   } finally {
     await rm(root, { recursive: true, force: true });
