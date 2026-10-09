@@ -107,7 +107,8 @@ public struct PageSkeleton: View {
     }
 }
 
-struct PageSkeletonControls: View {
+public struct PageSkeletonControls: View {
+    public init() {}
     public var body: some View {
         HStack(spacing: UIScale.pt(8)) {
             SkeletonBlock(width: 120, height: 28, corner: 7)
