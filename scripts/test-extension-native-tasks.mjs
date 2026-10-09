@@ -103,6 +103,8 @@ try {
     "parentExitCleanup",
     "cancelledDescendants",
     "normalReturnCleanup",
+    "wrongCapabilityAdmission",
+    "reparentedAdmission",
   ])
     assert.equal(result[key], true);
   assert.equal(result.remainingProcesses, 0);

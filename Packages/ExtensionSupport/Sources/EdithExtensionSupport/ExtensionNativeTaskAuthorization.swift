@@ -8,11 +8,16 @@ public enum ExtensionNativeTaskAuthorization {
         else {
             throw ExtensionPeerError.unavailable
         }
-        return try request(endpoint: endpoint, parent: parent)
+        guard let token = ProcessInfo.processInfo.environment["EDITH_EXTENSION_NATIVE_TOKEN"],
+            token.utf8.count == 72
+        else { throw ExtensionPeerError.unavailable }
+        return try request(endpoint: endpoint, parent: parent, token: token)
     }
 
-    static func request(endpoint: ExtensionPeerEndpoint, parent: Int32) throws -> Data {
-        guard parent > 1,
+    static func request(endpoint: ExtensionPeerEndpoint, parent: Int32, token: String) throws
+        -> Data
+    {
+        guard parent > 1, token.utf8.count == 72,
             let registration = ExtensionPeerRegistration.read(
                 at: endpoint.registrationURL, logicalName: endpoint.name),
             registration.process.pid == parent
@@ -52,7 +57,7 @@ public enum ExtensionNativeTaskAuthorization {
         guard getsockopt(descriptor, SOL_LOCAL, LOCAL_PEERPID, &server, &size) == 0,
             server == parent, registration.process.isAlive
         else { throw ExtensionPeerError.unavailable }
-        let payload = try JSONSerialization.data(withJSONObject: ["pid": getpid()])
+        let payload = try JSONSerialization.data(withJSONObject: ["pid": getpid(), "token": token])
         let request = ExtensionPeerRequest(
             token: UUID(), command: "extension.native.authorize", payload: payload, timeout: 5)
         let frame = try ExtensionPeerFrame.encode(request)

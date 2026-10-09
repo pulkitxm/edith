@@ -10,7 +10,7 @@ import Foundation
         guard ExtensionCommandOwnership.isWorker,
             let parentText = environment["EDITH_EXTENSION_NATIVE_PARENT"],
             let parent = Int32(parentText), parent > 1,
-            sameExecutable(parent), descended(from: parent),
+            sameExecutable(parent),
             let context = environment["EDITH_EXTENSION_NATIVE_CONTEXT"],
             context.utf8.count <= 16_384,
             let configurationBytes = Data(base64Encoded: context),
@@ -70,16 +70,21 @@ import Foundation
             identifier: parent, eventMask: .exit, queue: .global())
         watcher.setEventHandler(handler: terminate)
         watcher.resume()
-        let direct = DispatchSource.makeProcessSource(
-            identifier: getppid(), eventMask: .exit, queue: .global())
-        direct.setEventHandler(handler: terminate)
-        direct.activate()
+        var direct: DispatchSourceProcess?
+        let directParent = getppid()
+        if directParent > 1 && directParent != parent {
+            let source = DispatchSource.makeProcessSource(
+                identifier: directParent, eventMask: .exit, queue: .global())
+            source.setEventHandler(handler: terminate)
+            source.activate()
+            direct = source
+        }
         defer {
             groups.terminate()
-            watcher.cancel(); direct.cancel()
+            watcher.cancel(); direct?.cancel()
             for source in signals { source.cancel() }
         }
-        guard sameExecutable(parent), descended(from: parent) else {
+        guard sameExecutable(parent) else {
             throw HostWorkerError.rejected
         }
         return try runtime.nativeTask(id: next.extensionID, payload: payload)
@@ -95,18 +100,4 @@ import Foundation
         return path(pid) == current
     }
 
-    private static func descended(from parent: Int32) -> Bool {
-        var next = getppid()
-        for _ in 0..<8 {
-            if next == parent { return true }
-            guard next > 1 else { return false }
-            var info = proc_bsdinfo()
-            let size = MemoryLayout<proc_bsdinfo>.size
-            guard proc_pidinfo(next, PROC_PIDTBSDINFO, 0, &info, Int32(size)) == size else {
-                return false
-            }
-            next = Int32(info.pbi_ppid)
-        }
-        return false
-    }
 }

@@ -15,6 +15,7 @@ final class HostWorkerApplication {
     private var window: NSWindow?
     private var parentWatcher: DispatchSourceProcess?
     private var windowObserver: NSObjectProtocol?
+    private let nativeAdmission = ExtensionNativeTaskAdmission()
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
     private var preparingDisable = false
@@ -157,6 +158,7 @@ final class HostWorkerApplication {
                 "EDITH_EXTENSION_NATIVE_CONTEXT",
                 try JSONEncoder().encode(next).base64EncodedString(), 1)
             setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
+            setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
             try applyAppearance(next)
             let context: NSDictionary = [
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
@@ -190,18 +192,18 @@ final class HostWorkerApplication {
                 [weak self] token, command, payload in
                 guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
                 if command == "extension.native.authorize" {
-                    guard !self.preparingDisable, payload.count <= 128,
+                    guard !self.preparingDisable, payload.count <= 512,
                         let object = try JSONSerialization.jsonObject(with: payload)
                             as? [String: Any],
-                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32,
-                        HostNativeTask.sameExecutable(pid),
+                        Set(object.keys) == ["pid", "token"], let pid = object["pid"] as? Int32,
+                        let capability = object["token"] as? String,
                         self.runtimes.contains(where: {
                             $0.role == .app && (try? $0.snapshot(id: package.id)?.active) == true
                         }),
                         UserDefaults(suiteName: identity.defaultsSuite)?.stringArray(
                             forKey: "enabledExtensions")?.contains(package.id) == true
                     else { throw ExtensionPeerError.unavailable }
-                    try ExtensionNativeTask.registerDescendant(pid)
+                    try self.nativeAdmission.authorize(pid, token: capability)
                     return try JSONEncoder().encode(next)
                 }
                 if command == "extension.process.register" {
@@ -210,7 +212,7 @@ final class HostWorkerApplication {
                             as? [String: Any],
                         Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
                     else { throw ExtensionPeerError.invalidRequest }
-                    try ExtensionNativeTask.registerDescendant(pid)
+                    try self.nativeAdmission.registerDescendant(pid)
                     return Data("{\"registered\":true}".utf8)
                 }
                 if command == "surface.context" {

@@ -62,7 +62,9 @@ import Foundation
             throw HostWorkerError.invalidResponse
         }
         defaults.set(["keepAwake"], forKey: "enabledExtensions")
-        for command in ["native.malformed", "native.oversize", "native.contextMismatch"] {
+        for command in [
+            "native.malformed", "native.oversize", "native.contextMismatch", "native.wrongToken",
+        ] {
             let denied = try await call(endpoint, command)
             guard denied["status"] as? Int == 1 else { throw HostWorkerError.invalidResponse }
         }
@@ -99,7 +101,8 @@ import Foundation
         try await wait { kill(returnedChild, 0) == -1 && kill(-returnedChild, 0) == -1 }
         for mode in ["cancel", "parentExit"] {
             try? FileManager.default.removeItem(at: data.appendingPathComponent("native-child.pid"))
-            _ = try await call(endpoint, "native.launch")
+            _ = try await call(
+                endpoint, mode == "parentExit" ? "native.orphanLaunch" : "native.launch")
             try await wait {
                 FileManager.default.fileExists(
                     atPath: data.appendingPathComponent("native-child.pid").path)
@@ -109,6 +112,11 @@ import Foundation
             if mode == "cancel" {
                 _ = try await call(endpoint, "native.cancel")
             } else {
+                let observedParent = Int32(
+                    try String(
+                        contentsOf: data.appendingPathComponent("native-parent.pid"),
+                        encoding: .utf8))
+                guard observedParent == 1 else { throw HostWorkerError.invalidResponse }
                 kill(sessions.processIdentifiers["keepAwake"]!, SIGKILL)
             }
             try await wait { kill(native, 0) == -1 && kill(child, 0) == -1 }
@@ -128,7 +136,7 @@ import Foundation
         try await sessions.disable(id: "keepAwake")
         guard sessions.processIdentifiers.isEmpty else { throw HostWorkerError.invalidResponse }
         print(
-            "{\"sameAppExecutable\":true,\"binaryStdio\":true,\"disabledAdmission\":true,\"malformedAdmission\":true,\"oversizeAdmission\":true,\"contextAdmission\":true,\"incompatibleAdmission\":true,\"uninstalledAdmission\":true,\"unownedAdmission\":true,\"tamperedAdmission\":true,\"parentExitCleanup\":true,\"cancelledDescendants\":true,\"normalReturnCleanup\":true,\"remainingProcesses\":0}"
+            "{\"sameAppExecutable\":true,\"binaryStdio\":true,\"disabledAdmission\":true,\"malformedAdmission\":true,\"oversizeAdmission\":true,\"contextAdmission\":true,\"incompatibleAdmission\":true,\"uninstalledAdmission\":true,\"unownedAdmission\":true,\"tamperedAdmission\":true,\"parentExitCleanup\":true,\"cancelledDescendants\":true,\"wrongCapabilityAdmission\":true,\"reparentedAdmission\":true,\"normalReturnCleanup\":true,\"remainingProcesses\":0}"
         )
     }
 

@@ -30,6 +30,35 @@ final class NativeTaskFixtureRuntime: NSObject {
                 await task?.value
                 task = nil
                 return Data("{}".utf8)
+            case "native.wrongToken":
+                var environment = ProcessInfo.processInfo.environment
+                environment["EDITH_EXTENSION_NATIVE_TOKEN"] = String(repeating: "x", count: 72)
+                let result = try await run(Data([1]), input: Data(), environment: environment)
+                return try JSONSerialization.data(withJSONObject: [
+                    "status": result.terminationStatus
+                ])
+            case "native.orphanLaunch":
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+                process.arguments = [
+                    "-c",
+                    """
+                    import os,sys
+                    pid=os.fork()
+                    if pid:
+                        os._exit(0)
+                    os.setsid()
+                    os.execve(sys.argv[1],[sys.argv[1],'--extension-native-task',sys.argv[2]],dict(os.environ))
+                    """,
+                    Bundle.main.executableURL!.path, Data([2]).base64EncodedString(),
+                ]
+                process.environment = ProcessInfo.processInfo.environment
+                process.standardInput = FileHandle.nullDevice
+                process.standardOutput = FileHandle.nullDevice
+                process.standardError = FileHandle.nullDevice
+                try process.run(); process.waitUntilExit()
+                guard process.terminationStatus == 0 else { throw ExtensionPeerError.unavailable }
+                return Data("{}".utf8)
             case "native.contextMismatch":
                 var environment = ProcessInfo.processInfo.environment
                 environment["EDITH_EXTENSION_NATIVE_CONTEXT"] = Data("{}".utf8)
@@ -105,6 +134,7 @@ public func executeNativeTaskFixture(_ bytes: UnsafePointer<UInt8>?, _ count: In
     guard let bytes, count > 0 else { return 1 }
     let root = ExtensionData.root
     try? Data(String(getpid()).utf8).write(to: root.appendingPathComponent("native.pid"))
+    try? Data(String(getppid()).utf8).write(to: root.appendingPathComponent("native-parent.pid"))
     if bytes[0] == 1 {
         FileHandle.standardOutput.write(FileHandle.standardInput.readDataToEndOfFile())
         return 7
