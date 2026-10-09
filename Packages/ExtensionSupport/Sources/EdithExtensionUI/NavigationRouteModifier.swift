@@ -95,7 +95,7 @@ private struct NavigationRouteScopeKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var windowRouter: WindowRouter? {
+    public var windowRouter: WindowRouter? {
         get { self[WindowRouterKey.self] }
         set { self[WindowRouterKey.self] = newValue }
     }
