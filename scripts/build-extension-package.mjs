@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { buildExtensionSupport } from "./build-extension-support.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
@@ -72,6 +72,18 @@ export async function buildExtensionPackage({
     const contents = resolve(bundle, "Contents");
     await mkdir(resolve(contents, "MacOS"), { recursive: true });
     const executable = resolve(contents, "MacOS", "Runtime");
+    const resourceNames = new Set();
+    for (const resource of definition.resources?.[role] ?? []) {
+      const name = basename(resource);
+      if (resourceNames.has(name))
+        throw new Error("Duplicate extension resource name");
+      resourceNames.add(name);
+      await mkdir(resolve(contents, "Resources"), { recursive: true });
+      await copyFile(
+        resolve(root, resource),
+        resolve(contents, "Resources", name),
+      );
+    }
     const nativeFlags = [];
     if (definition.nativePackage) {
       const libraryName = `lib${definition.nativeProduct}.dylib`;

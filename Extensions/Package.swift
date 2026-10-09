@@ -59,5 +59,13 @@ let package = Package(
         .testTarget(
             name: "MicMuteExtensionTests", dependencies: ["MicMuteExtension"],
             path: "micMute/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "EmojiExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "emoji", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "EmojiExtensionTests", dependencies: ["EmojiExtension"],
+            path: "emoji/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

@@ -54,13 +54,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - run: bun scripts/extension-host-abi.mjs --write
       - run: bun install --frozen-lockfile
-      - run: bun test scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
-      - run: python3 -B scripts/test-extension-size-report.py
-      - run: make ci-host
-      - run: make host
-      - run: bun scripts/test-extension-workers.mjs
-      - run: swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs 2
-      - run: make ci-extension-support
+      - run: make ci-marketplace-host
       - run: swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
       - run: bun scripts/test-extension-marketplace.mjs
 
