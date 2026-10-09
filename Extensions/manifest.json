@@ -463,5 +463,35 @@
       "Packages/ExtensionSupport"
     ],
     "dependencies": []
+  },
+  {
+    "id": "appMaintenance",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "roles": {
+      "app": [
+        "Extensions/appMaintenance/AppMaintenance.swift",
+        "Extensions/appMaintenance/AppMaintenanceDiskImageInstaller.swift",
+        "Extensions/appMaintenance/AppMaintenanceFiles.swift",
+        "Extensions/appMaintenance/AppMaintenanceModel.swift",
+        "Extensions/appMaintenance/AppMaintenanceView.swift",
+        "Extensions/appMaintenance/AppUpdateCenter.swift",
+        "Extensions/appMaintenance/MaintenanceCommands.swift",
+        "Extensions/appMaintenance/MaintenancePreferences.swift",
+        "Extensions/appMaintenance/Runtime.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/appMaintenance"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": [],
+    "contractVersion": 1,
+    "supportProduct": "EdithExtensionUI"
   }
 ]

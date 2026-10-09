@@ -2,7 +2,7 @@ import Darwin
 import EdithExtensionSupport
 import Foundation
 
-public enum AppMaintenanceInstallDestination: String, CaseIterable, Sendable {
+public enum AppMaintenanceInstallDestination: String, CaseIterable, Codable, Sendable {
     case user = "user"
     case system = "system"
 
@@ -141,7 +141,8 @@ public enum AppMaintenanceDiskImageInstaller {
         try FileManager.default.createDirectory(
             at: mountURL, withIntermediateDirectories: false,
             attributes: [.posixPermissions: 0o700])
-        var mountedAttachment: AppMaintenanceDiskImageAttachment?
+        var mountedAttachment: AppMaintenanceDiskImageAttachment? =
+            AppMaintenanceDiskImageAttachment(mountURL: mountURL, deviceEntry: mountURL.path)
         do {
             let attachResult = try await command(
                 "/usr/bin/hdiutil",

@@ -150,9 +150,16 @@ final class HostWorkerApplication {
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
-                guard let self, !self.stopping,
-                    let runtime = self.runtimes.first(where: { $0.supportsCommands(id: package.id) }
-                    )
+                guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                if command == "extension.open" {
+                    guard payload.isEmpty else { throw ExtensionPeerError.invalidRequest }
+                    try self.showWindow()
+                    return Data("{\"opened\":true}".utf8)
+                }
+                guard
+                    let runtime = self.runtimes.first(where: {
+                        $0.supportsCommands(id: package.id)
+                    })
                 else {
                     throw ExtensionPeerError.rejected(
                         "This extension does not support that command.")
