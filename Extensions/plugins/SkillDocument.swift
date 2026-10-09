@@ -40,17 +40,33 @@ public struct SkillDocument: Sendable, Equatable {
     public init(
         cacheDirectory: URL = ExtensionData.root.appendingPathComponent("cache"),
         fetch: @escaping @Sendable (URL) async throws -> Data = { url in
-            let request = URLRequest(
-                url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let response = response as? HTTPURLResponse, response.statusCode == 200 else {
-                throw SkillsError.message("GitHub could not return this skill. Try again shortly.")
-            }
-            return data
+            try await SkillDocumentStore.download(url)
         }
     ) {
         self.cacheDirectory = cacheDirectory
         self.fetch = fetch
+    }
+
+    nonisolated public static func download(_ url: URL, session: URLSession = .shared) async throws
+        -> Data
+    {
+        let request = URLRequest(
+            url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let response = response as? HTTPURLResponse, response.statusCode == 200,
+            response.expectedContentLength < 400_000
+        else {
+            throw SkillsError.message("GitHub could not return this skill. Try again shortly.")
+        }
+        var data = Data()
+        data.reserveCapacity(8192)
+        for try await byte in bytes {
+            guard data.count < 399_999 else {
+                throw SkillsError.message("The skill exceeds its download size limit.")
+            }
+            data.append(byte)
+        }
+        return data
     }
 
     public func cachedDocument(for skill: EdithSkill) -> SkillDocument? {
