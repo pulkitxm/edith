@@ -15,7 +15,7 @@ extension SurfaceWidget {
             .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
             .ability("seoAudit"), .ability("latex"), .ability("audioMixer"), .ability("timeLapse"),
-            .ability("companion"), .ability("terminal"):
+            .ability("companion"), .ability("terminal"), .ability("studio"):
             true
         default: false
         }
@@ -27,6 +27,7 @@ extension SurfaceWidget {
         case .ability("audioMixer"): "Audio apps"
         case .ability("companion"): "Item kinds"
         case .ability("terminal"): "Sessions"
+        case .ability("studio"): "Media kinds"
         case .limits, .agents: "Providers"
         case .clocks: "Cities"
         case .calendar: "Calendars"
@@ -52,6 +53,11 @@ extension SurfaceWidget {
             ]
         case .ability("timeLapse"):
             [.init("active", "Live recorder"), .init("recordings", "Saved recordings")]
+        case .ability("studio"):
+            [
+                .init("files", "Media files"), .init("projects", "Video projects"),
+                .init("jobs", "Tool jobs"),
+            ]
         default: []
         }
     }
@@ -130,7 +136,12 @@ extension SurfaceWidget {
                 ]
             case .ability("plugins"):
                 [("agents", "Detected agent count"), ("skills", "Available skill count")]
-            case .ability("studio"), .ability("notchShelf"):
+            case .ability("studio"):
+                [
+                    ("files", "File count"), ("projects", "Project count"),
+                    ("running", "Running jobs"),
+                ]
+            case .ability("notchShelf"):
                 [("files", "File count")]
             case .ability("terminal"):
                 [("sessions", "Session count"), ("running", "Running shells")]
