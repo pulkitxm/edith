@@ -11,7 +11,7 @@ extension SurfaceWidget {
         switch self {
         case .calendar, .github, .ability("quinjet"), .databases, .machines, .desk, .media, .limits,
             .codeStats,
-            .ability("downloads"),
+            .ability("downloads"), .ability("docs"),
             .ability("clipboard"),
             .ability("attention"), .ability("appMaintenance"), .ability("homebrew"),
             .ability("seoAudit"), .ability("latex"), .ability("audioMixer"), .ability("timeLapse"),
