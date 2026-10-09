@@ -48,6 +48,28 @@ import Testing
         }
     }
 
+    @Test func recoveryIntentStartsIdleWithoutAnExistingFeatureMarker() async throws {
+        let original = ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"]
+        setenv("EDITH_EXTENSION_RECOVERY_ONLY", "1", 1)
+        defer {
+            if let original {
+                setenv("EDITH_EXTENSION_RECOVERY_ONLY", original, 1)
+            } else {
+                unsetenv("EDITH_EXTENSION_RECOVERY_ONLY")
+            }
+        }
+        try await fixture { defaults in
+            #expect(!defaults.bool(forKey: CameraAppWorker.pendingKey))
+            let worker = CameraAppWorker(defaults: defaults, host: "com.pulkit.edith.tests.worker")
+            #expect(worker.draining)
+            #expect(!worker.engine.streaming)
+            #expect(worker.client.currentStatus == nil)
+            try await worker.prepareDisable()
+            #expect(worker.engine.isStopped)
+            #expect(!defaults.bool(forKey: CameraAppWorker.pendingKey))
+        }
+    }
+
     private func fixture(_ body: @MainActor (UserDefaults) async throws -> Void) async throws {
         let suite = "edith.camera.worker.tests." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))

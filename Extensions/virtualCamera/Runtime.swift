@@ -224,7 +224,9 @@ final class ExtensionRuntime: NSObject {
             defaults: defaults, extensionManager: manager,
             accessProvider: environment.authorization, sourceProvider: environment.sources,
             previewBus: bus)
-        draining = defaults.bool(forKey: Self.pendingKey)
+        draining =
+            defaults.bool(forKey: Self.pendingKey)
+            || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
         if !draining {
             engine.start(); actions.install(engine: engine)
             CameraExtensionBridge.install(manager: manager)
