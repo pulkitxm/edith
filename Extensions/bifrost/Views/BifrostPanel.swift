@@ -128,6 +128,14 @@ final class BifrostPanel: NSObject, NSWindowDelegate {
         }
     }
 
+    func shutdown() {
+        hide()
+        showTask?.cancel(); showTask = nil
+        shortcutHandler = nil
+        panel?.delegate = nil; panel?.close(); panel = nil
+        hosting = nil; store = nil
+    }
+
     func hide() {
         showGeneration += 1
         showTask?.cancel()

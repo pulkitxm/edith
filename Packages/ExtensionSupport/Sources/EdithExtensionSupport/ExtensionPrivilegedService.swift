@@ -37,7 +37,7 @@ public enum ExtensionPrivilegedService {
 
     public func invoke(_ command: String, payload: Data) async throws -> Data {
         guard !command.isEmpty, command.utf8.count <= 256, !command.utf8.contains(0),
-            payload.count <= 65_536
+            payload.count <= 32_768
         else { throw ExtensionPeerError.invalidRequest }
         try await activate()
         guard let proxy else { throw ExtensionPeerError.unavailable }
@@ -97,7 +97,7 @@ public enum ExtensionPrivilegedService {
                 send { data, error in
                     if let error {
                         reply.finish(.failure(error))
-                    } else if let data, data.count <= 65_536 {
+                    } else if let data, data.count <= 32_768 {
                         reply.finish(.success(data))
                     } else {
                         reply.finish(.failure(ExtensionPeerError.invalidRequest))

@@ -32,6 +32,7 @@ public enum ExtensionArchive {
             let parts = path.split(separator: "/", omittingEmptySubsequences: false)
             let payloadNames = [
                 "package.json", "app.bundle", "helper.bundle", "agent.bundle", "cli.bundle",
+                "privileged.bundle",
             ]
             guard !path.hasPrefix("/"), !path.contains("\\"), !path.contains("\0"),
                 parts.first == Substring(package.id),
@@ -72,8 +73,9 @@ public enum ExtensionArchive {
         .filter { $0.pathExtension == "bundle" }
         guard !bundles.isEmpty,
             bundles.allSatisfy({
-                ["app.bundle", "helper.bundle", "agent.bundle", "cli.bundle"].contains(
-                    $0.lastPathComponent)
+                ["app.bundle", "helper.bundle", "agent.bundle", "cli.bundle", "privileged.bundle"]
+                    .contains(
+                        $0.lastPathComponent)
             })
         else {
             throw MarketplaceError.invalidArchive
