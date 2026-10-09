@@ -10,6 +10,9 @@ import Testing
         #expect(SurfaceArrangement.rowCounts(count: 3, width: 600, gap: 12) == [1, 1, 1])
         #expect(SurfaceArrangement.rowCounts(count: 3, width: .infinity, gap: 12) == [1, 1, 1])
         #expect(SurfaceArrangement.rowCounts(count: 3, width: .nan, gap: 12) == [1, 1, 1])
+        #expect(
+            SurfaceArrangement.rowCounts(
+                count: 5, width: 1200, minimumWidth: 130, maximumColumns: 5, gap: 12) == [5])
     }
     @Test func shelfFillsAvailableSpaceAndHonorsExplicitWidths() {
         let tiles = [SurfaceTile(.music), SurfaceTile(.actions)]

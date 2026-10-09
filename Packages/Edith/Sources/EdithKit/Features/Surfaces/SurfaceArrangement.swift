@@ -1,14 +1,19 @@
 import Foundation
 
 public enum SurfaceArrangement {
-    public static func rowCounts(count: Int, width: Double, minimumWidth: Double = 340, gap: Double)
+    public static func rowCounts(
+        count: Int, width: Double, minimumWidth: Double = 340,
+        maximumColumns: Int = 3, gap: Double
+    )
         -> [Int]
     {
         guard count > 0 else { return [] }
         let width = width.isFinite ? max(0, width) : 600
         let minimumWidth = minimumWidth.isFinite ? max(1, minimumWidth) : 340
         let gap = gap.isFinite ? max(0, gap) : 12
-        let columns = min(count, Int(min(3, max(1, (width + gap) / (minimumWidth + gap)))))
+        let columns = min(
+            count,
+            Int(min(Double(max(1, maximumColumns)), max(1, (width + gap) / (minimumWidth + gap)))))
         let rows = Int(ceil(Double(count) / Double(columns)))
         return (0..<rows).map { count / rows + ($0 < count % rows ? 1 : 0) }
     }

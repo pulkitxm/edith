@@ -14,7 +14,8 @@ public struct SurfaceControlLayout: Layout {
         let width = proposal.width.flatMap { $0.isFinite ? $0 : nil } ?? UIScale.pt(400)
         let rows = SurfaceArrangement.rowCounts(
             count: subviews.count,
-            width: Double(width / UIScale.current), minimumWidth: minimumWidth, gap: gap)
+            width: Double(width / UIScale.current), minimumWidth: minimumWidth,
+            maximumColumns: subviews.count, gap: gap)
         let height = UIScale.pt(
             Double(rows.count) * cellHeight + Double(max(0, rows.count - 1)) * gap)
         return CGSize(
@@ -26,7 +27,8 @@ public struct SurfaceControlLayout: Layout {
     ) {
         let rows = SurfaceArrangement.rowCounts(
             count: subviews.count,
-            width: Double(bounds.width / UIScale.current), minimumWidth: minimumWidth, gap: gap)
+            width: Double(bounds.width / UIScale.current), minimumWidth: minimumWidth,
+            maximumColumns: subviews.count, gap: gap)
         guard !rows.isEmpty else { return }
         let gap = UIScale.pt(gap)
         let height = max(1, (bounds.height - CGFloat(rows.count - 1) * gap) / CGFloat(rows.count))

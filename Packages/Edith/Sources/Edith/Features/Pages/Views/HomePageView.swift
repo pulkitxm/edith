@@ -625,19 +625,12 @@ private struct QuickActionsCard: View {
     @StateObject private var lidAwakeOperations = LidAwakeOperationModel()
 
     private var theme: Color { themeColor(themeName) }
-    @State private var availableWidth = 600.0
     private var actionCount: Int {
         [
             systemEnabled, keepAwakeEnabled, lidAwakeEnabled, keystrokeHighlightEnabled,
             presenterEnabled,
         ]
         .filter { $0 }.count
-    }
-    private var columns: [GridItem] {
-        let count = min(
-            max(1, actionCount), max(1, Int((availableWidth + UIScale.pt(12)) / UIScale.pt(142))))
-        return Array(
-            repeating: GridItem(.flexible(minimum: 0), spacing: UIScale.pt(12)), count: count)
     }
 
     var body: some View {
@@ -650,7 +643,7 @@ private struct QuickActionsCard: View {
                         .buttonStyle(.edith(.secondary))
                 }
             }
-            LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(12)) {
+            SurfaceControlLayout(minimumWidth: 130, cellHeight: compact ? 72 : 112, gap: 12) {
                 if systemEnabled {
                     tile(
                         icon: "keyboard", title: "Clean keys",
@@ -701,11 +694,6 @@ private struct QuickActionsCard: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .onGeometryChange(for: Double.self) {
-                $0.size.width
-            } action: {
-                availableWidth = $0
-            }
         }
         .onReceive(
             DistributedNotificationCenter.default().publisher(
@@ -766,7 +754,7 @@ private struct QuickActionsCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, UIScale.pt(compact ? 8 : 16))
             .padding(.horizontal, UIScale.pt(8))
             .foregroundStyle(active ? AnyShapeStyle(.white) : AnyShapeStyle(DashSkin.ink(dark)))
