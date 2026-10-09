@@ -7,6 +7,14 @@ let package = Package(
     dependencies: [.package(path: "../Packages/ExtensionSupport")],
     targets: [
         .target(
+            name: "NotchShelfExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "notchShelf", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "NotchShelfExtensionTests", dependencies: ["NotchShelfExtension"],
+            path: "notchShelf/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "KeepAwakeExtension",
             dependencies: [.product(name: "EdithExtensionSupport", package: "ExtensionSupport")],
             path: "keepAwake", exclude: ["Tests", "Runtime.swift"]),
