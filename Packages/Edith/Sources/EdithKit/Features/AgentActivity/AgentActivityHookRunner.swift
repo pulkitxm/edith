@@ -8,7 +8,7 @@ public struct AgentActivityHookRunner: Sendable {
     public init(
         interval: Duration = .milliseconds(250),
         perform: @escaping Perform = {
-            try await AgentClient.shared.performInternalAsync($0, payload: $1)
+            try await AgentClient.shared.performInternalAsync($0, payload: $1, timeout: 1.5)
         }
     ) {
         self.perform = perform
@@ -19,9 +19,12 @@ public struct AgentActivityHookRunner: Sendable {
         var token: AgentApprovalToken?
         do {
             try Task.checkCancellation()
-            let data = try await perform(AgentActivityOperation.ingest, AgentPayload.encode(event))
+            let payload = try AgentPayload.encode(event)
+            guard payload.count <= AgentActivityParser.maximumEventBytes else { return nil }
+            let data = try await perform(AgentActivityOperation.ingest, payload)
             let receipt = try AgentPayload.decode(AgentActivityReceipt.self, from: data)
-            guard event.permissionRequest, let received = receipt.token,
+            guard event.provider.supportsPermissionApprovals, event.permissionRequest,
+                let received = receipt.token,
                 let expires = receipt.expiresAt, expires > Date()
             else { return nil }
             token = received

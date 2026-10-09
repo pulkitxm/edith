@@ -81,7 +81,9 @@ public struct AgentActivityRow: Identifiable, Equatable, Sendable {
 
 extension AgentActivityProvider {
     public static func terminalKind(_ raw: String) -> Self? {
+        if let provider = Self(rawValue: raw.lowercased()) { return provider }
         let title = HerdrKind.displayName(for: raw)
+        if title == "Gemini" { return .gemini }
         return allCases.first { $0.title == title }
     }
 }
@@ -89,6 +91,22 @@ extension AgentActivityProvider {
 public struct AgentActivityPresentation: Equatable, Sendable {
     public var rows: [AgentActivityRow]
     public var approvals: [AgentApprovalRequest]
+    public func providerChoices(including selected: Set<String> = []) -> [SurfaceSourceChoice] {
+        var titles = Dictionary(
+            uniqueKeysWithValues: AgentActivityProvider.allCases.map { ($0.rawValue, $0.title) })
+        for title in HerdrKind.filterLabels {
+            let id = AgentActivityProvider.terminalKind(title)?.rawValue ?? title.lowercased()
+            if titles[id] == nil { titles[id] = title }
+        }
+        for row in rows where titles[row.provider] == nil {
+            titles[row.provider] = row.providerTitle
+        }
+        for id in selected where titles[id] == nil { titles[id] = HerdrKind.displayName(for: id) }
+        return titles.map { SurfaceSourceChoice($0.key, $0.value) }.sorted {
+            let order = $0.title.localizedStandardCompare($1.title)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
+    }
     public var working: Int { rows.filter { $0.phase == .working }.count }
     public var waiting: Int {
         rows.filter { [.waiting, .permission, .blocked].contains($0.phase) }.count

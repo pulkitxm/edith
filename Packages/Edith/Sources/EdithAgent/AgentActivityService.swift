@@ -119,7 +119,7 @@ public actor AgentActivityService {
             pending = pending.filter { $0.value.request.sessionID != event.identity }
         }
         var request: AgentApprovalRequest?
-        if event.permissionRequest, event.tool != nil,
+        if event.provider.supportsPermissionApprovals, event.permissionRequest, event.tool != nil,
             settings().configuration(event.provider).approvals, pending.count < 64,
             await listener(),
             settings().configuration(event.provider).approvals, !stopped
@@ -211,6 +211,7 @@ public actor AgentActivityService {
         pending = pending.filter {
             let provider = configuration.configuration($0.value.request.provider)
             return !stopped && listening && provider.observing && provider.approvals
+                && $0.value.request.provider.supportsPermissionApprovals
                 && $0.value.request.expiresAt > date
         }
     }

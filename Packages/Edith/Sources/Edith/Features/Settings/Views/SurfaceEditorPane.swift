@@ -5,6 +5,7 @@ import SwiftUI
 struct SurfaceEditorPane: View {
     @State private var store = SurfaceLayoutStore.shared
     @State private var dashboard = DashboardModel.shared
+    @State private var activity = AgentActivityMonitor.shared
     @AppStorage(AppStorageKeys.Surfaces.editorTarget, store: SharedDefaults.store) private
         var targetRaw = "home"
     private var target: SurfaceTarget { SurfaceTarget(rawValue: targetRaw) ?? .home }
@@ -97,6 +98,12 @@ struct SurfaceEditorPane: View {
         .pageTask(id: livePreview, active: livePreview && target == .home) {
             await dashboard.restoreCachedHomeUsage()
             await dashboard.load()
+        }
+        .pageTask(
+            id: "editor-agent-sources",
+            active: selection?.widget == .agents || (target == .notch && glancesExpanded)
+        ) {
+            await activity.observe()
         }
         .pageTask(id: "\(selectedRaw):\(livePreview):\(targetRaw)") {
             sourceChoices = []
@@ -1031,10 +1038,9 @@ struct SurfaceEditorPane: View {
         }
     }
 
-    private var agentProviderChoices: [(id: String, title: String)] {
-        HerdrKind.filterLabels.map { title in
-            (AgentActivityProvider.terminalKind(title)?.rawValue ?? title.lowercased(), title)
-        }
+    private var agentProviderChoices: [SurfaceSourceChoice] {
+        activity.presentation.providerChoices(
+            including: (selection?.sourceIDs ?? []).union(layout.notchAgentSources ?? []))
     }
 
     private func agentFilters(_ tile: SurfaceTile) -> some View {

@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 public enum AgentActivityHookScope: Equatable, Sendable {
@@ -54,6 +55,8 @@ public struct AgentActivityHookInstaller: Sendable {
         switch provider {
         case .claude: path = ".claude/settings.json"
         case .codex: path = ".codex/hooks.json"
+        case .gemini: path = ".gemini/settings.json"
+        case .cursor: path = ".cursor/hooks.json"
         case .opencode:
             path =
                 scope == .global
@@ -75,6 +78,8 @@ public struct AgentActivityHookInstaller: Sendable {
                 throw AgentActivityHookInstallerError.unrelatedPlugin
             }
             replacement = enabled ? Data(openCodePlugin.utf8) : nil
+        } else if provider == .cursor {
+            replacement = try cursorConfiguration(original, enabled: enabled)
         } else {
             var root: [String: Any] = [:]
             if let original {
@@ -116,9 +121,10 @@ public struct AgentActivityHookInstaller: Sendable {
                     let terminal = event == "SessionEnd" || event == "Interrupt"
                     var handler: [String: Any] = [
                         "type": "command", "command": command(provider),
-                        "timeout": permission ? 120 : (terminal ? 3 : 5),
+                        "timeout": (permission ? 120 : (terminal ? 3 : 5))
+                            * (provider == .gemini ? 1000 : 1),
                     ]
-                    if !permission && !terminal { handler["async"] = true }
+                    if provider != .gemini && !permission && !terminal { handler["async"] = true }
                     groups.append(["hooks": [handler]])
                     hooks[event] = groups
                 }
@@ -135,6 +141,49 @@ public struct AgentActivityHookInstaller: Sendable {
         }
         return AgentActivityHookPlan(
             provider: provider, url: url, original: original, replacement: replacement)
+    }
+
+    private func cursorConfiguration(_ original: Data?, enabled: Bool) throws -> Data? {
+        var root: [String: Any] = [:]
+        if let original {
+            guard let object = try JSONSerialization.jsonObject(with: original) as? [String: Any]
+            else { throw AgentActivityHookInstallerError.invalidConfiguration }
+            root = object
+        }
+        if let value = root["version"] {
+            guard let version = value as? NSNumber,
+                CFGetTypeID(version) != CFBooleanGetTypeID(), version.doubleValue == 1
+            else { throw AgentActivityHookInstallerError.invalidConfiguration }
+        }
+        if let existing = root["hooks"], !(existing is [String: Any]) {
+            throw AgentActivityHookInstallerError.invalidConfiguration
+        }
+        var hooks = root["hooks"] as? [String: Any] ?? [:]
+        var removedOwned = false
+        for (event, value) in hooks {
+            guard let handlers = value as? [[String: Any]]
+            else { throw AgentActivityHookInstallerError.invalidConfiguration }
+            let retained = handlers.filter { !Self.owns($0) }
+            removedOwned = removedOwned || retained.count != handlers.count
+            hooks[event] = retained.isEmpty ? nil : retained
+        }
+        if enabled {
+            root["version"] = 1
+            for event in events(.cursor) {
+                var handlers = hooks[event] as? [[String: Any]] ?? []
+                handlers.append([
+                    "type": "command", "command": command(.cursor), "timeout": 5,
+                    "failClosed": false,
+                ])
+                hooks[event] = handlers
+            }
+        } else if !removedOwned {
+            return original
+        }
+        root["hooks"] = hooks.isEmpty ? nil : hooks
+        return try JSONSerialization.data(
+            withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+            + Data("\n".utf8)
     }
 
     public func apply(_ plan: AgentActivityHookPlan) throws -> AgentActivityHookInstallation {
@@ -194,6 +243,20 @@ public struct AgentActivityHookInstaller: Sendable {
     }
 
     private func events(_ provider: AgentActivityProvider) -> [String] {
+        if provider == .gemini {
+            return [
+                "SessionStart", "SessionEnd", "BeforeAgent", "AfterAgent", "BeforeTool",
+                "AfterTool",
+                "Notification",
+            ]
+        }
+        if provider == .cursor {
+            return [
+                "sessionStart", "sessionEnd", "postToolUse", "postToolUseFailure",
+                "afterAgentThought",
+                "afterAgentResponse", "stop",
+            ]
+        }
         let shared = [
             "SessionStart", "SessionEnd", "UserPromptSubmit", "PreToolUse", "PostToolUse",
             "SubagentStart", "SubagentStop", "Stop", "PermissionRequest",

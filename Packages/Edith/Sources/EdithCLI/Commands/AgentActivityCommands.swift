@@ -6,7 +6,7 @@ struct AgentActivityCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "activity", abstract: "Inspect live provider sessions and approval requests.",
         discussion: """
-            Read Claude Code, Codex, and OpenCode activity delivered by configured hooks.
+            Read Claude Code, Codex, OpenCode, Gemini CLI, and Cursor activity delivered by configured hooks.
             status reads the live session snapshot. hook changes the activity feed and returns only a provider hook response.
 
             ed agent activity status --json
@@ -55,8 +55,8 @@ struct AgentActivityHookCommand: AsyncParsableCommand {
 
             ed agent activity hook --provider claude --integration-id edith-surfaces
             """, shouldDisplay: false)
-    @Option(name: .long, help: "Provider event format: claude, codex, or opencode.") var provider:
-        String
+    @Option(name: .long, help: "Provider event format: claude, codex, opencode, gemini, or cursor.")
+    var provider: String
     @Option(name: .long, help: "Integration ownership identifier.") var integrationID: String
 
     func run() async throws {

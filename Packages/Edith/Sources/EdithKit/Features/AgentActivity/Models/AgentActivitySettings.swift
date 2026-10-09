@@ -33,8 +33,12 @@ public struct AgentActivitySettings: Codable, Equatable, Sendable {
         var result = self
         result.quietMinutes = min(120, max(2, quietMinutes))
         result.providers = providers.filter { AgentActivityProvider(rawValue: $0.key) != nil }
-        for key in result.providers.keys where result.providers[key]?.observing != true {
-            result.providers[key]?.approvals = false
+        for key in result.providers.keys {
+            if result.providers[key]?.observing != true
+                || AgentActivityProvider(rawValue: key)?.supportsPermissionApprovals != true
+            {
+                result.providers[key]?.approvals = false
+            }
         }
         return result
     }
@@ -78,7 +82,7 @@ public enum AgentActivityHookOutput {
     public static func data(provider: AgentActivityProvider, choice: AgentApprovalChoice?) throws
         -> Data
     {
-        guard let choice else { return Data("{}".utf8) }
+        guard provider.supportsPermissionApprovals, let choice else { return Data("{}".utf8) }
         if provider == .opencode {
             return try JSONSerialization.data(withJSONObject: ["choice": choice.rawValue])
         }

@@ -145,10 +145,18 @@ struct AgentConnectionsPane: View {
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
             }
             Toggle("Observe session activity", isOn: providerSetting(provider, \.observing))
-            Toggle(
-                "Handle permission requests in Edith", isOn: providerSetting(provider, \.approvals)
-            )
-            .disabled(!settings.configuration(provider).observing)
+            if provider.supportsPermissionApprovals {
+                Toggle(
+                    "Handle permission requests in Edith",
+                    isOn: providerSetting(provider, \.approvals)
+                )
+                .disabled(!settings.configuration(provider).observing)
+            } else {
+                Text(
+                    "Activity appears in Edith. Complete approvals in the provider."
+                )
+                .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
             if settings.configuration(provider).approvals {
                 Text(
                     "Requests wait up to two minutes for Allow once or Deny, then follow the provider's normal approval behavior."

@@ -1,13 +1,21 @@
 import Foundation
 
 public enum AgentActivityProvider: String, Codable, CaseIterable, Identifiable, Sendable {
-    case claude, codex, opencode
+    case claude, codex, opencode, gemini, cursor
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .claude: "Claude Code"
         case .codex: "Codex"
         case .opencode: "OpenCode"
+        case .gemini: "Gemini CLI"
+        case .cursor: "Cursor Agent"
+        }
+    }
+    public var supportsPermissionApprovals: Bool {
+        switch self {
+        case .claude, .codex, .opencode: true
+        case .gemini, .cursor: false
         }
     }
 }
@@ -47,6 +55,10 @@ public struct AgentActivityEvent: Codable, Equatable, Sendable {
     public var permissionRequest = false
     public var receivedAt: Date
     public var identity: String { provider.rawValue + ":" + sessionID }
+    public var completedTool: Bool {
+        phase == .working
+            && ["PostToolUse", "tool.execute.after", "AfterTool", "postToolUse"].contains(eventName)
+    }
 
     public init(
         provider: AgentActivityProvider, sessionID: String, eventName: String,
@@ -88,8 +100,7 @@ public struct AgentActivitySession: Codable, Equatable, Identifiable, Sendable {
         tool = event.tool
         detail = event.detail
         pane = event.pane
-        completedTools =
-            (event.eventName == "PostToolUse" || event.eventName == "tool.execute.after") ? 1 : 0
+        completedTools = event.completedTool ? 1 : 0
         startedAt = event.receivedAt
         updatedAt = event.receivedAt
     }
@@ -104,7 +115,7 @@ public struct AgentActivitySession: Codable, Equatable, Identifiable, Sendable {
         pane = event.pane ?? pane
         if let parent = event.parentSessionID { parentID = provider.rawValue + ":" + parent }
         updatedAt = event.receivedAt
-        if event.eventName == "PostToolUse" || event.eventName == "tool.execute.after" {
+        if event.completedTool {
             completedTools += 1
         }
     }
@@ -188,16 +199,20 @@ public struct AgentActivitySnapshot: Codable, Equatable, Sendable {
 public enum AgentActivityParser {
     public static let maximumInputBytes = 131_072
     public static let maximumEventBytes = 1_048_576
+    public static let maximumInputDepth = 64
 
     public static func parse(
         _ data: Data, provider: AgentActivityProvider, pane: String? = nil, now: Date = Date()
     ) throws -> AgentActivityEvent? {
-        guard data.count <= maximumInputBytes,
+        guard data.count <= maximumInputBytes, boundedNesting(data),
             let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
-        return provider == .opencode
-            ? openCode(root, pane: pane, now: now)
-            : hook(root, provider: provider, pane: pane, now: now)
+        switch provider {
+        case .claude, .codex: return hook(root, provider: provider, pane: pane, now: now)
+        case .opencode: return openCode(root, pane: pane, now: now)
+        case .gemini: return gemini(root, pane: pane, now: now)
+        case .cursor: return cursor(root, pane: pane, now: now)
+        }
     }
 
     private static func hook(
@@ -295,6 +310,81 @@ public enum AgentActivityParser {
         return event
     }
 
+    private static func gemini(_ root: [String: Any], pane: String?, now: Date)
+        -> AgentActivityEvent?
+    {
+        guard let name = string(root["hook_event_name"]), let session = string(root["session_id"])
+        else { return nil }
+        let response = root["tool_response"] as? [String: Any] ?? [:]
+        let failure = response["error"].flatMap { value -> String? in
+            if value is NSNull { return nil }
+            return string(value) ?? (value as? [String: Any]).flatMap { describeAll($0) }
+        }
+        let phase: AgentActivityPhase
+        switch name {
+        case "SessionStart": phase = .idle
+        case "BeforeAgent", "BeforeTool": phase = .working
+        case "AfterTool": phase = failure == nil ? .working : .error
+        case "AfterAgent": phase = .finished
+        case "SessionEnd": phase = .ended
+        case "Notification":
+            guard string(root["notification_type"]) == "ToolPermission" else { return nil }
+            phase = .permission
+        default: return nil
+        }
+        var event = AgentActivityEvent(
+            provider: .gemini, sessionID: session, eventName: name, phase: phase,
+            project: string(root["cwd"]) ?? "", receivedAt: now)
+        event.tool = string(root["tool_name"])
+        event.model = string(root["model"])
+        if name == "BeforeTool" || name == "AfterTool" {
+            event.detail = failure ?? describe(root["tool_input"])
+        } else if name == "Notification" {
+            event.detail = string(root["message"])
+            let details = root["details"] as? [String: Any] ?? [:]
+            event.tool = event.tool ?? string(details["tool_name"])
+        }
+        event.pane = string(pane)
+        return event
+    }
+
+    private static func cursor(_ root: [String: Any], pane: String?, now: Date)
+        -> AgentActivityEvent?
+    {
+        guard let name = string(root["hook_event_name"]),
+            let session = string(root["conversation_id"]) ?? string(root["session_id"])
+        else { return nil }
+        let phase: AgentActivityPhase
+        switch name {
+        case "sessionStart": phase = .idle
+        case "sessionEnd": phase = .ended
+        case "postToolUse", "afterAgentThought", "afterAgentResponse": phase = .working
+        case "postToolUseFailure":
+            phase =
+                root["is_interrupt"] as? Bool == true
+                ? .idle : string(root["failure_type"]) == "permission_denied" ? .blocked : .error
+        case "stop":
+            switch string(root["status"]) {
+            case "completed": phase = .finished
+            case "aborted": phase = .idle
+            case "error": phase = .error
+            default: return nil
+            }
+        default: return nil
+        }
+        var event = AgentActivityEvent(
+            provider: .cursor, sessionID: session, eventName: name, phase: phase,
+            project: (root["workspace_roots"] as? [String])?.first.flatMap { string($0) }
+                ?? string(root["cwd"]) ?? "", receivedAt: now)
+        event.model = string(root["model_id"]) ?? string(root["model"])
+        if name == "postToolUse" || name == "postToolUseFailure" {
+            event.tool = string(root["tool_name"])
+            event.detail = string(root["error_message"]) ?? describe(root["tool_input"])
+        }
+        event.pane = string(pane)
+        return event
+    }
+
     private static func string(_ value: Any?) -> String? {
         guard let value = value as? String else { return nil }
         let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -312,8 +402,36 @@ public enum AgentActivityParser {
     private static func describeAll(_ value: Any?) -> String? {
         guard let value,
             let data = try? JSONSerialization.data(
-                withJSONObject: value, options: [.fragmentsAllowed, .prettyPrinted, .sortedKeys])
+                withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys])
         else { return nil }
         return String(data: data, encoding: .utf8)
+    }
+
+    private static func boundedNesting(_ data: Data) -> Bool {
+        var depth = 0
+        var quoted = false
+        var escaped = false
+        for byte in data {
+            if quoted {
+                if escaped {
+                    escaped = false
+                } else if byte == 92 {
+                    escaped = true
+                } else if byte == 34 {
+                    quoted = false
+                }
+            } else {
+                switch byte {
+                case 34: quoted = true
+                case 91, 123:
+                    depth += 1
+                    if depth > maximumInputDepth { return false }
+                case 93, 125:
+                    depth = max(0, depth - 1)
+                default: break
+                }
+            }
+        }
+        return true
     }
 }

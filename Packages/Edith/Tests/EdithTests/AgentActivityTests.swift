@@ -132,7 +132,7 @@ private actor ActivityPublications {
         #expect(session.phase == .permission)
     }
 
-    @Test(arguments: AgentActivityProvider.allCases)
+    @Test(arguments: AgentActivityProvider.allCases.filter(\.supportsPermissionApprovals))
     func hookOutputOnlyGrantsOneUse(_ provider: AgentActivityProvider) throws {
         let allow = try AgentActivityHookOutput.data(provider: provider, choice: .allowOnce)
         let object = try #require(JSONSerialization.jsonObject(with: allow) as? [String: Any])
