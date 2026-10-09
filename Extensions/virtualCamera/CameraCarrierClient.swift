@@ -38,7 +38,7 @@ import Foundation
 
     func prepareDisable(providerVisible: Bool) async throws {
         guard process != nil || preparation != nil || providerVisible else { return }
-        let status = try await request(.deactivate)
+        let status = try await request(.prepareDisable)
         guard !status.ownsProvider, !status.pending, status.phase != "restartRequired" else {
             throw failure("Restart macOS to finish disabling Edith Camera.")
         }

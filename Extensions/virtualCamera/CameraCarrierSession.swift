@@ -46,14 +46,15 @@ final class CameraCarrierSession {
                     if let token = request.cancelledToken { requests[token]?.cancel() }
                     publish(token: request.token)
                 case .status: publish(token: request.token)
-                case .activate, .deactivate, .microphonePrepare:
+                case .activate, .deactivate, .prepareDisable, .microphonePrepare:
                     requests[request.token] = Task { [weak self] in
                         guard let self else { return }
                         defer { requests.removeValue(forKey: request.token) }
                         do {
                             switch request.operation {
                             case .activate: try await controller.activate()
-                            case .deactivate: try await deactivateOwnedResources()
+                            case .deactivate: try await controller.deactivate()
+                            case .prepareDisable: try await deactivateOwnedResources()
                             case .microphonePrepare: try await prepareMicrophone()
                             default: throw CocoaError(.fileReadCorruptFile)
                             }

@@ -224,7 +224,7 @@ private final class CarrierBrokerProbe: CameraSystemExtensionSubmitting {
         let token = UUID()
         session.receive(
             try CameraCarrierFrames.encode(
-                CameraCarrierRequest(token: token, operation: .deactivate)))
+                CameraCarrierRequest(token: token, operation: .prepareDisable)))
         try await wait { replies.contains { $0.token == token } }
         let reply = try #require(replies.first { $0.token == token })
         #expect(reply.status.phase == "restartRequired")
@@ -234,6 +234,25 @@ private final class CarrierBrokerProbe: CameraSystemExtensionSubmitting {
         try await Task.sleep(for: .milliseconds(5))
         #expect(releases == 0 && !session.released)
         #expect(broker.requests.isEmpty)
+    }
+
+    @Test func removingOnlyTheCameraPreservesMeetingMicrophoneUntilFeatureDisable() async throws {
+        let broker = CarrierBrokerProbe()
+        let controller = CameraSystemExtensionController(
+            identifier: "org.example.fixture.camera", broker: broker, providerExited: { true })
+        var replies: [CameraCarrierReply] = []
+        var retirements = 0
+        let session = CameraCarrierSession(
+            controller: controller, send: { replies.append(try decode($0)) }, prepareMicrophone: {},
+            prepareDisableResources: { retirements += 1 }, releaseResources: {}, exited: {})
+        session.receive(try request(.deactivate))
+        try await wait { replies.filter { $0.token != nil }.count == 1 }
+        #expect(retirements == 0)
+        session.receive(try request(.prepareDisable))
+        try await wait { replies.filter { $0.token != nil }.count == 2 }
+        #expect(retirements == 1)
+        session.disconnect()
+        try await wait { session.released }
     }
 
     @Test func microphoneFailureIsBoundedAndCannotActivateProvider() async throws {

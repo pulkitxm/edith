@@ -72,7 +72,7 @@ private final class CameraControlProbe: CameraCarrierControlling {
                         print(json.dumps({'status':{'phase':phase,'ownsProvider':active,'pending':True}}),flush=True)
                         continue
                     if mode=='cancel': time.sleep(0.03)
-                elif operation=='deactivate':
+                elif operation in ['deactivate','prepareDisable']:
                     if mode=='restart':
                         phase='restartRequired'
                         error='Restart macOS to finish disabling the fixture provider.'
