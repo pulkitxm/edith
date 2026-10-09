@@ -20,6 +20,7 @@ final class CommandFixtureRuntime: NSObject {
                 let defaults = UserDefaults(suiteName: suite),
                 let mode = defaults.string(forKey: "commandFixtureMode")
             else { return ["ok": false] as NSDictionary }
+            try? ExtensionSharedState.current?.publish(["busy": "1"])
             self.mode = mode
             let directory = URL(fileURLWithPath: path)
             task = Task {
