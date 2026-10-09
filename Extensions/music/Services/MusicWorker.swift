@@ -14,6 +14,7 @@ final class MusicWorker {
     private let session = URLSession(configuration: .ephemeral)
     private var artwork: [URL: SurfaceThumbnail] = [:]
     private var stopped = false
+    private let tasks = MusicTaskOwner()
 
     init(
         player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
@@ -23,6 +24,7 @@ final class MusicWorker {
         self.external = external ?? ExternalMusic()
         self.accounts = accounts ?? .shared
         self.external.start()
+        tasks.start { try? await DownloadWorker.shared.start() }
     }
 
     func read(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
@@ -188,11 +190,12 @@ final class MusicWorker {
     func stop() {
         guard !stopped else { return }
         stopped = true
+        tasks.shutdown()
         session.invalidateAndCancel(); artwork.removeAll()
         player.shutdown(); external.stop(); accounts.shutdown()
         MusicRemote.shared.stop(); YoutubeDownloader.shared.shutdown(); MusicTools.shared.shutdown()
         MusicPrivacyState.shared.shutdown(); WindowVisibility.shared.shutdown()
-        TrackMeta.discardTransientDurations(); TrackMeta.discardMemoryCounts()
+        TrackMeta.shutdown()
     }
 
     private func transport(

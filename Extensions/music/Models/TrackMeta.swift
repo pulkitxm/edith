@@ -325,6 +325,16 @@ public enum TrackMeta {
         return cache
     }()
 
+    static func shutdown() {
+        cacheLock.withLock {
+            cachedBasePath = nil
+            trackCounts.removeAll()
+            durationCache.removeAll()
+            artworkMisses.removeAll()
+        }
+        artworkCache.removeAllObjects()
+    }
+
     public static func invalidateCaches() {
         cacheLock.withLock {
             cachedBasePath = nil

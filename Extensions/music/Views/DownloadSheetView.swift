@@ -6,6 +6,11 @@ import SwiftUI
 struct DownloadSheet: View {
     var isPage = false
     @State private var downloader = YoutubeDownloader.shared
+    init(isPage: Bool = false, downloader: YoutubeDownloader? = nil) {
+        self.isPage = isPage
+        _downloader = State(initialValue: downloader ?? .shared)
+    }
+
     @Environment(\.dismiss) private var dismiss
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"

@@ -851,11 +851,6 @@ struct MusicPage: View {
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
         "accent"
-    @AppStorage(AppStorageKeys.Tabs.musicEnabled, store: SharedDefaults.store) private
-        var tabMusicEnabled = false
-    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-        var presenterBlurMusic =
-        true
     @AppStorage(
         MusicStorage.musicFolderStaleKey, store: SharedDefaults.store)
     private var musicFolderStale = false
@@ -894,7 +889,7 @@ struct MusicPage: View {
     }
 
     private var theme: Color { themeColor(themeName) }
-    private var blurMusic: Bool { presenterState.active && presenterBlurMusic }
+    private var blurMusic: Bool { presenterState.active }
 
     private var listQuery: MusicListQuery {
         MusicListQuery(
@@ -1060,7 +1055,7 @@ struct MusicPage: View {
                     }
                     searchField
                     breadcrumbBar
-                    if tabMusicEnabled, remote.restorePending > 0 {
+                    if remote.restorePending > 0 {
                         Text("Restoring your music from iCloud, \(remote.restorePending) remaining")
                             .settingsCaption()
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -2318,9 +2313,6 @@ struct MusicFooter: View {
         AppStorageKeys.General.theme,
         store: SharedDefaults.store) private var themeName =
         "accent"
-    @AppStorage(AppStorageKeys.Presenter.blurMusic, store: SharedDefaults.store) private
-        var presenterBlurMusic =
-        true
     @AppStorage(AppStorageKeys.Music.barCollapsed, store: SharedDefaults.store) private
         var collapsed = false
     private var presenterState = MusicPrivacyState.shared
@@ -2328,7 +2320,7 @@ struct MusicFooter: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var theme: Color { themeColor(themeName) }
-    private var blur: Bool { presenterState.active && presenterBlurMusic }
+    private var blur: Bool { presenterState.active }
     private var dark: Bool { scheme == .dark }
 
     private var barHeight: CGFloat { accounts.selected == .spotify ? 80 : Self.expandedHeight }
