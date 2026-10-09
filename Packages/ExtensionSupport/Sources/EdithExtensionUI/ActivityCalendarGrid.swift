@@ -1,0 +1,171 @@
+import EdithExtensionSupport
+import SwiftUI
+
+public struct ActivityCalendarGrid<Detail: View>: View {
+    let weeks: [ActivityCalendarWeek]
+    let dark: Bool
+    var cellSize: CGFloat = 14
+    var calendar: Calendar = .current
+    var showsLegend = true
+    @ViewBuilder let detail: (ActivityCalendarDay) -> Detail
+    public init(
+        weeks: [ActivityCalendarWeek], dark: Bool, cellSize: CGFloat = 14,
+        calendar: Calendar = .current, showsLegend: Bool = true,
+        @ViewBuilder detail: @escaping (ActivityCalendarDay) -> Detail
+    ) {
+        self.weeks = weeks; self.dark = dark; self.cellSize = cellSize
+        self.calendar = calendar; self.showsLegend = showsLegend; self.detail = detail
+    }
+
+    @State private var hovered: String?
+    @State private var availableWidth = 400.0
+    @Environment(\.surfacePresentation) private var presentation
+    private var adaptiveCellSize: CGFloat {
+        guard presentation != nil, !weeks.isEmpty else { return cellSize }
+        return max(
+            cellSize, min(28, (availableWidth / UIScale.current - 16) / CGFloat(weeks.count) - 3))
+    }
+
+    private var gridHeight: CGFloat { UIScale.pt(12 + 3 + 7 * adaptiveCellSize + 6 * 3) }
+    private var gridWidth: CGFloat {
+        UIScale.pt(16 + CGFloat(weeks.count) * (adaptiveCellSize + 3) - 3)
+    }
+    private var weekdays: [String] {
+        (0..<7).map { calendar.veryShortWeekdaySymbols[(calendar.firstWeekday - 1 + $0) % 7] }
+    }
+
+    public var body: some View {
+        VStack(spacing: UIScale.pt(8)) {
+            HStack(alignment: .top, spacing: UIScale.pt(4)) {
+                VStack(spacing: UIScale.pt(3)) {
+                    Color.clear.frame(height: UIScale.pt(12))
+                    ForEach(0..<7, id: \.self) { row in
+                        Text(row.isMultiple(of: 2) ? weekdays[row] : "")
+                            .frame(width: UIScale.pt(12), height: UIScale.pt(adaptiveCellSize))
+                    }
+                }
+                .frame(width: UIScale.pt(12))
+                GeometryReader { geometry in
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                            ForEach(Array(weeks.enumerated()), id: \.element.id) { index, week in
+                                VStack(spacing: UIScale.pt(3)) {
+                                    Text(monthLabel(at: index))
+                                        .fixedSize(horizontal: true, vertical: false)
+                                        .frame(
+                                            width: UIScale.pt(adaptiveCellSize),
+                                            height: UIScale.pt(12),
+                                            alignment: .leading)
+                                    ForEach(week.cells) { cell in
+                                        RoundedRectangle(cornerRadius: UIScale.pt(3))
+                                            .fill(
+                                                ActivityCalendarStyle.color(cell.level, dark: dark)
+                                            )
+                                            .frame(
+                                                width: UIScale.pt(adaptiveCellSize),
+                                                height: UIScale.pt(adaptiveCellSize)
+                                            )
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: UIScale.pt(3))
+                                                    .strokeBorder(
+                                                        DashSkin.ink(dark).opacity(
+                                                            hovered == cell.id ? 0.5 : 0))
+                                            }
+                                            .accessibilityLabel(
+                                                cell.date == nil
+                                                    ? "Empty day" : "Activity " + cell.id
+                                            )
+                                            .accessibilityValue(String(cell.value))
+                                            .onHover { inside in
+                                                guard cell.date != nil else { return }
+                                                if inside {
+                                                    hovered = cell.id
+                                                } else if hovered == cell.id {
+                                                    hovered = nil
+                                                }
+                                            }
+                                            .popover(
+                                                isPresented: Binding(
+                                                    get: { hovered == cell.id },
+                                                    set: {
+                                                        if !$0, hovered == cell.id { hovered = nil }
+                                                    }
+                                                ), arrowEdge: .trailing
+                                            ) { detail(cell) }
+                                    }
+                                }
+                                .frame(width: UIScale.pt(adaptiveCellSize), alignment: .leading)
+                            }
+                        }
+                        .frame(minWidth: geometry.size.width, alignment: .leading)
+                    }
+                    .defaultScrollAnchor(.trailing)
+                }
+            }
+            .frame(height: gridHeight)
+            if showsLegend, presentation?.tile.showDetails != false {
+                HStack(spacing: UIScale.pt(3)) {
+                    Spacer()
+                    Text("Less")
+                    ForEach(0..<5, id: \.self) { level in
+                        RoundedRectangle(cornerRadius: UIScale.pt(2))
+                            .fill(ActivityCalendarStyle.color(level, dark: dark))
+                            .frame(width: UIScale.pt(10), height: UIScale.pt(10))
+                    }
+                    Text("More")
+                }
+            }
+        }
+        .frame(
+            maxWidth: presentation == nil ? max(UIScale.pt(16), gridWidth) : .infinity,
+            alignment: .leading
+        )
+        .onGeometryChange(for: Double.self) {
+            $0.size.width
+        } action: {
+            availableWidth = $0
+        }
+        .font(.system(size: UIScale.pt(9)))
+        .foregroundStyle(DashSkin.inkFaint(dark))
+    }
+
+    private func monthLabel(at index: Int) -> String {
+        let following = weeks.dropFirst(index + 1).prefix(2)
+        return following.contains { !$0.monthLabel.isEmpty } ? "" : weeks[index].monthLabel
+    }
+}
+
+public enum ActivityCalendarStyle {
+    public static func color(_ level: Int, dark: Bool) -> Color {
+        switch level {
+        case ..<0: .clear
+        case 0: DashSkin.grid(dark)
+        default: DashSkin.heat(level - 1, dark)
+        }
+    }
+}
+
+public struct ActivityCalendarSkeleton: View {
+    public init(cellSize: CGFloat = 14) { self.cellSize = cellSize }
+    var cellSize: CGFloat = 14
+
+    public var body: some View {
+        SkeletonGroup {
+            VStack(alignment: .trailing, spacing: UIScale.pt(8)) {
+                HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                    ForEach(0..<24, id: \.self) { _ in
+                        VStack(spacing: UIScale.pt(3)) {
+                            SkeletonBlock(width: cellSize, height: 12)
+                            ForEach(0..<7, id: \.self) { _ in
+                                SkeletonBlock(width: cellSize, height: cellSize, corner: 3)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .clipped()
+                SkeletonBlock(width: 110, height: 10)
+            }
+        }
+    }
+}
