@@ -69,11 +69,21 @@ public final class SurfaceSnapshotClient {
         providerID: String, target: SurfaceTarget, tile: SurfaceTile, snapshot: SurfaceSnapshot,
         actionID: String, value: Double? = nil
     ) async throws -> SurfaceSnapshot {
-        guard snapshot.providerID == providerID,
-            (snapshot.actions + snapshot.rows.flatMap(\.actions)).contains(where: {
-                $0.id == actionID
-            })
-        else { throw ExtensionPeerError.invalidRequest }
+        _ = try snapshot.encoded()
+        let current = SurfaceCommandService.project(snapshot, tile: tile)
+        guard current.providerID == providerID else { throw ExtensionPeerError.invalidRequest }
+        if let value {
+            guard value.isFinite, (0...1).contains(value),
+                ((current.sliders ?? []) + current.rows.flatMap { $0.sliders ?? [] }).contains(
+                    where: { $0.id == actionID })
+            else { throw ExtensionPeerError.invalidRequest }
+        } else {
+            guard
+                (current.actions + current.rows.flatMap(\.actions)).contains(where: {
+                    $0.id == actionID
+                })
+            else { throw ExtensionPeerError.invalidRequest }
+        }
         let request = SurfaceActionRequest(
             snapshot: .init(target: target, tile: tile), actionID: actionID, value: value)
         let payload = try request.encoded(providerID: providerID)

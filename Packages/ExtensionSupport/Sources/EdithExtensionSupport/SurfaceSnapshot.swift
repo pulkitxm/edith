@@ -66,15 +66,16 @@ public struct SurfaceDataRow: Codable, Equatable, Identifiable, Sendable {
     public let progress: Double?
     public let field: String?
     public let actions: [SurfaceAction]
+    public let sliders: [SurfaceSlider]?
 
     public init(
         _ id: String, sourceID: String? = nil, title: String, detail: String = "",
         value: String = "", icon: String = "circle", progress: Double? = nil,
-        field: String? = nil, actions: [SurfaceAction] = []
+        field: String? = nil, actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = []
     ) {
         self.id = id; self.sourceID = sourceID ?? id; self.title = title; self.detail = detail
         self.value = value; self.icon = icon; self.progress = progress; self.field = field
-        self.actions = actions
+        self.actions = actions; self.sliders = sliders.isEmpty ? nil : sliders
     }
 }
 
@@ -84,17 +85,20 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     public var metrics: [SurfaceMetric]
     public var rows: [SurfaceDataRow]
     public var actions: [SurfaceAction]
+    public var sliders: [SurfaceSlider]?
     public var sources: [SurfaceSourceChoice]
     public var message: String?
     public var updatedAt: Date?
 
     public init(
         providerID: String, metrics: [SurfaceMetric] = [], rows: [SurfaceDataRow] = [],
-        actions: [SurfaceAction] = [], sources: [SurfaceSourceChoice] = [],
+        actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = [],
+        sources: [SurfaceSourceChoice] = [],
         message: String? = nil, updatedAt: Date? = nil
     ) {
         self.providerID = providerID; self.metrics = metrics; self.rows = rows
-        self.actions = actions; self.sources = sources; self.message = message
+        self.actions = actions; self.sliders = sliders.isEmpty ? nil : sliders;
+        self.sources = sources; self.message = message
         self.updatedAt = updatedAt
     }
 
@@ -113,6 +117,12 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     }
 
     private func validate(providerID expected: String) throws {
+        let controls = (sliders ?? []) + rows.flatMap { $0.sliders ?? [] }
+        guard controls.count <= 32, Self.unique(controls.map(\.id)),
+            Set(controls.map(\.id)).isDisjoint(
+                with: Set((actions + rows.flatMap(\.actions)).map(\.id)))
+        else { throw ExtensionPeerError.invalidRequest }
+        for control in controls { try control.validate() }
         guard contractVersion == 1, providerID == expected,
             Self.validText(providerID, maximum: 80), metrics.count <= 32, rows.count <= 100,
             sources.count <= 100, Self.validActions(actions),

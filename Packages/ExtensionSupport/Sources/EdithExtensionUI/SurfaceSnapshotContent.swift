@@ -5,11 +5,13 @@ public struct SurfaceSnapshotContent: View {
     let tile: SurfaceTile
     let snapshot: SurfaceSnapshot
     let perform: (SurfaceAction) -> Void
+    let adjust: ((SurfaceSlider, Double) -> Void)?
 
     public init(
-        tile: SurfaceTile, snapshot: SurfaceSnapshot, perform: @escaping (SurfaceAction) -> Void
+        tile: SurfaceTile, snapshot: SurfaceSnapshot, perform: @escaping (SurfaceAction) -> Void,
+        adjust: ((SurfaceSlider, Double) -> Void)? = nil
     ) {
-        self.tile = tile; self.snapshot = snapshot; self.perform = perform
+        self.tile = tile; self.snapshot = snapshot; self.perform = perform; self.adjust = adjust
     }
 
     public var body: some View {
@@ -55,19 +57,31 @@ public struct SurfaceSnapshotContent: View {
                         if let progress = row.progress, tile.shows("progress") {
                             ProgressView(value: progress)
                         }
-                        if tile.showActions { actions(row.actions) }
+                        if tile.showActions {
+                            sliders(row.sliders)
+                            actions(row.actions)
+                        }
                     }
                 }
             }
             if let message = snapshot.message {
                 Text(message).font(.edithText(.caption)).foregroundStyle(.secondary)
             }
-            if tile.showActions { actions(snapshot.actions) }
+            if tile.showActions {
+                sliders(snapshot.sliders)
+                actions(snapshot.actions)
+            }
             if tile.showDetails, tile.shows("updated"), let updatedAt = snapshot.updatedAt {
                 Text("Updated " + updatedAt.formatted(date: .omitted, time: .shortened)).font(
                     .edithText(.caption2)
                 ).foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private func sliders(_ values: [SurfaceSlider]?) -> some View {
+        ForEach((values ?? []).filter { $0.field.map(tile.shows) ?? true }) { slider in
+            SurfaceSliderControl(slider: slider, adjust: adjust)
         }
     }
 
