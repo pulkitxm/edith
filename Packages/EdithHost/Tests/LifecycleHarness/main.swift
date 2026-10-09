@@ -446,22 +446,6 @@ struct HostLifecycleHarness {
                         "Clipboard category, item limit, or opaque actions were invalid."
                 ])
         }
-        let rawPreview = try await endpoint.invoke(
-            "clipboard.thumbnail",
-            payload: JSONSerialization.data(withJSONObject: [
-                "id": UUID().uuidString, "entryID": imageID,
-            ]))
-        guard let raw = try JSONSerialization.jsonObject(with: rawPreview) as? [String: Any],
-            let encodedPreview = raw["data"] as? String,
-            let previewBytes = Data(base64Encoded: encodedPreview), !previewBytes.isEmpty
-        else {
-            throw NSError(
-                domain: "ClipboardFixture", code: 9,
-                userInfo: [
-                    NSLocalizedDescriptionKey: "The loaded clipboard renderer returned no image."
-                ])
-        }
-        try SurfaceThumbnail(data: previewBytes).validate()
         var images = SurfaceTile(.ability("clipboard")); images.sourceIDs = ["image"];
         images.itemLimit = 1
         var imageSnapshot = SurfaceSnapshot(providerID: "clipboard")
@@ -485,6 +469,22 @@ struct HostLifecycleHarness {
                 ])
         }
         try preview.validate()
+        let rawPreview = try await endpoint.invoke(
+            "clipboard.thumbnail",
+            payload: JSONSerialization.data(withJSONObject: [
+                "id": UUID().uuidString, "entryID": imageID,
+            ]))
+        guard let raw = try JSONSerialization.jsonObject(with: rawPreview) as? [String: Any],
+            let encodedPreview = raw["data"] as? String,
+            let previewBytes = Data(base64Encoded: encodedPreview), !previewBytes.isEmpty
+        else {
+            throw NSError(
+                domain: "ClipboardFixture", code: 9,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "The loaded clipboard renderer returned no image."
+                ])
+        }
+        try SurfaceThumbnail(data: previewBytes).validate()
         images.hiddenFields = ["previews"]
         let hiddenImage = try SurfaceSnapshot.decode(
             try await endpoint.invoke(
