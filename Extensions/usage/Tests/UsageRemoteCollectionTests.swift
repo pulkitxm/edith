@@ -4,6 +4,28 @@ import Testing
 @testable import UsageExtension
 
 @Suite(.serialized) struct UsageRemoteCollectionTests {
+    @Test func remoteProjectPathsAcceptOnlyAbsoluteASCIIWindowsDrives() throws {
+        for path in [
+            "C:/workspace/project", "z:\\workspace\\project", "C:/", "Z:\\", "/remote/project",
+        ] {
+            try UsageRemoteProjectMetadata(
+                cwd: path, root: path, repositoryID: "sample", repositoryName: "Sample",
+                folderName: "sample"
+            ).validate()
+        }
+        for path in [
+            "1:\\project", "é:\\project", "_: /project", "C:project", "C:", "CC:/project",
+            "relative/project", "\\project",
+        ] {
+            #expect(throws: UsageNativeFailure.self) {
+                try UsageRemoteProjectMetadata(
+                    cwd: path, root: path, repositoryID: "sample", repositoryName: "Sample",
+                    folderName: "sample"
+                ).validate()
+            }
+        }
+    }
+
     @Test func remoteProjectsNeverResolveAnIdenticalLocalWorkingDirectory() async throws {
         let fixture = temporary()
         defer { try? FileManager.default.removeItem(at: fixture) }
