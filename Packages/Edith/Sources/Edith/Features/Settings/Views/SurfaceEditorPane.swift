@@ -403,6 +403,8 @@ struct SurfaceEditorPane: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .contentShape(Rectangle())
+                    .onDrag { SurfaceDrag.provider(widget) }
                     Spacer(minLength: 0)
                     Button {
                         store.update(target) { selected = $0.add(widget) }
@@ -420,7 +422,6 @@ struct SurfaceEditorPane: View {
                     in: RoundedRectangle(cornerRadius: UIScale.pt(10))
                 )
                 .contentShape(Rectangle())
-                .onDrag { SurfaceDrag.provider(widget) }
             }
             if !layout.tiles.filter(\.hidden).isEmpty {
                 Text("Hidden widgets").font(.edithText(.headline)).padding(.top, UIScale.pt(8))
