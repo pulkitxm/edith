@@ -142,7 +142,9 @@ struct HostLifecycleHarness {
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
-            if extensionID == "latex" {
+            if extensionID == "audioMixer" {
+                try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
@@ -191,7 +193,9 @@ struct HostLifecycleHarness {
                 kill(oldPID, 0) == -1
             else { throw HostWorkerError.rejected }
             try await requireExited(terminalChildren)
-            if extensionID == "latex" {
+            if extensionID == "audioMixer" {
+                try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
@@ -264,7 +268,9 @@ struct HostLifecycleHarness {
             else {
                 throw HostWorkerError.rejected
             }
-            if extensionID == "latex" {
+            if extensionID == "audioMixer" {
+                try await AudioMixerFixture.verify(endpoint)
+            } else if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
             } else if let companionServer {
                 try await verifyCompanion(endpoint, server: companionServer)
@@ -337,7 +343,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer")}"
             )
         } catch {
             if extensionID == "jev" {
