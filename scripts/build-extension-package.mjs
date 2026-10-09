@@ -107,6 +107,30 @@ export function nativeClangModuleFlags(root, definition) {
   ]);
 }
 
+export function nativeSwiftPackageArguments(root, definition, developer) {
+  return [
+    "build",
+    "--package-path",
+    resolve(root, definition.nativePackage),
+    "--build-system",
+    "native",
+    "--configuration",
+    "release",
+    "--jobs",
+    process.env.EXTENSION_SWIFT_JOBS ?? "2",
+    "--force-resolved-versions",
+    "--product",
+    definition.nativeProduct,
+    "-Xswiftc",
+    "-plugin-path",
+    "-Xswiftc",
+    resolve(
+      developer,
+      "Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins",
+    ),
+  ];
+}
+
 export async function buildExtensionPackage({
   root = process.cwd(),
   id,
@@ -145,20 +169,7 @@ export async function buildExtensionPackage({
   if (definition.nativePackage) {
     execFileSync(
       "swift",
-      [
-        "build",
-        "--package-path",
-        resolve(root, definition.nativePackage),
-        "--build-system",
-        "native",
-        "--configuration",
-        "release",
-        "--jobs",
-        process.env.EXTENSION_SWIFT_JOBS ?? "2",
-        "--force-resolved-versions",
-        "--product",
-        definition.nativeProduct,
-      ],
+      nativeSwiftPackageArguments(root, definition, developer),
       { stdio: "inherit" },
     );
   }
