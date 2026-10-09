@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { writeHostABI } from "./extension-host-abi.mjs";
 import { supportSourceInputs } from "./build-extension-support.mjs";
+import { writeHostABI } from "./extension-host-abi.mjs";
 
 export function definitionInputs(definition) {
   const shared = definition.supportProduct

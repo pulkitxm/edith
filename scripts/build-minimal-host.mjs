@@ -205,7 +205,10 @@ async function installedBytes(directory) {
   return total;
 }
 const bytes = await installedBytes(destination);
-assert(bytes < 5_000_000, `The minimal host exceeds its 5 MB size limit: ${bytes}`);
+assert(
+  bytes < 5_000_000,
+  `The minimal host exceeds its 5 MB size limit: ${bytes}`,
+);
 const index = JSON.parse(
   execFileSync(executable, ["extensions", "catalog", "--json"], {
     encoding: "utf8",

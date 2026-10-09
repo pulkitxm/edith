@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFile, readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 test("every owned worker source is included in a downloaded role", async () => {
@@ -12,10 +12,12 @@ test("every owned worker source is included in a downloaded role", async () => {
     for (const entry of await readdir(resolve(root, directory), {
       withFileTypes: true,
     })) {
-      if (["Tests", ".build", ".swiftpm", "vendor"].includes(entry.name)) continue;
+      if (["Tests", ".build", ".swiftpm", "vendor"].includes(entry.name))
+        continue;
       const path = `${directory}/${entry.name}`;
       if (path === nativePackage) continue;
-      if (entry.isDirectory()) result.push(...(await files(path, nativePackage)));
+      if (entry.isDirectory())
+        result.push(...(await files(path, nativePackage)));
       else if (entry.name.endsWith(".swift") && entry.name !== "Package.swift")
         result.push(path);
     }
@@ -54,7 +56,9 @@ test("every owned worker source is included in a downloaded role", async () => {
     }
     for (const source of definition.nativeSources ?? []) {
       expect(definition.nativePackage).toBeTruthy();
-      expect(source.startsWith(`${definition.nativePackage}/Sources/`)).toBe(true);
+      expect(source.startsWith(`${definition.nativePackage}/Sources/`)).toBe(
+        true,
+      );
     }
     for (const source of new Set([...listed, ...nativeSources]))
       await readFile(resolve(root, source));

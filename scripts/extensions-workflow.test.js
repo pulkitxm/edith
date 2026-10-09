@@ -86,7 +86,7 @@ test("terminal dependencies are restored before native lifecycle builds", () => 
   expect(cache).toBeLessThan(bootstrap);
   expect(bootstrap).toBeLessThan(lifecycle);
   expect(build.steps[native].run).toContain(
-    'nativeProduct===\"GhosttyTerminal\"',
+    'nativeProduct==="GhosttyTerminal"',
   );
   expect(build.steps[cache].with.path).toBe(
     "Extensions/terminal/Native/vendor",
@@ -115,10 +115,12 @@ test("selected optional native suites gate lifecycle and release signing", () =>
   );
   const lifecycle = build.steps.findIndex(
     (step) =>
-      step.name === "Build the isolated host and exercise this worker's lifecycle",
+      step.name ===
+      "Build the isolated host and exercise this worker's lifecycle",
   );
   const cache = build.steps.findIndex(
-    (step) => step.name === "Reuse this extension's unchanged support libraries",
+    (step) =>
+      step.name === "Reuse this extension's unchanged support libraries",
   );
   expect(suites).toBeGreaterThan(prerequisites);
   expect(cache).toBeLessThan(suites);
