@@ -838,5 +838,53 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "surfaceContractVersion": 1
+  },
+  {
+    "id": "docs",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "minimumSystemVersion": 14,
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionDocuments",
+    "nativePackage": "Packages/EdithDocsWorker",
+    "nativeProduct": "EdithDocsWorker",
+    "nativeResources": [
+      "EdithDocsWorker_EdithDocsWorker.bundle"
+    ],
+    "roles": {
+      "app": [
+        "Extensions/docs/DocsBrowser.swift",
+        "Extensions/docs/DocsDocumentView.swift",
+        "Extensions/docs/DocsPeerDecider.swift",
+        "Extensions/docs/DocsScreen.swift",
+        "Extensions/docs/Runtime.swift",
+        "Extensions/docs/Surface.swift"
+      ]
+    },
+    "inputs": [
+      "Extensions/docs",
+      "Packages/EdithDocsWorker"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport"
+    ],
+    "dependencies": [],
+    "nativeLicenses": [
+      {
+        "source": "Packages/EdithDocsWorker/Licenses/swift-cmark-license.txt",
+        "destination": "swift-cmark-license.txt"
+      },
+      {
+        "source": "Packages/EdithDocsWorker/Licenses/swift-markdown-license.txt",
+        "destination": "swift-markdown-license.txt"
+      },
+      {
+        "source": "Packages/EdithDocsWorker/Licenses/swift-markdown-notice.txt",
+        "destination": "swift-markdown-notice.txt"
+      }
+    ]
   }
 ]

@@ -4,7 +4,10 @@ import PackageDescription
 let package = Package(
     name: "EdithExtensions",
     platforms: [.macOS(.v14)],
-    dependencies: [.package(path: "../Packages/ExtensionSupport")],
+    dependencies: [
+        .package(path: "../Packages/ExtensionSupport"),
+        .package(path: "../Packages/EdithDocsWorker"),
+    ],
     targets: [
         .target(
             name: "ClipboardExtension",
@@ -184,5 +187,15 @@ let package = Package(
         .testTarget(
             name: "MusicExtensionTests", dependencies: ["MusicExtension"],
             path: "music/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
+            name: "DocsExtension",
+            dependencies: [
+                .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
+                .product(name: "EdithDocsWorker", package: "EdithDocsWorker"),
+            ], path: "docs", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "DocsExtensionTests", dependencies: ["DocsExtension"],
+            path: "docs/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

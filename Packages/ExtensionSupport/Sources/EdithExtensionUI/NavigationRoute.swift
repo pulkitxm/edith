@@ -152,8 +152,8 @@ public final class WindowRouter {
     @ObservationIgnored private static var registry: [ObjectIdentifier: WindowRouter] = [:]
     @ObservationIgnored private static weak var mainRouter: WindowRouter?
 
-    var canGoBack: Bool { history.canGoBack }
-    var canGoForward: Bool { history.canGoForward }
+    public var canGoBack: Bool { history.canGoBack }
+    public var canGoForward: Bool { history.canGoForward }
 
     public init(restoreTimeout: TimeInterval = 0.75) {
         self.restoreTimeout = restoreTimeout
@@ -312,13 +312,13 @@ public final class WindowRouter {
         if restoring { applyPending() } else { history.replaceCurrent(slotLocation) }
     }
 
-    func goBack() {
+    public func goBack() {
         let source = history
         guard let raw = history.goBack(), let route = NavigationRoute(raw) else { return }
         beginRestore(route, source: source)
     }
 
-    func goForward() {
+    public func goForward() {
         let source = history
         guard let raw = history.goForward(), let route = NavigationRoute(raw) else { return }
         beginRestore(route, source: source)
