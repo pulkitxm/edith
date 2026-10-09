@@ -3,14 +3,13 @@
 Prints the most recent rate limit observation for each provider Edith tracks.
 
 ```
-ed usage limits [--refresh] [--connect-browser] [--json]
+ed usage limits [--refresh] [--json]
 ```
 
 ## Options
 
 | Name | Type / values | Default | What it does |
 | --- | --- | --- | --- |
-| `--connect-browser` | flag | off | Connect the signed-in Claude website session, allowing a macOS Keychain prompt, then wait up to 90 seconds for a limits refresh |
 | `--refresh` | flag | off | Ask the background agent to poll providers again and wait up to 20 seconds before reading the file. Fails when `edithd` is not running |
 | `--json` | flag | off | Emit JSON on stdout |
 
@@ -86,20 +85,17 @@ backward through `limits-history.jsonl` and reports the newest valid line it
 finds for each provider. One provider's newer rows cannot hide another
 provider's history, and a partial final row is ignored.
 
-The background agent polls Claude's website using the signed-in session in
-Chrome's active profile. It selects the website's active organization and saves
-session, weekly, and Fable limits, including usage from web and cloud tasks.
-It never sends browser cookies to another host or prompts for Keychain access
-in the background. Chrome data access and its Safe Storage key must already be
-available to Edith. Access failures appear in the limits menu. To grant access,
-choose **Connect Claude website** in Agent Usage settings or run
-`ed usage limits --connect-browser`. Only this explicit connection may prompt
-for Keychain access; subsequent background refreshes remain noninteractive.
-A blocked credential lookup times out instead of stalling the limits job.
+The background agent polls Claude's usage API using `CLAUDE_CODE_OAUTH_TOKEN`
+from its process environment or your login shell, including `.zshrc`. The token
+must include `user:profile` scope. Inference-only tokens cannot read usage:
+the API returns HTTP 403, which appears in the limits menu as a scope error.
+The token stays in memory and is sent only to `api.anthropic.com`; redirects
+are refused. Edith does not read Chrome cookies or Chrome Safe Storage.
+Session, weekly, and Fable windows include usage from web and cloud tasks.
 
 Claude Code's status line through [`ed usage statusline record`](./statusline.md)
 remains a fallback while its session window is current. Once that window expires,
-a failed website refresh leaves the menu bar unavailable rather than showing an
+a failed API refresh leaves the menu bar unavailable rather than showing an
 old weekly zero. Other providers are also polled by the background agent.
 
 `percent` is what the provider reported, stored rounded to one decimal place.
@@ -108,7 +104,7 @@ old weekly zero. Other providers are also polled by the background agent.
 once the reset moment has passed.
 
 `--refresh` asks the background agent to poll the providers again, which for
-Claude includes fetching the website's current limits, and waits up
+Claude includes fetching its usage API with the shell's OAuth token, and waits up
 to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`
 is not running: exit 4 with `refreshing the rate limits needs the background
 agent`, hinted with `run ed agent restart or enable the background agent in

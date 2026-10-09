@@ -1,8 +1,8 @@
 # `ed usage statusline`
 
 Connects Claude Code's status line to Edith as a fallback for Claude's
-5-hour and 7-day rate limits. The background agent also polls the signed-in
-Claude website session in Chrome for session, weekly, and Fable windows.
+5-hour and 7-day rate limits. The background agent also polls Claude's usage API using the login shell's
+`CLAUDE_CODE_OAUTH_TOKEN` for session, weekly, and Fable windows.
 
 Claude Code runs the command named in the `statusLine` setting of its
 `settings.json` and passes it a JSON document on standard input. For claude.ai
@@ -11,13 +11,13 @@ Pro and Max subscribers that document carries `rate_limits.five_hour` and
 first response of a session. `ed usage statusline install` points that setting
 at `ed usage statusline record`, which writes those two windows to
 `limits-history.jsonl` and prints a short line such as `5h 42% · 7d 18%`. The
-background agent can use the newest Claude row when the website feed is
+background agent can use the newest Claude row when the usage API is
 unavailable and the CLI session window has not reset. Recording a CLI response
-preserves the most recent website Fable window until its reset time.
+preserves the most recent API Fable window until its reset time.
 
 The numbers are as fresh as your last Claude Code response. A window whose
 `resets_at` has passed is dropped until Claude Code reports it again, the same
-way Claude Code treats it. The website feed updates usage from other Claude
+way Claude Code treats it. The usage API updates usage from other Claude
 apps without waiting for a Claude Code response.
 
 Any custom status line, this one included, replaces most of the keyboard hints

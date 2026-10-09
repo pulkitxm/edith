@@ -1,7 +1,6 @@
 import CommonCrypto
 import CryptoKit
 import Foundation
-import LocalAuthentication
 import Security
 
 public enum ChromeSafeStorageError: Error, Equatable, LocalizedError {
@@ -46,36 +45,18 @@ public struct ChromeCookieKey: Sendable, Equatable {
 public enum ChromeSafeStorage {
     public static let service = "Chrome Safe Storage"
     public static let account = "Chrome"
-    private static let lookupLock = NSLock()
     private static let versionPrefix = Array("v10".utf8)
     private static let initializationVector = [UInt8](repeating: 0x20, count: kCCBlockSizeAES128)
 
-    public static func keychainKey(allowPrompt: Bool = true) throws -> ChromeCookieKey {
-        lookupLock.lock()
-        defer { lookupLock.unlock() }
-        var interactionAllowed: DarwinBoolean = true
-        let hasInteractionState =
-            SecKeychainGetUserInteractionAllowed(&interactionAllowed) == errSecSuccess
-        if !allowPrompt { SecKeychainSetUserInteractionAllowed(false) }
-        defer {
-            if !allowPrompt, hasInteractionState {
-                SecKeychainSetUserInteractionAllowed(interactionAllowed.boolValue)
-            }
-        }
+    public static func keychainKey() throws -> ChromeCookieKey {
         var result: CFTypeRef?
-        var query: [String: Any] = [
+        let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
-        if !allowPrompt {
-            let context = LAContext()
-            context.interactionNotAllowed = true
-            query[kSecUseAuthenticationContext as String] = context
-            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
-        }
         let status = SecItemCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { throw ChromeSafeStorageError.keychainMissing }
         guard status == errSecSuccess, let data = result as? Data,
