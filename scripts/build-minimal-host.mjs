@@ -57,6 +57,10 @@ execFileSync("ditto", [join(products, "Sparkle.framework"), sparkle]);
 async function prepareFramework(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
+    if (["Headers", "PrivateHeaders", "Modules"].includes(entry.name)) {
+      await rm(path, { recursive: true, force: true });
+      continue;
+    }
     if (entry.isDirectory()) await prepareFramework(path);
     else if (entry.isFile()) {
       const kind = execFileSync("file", ["-b", path], { encoding: "utf8" });
