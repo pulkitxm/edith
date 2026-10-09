@@ -1289,6 +1289,10 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "testTargets": [
+      "ci-extension-studio",
+      "ci-extension-studio-native"
+    ]
   }
 ]
