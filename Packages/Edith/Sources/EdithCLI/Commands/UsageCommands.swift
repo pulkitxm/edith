@@ -94,23 +94,19 @@ struct UsageLimitsCommand: AsyncParsableCommand {
     @Flag(help: "Ask the app to poll the providers again before reporting.")
     var refresh = false
 
-    @Flag(
-        name: .customLong("connect-browser"),
-        help: "Allow macOS to connect the signed-in Claude website session, then refresh limits.")
-    var connectBrowser = false
-
     func run() async throws {
         try await execute {
-            if refresh || connectBrowser {
+            if refresh {
                 guard (try? CLIEnvironment.verifyAgentHandshake()) != nil else {
                     throw CLIFailure.unavailable(
                         "refreshing the rate limits needs the background agent",
                         hint: "run `ed agent restart` or enable the background agent in Settings")
                 }
                 let answered = await AppBridge.awaitReply(
-                    IPC.Name.limitsUpdated, timeout: connectBrowser ? 90 : 20
+                    IPC.Name.limitsUpdated, timeout: 20
                 ) {
-                    try? CLIEnvironment.requestLimitsRefresh(connectBrowser)
+                    _ = try? CLIEnvironment.performAgentOperation(
+                        UsageCollectionOperation.limitsRefresh.descriptor.id)
                 }
                 guard answered != nil else {
                     throw CLIFailure.unavailable(

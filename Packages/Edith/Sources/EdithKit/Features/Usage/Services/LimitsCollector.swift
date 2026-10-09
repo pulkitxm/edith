@@ -77,17 +77,14 @@ public enum LimitsCollector {
         connectClaude: @Sendable () -> Void = { LimitsCollector.connectClaudeStatusLine() },
         announce: @Sendable (Notification.Name) -> Void = { IPC.post($0) }
     ) async -> LimitsTopicSnapshot {
-        let connectBrowser = await ClaudeWebLimitsReader.takeConnection()
-        return await collect(
+        await collect(
             providers: enabledProviders(defaults: defaults), force: force,
             refreshSession: refreshSession, announce: announce
         ) { provider in
             switch provider {
             case .claude:
                 connectClaude()
-                return await fetchClaude(fetch: {
-                    try await ClaudeWebLimitsReader.fetch(allowPrompt: connectBrowser)
-                })
+                return await fetchClaude()
             case .codex:
                 return (await fetchCodex(), nil)
             case .cursor:
@@ -143,7 +140,7 @@ public enum LimitsCollector {
     static func fetchClaude(
         now: Date = Date(),
         fetch: () async throws -> LimitsProviderSnapshot = {
-            try await ClaudeWebLimitsReader.fetch()
+            try await ClaudeLimitsReader.fetch()
         },
         fallback: () -> LimitsProviderSnapshot = { ClaudeStatusLine.snapshot() },
         persist: (LimitsProviderSnapshot) throws -> Void = { snapshot in
@@ -160,7 +157,7 @@ public enum LimitsCollector {
             let saved = fallback()
             let message = error.localizedDescription
             let deadline: Date?
-            if case ClaudeWebLimitsReader.Failure.rateLimited(let after) = error {
+            if case ClaudeLimitsReader.Failure.rateLimited(let after) = error {
                 deadline = now.addingTimeInterval(max(after ?? 1800, 60))
             } else {
                 deadline = nil

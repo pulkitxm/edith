@@ -190,20 +190,6 @@ import Testing
         }
     }
 
-    @Test func browserConnectionExplicitlyRequestsAnInteractiveRefresh() async {
-        await CLIProbe.inWorld { world in
-            world.configureLimitsRefreshAgent()
-            world.answers { name in name == IPC.Name.limitsUpdated ? [:] : nil }
-            CLIEnvironment.requestLimitsRefresh = { connectBrowser in
-                #expect(connectBrowser)
-                CLIEnvironment.deliver(IPC.Name.limitsUpdated, nil)
-            }
-            let result = await CLIProbe.capture(["usage", "limits", "--connect-browser", "--json"])
-            #expect(result.code == 0 || result.code == ExitCodes.unavailable)
-            #expect(world.postedNames() == [IPC.Name.limitsUpdated.rawValue])
-        }
-    }
-
     @Test func limitsRefreshUsesTheAgentAndUnavailableExitContract() async {
         await CLIProbe.inWorld { world in
             world.configureLimitsRefreshAgent()
