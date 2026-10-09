@@ -137,8 +137,34 @@ import Testing
             await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "quinjet")),
             providerID: "quinjet")
-        #expect(snapshot.rows.isEmpty)
+        #expect(snapshot.rows.isEmpty && snapshot.sources.isEmpty && snapshot.actions.isEmpty)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await surface.execute(
+                "surface.perform",
+                payload: SurfaceActionRequest(
+                    snapshot: request,
+                    actionID: "open"
+                ).encoded(providerID: "quinjet"))
+        }
         let visible = QuinjetSurface(worker: worker, privacyValues: { [:] })
+        var hidden = SurfaceTile(.ability("quinjet"))
+        hidden.sourceIDs = ["unavailable-source"]
+        let filtered = try SurfaceSnapshot.decode(
+            await visible.execute(
+                "surface.snapshot",
+                payload: SurfaceSnapshotRequest(target: .home, tile: hidden).encoded(
+                    providerID: "quinjet")),
+            providerID: "quinjet")
+        #expect(filtered.rows.isEmpty)
+        hidden.sourceIDs = ["local"]
+        hidden.hiddenFields = ["metadata"]
+        let fields = try SurfaceSnapshot.decode(
+            await visible.execute(
+                "surface.snapshot",
+                payload: SurfaceSnapshotRequest(target: .home, tile: hidden).encoded(
+                    providerID: "quinjet")),
+            providerID: "quinjet")
+        #expect(fields.rows.count == 1 && fields.rows.first?.detail == "")
         let full = try visible.snapshot(.init(.ability("quinjet")))
         let action = try #require(full.rows.first?.actions.first?.id)
         let id = worker.model.selected
@@ -154,6 +180,28 @@ import Testing
         }
         await worker.shutdown()
     }
+    @Test func oversizedNativeMetadataIsRejectedBeforeCurrentSelectionsAreAdmitted() async throws {
+        let client = QuinjetClient { _ in
+            try JSONEncoder().encode([
+                QuinjetProject(
+                    name: "Synthetic", commonDir: "/tmp/synthetic/.git",
+                    worktrees: [
+                        QuinjetWorktree(
+                            path: "/tmp/synthetic", head: "1234567",
+                            branch: String(repeating: "b", count: 1025), current: true, bare: false,
+                            detached: false, locked: nil, prunable: nil)
+                    ])
+            ])
+        }
+        let worker = QuinjetWorker(client: client, automaticActions: false)
+        await worker.start()
+        await #expect(throws: QuinjetClientError.invalidResponse) {
+            try await worker.execute("quinjet.projects", payload: Data("{}".utf8))
+        }
+        #expect(worker.model.projects.isEmpty)
+        await worker.shutdown()
+    }
+
     private var client: QuinjetClient {
         QuinjetClient { arguments in
             if arguments.contains("-C") {

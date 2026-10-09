@@ -60,7 +60,8 @@ import Foundation
         guard !isStopped, loaded.count <= 1024,
             loaded.allSatisfy({
                 $0.commonDir.utf8.count <= 4096 && $0.name.utf8.count <= 1024
-                    && !$0.commonDir.utf8.contains(0)
+                    && !$0.commonDir.utf8.contains(0) && $0.worktrees.count <= 1024
+                    && $0.worktrees.allSatisfy(Self.validWorktree)
             })
         else { throw QuinjetClientError.invalidResponse }
         let existing = projects.filter { $0.value.remote?.machineID == remote?.machineID }
@@ -92,6 +93,13 @@ import Foundation
                 ]
             }
         ])
+    }
+    private static func validWorktree(_ worktree: QuinjetWorktree) -> Bool {
+        worktree.path.utf8.count <= 4096 && !worktree.path.utf8.contains(0)
+            && worktree.head.utf8.count <= 256
+            && (worktree.branch?.utf8.count ?? 0) <= 1024
+            && (worktree.locked?.utf8.count ?? 0) <= 1024
+            && (worktree.prunable?.utf8.count ?? 0) <= 1024
     }
     private static func savedRemote(_ id: UUID) async throws -> QuinjetRemote {
         guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else {
@@ -158,9 +166,12 @@ import Foundation
             ).filter(\.canOpen)
             try Task.checkCancellation()
             guard !isStopped, projects[id] == project, loaded.count <= 1024,
-                loaded.allSatisfy({ $0.path.utf8.count <= 4096 && !$0.path.utf8.contains(0) })
+                loaded.allSatisfy(Self.validWorktree)
             else { throw QuinjetClientError.invalidResponse }
             worktrees = worktrees.filter { $0.value.0 != id }
+            guard worktrees.count + loaded.count <= 1024 else {
+                throw QuinjetClientError.invalidResponse
+            }
             let items = loaded.map { worktree -> [String: String] in
                 let token = UUID()
                 worktrees[token] = (id, worktree, loaded)

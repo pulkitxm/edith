@@ -222,11 +222,12 @@ public struct QuinjetClient: Sendable {
             return CLICommandRequest(
                 executableURL: SSHConnection.executable,
                 arguments: try remote.savedArguments(tty: false) + [command],
-                environment: environment)
+                environment: environment, timeout: 30, maximumOutputBytes: 6 * 1024 * 1024)
 
         }
         return CLICommandRequest(
-            executableURL: executable, arguments: arguments, environment: environment)
+            executableURL: executable, arguments: arguments, environment: environment,
+            timeout: 30, maximumOutputBytes: 6 * 1024 * 1024)
     }
 }
 
