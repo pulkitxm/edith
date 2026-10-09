@@ -69,11 +69,12 @@ actor TimeLapseThumbnailLoader {
     private var stopped = false
     private var requests: [UUID: Task<CGImage?, Never>] = [:]
 
-    func shutdown() {
+    func shutdown() async {
         stopped = true
-        for request in requests.values { request.cancel() }
-        requests.removeAll()
-        tail = nil
+        let pending = Array(requests.values)
+        for request in pending { request.cancel() }
+        for request in pending { _ = await request.value }
+        requests.removeAll(); tail = nil
     }
 
     func load(_ operation: @escaping @Sendable () async -> CGImage?) async -> CGImage? {

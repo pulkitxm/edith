@@ -202,7 +202,9 @@ struct VirtualCameraScreenPicker: View {
             sources: sources, compact: compact, selection: model.screenSelection,
             maximumCount: 1, title: "Choose what to share",
             detail: "Select a window or display to use as your meeting video.",
-            onSelection: { model.selectScreen($0) })
+            onSelection: { model.selectScreen($0) }
+        )
+        .onDisappear { Task { await sources.shutdown() } }
     }
 }
 
