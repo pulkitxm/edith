@@ -1,4 +1,4 @@
-import EdithKit
+import EdithExtensionSupport
 import Foundation
 import Testing
 
@@ -18,24 +18,20 @@ final class PresenterBox<Value>: @unchecked Sendable {
     }
 }
 
-final class PresenterScriptedDecider: JevDeciding, @unchecked Sendable {
+final class PresenterScriptedDecider: PresenterDeciding, @unchecked Sendable {
     private let lock = NSLock()
     private let probability: Double
-    private var captured: [JevRequest] = []
+    private var captured: [String] = []
 
     init(probability: Double) {
         self.probability = probability
     }
 
-    var requests: [JevRequest] { lock.withLock { captured } }
+    var requests: [String] { lock.withLock { captured } }
 
-    func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision {
-        lock.withLock { captured.append(request) }
-        return JevDecision(
-            response: JevResponse(
-                model: JevRequest.defaultModel,
-                answers: ["presenting": JevAnswer(type: "noul", noul: probability)]),
-            milliseconds: 10)
+    func probability(windows: String) async throws -> Double? {
+        lock.withLock { captured.append(windows) }
+        return probability
     }
 }
 
@@ -149,13 +145,7 @@ enum PresenterFixtures {
         await check.settle()
         #expect(check.reason(for: Self.meetWindows) == "Jev: screen sharing in Google Chrome")
         #expect(decider.requests.count == 1)
-        let request = decider.requests[0]
-        #expect(request.questions["presenting"] != nil)
-        guard case .fields(let state) = request.state else {
-            Issue.record("expected fields")
-            return
-        }
-        #expect(state["windows"]?.contains("Google Chrome | Meet - weekly sync | 1440x900") == true)
+        #expect(decider.requests[0].contains("Google Chrome | Meet - weekly sync | 1440x900"))
     }
 
     @Test func aDoubtfulAnswerIsAMiss() async {
@@ -204,7 +194,7 @@ enum PresenterFixtures {
         let decider = PresenterScriptedDecider(probability: 0.95)
         let noKey = PresenterJevCheck(
             enabled: { true },
-            decider: { AgentJevDecider.configured(defaults: PresenterFixtures.defaults()) })
+            decider: { nil })
         let off = check(decider, enabled: false)
         let noCallApp = check(decider)
         #expect(noKey.reason(for: Self.meetWindows) == nil)
@@ -255,7 +245,7 @@ enum PresenterFixtures {
         let lines = PresenterJevCheck.summary(of: windows).split(separator: "\n")
         #expect(lines.count == PresenterJevCheck.windowLimit)
         #expect(!lines[0].contains(secret))
-        #expect(lines[0].contains(JevText.redaction))
+        #expect(lines[0].contains(PresenterText.redaction))
         #expect(lines.allSatisfy { !$0.contains("Window Server") })
         let title = lines[0].split(separator: "|")[1].trimmingCharacters(in: .whitespaces)
         #expect(title.count <= PresenterJevCheck.titleLimit)

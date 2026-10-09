@@ -122,6 +122,9 @@ struct HostCommandHarness {
                 try await wait {
                     [pid, parent, child].allSatisfy { kill($0, 0) == -1 && errno == ESRCH }
                 }
+                guard sharedState.values(for: package.id).isEmpty else {
+                    throw HostWorkerError.rejected
+                }
                 print(
                     "{\"mode\":\"\(mode)\",\"sameAppExecutable\":true,\"binaryInput\":true,\"argumentsAndEnvironment\":true,\"peerCommands\":true,\"commandCancellation\":true,\"remainingProcesses\":0}"
                 )

@@ -1,6 +1,6 @@
 import CoreGraphics
 import Darwin
-import EdithKit
+import EdithExtensionSupport
 import Foundation
 
 struct PresenterScan: Equatable, Sendable {
