@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 
+@testable import EdithCLI
 @testable import EdithKit
 
 @Suite struct ClaudeWebLimitsReaderTests {
@@ -55,6 +56,33 @@ import Testing
         #expect(persisted == result.0)
         #expect(result.0.error == nil)
         #expect(result.1 == nil)
+    }
+
+    @Test func websiteRefreshReachesTheCliReportThroughPersistedHistory() async throws {
+        let url = LimitsHistory.url
+        let previous = try? Data(contentsOf: url)
+        defer {
+            if let previous {
+                try? previous.write(to: url)
+            } else {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+        let result = await LimitsCollector.fetchClaude(fetch: {
+            try ClaudeWebLimitsReader.limits(json: usage)
+        })
+        #expect(result.0.error == nil)
+        let observation = try #require(LimitsReport.providers().first { $0.provider == .claude })
+        #expect(observation.session?.percent == 23)
+        #expect(observation.week?.percent == 41)
+        #expect(observation.fable?.percent == 7)
+        guard case .object(let fields) = LimitsReport.json(observation),
+            case .object(let fable)? = fields["fable"]
+        else {
+            Issue.record("The CLI report omitted the website Fable window")
+            return
+        }
+        #expect(fable["percent"] == .double(7))
     }
 
     @Test func credentialsUseOnlyTheNewestClaudeCookies() throws {

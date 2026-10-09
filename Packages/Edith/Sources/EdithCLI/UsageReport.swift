@@ -685,6 +685,7 @@ public enum LimitsReport {
         public let observedAt: Date
         public let session: LimitWindow?
         public let week: LimitWindow?
+        public let fable: LimitWindow?
         public let grok: GrokAllowance?
     }
 
@@ -694,7 +695,7 @@ public enum LimitsReport {
             guard let value = latest[provider] else { return nil }
             return Observation(
                 provider: provider, observedAt: value.date, session: value.session,
-                week: value.week, grok: value.grok)
+                week: value.week, fable: value.fable, grok: value.grok)
         }
     }
 
@@ -735,6 +736,7 @@ public enum LimitsReport {
             "session": window(observation.session),
             "weekly": window(observation.week),
         ]
+        if observation.provider == .claude { fields["fable"] = window(observation.fable) }
         if let allowance = observation.grok {
             fields["period"] = .string(allowance.period)
             fields["tier"] = .optional(allowance.tier)

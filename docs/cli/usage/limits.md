@@ -18,7 +18,8 @@ ed usage limits [--refresh] [--json]
 A top-level array, one object per provider that has ever been recorded, in the
 fixed order `codex`, `claude`, `cursor`, then `grok`. `session` and `weekly`
 are each either an object or `null`. For Claude and Codex, `session` is the
-5-hour window and `weekly` is the 7-day window. For Cursor, `session` is the
+5-hour window and `weekly` is the 7-day window. Claude also has `fable`, its
+separate weekly Fable window, or `null` when unavailable. For Cursor, `session` is the
 Cursor Models pool (Cursor Grok and Composer) and `weekly` is the Other Models
 pool. Both Cursor pools reset together at the billing cycle. For Grok, `session`
 is always `null`. `weekly` is the plan allowance: one pool for Chat, Imagine,
@@ -84,11 +85,17 @@ backward through `limits-history.jsonl` and reports the newest valid line it
 finds for each provider. One provider's newer rows cannot hide another
 provider's history, and a partial final row is ignored.
 
-Claude's rows are written by Claude Code's status line through
-[`ed usage statusline record`](./statusline.md), so they are only as fresh as
-your last Claude Code response, and none appear until
-`ed usage statusline install` has run. The other providers are polled by the
-background agent.
+The background agent polls Claude's website using the signed-in session in
+Chrome's active profile. It selects the website's active organization and saves
+session, weekly, and Fable limits, including usage from web and cloud tasks.
+It never sends browser cookies to another host or prompts for Keychain access
+in the background. Chrome data access and its Safe Storage key must already be
+available to Edith. Access failures appear in the limits menu.
+
+Claude Code's status line through [`ed usage statusline record`](./statusline.md)
+remains a fallback while its session window is current. Once that window expires,
+a failed website refresh leaves the menu bar unavailable rather than showing an
+old weekly zero. Other providers are also polled by the background agent.
 
 `percent` is what the provider reported, stored rounded to one decimal place.
 `resetsAt` is the reset time the provider gave, or `null` when it gave none, and
@@ -96,14 +103,14 @@ background agent.
 once the reset moment has passed.
 
 `--refresh` asks the background agent to poll the providers again, which for
-Claude means rereading the newest status line row, and waits up
+Claude includes fetching the website's current limits, and waits up
 to 20 seconds for `limitsUpdated` before reading the file. Fails when `edithd`
 is not running: exit 4 with `refreshing the rate limits needs the background
 agent`, hinted with `run ed agent restart or enable the background agent in
-Settings`. The reply it waits for is only posted when a poll actually succeeds,
-so a provider that is failing to answer costs you the full 20 seconds and then
-the command fails rather than printing the old numbers: exit 4 with `the
-background agent did not refresh the rate limits in time`.
+Settings`. The completion signal reports that the poll finished, including
+provider failures. The CLI then reads saved observations; check the limits menu
+for refresh errors. If no completion arrives within 20 seconds, the command
+fails with `the background agent did not refresh the rate limits in time`.
 
 The listener goes up before the request goes out, so an app that answers within
 the same instant cannot beat it and a poll that worked is never reported as
