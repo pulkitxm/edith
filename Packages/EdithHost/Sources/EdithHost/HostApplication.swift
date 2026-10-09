@@ -141,6 +141,14 @@ private struct HostWorkspace: View {
             case .customize: HostSurfaceEditor(marketplace: marketplace)
             }
         }
+        .onChange(of: marketplace.surfaces.navigation.editorRequest, initial: true) {
+            guard let request = marketplace.surfaces.navigation.editorRequest else { return }
+            marketplace.surfaces.preferences.set(
+                request.target.rawValue, forKey: "surfaceEditorTarget")
+            marketplace.surfaces.preferences.set(
+                request.tileID ?? "", forKey: "surfaceEditorWidget")
+            page = .customize
+        }
     }
 }
 
