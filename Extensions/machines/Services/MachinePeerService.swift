@@ -3,21 +3,26 @@ import Foundation
 
 @MainActor public final class MachinePeerService {
     public typealias Run = @MainActor (Machine, String, Data?, TimeInterval) async throws -> String
+    public typealias PrepareConnection =
+        @MainActor (Machine) async throws -> MachineConnectionRecipe
     public typealias Forward = @MainActor (Machine, PortForward) async throws -> Bool
     private let files: MachineRegistry.Files
     private let run: Run
     private let forward: Forward
     private let usage: MachineUsageCollectionService
+    private let prepareConnection: PrepareConnection?
     private var stopped = false
 
     public init(
         files: MachineRegistry.Files = .init(), usage: MachineUsageCollectionService,
-        run: @escaping Run, forward: @escaping Forward
+        run: @escaping Run, forward: @escaping Forward,
+        prepareConnection: PrepareConnection? = nil
     ) {
         self.files = files
         self.usage = usage
         self.run = run
         self.forward = forward
+        self.prepareConnection = prepareConnection
     }
 
     public func execute(_ command: String, payload: Data) async throws -> Data {
@@ -35,6 +40,20 @@ import Foundation
                     machines: machines.map {
                         Host(id: $0.id, name: $0.name, sshTarget: $0.sshTarget)
                     }))
+        case "machines.connection.prepare":
+            let request = try MachineCommandPayload.decode(
+                ConnectionRequest.self, data: payload, required: ["machineID"])
+            let machine = try selected(request.machineID)
+            guard MachineConnectionRecipe.valid(machine), let prepareConnection else {
+                throw ExtensionPeerError.unavailable
+            }
+            let recipe = try await prepareConnection(machine)
+            try Task.checkCancellation()
+            guard !stopped, try selected(machine.id) == machine,
+                recipe.machineID == machine.id, recipe.name == machine.name,
+                recipe.sshTarget == machine.sshTarget
+            else { throw ExtensionPeerError.unavailable }
+            return try JSONEncoder().encode(recipe)
         case "machines.companion.run":
             let request = try MachineCommandPayload.decode(
                 RunRequest.self, data: payload, required: ["machineID", "command", "timeout"],
@@ -136,6 +155,7 @@ import Foundation
         ["localhost", "127.0.0.1", "::1"].contains(host.lowercased())
     }
 
+    private struct ConnectionRequest: Decodable { let machineID: UUID }
     private struct RunRequest: Decodable {
         let machineID: UUID
         let command: String

@@ -1723,6 +1723,7 @@
         "Extensions/machines/Services/LocalMachineCommandExecution.swift",
         "Extensions/machines/Services/LocalMachineSampler.swift",
         "Extensions/machines/Services/MachineCommandPayload.swift",
+        "Extensions/machines/Services/MachineConnectionRecipe.swift",
         "Extensions/machines/Services/MachineControlCenter.swift",
         "Extensions/machines/Services/MachineDetailOperations.swift",
         "Extensions/machines/Services/MachineFacts.swift",

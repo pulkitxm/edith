@@ -27,6 +27,28 @@ import Foundation
         self.usagePlatform = usagePlatform; self.usageRun = usageRun; self.usageInvoke = usageInvoke
     }
 
+    public func prepareConnection(_ machine: Machine) async throws -> MachineConnectionRecipe {
+        guard MachineConnectionRecipe.valid(machine), !stopped else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let connection = try await connected(machine)
+        try Task.checkCancellation()
+        guard !stopped, connections[machine.id] === connection,
+            await connection.masterIsAlive(), let platform = await connection.remotePlatform
+        else {
+            throw ExtensionPeerError.unavailable
+        }
+        try Task.checkCancellation()
+        guard !stopped, connections[machine.id] === connection else {
+            throw ExtensionPeerError.unavailable
+        }
+        return try MachineConnectionRecipe(
+            machine: machine,
+            sshArguments: MachineConnectionRecipe.masterOnlyOptions
+                + connection.terminalArguments(),
+            controlPath: connection.controlSocketPath, platform: platform)
+    }
+
     public func run(_ machine: Machine, command: String, stdin: Data?, timeout: TimeInterval)
         async throws -> String
     {

@@ -85,6 +85,10 @@ final class ExtensionRuntime: NSObject {
                     forward: { machine, forward in
                         if fixture { return true }
                         return try await transport.forward(machine, forward: forward)
+                    },
+                    prepareConnection: { machine in
+                        guard !fixture else { throw ExtensionPeerError.unavailable }
+                        return try await transport.prepareConnection(machine)
                     })
                 surface = MachineSurface(
                     items: {

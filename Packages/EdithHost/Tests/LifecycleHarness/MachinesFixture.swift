@@ -96,6 +96,11 @@ import Foundation
                 ["machineID": machineID, "command": "uname", "timeout": 1801]
             ),
             ("machines.forward.prepare", ["ports": [9999]]),
+            ("machines.connection.prepare", ["machineID": machineID]),
+            (
+                "machines.connection.prepare",
+                ["machineID": machineID, "sshArguments": ["arbitrary"]]
+            ),
             ("machines.forward.prepare", ["ports": [15432, 15432]]),
             (
                 "machines.usage.collect",
