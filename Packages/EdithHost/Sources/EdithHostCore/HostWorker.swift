@@ -28,7 +28,8 @@ public final class HostWorker {
 
     public init(
         configuration: HostWorkerConfiguration, executable: URL,
-        arguments: [String] = ["--extension-worker"], requestTimeout: Duration = .seconds(15)
+        arguments: [String] = ["--extension-worker"], requestTimeout: Duration = .seconds(15),
+        errorOutput: FileHandle = .nullDevice
     ) {
         self.configuration = configuration
         self.requestTimeout = requestTimeout
@@ -48,7 +49,7 @@ public final class HostWorker {
         }
         process.standardInput = input
         process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
+        process.standardError = errorOutput
     }
 
     public func start() async throws {
@@ -110,7 +111,8 @@ public final class HostWorker {
     public func stop() async throws {
         ready = false
         if process.isRunning {
-            _ = try? await request(HostWorkerRequest(operation: "stop"))
+            _ = try? await request(
+                HostWorkerRequest(operation: "stop"), timeout: min(requestTimeout, .seconds(3)))
             try? input.fileHandleForWriting.close()
             do { try await awaitExit() } catch {
                 terminate()
@@ -121,10 +123,13 @@ public final class HostWorker {
         terminateGroup()
     }
 
-    private func request(_ request: HostWorkerRequest) async throws -> HostWorkerResponse {
+    private func request(_ request: HostWorkerRequest, timeout: Duration? = nil) async throws
+        -> HostWorkerResponse
+    {
         guard process.isRunning, !exited else { throw HostWorkerError.exited }
         guard pending.isEmpty else { throw HostWorkerError.rejected }
         let data = try HostWorkerFrames.encode(request)
+        let requestTimeout = timeout ?? self.requestTimeout
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
                 let timeout = Task { [weak self, requestTimeout] in
