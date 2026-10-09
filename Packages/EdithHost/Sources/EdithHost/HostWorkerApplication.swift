@@ -17,6 +17,7 @@ final class HostWorkerApplication {
     private var windowObserver: NSObjectProtocol?
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
+    private var preparingDisable = false
     private var peerServer: ExtensionPeerServer?
     private var shutdownTask: Task<Void, Never>?
 
@@ -76,6 +77,10 @@ final class HostWorkerApplication {
         do {
             for frame in try frames.append(bytes) {
                 let request = try JSONDecoder().decode(HostWorkerRequest.self, from: frame)
+                if request.operation == "prepareDisable" {
+                    prepareDisable(request)
+                    continue
+                }
                 if request.operation == "stop" {
                     shutdown(token: request.token)
                     return
@@ -94,6 +99,35 @@ final class HostWorkerApplication {
                 if !response.ok, request.operation == "start" { shutdown(); return }
             }
         } catch { shutdown() }
+    }
+
+    private func prepareDisable(_ request: HostWorkerRequest) {
+        guard !preparingDisable else {
+            try? control.send(
+                HostWorkerResponse(
+                    token: request.token, ok: false,
+                    message: "The extension is still restoring system settings. Wait and try again."
+                ))
+            return
+        }
+        preparingDisable = true
+        Task { [self] in
+            defer { preparingDisable = false }
+            do {
+                for runtime in runtimes { try await runtime.prepareDisableAll() }
+                try control.send(
+                    HostWorkerResponse(
+                        token: request.token, ok: true, version: configuration?.version))
+            } catch {
+                let text = error.localizedDescription
+                let message =
+                    text.isEmpty || text.count > 1024
+                    ? "The extension could not restore its system settings. Open the extension and try again."
+                    : text
+                try? control.send(
+                    HostWorkerResponse(token: request.token, ok: false, message: message))
+            }
+        }
     }
 
     private func execute(_ request: HostWorkerRequest) throws {
