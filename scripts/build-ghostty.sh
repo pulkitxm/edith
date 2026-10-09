@@ -10,6 +10,7 @@ vendor="$root/vendor"
 src="$vendor/ghostty"
 out="$root/Packages/Edith/vendor/GhosttyKit.xcframework"
 resources_out="$root/Packages/Edith/vendor/GhosttyResources"
+extension_vendor="$root/Extensions/terminal/Native/vendor"
 
 zig_bin="$(command -v zig || true)"
 if [ -n "$zig_bin" ] && [ "$("$zig_bin" version)" = "$ZIG_VERSION" ]; then
@@ -78,4 +79,9 @@ mkdir -p "$resources_out/ghostty"
 cp -R "$shell_integration" "$resources_out/ghostty/shell-integration"
 cp -R "$terminfo" "$resources_out/terminfo"
 
-echo "GhosttyKit.xcframework ready at $out with resources at $resources_out"
+rm -rf "$extension_vendor"
+mkdir -p "$extension_vendor"
+cp -R "$out" "$extension_vendor/GhosttyKit.xcframework"
+cp -R "$resources_out" "$extension_vendor/GhosttyResources"
+
+echo "GhosttyKit.xcframework ready at $out and $extension_vendor with resources at $resources_out"

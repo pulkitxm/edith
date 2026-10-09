@@ -7,14 +7,15 @@ test("every owned worker source is included in a downloaded role", async () => {
   const definitions = JSON.parse(
     await readFile(resolve(root, "Extensions/manifest.json"), "utf8"),
   );
-  async function files(directory) {
+  async function files(directory, nativePackage) {
     const result = [];
     for (const entry of await readdir(resolve(root, directory), {
       withFileTypes: true,
     })) {
-      if (["Tests", ".build", ".swiftpm"].includes(entry.name)) continue;
+      if (["Tests", ".build", ".swiftpm", "vendor"].includes(entry.name)) continue;
       const path = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) result.push(...(await files(path)));
+      if (path === nativePackage) continue;
+      if (entry.isDirectory()) result.push(...(await files(path, nativePackage)));
       else if (entry.name.endsWith(".swift") && entry.name !== "Package.swift")
         result.push(path);
     }
@@ -25,7 +26,20 @@ test("every owned worker source is included in a downloaded role", async () => {
   )) {
     const listed = new Set(Object.values(definition.roles).flat());
     expect(listed.size).toBeGreaterThan(0);
-    for (const source of await files(`Extensions/${definition.id}`)) {
+    if (definition.nativePackage) {
+      expect(definition.nativeProduct).toBeTruthy();
+      const native = await files(definition.nativePackage);
+      expect(native.length).toBeGreaterThan(0);
+      for (const source of native)
+        expect(
+          listed.has(source),
+          `${definition.id} compiles native ${source} twice`,
+        ).toBe(false);
+    }
+    for (const source of await files(
+      `Extensions/${definition.id}`,
+      definition.nativePackage,
+    )) {
       expect(
         listed.has(source),
         `${definition.id} omits ${source} from downloaded roles`,
