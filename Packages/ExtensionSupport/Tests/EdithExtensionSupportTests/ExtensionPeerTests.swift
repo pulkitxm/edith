@@ -275,6 +275,42 @@ import Testing
         #expect(second.registration.physicalName.utf8.count < 128)
     }
 
+    @Test func rejectedRegistrationLeasesCannotCloseConcurrentFileWriters() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: "fixture", owner: "lock-contention", directory: directory)
+        let owner = try ExtensionPeerRegistrationLease(endpoint: endpoint)
+        defer { owner.release() }
+        try owner.publish()
+        let target = directory.appendingPathComponent("writer.json")
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await BlockingWork.perform {
+                    for _ in 0..<1_000 {
+                        do {
+                            let rejected = try ExtensionPeerRegistrationLease(endpoint: endpoint)
+                            rejected.release()
+                            Issue.record("An active registration lease must remain exclusive.")
+                        } catch ExtensionPeerError.unavailable {}
+                    }
+                }
+            }
+            group.addTask {
+                try await BlockingWork.perform {
+                    for index in 0..<1_000 {
+                        try Data("{\"fixture\":\(index)}".utf8).write(to: target, options: .atomic)
+                    }
+                }
+            }
+            try await group.waitForAll()
+        }
+        #expect(
+            ExtensionPeerRegistration.read(
+                at: endpoint.registrationURL, logicalName: endpoint.name)?.physicalName
+                == owner.registration.physicalName)
+        #expect(try Data(contentsOf: target) == Data("{\"fixture\":999}".utf8))
+    }
+
     @Test func staleIdentitiesAndLinkedRegistrationFilesCannotSelectAPeer() throws {
         defer { try? FileManager.default.removeItem(at: directory) }
         let endpoint = try ExtensionPeerEndpoint(
