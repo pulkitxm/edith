@@ -79,7 +79,7 @@ public final class SurfaceSnapshotClient {
             else { throw ExtensionPeerError.invalidRequest }
         } else {
             guard
-                (current.actions + current.rows.flatMap(\.actions)).contains(where: {
+                current.controlActions.contains(where: {
                     $0.id == actionID
                 })
             else { throw ExtensionPeerError.invalidRequest }

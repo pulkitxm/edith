@@ -91,6 +91,7 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     public var actions: [SurfaceAction]
     public var sliders: [SurfaceSlider]?
     public var charts: [SurfaceChart]?
+    public var calendars: [SurfaceCalendar]?
     public var sources: [SurfaceSourceChoice]
     public var message: String?
     public var updatedAt: Date?
@@ -98,14 +99,20 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     public init(
         providerID: String, metrics: [SurfaceMetric] = [], rows: [SurfaceDataRow] = [],
         actions: [SurfaceAction] = [], sliders: [SurfaceSlider] = [], charts: [SurfaceChart] = [],
-        sources: [SurfaceSourceChoice] = [],
+        calendars: [SurfaceCalendar] = [], sources: [SurfaceSourceChoice] = [],
         message: String? = nil, updatedAt: Date? = nil
     ) {
         self.providerID = providerID; self.metrics = metrics; self.rows = rows
         self.actions = actions; self.sliders = sliders.isEmpty ? nil : sliders;
         self.charts = charts.isEmpty ? nil : charts;
+        self.calendars = calendars.isEmpty ? nil : calendars;
         self.sources = sources; self.message = message
         self.updatedAt = updatedAt
+    }
+
+    public var controlActions: [SurfaceAction] {
+        actions + rows.flatMap(\.actions)
+            + (calendars ?? []).flatMap { $0.days.compactMap(\.action) }
     }
 
     public func encoded() throws -> Data {
@@ -123,6 +130,12 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
     }
 
     private func validate(providerID expected: String) throws {
+        let calendarValues = calendars ?? []
+        guard calendarValues.count <= 2, Self.unique(calendarValues.map(\.id)),
+            calendarValues.reduce(0, { $0 + $1.days.count }) <= 366,
+            Self.unique(controlActions.map(\.id))
+        else { throw ExtensionPeerError.invalidRequest }
+        for calendar in calendarValues { try calendar.validate() }
         let chartValues = charts ?? []
         let chartSeries = chartValues.flatMap(\.series)
         guard chartValues.count <= 8, Self.unique(chartValues.map(\.id)),
@@ -137,7 +150,7 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
         let controls = (sliders ?? []) + rows.flatMap { $0.sliders ?? [] }
         guard controls.count <= 32, Self.unique(controls.map(\.id)),
             Set(controls.map(\.id)).isDisjoint(
-                with: Set((actions + rows.flatMap(\.actions)).map(\.id)))
+                with: Set(controlActions.map(\.id)))
         else { throw ExtensionPeerError.invalidRequest }
         for control in controls { try control.validate() }
         guard contractVersion == 1, providerID == expected,
@@ -168,7 +181,7 @@ public struct SurfaceSnapshot: Codable, Equatable, Sendable {
         else { throw ExtensionPeerError.invalidRequest }
     }
 
-    private static func validActions(_ values: [SurfaceAction]) -> Bool {
+    static func validActions(_ values: [SurfaceAction]) -> Bool {
         values.count <= 8 && unique(values.map(\.id))
             && values.allSatisfy {
                 validText($0.id, maximum: 512) && validText($0.title, maximum: 256)
