@@ -153,6 +153,10 @@ final class HostWorkerApplication {
                 throw MarketplaceError.invalidSignature
             }
             configuration = next
+            setenv(
+                "EDITH_EXTENSION_NATIVE_CONTEXT",
+                try JSONEncoder().encode(next).base64EncodedString(), 1)
+            setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
             try applyAppearance(next)
             let context: NSDictionary = [
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
@@ -185,6 +189,15 @@ final class HostWorkerApplication {
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
                 guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                if command == "extension.process.register" {
+                    guard payload.count <= 128,
+                        let object = try JSONSerialization.jsonObject(with: payload)
+                            as? [String: Any],
+                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
+                    else { throw ExtensionPeerError.invalidRequest }
+                    try ExtensionNativeTask.registerDescendant(pid)
+                    return Data("{\"registered\":true}".utf8)
+                }
                 if command == "surface.context" {
                     guard payload.isEmpty, let context = SurfaceHostContext.current else {
                         throw ExtensionPeerError.invalidRequest

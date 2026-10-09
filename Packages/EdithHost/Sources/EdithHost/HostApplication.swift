@@ -33,6 +33,13 @@ struct HostEntry {
             do { try HostPrivilegedCarrier(approved: true).run() } catch { exit(1) }
             return
         }
+        if arguments.count == 2, arguments[0] == "--extension-native-task" {
+            do { exit(try HostNativeTask.run(encoded: arguments[1])) } catch {
+                FileHandle.standardError.write(
+                    Data("The installed extension task could not start.\n".utf8))
+                exit(1)
+            }
+        }
         if arguments == ["--extension-command"] {
             do { try ExtensionCommandSpecification.runWrapper() } catch { exit(1) }
         }
