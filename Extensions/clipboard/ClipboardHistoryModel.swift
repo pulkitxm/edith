@@ -18,7 +18,7 @@ final class ClipboardHistoryModel {
     @ObservationIgnored private var mutationTailID: UUID?
     @ObservationIgnored private var pendingRefresh = false
     @ObservationIgnored private var generation = 0
-    private let client: ClipboardClient
+    let client: ClipboardClient
     @ObservationIgnored private var history = ClipboardHistoryProjection()
 
     init(client: ClipboardClient) { self.client = client }
@@ -43,6 +43,13 @@ final class ClipboardHistoryModel {
         mutationTailID = nil
         if let observer { IPC.stopObserving(observer) }
         observer = nil
+    }
+
+    func shutdown() async {
+        let tasks = [refreshTask, mutationTail].compactMap { $0 } + Array(mutations.values)
+        stop()
+        for task in tasks { await task.value }
+        entries.removeAll(); history = ClipboardHistoryProjection(); error = nil; copiedID = nil
     }
 
     func reload() {

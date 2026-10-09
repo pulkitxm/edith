@@ -41,6 +41,16 @@ final class ClipboardPreviewCancellation: @unchecked Sendable {
         }
     }
 
+    func shutdown() async {
+        let tasks = lock.withLock {
+            let tasks = Array(pending.values)
+            pending.removeAll()
+            return tasks
+        }
+        for task in tasks { task.cancel() }
+        for task in tasks { await task.value }
+    }
+
     private func finish(_ id: UUID) { lock.withLock { pending[id] = nil } }
 
     deinit { for task in pending.values { task.cancel() } }
