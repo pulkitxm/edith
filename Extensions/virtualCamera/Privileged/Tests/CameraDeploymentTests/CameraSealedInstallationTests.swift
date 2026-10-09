@@ -9,6 +9,7 @@ import Testing
         let source: URL
         let privilege: URL
         var failedCopy = false
+        var failedPublished = false
         var wrongTeam = false
         var wrongInstaller = false
         var revision: UInt8 = 1
@@ -61,6 +62,11 @@ import Testing
                     protectedBoundary: root), privilegedBundle: privilege,
                 verify: { [self] path in
                     if failedCopy, path.lastPathComponent.hasPrefix(".camera-") {
+                        throw CocoaError(.fileReadCorruptFile)
+                    }
+                    if failedPublished, path.path.contains("/Installed/"),
+                        path.pathExtension == "app", !path.lastPathComponent.hasPrefix(".camera-")
+                    {
                         throw CocoaError(.fileReadCorruptFile)
                     }
                     let identifier: String
@@ -121,6 +127,20 @@ import Testing
         #expect(
             try FileManager.default.contentsOfDirectory(
                 atPath: fixture.root.appendingPathComponent("Installed").path) == [".receipts"])
+    }
+
+    @Test func finalSignatureFailureRollsBackPublishedCarrier() throws {
+        let fixture = try Fixture()
+        fixture.failedPublished = true
+        let installer = try fixture.installer()
+        #expect(throws: (any Error).self) {
+            try installer.installCarrier(source: fixture.source, providerExited: true)
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.root.appendingPathComponent(
+                    "Installed/" + fixture.host + ".cameraCarrier.app"
+                ).path))
     }
 
     @Test func wrongTeamOrEmbeddedInstallerIsRejected() throws {

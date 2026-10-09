@@ -169,6 +169,20 @@ public final class CameraSealedInstallation {
         return true
     }
 
+    public func removeMicrophone() throws -> Bool {
+        let identifier = configuration.hostIdentifier + ".microphone"
+        let installed = configuration.microphoneDestination.appendingPathComponent(
+            identifier + ".driver")
+        guard files.fileExists(atPath: installed.path) else { return false }
+        try protectedTree(installed)
+        let identity = try verify(installed)
+        guard identity.identifier == identifier, identity.team == ownIdentity.team else {
+            throw failure("The installed microphone signature is invalid.")
+        }
+        try files.removeItem(at: installed)
+        return true
+    }
+
     private func carrierIdentity(_ url: URL) throws -> CameraInstallIdentity {
         let identity = try verify(url)
         let bundle = try requiredBundle(url)
