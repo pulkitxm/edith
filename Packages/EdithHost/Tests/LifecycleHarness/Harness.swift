@@ -51,6 +51,14 @@ struct HostLifecycleHarness {
             UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
                 false, forKey: AppStorageKeys.Clipboard.enabled)
         }
+        let companionServer = extensionID == "companion" ? try CompanionFixtureServer() : nil
+        defer { companionServer?.stop() }
+        if let companionServer {
+            try await companionServer.start()
+            UserDefaults(suiteName: identity.extensionDefaultsSuite(extensionID))?.set(
+                "http://127.0.0.1:\(companionServer.port)",
+                forKey: AppStorageKeys.Companion.endpoint)
+        }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -122,6 +130,8 @@ struct HostLifecycleHarness {
             stage = "initial commands"
             if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: true)
+            } else if let companionServer {
+                try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "blitztree" {
@@ -164,6 +174,8 @@ struct HostLifecycleHarness {
             else { throw HostWorkerError.rejected }
             if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
+            } else if let companionServer {
+                try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "blitztree" {
@@ -228,6 +240,8 @@ struct HostLifecycleHarness {
             }
             if extensionID == "latex" {
                 try await verifyLaTeX(endpoint, fixture: fixture, seed: false)
+            } else if let companionServer {
+                try await verifyCompanion(endpoint, server: companionServer)
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "blitztree" {
@@ -269,6 +283,14 @@ struct HostLifecycleHarness {
             else {
                 throw HostWorkerError.rejected
             }
+            if let companionServer {
+                let settled = companionServer.requests.count
+                try await Task.sleep(for: .seconds(2))
+                guard companionServer.requests.count == settled else {
+                    throw CompanionFixtureError.failed(
+                        "The disabled Companion worker kept contacting its backend.")
+                }
+            }
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
             guard surfaces.layouts.home == savedSurface,
@@ -284,7 +306,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion")}"
             )
         } catch {
             if extensionID == "jev" {
