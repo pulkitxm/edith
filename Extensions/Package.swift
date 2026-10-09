@@ -12,7 +12,7 @@ let package = Package(
         .target(
             name: "LaTeXExtension",
             dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
-            path: "latex", exclude: ["Tests", "Resources"],
+            path: "latex", exclude: ["Tests"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "LaTeXExtensionTests", dependencies: ["LaTeXExtension"],
