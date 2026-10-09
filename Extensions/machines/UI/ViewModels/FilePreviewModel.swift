@@ -1,0 +1,612 @@
+import AVKit
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import EdithExtensionDocuments
+import ImageIO
+import Observation
+import PDFKit
+import Quartz
+import SwiftUI
+
+@MainActor
+@Observable
+final class FilePreviewModel {
+    typealias Materialize =
+        @MainActor @Sendable (
+            RemoteFileEntry, MachineSession, Int64
+        ) async throws -> URL
+    typealias ImageLoader = @MainActor @Sendable (URL) async -> NSImage?
+
+    enum Content: Equatable {
+        case empty
+        case loading
+        case text(String, language: String?, truncated: Bool)
+        case image(NSImage)
+        case pdf(URL)
+        case media(URL)
+        case quickLook(URL)
+        case downloadRequired(RemoteFileEntry, available: Bool)
+        case unsupported(URL?, reason: String)
+        case failed(String)
+    }
+
+    private(set) var content = Content.empty
+    let loading = ContentLoad()
+    private var task: Task<Void, Never>?
+    private let materializeFile: Materialize
+    private let imageLoader: ImageLoader
+
+    nonisolated static let textPreviewLimit = RemoteFileOperationExecution.previewLimit
+
+    init(
+        materialize: @escaping Materialize = { entry, session, maximumBytes in
+            try await RemoteFileOperationExecution.materialize(
+                entry, machineID: session.machine.id, isLocal: session.isLocal,
+                maximumBytes: maximumBytes
+            ) { remotePath, destination in
+                guard let connection = session.connectionRef else {
+                    throw FinderTransferError.notConnected
+                }
+                try await connection.download(remotePath: remotePath, to: destination)
+            }
+        },
+        imageLoader: @escaping ImageLoader = { await RemoteImagePreview.thumbnail(at: $0) }
+    ) {
+        materializeFile = materialize
+        self.imageLoader = imageLoader
+    }
+
+    func load(entry: RemoteFileEntry?, session: MachineSession) {
+        startLoading(entry: entry, session: session, explicit: false)
+    }
+
+    func loadExplicitPreview(entry: RemoteFileEntry, session: MachineSession) {
+        startLoading(entry: entry, session: session, explicit: true)
+    }
+
+    private func startLoading(
+        entry: RemoteFileEntry?, session: MachineSession, explicit: Bool
+    ) {
+        task?.cancel()
+        loading.reset()
+        guard let entry, !entry.isDirectory else {
+            content = .empty
+            return
+        }
+        if !explicit {
+            switch RemoteFileOperationExecution.automaticPreviewDecision(
+                for: entry, isLocal: session.isLocal)
+            {
+            case .automatic:
+                break
+            case .requiresExplicitDownload:
+                content = .downloadRequired(entry, available: true)
+                return
+            case .downloadOnly:
+                content = .downloadRequired(entry, available: false)
+                return
+            }
+        }
+        content = .loading
+        let request = loading.begin(preservingContent: false)
+        task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if Task.isCancelled {
+                    loading.cancel(request)
+                } else if case let .failed(message) = content {
+                    loading.fail(request, message: message)
+                } else {
+                    loading.complete(request)
+                }
+            }
+            let kind = resolvedKind(for: entry)
+            if kind == .text {
+                await loadText(entry: entry, session: session, request: request)
+                return
+            }
+            guard
+                let url = await materialize(
+                    entry: entry, session: session, request: request,
+                    maximumBytes: explicit
+                        ? RemoteFileOperationExecution.cacheLimitBytes
+                        : RemoteFileOperationExecution.automaticPreviewLimitBytes)
+            else { return }
+            guard loading.isCurrent(request) else { return }
+            switch kind {
+            case .image:
+                let image = await imageLoader(url)
+                guard loading.isCurrent(request) else { return }
+                if let image {
+                    content = .image(image)
+                } else {
+                    content = .unsupported(url, reason: "This image could not be read.")
+                }
+            case .pdf:
+                content = .pdf(url)
+            case .media:
+                let asset = AVURLAsset(url: url)
+                let playable = (try? await asset.load(.isPlayable)) ?? false
+                guard loading.isCurrent(request) else { return }
+                content =
+                    playable
+                    ? .media(url)
+                    : .unsupported(url, reason: "macOS cannot play this format natively.")
+            case .unsupported:
+                content = .unsupported(
+                    url, reason: "macOS cannot play this format natively. Open it in another app.")
+            default:
+                content = .quickLook(url)
+            }
+        }
+    }
+
+    private func resolvedKind(for entry: RemoteFileEntry) -> FilePreviewKind {
+        let byExtension = FilePreviewKind.kind(forExtension: entry.fileExtension)
+        if byExtension == .quickLook, FilePreviewKind.isPlainTextName(entry.name) {
+            return .text
+        }
+        return byExtension
+    }
+
+    func cancelLoading() {
+        task?.cancel()
+        task = nil
+        loading.cancel()
+    }
+
+    private func loadText(entry: RemoteFileEntry, session: MachineSession, request: UInt64) async {
+        if session.isLocal {
+            let path = entry.path
+            let data: Data? = await Task.detached(priority: .utility) { () -> Data? in
+                guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path))
+                else { return nil }
+                let data = handle.readData(ofLength: Self.textPreviewLimit + 1)
+                try? handle.close()
+                return data
+            }.value
+            guard loading.isCurrent(request) else { return }
+            guard let data else {
+                content = .failed("Could not read this file.")
+                return
+            }
+            let preview = RemoteFileOperationExecution.textPreview(data)
+            content = .text(
+                preview.text, language: entry.fileExtension, truncated: preview.truncated)
+            return
+        }
+        let command = RemoteFileOperationExecution.previewCommand(
+            path: entry.path, platform: session.remotePlatform ?? .linux)
+        let result = await session.runCommand(command, timeout: 45)
+        guard loading.isCurrent(request) else { return }
+        switch result {
+        case let .success(text):
+            let preview = RemoteFileOperationExecution.textPreview(text)
+            content = .text(
+                preview.text, language: entry.fileExtension,
+                truncated: preview.truncated || entry.sizeBytes > Int64(Self.textPreviewLimit))
+        case let .failure(error):
+            content = .failed(error.localizedDescription)
+        }
+    }
+
+    private func materialize(
+        entry: RemoteFileEntry, session: MachineSession, request: UInt64, maximumBytes: Int64
+    ) async -> URL? {
+        do {
+            return try await materializeFile(entry, session, maximumBytes)
+        } catch {
+            guard loading.isCurrent(request) else { return nil }
+            content = .failed(error.localizedDescription)
+            return nil
+        }
+    }
+}
+
+struct FilePreviewPane: View {
+    let entry: RemoteFileEntry?
+    let session: MachineSession
+    @State private var model = FilePreviewModel()
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().opacity(0.3)
+            content
+        }
+        .background(DashSkin.paper2(dark))
+        .pageTask(id: entry?.id, cancel: model.cancelLoading) {
+            model.load(entry: entry, session: session)
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            if let entry {
+                Image(nsImage: FileIcons.icon(for: entry))
+                    .resizable()
+                    .frame(width: UIScale.pt(16), height: UIScale.pt(16))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(entry.name)
+                        .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                        .foregroundStyle(DashSkin.ink(dark))
+                        .lineLimit(1)
+                    Text(ByteFormatter.string(entry.sizeBytes))
+                        .font(DashSkin.mono(10))
+                        .foregroundStyle(DashSkin.inkFaint(dark))
+                }
+            } else {
+                Text("Preview")
+                    .font(.system(size: UIScale.pt(12.5), weight: .medium))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, UIScale.pt(14))
+        .padding(.vertical, UIScale.pt(10))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.content {
+        case .empty:
+            placeholder("Select a file to preview it.", symbol: "doc.text.magnifyingglass")
+        case .loading:
+            FilePreviewLoadingSkeleton(entry: entry, dark: dark)
+        case let .text(text, language, truncated):
+            CodePreview(text: text, language: language, truncated: truncated, dark: dark)
+        case let .image(image):
+            ScrollView([.horizontal, .vertical]) {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .padding(UIScale.pt(12))
+            }
+        case let .pdf(url):
+            PDFPreview(url: url)
+        case let .quickLook(url):
+            QuickLookPreview(url: url)
+        case let .media(url):
+            VideoPlayer(player: AVPlayer(url: url))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .downloadRequired(entry, available):
+            VStack(spacing: UIScale.pt(12)) {
+                Image(systemName: available ? "arrow.down.circle" : "externaldrive")
+                    .font(.system(size: UIScale.pt(28)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(
+                    available
+                        ? "This file is too large to preview automatically."
+                        : "This file is larger than the preview cache. Download it to a folder instead."
+                )
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .multilineTextAlignment(.center)
+                if available {
+                    Button("Download preview") {
+                        model.loadExplicitPreview(entry: entry, session: session)
+                    }
+                }
+            }
+            .padding(UIScale.pt(20))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .unsupported(url, reason):
+            VStack(spacing: UIScale.pt(12)) {
+                Image(systemName: "play.slash")
+                    .font(.system(size: UIScale.pt(28)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                Text(reason)
+                    .font(.system(size: UIScale.pt(12)))
+                    .foregroundStyle(DashSkin.inkSoft(dark))
+                    .multilineTextAlignment(.center)
+                if let url {
+                    Button("Open in default app") {
+                        RemoteFileOperationExecution.present([url], action: .open) { urls, _ in
+                            NSWorkspace.shared.open(urls[0])
+                        }
+                    }
+                }
+            }
+            .padding(UIScale.pt(20))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case let .failed(message):
+            placeholder(message, symbol: "exclamationmark.triangle")
+        }
+    }
+
+    private func placeholder(_ text: String, symbol: String) -> some View {
+        VStack(spacing: UIScale.pt(10)) {
+            Image(systemName: symbol)
+                .font(.system(size: UIScale.pt(26)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Text(text)
+                .font(.system(size: UIScale.pt(12)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+                .multilineTextAlignment(.center)
+        }
+        .padding(UIScale.pt(20))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private struct FilePreviewLoadingSkeleton: View {
+    let entry: RemoteFileEntry?
+    let dark: Bool
+
+    private var kind: FilePreviewKind {
+        guard let entry else { return .quickLook }
+        if FilePreviewKind.isPlainTextName(entry.name) { return .text }
+        return FilePreviewKind.kind(forExtension: entry.fileExtension)
+    }
+
+    var body: some View {
+        SkeletonGroup {
+            Group {
+                switch kind {
+                case .text:
+                    textPreview
+                case .image:
+                    mediaPreview(width: 280, height: 190, corner: 10)
+                case .media, .unsupported:
+                    mediaPreview(width: 320, height: 180, corner: 10)
+                case .pdf:
+                    mediaPreview(width: 230, height: 310, corner: 4)
+                case .quickLook:
+                    mediaPreview(width: 260, height: 300, corner: 6)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading preview")
+    }
+
+    private var textPreview: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+            ForEach(0..<18, id: \.self) { index in
+                HStack(spacing: UIScale.pt(10)) {
+                    SkeletonBlock(width: 24, height: 8, corner: 2)
+                    SkeletonBlock(
+                        width: [218, 164, 286, 126, 246, 194][index % 6],
+                        height: 9,
+                        corner: 2
+                    )
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(UIScale.pt(14))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(DashSkin.paper(dark))
+    }
+
+    private func mediaPreview(width: Double, height: Double, corner: Double) -> some View {
+        VStack(spacing: UIScale.pt(10)) {
+            SkeletonBlock(width: width, height: height, corner: corner)
+            SkeletonBlock(width: min(width * 0.62, 168), height: 9, corner: 2)
+        }
+        .padding(UIScale.pt(18))
+    }
+}
+
+enum RemoteImagePreview {
+    static let maximumPixelSize = 2_048
+
+    @MainActor
+    static func thumbnail(
+        at url: URL,
+        decode: @escaping @Sendable (URL, Int) -> CGImage? = {
+            RemoteImagePreview.decode($0, maximumPixelSize: $1)
+        }
+    ) async -> NSImage? {
+        let decoded = await Task.detached(priority: .userInitiated) {
+            decode(url, maximumPixelSize)
+        }.value
+        guard let image = decoded else { return nil }
+        return NSImage(
+            cgImage: image, size: NSSize(width: image.width, height: image.height))
+    }
+
+    private nonisolated static func decode(_ url: URL, maximumPixelSize: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+}
+
+struct CodePreview: View {
+    let text: String
+    let language: String?
+    let truncated: Bool
+    let dark: Bool
+    @State private var highlighted: NSAttributedString?
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if truncated {
+                Text("Showing the first 400 KB.")
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, UIScale.pt(14))
+                    .padding(.vertical, UIScale.pt(6))
+                    .background(DashSkin.gold.opacity(0.12))
+            }
+            HighlightedTextView(
+                attributed: highlighted, plain: text, dark: dark, scale: UIScale.current)
+        }
+        .pageTask(id: highlightKey) {
+            highlighted = await SyntaxHighlighting.shared.highlight(
+                text: text, language: language, dark: dark)
+        }
+    }
+
+    private var highlightKey: String {
+        "\(language ?? "")-\(dark)-\(text.utf8.count)"
+    }
+}
+
+actor SyntaxHighlighting {
+    static let shared = SyntaxHighlighting()
+
+    static let cacheLimit = 64
+    static let cacheableBytes = 16_384
+
+    private struct CacheKey: Hashable {
+        let text: String
+        let language: String?
+        let dark: Bool
+    }
+
+    private var highlighter: Highlighter?
+    private var currentTheme: String?
+    private var cache: [CacheKey: NSAttributedString] = [:]
+    private var cacheOrder: [CacheKey] = []
+
+    func highlight(text: String, language: String?, dark: Bool) -> NSAttributedString? {
+        guard text.count < 400_000 else { return nil }
+        let key =
+            text.utf8.count <= Self.cacheableBytes
+            ? CacheKey(text: text, language: language, dark: dark) : nil
+        if let key, let cached = cache[key] { return cached }
+        let result = render(text: text, language: language, dark: dark)
+        if let key, let result {
+            if cacheOrder.count >= Self.cacheLimit { cache[cacheOrder.removeFirst()] = nil }
+            cache[key] = result
+            cacheOrder.append(key)
+        }
+        return result
+    }
+
+    private func render(text: String, language: String?, dark: Bool) -> NSAttributedString? {
+        let theme = dark ? "atom-one-dark" : "atom-one-light"
+        if highlighter == nil {
+            highlighter = Highlighter()
+        }
+        guard let highlighter else { return nil }
+        if currentTheme != theme {
+            highlighter.setTheme(theme)
+            currentTheme = theme
+        }
+        let resolved = Self.languageName(for: language)
+        return highlighter.highlight(text, as: resolved)
+    }
+
+    static func languageName(for ext: String?) -> String? {
+        guard let ext, !ext.isEmpty else { return nil }
+        let map: [String: String] = [
+            "js": "javascript", "mjs": "javascript", "cjs": "javascript", "jsx": "javascript",
+            "ts": "typescript", "tsx": "typescript", "py": "python", "rb": "ruby",
+            "sh": "bash", "zsh": "bash", "bash": "bash", "yml": "yaml", "md": "markdown",
+            "markdown": "markdown", "htm": "html", "rs": "rust", "kt": "kotlin",
+            "kts": "kotlin", "h": "c", "hpp": "cpp", "cc": "cpp", "m": "objectivec",
+            "mm": "objectivec", "conf": "ini", "cfg": "ini", "env": "ini", "toml": "ini",
+            "service": "ini", "socket": "ini", "timer": "ini", "gitignore": "bash",
+            "dockerfile": "dockerfile", "tf": "hcl", "jsonl": "json",
+        ]
+        return map[ext] ?? ext
+    }
+}
+
+enum PreviewTextScale {
+    static let body = 11.5
+    static let inset = 10.0
+
+    static func attributed(_ source: NSAttributedString, scale: Double) -> NSAttributedString {
+        guard abs(scale - 1) > 0.001, source.length > 0 else { return source }
+        let copy = NSMutableAttributedString(attributedString: source)
+        copy.enumerateAttribute(.font, in: NSRange(location: 0, length: copy.length)) {
+            value, range, _ in
+            guard let font = value as? NSFont else { return }
+            copy.addAttribute(.font, value: font.withSize(font.pointSize * scale), range: range)
+        }
+        return copy
+    }
+}
+
+private struct HighlightedTextView: NSViewRepresentable {
+    let attributed: NSAttributedString?
+    let plain: String
+    let dark: Bool
+    var scale = 1.0
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        guard let textView = scrollView.documentView as? NSTextView else { return scrollView }
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.drawsBackground = false
+        textView.textContainerInset = NSSize(
+            width: PreviewTextScale.inset * scale, height: PreviewTextScale.inset * scale)
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = true
+        textView.isHorizontallyResizable = true
+        textView.textContainer?.widthTracksTextView = false
+        textView.textContainer?.containerSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        textView.textContainerInset = NSSize(
+            width: PreviewTextScale.inset * scale, height: PreviewTextScale.inset * scale)
+        textView.font = .monospacedSystemFont(
+            ofSize: PreviewTextScale.body * scale, weight: .regular)
+        if let attributed {
+            textView.textStorage?.setAttributedString(
+                PreviewTextScale.attributed(attributed, scale: scale))
+        } else {
+            textView.string = plain
+            textView.textColor = dark ? .white : .textColor
+        }
+    }
+}
+
+private struct PDFPreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePageContinuous
+        view.backgroundColor = .clear
+        return view
+    }
+
+    func updateNSView(_ view: PDFView, context: Context) {
+        if view.document?.documentURL != url {
+            view.document = PDFDocument(url: url)
+        }
+    }
+}
+
+private struct QuickLookPreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> QLPreviewView {
+        let view = QLPreviewView(frame: .zero, style: .normal) ?? QLPreviewView()
+        view.shouldCloseWithWindow = false
+        view.autostarts = false
+        return view
+    }
+
+    func updateNSView(_ view: QLPreviewView, context: Context) {
+        view.previewItem = url as NSURL
+        view.refreshPreviewItem()
+    }
+
+    static func dismantleNSView(_ view: QLPreviewView, coordinator: ()) {
+        view.close()
+    }
+}
