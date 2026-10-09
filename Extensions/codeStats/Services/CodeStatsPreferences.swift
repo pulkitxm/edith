@@ -29,7 +29,7 @@ public enum CodeStatsFolderError: LocalizedError, Equatable {
     }
 }
 
-public struct CodeStatsFolderSelection: Equatable, Sendable {
+public struct CodeStatsFolderSelection: Codable, Equatable, Sendable {
     public let path: String
     public let changed: Bool
     public let external: Bool

@@ -85,16 +85,29 @@ public struct CodeStatsStore: Sendable {
             (try? fileManager.contentsOfDirectory(
                 at: repositoriesFolder, includingPropertiesForKeys: nil)) ?? []
         var caches: [String: CodeStatsRepositoryCache] = [:]
-        for owner in owners {
+        var byteCount = 0
+        var fileCount = 0
+        for owner in owners.prefix(CodeStatsOwnedIO.maximumCacheFiles) {
             let files =
                 (try? fileManager.contentsOfDirectory(at: owner, includingPropertiesForKeys: nil))
                 ?? []
-            for file in files where file.pathExtension == "json" {
-                guard let data = try? Data(contentsOf: file),
+            for file in files.prefix(CodeStatsOwnedIO.maximumCacheFiles)
+            where file.pathExtension == "json" {
+                guard fileCount < CodeStatsOwnedIO.maximumCacheFiles else { return caches }
+                fileCount += 1
+                guard
+                    let data = CodeStatsOwnedIO.read(
+                        file, root: root,
+                        limit: min(
+                            CodeStatsOwnedIO.maximumFileBytes,
+                            CodeStatsOwnedIO.maximumCacheBytes - byteCount)),
                     let cache = try? JSONDecoder().decode(
                         CodeStatsRepositoryCache.self, from: data),
-                    cache.version == CodeStatsRepositoryCache.currentVersion
+                    cache.version == CodeStatsRepositoryCache.currentVersion,
+                    CodeStatsOwnedIO.validRepository(cache.repository),
+                    file.standardizedFileURL == cacheFile(for: cache.repository).standardizedFileURL
                 else { continue }
+                byteCount += data.count
                 caches[cache.repository] = cache
             }
         }
@@ -102,10 +115,11 @@ public struct CodeStatsStore: Sendable {
     }
 
     public func save(_ cache: CodeStatsRepositoryCache) throws {
-        let file = cacheFile(for: cache.repository)
-        try FileManager.default.createDirectory(
-            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(cache).write(to: file, options: .atomic)
+        guard CodeStatsOwnedIO.validRepository(cache.repository) else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        try CodeStatsOwnedIO.write(
+            JSONEncoder().encode(cache), to: cacheFile(for: cache.repository), root: root)
     }
 
     public func removeCaches(except kept: Set<String>) {
@@ -115,32 +129,31 @@ public struct CodeStatsStore: Sendable {
     }
 
     public func loadReports() -> [CodeStatsReport] {
-        guard let data = try? Data(contentsOf: reportsFile) else { return [] }
+        guard let data = CodeStatsOwnedIO.read(reportsFile, root: root) else { return [] }
         return (try? JSONDecoder().decode([CodeStatsReport].self, from: data)) ?? []
     }
 
     public func saveReports(_ reports: [CodeStatsReport]) throws {
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try JSONEncoder().encode(reports).write(to: reportsFile, options: .atomic)
+        try CodeStatsOwnedIO.write(JSONEncoder().encode(reports), to: reportsFile, root: root)
     }
 
     public func loadFacts() -> CodeStatsFactTable? {
-        guard let data = try? Data(contentsOf: factsFile) else { return nil }
+        guard let data = CodeStatsOwnedIO.read(factsFile, root: root) else { return nil }
         return try? JSONDecoder().decode(CodeStatsFactTable.self, from: data)
     }
 
     public func saveFacts(_ table: CodeStatsFactTable) throws {
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try JSONEncoder().encode(table).write(to: factsFile, options: .atomic)
+        try CodeStatsOwnedIO.write(JSONEncoder().encode(table), to: factsFile, root: root)
     }
 
     public func loadState() -> CodeStatsState {
-        guard let data = try? Data(contentsOf: stateFile) else { return CodeStatsState() }
+        guard let data = CodeStatsOwnedIO.read(stateFile, root: root) else {
+            return CodeStatsState()
+        }
         return (try? JSONDecoder().decode(CodeStatsState.self, from: data)) ?? CodeStatsState()
     }
 
     public func saveState(_ state: CodeStatsState) throws {
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        try JSONEncoder().encode(state).write(to: stateFile, options: .atomic)
+        try CodeStatsOwnedIO.write(JSONEncoder().encode(state), to: stateFile, root: root)
     }
 }

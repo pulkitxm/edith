@@ -242,6 +242,27 @@ extension CodeStatsFactTable: Codable {
             throw DecodingError.dataCorruptedError(
                 forKey: .rows, in: container, debugDescription: "Fact columns differ in length")
         }
+        let repositoryCount = repositories.count
+        let languageCount = languages.count
+        guard count <= 1_000_000, repositories.count <= 4_096, languages.count <= 1_024,
+            repositories.allSatisfy(CodeStatsOwnedIO.validRepository),
+            languages.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 256 && !$0.utf8.contains(0) }),
+            columns.day.allSatisfy({ (-719_162...2_932_896).contains($0) }),
+            columns.hour.allSatisfy({ (0...23).contains($0) }),
+            columns.repository.allSatisfy({ (0..<repositoryCount).contains($0) }),
+            columns.language.allSatisfy({
+                $0 == Self.noLanguage || (0..<languageCount).contains($0)
+            }
+            ),
+            [columns.commits, columns.added, columns.updated, columns.deleted, columns.raw]
+                .allSatisfy({
+                    $0.allSatisfy { (0...1_000_000_000).contains($0) }
+                })
+        else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .rows, in: container,
+                debugDescription: "Fact table exceeds supported bounds")
+        }
         rows = (0..<count).map { index in
             CodeStatsFact(
                 day: columns.day[index], hour: columns.hour[index],

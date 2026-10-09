@@ -147,23 +147,34 @@ public actor CodeStatsEngine {
         let calendar = calendar
         let login = profile?.login
         let name = profile?.name
+        let cancellation = WorkCancellation()
         do {
-            try await BlockingWork.perform {
-                let table = CodeStatsFactBuilder.build(
-                    commits: entries.flatMap(\.commits),
-                    integrated: Set(entries.flatMap(\.integrated)),
-                    suggestions: CodeStatsIdentitySuggester.suggestions(
-                        authors: entries.flatMap(\.authors), identity: identity, login: login,
-                        name: name))
-                try store.saveFacts(table)
-                try store.saveReports(
-                    CodeStatsRange.presets.map {
-                        CodeStatsReportBuilder.build(
-                            table: table, filter: .default, range: $0, today: today,
-                            calendar: calendar)
-                    })
-                store.removeCaches(except: Set(discovered.map(\.fullName)))
+            try await withTaskCancellationHandler {
+                try await BlockingWork.perform {
+                    guard !cancellation.isCancelled else { throw CancellationError() }
+                    let table = CodeStatsFactBuilder.build(
+                        commits: entries.flatMap(\.commits),
+                        integrated: Set(entries.flatMap(\.integrated)),
+                        suggestions: CodeStatsIdentitySuggester.suggestions(
+                            authors: entries.flatMap(\.authors), identity: identity, login: login,
+                            name: name))
+                    guard !cancellation.isCancelled else { throw CancellationError() }
+                    try store.saveFacts(table)
+                    try store.saveReports(
+                        CodeStatsRange.presets.map {
+                            CodeStatsReportBuilder.build(
+                                table: table, filter: .default, range: $0, today: today,
+                                calendar: calendar)
+                        })
+                    guard !cancellation.isCancelled else { throw CancellationError() }
+                    store.removeCaches(except: Set(discovered.map(\.fullName)))
+                }
+            } onCancel: {
+                cancellation.cancel()
             }
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            return result(.cancelled, startedAt, profile, issue)
         } catch {
             return result(.failed(message: "\(error)"), startedAt, profile, issue)
         }

@@ -2,6 +2,16 @@ import EdithExtensionSupport
 import Foundation
 
 public enum CodeStatsPaths {
+    public static func prepare(
+        defaults: UserDefaults = SharedDefaults.store,
+        homeDirectory: URL = CodeStatsExecutionEnvironment.home
+    ) {
+        if selectedFolder(defaults: defaults, homeDirectory: homeDirectory) == nil {
+            defaults.removeObject(forKey: AppStorageKeys.CodeStats.folder)
+            defaults.removeObject(forKey: AppStorageKeys.CodeStats.folderConfirmation)
+        }
+    }
+
     public static func standardizedURL(_ path: String, homeDirectory: URL) -> URL {
         let expanded =
             path == "~"
@@ -20,7 +30,13 @@ public enum CodeStatsPaths {
             RestoredPathValidation.verdict(for: path, homeDirectory: homeDirectory) == .keep
                 || defaults.string(forKey: AppStorageKeys.CodeStats.folderConfirmation) == path
         else { return nil }
-        return standardizedURL(path, homeDirectory: homeDirectory).path
+        let normalized = standardizedURL(path, homeDirectory: homeDirectory).path
+        if let fixture = CodeStatsExecutionEnvironment.fixtureHome,
+            normalized != fixture.path && !normalized.hasPrefix(fixture.path + "/")
+        {
+            return nil
+        }
+        return normalized
     }
 
     public static func setFolder(
