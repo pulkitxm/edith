@@ -24,5 +24,17 @@ import Testing
                 HostContainedRole.accepts(
                     role: role, arguments: ["--contained-extension-probe"], fixture: true))
         }
+        #expect(
+            HostContainedRole.accepts(
+                role: "cameraCarrier",
+                arguments: ["--contained-extension-fixture-session"], fixture: true))
+        #expect(
+            !HostContainedRole.accepts(
+                role: "cameraProvider",
+                arguments: ["--contained-extension-fixture-session"], fixture: true))
+        #expect(
+            !HostContainedRole.accepts(
+                role: "cameraCarrier",
+                arguments: ["--contained-extension-fixture-session"], fixture: false))
     }
 }

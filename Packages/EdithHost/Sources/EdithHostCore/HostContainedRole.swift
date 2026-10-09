@@ -14,7 +14,11 @@ public enum HostContainedRole {
 
     public static func accepts(role: String, arguments: [String], fixture: Bool) -> Bool {
         guard roles.contains(role) else { return false }
-        if fixture { return arguments == ["--contained-extension-probe"] }
+        if fixture {
+            return arguments == ["--contained-extension-probe"]
+                || (role == "cameraCarrier"
+                    && arguments == ["--contained-extension-fixture-session"])
+        }
         return role == "cameraCarrier"
             ? arguments == ["--contained-extension-role"] : arguments.isEmpty
     }

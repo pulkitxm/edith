@@ -302,9 +302,12 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func shutdown() async {
+        let pending = [statusTask, sourceTask, thumbnailTask, pipelineTask].compactMap { $0 }
+        for task in pending { task.cancel() }
         attachments = 1
         if visible { disappear() }
         flushSave()
+        for task in pending { await task.value }
         await pipeline?.stopAndDrain()
         previewBus.close()
         display.onAvailabilityChanged = nil

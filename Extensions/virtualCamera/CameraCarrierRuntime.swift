@@ -20,7 +20,7 @@ import Security
         }
     }
 
-    private let environment: Environment
+    private var environment: Environment
     private var startup: Task<Void, Never>?
     private var retry: Task<Void, Never>?
     private var session: CameraCarrierSession?
@@ -47,8 +47,21 @@ import Security
         case "start":
             guard !started, let host = input["hostIdentifier"] as? String,
                 let version = input["version"] as? String,
-                input["fixture"] as? Bool == false
+                let fixture = input["fixture"] as? Bool
             else { return ["ok": false] as NSDictionary }
+            if fixture {
+                guard host.hasPrefix("com.pulkit.edith.tests."),
+                    Bundle.main.bundleIdentifier == host + ".cameraCarrier",
+                    let root = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"],
+                    Bundle.main.bundleURL.resolvingSymlinksInPath().path.hasPrefix(
+                        URL(fileURLWithPath: root).resolvingSymlinksInPath().path + "/")
+                else { return ["ok": false] as NSDictionary }
+                let lease = CameraFixtureLease()
+                environment = .init(
+                    admit: {}, lease: { _, _, _ in lease },
+                    broker: { CameraFixtureBroker(lease: lease) }, input: .standardInput,
+                    output: .standardOutput, exited: { CFRunLoopStop(CFRunLoopGetMain()) })
+            }
             do { try environment.admit() } catch { return ["ok": false] as NSDictionary }
             started = true
             let source = Bundle.main.bundleURL.appendingPathComponent(
@@ -123,6 +136,30 @@ import Security
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+}
+
+@MainActor private final class CameraFixtureLease: CameraCarrierLease {
+    var providerActive = false
+    var microphoneActive = false
+    func begin() async throws -> Bool { !providerActive }
+    func providerExited() async throws -> Bool { !providerActive }
+    func prepareMicrophone() async throws { microphoneActive = true }
+    func retireMicrophone() async throws { microphoneActive = false }
+    func release() async throws {
+        guard !providerActive, !microphoneActive else { throw CocoaError(.fileWriteUnknown) }
+    }
+}
+
+@MainActor private final class CameraFixtureBroker: CameraSystemExtensionSubmitting {
+    let lease: CameraFixtureLease
+    init(lease: CameraFixtureLease) { self.lease = lease }
+    func submit(
+        _ operation: CameraSystemExtensionOperation, identifier: String,
+        completion: @escaping @MainActor (CameraSystemExtensionEvent) -> Void
+    ) {
+        lease.providerActive = operation == .activate
+        completion(.completed)
     }
 }
 
