@@ -18,6 +18,14 @@ let package = Package(
             name: "LaTeXExtensionTests", dependencies: ["LaTeXExtension"],
             path: "latex/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
+            name: "CompanionExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "companion", exclude: ["Tests", "Runtime.swift"],
+            swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "CompanionExtensionTests", dependencies: ["CompanionExtension"],
+            path: "companion/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "clipboard", exclude: ["Tests", "Runtime.swift"],
