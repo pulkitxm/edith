@@ -66,7 +66,7 @@ export async function copyNativeFrameworks(root, definition, contents) {
     if (
       !name.endsWith(".framework") ||
       names.has(name) ||
-      !origin.startsWith(packageRoot + "/")
+      !origin.startsWith(`${packageRoot}/`)
     )
       throw new Error("Duplicate or invalid native framework");
     names.add(name);
@@ -78,7 +78,7 @@ export async function copyNativeFrameworks(root, definition, contents) {
       force: true,
     });
     const binary = await realpath(resolve(destination, name.slice(0, -10)));
-    if (!binary.startsWith((await realpath(destination)) + "/"))
+    if (!binary.startsWith(`${await realpath(destination)}/`))
       throw new Error("Native framework executable escapes its bundle");
     binaries.push({
       binary,
@@ -102,7 +102,7 @@ export function nativeClangModuleFlags(root, definition) {
       root,
       definition.nativePackage,
       ".build/release",
-      target + ".build",
+      `${target}.build`,
     ),
   ]);
 }
@@ -131,6 +131,49 @@ export function nativeSwiftPackageArguments(root, definition, developer) {
   ];
 }
 
+export function nativeRolePolicy(definition) {
+  const native = !!(definition.nativePackage || definition.nativeCargo);
+  const roles = Object.keys(definition.roles ?? {});
+  const selected = definition.nativeRoles ?? roles;
+  if (
+    (definition.nativeRoles !== undefined &&
+      (!native || !Array.isArray(definition.nativeRoles))) ||
+    (native &&
+      (!Array.isArray(selected) ||
+        selected.length === 0 ||
+        new Set(selected).size !== selected.length ||
+        selected.some(
+          (role) => typeof role !== "string" || !roles.includes(role),
+        ))) ||
+    (definition.nativeLink !== undefined &&
+      (typeof definition.nativeLink !== "boolean" || !definition.nativePackage))
+  )
+    throw new Error("Invalid native role or linking policy");
+  return {
+    roles: native ? selected : [],
+    link: definition.nativeLink !== false,
+  };
+}
+
+export function nativePackageLinkFlags(root, definition, contents) {
+  if (definition.nativeLink === false) return [];
+  const frameworks = resolve(contents, "Frameworks");
+  return [
+    ...nativeClangModuleFlags(root, definition),
+    "-F",
+    frameworks,
+    "-I",
+    resolve(root, definition.nativePackage, ".build/release/Modules"),
+    "-L",
+    frameworks,
+    `-l${definition.nativeProduct}`,
+    "-Xlinker",
+    "-rpath",
+    "-Xlinker",
+    "@loader_path/../Frameworks",
+  ];
+}
+
 export async function buildExtensionPackage({
   root = process.cwd(),
   id,
@@ -145,6 +188,7 @@ export async function buildExtensionPackage({
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  const nativePolicy = nativeRolePolicy(definition);
   if (definition.contractVersion === 1 && definition.usesHostFramework)
     throw new Error(
       "Worker extensions must not depend on the legacy host framework",
@@ -264,7 +308,7 @@ export async function buildExtensionPackage({
       }
     }
     const nativeFlags = [];
-    if (cargoLibrary) {
+    if (cargoLibrary && nativePolicy.roles.includes(role)) {
       const frameworks = resolve(contents, "Frameworks");
       await mkdir(frameworks, { recursive: true });
       const library = resolve(frameworks, definition.nativeCargo.library);
@@ -287,7 +331,7 @@ export async function buildExtensionPackage({
         { stdio: "inherit" },
       );
     }
-    if (definition.nativePackage) {
+    if (definition.nativePackage && nativePolicy.roles.includes(role)) {
       const libraryName = `lib${definition.nativeProduct}.dylib`;
       const frameworks = resolve(contents, "Frameworks");
       await mkdir(frameworks, { recursive: true });
@@ -306,7 +350,7 @@ export async function buildExtensionPackage({
         if (!architectures.includes("arm64"))
           throw new Error("A native framework lacks arm64");
         if (architectures.length > 1) {
-          const temporary = binary + ".arm64";
+          const temporary = `${binary}.arm64`;
           execFileSync("lipo", [
             binary,
             "-thin",
@@ -384,20 +428,7 @@ export async function buildExtensionPackage({
         ],
         { stdio: "inherit" },
       );
-      nativeFlags.push(...nativeClangModuleFlags(root, definition));
-      nativeFlags.push(
-        "-F",
-        frameworks,
-        "-I",
-        resolve(root, definition.nativePackage, ".build/release/Modules"),
-        "-L",
-        frameworks,
-        `-l${definition.nativeProduct}`,
-        "-Xlinker",
-        "-rpath",
-        "-Xlinker",
-        "@loader_path/../Frameworks",
-      );
+      nativeFlags.push(...nativePackageLinkFlags(root, definition, contents));
     }
     execFileSync(
       "xcrun",
