@@ -51,7 +51,7 @@ final class LidAwakePrivilegedRuntime: NSObject {
             }
             let created = LidAwakePrivilegedController(
                 read: { false },
-                apply: { [weak self] value in await MainActor.run { self?.fixtureState = value } })
+                apply: { [weak self] value in self?.fixtureState = value })
             controller = created; return created
         }
         let original = try Self.readJournal(journal)
