@@ -57,6 +57,7 @@ try {
     ])
       assert.equal(result[key], true);
     assert.equal(result.disabledProcesses, 0);
+    if (id === "calendar") assert.equal(result.surfaceDataValidated, true);
     if (retainPackages) {
       const output = resolve("dist/extensions");
       await mkdir(output, { recursive: true });

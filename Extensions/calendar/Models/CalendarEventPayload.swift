@@ -38,6 +38,7 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
     public var id: String
     public var title: String
     public var calendar: String
+    public var calendarID: String
     public var calendarColor: CalendarColorPayload?
     public var start: Date
     public var end: Date
@@ -60,6 +61,7 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
         id: String = UUID().uuidString,
         title: String,
         calendar: String = "",
+        calendarID: String? = nil,
         calendarColor: CalendarColorPayload? = nil,
         start: Date,
         end: Date,
@@ -81,6 +83,7 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
         self.id = id
         self.title = title
         self.calendar = calendar
+        self.calendarID = calendarID ?? calendar
         self.calendarColor = calendarColor
         self.start = start
         self.end = end
@@ -105,6 +108,7 @@ public struct CalendarEventPayload: Codable, Equatable, Identifiable, Sendable {
         id = event.eventIdentifier ?? event.calendarItemExternalIdentifier ?? UUID().uuidString
         title = event.title ?? "Untitled"
         calendar = event.calendar?.title ?? ""
+        calendarID = event.calendar?.calendarIdentifier ?? "unknown"
         calendarColor = Self.color(event.calendar?.cgColor)
         start = event.startDate
         end = event.endDate

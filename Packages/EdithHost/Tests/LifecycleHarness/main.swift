@@ -229,7 +229,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(extensionID == "calendar")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -257,6 +257,23 @@ struct HostLifecycleHarness {
         let context = try JSONDecoder().decode(SurfaceContextSnapshot.self, from: data)
         guard context.contractVersion == 1, context.activeIDs == [id], context.home == saved else {
             throw HostWorkerError.invalidResponse
+        }
+        if id == "calendar" {
+            let request = SurfaceSnapshotRequest(target: .home, tile: .init(.calendar))
+            let data = try await endpoint.invoke(
+                "surface.snapshot", payload: request.encoded(providerID: id))
+            let snapshot = try SurfaceSnapshot.decode(data, providerID: id)
+            guard snapshot.rows.count <= request.tile.itemLimit else {
+                throw HostWorkerError.invalidResponse
+            }
+            do {
+                let invalid = SurfaceActionRequest(
+                    snapshot: request, actionID: "join:unlisted-synthetic-meeting")
+                _ = try await endpoint.invoke(
+                    "surface.perform", payload: invalid.encoded(providerID: id))
+                throw HostWorkerError.invalidResponse
+            } catch HostWorkerError.invalidResponse { throw HostWorkerError.invalidResponse } catch
+            {}
         }
     }
 
