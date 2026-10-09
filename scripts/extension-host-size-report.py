@@ -34,15 +34,16 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "architecture": "arm64",
         "signature": "development",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
-        "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "shared Home and Notch layout contract", "code signatures"],
-        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "Home and Notch visual editor and worker card adapters", "Notch extension renderer", "required platform carriers", "shipping release packaging", "final release-host measurements"],
+        "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "Home, customization editor and shared UI", "code signatures"],
+        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "remaining live card adapters and Home clock controls", "Notch extension renderer", "required platform carriers", "shipping release packaging", "final release-host measurements"],
     }
     result["surfaceCustomization"] = {
         "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
-        "reviewedCommit": "f7aa029b299e963262910ac37f6d78172819f1ac",
+        "reviewedCommit": "31edeb8ccf693441b1da155a6be6491981d3f08d",
+        "mergedCommit": "98a0f440e161c130f7ebd12a9da5dea42c38b238",
         "layoutContractVersion": 1,
-        "implemented": ["host-owned layouts and profiles", "undo and redo", "availability for every indexed extension", "composite provider filtering", "read-only worker context", "layout retention through worker updates and app restarts"],
-        "outstanding": ["visual editor port", "Home card data and action adapters", "Notch renderer and integrations", "synthetic visual verification"],
+        "implemented": ["host-owned layouts and profiles", "undo and redo", "availability for every indexed extension", "composite provider filtering", "read-only worker context", "layout retention through worker updates and app restarts", "visual editor at compact, regular and zoomed sizes in both color schemes", "shared canvas and shelf rendering", "bounded versioned snapshot and action requests", "cancellation on disable, removal, update or hidden views", "immediate Presenter privacy observation", "Calendar live cards and validated meeting actions"],
+        "outstanding": ["remaining Home card data and action adapters", "world clock controls", "Notch renderer and integrations", "final combined synthetic visual verification"],
     }
     return result
 
@@ -88,9 +89,9 @@ Compatible installed extensions survive app updates without downloading them aga
 
 Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All {count} migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
 
-Home and Notch customization from [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The shared layout contract, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. The original visual editor, card data/action adapters, and Notch renderer still need porting and visual verification.
+Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The remaining live-card adapters, full world-clock controls, and the Notch worker are still being migrated.
 
-A card is active only when its provider is installed, compatible, and running. Downloaded or remembered-enabled extensions do not count as running. Runtime layouts omit inactive cards without changing the saved configuration. Disabled, removed, or temporarily incompatible extensions retain their positions, filters, and profiles for later restoration. The availability planner returns no provider queries for hidden surfaces and hidden cards. A widget cannot implicitly start an extension.
+A card is active only when its provider is installed, compatible, and running. Downloaded or remembered-enabled extensions do not count as running. Runtime layouts omit inactive cards without changing the saved configuration. Disabled, removed, or temporarily incompatible extensions retain their positions, filters, and profiles for later restoration. The availability planner returns no provider queries for hidden surfaces and hidden cards. A widget cannot implicitly start an extension. The shared request client cancels affected requests on disable, removal, or version changes and rejects late replies. Presenter changes clear displayed private card data and pause requests immediately. Editor sample previews are labeled explicitly and do not start workers or fetch data; live preview only queries already running providers.
 
 | Customized content | Planned data and action owner |
 | --- | --- |
