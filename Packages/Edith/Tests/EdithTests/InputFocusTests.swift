@@ -1,6 +1,7 @@
 import AppKit
-import EdithKit
 import Testing
+
+@testable import EdithKit
 
 @MainActor
 @Suite struct InputFocusTests {
@@ -17,6 +18,35 @@ import Testing
         #expect(!InputFocus.isTypeAheadKey(characters: "é", modifiers: []))
         #expect(!InputFocus.isTypeAheadKey(characters: "a", modifiers: [.command]))
         #expect(!InputFocus.isTypeAheadKey(characters: nil, modifiers: []))
+    }
+
+    @Test func commandFSelectsTheVisibleSearchAndSkipsUnavailableFields() throws {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 180))
+        let field = NSTextField(frame: NSRect(x: 20, y: 20, width: 200, height: 28))
+        field.stringValue = "sample query"
+        let anchor = NSView(frame: field.frame)
+        let disabled = NSTextField(frame: NSRect(x: 20, y: 80, width: 200, height: 28))
+        disabled.isEnabled = false
+        let disabledAnchor = NSView(frame: disabled.frame)
+        for view in [field, anchor, disabled, disabledAnchor] { root.addSubview(view) }
+        let window = TestWindowHost.window(contentRect: root.frame)
+        window.contentView = root
+        window.orderBack(nil)
+        defer {
+            TypeAhead.shared.unregister(anchor: anchor)
+            TypeAhead.shared.unregister(anchor: disabledAnchor)
+            window.orderOut(nil)
+        }
+        TypeAhead.shared.register(anchor: anchor, typeAhead: false)
+        TypeAhead.shared.register(anchor: disabledAnchor, typeAhead: false)
+        #expect(!TypeAhead.shared.focusField(in: window, typeAheadOnly: true))
+        #expect(TypeAhead.shared.focusField(in: window, selectAll: true))
+        let editor = try #require(field.currentEditor())
+        #expect(editor.selectedRange == NSRange(location: 0, length: field.stringValue.count))
+        #expect(disabled.currentEditor() == nil)
+        #expect(InputFocus.isSearchShortcut(characters: "f", modifiers: .command))
+        #expect(!InputFocus.isSearchShortcut(characters: "f", modifiers: [.command, .shift]))
+        #expect(!InputFocus.isSearchShortcut(characters: "f", modifiers: []))
     }
 
     @Test func onlyOverflowingContentScrolls() {

@@ -7,9 +7,10 @@ struct StudioFilesView: View {
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columns: [GridItem] {
-        PageMetrics.cardColumns(compact, minimum: 222, maximum: 280, spacing: 14)
+        PageMetrics.cardColumns(compact, minimum: 222, spacing: 14)
     }
 
     var body: some View {
@@ -22,7 +23,7 @@ struct StudioFilesView: View {
         } else {
             VStack(spacing: 0) {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+                    LazyVStack(alignment: .leading, spacing: UIScale.pt(14)) {
                         StudioFileFilters(model: model)
                         if model.visibleFiles.isEmpty {
                             ContentUnavailableView {
@@ -45,14 +46,18 @@ struct StudioFilesView: View {
                         }
                     }
                     .pageContent(compact)
+                    .pageScrollPosition("studio/files")
                 }
                 .scrollIndicators(.automatic)
                 if !model.selection.isEmpty {
                     StudioSelectionBar(model: model)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(
+                            reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.easeOut(duration: 0.15), value: model.selection.isEmpty)
+            .animation(
+                Motion.animation(Motion.feedback, reduceMotion: reduceMotion),
+                value: model.selection.isEmpty)
         }
     }
 }
@@ -61,6 +66,7 @@ struct StudioDropHero: View {
     let model: StudioModel
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let popular = [
         "pdf.merge", "pdf.compress", "pdf.edit", "pdf.sign", "image.compress",

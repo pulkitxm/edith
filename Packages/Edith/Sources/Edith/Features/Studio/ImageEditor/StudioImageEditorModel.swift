@@ -4,6 +4,7 @@ import EdithStudio
 import Observation
 
 enum StudioImagePanel: String, CaseIterable, Identifiable {
+    case select
     case crop
     case adjust
     case filters
@@ -19,6 +20,7 @@ enum StudioImagePanel: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .select: "Select"
         case .crop: "Crop & rotate"
         case .adjust: "Adjust"
         case .filters: "Filters"
@@ -34,6 +36,7 @@ enum StudioImagePanel: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
+        case .select: "cursorarrow"
         case .crop: "crop.rotate"
         case .adjust: "slider.horizontal.3"
         case .filters: "camera.filters"
@@ -50,6 +53,12 @@ enum StudioImagePanel: String, CaseIterable, Identifiable {
 
 struct StudioImageSource: @unchecked Sendable {
     let image: CGImage
+    let originalSize: CGSize?
+
+    init(image: CGImage, originalSize: CGSize? = nil) {
+        self.image = image
+        self.originalSize = originalSize
+    }
 }
 
 @MainActor
@@ -57,7 +66,7 @@ struct StudioImageSource: @unchecked Sendable {
 final class StudioImageEditorModel {
     let url: URL
     var document: ImageEditDocument
-    var panel: StudioImagePanel = .adjust
+    var panel: StudioImagePanel = .select
     var preview: CGImage?
     var renderedDocument: ImageEditDocument?
     var savedDocument: ImageEditDocument?
@@ -80,6 +89,7 @@ final class StudioImageEditorModel {
     private var undoStack: [ImageEditDocument] = []
     private var redoStack: [ImageEditDocument] = []
     private var renderTask: Task<Void, Never>?
+    @ObservationIgnored private var renderingFast = false
     private var loadTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var thumbnailTask: Task<Void, Never>?
@@ -164,6 +174,7 @@ final class StudioImageEditorModel {
     func commitPreview(from original: ImageEditDocument) {
         guard original != document else { return }
         undoStack.append(original)
+        if undoStack.count > 60 { undoStack.removeFirst() }
         redoStack.removeAll()
         render()
     }
@@ -189,17 +200,24 @@ final class StudioImageEditorModel {
 
     func render(fast: Bool = false) {
         guard let source else { return }
+        if fast && renderingFast && rendering.isRunning { return }
         renderTask?.cancel()
-        let document = self.document
+        renderingFast = fast
         let request = rendering.begin(preservingContent: preview != nil)
         let size = fast ? 900 : Self.previewSize
         let wantsGeometry = panel == .crop
         renderTask = Task { [weak self] in
+            if fast {
+                try? await Task.sleep(for: .milliseconds(32))
+            }
+            guard let self, self.rendering.isCurrent(request) else { return }
+            let document = self.document
             let rendered = await Task.detached(priority: .userInitiated) {
                 StudioImageEditorWork.render(
                     document, source: source, size: size, geometry: wantsGeometry)
             }.value
-            guard let self, self.rendering.isCurrent(request) else { return }
+            guard self.rendering.isCurrent(request) else { return }
+            self.renderingFast = false
             switch rendered {
             case let .success(images):
                 self.preview = images.preview
@@ -207,6 +225,7 @@ final class StudioImageEditorModel {
                 if let geometry = images.geometry { self.geometry = geometry }
                 self.loadError = nil
                 self.rendering.complete(request)
+                if document != self.document { self.render(fast: true) }
             case let .failure(error):
                 self.status = error.localizedDescription
                 self.rendering.fail(request, error: error)
@@ -216,6 +235,7 @@ final class StudioImageEditorModel {
 
     func switchPanel(_ next: StudioImagePanel) {
         panel = next
+        if [.draw, .shapes, .blur].contains(next) { selectedLayer = nil }
         if next == .crop { render() }
     }
 
@@ -240,6 +260,7 @@ final class StudioImageEditorModel {
         let layer = ImageLayer.text(text, at: frame)
         edit { $0.add(layer) }
         selectedLayer = layer.id
+        self.panel = .select
     }
 
     func addMeme() {
@@ -256,7 +277,7 @@ final class StudioImageEditorModel {
             document.add(topLayer)
             document.add(bottomLayer)
         }
-        selectedLayer = topLayer.id
+        selectLayer(topLayer.id)
     }
 
     func addSticker(_ value: String) {
@@ -269,6 +290,7 @@ final class StudioImageEditorModel {
         )
         edit { $0.add(layer) }
         selectedLayer = layer.id
+        self.panel = .select
     }
 
     func addImageLayer() {
@@ -287,6 +309,7 @@ final class StudioImageEditorModel {
         )
         edit { $0.add(layer) }
         selectedLayer = layer.id
+        self.panel = .select
     }
 
     func addStroke(_ points: [CGPoint]) {
@@ -320,6 +343,7 @@ final class StudioImageEditorModel {
         let layer = ImageLayer(content: .shape(style), frame: frame)
         edit { $0.add(layer) }
         selectedLayer = layer.id
+        self.panel = .select
     }
 
     func addRedaction(from start: CGPoint, to end: CGPoint) {
@@ -332,6 +356,7 @@ final class StudioImageEditorModel {
             frame: StudioRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height))
         edit { $0.add(layer) }
         selectedLayer = layer.id
+        self.panel = .select
     }
 
     func blurFaces() {
@@ -359,9 +384,60 @@ final class StudioImageEditorModel {
         }
     }
 
+    func selectLayer(_ id: UUID?) {
+        selectedLayer = id
+        if id != nil { panel = .select }
+    }
+
     func updateSelected(_ change: (inout ImageLayer) -> Void) {
         guard let selectedLayer else { return }
         edit { $0.updateLayer(selectedLayer, change) }
+    }
+
+    func duplicateSelected() {
+        guard let selectedLayer else { return }
+        var copied: UUID?
+        edit { copied = $0.duplicateLayer(selectedLayer) }
+        selectLayer(copied)
+    }
+
+    func handleCanvasKey(_ event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let character = event.charactersIgnoringModifiers?.lowercased()
+        if modifiers == .command, character == "d", selected != nil {
+            duplicateSelected()
+            return true
+        }
+        if character == "z", modifiers == .command || modifiers == [.command, .shift] {
+            if modifiers.contains(.shift) { redo() } else { undo() }
+            return true
+        }
+        guard modifiers.isEmpty || modifiers == .shift else { return false }
+        if event.keyCode == 53 {
+            guard selectedLayer != nil || panel != .select else { return false }
+            selectedLayer = nil
+            panel = .select
+            return true
+        }
+        guard let selected, !selected.isHidden, panel == .select else { return false }
+        if event.keyCode == 51 || event.keyCode == 117 {
+            deleteSelected()
+            return true
+        }
+        let offset: CGPoint
+        switch event.keyCode {
+        case 123: offset = CGPoint(x: -1, y: 0)
+        case 124: offset = CGPoint(x: 1, y: 0)
+        case 125: offset = CGPoint(x: 0, y: 1)
+        case 126: offset = CGPoint(x: 0, y: -1)
+        default: return false
+        }
+        let step = modifiers.contains(.shift) ? 10.0 : 1.0
+        updateSelected { layer in
+            layer.frame.x += offset.x * step / max(1, canvasSize.width)
+            layer.frame.y += offset.y * step / max(1, canvasSize.height)
+        }
+        return true
     }
 
     func deleteSelected() {
@@ -416,8 +492,13 @@ enum StudioImageEditorWork {
 
     static func loadSource(_ url: URL, maxPixelSize: Int) -> Result<StudioImageSource, Error> {
         do {
+            let originalSize = StudioImageIO.info(url).map {
+                CGSize(width: $0.width, height: $0.height)
+            }
             return .success(
-                StudioImageSource(image: try StudioImageIO.load(url, maxPixelSize: maxPixelSize)))
+                StudioImageSource(
+                    image: try StudioImageIO.load(url, maxPixelSize: maxPixelSize),
+                    originalSize: originalSize))
         } catch {
             return .failure(error)
         }

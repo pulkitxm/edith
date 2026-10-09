@@ -23,8 +23,12 @@ struct PageLoading<Content: View>: View {
             state: state, title: title, message: message, retry: retry, cancel: cancel,
             refreshing: refreshing
         ) {
-            VStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+            if layout == .editor {
                 content()
+            } else {
+                LazyVStack(alignment: .leading, spacing: UIScale.pt(PageMetrics.sectionSpacing)) {
+                    content()
+                }
             }
         } placeholder: {
             PageSkeleton(layout: layout)

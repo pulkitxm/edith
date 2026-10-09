@@ -30,6 +30,7 @@ final class CodeStatsModel {
     private(set) var explorer = CodeStatsExplorer()
     private(set) var lastPreset = CodeStatsRange.days(90)
 
+    @ObservationIgnored private var reportRevision: UInt64 = 0
     @ObservationIgnored private let service: CodeStatsPageService
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let calendar: Calendar
@@ -47,6 +48,13 @@ final class CodeStatsModel {
         self.calendar = calendar
         self.today = today
         identity = CodeStatsPreferences.identity(in: defaults)
+        if let data = defaults.data(forKey: AppStorageKeys.CodeStats.pageSelection),
+            let selection = try? JSONDecoder().decode(CodeStatsPageSelection.self, from: data)
+        {
+            filter = selection.filter
+            range = selection.range
+            lastPreset = selection.lastPreset
+        }
     }
 
     var phase: CodeStatsPagePhase {
@@ -132,8 +140,9 @@ final class CodeStatsModel {
     }
 
     func refresh() async {
+        let revision = reportRevision
         await loadStatus()
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, reportRevision == revision else { return }
         await loadReport()
     }
 
@@ -166,6 +175,7 @@ final class CodeStatsModel {
                 await recompute()
                 guard reportLoad.isCurrent(request) else { return }
                 reportLoaded = true
+                reportRevision &+= 1
                 reportLoad.complete(request)
                 return
             }
@@ -177,6 +187,7 @@ final class CodeStatsModel {
             report = next
             projection = projected ?? CodeStatsProjection()
             reportLoaded = true
+            reportRevision &+= 1
             reportLoad.complete(request)
         } catch {
             reportLoad.fail(request, error: error)
@@ -187,6 +198,7 @@ final class CodeStatsModel {
         guard next != range else { return }
         if CodeStatsRange.presets.contains(next) { lastPreset = next }
         range = next
+        saveSelection()
         if table != nil {
             await recompute()
         } else {
@@ -201,6 +213,7 @@ final class CodeStatsModel {
         change(&next)
         guard next != filter else { return }
         filter = next
+        saveSelection()
         await recompute()
     }
 
@@ -275,6 +288,8 @@ final class CodeStatsModel {
         let identity = identity
         let now = today()
         await computation.perform(operation: {
+            try await Task.sleep(for: .milliseconds(60))
+            try Task.checkCancellation()
             let report = CodeStatsReportBuilder.build(
                 table: table, filter: filter, range: range, today: now, calendar: calendar)
             return (
@@ -401,6 +416,13 @@ final class CodeStatsModel {
         await loadStatus()
     }
 
+    private func saveSelection() {
+        let selection = CodeStatsPageSelection(filter: filter, range: range, lastPreset: lastPreset)
+        if let data = try? JSONEncoder().encode(selection) {
+            defaults.set(data, forKey: AppStorageKeys.CodeStats.pageSelection)
+        }
+    }
+
     private func followAgent() async {
         for await next in service.updates() {
             guard !Task.isCancelled else { return }
@@ -420,4 +442,10 @@ enum CodeStatsAuthorMarking {
             return updated
         }
     }
+}
+
+private struct CodeStatsPageSelection: Codable {
+    var filter: CodeStatsFilter
+    var range: CodeStatsRange
+    var lastPreset: CodeStatsRange
 }

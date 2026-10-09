@@ -42,6 +42,7 @@ struct VideoCanvas: View {
                         display: display,
                         title: annotation.type == "text"
                             ? annotation.text : annotation.type.capitalized,
+                        preserveAspect: annotation.type == "image",
                         selected: model.selection == .annotation(annotation.id),
                         select: { model.selection = .annotation(annotation.id) },
                         commit: { model.placeAnnotation(annotation.id, rect: $0) })
@@ -54,9 +55,19 @@ struct VideoCanvas: View {
                             x: (project.webcamPosition["cx"] ?? 0.84) - width / 2,
                             y: (project.webcamPosition["cy"] ?? 0.8) - height / 2,
                             width: width, height: height),
-                        display: display, title: "Webcam", selected: model.selection == .webcam,
+                        display: display, title: "Webcam", preserveAspect: true,
+                        selected: model.selection == .webcam,
                         select: { model.selection = .webcam }, commit: model.placeCamera)
                 }
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if model.canvasEditing, model.player.rate == 0, model.editingZoomID == nil,
+                case let .annotation(id) = model.selection,
+                let annotation = model.project?.annotations.first(where: { $0.id == id })
+            {
+                VideoCanvasSelectionControls(annotation: annotation, model: model)
+                    .id(id)
             }
         }
         .pageTask(id: cameraPath) {
@@ -74,14 +85,57 @@ struct VideoCanvas: View {
     }
 }
 
-private struct VideoCanvasHandle: View {
+private struct VideoCanvasSelectionControls: View {
+    let annotation: VideoProject.Annotation
+    let model: VideoEditorModel
+    @State private var text = ""
+
+    var body: some View {
+        HStack(spacing: UIScale.pt(8)) {
+            if annotation.type == "text" {
+                TextField("Selected text", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: UIScale.pt(300))
+                    .onSubmit { apply() }
+                    .onChange(of: annotation.text) { text = annotation.text }
+                    .onAppear { text = annotation.text }
+                    .onDisappear { apply() }
+                Button("Apply", action: apply)
+                    .disabled(text == annotation.text)
+            } else {
+                Text(annotation.type.capitalized).font(.edithText(.body))
+            }
+            Button("Delete", systemImage: "trash", role: .destructive) {
+                model.removeCaption(annotation.id)
+            }
+            .labelStyle(.iconOnly)
+            .help("Delete selected overlay")
+        }
+        .buttonStyle(.edith(.secondary))
+        .padding(UIScale.pt(10))
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: UIScale.pt(12)))
+        .padding(UIScale.pt(12))
+    }
+
+    private func apply() {
+        guard text != annotation.text,
+            model.project?.annotations.contains(where: { $0.id == annotation.id }) == true
+        else { return }
+        model.updateCaption(annotation.id, text: text)
+    }
+}
+
+struct VideoCanvasHandle: View {
     let rect: CGRect
     let display: CGRect
     let title: String
+    var preserveAspect = false
     let selected: Bool
     let select: () -> Void
     let commit: (CGRect) -> Void
     @State private var draft: CGRect?
+    @State private var activeCorner: Int?
+    @State private var origin: CGRect?
 
     var body: some View {
         let area = draft ?? rect
@@ -94,13 +148,20 @@ private struct VideoCanvasHandle: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
-        .highPriorityGesture(drag("move"))
-        .overlay(alignment: .bottomTrailing) {
+        .overlay {
             if selected {
-                Rectangle().fill(.white).frame(width: UIScale.pt(12), height: UIScale.pt(12))
-                    .overlay { Rectangle().stroke(.cyan) }
-                    .gesture(drag("resize"))
-                    .accessibilityLabel("Resize \(title)")
+                GeometryReader { geometry in
+                    ForEach(0..<4, id: \.self) { corner in
+                        let anchor = CanvasSelectionGeometry.anchor(
+                            corner,
+                            in: CGRect(origin: .zero, size: geometry.size))
+                        RoundedRectangle(cornerRadius: 2).fill(.white)
+                            .frame(width: UIScale.pt(10), height: UIScale.pt(10))
+                            .overlay { RoundedRectangle(cornerRadius: 2).stroke(.cyan) }
+                            .position(anchor)
+                    }
+                }
+                .allowsHitTesting(false)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -113,6 +174,11 @@ private struct VideoCanvasHandle: View {
             width: max(12, area.width * display.width),
             height: max(12, area.height * display.height)
         )
+        .padding(UIScale.pt(12))
+        .contentShape(Rectangle())
+        .overlay {
+            CanvasPointerSurface(onChanged: dragChanged, onEnded: dragEnded)
+        }
         .position(
             x: display.minX + area.midX * display.width,
             y: display.minY + area.midY * display.height
@@ -120,24 +186,39 @@ private struct VideoCanvasHandle: View {
         .accessibilityLabel("Move \(title)")
     }
 
-    private func drag(_ handle: String) -> some Gesture {
-        DragGesture(minimumDistance: 2, coordinateSpace: .named("videoCanvas"))
-            .onChanged { value in
-                select()
-                draft = adjusted(value.translation, handle: handle)
+    private func dragChanged(_ value: CanvasPointerDrag) {
+        if origin == nil {
+            origin = rect
+            if selected {
+                activeCorner = CanvasSelectionGeometry.corner(
+                    at: value.startLocation,
+                    frame: CGRect(
+                        x: UIScale.pt(12), y: UIScale.pt(12),
+                        width: rect.width * display.width, height: rect.height * display.height))
             }
-            .onEnded { value in
-                commit(adjusted(value.translation, handle: handle))
-                draft = nil
-            }
+            select()
+        }
+        draft = adjusted(value.translation)
     }
 
-    private func adjusted(_ translation: CGSize, handle: String) -> CGRect {
-        VideoCanvasGeometry.adjust(
-            rect,
-            translation: CGSize(
-                width: translation.width / max(1, display.width),
-                height: translation.height / max(1, display.height)),
-            handle: handle)
+    private func dragEnded(_ value: CanvasPointerDrag) {
+        let result = adjusted(value.translation)
+        if result != rect { commit(result) }
+        draft = nil
+        origin = nil
+        activeCorner = nil
+    }
+
+    private func adjusted(_ translation: CGSize) -> CGRect {
+        let normalized = CGSize(
+            width: translation.width / max(1, display.width),
+            height: translation.height / max(1, display.height))
+        if let activeCorner {
+            return CanvasSelectionGeometry.resize(
+                origin ?? rect, corner: activeCorner,
+                delta: CGPoint(x: normalized.width, y: normalized.height), minimum: 0.03,
+                preserveAspect: preserveAspect)
+        }
+        return VideoCanvasGeometry.adjust(origin ?? rect, translation: normalized, handle: "move")
     }
 }

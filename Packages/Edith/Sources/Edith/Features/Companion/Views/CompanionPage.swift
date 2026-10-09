@@ -60,16 +60,17 @@ enum CompanionTab: String, CaseIterable, Identifiable {
 }
 
 struct CompanionPage: View {
-    @State private var home = CompanionHomeModel()
-    @State private var chat = CompanionChatModel()
+    @State private var workspace: CompanionWorkspaceSession
+    private var home: CompanionHomeModel { workspace.home }
+    private var chat: CompanionChatModel { workspace.chat }
     @StateObject private var fallbackOwner = WindowSessionOwner()
     @Environment(\.windowSessionOwner) private var sessionOwner
     private var capture: CompanionCaptureModel { sessionOwner?.capture ?? fallbackOwner.capture }
-    @State private var library = CompanionLibraryModel()
-    @State private var mind = CompanionMindModel()
-    @State private var desk = CompanionDeskModel()
-    @State private var backend = CompanionBackendModel()
-    @State private var reason = CompanionSettingsModel()
+    private var library: CompanionLibraryModel { workspace.library }
+    private var mind: CompanionMindModel { workspace.mind }
+    private var desk: CompanionDeskModel { workspace.desk }
+    private var backend: CompanionBackendModel { workspace.backend }
+    private var reason: CompanionSettingsModel { workspace.settings }
     @AppStorage(AppStorageKeys.Companion.tab, store: SharedDefaults.store)
     private var tabRaw = CompanionTab.chat.rawValue
     @Environment(\.colorScheme) private var scheme
@@ -78,12 +79,15 @@ struct CompanionPage: View {
     @Environment(\.companionRequestsEnabled) private var requestsEnabled
     @Environment(\.windowVisible) private var windowVisible
     @State private var checkedSetup = false
-    @Namespace private var tabGlow
     @State private var refreshTick = 0
     @State private var visited: Set<CompanionTab> = []
     @State private var setupModel: CompanionSetupModel?
     @AppStorage(AppStorageKeys.Companion.setupDeclined, store: SharedDefaults.store)
     private var setupDeclined = false
+
+    init(session: CompanionWorkspaceSession? = nil) {
+        _workspace = State(initialValue: session ?? CompanionWorkspaceSession())
+    }
 
     private var dark: Bool { scheme == .dark }
     private var tab: CompanionTab { CompanionTab(rawValue: tabRaw) ?? .chat }
@@ -92,6 +96,7 @@ struct CompanionPage: View {
     }
 
     var body: some View {
+        @Bindable var library = workspace.library
         PageWorkspace {
             header
             tabBar
@@ -224,43 +229,13 @@ struct CompanionPage: View {
     }
 
     private var tabBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: UIScale.pt(4)) {
-                ForEach(CompanionTab.allCases) { item in
-                    Button {
-                        select(item)
-                    } label: {
-                        HStack(spacing: UIScale.pt(6)) {
-                            Image(systemName: item.icon)
-                                .font(.system(size: UIScale.pt(11), weight: .medium))
-                            Text(item.title)
-                                .font(.system(size: UIScale.pt(12.5), weight: .medium))
-                                .lineLimit(1)
-                        }
-                        .padding(.horizontal, UIScale.pt(11))
-                        .padding(.vertical, UIScale.pt(6))
-                        .foregroundStyle(tab == item ? DashSkin.ink(dark) : DashSkin.inkFaint(dark))
-                        .background {
-                            if tab == item {
-                                RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                    .fill(DashSkin.paper2(dark))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: UIScale.pt(8))
-                                            .strokeBorder(DashSkin.line(dark))
-                                    }
-                                    .matchedGeometryEffect(id: "companionTab", in: tabGlow)
-                            }
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .help(item.title)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, PageMetrics.gutter(compact))
-            .padding(.bottom, UIScale.pt(12))
-        }
+        PageTabPicker(
+            title: "Companion section",
+            selection: Binding(get: { tab }, set: select),
+            options: CompanionTab.allCases, label: { $0.title }
+        )
+        .pageGutter(compact)
+        .padding(.bottom, UIScale.pt(12))
     }
 
     private var screens: some View {

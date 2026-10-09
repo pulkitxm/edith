@@ -46,75 +46,79 @@ struct CodeStatsFilterBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(8)) {
-            HStack(spacing: UIScale.pt(10)) {
-                CodeStatsRangePicker(range: model.range) { range in
-                    Task { await model.select(range) }
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: UIScale.pt(10)) {
+                    rangeControls
+                    Spacer()
+                    resetButton
                 }
-                if model.isComputing {
-                    LoadingIndicator()
-                }
-                if let dominant = model.explorer.dominant,
-                    !model.filter.excludedRepositories.contains(dominant.repository),
-                    model.filter.repositories.isEmpty
-                {
-                    Button {
-                        Task { await model.toggleExcludedRepository(dominant.repository) }
-                    } label: {
-                        AttentionChip(
-                            title:
-                                "Exclude \(dominant.repository) (\(CodeStatsNumberFormat.percent(dominant.share * 100)) of lines)",
-                            color: DashSkin.warn, active: false)
-                    }
-                    .buttonStyle(.edith(.borderless))
-                    .help(
-                        "One repository dominates this range. Exclude it to see the rest clearly.")
-                }
-                Spacer()
-                if model.hasActiveFilter {
-                    Button("Reset filters") { Task { await model.resetFilter() } }
-                        .buttonStyle(.edith(.borderless))
+                VStack(alignment: .leading, spacing: UIScale.pt(8)) {
+                    ScrollView(.horizontal) { rangeControls }
+                        .scrollIndicators(.automatic)
+                    resetButton
                 }
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: UIScale.pt(6)) {
-                    facetButton(.repositories, selected: model.filter.repositories.count)
-                    facetButton(.owners, selected: model.filter.owners.count)
-                    facetButton(.languages, selected: model.filter.languages.count)
-                    separator
-                    ForEach(CodeStatsCategory.filterable, id: \.self) { category in
-                        let active = model.filter.categories.contains(category)
-                        Button {
-                            Task { await model.toggleCategory(category) }
-                        } label: {
-                            AttentionChip(
-                                title: category.title, color: DashSkin.accent(dark), active: active)
-                        }
-                        .buttonStyle(.edith(.borderless))
-                        .accessibilityAddTraits(active ? .isSelected : [])
-                    }
-                    separator
+            WrapHStack(spacing: UIScale.pt(6), lineSpacing: UIScale.pt(6)) {
+                facetButton(.repositories, selected: model.filter.repositories.count)
+                facetButton(.owners, selected: model.filter.owners.count)
+                facetButton(.languages, selected: model.filter.languages.count)
+                Menu {
                     ForEach(Self.flags, id: \.1) { flag in
-                        let active = model.filter[keyPath: flag.2]
-                        Button {
-                            Task { await model.updateFilter { $0[keyPath: flag.2].toggle() } }
-                        } label: {
-                            AttentionChip(
-                                title: flag.1, color: DashPalette.slate(dark), active: active)
-                        }
-                        .buttonStyle(.edith(.borderless))
-                        .help(active ? "Counted. Click to exclude." : "Excluded. Click to count.")
+                        Toggle(
+                            flag.1,
+                            isOn: Binding(
+                                get: { model.filter[keyPath: flag.2] },
+                                set: { value in
+                                    Task {
+                                        await model.updateFilter { $0[keyPath: flag.2] = value }
+                                    }
+                                }))
                     }
+                } label: {
+                    Label("Counted changes", systemImage: "line.3.horizontal.decrease")
                 }
-                .padding(.vertical, UIScale.pt(2))
+                .menuStyle(.button)
+                .buttonStyle(.edith(.secondary))
+                ForEach(CodeStatsCategory.filterable, id: \.self) { category in
+                    let active = model.filter.categories.contains(category)
+                    Button {
+                        Task { await model.toggleCategory(category) }
+                    } label: {
+                        AttentionChip(
+                            title: category.title, color: DashSkin.accent(dark), active: active)
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    .accessibilityAddTraits(active ? .isSelected : [])
+                }
+            }
+            let excluded = Self.flags.filter { !model.filter[keyPath: $0.2] }.map {
+                $0.1.lowercased()
+            }
+            if !excluded.isEmpty {
+                Text("Excluded from totals: " + excluded.joined(separator: ", "))
+                    .font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
             }
             selectedTokens
         }
     }
 
-    private var separator: some View {
-        Rectangle()
-            .fill(DashSkin.lineStrong(dark))
-            .frame(width: UIScale.pt(1), height: UIScale.pt(16))
+    private var rangeControls: some View {
+        HStack(spacing: UIScale.pt(10)) {
+            CodeStatsRangePicker(range: model.range) { range in
+                Task { await model.select(range) }
+            }
+            if model.isComputing {
+                LoadingIndicator()
+            }
+        }
+    }
+
+    @ViewBuilder private var resetButton: some View {
+        if model.hasActiveFilter {
+            Button("Reset filters") { Task { await model.resetFilter() } }
+                .buttonStyle(.edith(.borderless))
+        }
     }
 
     private func facetButton(_ kind: CodeStatsFacetKind, selected: Int) -> some View {
@@ -140,7 +144,7 @@ struct CodeStatsFilterBar: View {
         if !filter.repositories.isEmpty || !filter.owners.isEmpty || !filter.languages.isEmpty
             || !filter.excludedRepositories.isEmpty || model.isCustomRange
         {
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: UIScale.pt(6)) {
                     if model.isCustomRange {
                         token(CodeStatsRangePicker.title(model.range)) {
@@ -189,14 +193,18 @@ private struct CodeStatsFacetPicker: View {
     let dark: Bool
     @State private var query = ""
 
-    private static let limit = 400
-
     private var facets: [CodeStatsFacet] {
         switch kind {
         case .repositories: model.facets.repositories
         case .owners: model.facets.owners
         case .languages: model.facets.languages
         }
+    }
+
+    private var matchingFacets: [CodeStatsFacet] {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty
+            ? facets : facets.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
     private var selected: Set<String> {
@@ -213,10 +221,11 @@ private struct CodeStatsFacetPicker: View {
                 .textFieldStyle(.roundedBorder)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UIScale.pt(2)) {
-                    ForEach(facets.prefix(Self.limit)) { facet in
-                        if query.isEmpty || facet.name.localizedCaseInsensitiveContains(query) {
-                            row(facet)
-                        }
+                    ForEach(matchingFacets) { facet in
+                        row(facet)
+                    }
+                    if matchingFacets.isEmpty {
+                        ContentUnavailableView.search(text: query)
                     }
                 }
             }

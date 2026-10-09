@@ -58,8 +58,15 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        PageScaffold {
-            masthead
+        PageScaffold(pinnedHeader: true) {
+            VStack(spacing: 0) {
+                masthead
+                if model.loaded {
+                    controlsBar.pageGutter(compactLayout)
+                        .padding(.bottom, UIScale.pt(12))
+                }
+                Divider()
+            }
         } content: {
             if showLog { logView }
             if model.loaded, let error = model.contentLoad.errorMessage {
@@ -76,7 +83,6 @@ struct DashboardView: View {
                 refreshing: model.contentLoad.isRefreshing || model.computation.isRunning,
                 retry: refresh.requestRefresh
             ) {
-                controlsBar
                 kpiGrid(compact: compactLayout)
                 activityRow(compact: compactLayout)
                 LimitsCardView(theme: acc, dark: dark)

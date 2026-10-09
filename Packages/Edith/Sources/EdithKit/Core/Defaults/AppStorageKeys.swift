@@ -111,6 +111,7 @@ public enum AppStorageKeys {
     }
 
     public enum CodeStats {
+        public static let pageSelection = "codeStatsPageSelection"
         public static let folder = "codeStatsFolderPath"
         public static let folderConfirmation = "codeStatsFolderExternalConfirmation"
         public static let scheduleKind = "codeStatsScheduleKind"

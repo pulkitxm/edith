@@ -32,14 +32,15 @@ import Testing
         try await Task.sleep(for: .milliseconds(50))
     }
 
-    @Test func disabledRenderedButtonRejectsEveryPointerEvent() async throws {
+    @Test(arguments: EdithButtonRole.allCases)
+    func disabledRenderedButtonRejectsEveryPointerEvent(role: EdithButtonRole) async throws {
         let probe = EdithButtonProbe()
         let harness = EdithButtonHarness(
             rootView: EdithButtonInteractionFixture(
-                role: .primary, disabled: true, probe: probe))
+                role: role, disabled: true, probe: probe))
         defer { harness.close() }
 
-        let frames = try await harness.frames(probe, role: .primary)
+        let frames = try await harness.frames(probe, role: role)
         for point in EdithButtonTestPoints.inside(frames) {
             harness.click(point)
         }

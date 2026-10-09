@@ -59,6 +59,24 @@ import Testing
         #expect(model.apps.count == 2)
     }
 
+    @Test func filtersSearchNameBundleIdentifierAndPIDAndSurviveRefresh() async {
+        let model = RunningAppsModel(
+            operations: RunningAppOperationCenter(snapshot: { [Self.safari, Self.music] }))
+        await model.refresh()
+        model.query = " SAFARI "
+        #expect(model.visibleApps.map(\.pid) == [2])
+        model.query = "com.apple.Music"
+        #expect(model.visibleApps.map(\.pid) == [3])
+        model.query = "2"
+        await model.refresh()
+        #expect(model.query == "2")
+        #expect(model.visibleApps.map(\.pid) == [2])
+        model.query = "absent app"
+        #expect(model.visibleApps.isEmpty)
+        model.query = ""
+        #expect(model.visibleApps.count == 2)
+    }
+
     @Test func partialQuitAllOutcomeReportsAcceptedAndRemainingCounts() {
         let model = RunningAppsModel(
             operations: RunningAppOperationCenter(

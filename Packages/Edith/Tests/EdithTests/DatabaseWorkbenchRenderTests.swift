@@ -1,4 +1,5 @@
 import AppKit
+import EdithKit
 @testable import EdithDatabase
 @testable import EdithDatabaseDrivers
 import SwiftUI
@@ -38,6 +39,64 @@ struct DatabaseWorkbenchRenderTests {
         #expect(tab.data.queryText == entry.text)
         #expect(tab.data.recordsRevision == queryRevision)
         #expect(tab.data.objectFields == fields)
+    }
+
+    @Test func compactQueryControlsRemainVisibleAtIncreasedZoom() async throws {
+        let previous = UIScale.current
+        UIScale.apply(1.6)
+        defer { UIScale.apply(previous) }
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let oldAttributes = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, value) in zip(attributes, oldAttributes) {
+                NSApp.accessibilitySetValue(value ?? false, forAttribute: attribute)
+            }
+        }
+        let fixture = try await Self.fixture()
+        let tab = try #require(fixture.tabs.selected)
+        tab.mode = .query
+        tab.data.queryText = "SELECT customer FROM public.orders"
+        tab.history.record(tab.data.queryText, operation: .search)
+        let host = NSHostingView(
+            rootView: DatabaseWorkbenchView(
+                connections: fixture.connections, explorer: fixture.explorer,
+                tabs: fixture.tabs, mutations: fixture.mutations
+            )
+            .environment(\.compactLayout, true)
+            .environment(\.automaticViewActionsEnabled, false))
+        host.sizingOptions = []
+        host.frame = NSRect(x: 0, y: 0, width: 680, height: 900)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host
+        window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        var seen = Set<ObjectIdentifier>()
+        func elements(_ root: NSObject) -> [NSObject] {
+            guard seen.insert(ObjectIdentifier(root)).inserted else { return [] }
+            let children = (root as AnyObject).accessibilityChildren?() as? [NSObject] ?? []
+            return [root] + children.flatMap(elements)
+        }
+        let accessibility = elements(host)
+        let viewport = window.convertToScreen(host.convert(host.bounds, to: nil))
+        #expect(abs(host.bounds.height - 900) < 2)
+        for title in ["Run", "History", "More database actions"] {
+            let control = try #require(
+                accessibility.first {
+                    nativeAccessibilityMatches($0, label: title)
+                        && (($0 as AnyObject).accessibilityRole?() == .button
+                            || ($0 as AnyObject).accessibilityRole?() == .popUpButton
+                            || ($0 as AnyObject).accessibilityRole?() == .menuButton)
+                }, "\(title)")
+            let frame = try #require((control as AnyObject).accessibilityFrame?(), "\(title)")
+            #expect(frame.width > 0 && frame.height > 0, "\(title)")
+            #expect(viewport.insetBy(dx: -1, dy: -1).contains(frame), "\(title)")
+        }
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
     }
 
     @Test func finishedWorkbenchModesRenderWithSyntheticData() async throws {

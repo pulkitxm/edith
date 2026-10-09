@@ -12,6 +12,15 @@ struct StudioImageInspector: View {
                 Text(editor.panel.title)
                     .font(.system(size: UIScale.pt(14), weight: .semibold))
                 switch editor.panel {
+                case .select:
+                    Text(
+                        "Select a layer on the canvas. Drag it to move, or drag a corner to resize. Hold Shift to resize an image freely."
+                    )
+                    .font(.edithText(.caption))
+                    .foregroundStyle(.secondary)
+                    if let layer = editor.selected, case let .text(style) = layer.content {
+                        StudioImageTextStyleEditor(editor: editor, style: style)
+                    }
                 case .crop: StudioImageCropPanel(editor: editor)
                 case .adjust: StudioImageAdjustPanel(editor: editor)
                 case .filters: StudioImageFilterPanel(editor: editor)
@@ -22,6 +31,17 @@ struct StudioImageInspector: View {
                 case .blur: StudioImageBlurPanel(editor: editor)
                 case .frame: StudioImageFramePanel(editor: editor)
                 case .export: StudioImageExportPanel(editor: editor)
+                }
+                if let selected = editor.selected {
+                    StudioInspectorGroup("Layer name") {
+                        TextField(
+                            "Name",
+                            text: Binding(
+                                get: { selected.title },
+                                set: { value in editor.updateSelected { $0.name = value } })
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
                 }
                 if !editor.document.layers.isEmpty {
                     StudioImageLayerList(editor: editor)
@@ -534,7 +554,7 @@ struct StudioImageLayerList: View {
             ForEach(editor.document.layers.reversed()) { layer in
                 HStack(spacing: UIScale.pt(6)) {
                     Button {
-                        editor.selectedLayer = layer.id
+                        editor.selectLayer(layer.id)
                     } label: {
                         Text(layer.title)
                             .font(

@@ -12,6 +12,23 @@ import Testing
         return (url, try StudioImageIO.load(url))
     }
 
+    @Test func layerNamesSurviveSavingAndDuplication() throws {
+        let space = try Workspace()
+        let (url, _) = try quad(space)
+        var document = ImageEditDocument(source: url)
+        let layer = ImageLayer(
+            name: "Title", content: .text(ImageTextStyle(text: "Sample caption")),
+            frame: StudioRect(x: 0.1, y: 0.1, width: 0.6, height: 0.2))
+        document.add(layer)
+        let data = try JSONEncoder().encode(document)
+        let restored = try JSONDecoder().decode(ImageEditDocument.self, from: data)
+        #expect(restored.layer(layer.id)?.title == "Title")
+        let duplicated = document.duplicateLayer(layer.id)
+        let copy = try #require(duplicated)
+        #expect(document.layer(copy)?.name == "Title")
+        #expect(copy != layer.id)
+    }
+
     @Test func untouchedDocumentRendersTheSourceUnchanged() throws {
         let space = try Workspace()
         let (url, source) = try quad(space)
