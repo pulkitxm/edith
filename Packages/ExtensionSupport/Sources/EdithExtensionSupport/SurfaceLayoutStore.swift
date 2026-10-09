@@ -29,15 +29,18 @@ public final class SurfaceLayoutStore {
     public func canUndo(_ target: SurfaceTarget) -> Bool { !(undoHistory[target] ?? []).isEmpty }
     public func canRedo(_ target: SurfaceTarget) -> Bool { !(redoHistory[target] ?? []).isEmpty }
 
-    public func update(_ target: SurfaceTarget, _ edit: (inout SurfaceLayout) -> Void) {
+    @discardableResult
+    public func update(_ target: SurfaceTarget, _ edit: (inout SurfaceLayout) -> Void) -> Bool {
         let previous = layout(target)
         var next = previous
         edit(&next)
         next = next.normalized()
-        guard next != previous else { return }
+        guard next != previous else { return true }
+        guard next.encoded.utf8.count <= 1_048_576 else { return false }
         undoHistory[target] = Array(((undoHistory[target] ?? []) + [previous]).suffix(50))
         redoHistory[target] = []
         save(next, target: target)
+        return true
     }
 
     public func undo(_ target: SurfaceTarget) {
