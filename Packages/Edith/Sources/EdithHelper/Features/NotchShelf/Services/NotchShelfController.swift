@@ -96,7 +96,7 @@ final class NotchShelfController: FeatureModule {
     private(set) var usageStore: UsageStore?
     private(set) weak var browser: NotchBrowserStore?
     private(set) var calendarStore: CalendarStore?
-    private var externalVolume: Double = 0.7
+    private var previewPlayback: ExternalPlayback?
     private var alertDetectors: NotchAlertDetectors?
     private var alertWorkItem: DispatchWorkItem?
     private var alertPinned = false
@@ -148,7 +148,8 @@ final class NotchShelfController: FeatureModule {
         self.init(nowPlaying: nil, startsServices: true)
     }
 
-    init(nowPlaying: NotchNowPlaying?, startsServices: Bool) {
+    init(nowPlaying: NotchNowPlaying?, startsServices: Bool, playback: ExternalPlayback? = nil) {
+        previewPlayback = playback
         self.nowPlaying = nowPlaying
         items = store.items
         loadArtwork(for: nowPlaying)
@@ -738,6 +739,7 @@ final class NotchShelfController: FeatureModule {
     }
 
     private func syncFrames() {
+        syncPlaybackObservation()
         updatePanelFrames()
         for screen in NSScreen.screens {
             guard let id = screen.displayID, let panel = panels[id] else { continue }
@@ -1054,8 +1056,20 @@ final class NotchShelfController: FeatureModule {
         let trackChanged =
             active?.title != nowPlaying?.title || active?.source != nowPlaying?.source
         nowPlaying = active
+        syncPlaybackObservation()
         if trackChanged { loadArtwork(for: active) }
         if (active != nil) != hadActivity, !isExpanded { syncFrames() }
+    }
+
+    private func syncPlaybackObservation() {
+        let externalActive: Bool
+        if case .external = nowPlaying?.source {
+            externalActive = true
+        } else {
+            externalActive = false
+        }
+        external.observePlayback(
+            isExpanded && showMusic && externalActive && previewPlayback == nil)
     }
 
     private func loadArtwork(for track: NotchNowPlaying?) {
@@ -1110,34 +1124,80 @@ final class NotchShelfController: FeatureModule {
         calendarStore = store
     }
 
-    var nowPlayingSeekable: Bool {
-        if case .local = nowPlaying?.source { return true }
-        return false
-    }
+    private var currentPlayback: ExternalPlayback? { previewPlayback ?? external.playback }
 
-    func nowPlayingProgress() -> Double {
-        nowPlayingSeekable ? (localMusic?.progressNow() ?? 0) : 0
-    }
-
-    func nowPlayingSeek(_ fraction: Double) {
-        guard nowPlayingSeekable else { return }
-        localMusic?.perform(.seek(fraction))
-    }
-
-    var nowPlayingVolume: Double {
+    var nowPlayingDuration: Double {
         switch nowPlaying?.source {
-        case .local: return localMusic?.volume ?? 0
-        case .external: return externalVolume
+        case .local: return localMusic?.trackDuration ?? 0
+        case .external: return currentPlayback?.track.duration ?? external.current?.duration ?? 0
         case .none: return 0
         }
     }
 
-    func setNowPlayingVolume(_ value: Double) {
+    func nowPlayingElapsed() -> Double {
         switch nowPlaying?.source {
-        case .local: localMusic?.perform(.volume(value))
+        case .local: return nowPlayingDuration * (localMusic?.progressNow() ?? 0)
+        case .external: return currentPlayback?.elapsed() ?? 0
+        case .none: return 0
+        }
+    }
+
+    var nowPlayingSeekable: Bool {
+        nowPlayingDuration > 0 && (nowPlaying?.source == .local || currentPlayback != nil)
+    }
+
+    func nowPlayingProgress() -> Double {
+        nowPlayingDuration > 0 ? nowPlayingElapsed() / nowPlayingDuration : 0
+    }
+
+    func nowPlayingSeek(_ fraction: Double) {
+        guard nowPlayingSeekable else { return }
+        performNowPlayingTransport(.seek(fraction))
+    }
+
+    var nowPlayingVolume: Double? {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.volume
+        case .external: return currentPlayback?.volume
+        case .none: return nil
+        }
+    }
+
+    func setNowPlayingVolume(_ value: Double) { performNowPlayingTransport(.volume(value)) }
+
+    var nowPlayingShuffle: Bool? {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.isShuffling
         case .external:
-            externalVolume = value
-            external.perform(.volume(value))
+            return currentPlayback?.canShuffle == true ? currentPlayback?.shuffling : nil
+        case .none: return nil
+        }
+    }
+
+    var nowPlayingRepeat: Bool? {
+        switch nowPlaying?.source {
+        case .local: return localMusic?.isLooping
+        case .external: return currentPlayback?.canRepeat == true ? currentPlayback?.repeating : nil
+        case .none: return nil
+        }
+    }
+
+    var nowPlayingControlError: String? {
+        if case .external = nowPlaying?.source { return external.lastError }
+        return nil
+    }
+    func retryNowPlayingControls() { external.retryPlayback() }
+    func setNowPlayingShuffle(_ enabled: Bool) { performNowPlayingTransport(.shuffle(enabled)) }
+    func setNowPlayingRepeat(_ enabled: Bool) { performNowPlayingTransport(.repeat(enabled)) }
+    func skipNowPlaying(_ seconds: Double) {
+        guard nowPlayingSeekable else { return }
+        nowPlayingSeek((nowPlayingElapsed() + seconds) / nowPlayingDuration)
+    }
+
+    private func performNowPlayingTransport(_ request: MusicTransportRequest) {
+        switch nowPlaying?.source {
+        case .local: localMusic?.perform(request)
+        case .external: external.perform(request)
         case .none: break
         }
     }

@@ -471,7 +471,7 @@ extension SurfaceWidget {
                 ("artwork", "Album artwork"), ("artist", "Artist name"),
                 ("queue", "Upcoming tracks"), ("progress", "Playback time"),
                 ("volume", "Volume and mute"), ("shuffle", "Shuffle control"),
-                ("repeat", "Repeat control"), ("seekControls", "Skip 15 seconds and open player"),
+                ("repeat", "Repeat control"), ("seekControls", "Skip 15 seconds"),
             ]
         case .calendar: [("time", "Meeting times"), ("join", "Join meeting controls")]
         case .codeStats:

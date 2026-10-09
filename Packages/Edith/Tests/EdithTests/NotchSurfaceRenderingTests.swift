@@ -29,13 +29,26 @@ import Testing
         defaults.set(false, forKey: AppStorageKeys.Notch.shelfHaptics)
         for key in keys.dropFirst(2) { defaults.set(true, forKey: key) }
         defaults.set(false, forKey: AppStorageKeys.Notch.shelfRequireOption)
-        for preset in [SurfacePreset.media, .agents] {
-            defaults.set(preset.layout(for: .notch).encoded, forKey: SurfaceTarget.notch.key)
+        for (name, preset) in [
+            ("media", SurfacePreset.media), ("agents", .agents), ("usage", .agents),
+        ] {
+            var layout = preset.layout(for: .notch)
+            if name == "usage" {
+                layout.tiles = [SurfaceTile(.usage), SurfaceTile(.limits), SurfaceTile(.music)]
+                for index in layout.tiles.indices { layout.tiles[index].dense = true }
+            }
+            defaults.set(layout.encoded, forKey: SurfaceTarget.notch.key)
             SurfaceLayoutStore.shared.reload()
             let controller = NotchShelfController(
                 nowPlaying: NotchNowPlaying(
                     source: .external(.spotify), title: "Night drive", artist: "Sample artist",
-                    isPlaying: false), startsServices: false)
+                    isPlaying: false), startsServices: false,
+                playback: ExternalPlayback(
+                    track: .init(
+                        app: .spotify, title: "Night drive",
+                        artist: "Sample artist", isPlaying: false, duration: 240),
+                    position: 83, volume: 0.65, shuffling: true, repeating: false,
+                    canShuffle: true, canRepeat: true))
             #expect(!controller.isExpanded(on: 0))
             let host = NSHostingView(
                 rootView: NotchShelfContentView(controller: controller, isBuiltin: false)
@@ -68,7 +81,7 @@ import Testing
             if let path = ProcessInfo.processInfo.environment["EDITH_SURFACE_EVIDENCE_DIR"] {
                 let root = URL(fileURLWithPath: path)
                 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-                try data.write(to: root.appendingPathComponent("notch-\(preset.rawValue).png"))
+                try data.write(to: root.appendingPathComponent("notch-\(name).png"))
             }
         }
     }

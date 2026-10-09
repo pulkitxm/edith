@@ -821,7 +821,7 @@ private struct NotchNowPlayingCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 8) {
             if tile.showTitle {
                 HStack {
                     Label(tile.displayTitle, systemImage: "music.note")
@@ -850,19 +850,48 @@ private struct NotchNowPlayingCard: View {
                 }.buttonStyle(.edith(.borderless)).disabled(!tile.showActions)
                     .help(isLocal ? "Show this track in Music" : "Open the app playing this")
             }
-            Spacer(minLength: 4)
             if tile.showDetails, tile.shows("progress"), controller.nowPlayingSeekable {
-                NotchSeekBar(controller: controller).allowsHitTesting(tile.showActions)
+                NotchSeekBar(
+                    controller: controller,
+                    showsSkip: tile.showActions && tile.shows("seekControls")
+                ).allowsHitTesting(tile.showActions)
             }
             if tile.showActions {
-                HStack(spacing: 24) {
-                    Spacer(minLength: 0)
-                    control("backward.fill", 15) { controller.nowPlayingPrevious() }
-                    control(track.isPlaying ? "pause.fill" : "play.fill", 20) {
+                HStack(spacing: 8) {
+                    if tile.shows("shuffle"), let enabled = controller.nowPlayingShuffle {
+                        control(
+                            "shuffle", 14, label: enabled ? "Turn shuffle off" : "Turn shuffle on",
+                            selected: enabled
+                        ) {
+                            controller.setNowPlayingShuffle(!enabled)
+                        }
+                    }
+                    control("backward.fill", 15, label: "Previous track") {
+                        controller.nowPlayingPrevious()
+                    }
+                    control(
+                        track.isPlaying ? "pause.fill" : "play.fill", 20,
+                        label: track.isPlaying ? "Pause" : "Play"
+                    ) {
                         controller.nowPlayingPlayPause()
                     }
-                    control("forward.fill", 15) { controller.nowPlayingNext() }
-                    Spacer(minLength: 0)
+                    control("forward.fill", 15, label: "Next track") { controller.nowPlayingNext() }
+                    if tile.shows("repeat"), let enabled = controller.nowPlayingRepeat {
+                        control(
+                            "repeat", 14, label: enabled ? "Turn repeat off" : "Turn repeat on",
+                            selected: enabled
+                        ) {
+                            controller.setNowPlayingRepeat(!enabled)
+                        }
+                    }
+                }
+                if tile.shows("volume"), controller.nowPlayingVolume != nil {
+                    NotchVolumeControl(controller: controller)
+                }
+                if let error = controller.nowPlayingControlError {
+                    Text(error).font(.edithText(.caption2)).foregroundStyle(.secondary).lineLimit(3)
+                    Button("Retry playback controls") { controller.retryNowPlayingControls() }
+                        .font(.edithText(.caption)).buttonStyle(.edith(.borderless))
                 }
             }
         }
@@ -911,7 +940,7 @@ private struct NotchNowPlayingCard: View {
                         .background(.white.opacity(0.08))
                 }
             }
-            .frame(width: tile.dense ? 56 : 72, height: tile.dense ? 56 : 72)
+            .frame(width: tile.dense ? 48 : 56, height: tile.dense ? 48 : 56)
             .clipShape(RoundedRectangle(cornerRadius: 10))
             .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
         }
@@ -919,47 +948,113 @@ private struct NotchNowPlayingCard: View {
         .help("Open player")
     }
 
-    private func control(_ name: String, _ size: CGFloat, _ action: @escaping () -> Void)
+    private func control(
+        _ name: String, _ size: CGFloat, label: String,
+        selected: Bool = false, _ action: @escaping () -> Void
+    )
         -> some View
     {
         Button(action: action) {
             Image(systemName: name)
-                .font(.system(size: size, weight: .medium)).foregroundStyle(.white)
-                .frame(width: 40, height: 36)
-                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+                .font(.system(size: size, weight: .medium))
+                .foregroundStyle(selected ? tile.highlightColor : .white)
+                .frame(maxWidth: .infinity).frame(height: 32)
+                .background(
+                    .white.opacity(selected ? 0.12 : 0.07), in: RoundedRectangle(cornerRadius: 10)
+                )
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.edith(.borderless))
+        .buttonStyle(.edith(.borderless)).help(label).accessibilityLabel(label)
     }
 }
 
 private struct NotchSeekBar: View {
     var controller: NotchShelfController
+    var showsSkip: Bool
     @State private var dragFraction: Double?
 
     var body: some View {
-        GeometryReader { geo in
-            let width = geo.size.width
-            ZStack(alignment: .leading) {
-                Capsule().fill(.white.opacity(0.15)).frame(height: 3)
-                TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
-                    let fraction = dragFraction ?? controller.nowPlayingProgress()
-                    Capsule().fill(.white.opacity(0.85))
-                        .frame(width: max(3, width * min(1, fraction)), height: 3)
-                }
-            }
-            .frame(height: 10)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { dragFraction = min(max($0.location.x / width, 0), 1) }
-                    .onEnded { value in
-                        controller.nowPlayingSeek(min(max(value.location.x / width, 0), 1))
-                        dragFraction = nil
+        TimelineView(.periodic(from: MusicTick.epoch, by: 0.5)) { _ in
+            VStack(spacing: 4) {
+                Slider(
+                    value: Binding(
+                        get: { dragFraction ?? controller.nowPlayingProgress() },
+                        set: { dragFraction = $0 }), in: 0...1,
+                    onEditingChanged: { editing in
+                        if !editing, let fraction = dragFraction {
+                            controller.nowPlayingSeek(fraction); dragFraction = nil
+                        }
                     }
-            )
+                )
+                .controlSize(.small).tint(.white).accessibilityLabel("Playback position")
+                HStack {
+                    Text(
+                        clock(
+                            (dragFraction ?? controller.nowPlayingProgress())
+                                * controller.nowPlayingDuration))
+                    Spacer(minLength: 0)
+                    if showsSkip {
+                        Button {
+                            controller.skipNowPlaying(-15)
+                        } label: {
+                            Image(systemName: "gobackward.15").font(.system(size: 13)).frame(
+                                width: 26, height: 20)
+                        }
+                        .help("Back 15 seconds").accessibilityLabel("Back 15 seconds")
+                        Button {
+                            controller.skipNowPlaying(15)
+                        } label: {
+                            Image(systemName: "goforward.15").font(.system(size: 13)).frame(
+                                width: 26, height: 20)
+                        }
+                        .help("Forward 15 seconds").accessibilityLabel("Forward 15 seconds")
+                        Spacer(minLength: 0)
+                    }
+                    Text(clock(controller.nowPlayingDuration))
+                }.font(.edithText(.caption2)).monospacedDigit().foregroundStyle(.secondary)
+                    .buttonStyle(.edith(.borderless))
+            }
         }
-        .frame(height: 10)
+        .onChange(of: controller.nowPlaying?.title) { _, _ in dragFraction = nil }
+    }
+
+    private func clock(_ value: Double) -> String {
+        let seconds = Int(max(0, value.isFinite ? value : 0))
+        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+private struct NotchVolumeControl: View {
+    var controller: NotchShelfController
+    @State private var requested: Double?
+    @State private var savedVolume = 0.7
+
+    var body: some View {
+        let value = requested ?? controller.nowPlayingVolume ?? 0
+        HStack(spacing: 8) {
+            Button {
+                if value > 0 { savedVolume = value }
+                controller.setNowPlayingVolume(value == 0 ? savedVolume : 0)
+            } label: {
+                Image(systemName: value == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                    .frame(width: 22, height: 24)
+            }.buttonStyle(.edith(.borderless)).help(value == 0 ? "Unmute" : "Mute")
+                .accessibilityLabel(value == 0 ? "Unmute" : "Mute")
+            Slider(
+                value: Binding(get: { value }, set: { requested = $0 }), in: 0...1,
+                onEditingChanged: { editing in
+                    if !editing, let volume = requested {
+                        controller.setNowPlayingVolume(volume); requested = nil
+                    }
+                }
+            ).controlSize(.small).tint(.white).accessibilityLabel("Player volume")
+            Text("\(Int(value * 100))%")
+                .font(.edithText(.caption2)).monospacedDigit().foregroundStyle(.secondary)
+                .frame(width: 32, alignment: .trailing)
+        }
+        .onChange(of: controller.nowPlaying?.source) { _, _ in
+            requested = nil; savedVolume = 0.7
+        }
     }
 }
 
