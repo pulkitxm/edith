@@ -68,6 +68,7 @@ public enum SurfaceCommandService {
         projected.metrics = snapshot.metrics.filter { tile.shows($0.id) }
         projected.actions = actions(snapshot.actions, tile: tile)
         projected.sliders = sliders(snapshot.sliders, tile: tile)
+        projected.charts = charts(snapshot.charts, tile: tile)
         projected.rows =
             tile.shows("items")
             ? Array(
@@ -90,6 +91,22 @@ public enum SurfaceCommandService {
         if !tile.shows("status") { projected.message = nil }
         if !tile.shows("updated") { projected.updatedAt = nil }
         return projected
+    }
+
+    private static func charts(_ values: [SurfaceChart]?, tile: SurfaceTile) -> [SurfaceChart]? {
+        guard tile.showDetails, tile.shows("chart") else { return nil }
+        let projected =
+            values?.compactMap { chart -> SurfaceChart? in
+                guard chart.field.map(tile.shows) ?? true else { return nil }
+                let series = chart.series.filter {
+                    $0.sourceID.map { tile.sourceIDs?.contains($0) ?? true } ?? true
+                }
+                guard !series.isEmpty else { return nil }
+                return SurfaceChart(
+                    chart.id, chart.title, series: series, style: chart.style, xAxis: chart.xAxis,
+                    xTitle: chart.xTitle, yTitle: chart.yTitle, field: chart.field)
+            } ?? []
+        return projected.isEmpty ? nil : projected
     }
 
     private static func actions(_ actions: [SurfaceAction], tile: SurfaceTile) -> [SurfaceAction] {
