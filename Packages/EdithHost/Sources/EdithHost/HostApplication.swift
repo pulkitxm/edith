@@ -36,6 +36,7 @@ struct HostEntry {
 }
 
 struct HostApplication: App {
+    @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @State private var marketplace: HostMarketplace?
     @State private var startupError = false
 
@@ -64,7 +65,9 @@ struct HostApplication: App {
                         supportDirectory: support)
                     let loaded = try HostMarketplace.live(identity: identity)
                     marketplace = loaded
+                    delegate.shutdown = { await loaded.sessions.shutdown() }
                     await loaded.loadCachedCatalog()
+                    await loaded.restoreEnabledExtensions()
                 } catch { startupError = true }
             }
         }
@@ -106,7 +109,9 @@ struct MarketplacePage: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(entry.title).font(.headline)
                         if let package = marketplace.installed[entry.id] {
-                            Text("Installed · \(package.version)").foregroundStyle(.secondary)
+                            Text(
+                                "\(marketplace.sessions.states[entry.id] == .active ? "Enabled" : "Disabled") · \(package.version)"
+                            ).foregroundStyle(.secondary)
                         } else {
                             Text("Not installed").foregroundStyle(.secondary)
                         }
@@ -116,13 +121,22 @@ struct MarketplacePage: View {
                         ProgressView(value: marketplace.progress).frame(width: 90)
                             .accessibilityLabel("Downloading \(entry.title)")
                     } else if marketplace.installed[entry.id] != nil {
-                        Button("Remove") { marketplace.remove(id: entry.id) }
-                            .disabled(marketplace.operationID != nil)
+                        if marketplace.updateAvailable(id: entry.id) {
+                            Button("Update") { Task { await marketplace.download(id: entry.id) } }
+                        }
+                        if marketplace.sessions.states[entry.id] == .active {
+                            Button("Open") { Task { await marketplace.show(id: entry.id) } }
+                            Button("Disable") { Task { await marketplace.disable(id: entry.id) } }
+                        } else {
+                            Button("Enable") { Task { await marketplace.enable(id: entry.id) } }
+                        }
+                        Button("Remove") { Task { await marketplace.remove(id: entry.id) } }
                     } else {
                         Button("Download") { Task { await marketplace.download(id: entry.id) } }
                             .disabled(marketplace.operationID != nil)
                     }
                 }
+                .disabled(marketplace.operationID != nil)
                 .padding(.vertical, 10)
             }
             .searchable(text: $search, prompt: "Find extensions")

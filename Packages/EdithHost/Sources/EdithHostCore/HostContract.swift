@@ -1,8 +1,9 @@
 import Foundation
+import ExtensionMarketplace
 
 public enum HostContract {
     public static let version = 1
-    public static let compatibility = "edith-host-1"
+    public static let compatibility = MarketplaceConfiguration.workerHostABI
 }
 
 public struct HostExtension: Codable, Hashable, Sendable, Identifiable {

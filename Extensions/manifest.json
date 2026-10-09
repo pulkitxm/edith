@@ -2,7 +2,7 @@
   {
     "id": "keepAwake",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "edith-host-1",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -16,12 +16,13 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "contractVersion": 1
   },
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -41,7 +42,7 @@
   {
     "id": "focusDim",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -66,7 +67,7 @@
   {
     "id": "windowSweaters",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -97,7 +98,7 @@
   {
     "id": "micMute",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -126,7 +127,7 @@
   {
     "id": "keystrokeHighlight",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -152,7 +153,7 @@
   {
     "id": "presenter",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -183,7 +184,7 @@
   {
     "id": "colorPicker",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -208,7 +209,7 @@
   {
     "id": "systemStats",
     "version": "1.0.0",
-    "hostABI": "host-bd6d7e602a2e3a7075232d69",
+    "hostABI": "host-99450dc9914b4c354b695afe",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
