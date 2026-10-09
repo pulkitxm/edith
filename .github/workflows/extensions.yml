@@ -158,7 +158,7 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: local/extension-support/${{ matrix.id }}_*
-          key: extension-support-v1-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ hashFiles('Packages/ExtensionSupport/Package.swift', 'Packages/ExtensionSupport/Sources/**', 'scripts/build-extension-support.mjs') }}
+          key: extension-support-v2-${{ runner.os }}-${{ runner.arch }}-${{ matrix.id }}-${{ steps.support-toolchain.outputs.fingerprint }}-${{ matrix.supportFingerprint }}
       - name: Import the release signing certificate
         if: github.event_name != 'pull_request'
         env:
