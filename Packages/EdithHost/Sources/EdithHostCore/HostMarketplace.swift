@@ -48,6 +48,7 @@ public final class HostMarketplace {
         automaticallyUpdatesExtensions =
             preferences.object(forKey: "automaticallyUpdatesExtensions") as? Bool ?? true
         try store.completePendingRemovals()
+        try store.prune(hostABI: HostContract.compatibility)
         try reloadInstalled()
     }
 
@@ -211,7 +212,7 @@ public final class HostMarketplace {
                         "The update could not start. The previous version will keep running if available."
                 }
             }
-            try store.prune()
+            try store.prune(hostABI: HostContract.compatibility)
         } catch {
             self.error = "The extension could not be downloaded. Try again."
         }

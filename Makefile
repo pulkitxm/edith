@@ -163,7 +163,7 @@ ci-swift-build: approve-package-plugins ci-meeting-microphone
 ci-swift-test: ci-studio
 	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
 
-.PHONY: ci-host host ci-marketplace-host extension-dev ci-extension-support ci-extension-commands ci-extension-workers
+.PHONY: ci-host host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-commands ci-extension-workers
 ci-host:
 	swift format lint --strict --parallel --recursive Packages/EdithHost/Sources Packages/EdithHost/Tests Packages/EdithHost/Package.swift
 	swift test --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
@@ -185,12 +185,16 @@ ci-extension-workers:
 ci-extension-commands:
 	bun scripts/test-extension-commands.mjs
 
+ci-marketplace-runtime:
+	swift format lint --strict --parallel --recursive Packages/ExtensionMarketplace/Sources Packages/ExtensionMarketplace/Tests
+	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
+
 ci-marketplace-host: ci-host host
 	python3 -B scripts/test-extension-size-report.py
 	python3 -B scripts/test-extension-host-size-report.py
 	bun scripts/extension-host-abi.mjs --write
 	bun test scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
-	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
+	$(MAKE) ci-marketplace-runtime
 	$(MAKE) ci-extension-support
 	$(MAKE) ci-extension-commands
 	$(MAKE) ci-extension-workers
