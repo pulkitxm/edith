@@ -238,6 +238,10 @@ import Testing
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
             controlPath: "/tmp/edith socket",
+            sshArguments: SSHConnection.masterOnlyOptions + [
+                "-p", "2222", "-i", "/tmp/mock-key", "-S", "/tmp/edith socket", "--",
+                "pulkit@build",
+            ],
             executablePath: "/home/pulkit/.local/bin/quinjet", distributionID: "ubuntu")
         let configuration = QuinjetLaunchConfiguration(
             terminal: .cmux, theme: .gruvbox, appearance: .dark)
@@ -247,21 +251,18 @@ import Testing
             worktreePath: Self.main.path, remote: remote, configuration: configuration,
             managedByEdith: false, localHomeDirectory: "/Users/pulkit")
 
+        #expect(request.executableURL == SSHConnection.executable)
+        #expect(Array(request.arguments.dropLast()) == ["-tt"] + remote.sshArguments)
         #expect(
-            request.arguments
-                == [
-                    "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith socket",
-                    "-C", "/work/edith", "tui", "--theme", "gruvbox", "--appearance", "dark",
-                ])
-        #expect(!request.arguments.contains("--client"))
+            request.arguments.last
+                == "'/home/pulkit/.local/bin/quinjet' '-C' '/work/edith' 'tui' '--theme' 'gruvbox' '--appearance' 'dark'"
+        )
+        #expect(!request.arguments.last!.contains("--client"))
         #expect(request.currentDirectory == "/Users/pulkit")
-        #expect(
-            request.environment
-                == ["QUINJET_REMOTE_BINARY": "/home/pulkit/.local/bin/quinjet"])
-        #expect(request.shellCommand.contains("exec '/usr/bin/env'"))
-        #expect(
-            request.shellCommand.contains(
-                "'QUINJET_REMOTE_BINARY=/home/pulkit/.local/bin/quinjet'"))
+        #expect(request.environment.isEmpty)
+        #expect(request.shellCommand.contains("exec '/usr/bin/ssh'"))
+        #expect(request.shellCommand.contains("'ProxyCommand=/usr/bin/false'"))
+
     }
 
     @Test func WindowsLaunchRunsQuinjetThroughEncodedPowerShell() throws {
@@ -269,6 +270,9 @@ import Testing
             machineID: UUID(), machineName: "win-lan", target: "win-lan",
             controlPath: "/tmp/edith socket", platform: .windows,
             homeDirectory: #"C:\Users\kpulk"#,
+            sshArguments: SSHConnection.masterOnlyOptions + [
+                "-p", "2222", "-S", "/tmp/edith socket", "--", "win-lan",
+            ],
             executablePath: #"C:\Users\kpulk\scoop\shims\quinjet.exe"#)
         let configuration = QuinjetLaunchConfiguration(
             terminal: .embedded, theme: .gruvbox, appearance: .dark,
@@ -281,10 +285,7 @@ import Testing
             localHomeDirectory: "/Users/pulkit")
 
         #expect(request.executableURL.path == "/usr/bin/ssh")
-        #expect(
-            Array(request.arguments.prefix(5)) == [
-                "-tt", "-S", "/tmp/edith socket", "--", "win-lan",
-            ])
+        #expect(Array(request.arguments.dropLast()) == ["-tt"] + remote.sshArguments)
         let command = try #require(request.arguments.last)
         let payload = try #require(command.split(separator: " ").last)
         let data = try #require(Data(base64Encoded: String(payload)))
@@ -294,7 +295,7 @@ import Testing
                 #"& 'C:\Users\kpulk\scoop\shims\quinjet.exe' '--client' 'edith' '-C'"#))
         #expect(script.contains(#"'E:\career\3. MagicAPI\noveum-app-nextjs'"#))
         #expect(script.contains("'tui' '--theme' 'gruvbox' '--appearance' 'dark'"))
-        #expect(request.arguments.count == 6)
+        #expect(request.arguments.count == remote.sshArguments.count + 2)
         #expect(request.currentDirectory == nil)
     }
 

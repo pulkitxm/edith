@@ -49,7 +49,7 @@ let package = Package(
             path: "quinjet",
             exclude: [
                 "Tests", "Views", "ViewModels", "Models/QuinjetLaunchModels.swift",
-                "Services/QuinjetSessionBridge.swift", "Package.swift",
+                "Services/QuinjetSessionBridge.swift", "Package.swift", "Runtime.swift",
             ], resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "QuinjetExtensionTests", dependencies: ["QuinjetExtension"],

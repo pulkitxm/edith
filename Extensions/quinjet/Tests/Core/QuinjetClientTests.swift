@@ -213,22 +213,23 @@ import EdithExtensionSupport
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "build", target: "pulkit@build",
             controlPath: "/tmp/edith.sock", platform: .linux,
+            sshArguments: SSHConnection.masterOnlyOptions + [
+                "-p", "2222", "-i", "/tmp/mock-key", "-S", "/tmp/edith.sock", "--", "pulkit@build",
+            ],
             executablePath: "/home/pulkit/.local/bin/quinjet", distributionID: "ubuntu")
 
         let request = try QuinjetClient.liveRequest(
             arguments: ["-C", "/srv/project", "worktree", "list", "--json"],
             remote: remote, executable: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"))
 
-        #expect(request.executableURL.path == "/opt/homebrew/bin/quinjet")
+        #expect(request.executableURL == SSHConnection.executable)
+        #expect(Array(request.arguments.dropLast()) == ["-T"] + remote.sshArguments)
         #expect(
-            request.arguments
-                == [
-                    "--remote", "pulkit@build", "--ssh-control-path", "/tmp/edith.sock",
-                    "-C", "/srv/project", "worktree", "list", "--json",
-                ])
-        #expect(
-            request.environment["QUINJET_REMOTE_BINARY"]
-                == "/home/pulkit/.local/bin/quinjet")
+            request.arguments.last
+                == "'/home/pulkit/.local/bin/quinjet' '-C' '/srv/project' 'worktree' 'list' '--json'"
+        )
+        #expect(request.arguments.contains("ProxyCommand=/usr/bin/false"))
+
     }
 
     @Test func liveRequestsRunResolvedWindowsQuinjetThroughPowerShell() throws {
@@ -236,6 +237,9 @@ import EdithExtensionSupport
         let remote = QuinjetRemote(
             machineID: UUID(), machineName: "windows", target: "pulkit@windows",
             controlPath: "/tmp/edith.sock", platform: .windows,
+            sshArguments: SSHConnection.masterOnlyOptions + [
+                "-p", "2222", "-S", "/tmp/edith.sock", "--", "pulkit@windows",
+            ],
             executablePath: executable, distributionID: "windows")
 
         let request = try QuinjetClient.liveRequest(
@@ -243,9 +247,7 @@ import EdithExtensionSupport
             remote: remote, executable: URL(fileURLWithPath: "/opt/homebrew/bin/quinjet"))
 
         #expect(request.executableURL == SSHConnection.executable)
-        #expect(
-            Array(request.arguments.prefix(5))
-                == ["-T", "-S", "/tmp/edith.sock", "--", "pulkit@windows"])
+        #expect(Array(request.arguments.dropLast()) == ["-T"] + remote.sshArguments)
         let command = try #require(request.arguments.last)
         #expect(command.hasPrefix("powershell.exe "))
         let payload = try #require(command.split(separator: " ").last)

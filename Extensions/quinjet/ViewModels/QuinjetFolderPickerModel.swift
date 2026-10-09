@@ -102,6 +102,13 @@ final class QuinjetFolderPickerModel {
         }
     }
 
+    func shutdown() async {
+        contentLoad.cancel()
+        refreshTask?.cancel()
+        await refreshTask?.value
+        refreshTask = nil
+    }
+
     func waitForInputRefresh() async {
         await refreshTask?.value
     }

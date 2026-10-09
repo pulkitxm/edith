@@ -345,6 +345,10 @@ private final class QuinjetPTYTerminalBridgeRuntime {
         }
 
         try forwardFrames(from: controllerOutput.fileHandleForReading)
+        if QuinjetPTYBridgeCancellation.isCancelled {
+            QuinjetPTYOwnedProcess.stop(controller)
+            throw QuinjetPTYBridgeExit(130)
+        }
         controller.waitUntilExit()
         guard controller.terminationStatus == 0 else {
             throw QuinjetPTYBridgeExit(controller.terminationStatus)

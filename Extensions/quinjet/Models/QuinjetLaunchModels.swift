@@ -270,6 +270,13 @@ enum QuinjetBackgroundOperation {
     static func run<Value: Sendable>(
         _ operation: @escaping @Sendable () throws -> Value
     ) async throws -> Value {
-        try await Task.detached(priority: .userInitiated, operation: operation).value
+        let task = Task.detached(priority: .userInitiated, operation: operation)
+        return try await withTaskCancellationHandler {
+            let value = try await task.value
+            try Task.checkCancellation()
+            return value
+        } onCancel: {
+            task.cancel()
+        }
     }
 }

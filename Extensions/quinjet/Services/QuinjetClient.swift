@@ -205,27 +205,25 @@ public struct QuinjetClient: Sendable {
     static func liveRequest(
         arguments: [String], remote: QuinjetRemote?, executable: URL
     ) throws -> CLICommandRequest {
-        var environment = CLIToolEnvironment.sanitized()
+        let environment = CLIToolEnvironment.sanitized()
         if let remote {
             guard let remoteExecutable = remote.executablePath else {
                 throw QuinjetClientError.remoteNotInstalled(
                     machine: remote.machineName, platform: remote.platform,
                     distributionID: remote.distributionID)
             }
+            let command: String
             if remote.platform == .windows {
-                let command = PowerShell.command(
-                    PowerShell.invocation([remoteExecutable] + arguments)!)
-                return CLICommandRequest(
-                    executableURL: SSHConnection.executable,
-                    arguments: ["-T", "-S", remote.controlPath, "--", remote.target, command],
-                    environment: environment)
+                command = PowerShell.command(PowerShell.invocation([remoteExecutable] + arguments)!)
             } else {
-                environment["QUINJET_REMOTE_BINARY"] = remoteExecutable
-                return CLICommandRequest(
-                    executableURL: executable,
-                    arguments: remoteArguments(arguments, remote: remote),
-                    environment: environment)
+                command = ([remoteExecutable] + arguments).map(POSIXQuote.quote).joined(
+                    separator: " ")
             }
+            return CLICommandRequest(
+                executableURL: SSHConnection.executable,
+                arguments: try remote.savedArguments(tty: false) + [command],
+                environment: environment)
+
         }
         return CLICommandRequest(
             executableURL: executable, arguments: arguments, environment: environment)

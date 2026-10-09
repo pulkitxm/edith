@@ -6,6 +6,7 @@ public struct QuinjetRemote: Equatable, Sendable {
     public let machineName: String
     public let target: String
     public let controlPath: String
+    public let sshArguments: [String]
     public let platform: RemoteMachinePlatform
     public let homeDirectory: String?
     public let executablePath: String?
@@ -14,16 +15,36 @@ public struct QuinjetRemote: Equatable, Sendable {
     public init(
         machineID: UUID, machineName: String, target: String, controlPath: String,
         platform: RemoteMachinePlatform = .linux, homeDirectory: String? = nil,
+        sshArguments: [String] = [],
         executablePath: String? = nil, distributionID: String? = nil
     ) {
         self.machineID = machineID
         self.machineName = machineName
         self.target = target
         self.controlPath = controlPath
+        self.sshArguments = sshArguments
         self.platform = platform
         self.homeDirectory = homeDirectory
         self.executablePath = executablePath
         self.distributionID = distributionID ?? platform.rawValue
+    }
+
+    public func savedArguments(tty: Bool) throws -> [String] {
+        guard
+            Array(sshArguments.prefix(SSHConnection.masterOnlyOptions.count))
+                == SSHConnection.masterOnlyOptions,
+            sshArguments.last == target, MachineRegistry.validTarget(target),
+            controlPath.hasPrefix("/"), controlPath.utf8.count <= 4096, sshArguments.count <= 128,
+            sshArguments.allSatisfy({
+                !$0.isEmpty && $0.utf8.count <= 4096
+                    && !$0.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+            }),
+            sshArguments.reduce(0, { $0 + $1.utf8.count }) <= 16384,
+            sshArguments.filter({ $0 == "-S" }).count == 1,
+            let socket = sshArguments.firstIndex(of: "-S"), socket + 1 < sshArguments.count,
+            sshArguments[socket + 1] == controlPath
+        else { throw ExtensionPeerError.unavailable }
+        return [tty ? "-tt" : "-T"] + sshArguments
     }
 
     public func resolve(_ path: String) -> String {
@@ -45,7 +66,9 @@ public struct QuinjetRemote: Equatable, Sendable {
         return QuinjetRemote(
             machineID: machineID, machineName: machineName, target: target,
             controlPath: connection.controlSocketPath, platform: platform,
-            homeDirectory: home, executablePath: executable.path,
+            homeDirectory: home,
+            sshArguments: Array(try connection.terminalArguments().dropFirst()),
+            executablePath: executable.path,
             distributionID: executable.distributionID)
     }
 }

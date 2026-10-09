@@ -52,6 +52,7 @@ final class QuinjetPageModel {
     private var remoteProjectLoads: [UUID: ContentLoad] = [:]
     private var remoteProjectErrors: [UUID: String] = [:]
     private var sessionLaunchEnabled = false
+    private(set) var stopped = false
 
     init(
         client: QuinjetClient = .live,
@@ -307,7 +308,9 @@ final class QuinjetPageModel {
     }
 
     func handleHostPayload(_ payload: String, from tab: QuinjetTab) {
-        guard let action = QuinjetHostAction(payload: payload) else { return }
+        guard !stopped, tabs.contains(where: { $0 === tab }), tabs.count < 32,
+            let action = QuinjetHostAction(payload: payload)
+        else { return }
         switch action {
         case .openNewTab:
             QuinjetWorkOwnership.start {
@@ -340,6 +343,10 @@ final class QuinjetPageModel {
     func performSessionOperation(
         _ request: QuinjetSessionRequest
     ) async throws -> QuinjetSessionResult {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        if request.operation == .create, tabs.count >= 32 {
+            throw ExtensionPeerError.invalidRequest
+        }
         switch request.operation {
         case .status:
             let tab = try session(matching: request.session)
@@ -379,6 +386,20 @@ final class QuinjetPageModel {
             }
             try await switchSession(tab, to: path)
             return sessionResult(for: .switchWorktree, affected: tab.id)
+        }
+    }
+
+    func shutdown() async {
+        stopped = true
+        cancelDiscovery()
+        stopAll()
+        for tab in tabs {
+            tab.externalLaunchGeneration += 1
+            await tab.folderPicker?.shutdown()
+            if let workspaceID = tab.externalWorkspaceID {
+                tab.externalWorkspaceID = nil
+                try? await closeExternalWorkspace(workspaceID)
+            }
         }
     }
 

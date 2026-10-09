@@ -7,6 +7,7 @@ enum QuinjetPTYNativeTerminalBridge {
         specification: QuinjetPTYTerminalBridgeSpecification, observe: (Data) -> Void = { _ in }
     ) throws {
         signal(SIGPIPE, SIG_IGN)
+        signal(SIGTTOU, SIG_IGN)
         let terminal = QuinjetPTYRawTerminal()
         try terminal.configure(mouse: specification.mouse, managesPresentation: false)
         defer { terminal.restore() }
@@ -201,11 +202,9 @@ final class QuinjetPTYNativeTerminalProcess {
             _ = kill(pid, signal)
             if waitForExit(milliseconds: 200) { return }
         }
-        let identifier = pid
-        DispatchQueue.global(qos: .utility).async {
-            var status: Int32 = 0
-            while waitpid(identifier, &status, 0) < 0 && errno == EINTR {}
-        }
+        var status: Int32 = 0
+        while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
+        terminationStatus = 128 + SIGKILL
     }
 
     private func reap() -> Bool {
