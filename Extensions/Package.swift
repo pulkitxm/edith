@@ -143,8 +143,9 @@ let package = Package(
 
         .target(
             name: "PluginsExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "plugins", exclude: ["Tests"],
+            dependencies: [.product(name: "EdithExtensionDocuments", package: "ExtensionSupport")],
+            path: "plugins", exclude: ["Tests", "Runtime.swift"],
+            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "PluginsExtensionTests", dependencies: ["PluginsExtension"],
