@@ -58,3 +58,18 @@ test("document imports also get private extension module names", () => {
     ),
   ).toBe("import EdithExtensionDocuments_plugins_app\n");
 });
+
+test("archive support stays separate from document rendering", () => {
+  expect(supportProducts("EdithExtensionArchive")).toEqual([
+    "EdithExtensionSupport",
+    "EdithExtensionUI",
+    "EdithExtensionArchive",
+  ]);
+  expect(supportSourceInputs("EdithExtensionArchive")).not.toContain(
+    "Packages/ExtensionSupport/Sources/EdithExtensionDocuments",
+  );
+  const modules = supportModules("latex_helper");
+  expect(rewriteSupportImports("import EdithExtensionArchive\n", modules)).toBe(
+    "import EdithExtensionArchive_latex_helper\n",
+  );
+});
