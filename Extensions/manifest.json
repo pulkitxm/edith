@@ -683,5 +683,73 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "surfaceContractVersion": 1
+  },
+  {
+    "id": "clipboard",
+    "version": "1.0.0",
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "hostABI": "edith-host-1",
+    "supportProduct": "EdithExtensionUI",
+    "inputs": [
+      "Extensions/clipboard"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+    ],
+    "dependencies": [],
+    "roles": {
+      "helper": [
+        "Extensions/clipboard/ClipboardActions.swift",
+        "Extensions/clipboard/ClipboardArchive.swift",
+        "Extensions/clipboard/ClipboardCapturePolicy.swift",
+        "Extensions/clipboard/ClipboardCategory.swift",
+        "Extensions/clipboard/ClipboardClient.swift",
+        "Extensions/clipboard/ClipboardColorValue.swift",
+        "Extensions/clipboard/ClipboardCopyPayload.swift",
+        "Extensions/clipboard/ClipboardEntry.swift",
+        "Extensions/clipboard/ClipboardField.swift",
+        "Extensions/clipboard/ClipboardFiles.swift",
+        "Extensions/clipboard/ClipboardHistoryModel.swift",
+        "Extensions/clipboard/ClipboardHistoryProjection.swift",
+        "Extensions/clipboard/ClipboardHistoryView.swift",
+        "Extensions/clipboard/ClipboardIgnore.swift",
+        "Extensions/clipboard/ClipboardIndex.swift",
+        "Extensions/clipboard/ClipboardMessage.swift",
+        "Extensions/clipboard/ClipboardNotifications.swift",
+        "Extensions/clipboard/ClipboardOperations.swift",
+        "Extensions/clipboard/ClipboardPage.swift",
+        "Extensions/clipboard/ClipboardPalette.swift",
+        "Extensions/clipboard/ClipboardPaletteKeymap.swift",
+        "Extensions/clipboard/ClipboardPanel.swift",
+        "Extensions/clipboard/ClipboardPanelLayout.swift",
+        "Extensions/clipboard/ClipboardPanelView.swift",
+        "Extensions/clipboard/ClipboardPasteSynth.swift",
+        "Extensions/clipboard/ClipboardPasteboardFilter.swift",
+        "Extensions/clipboard/ClipboardPaths.swift",
+        "Extensions/clipboard/ClipboardPayload.swift",
+        "Extensions/clipboard/ClipboardPermission.swift",
+        "Extensions/clipboard/ClipboardPreviewPreparation.swift",
+        "Extensions/clipboard/ClipboardQuery.swift",
+        "Extensions/clipboard/ClipboardRepository.swift",
+        "Extensions/clipboard/ClipboardRows.swift",
+        "Extensions/clipboard/ClipboardService.swift",
+        "Extensions/clipboard/ClipboardStore.swift",
+        "Extensions/clipboard/ClipboardSurface.swift",
+        "Extensions/clipboard/ClipboardTextKinds.swift",
+        "Extensions/clipboard/ClipboardThumbnail.swift",
+        "Extensions/clipboard/ClipboardThumbnailRenderer.swift",
+        "Extensions/clipboard/ClipboardThumbnailService.swift",
+        "Extensions/clipboard/ClipboardThumbnailSnapshot.swift",
+        "Extensions/clipboard/ClipboardTimeline.swift",
+        "Extensions/clipboard/ClipboardWorker.swift",
+        "Extensions/clipboard/Runtime.swift"
+      ]
+    },
+    "minimumSystemVersion": 14
   }
 ]

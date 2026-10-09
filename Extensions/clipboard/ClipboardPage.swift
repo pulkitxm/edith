@@ -11,12 +11,16 @@ struct ClipboardPage: View {
 
     var body: some View {
         PageWorkspace {
-            PageHeader("Clipboard") {
-                Toggle("Capture copies", isOn: $enabled.notifyingSettingsChange())
-                    .toggleStyle(.switch)
-                Button("Open clipboard", action: openPalette)
-                    .buttonStyle(.edith(.secondary))
-            }
+            PageHeader(
+                "Clipboard",
+                trailing: {
+                    HStack(spacing: UIScale.pt(12)) {
+                        Toggle("Capture copies", isOn: $enabled.notifyingSettingsChange())
+                            .toggleStyle(.switch)
+                        Button("Open clipboard", action: openPalette)
+                            .buttonStyle(.edith(.secondary))
+                    }
+                })
         } content: {
             Form { ClipboardRows(client: client, history: history) }
                 .formStyle(.grouped)

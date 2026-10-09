@@ -121,6 +121,8 @@ final class ClipboardStore {
         mutationError = nil; refreshError = nil; captureError = nil
     }
 
+    var isCapturing: Bool { timer != nil }
+
     private var configuredInterval: Double {
         let configured =
             SharedDefaults.store.object(forKey: AppStorageKeys.Clipboard.checkInterval) as? Double
@@ -318,6 +320,7 @@ final class ClipboardStore {
                     payload, pasteboard: .general)
                 self.lastChangeCount = NSPasteboard.general.changeCount
                 self.mutate(.init(.copied, ids: [entry.id]))
+                ClipboardPermission.refresh()
                 guard ClipboardCapturePolicy.pastesOnPick() else { return }
                 try await Task.sleep(for: .milliseconds(50))
                 guard !Task.isCancelled else { return }
