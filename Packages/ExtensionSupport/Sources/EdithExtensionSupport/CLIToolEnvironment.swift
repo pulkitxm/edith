@@ -11,7 +11,7 @@ public enum CLIToolEnvironment {
         where UserShellEnvironment.imports(key) && processEnvironment[key] == nil {
             environment[key] = value
         }
-        environment.removeValue(forKey: "NO_COLOR")
+        environment["NO_COLOR"] = nil
         let directories = commonDirectories(
             processEnvironment: processEnvironment, fileManager: fileManager)
         let shellPath = shellEnvironment?["PATH"]?.split(separator: ":").map(String.init) ?? []

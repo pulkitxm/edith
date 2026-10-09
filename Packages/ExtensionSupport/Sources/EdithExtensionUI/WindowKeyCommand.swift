@@ -55,7 +55,7 @@ public enum WindowKeyCommand: Equatable, Sendable {
 public enum WindowZoom {
     public static let range = 0.8...1.6
     public static let step = 0.1
-    public static let defaultsKey = "mainWindowZoom"
+    public static let defaultsKey = AppStorageKeys.General.mainWindowZoom
 
     public static func clamp(_ value: Double) -> Double {
         min(range.upperBound, max(range.lowerBound, (value * 100).rounded() / 100))

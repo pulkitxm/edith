@@ -223,9 +223,9 @@ final class HostWorkerApplication {
             let defaults = UserDefaults(
                 suiteName: identity.extensionDefaultsSuite(configuration.extensionID))
         else { throw HostWorkerError.rejected }
-        defaults.set(configuration.theme, forKey: "theme")
-        defaults.set(configuration.appearance, forKey: "appearance")
-        defaults.set(configuration.zoom, forKey: "mainWindowZoom")
+        defaults.set(configuration.theme, forKey: AppStorageKeys.General.theme)
+        defaults.set(configuration.appearance, forKey: AppStorageKeys.General.appearance)
+        defaults.set(configuration.zoom, forKey: AppStorageKeys.General.mainWindowZoom)
         UIScale.apply(configuration.zoom)
         EdithExtensionUI.applyAppearance(configuration.appearance)
     }
