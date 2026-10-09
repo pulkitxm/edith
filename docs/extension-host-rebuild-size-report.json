@@ -4,170 +4,194 @@
     "comparisonZipBytes": 52271486
   },
   "appWithoutExtensions": {
-    "installedBytes": 4839699,
-    "comparisonZipBytes": 2066014
+    "installedBytes": 4820067,
+    "comparisonZipBytes": 2128707
   },
   "savedBytes": {
-    "installedBytes": 111625502,
-    "comparisonZipBytes": 50205472
+    "installedBytes": 111645134,
+    "comparisonZipBytes": 50142779
   },
   "savedPercent": {
-    "installedBytes": 95.84,
-    "comparisonZipBytes": 96.05
+    "installedBytes": 95.86,
+    "comparisonZipBytes": 95.93
   },
   "packages": [
     {
       "id": "appMaintenance",
       "version": "1.0.0",
-      "downloadBytes": 815775,
-      "installedBytes": 1880479,
-      "sha256": "67ecbffb45d89e51be24b47be102bb65f59ca06afa98efacf4747a7dbf07f487",
+      "downloadBytes": 972988,
+      "installedBytes": 2259823,
+      "sha256": "808af131317962afa54e0fa5f2047f6df36a253fed2458c632f9b3c76bcce40d",
       "releaseMetadataBytes": 528
     },
     {
       "id": "blitztree",
       "version": "1.0.0",
-      "downloadBytes": 612159,
-      "installedBytes": 1455202,
-      "sha256": "afd1a4a7d020dd25cf9b081c1ab622b8d1fdb5f2b50d0b122d6cc535e128ff72",
+      "downloadBytes": 769671,
+      "installedBytes": 1834482,
+      "sha256": "e7971f474fa058f7a69879c0acd6a39ddd1e7cd531cb5c230d4c357daa532d06",
       "releaseMetadataBytes": 513
     },
     {
       "id": "calendar",
       "version": "1.0.0",
-      "downloadBytes": 623850,
-      "installedBytes": 1456431,
-      "sha256": "79ae9c7a8c7541b15277eacc0084a99b389a98c57b956328b8a8edbcdc29ec10",
+      "downloadBytes": 787199,
+      "installedBytes": 1852607,
+      "sha256": "d4e7ffc20d6e9094de681f7fcb8ed9919fab1504c5995c3b0c75c9d8e44e654d",
       "releaseMetadataBytes": 510
     },
     {
       "id": "cleaner",
       "version": "1.0.0",
-      "downloadBytes": 649818,
-      "installedBytes": 1523116,
-      "sha256": "c575ed971d5e8e77da5063c8585ef752e8bd8711de3ea4d51fadbfcbd38bfd84",
+      "downloadBytes": 806685,
+      "installedBytes": 1901580,
+      "sha256": "c9054c17343eb19149595e0d1dc74d36f866316182f20d1a3a2d93304b676c4c",
       "releaseMetadataBytes": 507
+    },
+    {
+      "id": "clipboard",
+      "version": "1.0.0",
+      "downloadBytes": 1037804,
+      "installedBytes": 2367461,
+      "sha256": "fc05c43f0b6b1faf1c95a9261379e05d306da080afac53b3f3b27e47847273a4",
+      "releaseMetadataBytes": 514
     },
     {
       "id": "colorPicker",
       "version": "1.0.0",
-      "downloadBytes": 545748,
-      "installedBytes": 1319883,
-      "sha256": "b697e52b18d5203c7e216aab052841a32c90c9faa5877e16c06de6abbcafd582",
+      "downloadBytes": 712939,
+      "installedBytes": 1716075,
+      "sha256": "eea073b6befabaa6a7f5ecc1f9abbe00204d098638b7cdd8e70a76328f7f534b",
       "releaseMetadataBytes": 519
     },
     {
       "id": "emoji",
       "version": "1.0.0",
-      "downloadBytes": 688414,
-      "installedBytes": 1733313,
-      "sha256": "2091c9ad1863d92431667a1897a58eccdbbdbdbb84fc64c8aa443484fdac89e2",
+      "downloadBytes": 855167,
+      "installedBytes": 2112817,
+      "sha256": "53d421a4894cfa5bd95872256656f1a254f8a88c1560a1586f9d2e2cfa466d09",
       "releaseMetadataBytes": 501
     },
     {
       "id": "focusDim",
       "version": "1.0.0",
-      "downloadBytes": 529118,
-      "installedBytes": 1286402,
-      "sha256": "52b08b6049a775a662824930ae804d89d48fc82bed160cf05287867f27dead96",
+      "downloadBytes": 694320,
+      "installedBytes": 1683378,
+      "sha256": "24dbb5a7f5d606d9eb48ed9acf4f9e276739e6790681374c7a6603c16001e8a5",
       "releaseMetadataBytes": 510
     },
     {
       "id": "homebrew",
       "version": "1.0.0",
-      "downloadBytes": 615762,
-      "installedBytes": 1454783,
-      "sha256": "02540af9f7a5b499151db452ac6fb831d0b06e9e9ff3af53155f586f4c4944e1",
+      "downloadBytes": 769178,
+      "installedBytes": 1817615,
+      "sha256": "d6a84b206965492fc260f01a0b8da500d28a49331dba06f81f1c6b58fd6e5e8b",
       "releaseMetadataBytes": 510
     },
     {
       "id": "jev",
       "version": "1.0.0",
-      "downloadBytes": 631688,
-      "installedBytes": 1506688,
-      "sha256": "9e6c3a3227e5efff07c4d42cc6475a1a99aa22581c1de63bbf8e92e9fd846966",
+      "downloadBytes": 786161,
+      "installedBytes": 1853904,
+      "sha256": "903f6c79c435dc8cc74db3974f00ba5e53ca0b0947499ada0dc99c4f2e4afea1",
       "releaseMetadataBytes": 495
     },
     {
       "id": "keepAwake",
       "version": "1.0.0",
-      "downloadBytes": 18173,
-      "installedBytes": 79141,
-      "sha256": "a56fcde30280553279277312d6726f89384e148e0e7c6b937a50101bd0f44338",
-      "releaseMetadataBytes": 510
+      "downloadBytes": 318732,
+      "installedBytes": 774373,
+      "sha256": "6ad8cf1ef93fa5a7983ffed0461ced8f57606932ab23c7925f82c275e84a17d8",
+      "releaseMetadataBytes": 512
     },
     {
       "id": "keystrokeHighlight",
       "version": "1.0.0",
-      "downloadBytes": 553523,
-      "installedBytes": 1323904,
-      "sha256": "718b7a26d81674ae7480fb42fc8b067ec91bec5b0b97512ceb9812e67ee1b714",
+      "downloadBytes": 718534,
+      "installedBytes": 1736128,
+      "sha256": "505543959a96ee525f2850b8c2d771a898fc0b642224417d8de4455e24d97a67",
       "releaseMetadataBytes": 540
     },
     {
       "id": "micMute",
       "version": "1.0.0",
-      "downloadBytes": 534091,
-      "installedBytes": 1286303,
-      "sha256": "cd282bbf83d2bcf573840a740aedd0571b6f88cd6c6b0e8acdea069a8992de3e",
+      "downloadBytes": 699729,
+      "installedBytes": 1699743,
+      "sha256": "075a092fd3ec23c7b643ab1db71a485c1765dd8e8e2f8a761f30461433f328ac",
       "releaseMetadataBytes": 507
+    },
+    {
+      "id": "notchShelf",
+      "version": "1.0.0",
+      "downloadBytes": 1147178,
+      "installedBytes": 2587736,
+      "sha256": "e0549ad63cc5c32a42cb69e2ec53b3aedb032d5b728dfa1d96bed50adbb8c129",
+      "releaseMetadataBytes": 517
+    },
+    {
+      "id": "plugins",
+      "version": "1.0.0",
+      "downloadBytes": 1176568,
+      "installedBytes": 3071607,
+      "sha256": "778c68592daeaf2f3b31cbabfb1216e1f1254e583d65f75e11583799e4fcfe48",
+      "releaseMetadataBytes": 508
     },
     {
       "id": "presenter",
       "version": "1.0.0",
-      "downloadBytes": 566438,
-      "installedBytes": 1354469,
-      "sha256": "0a7bb6e199f82cd91a96ae6ca3d284225aae8e7e8b45ce18aef009fa0dc54703",
+      "downloadBytes": 732302,
+      "installedBytes": 1750405,
+      "sha256": "f7a54a98461d8ea369692cdd8a95bf32beadc8b582385472dcf5854387d96871",
       "releaseMetadataBytes": 513
     },
     {
       "id": "system",
       "version": "1.0.0",
-      "downloadBytes": 588148,
-      "installedBytes": 1402921,
-      "sha256": "fb0022b10ae4c987420b4e7865876630589096501a20f115c81e7f8d70b3bad0",
+      "downloadBytes": 743681,
+      "installedBytes": 1782953,
+      "sha256": "ae62d77095f1fc33a2d2a88fb4840b4a35ab931b3ec1bea6d4417cba61dcdfc3",
       "releaseMetadataBytes": 504
     },
     {
       "id": "systemStats",
       "version": "1.0.0",
-      "downloadBytes": 528643,
-      "installedBytes": 1285867,
-      "sha256": "a170028162ad0e0a2dd2711bc8ba63a90ed1274aff2eddf79ec44770bb29c018",
+      "downloadBytes": 695305,
+      "installedBytes": 1683499,
+      "sha256": "08adf82b1389aeadc5522fe01e1bdb48f534c76ef804088b801ecc3cfd54187b",
       "releaseMetadataBytes": 519
     },
     {
       "id": "timeLapse",
       "version": "1.0.0",
-      "downloadBytes": 752077,
-      "installedBytes": 1750098,
-      "sha256": "3d7e7b677490361c7fee35253645c321b10bee75d553a23c5d89d74efcf4fc25",
+      "downloadBytes": 911717,
+      "installedBytes": 2112962,
+      "sha256": "bf9150617d9617d396362e233e1a60e28a31e8ea6d56eb75c2ddf2449f95a4bb",
       "releaseMetadataBytes": 513
     },
     {
       "id": "windowSweaters",
       "version": "1.0.0",
-      "downloadBytes": 599529,
-      "installedBytes": 1427090,
-      "sha256": "424e46ca5858bdc8c801cee9fdbeca512fb9a37518fd6b184b669400e27c5468",
+      "downloadBytes": 765072,
+      "installedBytes": 1822114,
+      "sha256": "83f34949d53889c41227d7e87361349f5b82f836e1d4ce2d1dac99bed42d0600",
       "releaseMetadataBytes": 528
     }
   ],
   "migratedExtensionPackages": {
-    "downloadBytes": 9852954,
-    "installedBytes": 23526090,
-    "releaseMetadataBytes": 8727,
-    "releaseAssetBytes": 9861681
+    "downloadBytes": 16100930,
+    "installedBytes": 38421262,
+    "releaseMetadataBytes": 10268,
+    "releaseAssetBytes": 16111198
   },
   "appWithMigratedExtensions": {
-    "installedBytes": 28365789,
-    "comparisonZipAndPackageBytes": 11918968
+    "installedBytes": 43241329,
+    "comparisonZipAndPackageBytes": 18229637
   },
-  "measuredAtUTC": "2026-10-09T10:14:04+00:00",
+  "measuredAtUTC": "2026-10-09T11:46:47+00:00",
   "status": "migration-in-progress",
-  "migratedExtensions": 17,
+  "migratedExtensions": 20,
   "indexedExtensions": 39,
-  "hostExecutableSHA256": "e24d475aa90f803ace1ae8e8c6ad5e39b57f68420aab5723ad908ee61f7aee70",
+  "hostExecutableSHA256": "6aca7ffc1ff18527c9c46de2b56e49a1ecd7aefdc80a4eb29f1f1ab978c636a6",
   "measurement": {
     "baselineSourceCommit": "9c6b7ae8a4827578c99dbe5a3df433a19293311b",
     "architecture": "arm64",
@@ -185,8 +209,7 @@
     "outstanding": [
       "remaining feature migrations",
       "remaining feature navigation integration",
-      "remaining live card adapters and Home clock controls",
-      "Notch extension renderer",
+      "remaining feature card adapters",
       "required platform carriers",
       "shipping release packaging",
       "final release-host measurements"
@@ -209,12 +232,13 @@
       "bounded versioned snapshot and action requests",
       "cancellation on disable, removal, update or hidden views",
       "immediate Presenter privacy observation",
-      "Calendar live cards and validated meeting actions"
+      "live cards and validated actions for every migrated worker",
+      "native Notch renderer and explicit customization navigation",
+      "world clock favorites, faces, city search and time differences",
+      "bounded sliders, thumbnails and charts with native socket validation"
     ],
     "outstanding": [
       "remaining Home card data and action adapters",
-      "world clock controls",
-      "Notch renderer and integrations",
       "final combined synthetic visual verification"
     ]
   }

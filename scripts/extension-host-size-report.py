@@ -35,15 +35,15 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
         "signature": "development",
         "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
         "included": ["host executable", "marketplace runtime", "Sparkle updater and its helpers", "application icon", "extension index", "Home, customization editor and shared UI", "code signatures"],
-        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "remaining live card adapters and Home clock controls", "Notch extension renderer", "required platform carriers", "shipping release packaging", "final release-host measurements"],
+        "outstanding": ["remaining feature migrations", "remaining feature navigation integration", "remaining feature card adapters", "required platform carriers", "shipping release packaging", "final release-host measurements"],
     }
     result["surfaceCustomization"] = {
         "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
         "reviewedCommit": "31edeb8ccf693441b1da155a6be6491981d3f08d",
         "mergedCommit": "98a0f440e161c130f7ebd12a9da5dea42c38b238",
         "layoutContractVersion": 1,
-        "implemented": ["host-owned layouts and profiles", "undo and redo", "availability for every indexed extension", "composite provider filtering", "read-only worker context", "layout retention through worker updates and app restarts", "visual editor at compact, regular and zoomed sizes in both color schemes", "shared canvas and shelf rendering", "bounded versioned snapshot and action requests", "cancellation on disable, removal, update or hidden views", "immediate Presenter privacy observation", "Calendar live cards and validated meeting actions"],
-        "outstanding": ["remaining Home card data and action adapters", "world clock controls", "Notch renderer and integrations", "final combined synthetic visual verification"],
+        "implemented": ["host-owned layouts and profiles", "undo and redo", "availability for every indexed extension", "composite provider filtering", "read-only worker context", "layout retention through worker updates and app restarts", "visual editor at compact, regular and zoomed sizes in both color schemes", "shared canvas and shelf rendering", "bounded versioned snapshot and action requests", "cancellation on disable, removal, update or hidden views", "immediate Presenter privacy observation", "live cards and validated actions for every migrated worker", "native Notch renderer and explicit customization navigation", "world clock favorites, faces, city search and time differences", "bounded sliders, thumbnails and charts with native socket validation"],
+        "outstanding": ["remaining Home card data and action adapters", "final combined synthetic visual verification"],
     }
     return result
 

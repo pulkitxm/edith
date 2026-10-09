@@ -1,6 +1,6 @@
 # Lightweight host rebuild measurements
 
-Measured on 2026-10-09. The rebuild is in progress and the PR is not ready to merge. 17 of the 39 indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
+Measured on 2026-10-09. The rebuild is in progress and the PR is not ready to merge. 20 of the 39 indexed features have been migrated to self-contained workers. These measurements describe the current host foundation, not the final shipping app or all extension packages.
 
 The host contains its executable, marketplace runtime, Sparkle updater including its helpers, application icon, extension metadata, and signatures. It contains zero extension payloads. Feature navigation integration, required platform carriers, the remaining feature migrations, and shipping release packaging still need completion and measurement.
 
@@ -8,39 +8,42 @@ The host contains its executable, marketplace runtime, Sparkle updater including
 | --- | ---: | ---: |
 | Original bundled app | 116.47 | 52.27 |
 | Superseded partial extraction | 95.70 | 44.94 |
-| Current host foundation with updater and shared UI | 4.84 | 2.07 |
-| Host plus all 17 migrated extensions | 28.37 | 11.92 |
+| Current host foundation with updater and shared UI | 4.82 | 2.13 |
+| Host plus all 20 migrated extensions | 43.24 | 18.23 |
 
-MB means 1,000,000 bytes. The current host foundation is 95.84% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
+MB means 1,000,000 bytes. The current host foundation is 95.86% smaller on disk than the original bundled app. That percentage will be recalculated after the remaining shipping components are integrated. Comparison ZIPs use deflate level 9 over regular files and exclude symlinks. They are a controlled comparison, not shipping installer sizes.
 
 | Independent release package | ZIP bytes | Installed bytes | Release metadata bytes |
 | --- | ---: | ---: | ---: |
-| Updates | 815,775 | 1,880,479 | 528 |
-| BlitzTree | 612,159 | 1,455,202 | 513 |
-| Calendar | 623,850 | 1,456,431 | 510 |
-| Cleaner | 649,818 | 1,523,116 | 507 |
-| Color Picker | 545,748 | 1,319,883 | 519 |
-| Emoji Picker | 688,414 | 1,733,313 | 501 |
-| Focus Dim | 529,118 | 1,286,402 | 510 |
-| Packages | 615,762 | 1,454,783 | 510 |
-| Jev | 631,688 | 1,506,688 | 495 |
-| Keep Awake | 18,173 | 79,141 | 510 |
-| Keystroke Highlight | 553,523 | 1,323,904 | 540 |
-| Mic Mute | 534,091 | 1,286,303 | 507 |
-| Presenter | 566,438 | 1,354,469 | 513 |
-| System | 588,148 | 1,402,921 | 504 |
-| CPU & Memory in menu bar | 528,643 | 1,285,867 | 519 |
-| Screen Recorder | 752,077 | 1,750,098 | 513 |
-| Window Sweaters | 599,529 | 1,427,090 | 528 |
-| All 17 migrated packages | 9,852,954 | 23,526,090 | 8,727 |
+| Updates | 972,988 | 2,259,823 | 528 |
+| BlitzTree | 769,671 | 1,834,482 | 513 |
+| Calendar | 787,199 | 1,852,607 | 510 |
+| Cleaner | 806,685 | 1,901,580 | 507 |
+| Clipboard | 1,037,804 | 2,367,461 | 514 |
+| Color Picker | 712,939 | 1,716,075 | 519 |
+| Emoji Picker | 855,167 | 2,112,817 | 501 |
+| Focus Dim | 694,320 | 1,683,378 | 510 |
+| Packages | 769,178 | 1,817,615 | 510 |
+| Jev | 786,161 | 1,853,904 | 495 |
+| Keep Awake | 318,732 | 774,373 | 512 |
+| Keystroke Highlight | 718,534 | 1,736,128 | 540 |
+| Mic Mute | 699,729 | 1,699,743 | 507 |
+| Notch Shelf | 1,147,178 | 2,587,736 | 517 |
+| Plugins | 1,176,568 | 3,071,607 | 508 |
+| Presenter | 732,302 | 1,750,405 | 513 |
+| System | 743,681 | 1,782,953 | 504 |
+| CPU & Memory in menu bar | 695,305 | 1,683,499 | 519 |
+| Screen Recorder | 911,717 | 2,112,962 | 513 |
+| Window Sweaters | 765,072 | 1,822,114 | 528 |
+| All 20 migrated packages | 16,100,930 | 38,421,262 | 10,268 |
 
-The 17 ZIPs plus their metadata occupy 9,861,681 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
+The 20 ZIPs plus their metadata occupy 16,111,198 bytes as release assets. A shared signed catalog, checksums, retained older releases, and packages that have not been migrated are outside this subtotal. These are locally built development artifacts; these particular releases have not been published.
 
 Each enabled extension runs in a worker launched from the same Edith executable. Disabling waits for that process to exit, including a forced shutdown when it does not respond. The host also tracks commands launched into their own process groups and stops those groups on disable, crash, or unresponsive shutdown. The lifecycle test confirms that no worker process remains. Removing an extension stops it before deleting its downloaded packages. User preferences remain separate from downloaded code.
 
 Compatible installed extensions survive app updates without downloading them again. Enabled preferences persist, and workers restart when the updated app starts. Extension updates install immutable, verified packages and restart only the affected worker. A failed update attempts to restore the previous working version. Automatic checks run on app startup at most once every eight hours, only when extensions are installed and automatic extension updates are enabled. Users can also check and update manually. Incompatible installed packages are shown as needing a compatible update.
 
-Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All 17 migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
+Local `make ci-marketplace-host` verifies worker failure handling, package integrity and signatures, offline catalog behavior, update preferences, restored enabled extensions, and extension behavior. The real-bundle harness opens a native window, installs a newer version while the previous worker is active, replaces that worker, simulates an app restart, disables the extension, checks process exit, and removes its payloads. All 20 migrated extensions pass this flow. Visual review of the completed marketplace and cloud release testing remain outstanding.
 
 Home and Notch customization from merged [PR #1010](https://github.com/pulkitxm/edith/pull/1010) is part of this rebuild. The visual editor, shared canvas and shelf controls, host-owned preferences, profiles, undo/redo, tab order, source filters, and read-only worker context are implemented. Native synthetic UI tests verify both editors at compact and regular widths, increased zoom, and light and dark appearance. Calendar supplies real filtered meeting data and validates Join actions in its worker. The remaining live-card adapters, full world-clock controls, and the Notch worker are still being migrated.
 
