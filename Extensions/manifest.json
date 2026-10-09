@@ -49,7 +49,10 @@
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "testTargets": [
+      "ci-extension-audio-mixer"
+    ]
   },
   {
     "id": "focusDim",
