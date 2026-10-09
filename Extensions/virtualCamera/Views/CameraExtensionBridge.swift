@@ -5,13 +5,19 @@ import Foundation
 @MainActor
 enum CameraExtensionBridge {
     private static var observer: NSObjectProtocol?
-    private static let manager = VirtualCameraExtensionManager()
+    private static var manager = VirtualCameraExtensionManager()
 
-    static func install() {
+    static func install(manager: VirtualCameraExtensionManager) {
+        self.manager = manager
         guard observer == nil else { return }
         observer = IPC.observe(IPC.Name.requestCameraExtensionAction) { info in
             MainActor.assumeIsolated { receive(info) }
         }
+    }
+
+    static func shutdown() {
+        if let observer { IPC.stopObserving(observer) }
+        observer = nil
     }
 
     static func reply(to info: [AnyHashable: Any], now: Date = Date()) -> [String: Any]? {
@@ -69,6 +75,7 @@ enum CameraExtensionBridge {
         case .awaitingApproval: "awaitingApproval"
         case .installed: "installed"
         case .removing: "removing"
+        case .restartRequired: "restartRequired"
         case .failed: "failed"
         }
     }

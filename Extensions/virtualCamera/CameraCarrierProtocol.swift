@@ -16,6 +16,22 @@ struct CameraCarrierStatus: Codable, Equatable, Sendable {
     let pending: Bool
     var message: String?
 
+    init(phase: String, ownsProvider: Bool, pending: Bool, message: String? = nil) {
+        self.phase = phase; self.ownsProvider = ownsProvider; self.pending = pending;
+        self.message = message
+    }
+
+    var isValid: Bool {
+        [
+            "idle", "activating", "awaitingApproval", "active", "deactivating", "stopped",
+            "restartRequired", "failed",
+        ].contains(phase)
+            && (message?.utf8.count ?? 0) <= 4096
+            && (!["active", "activating", "awaitingApproval", "deactivating", "restartRequired"]
+                .contains(phase) || ownsProvider)
+            && (!["idle", "stopped"].contains(phase) || !ownsProvider)
+    }
+
     @MainActor init(_ controller: CameraSystemExtensionController) {
         ownsProvider = controller.ownsProvider
         pending = controller.pendingRequest

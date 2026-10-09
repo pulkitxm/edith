@@ -1,7 +1,6 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
-import EdithExtensionSupport
 import Foundation
 import Security
 import SystemExtensions
@@ -16,6 +15,7 @@ enum VirtualCameraExtensionPhase: Equatable {
     case awaitingApproval
     case installed
     case removing
+    case restartRequired
     case failed(String)
 
     var title: String {
@@ -29,6 +29,7 @@ enum VirtualCameraExtensionPhase: Equatable {
         case .awaitingApproval: "Waiting for your approval"
         case .installed: "Installed"
         case .removing: "Removing"
+        case .restartRequired: "Restart required"
         case .failed: "Install failed"
         }
     }
@@ -38,9 +39,9 @@ enum VirtualCameraExtensionPhase: Equatable {
         case .checking:
             "Looking for the Edith Camera extension."
         case .missingFromBundle:
-            "This copy of Edith was built without the camera extension. Rebuild it with build.sh."
+            "Download Edith Camera from Extensions, then try again."
         case .needsSigning:
-            "macOS only installs camera extensions from a copy of Edith signed with a paid Apple Developer Program profile. With one, sign in to Xcode, run make camera-profiles, then make install. Without one, Edith sends through OBS Virtual Camera when OBS Studio is installed."
+            "The downloaded camera needs a valid macOS signing profile. Download the latest Edith Camera release, then try again."
         case .needsApplicationsFolder:
             "macOS installs camera extensions only from apps in the Applications folder."
         case .notInstalled:
@@ -53,6 +54,8 @@ enum VirtualCameraExtensionPhase: Equatable {
             "Choose Edith Camera as the camera in any video app."
         case .removing:
             "Asking macOS to remove Edith Camera."
+        case .restartRequired:
+            "Restart macOS to finish changing Edith Camera. Its provider remains owned until the change completes."
         case .failed(let message):
             message
         }
@@ -70,6 +73,7 @@ struct VirtualCameraExtensionEnvironment {
     var bundleURL: URL
     var hasInstallEntitlement: () -> Bool
     var deviceVisible: () -> Bool
+    var canPrepareLocation = false
 
     static var live: VirtualCameraExtensionEnvironment {
         VirtualCameraExtensionEnvironment(
@@ -95,12 +99,18 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
     @Published private(set) var phase: VirtualCameraExtensionPhase = .checking
 
     private let environment: VirtualCameraExtensionEnvironment
-    private var pendingRemoval = false
+    private let client: (any CameraCarrierControlling)?
+    private var operationTask: Task<Void, Never>?
+    private var stopped = false
     private var refreshTask: Task<Void, Never>?
 
-    init(environment: VirtualCameraExtensionEnvironment = .live) {
-        self.environment = environment
+    init(
+        environment: VirtualCameraExtensionEnvironment = .live,
+        client: (any CameraCarrierControlling)? = nil
+    ) {
+        self.environment = environment; self.client = client
         super.init()
+        client?.changed = { [weak self] status in self?.receive(status) }
     }
 
     nonisolated static func phase(
@@ -120,12 +130,15 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
     }
 
     var inApplicationsFolder: Bool {
-        environment.bundleURL.standardizedFileURL.path.hasPrefix("/Applications/")
+        environment.canPrepareLocation
+            || environment.bundleURL.standardizedFileURL.path.hasPrefix("/Applications/")
     }
 
     func refresh() {
+        guard !stopped else { return }
+        if let status = client?.currentStatus { receive(status); return }
         switch phase {
-        case .installing, .removing,
+        case .installing, .removing, .restartRequired,
             .awaitingApproval where !environment.deviceVisible():
             return
         default:
@@ -140,8 +153,10 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
     }
 
     func refreshDetached() {
+        guard !stopped else { return }
+        if let status = client?.currentStatus { receive(status); return }
         switch phase {
-        case .installing, .removing:
+        case .installing, .removing, .restartRequired:
             return
         default:
             break
@@ -162,8 +177,9 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
 
     private func completeRefresh(_ next: VirtualCameraExtensionPhase, deviceVisible: Bool) {
         refreshTask = nil
+        guard !stopped else { return }
         switch phase {
-        case .installing, .removing:
+        case .installing, .removing, .restartRequired:
             return
         case .awaitingApproval where !deviceVisible:
             return
@@ -175,23 +191,62 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
 
     func install() {
         refresh()
-        guard phase.canInstall else { return }
+        guard phase.canInstall, !stopped, operationTask == nil else { return }
         phase = .installing
-        pendingRemoval = false
-        let request = OSSystemExtensionRequest.activationRequest(
-            forExtensionWithIdentifier: Self.identifier, queue: .main)
-        request.delegate = self
-        OSSystemExtensionManager.shared.submitRequest(request)
+        perform { try await $0.activate() }
     }
 
     func uninstall() {
-        guard phase == .installed || phase == .awaitingApproval else { return }
+        guard !stopped, operationTask == nil, phase == .installed || phase == .awaitingApproval
+        else { return }
         phase = .removing
-        pendingRemoval = true
-        let request = OSSystemExtensionRequest.deactivationRequest(
-            forExtensionWithIdentifier: Self.identifier, queue: .main)
-        request.delegate = self
-        OSSystemExtensionManager.shared.submitRequest(request)
+        perform { try await $0.deactivate() }
+    }
+
+    private func perform(
+        _ operation: @escaping @MainActor (any CameraCarrierControlling) async throws -> Void
+    ) {
+        guard let client else { phase = .missingFromBundle; return }
+        operationTask = Task { [weak self] in
+            guard let self else { return }
+            defer { operationTask = nil }
+            do {
+                try await operation(client)
+                guard !stopped else { return }
+                if let status = client.currentStatus { receive(status) }
+            } catch {
+                guard !stopped else { return }
+                if client.currentStatus?.phase == "restartRequired" {
+                    phase = .restartRequired
+                } else {
+                    phase = .failed(Self.message(for: error))
+                }
+            }
+        }
+    }
+
+    private func receive(_ status: CameraCarrierStatus) {
+        guard !stopped, status.isValid else { return }
+        phase =
+            switch status.phase {
+            case "idle", "stopped": .notInstalled
+            case "activating": .installing
+            case "awaitingApproval": .awaitingApproval
+            case "active": .installed
+            case "deactivating": .removing
+            case "restartRequired": .restartRequired
+            default: .failed(status.message ?? "The camera change did not complete.")
+            }
+    }
+
+    func shutdown() async {
+        guard !stopped else { return }
+        stopped = true
+        client?.changed = nil
+        operationTask?.cancel(); refreshTask?.cancel()
+        let pending = [operationTask, refreshTask].compactMap { $0 }
+        for task in pending { await task.value }
+        operationTask = nil; refreshTask = nil
     }
 
     func openSystemSettings() {
@@ -224,48 +279,10 @@ final class VirtualCameraExtensionManager: NSObject, ObservableObject {
             return "macOS needs your approval before it installs Edith Camera."
         case .codeSignatureInvalid, .validationFailed:
             return
-                "macOS rejected the camera extension signature. Rebuild Edith with matching provisioning profiles."
+                "macOS rejected the camera extension signature. Download the latest Edith Camera release and try again."
         default:
             return error.localizedDescription
         }
     }
 
-    fileprivate func finish(_ result: OSSystemExtensionRequest.Result) {
-        if result == .willCompleteAfterReboot {
-            phase = .failed("Restart the Mac to finish updating Edith Camera.")
-            return
-        }
-        phase = pendingRemoval ? .notInstalled : .installed
-        pendingRemoval = false
-    }
-
-    fileprivate func fail(_ error: Error) {
-        pendingRemoval = false
-        phase = .failed(Self.message(for: error))
-    }
-}
-
-extension VirtualCameraExtensionManager: OSSystemExtensionRequestDelegate {
-    nonisolated func request(
-        _ request: OSSystemExtensionRequest,
-        actionForReplacingExtension existing: OSSystemExtensionProperties,
-        withExtension ext: OSSystemExtensionProperties
-    ) -> OSSystemExtensionRequest.ReplacementAction {
-        .replace
-    }
-
-    nonisolated func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
-        MainActor.assumeIsolated { phase = .awaitingApproval }
-    }
-
-    nonisolated func request(
-        _ request: OSSystemExtensionRequest,
-        didFinishWithResult result: OSSystemExtensionRequest.Result
-    ) {
-        MainActor.assumeIsolated { finish(result) }
-    }
-
-    nonisolated func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
-        MainActor.assumeIsolated { fail(error) }
-    }
 }
