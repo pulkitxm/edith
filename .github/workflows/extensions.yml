@@ -163,7 +163,10 @@ jobs:
         env:
           EXTENSION_SUPPORT_NATIVE_TESTS: "1"
           EXTENSION_SWIFT_JOBS: "2"
-        run: bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
+        run: |
+          command -v zig >/dev/null 2>&1 || brew install zig
+          test "$(zig version)" = "0.16.0"
+          bun test scripts/extension-ghostty-native.test.js scripts/build-extension-support.native.test.js
       - run: make ci-marketplace-runtime ci-extension-support ci-extension-docs ci-extension-commands ci-comments
       - run: |
           mkdir -p Packages/ExtensionMarketplace/.build/debug
