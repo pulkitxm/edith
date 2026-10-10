@@ -115,6 +115,8 @@ test("managed request excludes ordinary builds and other hosted fixtures rather 
 
 test("managed chunks retain every gate and only always aggregate can claim complete39", () => {
   expect(workflow).toContain("fail-fast: false");
+  expect(workflow).toContain("scripts/test-hosted-managed-chunk-artifact.py");
+  expect(workflow).toContain("scripts/hosted-managed-chunk-intake.test.js");
   expect(workflow).toContain("max-parallel: 3");
   expect(workflow).toContain("chunk: [0, 1, 2]");
   expect(workflow).toContain('--chunk "$MANAGED_CHUNK"');

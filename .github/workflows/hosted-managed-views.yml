@@ -76,8 +76,9 @@ jobs:
       - name: Verify closed route, archive and process contracts
         run: |
           set -euo pipefail
-          bun test scripts/hosted-managed-execution-contract.test.js scripts/hosted-managed-frozen-host.test.js scripts/hosted-managed-process-proof.test.js scripts/hosted-managed-run-owner.test.js scripts/hosted-managed-owned-cleanup.test.js scripts/hosted-managed-ui-project.test.js
+          bun test scripts/hosted-managed-execution-contract.test.js scripts/hosted-managed-frozen-host.test.js scripts/hosted-managed-process-proof.test.js scripts/hosted-managed-run-owner.test.js scripts/hosted-managed-owned-cleanup.test.js scripts/hosted-managed-ui-project.test.js scripts/hosted-managed-chunks.test.js scripts/hosted-managed-chunk-intake.test.js scripts/hosted-managed-package-preparation.test.js scripts/hosted-managed-workflow.test.js
           python3 scripts/test-hosted-managed-frozen-host.py
+          python3 scripts/test-hosted-managed-chunk-artifact.py
           swift test --package-path Tests/HostedManagedViews/ApprovalSources --jobs 1
       - name: Import signing into one owned disposable keychain
         env:
