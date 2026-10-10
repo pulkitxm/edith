@@ -3,17 +3,30 @@ import Foundation
 
 private final class LineSplitter: @unchecked Sendable {
     private let lock = NSLock()
-    private var pending = ""
+    private var pending = Data()
+    private var skipLineFeed = false
 
     func receive(_ data: Data) -> [String] {
-        guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return [] }
+        guard !data.isEmpty else { return [] }
         lock.lock()
         defer { lock.unlock() }
-        pending += text
         var lines: [String] = []
-        while let newline = pending.firstIndex(where: \.isNewline) {
-            lines.append(String(pending[..<newline]))
-            pending.removeSubrange(...newline)
+        for byte in data {
+            if skipLineFeed {
+                skipLineFeed = false
+                if byte == 10 { continue }
+            }
+            if byte == 10 || byte == 13 {
+                lines.append(String(decoding: pending, as: UTF8.self))
+                pending.removeAll(keepingCapacity: true)
+                skipLineFeed = byte == 13
+            } else {
+                pending.append(byte)
+                if pending.count == 1_048_576 {
+                    lines.append(String(decoding: pending, as: UTF8.self))
+                    pending.removeAll(keepingCapacity: true)
+                }
+            }
         }
         return lines
     }
@@ -21,8 +34,8 @@ private final class LineSplitter: @unchecked Sendable {
     func flush() -> [String] {
         lock.lock()
         defer { lock.unlock() }
-        let rest = pending
-        pending = ""
+        let rest = String(decoding: pending, as: UTF8.self)
+        pending = Data()
         return rest.isEmpty ? [] : [rest]
     }
 }
@@ -201,8 +214,12 @@ public final class SSHLineStream: @unchecked Sendable {
             process.standardInput = stdinPipe
             try process.run()
             lifecycleLock.withLock { hasStarted = true }
-            stdinPipe.fileHandleForWriting.write(stdinData)
-            try? stdinPipe.fileHandleForWriting.close()
+            let writer = stdinPipe.fileHandleForWriting
+            DispatchQueue.global(qos: .utility).async {
+                signal(SIGPIPE, SIG_IGN)
+                try? writer.write(contentsOf: stdinData)
+                try? writer.close()
+            }
         } else {
             process.standardInput = FileHandle.nullDevice
             try process.run()

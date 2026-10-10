@@ -113,6 +113,11 @@ import Foundation
         return try await job("machines.ui.files", value: value)
     }
 
+    func logs(_ value: MachineLogRequest) async throws -> MachineLogFrame {
+        try value.validate()
+        return try await request("machines.ui.logs", value: value)
+    }
+
     func configuration() async throws -> MachineUIConfigurationState {
         try await request("machines.ui.configuration", value: [String: String]())
     }

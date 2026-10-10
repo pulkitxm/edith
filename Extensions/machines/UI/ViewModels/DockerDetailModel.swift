@@ -40,6 +40,7 @@ final class DockerDetailModel {
     private(set) var filesFailed = false
 
     private var stream: SSHLineStream?
+    private var remoteLogTask: Task<Void, Never>?
     private var nextLogID = 0
     private var logGeneration = 0
     private var pending: [DockerLogLine] = []
@@ -125,6 +126,11 @@ final class DockerDetailModel {
     private func attachLogs(
         session: MachineSession, container: DockerContainer, generation: Int
     ) {
+        if let client = session.uiClient {
+            attachRemoteLogs(
+                client: client, session: session, container: container, generation: generation)
+            return
+        }
         guard let process = logProcess(session, container) else { return }
         let stream = SSHLineStream(
             process: process,
@@ -158,11 +164,80 @@ final class DockerDetailModel {
         self.stream = stream
     }
 
+    private func attachRemoteLogs(
+        client: MachineUIClient, session: MachineSession, container: DockerContainer,
+        generation: Int
+    ) {
+        remoteLogTask = Task { [weak self] in
+            var handle: UUID?
+            var sequence: UInt64 = 0
+            do {
+                let started = try await client.logs(
+                    MachineLogRequest(
+                        operation: .start, machineID: session.id, containerID: container.id))
+                handle = started.handle
+                while !Task.isCancelled {
+                    let frame = try await client.logs(
+                        MachineLogRequest(
+                            operation: .read, machineID: session.id, handle: started.handle,
+                            sequence: sequence))
+                    guard let self, generation == logGeneration else { throw CancellationError() }
+                    guard frame.handle == started.handle, frame.sequence == sequence,
+                        frame.nextSequence == sequence + UInt64(frame.lines.count),
+                        frame.lines.count <= 128
+                    else { throw MachineUIError.invalidRequest }
+                    sequence = frame.nextSequence
+                    for chunk in frame.lines {
+                        enqueue(
+                            DockerParsing.splitLogLine(
+                                chunk.text, index: nextLogID, isStderr: chunk.isStderr))
+                        nextLogID += 1
+                    }
+                    if frame.exitCode != nil {
+                        handle = nil
+                        flushPending()
+                        let running =
+                            session.containers.first { $0.id == container.id }?.state.isRunning
+                            ?? false
+                        guard running, reattempts < 5 else { streamEnded = true; return }
+                        reattempts += 1
+                        try await Task.sleep(for: .seconds(2))
+                        guard generation == logGeneration else { return }
+                        attachLogs(session: session, container: container, generation: generation)
+                        return
+                    }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            } catch {
+                if !Task.isCancelled, let self, generation == logGeneration {
+                    flushPending()
+                    streamEnded = true
+                    logs.append(
+                        DockerLogLine(
+                            id: nextLogID, timestamp: nil, text: error.localizedDescription,
+                            isStderr: true))
+                    nextLogID += 1
+                }
+            }
+            if let handle {
+                let cleanup = Task {
+                    _ = try? await client.logs(
+                        MachineLogRequest(
+                            operation: .cancel, machineID: session.id, handle: handle,
+                            sequence: sequence))
+                }
+                await cleanup.value
+            }
+        }
+    }
+
     func stopLogs() {
         logGeneration += 1
         flushTask?.cancel()
         flushTask = nil
         pending = []
+        remoteLogTask?.cancel()
+        remoteLogTask = nil
         stream?.cancel()
         stream = nil
     }

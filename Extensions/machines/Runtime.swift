@@ -13,6 +13,7 @@ final class ExtensionRuntime: NSObject {
     private var cli: MachineCLIService?
     private var previewEngine: MachinePreviewEngine?
     private var filesEngine: MachineFilesEngine?
+    private var logEngine: MachineLogEngine?
     private var uiEngine: MachineUIEngine?
     private var uiClient: MachineUIClient?
     private var health: MachineHealthLifecycle?
@@ -167,6 +168,13 @@ final class ExtensionRuntime: NSObject {
                     return MachinesModel.shared.session(for: id)
                 })
                 previewEngine = previews
+                let logs = MachineLogEngine(session: { id in
+                    guard MachinesModel.shared.knows(id) else {
+                        throw MachineUIError.invalidRequest
+                    }
+                    return MachinesModel.shared.session(for: id)
+                })
+                logEngine = logs
                 MachinesCLIEnvironment.undo = { id in try await files.undo(machineID: id) }
                 uiEngine = MachineUIEngine(
                     session: { id in
@@ -205,7 +213,8 @@ final class ExtensionRuntime: NSObject {
                     observe: { _, active in
                         if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
                     }, files: { value in try await files.execute(value) },
-                    preview: { value in try await previews.execute(value) })
+                    preview: { value in try await previews.execute(value) },
+                    logs: { value in try logs.execute(value) })
                 cli = MachineCLIService()
                 MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
                 if !fixture {
@@ -240,6 +249,7 @@ final class ExtensionRuntime: NSObject {
         await uiEngine?.shutdown(); uiEngine = nil
         filesEngine?.shutdown(); filesEngine = nil
         previewEngine?.shutdown(); previewEngine = nil
+        await logEngine?.shutdown(); logEngine = nil
         MachinesCLIEnvironment.undo = { _ in throw MachineUIError.unavailable }
         await commands.shutdownAndWait()
         await health?.stop(); health = nil

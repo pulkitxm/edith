@@ -32,4 +32,9 @@ public final class MachineExecutionOwner: @unchecked Sendable {
         for stream in retained { stream.cancel() }
         for stream in retained { _ = await stream.waitForExit(); await stream.waitForProcessExit() }
     }
+
+    public func cancel() {
+        let retained = lock.withLock { Array(streams.values) }
+        for stream in retained { stream.cancel() }
+    }
 }
