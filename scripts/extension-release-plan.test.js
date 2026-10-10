@@ -1206,17 +1206,111 @@ describe("pull request candidate planning", () => {
       ).toEqual(pullRequestDefinitions);
     });
   });
-  test("git planning rejects malformed absent or nonancestor commit identities", async () => {
+  test("divergent event base tips use the branch point for both changes and manifest rows", async () => {
     await pullRequestRepository(async ({ root, git, commit, baseSHA }) => {
+      const advanced = structuredClone(pullRequestDefinitions);
+      advanced[1].minimumSystemVersion = 15;
+      await writeFile(
+        join(root, "Extensions/manifest.json"),
+        JSON.stringify(advanced),
+      );
+      await writeFile(
+        join(root, "Extensions/calendar/Runtime.swift"),
+        "base-only calendar",
+      );
+      const eventBase = await commit();
+      git("checkout", "--quiet", "--detach", baseSHA);
+      await writeFile(
+        join(root, "Extensions/music/Runtime.swift"),
+        "candidate music",
+      );
+      await commit();
+      expect(git("merge-base", "--all", eventBase, "HEAD")).toBe(baseSHA);
+      const baseline = readPullRequestBaseline(root, eventBase);
+      expect(baseline.priorDefinitions).toEqual(pullRequestDefinitions);
+      expect(baseline.changes).toEqual(["Extensions/music/Runtime.swift"]);
+      const candidates = await planPullRequestExtensions(
+        root,
+        pullRequestDefinitions,
+        eventBase,
+      );
+      expect(candidates.map(({ id }) => id)).toEqual(["music", "shelf"]);
+      for (const candidate of candidates) {
+        const definition = pullRequestDefinitions.find(
+          ({ id }) => id === candidate.id,
+        );
+        expect(candidate.fingerprint).toBe(
+          await extensionFingerprint(root, definition, pullRequestDefinitions),
+        );
+        expect(candidate.version).toBe(definition.version);
+        expect(candidate.tag).toBe(extensionReleaseTag(candidate));
+      }
+    });
+  });
+  test("git planning rejects malformed absent noncommit and unrelated identities", async () => {
+    await pullRequestRepository(async ({ root, git, baseSHA }) => {
       for (const value of ["", "main", "--all", "a".repeat(39), "g".repeat(40)])
         expect(() => readPullRequestBaseline(root, value)).toThrow(
           "Invalid pull request base",
         );
       expect(() => readPullRequestBaseline(root, "0".repeat(40))).toThrow();
-      await writeFile(join(root, "README.md"), "future");
-      const future = await commit();
-      git("checkout", "--quiet", "--detach", baseSHA);
-      expect(() => readPullRequestBaseline(root, future)).toThrow();
+      const tree = git("rev-parse", `${baseSHA}^{tree}`);
+      expect(() => readPullRequestBaseline(root, tree)).toThrow();
+      const unrelated = git(
+        "commit-tree",
+        tree,
+        "-m",
+        "Unrelated fixture root",
+      );
+      expect(() => readPullRequestBaseline(root, unrelated)).toThrow();
+    });
+  });
+  test("criss-cross histories fail closed when two verified merge bases exist", async () => {
+    await pullRequestRepository(async ({ root, git, baseSHA }) => {
+      const tree = git("rev-parse", `${baseSHA}^{tree}`);
+      const left = git(
+        "commit-tree",
+        tree,
+        "-p",
+        baseSHA,
+        "-m",
+        "Left fixture",
+      );
+      const right = git(
+        "commit-tree",
+        tree,
+        "-p",
+        baseSHA,
+        "-m",
+        "Right fixture",
+      );
+      const eventBase = git(
+        "commit-tree",
+        tree,
+        "-p",
+        left,
+        "-p",
+        right,
+        "-m",
+        "Base fixture merge",
+      );
+      const head = git(
+        "commit-tree",
+        tree,
+        "-p",
+        right,
+        "-p",
+        left,
+        "-m",
+        "Head fixture merge",
+      );
+      git("checkout", "--quiet", "--detach", head);
+      expect(
+        git("merge-base", "--all", eventBase, head).split("\n").sort(),
+      ).toEqual([left, right].sort());
+      expect(() => readPullRequestBaseline(root, eventBase)).toThrow(
+        "unique merge base",
+      );
     });
   });
   test("malformed base manifests fail closed instead of producing an empty matrix", async () => {
