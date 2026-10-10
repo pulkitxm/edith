@@ -15,6 +15,7 @@ final class HostWorkerApplication {
     private var window: NSWindow?
     private var parentWatcher: DispatchSourceProcess?
     private var windowObserver: NSObjectProtocol?
+    private let nativeAdmission = ExtensionNativeTaskAdmission()
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
     private var preparingDisable = false
@@ -47,7 +48,13 @@ final class HostWorkerApplication {
                         return
                     }
                     do {
-                        try control.send(HostWorkerProcessGroup(pid: pid, registered: registered))
+                        guard let identity = ExtensionProcessIdentity.read(pid) else {
+                            accept?(false)
+                            return
+                        }
+                        try control.send(
+                            HostWorkerProcessGroup(
+                                pid: pid, generation: identity.generation, registered: registered))
                         accept?(true)
                     } catch { accept?(false) }
                 })
@@ -153,6 +160,11 @@ final class HostWorkerApplication {
                 throw MarketplaceError.invalidSignature
             }
             configuration = next
+            setenv(
+                "EDITH_EXTENSION_NATIVE_CONTEXT",
+                try JSONEncoder().encode(next).base64EncodedString(), 1)
+            setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
+            setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
             try applyAppearance(next)
             let context: NSDictionary = [
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
@@ -185,6 +197,30 @@ final class HostWorkerApplication {
             let server = ExtensionPeerServer(endpoint: endpoint) {
                 [weak self] token, command, payload in
                 guard let self, !self.stopping else { throw ExtensionPeerError.unavailable }
+                if command == "extension.native.authorize" {
+                    guard !self.preparingDisable, payload.count <= 512,
+                        let object = try JSONSerialization.jsonObject(with: payload)
+                            as? [String: Any],
+                        Set(object.keys) == ["pid", "token"], let pid = object["pid"] as? Int32,
+                        let capability = object["token"] as? String,
+                        self.runtimes.contains(where: {
+                            $0.role == .app && (try? $0.snapshot(id: package.id)?.active) == true
+                        }),
+                        UserDefaults(suiteName: identity.defaultsSuite)?.stringArray(
+                            forKey: "enabledExtensions")?.contains(package.id) == true
+                    else { throw ExtensionPeerError.unavailable }
+                    try self.nativeAdmission.authorize(pid, token: capability)
+                    return try JSONEncoder().encode(next)
+                }
+                if command == "extension.process.register" {
+                    guard payload.count <= 128,
+                        let object = try JSONSerialization.jsonObject(with: payload)
+                            as? [String: Any],
+                        Set(object.keys) == ["pid"], let pid = object["pid"] as? Int32
+                    else { throw ExtensionPeerError.invalidRequest }
+                    try self.nativeAdmission.registerDescendant(pid)
+                    return Data("{\"registered\":true}".utf8)
+                }
                 if command == "surface.context" {
                     guard payload.isEmpty, let context = SurfaceHostContext.current else {
                         throw ExtensionPeerError.invalidRequest
