@@ -92,11 +92,11 @@ struct HostApplication: App {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
 
     var body: some Scene {
-        WindowGroup("Edith") {
+        WindowGroup("Edith", id: "main") {
             GeometryReader { geometry in
                 Group {
                     if let marketplace {
-                        HostWorkspace(marketplace: marketplace)
+                        HostWorkspace(marketplace: marketplace, updater: updater)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -162,7 +162,7 @@ struct HostApplication: App {
                     !updater.available)
             }
         }
-        Settings { HostSettingsPage() }
+        Settings { HostSettingsRedirect() }
     }
 
     private func synchronizeAppearance() {

@@ -6,6 +6,11 @@ import SwiftUI
 
 struct HostWorkspace: View {
     let marketplace: HostMarketplace
+    let updater: HostUpdater
+    var showWelcome: (() -> Void)? = nil
+    var panelShortcutChanged: () -> Void = {}
+    var additionalSettings: ((String) -> AnyView)? = nil
+    @State private var permissions = HostPermissions()
     var presenter: (any HostExtensionContentPresenting)? = nil
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
         var selection = "home"
@@ -29,15 +34,23 @@ struct HostWorkspace: View {
     @State private var keyMonitor: Any?
     @State private var hintMonitor: Any?
     @State private var showHints = false
+    @State private var fullscreen = false
+    @Environment(\.automaticViewActionsEnabled) private var automaticActions
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let navigationDefaults: UserDefaults
     init(
         marketplace: HostMarketplace, presenter: (any HostExtensionContentPresenting)? = nil,
+        updater: HostUpdater? = nil, showWelcome: (() -> Void)? = nil,
+        panelShortcutChanged: @escaping () -> Void = {},
+        additionalSettings: ((String) -> AnyView)? = nil,
         defaults: UserDefaults = SharedDefaults.store
     ) {
         self.marketplace = marketplace
+        self.updater = updater ?? HostUpdater(startingUpdater: false)
+        self.showWelcome = showWelcome; self.panelShortcutChanged = panelShortcutChanged
+        self.additionalSettings = additionalSettings
         self.presenter = presenter
         navigationDefaults = defaults
         _selection = AppStorage(
@@ -93,7 +106,7 @@ struct HostWorkspace: View {
                         color: scheme == .dark ? .black.opacity(0.55) : .black.opacity(0.16),
                         radius: UIScale.pt(18), x: -6, y: 0)
                 sidebarEdge.offset(x: sidebarOpen ? width : 0).opacity(sidebarOpen ? 1 : 0)
-                titlebar.padding(.leading, UIScale.pt(94))
+                titlebar.padding(.leading, UIScale.pt(fullscreen ? 12 : 94))
             }
             .ignoresSafeArea()
             .animation(
@@ -103,7 +116,7 @@ struct HostWorkspace: View {
                 "section", selection: binding,
                 isValid: { raw in raw.isEmpty || pages.contains { $0.id == raw } })
         }
-        .background(HostWindowChrome())
+        .background(HostWindowChrome(persist: automaticActions, fullscreen: $fullscreen))
         .onAppear { installKeys() }
         .onDisappear { removeKeys() }
         .onExitCommand { NSApp.keyWindow?.makeFirstResponder(nil) }
@@ -126,7 +139,7 @@ struct HostWorkspace: View {
             }.buttonStyle(.edith(.toolbar)).help("Toggle sidebar (⌘B)").keyboardShortcut(
                 "b", modifiers: .command
             ).accessibilityLabel("Toggle sidebar")
-            if sidebarOpen, width - UIScale.pt(94) >= UIScale.pt(130) {
+            if sidebarOpen, width - UIScale.pt(fullscreen ? 12 : 94) >= UIScale.pt(130) {
                 HStack(spacing: 6) {
                     if let icon = NSImage(named: NSImage.applicationIconName) {
                         Image(nsImage: icon).resizable().frame(
@@ -139,7 +152,8 @@ struct HostWorkspace: View {
             }
             Spacer(minLength: 0)
         }.frame(
-            width: sidebarOpen ? max(width - UIScale.pt(94), UIScale.pt(60)) : UIScale.pt(200),
+            width: sidebarOpen
+                ? max(width - UIScale.pt(fullscreen ? 12 : 94), UIScale.pt(60)) : UIScale.pt(200),
             height: UIScale.pt(31)
         ).clipped()
     }
@@ -296,12 +310,8 @@ struct HostWorkspace: View {
                 marketplace: marketplace, customize: customize,
                 extensions: { selection = "extensions" })
         case "extensions": MarketplacePage(marketplace: marketplace)
-        case "settings": settingsContent
-        case "about":
-            ContentUnavailableView(
-                "Edith", systemImage: "info.circle",
-                description: Text(
-                    Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""))
+        case "settings": HostSettingsContainer(category: $settings) { settingsContent }
+        case "about": HostAboutPage(identity: marketplace.identity)
         default:
             if destination.id == "appMaintenance",
                 let child = HostNavigationCatalog.maintenance.first(where: {
@@ -319,12 +329,25 @@ struct HostWorkspace: View {
     @ViewBuilder private var settingsContent: some View {
         switch settings {
         case "surfaces": HostSurfaceEditor(marketplace: marketplace)
-        case "general": HostSettingsPage()
+        case "general":
+            HostSettingsPage(
+                marketplace: marketplace, permissions: permissions, defaults: defaults,
+                openPermissions: { settings = "permissions" }, showWelcome: showWelcome,
+                panelShortcutChanged: panelShortcutChanged)
+        case "permissions":
+            HostPermissionsPane(
+                marketplace: marketplace, permissions: permissions,
+                openExtensions: { selection = "extensions" })
+        case "updates": HostUpdatesPane(updater: updater)
+        case "shortcuts":
+            HostShortcutsPane(marketplace: marketplace, panelShortcutChanged: panelShortcutChanged)
         default:
             if let section = HostNavigationCatalog.settings.first(where: { $0.id == settings }),
                 let id = section.extensionID
             {
                 content(id, section: settings)
+            } else if let additionalSettings {
+                additionalSettings(settings)
             } else {
                 ContentUnavailableView(
                     HostNavigationCatalog.settings.first(where: { $0.id == settings })?.title
@@ -388,21 +411,5 @@ struct HostWorkspace: View {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) };
         if let hintMonitor { NSEvent.removeMonitor(hintMonitor) }; keyMonitor = nil;
         hintMonitor = nil
-    }
-}
-
-private struct HostWindowChrome: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { Sentinel() }
-    func updateNSView(_ view: NSView, context: Context) {}
-    private final class Sentinel: NSView {
-        override func viewDidMoveToWindow() {
-            guard let window else { return }
-            window.styleMask.insert(.fullSizeContentView)
-            window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true;
-            window.titlebarSeparatorStyle = .none
-            window.tabbingMode = .disallowed
-            window.identifier = NSUserInterfaceItemIdentifier("EdithMainWindow")
-            window.contentMinSize = NSSize(width: 960, height: 640)
-        }
     }
 }

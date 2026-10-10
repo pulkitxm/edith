@@ -10,6 +10,236 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HostSurfaceEditorTests {
+    @Test func generalSettingsKeepOriginalControlsAndExecuteOwnedActions() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let defaults = try #require(
+            UserDefaults(suiteName: fixture.marketplace.identity.defaultsSuite))
+        let restore = enableAccessibility()
+        defer { restore() }
+        var openedPermissions = false
+        var openedWelcome = false
+        var dockValues: [Bool] = []
+        let permissions = HostPermissions(
+            environment: .init(read: { [:] }, request: { _ in }, openSettings: { _ in false }))
+        let host = NSHostingView(
+            rootView: HostSettingsPage(
+                marketplace: fixture.marketplace,
+                permissions: permissions, defaults: defaults,
+                openPermissions: { openedPermissions = true },
+                showWelcome: { openedWelcome = true }, activation: { dockValues.append($0) }
+            )
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 960, height: 1000)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        let blue = try #require(find(host, label: "Blue theme"))
+        #expect((blue as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(defaults.string(forKey: AppStorageKeys.General.theme) == "blue")
+        #expect(defaults.string(forKey: AppStorageKeys.General.lastPaletteTheme) == "blue")
+        let access = try #require(find(host, label: "Permissions"))
+        #expect((access as AnyObject).accessibilityPerformPress?() == true)
+        #expect(openedPermissions)
+        let welcome = try #require(find(host, label: "Show welcome tour"))
+        #expect((welcome as AnyObject).accessibilityPerformPress?() == true)
+        #expect(openedWelcome)
+        let dock = try #require(find(host, label: "Show Dock icon"))
+        _ = (dock as AnyObject).accessibilityPerformPress?()
+        await settle(window, host: host)
+        #expect(defaults.bool(forKey: AppStorageKeys.General.showDockIcon) == false)
+        #expect(dockValues == [false])
+        #expect(find(host, label: "⌥⌘E") != nil)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func aboutRestoresOriginalIdentityStoryAndRepositoryWithoutAutomaticRequests()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let restore = enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: HostAboutPage(identity: fixture.marketplace.identity)
+                .environment(\.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 900, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Edith") != nil)
+        #expect(find(host, label: "pulkitxm/edith") != nil)
+        #expect(
+            find(host, label: "Every little Mac utility you'd otherwise pay for, under one roof.")
+                != nil)
+        #expect(find(host, label: "Made with ♥ by Pulkit") != nil)
+        #expect(HostBrand.github != nil)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.marketplace.identity.root.appendingPathComponent(
+                    "Caches/contributors.json"
+                ).path))
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test func permissionsRetainCatalogRequirementsAndHonorExplicitRequestOwnership() async throws {
+        let entries = try HostIndex.bundled()
+        var requested: [HostPermission] = []
+        var reads = 0
+        let permissions = HostPermissions(
+            environment: .init(
+                read: {
+                    reads += 1; return [.camera: true]
+                },
+                request: { requested.append($0) }, openSettings: { _ in true }))
+        let initial = permissions.usages(
+            entries: entries, activeIDs: ["calendar", "virtualCamera"])
+        #expect(HostPermissionCatalog.grantable(initial).map(\.permission) == [.calendar, .camera])
+        await permissions.request(.camera)
+        #expect(requested == [.camera])
+        #expect(reads == 1)
+        #expect(permissions.requesting == nil)
+        let current = permissions.usages(
+            entries: entries, activeIDs: ["calendar", "virtualCamera"])
+        #expect(HostPermissionCatalog.grantable(current).map(\.permission) == [.calendar])
+        await permissions.request(.bluetooth)
+        #expect(requested == [.camera])
+        #expect(permissions.openSettings(.automation) == false)
+        #expect(permissions.openSettings(.camera) == true)
+        let stopped = permissions.usages(entries: entries, activeIDs: [])
+        #expect(HostPermissionCatalog.filter(stopped, by: .mine).isEmpty)
+        #expect(HostPermissionCatalog.grantable(stopped).isEmpty)
+    }
+
+    @Test func permissionsUIKeepsOriginalFiltersAndInactiveExtensionDiscovery() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let restore = enableAccessibility()
+        defer { restore() }
+        var opened = false
+        var requests = 0
+        let permissions = HostPermissions(
+            environment: .init(
+                read: { [:] }, request: { _ in requests += 1 }, openSettings: { _ in false }))
+        let host = NSHostingView(
+            rootView: HostPermissionsPane(
+                marketplace: fixture.marketplace, permissions: permissions,
+                openExtensions: { opened = true }
+            )
+            .environment(\.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "My extensions") != nil)
+        #expect(find(host, label: "All permissions") != nil)
+        #expect(find(host, label: "Needs attention") != nil)
+        #expect(find(host, label: "No enabled extension needs access yet") != nil)
+        let browse = try #require(find(host, label: "Browse Extensions"))
+        #expect((browse as AnyObject).accessibilityPerformPress?() == true)
+        #expect(opened)
+        #expect(requests == 0)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+    }
+
+    @Test func contributorAdmissionRejectsUnboundedOrForeignDestinationsAndKeepsBotFiltering()
+        throws
+    {
+        let values = [
+            HostContributor(
+                id: 1, login: "sample-one",
+                avatarURL: URL(string: "https://avatars.githubusercontent.com/u/1")!,
+                profileURL: URL(string: "https://github.com/sample-one")!, contributions: 10),
+            HostContributor(
+                id: 2, login: "sample-bot[bot]",
+                avatarURL: URL(string: "https://avatars.githubusercontent.com/u/2")!,
+                profileURL: URL(string: "https://github.com/sample-bot")!, contributions: 20),
+        ]
+        #expect(
+            try HostContributors.people(from: JSONEncoder().encode(values)).map(\.login) == [
+                "sample-one"
+            ])
+        #expect(throws: (any Error).self) {
+            try HostContributors.people(
+                from: Data(repeating: 1, count: HostContributors.byteLimit + 1))
+        }
+        let foreign = HostContributor(
+            id: 3, login: "sample",
+            avatarURL: URL(string: "https://avatars.githubusercontent.com/u/3")!,
+            profileURL: URL(string: "https://example.com/sample")!, contributions: 1)
+        #expect(throws: (any Error).self) {
+            try HostContributors.people(from: JSONEncoder().encode([foreign]))
+        }
+    }
+
+    @Test func updateHistoryPersistsBoundedOriginalRecordsAndClearsItsOwnedFile() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let log = directory.appendingPathComponent("update-checks.json")
+        let updater = HostUpdater(startingUpdater: false, logURL: log)
+        for index in 0..<205 {
+            updater.recordCheck(
+                kind: .automatic, outcome: .upToDate,
+                date: Date(timeIntervalSince1970: Double(index)))
+        }
+        #expect(updater.checkHistory.count == 200)
+        #expect(updater.automaticCheckCount == 200)
+        let restored = HostUpdateCheckLog.load(from: log)
+        #expect(restored.count == 200)
+        #expect(restored.first?.date == Date(timeIntervalSince1970: 204))
+        #expect(restored.last?.date == Date(timeIntervalSince1970: 5))
+        #expect(HostUpdateCheckInterval.clamp(1) == 3600)
+        #expect(HostUpdateCheckInterval.clamp(.infinity) == 86400)
+        #expect(HostUpdateCheckInterval.clamp(4_000_000) == 2_592_000)
+        updater.clearCheckHistory()
+        await Task.yield()
+        #expect(updater.checkHistory.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: log.path))
+        #expect(updater.available == false)
+    }
+
+    @Test func recordedShortcutPreservesEstablishedModifierOrderAndRejectsUnmodifiedKeys() {
+        #expect(
+            HostRecordedShortcut(
+                code: 49, flags: [.control, .option, .shift, .command], characters: " ")?.label
+                == "⌃⌥⇧⌘Space")
+        #expect(
+            HostRecordedShortcut(code: 14, flags: [.option, .command], characters: "e")?.label
+                == "⌥⌘E")
+        #expect(HostRecordedShortcut(code: 14, flags: [], characters: "e") == nil)
+        #expect(HostExtensionShortcut.micMute.prefix == "micHotKey")
+    }
+
+    @Test func mainWindowFramesPreserveOriginalScreenBoundsAndAutosaveRepair() {
+        let regular = NSRect(x: 0, y: 0, width: 1440, height: 900)
+        #expect(
+            HostWindowFramePolicy.minimumSize(visibleFrame: regular)
+                == NSSize(width: 960, height: 640))
+        #expect(
+            HostWindowFramePolicy.defaultSize(visibleFrame: regular)
+                == NSSize(width: 1180.8, height: 702))
+        let compact = NSRect(x: -800, y: 30, width: 800, height: 500)
+        #expect(HostWindowFramePolicy.minimumSize(visibleFrame: compact) == compact.size)
+        #expect(HostWindowFramePolicy.defaultSize(visibleFrame: compact) == compact.size)
+        let oversized = HostWindowFramePolicy.normalizedFrame(
+            NSRect(x: 9000, y: 9000, width: 2000, height: 1800), visibleFrame: compact)
+        #expect(oversized == compact)
+        let repaired = HostWindowFramePolicy.normalizedFrame(
+            NSRect(x: -900, y: 0, width: 200, height: 100), visibleFrame: compact)
+        #expect(repaired == compact)
+        #expect(HostWindowFramePolicy.shouldDiscardAutosave("tilingState=fullscreen"))
+        #expect(!HostWindowFramePolicy.shouldDiscardAutosave("0 0 1240 820"))
+        #expect(
+            HostWindowFramePolicy.autosaveKey(name: "EdithMainWindow")
+                == "NSWindow Frame EdithMainWindow")
+    }
+
     @Test func mainNavigationPreservesEstablishedDestinationOrderAndSections() {
         #expect(
             HostNavigationCatalog.pages.map(\.id) == [
@@ -393,9 +623,11 @@ import Testing
 
     private func find(_ node: NSObject, label: String, depth: Int = 0) -> NSObject? {
         guard depth < 64 else { return nil }
-        if (node as AnyObject).accessibilityLabel?() == label { return node }
+        let isControl =
+            label != "Show Dock icon" || (node as AnyObject).accessibilityRole?() == .checkBox
+        if isControl, (node as AnyObject).accessibilityLabel?() == label { return node }
         let valueSelector = NSSelectorFromString("accessibilityValue")
-        if node.responds(to: valueSelector),
+        if isControl, node.responds(to: valueSelector),
             node.perform(valueSelector)?.takeUnretainedValue() as? String == label
         {
             return node
