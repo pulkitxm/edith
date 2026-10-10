@@ -9,7 +9,21 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var model: RunningAppsModel?
     private var presentation: SystemPresentationState?
-    private let operations = RunningAppOperationCenter()
+    private var cleaning: KeyboardCleaning?
+    private let operations: RunningAppOperationCenter = {
+        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil else {
+            return RunningAppOperationCenter()
+        }
+        return RunningAppOperationCenter(
+            snapshot: {
+                [
+                    .init(
+                        pid: 12345, name: "Synthetic editor", bundleID: "test.synthetic.editor",
+                        active: true)
+                ]
+            }, perform: { _, _ in 0 },
+            resource: { _ in .init(cpuNanoseconds: 0, memoryMB: 0) })
+    }()
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -19,9 +33,18 @@ final class ExtensionRuntime: NSObject {
                 return try await SurfaceCommandService.execute(
                     providerID: "system", command: command, payload: payload,
                     snapshot: { tile in
-                        SystemSurface.snapshot(apps: self.operations.list(), tile: tile)
+                        SystemSurface.snapshot(
+                            apps: self.operations.list(), tile: tile,
+                            cleaning: self.cleaning?.status)
                     },
                     perform: { action in
+                        if action == "cleanKeys" || action == "stopCleaning" {
+                            guard let cleaning = self.cleaning else {
+                                throw ExtensionPeerError.unavailable
+                            }
+                            _ = try cleaning.execute("system." + action, payload: Data())
+                            return
+                        }
                         guard
                             let app = self.operations.list().first(where: {
                                 "activate:" + $0.pid.description == action
@@ -34,6 +57,9 @@ final class ExtensionRuntime: NSObject {
                     })
             }
             switch command {
+            case "system.cleanKeys", "system.stopCleaning", "system.cleaning.status":
+                guard let cleaning = self.cleaning else { throw ExtensionPeerError.unavailable }
+                return try cleaning.execute(command, payload: payload)
             case "apps.list":
                 return try JSONSerialization.data(
                     withJSONObject: self.operations.list().map(Self.encode))
@@ -62,6 +88,17 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            cleaning?.shutdown()
+            model?.shutdown()
+            presentation?.shutdown()
+            completion()
+        }
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -78,6 +115,7 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = RunningAppsModel(operations: operations) }
             if presentation == nil { presentation = SystemPresentationState() }
+            if cleaning == nil { cleaning = KeyboardCleaning() }
         case "view":
             guard let model, let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -87,6 +125,8 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": break
         case "stop":
             commands.shutdown()
+            cleaning?.shutdown()
+            cleaning = nil
             model?.shutdown()
             model = nil
             presentation?.shutdown()
