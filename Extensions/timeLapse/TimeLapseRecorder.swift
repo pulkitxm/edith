@@ -28,7 +28,11 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     var preview: CGImage?
     var sourceRevision = 0
     let sourceLoad = ContentLoad()
-    let library = TimeLapseLibraryModel()
+    let library: TimeLapseLibraryModel
+    private var engineClient: ExtensionEngineClient?
+    private var remoteRevision = 0
+    private var permissionTask: Task<Void, Never>?
+    private var receivedRemoteSettings = false
     @ObservationIgnored private var sourceSnapshot: TimeLapseSources?
     @ObservationIgnored private var thumbnailCache: [String: CGImage] = [:]
     private let thumbnailLoader = TimeLapseThumbnailLoader()
@@ -42,6 +46,103 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     private var outputs: [TimeLapseCaptureOutput] = []
     private var writer: TimeLapseWriter?
     private var sleepAssertions: [IOPMAssertionID] = []
+
+    override init() {
+        library = TimeLapseLibraryModel()
+        super.init()
+    }
+
+    init(engineClient: ExtensionEngineClient) {
+        self.engineClient = engineClient
+        library = TimeLapseLibraryModel(
+            read: { _ in
+                let data = try await engineClient.invoke("recording.ui.library")
+                return try JSONDecoder().decode([TimeLapseRecording].self, from: data)
+            },
+            write: { recording, quality, destination in
+                let payload = try JSONEncoder().encode(
+                    TimeLapseUIExport(
+                        id: recording.id, quality: quality, destination: destination.path))
+                let data = try await engineClient.invoke("recording.ui.export", payload: payload)
+                let job = try JSONDecoder().decode(TimeLapseUIExportStatus.self, from: data)
+                let poll = try JSONEncoder().encode(["token": job.token])
+                try await withTaskCancellationHandler {
+                    while true {
+                        try Task.checkCancellation()
+                        let result = try await engineClient.invoke(
+                            "recording.ui.exportPoll", payload: poll)
+                        let status = try JSONDecoder().decode(
+                            TimeLapseUIExportStatus.self, from: result)
+                        guard status.token == job.token else {
+                            throw ExtensionPeerError.invalidRequest
+                        }
+                        if status.complete {
+                            if let error = status.error { throw ExtensionPeerError.rejected(error) }
+                            return
+                        }
+                        try await Task.sleep(for: .milliseconds(150))
+                    }
+                } onCancel: {
+                    Task { @MainActor in
+                        _ = try? await engineClient.invoke(
+                            "recording.ui.exportCancel", payload: poll)
+                    }
+                }
+            })
+        super.init()
+    }
+
+    func uiSnapshot() -> TimeLapseUISnapshot {
+        .init(
+            settings: settings, displays: displays, windows: windows, microphones: microphones,
+            sourceMode: sourceMode, selectedDisplays: selectedDisplays,
+            selectedWindows: selectedWindows,
+            microphone: microphone, recording: recording, busy: busy, error: error,
+            startedAt: startedAt,
+            frames: frames, bytes: bytes, playbackSeconds: playbackSeconds,
+            lastDirectory: lastDirectory,
+            preview: preview.flatMap {
+                NSBitmapImageRep(cgImage: $0).representation(
+                    using: .jpeg, properties: [.compressionFactor: 0.75])
+            },
+            sourceRevision: sourceRevision, sourceError: sourceLoad.errorMessage,
+            sourcesLoaded: sourceLoad.hasContent)
+    }
+
+    func refreshRemote() async {
+        guard let engineClient, !stopped else { return }
+        let revision = remoteRevision
+        do {
+            let payload = try JSONEncoder().encode(["preview": previewVisible])
+            let data = try await engineClient.invoke("recording.ui.snapshot", payload: payload)
+            guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+            applyRemote(try JSONDecoder().decode(TimeLapseUISnapshot.self, from: data))
+        } catch is CancellationError {} catch {
+            if !stopped { self.error = error.localizedDescription }
+        }
+    }
+
+    private func applyRemote(_ value: TimeLapseUISnapshot) {
+        if !receivedRemoteSettings || value.recording {
+            settings = value.settings; sourceMode = value.sourceMode;
+            selectedDisplays = value.selectedDisplays
+            selectedWindows = value.selectedWindows; microphone = value.microphone
+            receivedRemoteSettings = true
+        }
+        displays = value.displays; windows = value.windows; microphones = value.microphones
+        recording = value.recording; busy = value.busy; error = value.error;
+        startedAt = value.startedAt
+        frames = value.frames; bytes = value.bytes; playbackSeconds = value.playbackSeconds
+        lastDirectory = value.lastDirectory; sourceRevision = value.sourceRevision
+        preview = value.preview.flatMap {
+            NSImage(data: $0)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        }
+        if let sourceError = value.sourceError {
+            sourceLoad.fail(sourceLoad.begin(), message: sourceError)
+        } else if value.sourcesLoaded {
+            sourceLoad.setContent()
+        }
+    }
 
     var canStart: Bool {
         !stopped && !busy && !recording && !sourceLoad.isRunning
@@ -66,6 +167,13 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
             }
     ) async {
         guard !stopped, !busy, !recording else { return }
+        if let engineClient {
+            await sourceLoad.perform(operation: {
+                let data = try await engineClient.invoke("recording.ui.sources")
+                return try JSONDecoder().decode(TimeLapseUISnapshot.self, from: data)
+            }) { applyRemote($0) }
+            return
+        }
         await sourceLoad.perform(operation: operation) { [self] sources, microphones in
             sourceSnapshot = sources
             thumbnailCache.removeAll()
@@ -82,6 +190,18 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     func sourceThumbnail(mode: String, id: UInt32) async -> CGImage? {
+        if let engineClient {
+            guard !stopped else { return nil }
+            do {
+                let payload = try JSONEncoder().encode(TimeLapseUIThumbnail(mode: mode, id: id))
+                let data = try await engineClient.invoke("recording.ui.thumbnail", payload: payload)
+                let result = try JSONDecoder().decode(TimeLapseUIImage.self, from: data)
+                guard !stopped, !Task.isCancelled else { return nil }
+                return result.image.flatMap {
+                    NSImage(data: $0)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                }
+            } catch { return nil }
+        }
         guard !stopped, !recording, let sources = sourceSnapshot else { return nil }
         let key = "\(mode)-\(id)"
         if let image = thumbnailCache[key] { return image }
@@ -110,8 +230,36 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
         writer?.setPreviewEnabled(previewVisible)
     }
 
+    func requestScreenPermission() {
+        guard !stopped else { return }
+        if let engineClient {
+            permissionTask?.cancel()
+            permissionTask = Task { _ = try? await engineClient.invoke("recording.ui.permission") }
+        } else {
+            _ = CGRequestScreenCaptureAccess()
+        }
+    }
+
     func start() async {
         guard canStart, startTask == nil else { return }
+        if let engineClient {
+            busy = true; remoteRevision += 1
+            let revision = remoteRevision
+            defer { if revision == remoteRevision { busy = false } }
+            do {
+                let payload = try JSONEncoder().encode(
+                    TimeLapseUIStart(
+                        settings: settings, sourceMode: sourceMode, displays: selectedDisplays,
+                        windows: selectedWindows, microphone: microphone))
+                let data = try await engineClient.invoke(
+                    "recording.ui.start", payload: payload, timeout: 30)
+                guard !stopped, !Task.isCancelled, revision == remoteRevision else { return }
+                applyRemote(try JSONDecoder().decode(TimeLapseUISnapshot.self, from: data))
+            } catch is CancellationError {} catch {
+                if !stopped { self.error = error.localizedDescription }
+            }
+            return
+        }
         let task = Task { await startRecording() }
         startTask = task
         await withTaskCancellationHandler {
@@ -283,6 +431,18 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
     }
 
     func stop(reason: String? = nil) async {
+        if let engineClient {
+            guard !stopped else { return }
+            remoteRevision += 1
+            do {
+                let data = try await engineClient.invoke("recording.ui.stop", timeout: 30)
+                guard !stopped, !Task.isCancelled else { return }
+                applyRemote(try JSONDecoder().decode(TimeLapseUISnapshot.self, from: data))
+            } catch is CancellationError {} catch {
+                if !stopped { self.error = error.localizedDescription }
+            }
+            return
+        }
         if let stopTask { await stopTask.value; return }
         guard !busy, writer != nil else { return }
         let task = Task { await stopRecording(reason: reason) }
@@ -322,9 +482,15 @@ final class TimeLapseRecorder: NSObject, SCStreamDelegate {
 
     func shutdown() async {
         stopped = true
+        permissionTask?.cancel()
         sourceLoad.cancel()
         startTask?.cancel()
         await startTask?.value
+        if engineClient != nil {
+            await library.shutdown(); await thumbnailLoader.shutdown(); thumbnailCache.removeAll();
+            preview = nil
+            return
+        }
         await stop()
         await library.shutdown()
         sourceSnapshot = nil

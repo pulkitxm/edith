@@ -81,7 +81,7 @@ struct TimeLapseControls: View {
                 }
                 if recorder.sourceLoad.errorMessage != nil {
                     Button("Allow Screen Recording") {
-                        _ = CGRequestScreenCaptureAccess()
+                        recorder.requestScreenPermission()
                         if let url = URL(
                             string:
                                 "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
@@ -102,6 +102,7 @@ struct TimeLapseControls: View {
                 }
             }
         }
+        .pageRefresh(interval: { .seconds(1) }) { await recorder.refreshRemote() }
         .navigationTitle("Screen Recorder")
         .edithSheet(isPresented: $choosingSources, dismissible: false) {
             TimeLapseSourcePicker(recorder: recorder, compact: narrow)

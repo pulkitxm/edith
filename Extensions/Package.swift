@@ -230,7 +230,7 @@ let package = Package(
         .target(
             name: "TimeLapseExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "timeLapse", exclude: ["Tests", "Runtime.swift"],
+            path: "timeLapse", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "TimeLapseExtensionTests", dependencies: ["TimeLapseExtension"],

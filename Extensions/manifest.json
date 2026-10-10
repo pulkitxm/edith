@@ -559,7 +559,8 @@
         "Extensions/timeLapse/TimeLapseSourcePicker.swift",
         "Extensions/timeLapse/TimeLapseSources.swift",
         "Extensions/timeLapse/TimeLapseWriter.swift",
-        "Extensions/timeLapse/Surface.swift"
+        "Extensions/timeLapse/Surface.swift",
+        "Extensions/timeLapse/TimeLapseUICommands.swift"
       ]
     },
     "inputs": [

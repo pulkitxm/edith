@@ -2,7 +2,7 @@ import AVFoundation
 import EdithExtensionSupport
 import Foundation
 
-struct TimeLapseRecording: Identifiable, Sendable {
+struct TimeLapseRecording: Codable, Identifiable, Sendable {
     let session: TimeLapseSession
     let directory: URL
     var id: UUID { session.id }
@@ -36,7 +36,7 @@ struct TimeLapseRecording: Identifiable, Sendable {
     }
 }
 
-enum TimeLapseExportQuality: String, CaseIterable, Identifiable, Sendable {
+enum TimeLapseExportQuality: String, Codable, CaseIterable, Identifiable, Sendable {
     case compact = "Compact HEVC, up to 1080p"
     case high = "High quality HEVC, recorded resolution"
     case original = "Original video, no re-encoding"
