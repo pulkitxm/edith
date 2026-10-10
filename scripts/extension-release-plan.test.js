@@ -4,13 +4,16 @@ import {
   access,
   mkdir,
   mkdtemp,
+  readFile,
   rename,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  definitionInputs,
   extensionFingerprint,
   extensionReleaseTag,
   planExtensionBuilds,
@@ -723,6 +726,106 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
     expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
       first,
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("all39 fingerprints and publication plans include carried engine and request helpers", async () => {
+  const current = JSON.parse(
+    await readFile("Extensions/manifest.json", "utf8"),
+  );
+  expect(current).toHaveLength(39);
+  expect(
+    current.every(({ sameExecutableWorker }) => sameExecutableWorker),
+  ).toBe(true);
+  const helpers = [
+    "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineBridge.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineTransport.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostTerminalUIRequest.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostMachinesWindowTarget.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostHerdrWindowTarget.swift",
+  ];
+  const root = await mkdtemp(join(tmpdir(), "extension-all39-runtime-"));
+  const fingerprints = () =>
+    Promise.all(
+      current.map((entry) => extensionFingerprint(root, entry, current)),
+    );
+  try {
+    const inputs = new Set(current.flatMap(definitionInputs));
+    for (const path of [...new Set([...inputs, ...helpers])].sort()) {
+      if ((await stat(path)).isDirectory()) {
+        await mkdir(join(root, path), { recursive: true });
+        await writeFile(
+          join(root, path, "Synthetic.swift"),
+          "synthetic source",
+        );
+      } else {
+        await mkdir(join(root, path, ".."), { recursive: true });
+        await writeFile(join(root, path), "synthetic source");
+      }
+    }
+    const initial = await fingerprints();
+    const published = current.map((entry, index) => ({
+      id: entry.id,
+      version: entry.version,
+      hostABI: entry.hostABI,
+      architecture: "arm64",
+      sourceFingerprint: initial[index],
+    }));
+    expect(await planUnpublishedExtensions(root, current, published)).toEqual(
+      [],
+    );
+    for (const path of helpers) {
+      expect(workerRuntimeInputs).toContain(path);
+      expect(planExtensionBuilds(current, [path])).toEqual(current);
+      expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
+      await writeFile(join(root, path), `changed synthetic helper ${path}`);
+      const changed = await fingerprints();
+      for (const [index, fingerprint] of changed.entries())
+        expect(fingerprint).not.toBe(initial[index]);
+      const pending = await planUnpublishedExtensions(root, current, published);
+      expect(pending.map(({ id }) => id)).toEqual(current.map(({ id }) => id));
+      for (const [index, row] of pending.entries()) {
+        expect(row.fingerprint).toBe(changed[index]);
+        expect(row.tag).toBe(extensionReleaseTag(row));
+      }
+      await writeFile(join(root, path), "synthetic source");
+      expect(await fingerprints()).toEqual(initial);
+    }
+    const excluded = [
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/.DS_Store",
+      ...[
+        "Tests",
+        "tests",
+        "EmbeddedTests",
+        ".build",
+        "build",
+        "dist",
+        "target",
+      ].map(
+        (directory) =>
+          `Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/${directory}/Synthetic.swift`,
+      ),
+    ];
+    for (const path of excluded) {
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), "synthetic excluded input");
+    }
+    expect(await fingerprints()).toEqual(initial);
+    expect(planPullRequestBuilds(current, excluded, current)).toEqual([]);
+    expect(await planUnpublishedExtensions(root, current, published)).toEqual(
+      [],
+    );
+    const independent = current.filter(({ id }) => id !== "virtualCamera");
+    for (const path of [
+      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineOwner.swift",
+    ])
+      expect(planPullRequestBuilds(independent, [path], independent)).toEqual(
+        [],
+      );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

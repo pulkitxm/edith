@@ -38,8 +38,13 @@ export const workerRuntimeInputs = [
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteProtocol.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteAuthentication.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEndpoint.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineBridge.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEngineTransport.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteChannel.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostRemoteConfiguration.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostTerminalUIRequest.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostMachinesWindowTarget.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostHerdrWindowTarget.swift",
   "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
 ];
 
