@@ -11,6 +11,11 @@ import {
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
+import {
+  maximumCatalogPackages,
+  validateCatalog,
+  verifiedCatalogPayload,
+} from "./verify-extension-catalog.mjs";
 
 export function mergeExtensionCatalog(previous, records, revision) {
   if (!Number.isSafeInteger(revision) || revision <= previous.revision)
@@ -27,7 +32,31 @@ export function mergeExtensionCatalog(previous, records, revision) {
       throw new Error("Published package versions are immutable");
     if (!existing) packages.push(record);
   }
-  return { schemaVersion: 1, revision, packages };
+  const tiers = new Map();
+  for (const record of packages) {
+    const key = JSON.stringify([
+      record.id,
+      record.hostABI,
+      record.architecture,
+      record.minimumSystemVersion,
+    ]);
+    if (!tiers.has(key)) tiers.set(key, []);
+    tiers.get(key).push(record);
+  }
+  const retained = [...tiers.values()].flatMap((versions) =>
+    versions
+      .sort((a, b) =>
+        b.version.localeCompare(a.version, undefined, { numeric: true }),
+      )
+      .slice(0, 2),
+  );
+  if (retained.length > maximumCatalogPackages)
+    throw new Error(
+      "Catalog cannot preserve compatible rollback versions within its package limit",
+    );
+  const catalog = { schemaVersion: 1, revision, packages: retained };
+  validateCatalog(catalog);
+  return catalog;
 }
 
 function gh(...args) {
@@ -235,6 +264,7 @@ export async function publishExtensions({
     ],
     { stdio: "inherit" },
   );
+  verifiedCatalogPayload(await readFile(envelope), publicKey);
   let catalog = release(repository, catalogTag);
   if (!catalog) {
     mutate(

@@ -2,10 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  requireRegularTree,
-  validateCameraCarrierDefinition,
-} from "./build-camera-carrier.mjs";
+import { validateCameraCarrierDefinition } from "./build-camera-carrier.mjs";
+import { requireRegularTree } from "./build-contained-host-runtime.mjs";
 
 const definition = {
   role: "cameraCarrier",

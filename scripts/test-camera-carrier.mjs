@@ -12,10 +12,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import {
-  buildCameraCarrier,
-  requireRegularTree,
-} from "./build-camera-carrier.mjs";
+import { buildCameraCarrier } from "./build-camera-carrier.mjs";
+import { requireRegularTree } from "./build-contained-host-runtime.mjs";
 
 const root = await realpath(
   await mkdtemp(join(tmpdir(), "edith-camera-fixture-")),

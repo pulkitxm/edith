@@ -287,3 +287,31 @@ test("native cache keys include maintained patch and exact toolchain; validation
   );
   expect(build.steps[validation]["continue-on-error"]).toBeUndefined();
 });
+
+test("common frozen runtime changes rebuild all39 while Camera-only packaging stays selective", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  expect(definitions).toHaveLength(39);
+  const common = "scripts/build-contained-host-runtime.mjs";
+  const camera = "scripts/build-camera-carrier.mjs";
+  for (const event of [workflow.on.pull_request, workflow.on.push]) {
+    for (const path of [common, camera])
+      expect(
+        event.paths.some((pattern) => new Bun.Glob(pattern).match(path)),
+      ).toBe(true);
+  }
+  expect(
+    planExtensionBuilds(definitions, [common]).map(({ id }) => id),
+  ).toEqual(definitions.map(({ id }) => id));
+  expect(
+    planExtensionBuilds(definitions, [camera]).map(({ id }) => id),
+  ).toEqual(["virtualCamera"]);
+});
+
+test("signed retained catalogs must pass actual native selection before package publication", () => {
+  expect(text(workflow.jobs.tests)).toContain(
+    "test-extension-catalog-retention.mjs",
+  );
+  expect(workflow.jobs.tests.needs).toContain("frozen-host");
+});
