@@ -34,6 +34,15 @@ import Foundation
         self.resolveRemote = resolveRemote
         self.automaticActions = automaticActions
         model = QuinjetPageModel(client: client)
+        terminalSessions.files.upload = { [weak self] handle, urls in
+            guard let self, !self.isStopped, self.terminalSessions.find(handle) != nil,
+                let tab = self.model.tabs.first(where: { $0.holder.descriptor?.handle == handle }),
+                let remote = tab.remote,
+                let connection = self.model.machines.session(for: remote.machineID).connectionRef,
+                connection.machine.id == remote.machineID
+            else { throw ExtensionPeerError.unavailable }
+            return try await TerminalDropTransfer.upload(urls, over: connection)
+        }
         QuinjetWorkOwnership.enable()
     }
     func start() async {
@@ -158,7 +167,7 @@ import Foundation
         if [
             "quinjet.terminal.read", "quinjet.terminal.input", "quinjet.terminal.resize",
             "quinjet.terminal.close",
-        ].contains(command) {
+        ].contains(command) || OwnedTerminalFiles.admits(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
             guard let session = terminalSessions.find(request.session) else {
@@ -281,7 +290,7 @@ import Foundation
         return try JSONEncoder().encode(result)
     }
     func cancelPendingWork() async {
-        terminalSessions.stopAll()
+        await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         model.cancelDiscovery()
         await cliStreams?.stopAndWait()
@@ -290,7 +299,7 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
-        terminalSessions.stopAll()
+        await terminalSessions.stopAllAndWait()
         await cliStreams?.stopAndWait()
         cliStreams = nil
         maintenance?.cancel()

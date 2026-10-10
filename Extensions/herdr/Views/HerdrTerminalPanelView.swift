@@ -340,7 +340,6 @@ struct HerdrPanelTerminalView: View {
             TerminalPane(
                 holder: terminal.holder, palette: palette, active: selected,
                 wantsFocus: wantsFocus, fontSize: store.terminalSettings.fontSize,
-                onDropFiles: terminal.host.isLocal ? nil : handleRemoteDrop,
                 onFocus: onFocus
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -395,16 +394,6 @@ struct HerdrPanelTerminalView: View {
         }
         .padding(UIScale.pt(20))
         .frame(maxWidth: UIScale.pt(420))
-    }
-
-    private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
-        let machine = terminal.host.machine
-        HerdrWorkOwnership.start {
-            await terminal.holder.deliverRemoteDrop(payload) { files in
-                try await store.uploadDroppedFiles(files, to: machine)
-            }
-        }
-        return true
     }
 
     private func start() async {

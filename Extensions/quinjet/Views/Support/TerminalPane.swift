@@ -11,7 +11,6 @@ struct TerminalPane: View {
     var active = true
     var wantsFocus = true
     var fontSize: Double?
-    var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
 
     @AppStorage("quinjetTerminalFontSize", store: SharedDefaults.store)
@@ -26,7 +25,7 @@ struct TerminalPane: View {
             GhosttyPane(
                 holder: holder,
                 theme: GhosttyTheme(palette: palette, fontSize: resolvedFontSize),
-                active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles,
+                active: active, wantsFocus: wantsFocus,
                 onFocus: onFocus
             )
             .id(holder.generation)

@@ -106,7 +106,7 @@ import Testing
     }
 }
 
-@MainActor private final class SyntheticPTYEngineBridge: NSObject {
+@MainActor final class SyntheticPTYEngineBridge: NSObject {
     let presentation = UUID()
     private let registry: OwnedTerminalSessionRegistry
     private var tasks: [UUID: Task<Void, Never>] = [:]

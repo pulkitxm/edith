@@ -2063,6 +2063,9 @@ final class HerdrStore {
     }
 
     func uploadDroppedFiles(_ urls: [URL], to machine: Machine?) async throws -> [String] {
+        guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+            throw ExtensionPeerError.invalidRequest
+        }
         guard let machine else { throw HerdrQuinjetError.machineUnavailable }
         return try await TerminalDropTransfer.upload(urls, over: connection(for: machine))
     }

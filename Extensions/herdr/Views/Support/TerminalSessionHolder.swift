@@ -25,6 +25,7 @@ final class TerminalSessionHolder {
     private(set) var descriptor: OwnedTerminalDescriptor?
     private var engineSession: OwnedTerminalSession?
     private var client: OwnedTerminalClient?
+    private var dropTask: Task<Void, Never>?
     private var readTask: Task<Void, Never>?
     private var deliveryTask: Task<Void, Never>?
     private var offset: UInt64 = 0
@@ -99,18 +100,59 @@ final class TerminalSessionHolder {
         ghosttyView?.setRenderingActive(active)
         if focus { ghosttyView?.requestFocus() } else { ghosttyView?.cancelFocusRequest() }
     }
-    func deliverRemoteDrop(_ payload: TerminalDropPayload, upload: ([URL]) async throws -> [String])
-        async
-    {
+    func handleDropFiles(_ payload: TerminalDropPayload, generation expected: Int? = nil) -> Bool {
+        if let expected, expected != generation { payload.removeTemporaryFiles(); return true }
+        guard dropTask == nil else {
+            dropTransferError = "A terminal file transfer is already in progress."
+            payload.removeTemporaryFiles(); return true
+        }
+        guard let client else {
+            dropTransferError = "The terminal is unavailable."
+            payload.removeTemporaryFiles(); return true
+        }
+        let current = generation
         transferringDrop = true; dropTransferError = nil
-        defer { transferringDrop = false; payload.removeTemporaryFiles() }
-        do {
-            let paths = try await upload(payload.files); try Task.checkCancellation();
-            insertText(paths.map(ShellQuote.quote).joined(separator: " "))
-        } catch { dropTransferError = error.localizedDescription }
+        dropTask = Task { [weak self] in
+            defer {
+                payload.removeTemporaryFiles();
+                if let self, self.generation == current {
+                    self.transferringDrop = false; self.dropTask = nil
+                }
+            }
+            do {
+                var paths: [String] = []
+                if client.descriptor.allowsLocalFileLinks {
+                    for file in payload.files {
+                        if payload.temporaryFiles.contains(file) {
+                            paths += try await client.uploadFiles([file])
+                        } else {
+                            let result = try await client.fileRequest(
+                                "paths",
+                                .init(session: client.descriptor.handle, paths: [file.path]))
+                            guard let values = result.paths, values == [file.path] else {
+                                throw ExtensionPeerError.invalidRequest
+                            }
+                            paths += values
+                        }
+                    }
+                } else {
+                    paths = try await client.uploadFiles(payload.files)
+                }
+                try Task.checkCancellation()
+                guard let self, self.generation == current else { return }
+                self.insertText(paths.map(ShellQuote.quote).joined(separator: " "))
+            } catch {
+                if let self, self.generation == current, !Task.isCancelled {
+                    self.dropTransferError = error.localizedDescription
+                }
+            }
+        }
+        return true
     }
 
     func reset() {
+        dropTask?.cancel(); dropTask = nil
+        transferringDrop = false
         readTask?.cancel()
         readTask = nil
         deliveryTask?.cancel()
@@ -247,6 +289,8 @@ final class TerminalSessionHolder {
     }
 
     func stopRendering() {
+        dropTask?.cancel(); dropTask = nil
+        transferringDrop = false
         generation += 1
         readTask?.cancel()
         deliveryTask?.cancel()

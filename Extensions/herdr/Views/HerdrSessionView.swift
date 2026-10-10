@@ -293,7 +293,6 @@ struct HerdrSessionView: View {
                 active: presented && tab.view.showsAgent,
                 wantsFocus: wantsFocus && terminalFocus == .agent,
                 fontSize: store.terminalSettings.fontSize,
-                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
                 onFocus: {
                     splitTerminalFocus = .agent
                     onFocus?()
@@ -350,15 +349,6 @@ struct HerdrSessionView: View {
             }
             .padding(UIScale.pt(20))
         }
-    }
-
-    private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
-        HerdrWorkOwnership.start {
-            await tab.holder.deliverRemoteDrop(payload) { files in
-                try await store.uploadDroppedFiles(files, for: tab)
-            }
-        }
-        return true
     }
 
     private var diffPane: some View {

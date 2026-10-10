@@ -39,6 +39,7 @@ enum OwnedTerminalContext {
 }
 
 @MainActor final class OwnedTerminalSessionRegistry {
+    let files = OwnedTerminalFiles()
     private var sessions: [UUID: OwnedTerminalSession] = [:]
     private var stopped = false
     var acceptsSession: Bool { !stopped && sessions.count < 512 }
@@ -55,8 +56,14 @@ enum OwnedTerminalContext {
 
     func remove(_ handle: OwnedTerminalHandle) { sessions[handle.id] = nil }
 
+    func stopAllAndWait() async {
+        stopAll()
+        await files.stopAndWait()
+    }
+
     func stopAll() {
         stopped = true
+        files.stop()
         let owned = Array(sessions.values)
         sessions.removeAll()
         for session in owned { session.stop() }
@@ -66,6 +73,7 @@ enum OwnedTerminalContext {
 @MainActor final class OwnedTerminalSession {
     static let owner = "herdr"
     let descriptor: OwnedTerminalDescriptor
+    private let files: OwnedTerminalFiles
     private let terminal: OwnedTerminalPTY
     private weak var registry: OwnedTerminalSessionRegistry?
     private var stopped = false
@@ -77,6 +85,7 @@ enum OwnedTerminalContext {
         }
         let registry = OwnedTerminalContext.registry
         guard registry?.acceptsSession != false else { throw ExtensionPeerError.unavailable }
+        files = registry?.files ?? OwnedTerminalFiles()
         terminal = try OwnedTerminalPTY(launch: launch)
         descriptor = .init(
             handle: .init(owner: Self.owner, id: UUID(), generation: UUID()),
@@ -96,6 +105,11 @@ enum OwnedTerminalContext {
         let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
         guard request.session == descriptor.handle else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
+        if OwnedTerminalFiles.admits(operation) {
+            return try await files.execute(
+                operation, payload: payload, session: descriptor.handle,
+                local: descriptor.allowsLocalFileLinks)
+        }
         switch operation {
         case "herdr.terminal.read":
             guard Set(object.keys) == ["session", "offset"], let cursor = request.offset else {
@@ -154,6 +168,7 @@ enum OwnedTerminalContext {
     func stop() {
         guard !stopped else { return }
         stopped = true
+        files.close(descriptor.handle)
         terminal.close()
         registry?.remove(descriptor.handle)
     }
@@ -303,10 +318,15 @@ enum OwnedTerminalContext {
     }
 
     private func perform(_ action: String, request: OwnedTerminalRequest) async throws -> Data {
-        guard !stopped, pending.count < 8 else { throw ExtensionPeerError.unavailable }
+        try await perform(action, payload: JSONEncoder().encode(request))
+    }
+
+    func perform(_ action: String, payload: Data) async throws -> Data {
+        guard !stopped, pending.count < 8, payload.count <= 32768 else {
+            throw ExtensionPeerError.unavailable
+        }
         try Task.checkCancellation()
         let id = UUID()
-        let payload = try JSONEncoder().encode(request)
         let task = Task {
             try await invoke(OwnedTerminalSession.owner + ".terminal." + action, payload)
         }
@@ -321,5 +341,110 @@ enum OwnedTerminalContext {
         guard !task.isCancelled else { throw CancellationError() }
         guard !stopped else { throw ExtensionPeerError.unavailable }
         return result
+    }
+}
+
+extension OwnedTerminalClient {
+    func fileRequest(_ action: String, _ request: OwnedTerminalDropRequest) async throws
+        -> OwnedTerminalDropReceipt
+    {
+        let data = try await perform("drop." + action, payload: JSONEncoder().encode(request))
+        return try JSONDecoder().decode(OwnedTerminalDropReceipt.self, from: data)
+    }
+
+    func uploadBytes(_ bytes: Data, name: String) async throws -> [String] {
+        guard UInt64(bytes.count) <= OwnedTerminalFiles.maximumBytes else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let begun = try await fileRequest("begin", .init(session: descriptor.handle, names: [name]))
+        guard let token = begun.token else { throw ExtensionPeerError.invalidRequest }
+        do {
+            var offset = 0
+            while offset < bytes.count {
+                try Task.checkCancellation()
+                let end = min(bytes.count, offset + 16384)
+                let receipt = try await fileRequest(
+                    "write",
+                    .init(
+                        session: descriptor.handle, token: token, index: 0, offset: UInt64(offset),
+                        bytes: bytes.subdata(in: offset..<end)))
+                guard receipt.offset == UInt64(end) else { throw ExtensionPeerError.invalidRequest }
+                offset = end
+            }
+            var result = try await fileRequest(
+                "finish", .init(session: descriptor.handle, token: token))
+            while result.state == "running" {
+                try await Task.sleep(for: .milliseconds(50));
+                result = try await fileRequest(
+                    "status", .init(session: descriptor.handle, token: token))
+            }
+            guard let paths = result.paths, paths.count == 1 else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return paths
+        } catch {
+            let cleanup = Task {
+                _ = try? await self.fileRequest(
+                    "cancel", .init(session: descriptor.handle, token: token))
+            }
+            await cleanup.value
+            throw error
+        }
+    }
+
+    func uploadFiles(_ urls: [URL]) async throws -> [String] {
+        guard !urls.isEmpty, urls.count <= 64, urls.allSatisfy(\.isFileURL) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let secured = urls.filter { $0.startAccessingSecurityScopedResource() }
+        defer { secured.forEach { $0.stopAccessingSecurityScopedResource() } }
+        let reply = try await fileRequest(
+            "begin", .init(session: descriptor.handle, names: urls.map(\.lastPathComponent)))
+        guard let token = reply.token else { throw ExtensionPeerError.invalidRequest }
+        do {
+            for (index, url) in urls.enumerated() {
+                try Task.checkCancellation()
+                let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+                guard values.isRegularFile == true, let size = values.fileSize, size >= 0,
+                    UInt64(size) <= OwnedTerminalFiles.maximumBytes
+                else { throw ExtensionPeerError.invalidRequest }
+                let reader = try FileHandle(forReadingFrom: url)
+                defer { try? reader.close() }
+                var offset: UInt64 = 0
+                while true {
+                    try Task.checkCancellation()
+                    let bytes = try reader.read(upToCount: 16384) ?? Data()
+                    if bytes.isEmpty { break }
+                    let receipt = try await fileRequest(
+                        "write",
+                        .init(
+                            session: descriptor.handle, token: token, index: index, offset: offset,
+                            bytes: bytes))
+                    offset += UInt64(bytes.count)
+                    guard receipt.offset == offset else { throw ExtensionPeerError.invalidRequest }
+                }
+                guard offset == UInt64(size) else {
+                    throw ExtensionPeerError.rejected("The dropped file changed during transfer.")
+                }
+            }
+            var receipt = try await fileRequest(
+                "finish", .init(session: descriptor.handle, token: token))
+            while receipt.state == "running" {
+                try await Task.sleep(for: .milliseconds(50))
+                receipt = try await fileRequest(
+                    "status", .init(session: descriptor.handle, token: token))
+            }
+            guard let paths = receipt.paths, paths.count == urls.count,
+                paths.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 4096 && !$0.utf8.contains(0) })
+            else { throw ExtensionPeerError.invalidRequest }
+            return paths
+        } catch {
+            let cleanup = Task {
+                _ = try? await self.fileRequest(
+                    "cancel", .init(session: descriptor.handle, token: token))
+            }
+            await cleanup.value
+            throw error
+        }
     }
 }

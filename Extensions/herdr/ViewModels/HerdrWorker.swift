@@ -85,6 +85,36 @@ import Foundation
         HerdrWorkOwnership.enable()
         ownedStore.ownsSpaceAgent = { [weak self] in self?.spaces.holds($0) ?? false }
         ownedStore.prepareNotificationAgent = { [weak self] id in self?.spaces.removeAgent(id) }
+        terminalSessions.files.upload = { [weak self] handle, urls in
+            guard let self, !self.isStopped, self.terminalSessions.find(handle) != nil else {
+                throw ExtensionPeerError.unavailable
+            }
+            let tabs =
+                self.store.sessions
+                + self.store.detachedIDs.compactMap { self.store.detachedTab(id: $0) }
+                + self.spaces.openedAgents.compactMap { self.spaces.agentTab($0.id) }
+            if let tab = tabs.first(where: {
+                $0.holder.descriptor?.handle == handle
+                    || $0.quinjet.holder.descriptor?.handle == handle
+            }) {
+                return try await self.store.uploadDroppedFiles(urls, for: tab)
+            }
+            if let panel = self.store.terminalPanels.terminals.values.first(where: {
+                $0.holder.descriptor?.handle == handle
+            }) {
+                return try await self.store.uploadDroppedFiles(urls, to: panel.host.machine)
+            }
+            if let shell = self.shells.values.first(where: {
+                $0.holder.descriptor?.handle == handle
+            }),
+                let machine = MachineRegistry.machines().first(where: {
+                    $0.id == shell.target.machineID
+                })
+            {
+                return try await self.store.uploadDroppedFiles(urls, to: machine)
+            }
+            throw ExtensionPeerError.unavailable
+        }
     }
 
     func start() async {
@@ -167,7 +197,7 @@ import Foundation
         if [
             "herdr.terminal.read", "herdr.terminal.input", "herdr.terminal.resize",
             "herdr.terminal.close",
-        ].contains(command) {
+        ].contains(command) || OwnedTerminalFiles.admits(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
             guard let session = terminalSessions.find(request.session) else {
@@ -405,7 +435,7 @@ import Foundation
     }
 
     func cancelPendingWork() async {
-        terminalSessions.stopAll()
+        await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await catalogs.shutdown()
         await cliStreams?.stopAndWait()
@@ -414,7 +444,7 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
-        terminalSessions.stopAll()
+        await terminalSessions.stopAllAndWait()
         spaces.stopAll()
         uiHookPlans.shutdown()
         await catalogs.shutdown()
