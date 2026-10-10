@@ -1,3 +1,4 @@
+import Darwin
 import ExtensionMarketplace
 import Foundation
 
@@ -6,6 +7,26 @@ struct MarketplaceHarness {
     @MainActor
     static func main() async throws {
         let arguments = Array(CommandLine.arguments.dropFirst())
+        if arguments.first == "verify-catalog-selection" {
+            do {
+                guard arguments.count == 7, let publicKey = Data(base64Encoded: arguments[2]),
+                    let systemVersion = Int(arguments[6]), systemVersion >= 14
+                else { throw MarketplaceError.invalidCatalog }
+                let bytes = try Data(contentsOf: URL(fileURLWithPath: arguments[1]))
+                guard bytes.count <= 3 * 1024 * 1024 else { throw MarketplaceError.invalidCatalog }
+                let catalog = try JSONDecoder().decode(SignedExtensionCatalog.self, from: bytes)
+                    .verified(
+                        publicKey: publicKey, repository: "pulkitxm/edith", minimumRevision: 0)
+                let selection = try catalog.installationPlan(
+                    for: arguments[3], hostABI: arguments[4], architecture: arguments[5],
+                    systemVersion: systemVersion)
+                print(String(decoding: try JSONEncoder().encode(selection), as: UTF8.self))
+            } catch {
+                FileHandle.standardError.write(Data("Catalog selection rejected.\n".utf8))
+                exit(2)
+            }
+            return
+        }
         if arguments.first == "verify-ui-carrier" {
             guard arguments.count == 3 else { throw MarketplaceError.invalidCatalog }
             let payload = URL(fileURLWithPath: arguments[1])

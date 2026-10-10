@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 export const maximumEnvelopeBytes = 3 * 1024 ** 2;
 export const maximumPayloadBytes = 2 * 1024 ** 2;
+export const maximumCatalogPackages = 1000;
 
 const fail = (message) => {
   throw new Error(message);
@@ -41,13 +42,13 @@ function json(bytes) {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 
-function validateCatalog(catalog) {
+export function validateCatalog(catalog) {
   if (
     !object(catalog) ||
     catalog.schemaVersion !== 1 ||
     !integer(catalog.revision, 0) ||
     !Array.isArray(catalog.packages) ||
-    catalog.packages.length > 1000
+    catalog.packages.length > maximumCatalogPackages
   )
     fail("Invalid catalog schema");
   const identities = new Set();
