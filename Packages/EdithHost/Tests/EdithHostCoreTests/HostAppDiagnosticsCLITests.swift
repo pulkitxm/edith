@@ -14,20 +14,33 @@ import Testing
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.app-paths-\(UUID().uuidString)",
             supportDirectory: root)
-        let music = try HostAppPathsCLI.prepareOpen("music", identity: identity)
+        let suite = identity.applicationDefaultsSuite
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let music = try HostAppPathsCLI.prepareOpen(
+            "music", identity: identity, defaults: defaults, homeDirectory: root)
         #expect(FileManager.default.fileExists(atPath: music.url.path) && !music.reveal)
-        let cloud = try HostAppPathsCLI.prepareOpen("icloud", identity: identity)
+        let cloud = try HostAppPathsCLI.prepareOpen(
+            "icloud", identity: identity, defaults: defaults, homeDirectory: root)
         #expect(
             cloud.url.path.hasPrefix(identity.root.path + "/")
                 && FileManager.default.fileExists(atPath: cloud.url.path))
-        let fallback = try HostAppPathsCLI.prepareOpen("refresh-log", identity: identity)
-        #expect(fallback.url == identity.extensionDirectory("usage") && !fallback.reveal)
+        let fallback = try HostAppPathsCLI.prepareOpen(
+            "refresh-log", identity: identity, defaults: defaults, homeDirectory: root)
+        #expect(
+            fallback.url
+                == identity.effectiveExtensionDirectory("usage").appendingPathComponent("data")
+                && !fallback.reveal)
         try FileManager.default.createDirectory(at: fallback.url, withIntermediateDirectories: true)
         try Data("synthetic refresh\n".utf8).write(
             to: fallback.url.appendingPathComponent("refresh.log"))
-        #expect(try HostAppPathsCLI.prepareOpen("refresh-log", identity: identity).reveal)
+        #expect(
+            try HostAppPathsCLI.prepareOpen(
+                "refresh-log", identity: identity, defaults: defaults, homeDirectory: root
+            ).reveal)
         #expect(throws: HostCLIError.self) {
-            try HostAppPathsCLI.prepareOpen("foreign", identity: identity)
+            try HostAppPathsCLI.prepareOpen(
+                "foreign", identity: identity, defaults: defaults, homeDirectory: root)
         }
     }
     @Test func diagnosticsReadTheActualOwnedProcessAndReportUnavailableCoreHonestly() throws {
