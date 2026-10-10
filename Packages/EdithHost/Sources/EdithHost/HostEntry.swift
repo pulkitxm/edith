@@ -141,6 +141,8 @@ struct HostEntry: AppExtension {
 
 private final class HostUICarrierDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            NSApplication.shared.terminate(nil)
+        }
     }
 }

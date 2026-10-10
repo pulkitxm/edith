@@ -56,4 +56,26 @@ struct HostRemoteProtocolTests {
             }
         }
     }
+    @Test func reservationSelectsTheExactBoundedSceneAndOwningPresentation() throws {
+        let request = HostExtensionContentRequest(
+            extensionID: "database", location: "main", section: "database")
+        for slot in 0..<HostRemoteSceneDescriptor.maximumScenes {
+            let descriptor = try HostRemoteSceneDescriptor(
+                slot: slot, presentationID: request.presentationID)
+            let reservation = HostRemoteReservation(
+                request: request, sceneIdentifier: descriptor.sceneIdentifier)
+            let decoded = try HostRemoteWire.decode(
+                HostRemoteReservation.self, from: HostRemoteWire.encode(reservation))
+            #expect(try decoded.slot(extensionID: "database") == slot)
+            #expect(decoded.request.presentationID == request.presentationID)
+            #expect(throws: HostWorkerError.rejected) { try decoded.slot(extensionID: "music") }
+        }
+        for scene in ["edith-ui--1", "edith-ui-16", "edith-ui-00", "../edith-ui-0", ""] {
+            let reservation = HostRemoteReservation(request: request, sceneIdentifier: scene)
+            #expect(throws: HostWorkerError.rejected) {
+                try reservation.slot(extensionID: "database")
+            }
+        }
+    }
+
 }

@@ -11,7 +11,9 @@ import SwiftUI
 @MainActor
 final class HostRemoteApplication {
     static let shared: HostRemoteApplication = {
-        do { return try HostRemoteApplication() } catch { exit(1) }
+        do { return try HostRemoteApplication() } catch {
+            exit(1)
+        }
     }()
 
     private let hostIdentifier: String
@@ -67,6 +69,10 @@ final class HostRemoteApplication {
                     present: { [weak self] context in
                         guard let self else { throw HostWorkerError.exited }
                         return try self.controller(presentation: context)
+                    },
+                    disconnected: { [weak self] in
+                        guard self?.configuration == nil else { return }
+                        self?.shutdown()
                     }))
         }
         Task { [weak self] in
@@ -76,7 +82,7 @@ final class HostRemoteApplication {
     }
 
     var sceneConfiguration: AppExtensionSceneConfiguration {
-        AppExtensionSceneConfiguration(
+        return AppExtensionSceneConfiguration(
             self.slots.map { slot in
                 PrimitiveAppExtensionScene(
                     id: slot.identifier,
@@ -110,14 +116,16 @@ final class HostRemoteApplication {
             return Data()
         case "reserve":
             guard let configuration else { throw HostWorkerError.rejected }
-            let request = try HostRemoteWire.decode(
-                EdithHostCore.HostExtensionContentRequest.self, from: command.payload)
-            try request.validate(extensionID: extensionID)
+            let reservation = try HostRemoteWire.decode(
+                HostRemoteReservation.self, from: command.payload)
+            let request = reservation.request
+            let index = try reservation.slot(extensionID: extensionID)
             guard
                 !configuration.uiOnly || (request.location == "settings" && request.surface == nil),
                 !slots.contains(where: { $0.request?.presentationID == request.presentationID }),
-                let slot = slots.first(where: { $0.request == nil })
+                slots[index].request == nil
             else { throw HostWorkerError.rejected }
+            let slot = slots[index]
             try slot.reserve(request, session: configuration.session)
             return try HostRemoteWire.encode(
                 HostRemoteSceneDescriptor(slot: slot.index, presentationID: request.presentationID))
@@ -243,6 +251,7 @@ private final class HostRemoteSceneSlot {
     private var presentation: HostRemotePresentation?
     weak var container: HostRemoteSceneController?
     private let present: (HostRemotePresentation) throws -> ExtensionBundlePresentation
+    private let disconnected: @MainActor () -> Void
     private let executable: URL
     private let requirement: String
     private var generation = UUID()
@@ -250,7 +259,8 @@ private final class HostRemoteSceneSlot {
     init(
         index: Int, executable: URL, requirement: String,
         present:
-            @escaping (HostRemotePresentation) throws -> ExtensionBundlePresentation
+            @escaping (HostRemotePresentation) throws -> ExtensionBundlePresentation,
+        disconnected: @escaping @MainActor () -> Void
     ) throws {
         self.index = index
         self.executable = executable
@@ -258,10 +268,11 @@ private final class HostRemoteSceneSlot {
         identifier = try HostRemoteSceneDescriptor(slot: index, presentationID: UUID())
             .sceneIdentifier
         self.present = present
+        self.disconnected = disconnected
+        try resetEndpoint()
     }
 
-    func reserve(_ request: EdithHostCore.HostExtensionContentRequest, session: UUID) throws {
-        generation = UUID()
+    private func resetEndpoint() throws {
         let generation = generation
         endpoint = try HostRemoteEndpoint(
             executable: executable, requirement: requirement,
@@ -272,11 +283,15 @@ private final class HostRemoteSceneSlot {
             didDisconnect: { [weak self] in
                 guard let self, self.generation == generation else { return }
                 self.clearView()
+                self.disconnected()
             })
         bootstrap.replace(endpoint)
+    }
+
+    func reserve(_ request: EdithHostCore.HostExtensionContentRequest, session: UUID) throws {
+        guard self.request == nil, endpoint != nil else { throw HostWorkerError.rejected }
         self.request = request
         self.session = session
-
     }
 
     private func execute(_ command: HostRemoteCommand) throws -> Data {
@@ -288,7 +303,7 @@ private final class HostRemoteSceneSlot {
         try context.validate(session: session, extensionID: request.extensionID)
         guard context.request == request else { throw HostWorkerError.rejected }
         if command.operation == "present" {
-            guard presentation == nil else { throw HostWorkerError.rejected }
+            guard presentation == nil, container != nil else { throw HostWorkerError.rejected }
         } else {
             guard presentation != nil else { throw HostWorkerError.rejected }
         }
@@ -297,6 +312,7 @@ private final class HostRemoteSceneSlot {
             intrinsic: !["main", "settings", "music.detail"].contains(request.location))
         presentation = context
         try render()
+        guard content != nil else { throw HostWorkerError.rejected }
         return Data()
     }
 
@@ -335,6 +351,7 @@ private final class HostRemoteSceneSlot {
         endpoint = nil
         request = nil
         session = nil
+        try? resetEndpoint()
     }
 }
 

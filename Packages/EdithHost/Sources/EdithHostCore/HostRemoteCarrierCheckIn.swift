@@ -1,4 +1,5 @@
 import AppKit
+import CoreServices
 import Darwin
 import ExtensionMarketplace
 import Foundation
@@ -26,9 +27,10 @@ final class HostRemoteCarrierCheckIn {
         self.lease = lease
     }
 
-    static func register(configuration: HostRemoteConfiguration, store: ExtensionPackageStore)
-        async throws
-    {
+    static func register(
+        configuration: HostRemoteConfiguration, store: ExtensionPackageStore,
+        beforeRegistration: @MainActor () async throws -> Void = {}
+    ) async throws {
         try configuration.validate(
             hostIdentifier: configuration.worker.identifier,
             extensionID: configuration.package.id, version: configuration.package.version)
@@ -58,6 +60,44 @@ final class HostRemoteCarrierCheckIn {
                 == carrier.hostExecutablePath,
             pending[key] == nil, pending.count < 64
         else { throw HostWorkerError.rejected }
+        try await beforeRegistration()
+        try Task.checkCancellation()
+        guard LSRegisterURL(carrier.application as CFURL, true) == noErr else {
+            throw HostWorkerError.rejected
+        }
+        #if EDITH_CLI_FIXTURE
+        if configuration.worker.identifier.hasPrefix("com.pulkit.edith.tests.remote-"),
+            ProcessInfo.processInfo.environment["EDITH_REMOTE_OFFSCREEN_FIXTURE"] == "1"
+        {
+            let process = Process()
+            process.executableURL = carrier.application.appendingPathComponent(
+                "Contents/MacOS/Edith")
+            process.arguments = ["--extension-ui-carrier"]
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            let peer = try? HostRemoteProcessIdentity.verify(
+                process.processIdentifier, executable: process.executableURL!)
+            let until = ContinuousClock.now + .seconds(5)
+            while process.isRunning, ContinuousClock.now < until, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            if process.isRunning, peer?.isRunning == true {
+                _ = kill(process.processIdentifier, SIGKILL)
+            }
+            let killedUntil = ContinuousClock.now + .seconds(2)
+            while process.isRunning, ContinuousClock.now < killedUntil {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            guard !process.isRunning else { throw HostWorkerError.stillRunning }
+            guard peer != nil else { throw HostWorkerError.rejected }
+            try Task.checkCancellation()
+            guard process.terminationStatus == 0 else { throw HostWorkerError.rejected }
+            lease.close()
+            return
+        }
+        #endif
         let checkIn = HostRemoteCarrierCheckIn(
             id: configuration.package.id, key: key,
             executable: carrier.application.appendingPathComponent("Contents/MacOS/Edith"),
@@ -133,10 +173,7 @@ final class HostRemoteCarrierCheckIn {
                         == executable.deletingLastPathComponent().deletingLastPathComponent()
                         .deletingLastPathComponent().resolvingSymlinksInPath()
                 else { throw HostWorkerError.rejected }
-                if application.isTerminated {
-                    finish(cancelled ? .failure(CancellationError()) : .success(()))
-                    return
-                }
+                guard !application.isTerminated else { throw HostWorkerError.exited }
                 let actual = try HostRemoteProcessIdentity.verify(
                     application.processIdentifier, executable: executable)
                 peer = actual

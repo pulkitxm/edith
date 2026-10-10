@@ -36,7 +36,7 @@ import Testing
         let marketplace = try fixture.marketplace()
         let manager = HostRemoteSessionManager(marketplace: marketplace)
         let state = RemoteDiscoveryState()
-        manager.checkIn = { _ in }
+        manager.checkIn = { _, before in try await before() }
         manager.discover = { _ in
             state.starts += 1
             state.active += 1
@@ -76,7 +76,7 @@ import Testing
                 for: HostExtensionContentRequest(
                     extensionID: "sample", location: "settings", section: "extension"))
         }
-        #expect(state.starts == 2)
+        #expect(state.starts == 3)
         #expect(HostRemoteSession.extensionIDs.isEmpty)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.network.count == 0)
@@ -89,13 +89,16 @@ import Testing
         let marketplace = try fixture.marketplace()
         let manager = HostRemoteSessionManager(marketplace: marketplace)
         var checkedIn = false
-        manager.checkIn = { configuration in
+        manager.checkIn = { configuration, before in
             #expect(configuration.package == fixture.package("1.0.0"))
             #expect(configuration.uiOnly)
+            try await before()
             checkedIn = true
         }
+        var snapshots = 0
         manager.discover = { _ in
-            #expect(checkedIn)
+            #expect(checkedIn == (snapshots > 0))
+            snapshots += 1
             return []
         }
         await #expect(throws: HostRemoteAvailabilityError.approvalRequired) {
@@ -104,6 +107,7 @@ import Testing
                     extensionID: "sample", location: "settings", section: "extension"))
         }
         #expect(checkedIn)
+        #expect(snapshots == 2)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.network.count == 0)
     }
@@ -140,7 +144,7 @@ import Testing
         let marketplace = try fixture.marketplace()
         let manager = HostRemoteSessionManager(marketplace: marketplace)
         let state = RemoteDiscoveryState()
-        manager.checkIn = { _ in
+        manager.checkIn = { _, _ in
             state.active += 1
             defer { state.active -= 1 }
             try await Task.sleep(for: .seconds(20))
