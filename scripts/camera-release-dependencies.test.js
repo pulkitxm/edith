@@ -13,6 +13,7 @@ test("copied host runtime changes select the camera carrier without rebuilding u
     "Packages/EdithHost/Package.resolved",
     "scripts/build-minimal-host.mjs",
     "scripts/package-shipping-host.py",
+    "scripts/prepare-camera-extension-release.py",
   ]) {
     const selected = planExtensionBuilds(definitions, [source]).map(
       ({ id }) => id,

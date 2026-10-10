@@ -14,6 +14,15 @@ function python(source) {
 
 const buildScript = readFileSync("build.sh", "utf8");
 
+test("Camera release preparation validates real profile metadata and keeps development identities synthetic", () => {
+  const result = Bun.spawnSync(
+    ["python3", "-B", "scripts/test_prepare_camera_extension_release.py"],
+    { stdout: "pipe", stderr: "pipe", timeout: 15000 },
+  );
+  expect(result.exitCode).toBe(0);
+  expect(result.stderr.toString()).toContain("Ran 8 tests");
+});
+
 test("the camera extension plist names a CoreMediaIO system extension per slot", () => {
   const result = python(`import json
 from scripts.camera_extension import info
@@ -206,4 +215,24 @@ test("camera profile tooling remains available outside host packaging", () => {
   expect(profiles).toContain("-allowProvisioningUpdates");
   expect(profiles).toContain("-allowProvisioningDeviceRegistration");
   expect(profiles).toContain("signing_keychain_close");
+  expect(profiles).toContain("com.pulkit.edith.cameraCarrier");
+});
+
+test("carrier profile provisioning requests the production provider and shared app group", () => {
+  const result = python(`import json, os, plistlib, tempfile
+from scripts.camera_extension import write_project
+with tempfile.TemporaryDirectory() as folder:
+    project = write_project(folder, 'com.pulkit.edith.cameraCarrier', 'TEAM123456')
+    print(json.dumps(dict(text=open(os.path.join(project, 'project.pbxproj')).read(),
+        app=plistlib.load(open(os.path.join(folder, 'App.entitlements'), 'rb')),
+        camera=plistlib.load(open(os.path.join(folder, 'Camera.entitlements'), 'rb')))))`);
+  expect(result.text).toContain("PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.cameraCarrier;");
+  expect(result.text).toContain("PRODUCT_BUNDLE_IDENTIFIER = com.pulkit.edith.camera;");
+  expect(result.app["com.apple.developer.system-extension.install"]).toBe(true);
+  expect(result.app["com.apple.security.application-groups"]).toEqual([
+    "TEAM123456.com.pulkit.edith.camera",
+  ]);
+  expect(result.camera["com.apple.security.application-groups"]).toEqual(
+    result.app["com.apple.security.application-groups"],
+  );
 });

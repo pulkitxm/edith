@@ -11,7 +11,8 @@ if [ -f "$env_file" ]; then
 fi
 team="${EDITH_TEAM_ID:?set EDITH_TEAM_ID to the team that signs Edith}"
 identity="${EDITH_SIGN_IDENTITY:?set EDITH_SIGN_IDENTITY to the Apple Development identity}"
-application="${1:-com.pulkit.edith}"
+application="${1:-com.pulkit.edith.cameraCarrier}"
+provider="${application%.cameraCarrier}.camera"
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
 . scripts/signing-keychain.sh
@@ -33,7 +34,7 @@ if ! xcodebuild -project "$work/EdithProfiles.xcodeproj" -alltargets -configurat
 fi
 
 missing=0
-for pair in "$application|com.apple.developer.system-extension.install" "$application.camera|"; do
+for pair in "$application|com.apple.developer.system-extension.install" "$provider|"; do
   identifier="${pair%%|*}"
   entitlement="${pair#*|}"
   found="$(python3 scripts/camera_extension.py find "$identifier" "$team" "$entitlement" "$identity")"
@@ -45,4 +46,4 @@ for pair in "$application|com.apple.developer.system-extension.install" "$applic
   fi
 done
 [ "$missing" = 0 ] || exit 1
-echo "profiles ready; run make install, then install Edith Camera from the Virtual Camera page"
+echo "profiles ready; configure CAMERA_CARRIER_PROVISIONING_PROFILE and CAMERA_EXTENSION_PROVISIONING_PROFILE with base64 CMS bytes before publishing Camera"

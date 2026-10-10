@@ -2071,6 +2071,7 @@
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "scripts/build-camera-carrier.mjs",
+      "scripts/prepare-camera-extension-release.py",
       "scripts/build-camera-microphone.py",
       "scripts/camera_extension.py",
       "Packages/ExtensionSupport",
