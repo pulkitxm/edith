@@ -92,11 +92,11 @@ struct HostApplication: App {
     @AppStorage(WindowZoom.defaultsKey, store: SharedDefaults.store) private var zoom = 1.0
 
     var body: some Scene {
-        WindowGroup("Edith") {
+        WindowGroup("Edith", id: "main") {
             GeometryReader { geometry in
                 Group {
                     if let marketplace {
-                        HostWorkspace(marketplace: marketplace)
+                        HostWorkspace(marketplace: marketplace, updater: updater)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -106,10 +106,16 @@ struct HostApplication: App {
                 }
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
                 .tint(themeColor(theme))
-                .tracksWindowVisibility()
+                #if EDITH_GUI_FIXTURE
+                .background { HostGUIVisibilityProbe() }
+                #endif
                 .task {
                     guard marketplace == nil, !startupError else { return }
                     do {
+                        #if EDITH_GUI_FIXTURE
+                        let loaded = try HostGUIFixture.make()
+                        let identity = loaded.identity
+                        #else
                         let support = try FileManager.default.url(
                             for: .applicationSupportDirectory, in: .userDomainMask,
                             appropriateFor: nil, create: true)
@@ -118,6 +124,7 @@ struct HostApplication: App {
                                 ?? "com.pulkit.edith.dev.extension-host-rebuild",
                             supportDirectory: support)
                         let loaded = try HostMarketplace.live(identity: identity)
+                        #endif
                         let gateway = HostCLIGateway(marketplace: loaded)
                         let control = HostCLIServer(identity: identity) { request in
                             try await gateway.execute(request)
@@ -136,6 +143,7 @@ struct HostApplication: App {
                     } catch { startupError = true }
                 }
             }
+            .tracksWindowVisibility()
             .frame(minWidth: 540, minHeight: 400)
             .onAppear {
                 UIScale.apply(zoom); applyAppearance(appearance)
@@ -154,49 +162,12 @@ struct HostApplication: App {
                     !updater.available)
             }
         }
-        Settings { HostSettingsPage() }
+        Settings { HostSettingsRedirect() }
     }
 
     private func synchronizeAppearance() {
         guard let marketplace else { return }
         Task { await marketplace.sessions.synchronizeAppearance(identity: marketplace.identity) }
-    }
-}
-
-private enum HostWorkspacePage: String, CaseIterable {
-    case home = "Home"
-    case extensions = "Extensions"
-    case customize = "Customize Home and Notch"
-}
-
-private struct HostWorkspace: View {
-    let marketplace: HostMarketplace
-    @State private var page = HostWorkspacePage.home
-
-    var body: some View {
-        VStack(spacing: 0) {
-            EdithSegmentedPicker(
-                "Workspace", selection: $page, options: HostWorkspacePage.allCases,
-                label: { $0.rawValue }
-            ).padding(UIScale.pt(12))
-            Divider()
-            switch page {
-            case .home:
-                HostHomePage(
-                    marketplace: marketplace, customize: { page = .customize },
-                    extensions: { page = .extensions })
-            case .extensions: MarketplacePage(marketplace: marketplace)
-            case .customize: HostSurfaceEditor(marketplace: marketplace)
-            }
-        }
-        .onChange(of: marketplace.surfaces.navigation.editorRequest, initial: true) {
-            guard let request = marketplace.surfaces.navigation.editorRequest else { return }
-            marketplace.surfaces.preferences.set(
-                request.target.rawValue, forKey: "surfaceEditorTarget")
-            marketplace.surfaces.preferences.set(
-                request.tileID ?? "", forKey: "surfaceEditorWidget")
-            page = .customize
-        }
     }
 }
 
