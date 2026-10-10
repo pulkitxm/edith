@@ -22,6 +22,7 @@ import Observation
     public private(set) var isStopped = false
     @ObservationIgnored private var installationID = UUID()
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let discoverInstaller: @Sendable () -> Bool
     @ObservationIgnored private let detectAgents: @Sendable () -> [SkillAgent]
     @ObservationIgnored private var discoveryTask: Task<Void, Never>?
     @ObservationIgnored private var jobs: [UUID: Task<Void, Never>] = [:]
@@ -36,7 +37,10 @@ import Observation
         defaults: UserDefaults = SharedDefaults.store,
         documents: SkillDocumentStore? = nil,
         installer: SkillInstaller? = nil,
-        detectAgents: @escaping @Sendable () -> [SkillAgent] = { SkillAgentCatalog.detected() }
+        detectAgents: @escaping @Sendable () -> [SkillAgent] = { SkillAgentCatalog.detected() },
+        discoverInstaller: @escaping @Sendable () -> Bool = {
+            CLIToolEnvironment.executable(named: "npx") != nil
+        }
     ) {
         self.defaults = defaults
         self.remote = remote
@@ -53,6 +57,7 @@ import Observation
                 try await store.recordInstalled(document, for: skill)
             })
         self.detectAgents = detectAgents
+        self.discoverInstaller = discoverInstaller
     }
 
     public func discoverAgents() async {
@@ -63,11 +68,12 @@ import Observation
             return
         }
         let detect = detectAgents
+        let discoverInstaller = discoverInstaller
         let task = Task { [weak self] in
             guard let self else { return }
             defer { discoveryTask = nil }
             await discoveryLoad.perform(operation: {
-                (detect(), CLIToolEnvironment.executable(named: "npx") != nil)
+                (detect(), discoverInstaller())
             }) { [weak self] result in
                 guard let self, !isStopped else { return }
                 agents = result.0

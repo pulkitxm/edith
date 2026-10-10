@@ -9,15 +9,18 @@ public struct SkillInstaller: Sendable {
     public static let package = "skills@1.5.24"
     private let recordInstalled: @Sendable (EdithSkill, SkillDocument) async throws -> Void
     private let run: RunCommand
+    private let unavailableReason: String?
 
     public init(
         recordInstalled: @escaping @Sendable (EdithSkill, SkillDocument) async throws -> Void,
+        unavailableReason: String? = nil,
         run: @escaping RunCommand = {
             try await CLICommandRunner.run($0, onLine: $1)
         }
     ) {
         self.recordInstalled = recordInstalled
         self.run = run
+        self.unavailableReason = unavailableReason
     }
 
     public static func arguments(skill: EdithSkill, agentIDs: [String]) throws
@@ -44,6 +47,8 @@ public struct SkillInstaller: Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         log: @escaping Log = { _ in }
     ) async throws {
+        try Task.checkCancellation()
+        if let unavailableReason { throw SkillsError.message(unavailableReason) }
         let arguments = try Self.arguments(skill: skill, agentIDs: agentIDs)
         var environment = CLIToolEnvironment.sanitized(processEnvironment: environment)
         environment["HOME"] = home.path

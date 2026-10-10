@@ -10,18 +10,20 @@ public struct StudioEnvironment: Sendable {
     public var qpdf: URL?
     public var temporaryRoot: URL
     public var appleIntelligenceAvailable: Bool
+    public var translationAvailable: Bool?
 
     public init(
         ffmpeg: URL? = nil, ffprobe: URL? = nil, qpdf: URL? = nil,
         temporaryRoot: URL = FileManager.default.temporaryDirectory.appendingPathComponent(
             "EdithStudio", isDirectory: true),
-        appleIntelligenceAvailable: Bool = false
+        appleIntelligenceAvailable: Bool = false, translationAvailable: Bool? = nil
     ) {
         self.ffmpeg = ffmpeg
         self.ffprobe = ffprobe
         self.qpdf = qpdf
         self.temporaryRoot = temporaryRoot
         self.appleIntelligenceAvailable = appleIntelligenceAvailable
+        self.translationAvailable = translationAvailable
     }
 
     public static let searchDirectories = [
@@ -30,12 +32,16 @@ public struct StudioEnvironment: Sendable {
 
     public static func detect(
         path: String? = ProcessInfo.processInfo.environment["PATH"],
-        resolve: ((String) -> URL?)? = nil
+        resolve: ((String) -> URL?)? = nil,
+        allowsSearchFallback: Bool = true,
+        modelAvailable: () -> Bool = { StudioIntelligence.isModelAvailable },
+        translationAvailable: Bool? = nil
     ) -> StudioEnvironment {
         let directories =
             (path?.split(separator: ":").map(String.init) ?? []) + searchDirectories
         func locate(_ name: String) -> URL? {
             if let resolve, let url = resolve(name) { return url }
+            guard allowsSearchFallback else { return nil }
             for directory in directories {
                 let candidate = URL(fileURLWithPath: directory).appendingPathComponent(name)
                 if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
@@ -44,7 +50,8 @@ public struct StudioEnvironment: Sendable {
         }
         return StudioEnvironment(
             ffmpeg: locate("ffmpeg"), ffprobe: locate("ffprobe"), qpdf: locate("qpdf"),
-            appleIntelligenceAvailable: StudioIntelligence.isModelAvailable)
+            appleIntelligenceAvailable: modelAvailable(), translationAvailable: translationAvailable
+        )
     }
 
     public func executable(for engine: StudioEngine) -> URL? {
@@ -58,7 +65,7 @@ public struct StudioEnvironment: Sendable {
         switch requirement {
         case let .engine(engine): executable(for: engine) != nil
         case .appleIntelligence: appleIntelligenceAvailable
-        case .translation: StudioIntelligence.isTranslationSupported
+        case .translation: translationAvailable ?? StudioIntelligence.isTranslationSupported
         }
     }
 
