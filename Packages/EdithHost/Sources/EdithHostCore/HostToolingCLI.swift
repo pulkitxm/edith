@@ -210,13 +210,17 @@ public struct HostToolingCLI: Sendable {
         }
     }
     public func script(_ shell: Shell) -> String {
+        completionTemplate(shell).replacingOccurrences(
+            of: "@ED@", with: Self.quote(executable.path))
+    }
+    func completionTemplate(_ shell: Shell) -> String {
         let template =
             switch shell {
             case .zsh: Self.zsh;
             case .bash: Self.bash;
             case .fish: Self.fish
             }
-        return template.replacingOccurrences(of: "@ED@", with: Self.quote(executable.path))
+        return template
     }
     private func source(_ shell: Shell) -> String {
         "source " + Self.quote(completionFile(shell).path)

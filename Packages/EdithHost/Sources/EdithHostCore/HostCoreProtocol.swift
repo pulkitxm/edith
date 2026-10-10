@@ -44,11 +44,13 @@ public struct HostCoreSnapshot: Codable, Sendable {
     public let cloudDirectory: URL
     public let cloudAvailable: Bool
     public let settingsBackup: HostSettingsBackupResult?
+    public let agent: HostCoreAgentSnapshot?
 
     public init(
         pid: Int32, startedAt: Date, collectedAt: Date, residentBytes: UInt64,
         cpuSeconds: Double, storage: HostStorageSnapshot?, tasks: [HostCoreTaskSnapshot],
-        cloudDirectory: URL, cloudAvailable: Bool, settingsBackup: HostSettingsBackupResult? = nil
+        cloudDirectory: URL, cloudAvailable: Bool, settingsBackup: HostSettingsBackupResult? = nil,
+        agent: HostCoreAgentSnapshot? = nil
     ) {
         self.pid = pid
         self.startedAt = startedAt
@@ -60,6 +62,7 @@ public struct HostCoreSnapshot: Codable, Sendable {
         self.cloudDirectory = cloudDirectory
         self.cloudAvailable = cloudAvailable
         self.settingsBackup = settingsBackup
+        self.agent = agent
     }
 }
 

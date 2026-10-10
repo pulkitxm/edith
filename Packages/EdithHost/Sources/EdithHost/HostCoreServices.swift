@@ -20,6 +20,10 @@ import SwiftUI
     private(set) var backupFailure: String?
     private(set) var cpuPercent = 0.0
     @ObservationIgnored private var process: HostCoreProcess?
+    @ObservationIgnored private var cliStatusFlight: Task<HostCoreSnapshot, Error>?
+    @ObservationIgnored private var cliJobFlights: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var activeJob: String?
+    @ObservationIgnored private var cliStopping = false
     @ObservationIgnored private var observation: Task<Void, Never>?
     @ObservationIgnored private let executable: URL
     @ObservationIgnored private let panel: HostPanelService
@@ -55,6 +59,7 @@ import SwiftUI
     func start() async {
         guard !starting, process == nil else { return }
         starting = true
+        cliStopping = false
         defer { starting = false }
         NSApp.setActivationPolicy(
             defaults.object(forKey: AppStorageKeys.General.showDockIcon) as? Bool ?? true
@@ -66,19 +71,14 @@ import SwiftUI
             update(try await process.start())
             failure = nil
             startSettingsScheduler()
+            refreshExistingCompletions()
             if workflowModel.incomplete,
                 marketplace.downloadedIDs.isEmpty
                     || defaults.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)
             {
                 workflowModel.present()
             }
-            observation = Task { [weak self] in
-                while !Task.isCancelled {
-                    do { try await Task.sleep(for: .seconds(5)) } catch { return }
-                    guard let self else { return }
-                    await self.refresh()
-                }
-            }
+            startObservation()
         } catch {
             await process.stop()
             self.process = nil
@@ -88,14 +88,16 @@ import SwiftUI
 
     func refresh() async {
         guard let process, process.ready else { return }
-        do { update(try await process.perform(.status)); failure = nil } catch is CancellationError
-        {} catch { failure = "The background service could not be reached. Try restarting it." }
+        do { _ = try await cliSnapshot(); failure = nil } catch is CancellationError {} catch {
+            failure = "The background service could not be reached. Try restarting it."
+        }
     }
 
     func inspectStorage() async {
         guard !inspecting, !synchronizing, let process, process.ready else { return }
         inspecting = true
-        defer { inspecting = false }
+        activeJob = "storage.inspect"
+        defer { inspecting = false; activeJob = nil }
         do { update(try await process.perform(.inspect)); failure = nil } catch is CancellationError
         {} catch { failure = "Storage could not be inspected. Reload to try again." }
     }
@@ -113,7 +115,8 @@ import SwiftUI
             throw HostWorkerError.rejected
         }
         synchronizing = true
-        defer { synchronizing = false }
+        activeJob = restoreOnly ? "backup.restore" : "backup.sync"
+        defer { synchronizing = false; activeJob = nil }
         do {
             let next = try await process.perform(restoreOnly ? .restore : .synchronize)
             guard let result = next.settingsBackup else { throw HostWorkerError.invalidResponse }
@@ -143,6 +146,15 @@ import SwiftUI
     }
 
     func shutdown() async {
+        cliStopping = true
+        let flights = Array(cliJobFlights.values)
+        flights.forEach { $0.cancel() }
+        process?.cancelCurrentTask()
+        for flight in flights { await flight.value }
+        cliJobFlights.removeAll()
+        cliStatusFlight?.cancel()
+        _ = try? await cliStatusFlight?.value
+        cliStatusFlight = nil
         await workflowValue?.shutdown()
         IPC.stopObserving(settingsObserver)
         settingsObserver = nil
@@ -290,6 +302,166 @@ import SwiftUI
             MainActor.assumeIsolated { self?.settingsScheduler?.preferencesChanged() }
         }
         settingsScheduler?.start()
+    }
+
+    var cliOwnedJobIDs: Set<String> {
+        guard online, !cliStopping else { return [] }
+        return Set(snapshot?.agent?.jobs.map(\.id) ?? [])
+    }
+
+    func cliStatus() async throws -> HostCoreAgentStatus {
+        try HostCoreAgentStatus(snapshot: await cliSnapshot(), cpuPercent: cpuPercent)
+    }
+
+    func cliJobs() async throws -> [HostCoreJobSnapshot] {
+        guard let agent = try await cliSnapshot().agent else {
+            throw HostCoreCommandFailure(
+                "The core does not expose its actual job inventory.",
+                hint: "Update this Edith app installation.")
+        }
+        return agent.jobs
+    }
+
+    func cliEvents() async throws -> [HostCoreAgentEvent] {
+        guard let agent = try await cliSnapshot().agent else {
+            throw HostCoreCommandFailure(
+                "The core does not expose its retained events.",
+                hint: "Update this Edith app installation.")
+        }
+        return agent.events
+    }
+
+    func cliLogs(last: String) async throws -> [String] {
+        let window = try HostCoreAgentCLI.logWindow(last)
+        let cutoff = Date().addingTimeInterval(-window)
+        return try await cliEvents().filter { $0.date >= cutoff }.map {
+            "\($0.date.ISO8601Format()) [\($0.level.rawValue)] \($0.name): \($0.message)"
+        }
+    }
+
+    func cliRestart() async throws {
+        guard online, !cliStopping, let previous = process?.processIdentifier else {
+            throw HostCoreCommandFailure(
+                "background agent", hint: "No owned core process is available to restart.")
+        }
+        cliStopping = true
+        observation?.cancel(); await observation?.value; observation = nil
+        IPC.stopObserving(settingsObserver); settingsObserver = nil
+        await settingsScheduler?.shutdown(); settingsScheduler = nil
+        let flights = Array(cliJobFlights.values)
+        process?.cancelCurrentTask()
+        flights.forEach { $0.cancel() }
+        for flight in flights { await flight.value }
+        cliJobFlights.removeAll()
+        cliStatusFlight?.cancel(); _ = try? await cliStatusFlight?.value; cliStatusFlight = nil
+        await process?.stop()
+        process = nil; snapshot = nil; cpuPercent = 0
+        let next = HostCoreProcess(identity: identity, executable: executable)
+        process = next
+        do {
+            update(try await next.start())
+            guard online, next.processIdentifier != previous else {
+                throw HostWorkerError.invalidResponse
+            }
+            try Task.checkCancellation()
+            cliStopping = false; failure = nil
+            startSettingsScheduler(); startObservation()
+        } catch {
+            await next.stop(); process = nil; snapshot = nil; cpuPercent = 0
+            cliStopping = false
+            failure = "The owned core process could not restart."
+            if error is CancellationError { throw error }
+            throw HostCoreCommandFailure("background agent", hint: failure)
+        }
+    }
+
+    private func refreshExistingCompletions() {
+        guard let launcher = HostToolingCLI.bundledLauncher() else { return }
+        let tooling = HostToolingCLI(
+            home: FileManager.default.homeDirectoryForCurrentUser,
+            executable: launcher, path: [])
+        _ = tooling.refreshExistingCompletions(
+            enabled: defaults.object(forKey: "completionsAutoRefresh") as? Bool ?? true)
+    }
+
+    private func startObservation() {
+        guard observation == nil else { return }
+        observation = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(5)) } catch { return }
+                guard let self else { return }
+                await self.refresh()
+            }
+        }
+    }
+
+    func cliRun(job: String) throws {
+        guard ["backup.sync", "backup.restore", "storage.inspect"].contains(job), online,
+            !cliStopping, !inspecting, !synchronizing, cliJobFlights.isEmpty
+        else {
+            throw HostCoreCommandFailure(
+                "The core job could not be queued: " + job,
+                hint: "Wait for the owned core operation to finish, then retry ed agent jobs.")
+        }
+        cliJobFlights[job] = Task { [weak self] in
+            guard let self else { return }
+            defer { cliJobFlights.removeValue(forKey: job) }
+            do {
+                try Task.checkCancellation()
+                if job == "storage.inspect" {
+                    guard let process, process.ready, !inspecting, !synchronizing else {
+                        throw HostWorkerError.rejected
+                    }
+                    inspecting = true; activeJob = job
+                    defer { inspecting = false; activeJob = nil }
+                    update(try await process.perform(.inspect))
+                    failure = nil
+                } else {
+                    _ = try await synchronizeSettings(restoreOnly: job == "backup.restore")
+                }
+            } catch is CancellationError {} catch {
+                failure = "The queued core operation failed. Inspect ed agent events."
+            }
+        }
+    }
+
+    func cliCancel(job: String) throws {
+        guard !cliStopping, online, activeJob == job || cliJobFlights[job] != nil else {
+            throw HostCoreCommandFailure(
+                "The core job is not running: " + job,
+                hint: "Choose a running job from ed agent jobs.")
+        }
+        cliJobFlights[job]?.cancel()
+        if activeJob == job { process?.cancelCurrentTask() }
+    }
+
+    private func cliSnapshot() async throws -> HostCoreSnapshot {
+        guard !cliStopping, let process, process.ready else {
+            throw HostCoreCommandFailure(
+                "background agent", hint: "The owned core process is offline.")
+        }
+        if let cliStatusFlight {
+            let next = try await cliStatusFlight.value
+            try Task.checkCancellation()
+            guard !cliStopping, process.processIdentifier == next.pid else {
+                throw HostCoreCommandFailure("The core process changed during the command.")
+            }
+            return next
+        }
+        let task = Task { try await process.perform(.status) }
+        cliStatusFlight = task
+        defer { cliStatusFlight = nil }
+        let snapshot = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        try Task.checkCancellation()
+        guard !cliStopping, process.processIdentifier == snapshot.pid else {
+            throw HostCoreCommandFailure("The core process changed during the command.")
+        }
+        update(snapshot)
+        return snapshot
     }
 
     private func update(_ next: HostCoreSnapshot) {

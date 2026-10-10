@@ -11,6 +11,7 @@ import Foundation
     private var inspection: Task<HostStorageSnapshot, Error>?
     private var cancellation: WorkCancellation?
     private let journal: URL
+    private let agent: HostCoreAgentStore
     private var stopping = false
     private let settings: HostSettingsArchive
     private var backup: Task<HostSettingsBackupResult, Error>?
@@ -28,6 +29,7 @@ import Foundation
             metadata.st_mode & S_IFMT == S_IFDIR, metadata.st_uid == getuid(),
             metadata.st_mode & 0o077 == 0
         else { throw CocoaError(.fileReadNoPermission) }
+        agent = try HostCoreAgentStore(directory: directory)
         journal = directory.appendingPathComponent("tasks.json")
         settings = try HostSettingsArchive(identity: identity, cloudDirectory: cloud)
         if lstat(journal.path, &metadata) == 0 {
@@ -59,7 +61,7 @@ import Foundation
             cpuSeconds: valid ? Double(info.pti_total_user + info.pti_total_system) / 1e9 : 0,
             storage: storage, tasks: tasks, cloudDirectory: cloud,
             cloudAvailable: HostCoreCloud.available(identity: identity, directory: cloud),
-            settingsBackup: backupResult)
+            settingsBackup: backupResult, agent: agent.snapshot())
     }
 
     public func inspect() async throws -> HostCoreSnapshot {
@@ -67,12 +69,16 @@ import Foundation
         guard !stopping, backup == nil else { throw HostWorkerError.rejected }
         if let inspection { storage = try await inspection.value; return snapshot() }
         let id = UUID()
+        try agent.begin(job: "storage.inspect", execution: id)
         tasks.append(
             HostCoreTaskSnapshot(
                 id: id, title: "Inspecting storage and backup sizes",
                 startedAt: Date(), finishedAt: nil, phase: .running, message: nil))
         tasks = Array(tasks.suffix(32))
-        try saveTasks()
+        do { try saveTasks() } catch {
+            try? finish(id, phase: .failed, message: "The core task journal could not be saved.")
+            throw error
+        }
         let cancellation = WorkCancellation()
         self.cancellation = cancellation
         let targets = HostStorageTarget.defaults(identity: identity)
@@ -93,10 +99,12 @@ import Foundation
             try finish(id, phase: .completed, message: nil)
             return snapshot()
         } catch {
-            try finish(
-                id, phase: error is CancellationError ? .cancelled : .failed,
-                message: error is CancellationError
-                    ? "Cancelled." : "Storage could not be inspected.")
+            if tasks.first(where: { $0.id == id })?.phase == .running {
+                try finish(
+                    id, phase: error is CancellationError ? .cancelled : .failed,
+                    message: error is CancellationError
+                        ? "Cancelled." : "Storage could not be inspected.")
+            }
             throw error
         }
     }
@@ -105,13 +113,17 @@ import Foundation
         try Task.checkCancellation()
         guard !stopping, inspection == nil, backup == nil else { throw HostWorkerError.rejected }
         let id = UUID()
+        try agent.begin(job: restoreOnly ? "backup.restore" : "backup.sync", execution: id)
         tasks.append(
             HostCoreTaskSnapshot(
                 id: id,
                 title: restoreOnly ? "Restoring settings from iCloud" : "Backing up settings",
                 startedAt: Date(), finishedAt: nil, phase: .running, message: nil))
         tasks = Array(tasks.suffix(32))
-        try saveTasks()
+        do { try saveTasks() } catch {
+            try? finish(id, phase: .failed, message: "The core task journal could not be saved.")
+            throw error
+        }
         let settings = settings
         let work = Task { try await settings.synchronize(restoreOnly: restoreOnly) }
         backup = work
@@ -125,10 +137,12 @@ import Foundation
             try finish(id, phase: .completed, message: nil)
             return snapshot()
         } catch {
-            try finish(
-                id, phase: error is CancellationError ? .cancelled : .failed,
-                message: error is CancellationError
-                    ? "Cancelled." : "Settings backup could not finish.")
+            if tasks.first(where: { $0.id == id })?.phase == .running {
+                try finish(
+                    id, phase: error is CancellationError ? .cancelled : .failed,
+                    message: error is CancellationError
+                        ? "Cancelled." : "Settings backup could not finish.")
+            }
             throw error
         }
     }
@@ -144,6 +158,7 @@ import Foundation
         _ = try? await inspection?.value
         await settings.shutdown()
         _ = try? await backup?.value
+        try? agent.stopped()
     }
 
     private func finish(_ id: UUID, phase: HostCoreTaskSnapshot.Phase, message: String?) throws {
@@ -152,7 +167,12 @@ import Foundation
         tasks[index] = HostCoreTaskSnapshot(
             id: id, title: previous.title, startedAt: previous.startedAt,
             finishedAt: Date(), phase: phase, message: message)
-        try saveTasks()
+        do { try saveTasks() } catch {
+            try? agent.finish(
+                execution: id, phase: .failed, message: "The core task journal could not be saved.")
+            throw error
+        }
+        try agent.finish(execution: id, phase: phase, message: message)
     }
 
     private func saveTasks() throws {

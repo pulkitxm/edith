@@ -97,13 +97,16 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     public let aliasStreamOperation: String?
     public let aliasStreamDeadline: Double?
     public let parserHelp: [HostCLIJSON]?
+    public let coreOwner: HostCoreOwnerCatalog?
+    public var allCommands: [HostCLIProviderCommand] { commands + (coreOwner?.routes ?? []) }
 
     public init(
         owner: String, commands: [HostCLIProviderCommand], settings: [HostCLISetting] = [],
         acceptsInput: Bool = false, nativeTools: [HostCLINativeTool] = [],
         completionOperation: String? = nil, machineAliases: [String] = [],
         aliasOperation: String? = nil, aliasStreamOperation: String? = nil,
-        aliasStreamDeadline: Double? = nil, parserHelp: [HostCLIJSON] = []
+        aliasStreamDeadline: Double? = nil, parserHelp: [HostCLIJSON] = [],
+        coreOwner: HostCoreOwnerCatalog? = nil
     ) {
         version = 1; self.owner = owner; self.commands = commands; self.settings = settings
         self.acceptsInput = acceptsInput
@@ -112,6 +115,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         self.aliasStreamOperation = aliasStreamOperation;
         self.aliasStreamDeadline = aliasStreamDeadline
         self.parserHelp = parserHelp
+        self.coreOwner = coreOwner
     }
 
     public init(from decoder: Decoder) throws {
@@ -131,6 +135,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         aliasStreamDeadline = try container.decodeIfPresent(
             Double.self, forKey: .aliasStreamDeadline)
         parserHelp = try container.decodeIfPresent([HostCLIJSON].self, forKey: .parserHelp)
+        coreOwner = try container.decodeIfPresent(HostCoreOwnerCatalog.self, forKey: .coreOwner)
     }
 
     public static func decode(_ data: Data, owner: String) throws -> Self {
@@ -144,12 +149,17 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
 
     public func validate(owner expected: String) throws {
         guard version == 1, owner == expected, let prefixes = Self.prefixes[owner],
-            !commands.isEmpty || !(nativeTools ?? []).isEmpty || !settings.isEmpty,
+            !commands.isEmpty || !(nativeTools ?? []).isEmpty || !settings.isEmpty
+                || coreOwner != nil,
             commands.count <= 1024,
             settings.count <= 512,
             Set(commands.map(\.toolName)).count == commands.count,
             Set(settings.map(\.key)).count == settings.count
         else { throw HostCLIError.rejected("Invalid extension command catalog.") }
+        try coreOwner?.validate(owner: owner)
+        guard Set(allCommands.map(\.toolName)).count == allCommands.count else {
+            throw HostCLIError.rejected("Conflicting original agent command routes.")
+        }
         for command in commands {
             guard (1...12).contains(command.route.count),
                 command.route.first.map(prefixes.contains) == true,
@@ -194,7 +204,8 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         }
         let tools = nativeTools ?? []
         guard tools.count <= 1024,
-            Set(tools.map(\.name) + commands.map(\.toolName)).count == tools.count + commands.count
+            Set(tools.map(\.name) + allCommands.map(\.toolName)).count == tools.count
+                + allCommands.count
         else { throw HostCLIError.rejected("Duplicate tool names.") }
         for tool in tools { try tool.validate(owner: owner) }
         if let completionOperation {
@@ -229,7 +240,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         }
     }
 
-    private static func validateHelp(
+    static func validateHelp(
         _ value: HostCLIJSON, route: [String], commands: [HostCLIProviderCommand]
     ) throws {
         guard let object = value.object, let name = object["commandName"]?.string,
@@ -257,7 +268,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     public static let prefixes: [String: Set<String>] = [
         "host": [
             "config", "app", "permissions", "guide", "schema", "version", "status", "install",
-            "uninstall", "completions", "extensions",
+            "uninstall", "completions", "extensions", "agent",
         ],
         "keepAwake": [], "focusDim": [], "windowSweaters": [], "keystrokeHighlight": [],
         "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [],
@@ -352,18 +363,18 @@ public struct HostCLIProviderRegistry: Sendable {
             throw HostCLIError.usage("Missing extension command.")
         }
         let matching = providers.flatMap { provider in
-            provider.catalog.commands.filter { arguments.starts(with: $0.route) }
+            provider.catalog.allCommands.filter { arguments.starts(with: $0.route) }
                 .map { (provider, $0) }
         }.sorted { $0.1.route.count > $1.1.route.count }
         let families = providers.filter {
-            $0.catalog.commands.contains { $0.route.first == prefix }
+            $0.catalog.allCommands.contains { $0.route.first == prefix }
                 || ($0.catalog.machineAliases ?? []).contains(prefix)
         }
         let selected =
             matching.first
             ?? (families.count == 1
                 ? families.first.flatMap { provider in
-                    provider.catalog.commands.first.map { (provider, $0) }
+                    provider.catalog.allCommands.first.map { (provider, $0) }
                 } : nil)
         guard let (provider, command) = selected,
             matching.count < 2 || matching[0].1.route.count != matching[1].1.route.count
@@ -475,7 +486,7 @@ public struct HostCLINativeTool: Codable, Sendable {
     }
 }
 
-private actor HostCLIStreamCapture {
+actor HostCLIStreamCapture {
     private var stdout = Data()
     private var stderr = Data()
     func append(_ data: Data, stderr error: Bool) throws {

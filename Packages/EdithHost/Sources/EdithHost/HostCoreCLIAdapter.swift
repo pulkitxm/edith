@@ -11,6 +11,7 @@ import Foundation
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping HostAppCLIAdapter.Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
+        agentBackend: HostCoreAgentCLIBackend? = nil,
         quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
         changed: @escaping @MainActor () -> Void
     ) throws -> HostCoreCLIService {
@@ -24,6 +25,18 @@ import Foundation
                     "Relaunch must be performed by the matching CLI caller.")
             })
         let gateway = HostCLIGateway(marketplace: marketplace)
+        let invoke: HostCLIProviderRegistry.Invoke = { try await gateway.execute($0) }
+        let agent = HostCoreAgentCLIFactory.make(
+            local: agentBackend ?? HostCoreAgentCLIAdapter.backend(core: core), invoke: invoke)
+        let readinessHooks = HostCoreOwnerHooks(invoke: invoke)
+        let readiness = HostCoreReadinessCLI(
+            backend: .init(
+                entries: { marketplace.entries.map { .init(id: $0.id, title: $0.title) } },
+                inspect: { id, operation in
+                    try await readinessHooks.readiness(
+                        id: id, operation: operation,
+                        title: marketplace.entries.first { $0.id == id }?.title ?? id)
+                }, setup: { try await readinessHooks.setup(id: $0, dryRun: $1, installTools: $2) }))
         let local = HostCommandCLI(
             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
                 as? String ?? "development",
@@ -48,8 +61,10 @@ import Foundation
                 shared: shared, standard: standard, changed: changed),
             commandProvider: {
                 commands.filter { command in
-                    (command.route != ["app", "clean-keys"]
-                        || marketplace.sessions.activeIDs.contains("system"))
+                    (command.route.first != "agent" || agentBackend?.ownedJobs().isEmpty == false
+                        || core()?.online == true)
+                        && (command.route != ["app", "clean-keys"]
+                            || marketplace.sessions.activeIDs.contains("system"))
                         && (command.route != ["app", "check-updates"] || updater.available)
                 }
             },
@@ -66,6 +81,10 @@ import Foundation
                 case "app": return try await app.execute(remainder)
                 case "permissions": return try await permissions.execute(remainder)
                 case "camera": return try await camera.execute(remainder)
+                case "agent": return try await agent.execute(remainder)
+                case "extensions"
+                where ["status", "verify", "doctor", "setup"].contains(remainder.first ?? ""):
+                    return try await readiness.execute(remainder)
                 default: return try await local.execute(arguments)
                 }
             })
@@ -86,12 +105,16 @@ import Foundation
         let local = HostCLIHelp.routes.filter { route in
             [
                 "guide", "schema", "version", "status", "install", "uninstall", "completions",
-                "extensions",
+                "extensions", "agent",
             ].contains(route.first ?? "")
         }.map { route in
             HostCLIProviderCommand(
                 route: route, operation: "host.cli",
                 summary: "Run ed " + route.joined(separator: " "),
+                destructive: route == ["agent", "restart"]
+                    || route.first == "agent" && ["run", "cancel"].contains(route.last ?? "")
+                    || route == ["extensions", "setup"],
+                timeout: route == ["extensions", "setup"] ? 120 : 30,
                 jsonOutput: route.first != "schema" && route.first != "guide"
                     && route.first != "completions")
         }

@@ -89,7 +89,7 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
                 guard
                     [
                         "app", "permissions", "camera", "guide", "schema", "version", "status",
-                        "install", "uninstall", "completions", "extensions",
+                        "install", "uninstall", "completions", "extensions", "agent",
                     ].contains(envelope.arguments.first ?? ""),
                     envelope.input.isEmpty
                 else {
@@ -101,6 +101,8 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
                     try await action(envelope.arguments)
                 }
             }
+        } catch let error as HostCoreCommandFailure {
+            reply = try error.reply()
         } catch let error as HostCLIError {
             reply = HostCLIErrorReply.make(error)
         }
