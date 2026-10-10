@@ -144,3 +144,85 @@ test("maintained diagnostics admit only reviewed nonpublishing owner refs and im
     `EDITH_HOSTED_REBUILD: "\${{ inputs.rebuild }}"`,
   );
 });
+
+test("original journey remains callable at reviewed final refs without changing synthetic fixture admission", async () => {
+  const workflow = await readFile(
+    ".github/workflows/hosted-original-shell.yml",
+    "utf8",
+  );
+  const route = ci
+    .split("  hosted-original-shell:\n")[1]
+    .split("  changes:\n")[0];
+  const routeAllows = new Function(
+    "github",
+    "inputs",
+    `return Boolean(${route.match(/ {4}if: ([^\n]+)/)[1]})`,
+  );
+  const calledAllows = new Function(
+    "github",
+    "inputs",
+    `return Boolean(${workflow.match(/ {4}if: ([^\n]+)/)[1]})`,
+  );
+  const github = {
+    event_name: "workflow_dispatch",
+    repository: "pulkitxm/edith",
+    actor_id: "65671483",
+    ref: "refs/heads/main",
+    sha: "a".repeat(40),
+  };
+  const inputs = {
+    hosted_shell_journey_sha: github.sha,
+    hosted_host_tests_sha: "",
+    expected_sha: github.sha,
+    release: false,
+    rebuild: "",
+  };
+  for (const ref of [
+    "refs/heads/main",
+    "refs/heads/feat/extension-marketplace",
+    "refs/heads/feat/hosted-original-shell-journey",
+    "refs/heads/feat/hosted-host-test-diagnostics",
+  ]) {
+    for (const actor of ["65671483", "320458784"]) {
+      expect(routeAllows({ ...github, ref, actor_id: actor }, inputs)).toBe(
+        true,
+      );
+      expect(calledAllows({ ...github, ref, actor_id: actor }, inputs)).toBe(
+        true,
+      );
+    }
+  }
+  for (const changed of [
+    { ref: "refs/heads/other" },
+    { ref: "refs/tags/main" },
+    { ref: "refs/pull/1220/merge" },
+    { actor_id: "999" },
+    { repository: "other/edith" },
+    { event_name: "push" },
+    { sha: "b".repeat(40) },
+  ]) {
+    expect(routeAllows({ ...github, ...changed }, inputs)).toBe(false);
+    expect(calledAllows({ ...github, ...changed }, inputs)).toBe(false);
+  }
+  for (const changed of [{ release: true }, { rebuild: "v1.0.0" }]) {
+    expect(routeAllows(github, { ...inputs, ...changed })).toBe(false);
+    expect(calledAllows(github, { ...inputs, ...changed })).toBe(false);
+  }
+  expect(
+    routeAllows(github, { ...inputs, hosted_host_tests_sha: github.sha }),
+  ).toBe(false);
+  expect(routeAllows(github, { ...inputs, hosted_shell_journey_sha: "" })).toBe(
+    false,
+  );
+  expect(calledAllows(github, { ...inputs, expected_sha: "" })).toBe(false);
+  expect(route).toContain(`release: \${{ inputs.release }}`);
+  expect(route).toContain(`rebuild: \${{ inputs.rebuild }}`);
+  for (const guard of [
+    'test "$EDITH_HOSTED_RELEASE" = false',
+    'test -z "$EDITH_HOSTED_REBUILD"',
+    'test "$RUNNER_ENVIRONMENT" = github-hosted',
+    'test "$RUNNER_OS" = macOS',
+    'test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"',
+  ])
+    expect(workflow).toContain(guard);
+});
