@@ -93,6 +93,11 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             guard worker == nil else { return ["ok": true] as NSDictionary }
+            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+                do {
+                    try ambientPolicy.start { [weak self] in self?.worker?.monitor.reschedule() }
+                } catch { return ["ok": false] as NSDictionary }
+            }
             let policy = ambientPolicy
             let monitor = CompanionMonitor(interval: {
                 policy.interval(for: CompanionMonitor.jobID)
@@ -107,11 +112,6 @@ final class ExtensionRuntime: NSObject {
                 monitor: worker.monitor,
                 isStopped: { [weak worker] in worker?.isStopped != false },
                 open: { [weak worker] id in worker?.openEpisode(id) })
-            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
-                do { try policy.start { [weak monitor] in monitor?.reschedule() } } catch {
-                    return ["ok": false] as NSDictionary
-                }
-            }
             worker.start()
             TextEditingCommands.install()
         case "view":

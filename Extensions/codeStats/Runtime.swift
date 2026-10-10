@@ -108,6 +108,10 @@ final class ExtensionRuntime: NSObject {
                 return ["ok": false] as NSDictionary
             }
             guard workflow == nil else { return ["ok": true] as NSDictionary }
+            if CodeStatsExecutionEnvironment.fixtureHome == nil {
+                do { try ambientPolicy.start { [weak self] in self?.schedule?.reschedule() } } catch
+                { return ["ok": false] as NSDictionary }
+            }
             CodeStatsPaths.prepare()
             let store = CodeStatsStore()
             let workflow = CodeStatsWorkflow(environment: .live)
@@ -135,9 +139,6 @@ final class ExtensionRuntime: NSObject {
                     ready: { [weak self] in await self?.startup?.value },
                     check: { _ = await workflow.scheduledCheck() })
                 self.schedule = schedule
-                do { try policy.start { [weak schedule] in schedule?.reschedule() } } catch {
-                    self.schedule = nil; return ["ok": false] as NSDictionary
-                }
                 schedule.start()
             }
         case "view":
