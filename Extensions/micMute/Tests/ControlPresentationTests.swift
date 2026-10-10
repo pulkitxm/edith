@@ -194,4 +194,91 @@ import Testing
         #expect(model.error == nil)
     }
 
+    @Test func disabledPreferencesPersistAndReplayOnlyEditedKeysAfterEnable() async throws {
+        let engine = fixture()
+        let local = fixture()
+        let key = try #require(ControlPresentationContract.writable.sorted().first)
+        let initial: Any =
+            ControlPresentationContract.stringKeys.contains(key)
+            ? "original"
+            : ControlPresentationContract.boolKeys.contains(key)
+                ? NSNumber(value: false) : NSNumber(value: 1)
+        let changed: Any =
+            ControlPresentationContract.stringKeys.contains(key)
+            ? "changed"
+            : ControlPresentationContract.boolKeys.contains(key)
+                ? NSNumber(value: true) : NSNumber(value: 2)
+        local.set(initial, forKey: key)
+        engine.set(initial, forKey: key)
+        let disabled = ControlPresentation(client: nil, defaults: local)
+        local.set(changed, forKey: key)
+        disabled.changed()
+        disabled.stop()
+        var updates = 0
+        func active() -> ControlPresentation {
+            ControlPresentation(client: nil, defaults: local) { operation, payload in
+                if operation == "micMute.ui.update" {
+                    let update = try JSONDecoder().decode(
+                        ControlPreferenceUpdate.self, from: payload)
+                    let values = try ControlPresentationContract.decode(
+                        update.values, keys: ControlPresentationContract.writable)
+                    #expect(Set(values.keys).union(update.removed) == [key])
+                    try ControlPresentationContract.update(payload, defaults: engine)
+                    updates += 1
+                    return Data("{}".utf8)
+                }
+                #expect(operation == "micMute.ui.read")
+                return try ControlPresentationContract.snapshot(
+                    defaults: engine, state: ControlPresentationState())
+            }
+        }
+        let enabled = active()
+        await enabled.refresh()
+        #expect(enabled.ready)
+        #expect(updates == 1)
+        #expect(
+            NSDictionary(dictionary: [key: engine.object(forKey: key) ?? NSNull()]).isEqual(to: [
+                key: changed
+            ]))
+        enabled.stop()
+        let reopened = active()
+        await reopened.refresh()
+        #expect(updates == 1)
+        reopened.stop()
+        let disabledAgain = ControlPresentation(client: nil, defaults: local)
+        local.removeObject(forKey: key)
+        disabledAgain.changed()
+        disabledAgain.stop()
+        let unset = active()
+        await unset.refresh()
+        #expect(updates == 2)
+        #expect(engine.object(forKey: key) == nil)
+        #expect(local.object(forKey: key) == nil)
+        unset.stop()
+    }
+
+    @Test func checkedPreferencesRejectOutOfRangeNumbersAndBooleanTypeConfusion() throws {
+        let defaults = fixture()
+        for (key, range) in ControlPresentationContract.ranges {
+            for value in [range.lowerBound - 1, range.upperBound + 1] {
+                let payload = try JSONEncoder().encode(
+                    ControlPreferenceUpdate(
+                        values: ControlPresentationContract.encode([key: value]), removed: []))
+                #expect(throws: (any Error).self) {
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                }
+                #expect(defaults.object(forKey: key) == nil)
+            }
+        }
+        for key in ControlPresentationContract.boolKeys {
+            let payload = try JSONEncoder().encode(
+                ControlPreferenceUpdate(
+                    values: ControlPresentationContract.encode([key: 1]), removed: []))
+            #expect(throws: (any Error).self) {
+                try ControlPresentationContract.update(payload, defaults: defaults)
+            }
+            #expect(defaults.object(forKey: key) == nil)
+        }
+    }
+
 }

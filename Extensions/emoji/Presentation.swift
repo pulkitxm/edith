@@ -31,9 +31,7 @@ enum ControlPresentationContract {
         "emojiFrequentCount", "emojiHotKeyCode", "emojiHotKeyLabel", "emojiHotKeyMods",
         "emojiPopupAt", "emojiSkinTone",
     ]
-    static let readable: Set<String> = writable.union([
-        "emojiEnabled", "emojiUsage", "theme", "appearance", "mainWindowZoom",
-    ])
+    static let readable: Set<String> = writable.union(["emojiEnabled", "emojiUsage"])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(
@@ -80,6 +78,11 @@ enum ControlPresentationContract {
         guard let number = value as? NSNumber else { return false }
         if boolKeys.contains(key) { return CFGetTypeID(number) == CFBooleanGetTypeID() }
         guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }
+        if ["emojiFrequentCount", "emojiSkinTone"].contains(key),
+            number.doubleValue.rounded() != number.doubleValue
+        {
+            return false
+        }
         if let range = ranges[key] { return range.contains(number.doubleValue) }
         return number.doubleValue.rounded() == number.doubleValue && number.doubleValue >= 0
             && number.doubleValue <= Double(UInt32.max)
@@ -116,6 +119,8 @@ final class ControlPresentation {
     private var observer: NSObjectProtocol?
     private var defaultsObserver: NSObjectProtocol?
     private var baseline: [String: Any] = [:]
+    private var reading = false
+    private static let pendingPreferencesKey = "utilityControlsPendingPreferences"
     private var applying = false
     private var stopped = false
     private var revision = 0
@@ -138,13 +143,14 @@ final class ControlPresentation {
     }
 
     func start() {
-        guard !stopped, active, polling == nil else { return }
+        guard !stopped, observer == nil else { return }
         observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
             MainActor.assumeIsolated { self?.changed() }
         }
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.changed() } }
+        guard active else { return }
         polling = Task { [weak self] in
             while !Task.isCancelled {
                 guard let self, !self.stopped else { return }
@@ -155,10 +161,18 @@ final class ControlPresentation {
     }
 
     func changed() {
-        guard !applying, !stopped, active, ready else { return }
+        guard !applying, !stopped, ready else { return }
         let values = ControlPresentationContract.values(
             from: defaults, keys: ControlPresentationContract.writable)
         guard !(values as NSDictionary).isEqual(to: baseline) else { return }
+        if !active {
+            do {
+                try queuePreferences(values)
+                baseline = values
+                error = nil
+            } catch { self.error = error.localizedDescription }
+            return
+        }
         revision += 1
         guard writing == nil else { return }
         writing = Task { [weak self] in
@@ -190,11 +204,52 @@ final class ControlPresentation {
         }
     }
 
+    private func queuePreferences(_ values: [String: Any]) throws {
+        var queued: [String: Any] = [:]
+        var removed: Set<String> = []
+        if let data = defaults.data(forKey: Self.pendingPreferencesKey) {
+            let update = try JSONDecoder().decode(ControlPreferenceUpdate.self, from: data)
+            queued = try ControlPresentationContract.decode(
+                update.values, keys: ControlPresentationContract.writable)
+            guard Set(update.removed).isSubset(of: ControlPresentationContract.writable) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            removed = Set(update.removed)
+        }
+        for (key, value) in values {
+            if let old = baseline[key],
+                NSDictionary(dictionary: [key: old]).isEqual(to: [key: value])
+            {
+                continue
+            }
+            queued[key] = value
+            removed.remove(key)
+        }
+        for key in Set(baseline.keys).subtracting(values.keys) {
+            queued[key] = nil
+            removed.insert(key)
+        }
+        let update = ControlPreferenceUpdate(
+            values: try ControlPresentationContract.encode(queued), removed: Array(removed))
+        defaults.set(try JSONEncoder().encode(update), forKey: Self.pendingPreferencesKey)
+    }
+
     func refresh() async {
-        guard active, !stopped, writing == nil, actions.isEmpty else { return }
+        guard active, !stopped, !reading, writing == nil, actions.isEmpty else { return }
+        reading = true
+        defer { reading = false }
         let revision = revision
         do {
-            let data = try await invoke("emoji.ui.read", Data("{}".utf8))
+            var data = try await invoke("emoji.ui.read", Data("{}".utf8))
+            guard !stopped, revision == self.revision else { return }
+            if !ready, let queued = defaults.data(forKey: Self.pendingPreferencesKey) {
+                _ = try await invoke("emoji.ui.update", queued)
+                guard !stopped, revision == self.revision else { return }
+                if defaults.data(forKey: Self.pendingPreferencesKey) == queued {
+                    defaults.removeObject(forKey: Self.pendingPreferencesKey)
+                }
+                data = try await invoke("emoji.ui.read", Data("{}".utf8))
+            }
             let packet = try JSONDecoder().decode(ControlPresentationPacket.self, from: data)
             let values = try ControlPresentationContract.decode(
                 packet.preferences, keys: ControlPresentationContract.readable)

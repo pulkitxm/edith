@@ -116,4 +116,28 @@ import Testing
         }
         model.stop()
     }
+    @Test func checkedPreferencesRejectOutOfRangeNumbersAndBooleanTypeConfusion() throws {
+        let defaults = fixture()
+        for (key, range) in ControlPresentationContract.ranges {
+            for value in [range.lowerBound - 1, range.upperBound + 1] {
+                let payload = try JSONEncoder().encode(
+                    ControlPreferenceUpdate(
+                        values: ControlPresentationContract.encode([key: value]), removed: []))
+                #expect(throws: (any Error).self) {
+                    try ControlPresentationContract.update(payload, defaults: defaults)
+                }
+                #expect(defaults.object(forKey: key) == nil)
+            }
+        }
+        for key in ControlPresentationContract.boolKeys {
+            let payload = try JSONEncoder().encode(
+                ControlPreferenceUpdate(
+                    values: ControlPresentationContract.encode([key: 1]), removed: []))
+            #expect(throws: (any Error).self) {
+                try ControlPresentationContract.update(payload, defaults: defaults)
+            }
+            #expect(defaults.object(forKey: key) == nil)
+        }
+    }
+
 }
