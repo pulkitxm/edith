@@ -20,6 +20,18 @@ final class HostNotchPanelAssembly {
     private(set) var state: HostNotchPanelState?
     private(set) var failures: [UUID: String] = [:]
     private var stopped = false
+    private var association: (UUID, HostNotchWindowAssociation)?
+
+    func associate(_ context: HostNotchWindowAssociation) throws {
+        guard association == nil, state == nil, !stopped else {
+            throw HostNotchPanelError.staleState
+        }
+        association = (try context.associate(panel), context)
+    }
+
+    func containsLivePresentation(_ id: UUID) -> Bool {
+        !stopped && records.values.contains { $0.request.presentationID == id && $0.lease != nil }
+    }
 
     init(
         create: @escaping Create,
@@ -130,6 +142,10 @@ final class HostNotchPanelAssembly {
         }
         if let failure { throw failure }
         panel.close()
+        if let (token, context) = association {
+            association = nil
+            context.remove(token)
+        }
     }
 
     private func upsert(id: UUID, request: HostExtensionContentRequest, slot: HostNotchNativeSlot?)

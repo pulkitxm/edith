@@ -10,6 +10,7 @@ final class HostNotchPanelCoordinator {
     let ownershipID = UUID()
     private let invoke: Invoke
     private let environment: Environment
+    private let association: HostNotchWindowAssociation?
     private let create: HostNotchPanelAssembly.Create
     private let present: @MainActor (HostNotchPanel) -> Void
     private let now: @MainActor () -> ContinuousClock.Instant
@@ -29,11 +30,12 @@ final class HostNotchPanelCoordinator {
 
     init(
         invoke: @escaping Invoke, environment: @escaping Environment,
+        association: HostNotchWindowAssociation? = nil,
         create: @escaping HostNotchPanelAssembly.Create,
         present: @escaping @MainActor (HostNotchPanel) -> Void = { $0.orderFrontRegardless() },
         now: @escaping @MainActor () -> ContinuousClock.Instant = { .now }
     ) {
-        self.invoke = invoke; self.environment = environment
+        self.invoke = invoke; self.environment = environment; self.association = association
         self.create = create; self.present = present; self.now = now
     }
 
@@ -45,6 +47,14 @@ final class HostNotchPanelCoordinator {
     var pendingCleanupCount: Int {
         assemblies.values.reduce(0) { $0 + $1.pendingCleanupCount }
             + (retired && attachRequest != nil ? 1 : 0)
+    }
+
+    func window(for presentationID: UUID) -> NSWindow? {
+        guard !retired, environment().activeVersions["notchShelf"] == attachRequest?.version else {
+            return nil
+        }
+        return assemblies.values.first(where: { $0.containsLivePresentation(presentationID) })?
+            .panel
     }
 
     func start(version: String, screens: [HostNotchPanelScreen]) async throws {
@@ -241,6 +251,7 @@ final class HostNotchPanelCoordinator {
                         )
                     }
                 )
+                if let association { try assembly.associate(association) }
                 assemblies[state.displayID] = assembly
             }
             try assembly.accept(state, admission: admissions[state.displayID]!)

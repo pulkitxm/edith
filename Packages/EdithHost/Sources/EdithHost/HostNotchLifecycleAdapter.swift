@@ -6,6 +6,12 @@ import Foundation
 import Observation
 
 @MainActor
+struct HostNotchWindowAssociation {
+    let associate: @MainActor (NSWindow) throws -> UUID
+    let remove: @MainActor (UUID) -> Void
+}
+
+@MainActor
 final class HostNotchLifecycleAdapter {
     typealias Make = @MainActor (String) throws -> HostNotchPanelCoordinator
     private let environment: HostNotchPanelCoordinator.Environment
@@ -29,7 +35,10 @@ final class HostNotchLifecycleAdapter {
         self.environment = environment; self.screens = screens; self.make = make
     }
 
-    convenience init(marketplace: HostMarketplace, manager: HostRemoteSessionManager) {
+    convenience init(
+        marketplace: HostMarketplace, manager: HostRemoteSessionManager,
+        association: HostNotchWindowAssociation
+    ) {
         weak var adapter: HostNotchLifecycleAdapter?
         let environment: HostNotchPanelCoordinator.Environment = {
             let versions = marketplace.sessions.versions.filter {
@@ -39,7 +48,9 @@ final class HostNotchLifecycleAdapter {
             }
             let layout = marketplace.surfaceLayouts.notch
             let hidden = Set(
-                layout.tiles.map(\.widget).filter { marketplace.surfaces.privacy.hides($0) })
+                SurfaceWidget.library(extensionIDs: marketplace.entries.map(\.id)).filter {
+                    marketplace.surfaces.privacy.hides($0)
+                })
             return .init(
                 activeVersions: versions, layout: layout, hiddenWidgets: hidden,
                 reservedProviderScenes: manager.presentationCounts(
@@ -48,7 +59,7 @@ final class HostNotchLifecycleAdapter {
         self.init(environment: environment, screens: Self.connectedScreens) { version in
             let peer = try HostNotchEnginePeer(marketplace: marketplace, version: version)
             return HostNotchPanelCoordinator(
-                invoke: peer.invoke, environment: environment,
+                invoke: peer.invoke, environment: environment, association: association,
                 create: { try await HostNotchSceneLease.remote(manager: manager, request: $0) })
         }
         adapter = self
@@ -66,6 +77,11 @@ final class HostNotchLifecycleAdapter {
 
     var pendingCleanupCount: Int { coordinator?.pendingCleanupCount ?? 0 }
     var panelCount: Int { coordinator?.panelCount ?? 0 }
+
+    func window(for presentationID: UUID) -> NSWindow? {
+        guard !stopped, environment().activeVersions["notchShelf"] == version else { return nil }
+        return coordinator?.window(for: presentationID)
+    }
 
     func install() {
         guard !installed, !stopped else { return }
