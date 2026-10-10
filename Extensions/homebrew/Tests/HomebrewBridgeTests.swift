@@ -42,15 +42,36 @@ import Testing
         try await wait { model.loaded && !model.isBusy }
         #expect(model.status?.available == true)
         #expect(model.packages.map(\.name) == ["synthetic-formula"])
-        #expect(bridge.operations == ["homebrew.cache", "homebrew.status", "homebrew.list"])
+        #expect(
+            bridge.operations.first == "homebrew.cache"
+                && bridge.operations.filter { $0 == "homebrew.ui.begin" }.count == 2
+                && bridge.operations.contains("homebrew.ui.poll"))
         #expect((await ownerCache(owner))?.packages[.formula]?.count == 1)
         model.search("synthetic", kind: .formula)
         try await wait { !model.isBusy }
-        #expect(bridge.operations.last == "homebrew.search")
+        #expect(recorder.arguments.contains(["search", "--formula", "synthetic"]))
         client.invalidate()
         model.search("later", kind: .formula)
         try await wait { !model.isBusy }
         #expect(model.errorMessage != nil)
+    }
+
+    @Test func originalCLICancelCanInterruptAnActiveCLIInstall() async throws {
+        let recorder = Requests(); recorder.hold = true
+        let owner = makeOwner(recorder)
+        let install = Task {
+            try await HomebrewCLIExecution.run(
+                .init(arguments: ["install", "synthetic-formula"]), owner: owner)
+        }
+        try await wait { recorder.arguments.contains(["install", "synthetic-formula"]) }
+        let cancelled = try await HomebrewCLIExecution.run(
+            .init(arguments: ["cancel", "--json"]), owner: owner)
+        #expect(
+            cancelled.exitCode == 0 && cancelled.stderr.isEmpty
+                && cancelled.stdout.contains("\"window\": 1"))
+        let stopped = try await install.value
+        #expect(stopped.exitCode == 1 && stopped.stdout.isEmpty && !stopped.stderr.isEmpty)
+        await owner.shutdownAndWait()
     }
 
     @Test func cancelAndDisableDrainOnlyOwnedMutationAndRejectLateReads() async throws {

@@ -3,6 +3,7 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor final class HomebrewEngineCommands {
+    let uiJobs = HomebrewUIJobs()
     let client: HomebrewClient
     private let store: HomebrewListingStore
     private var mutations: [UUID: Task<HomebrewMutationResult, Error>] = [:]
@@ -18,6 +19,9 @@ import Foundation
 
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        if command.hasPrefix("homebrew.ui.") {
+            return try uiJobs.execute(command, payload: payload, owner: self)
+        }
         if command == "homebrew.cli" {
             let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
             return try JSONEncoder().encode(
@@ -90,10 +94,11 @@ import Foundation
         return active
     }
 
-    func shutdown() { stopped = true; cancel() }
+    func shutdown() { stopped = true; cancel(); uiJobs.shutdown() }
 
     func shutdownAndWait() async {
         shutdown()
+        await uiJobs.shutdownAndWait()
         for task in mutations.values { _ = try? await task.value }
     }
 }

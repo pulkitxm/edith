@@ -50,8 +50,40 @@ import Foundation
         _ command: String, input: [String: String] = [:], as type: Value.Type, timeout: Double = 30
     ) async throws -> Value {
         guard let engine else { throw ExtensionPeerError.unavailable }
-        let payload = try JSONEncoder().encode(input)
-        let data = try await engine.invoke(command, payload: payload, timeout: timeout)
+        let data: Data
+        if [
+            "homebrew.status", "homebrew.list", "homebrew.search", "homebrew.install",
+            "homebrew.upgrade", "homebrew.uninstall",
+        ].contains(command) {
+            var values = input; values["operation"] = String(command.dropFirst("homebrew.".count))
+            let begin = try await engine.invoke(
+                "homebrew.ui.begin", payload: JSONEncoder().encode(values))
+            let job = try JSONDecoder().decode(HomebrewUIJobReply.self, from: begin)
+            let poll = try JSONEncoder().encode(["token": job.token.uuidString])
+            data = try await withTaskCancellationHandler {
+                while true {
+                    try Task.checkCancellation()
+                    let response = try await engine.invoke("homebrew.ui.poll", payload: poll)
+                    let state = try JSONDecoder().decode(HomebrewUIJobReply.self, from: response)
+                    guard state.token == job.token else { throw ExtensionPeerError.invalidRequest }
+                    if state.complete {
+                        if let error = state.error { throw ExtensionPeerError.rejected(error) }
+                        guard let result = state.payload else {
+                            throw ExtensionPeerError.invalidRequest
+                        }
+                        return result
+                    }
+                    try await Task.sleep(for: .milliseconds(150))
+                }
+            } onCancel: {
+                Task { @MainActor in
+                    _ = try? await engine.invoke("homebrew.ui.cancel", payload: poll)
+                }
+            }
+        } else {
+            data = try await engine.invoke(
+                command, payload: JSONEncoder().encode(input), timeout: timeout)
+        }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(type, from: data)
