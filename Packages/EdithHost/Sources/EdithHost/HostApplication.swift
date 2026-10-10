@@ -106,10 +106,16 @@ struct HostApplication: App {
                 }
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
                 .tint(themeColor(theme))
-                .tracksWindowVisibility()
+                #if EDITH_GUI_FIXTURE
+                .background { HostGUIVisibilityProbe() }
+                #endif
                 .task {
                     guard marketplace == nil, !startupError else { return }
                     do {
+                        #if EDITH_GUI_FIXTURE
+                        let loaded = try HostGUIFixture.make()
+                        let identity = loaded.identity
+                        #else
                         let support = try FileManager.default.url(
                             for: .applicationSupportDirectory, in: .userDomainMask,
                             appropriateFor: nil, create: true)
@@ -118,6 +124,7 @@ struct HostApplication: App {
                                 ?? "com.pulkit.edith.dev.extension-host-rebuild",
                             supportDirectory: support)
                         let loaded = try HostMarketplace.live(identity: identity)
+                        #endif
                         let gateway = HostCLIGateway(marketplace: loaded)
                         let control = HostCLIServer(identity: identity) { request in
                             try await gateway.execute(request)
@@ -136,6 +143,7 @@ struct HostApplication: App {
                     } catch { startupError = true }
                 }
             }
+            .tracksWindowVisibility()
             .frame(minWidth: 540, minHeight: 400)
             .onAppear {
                 UIScale.apply(zoom); applyAppearance(appearance)
