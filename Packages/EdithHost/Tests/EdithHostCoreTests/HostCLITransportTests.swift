@@ -27,16 +27,23 @@ import Testing
     }
     @Test func maximumEnginePayloadAndStdinRoundTripOverAuthenticatedSocket() async throws {
         let identity = try identity()
-        let server = HostCLIServer(identity: identity) { $0.payload }
+        let server = HostCLIServer(identity: identity) {
+            Self.traceMaximumRoundTrip("server.requestDecoded")
+            return $0.payload
+        }
         try server.start()
         defer { server.shutdown() }
         let payload = Data(
             ("\"" + String(repeating: "?", count: HostCLIRequest.maximumPayload - 2) + "\"").utf8)
         let maximum = try HostCLIRequest(
             action: .invoke, id: "synthetic", operation: "synthetic.echo", payload: payload)
-        #expect(
-            try await Task.detached { try HostCLITransport.invoke(maximum, identity: identity) }
-                .value == payload)
+        Self.traceMaximumRoundTrip("client.maximumInvoke")
+        let maximumResult = try await Task.detached {
+            try HostCLITransport.invoke(maximum, identity: identity)
+        }.value
+        Self.traceMaximumRoundTrip("client.maximumResponseDecoded")
+        #expect(maximumResult == payload)
+        Self.traceMaximumRoundTrip("client.maximumExpectationPassed")
         let input = Data(repeating: 0xFF, count: ExtensionCLIRequest.maximumInputBytes)
         let context = try ExtensionCLIRequest(
             arguments: ["ls", "--json"], standardInput: input,
@@ -46,10 +53,22 @@ import Testing
                 ["calendar", "ls", "--json"], standardInput: input,
                 workingDirectory: context.workingDirectory, interactive: true)
         else { Issue.record("Calendar context missing"); return }
+        Self.traceMaximumRoundTrip("client.calendarInvoke")
         let result = try await Task.detached {
             try HostCLITransport.invoke(request, identity: identity)
         }.value
+        Self.traceMaximumRoundTrip("client.calendarResponseDecoded")
         #expect(try JSONDecoder().decode(ExtensionCLIRequest.self, from: result) == context)
+        Self.traceMaximumRoundTrip("client.calendarExpectationPassed")
+    }
+
+    private static func traceMaximumRoundTrip(_ phase: String) {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["GITHUB_ACTIONS"] == "true",
+            environment["RUNNER_ENVIRONMENT"] == "github-hosted",
+            environment["EDITH_HOSTED_HOST_TESTS"] == "1"
+        else { return }
+        FileHandle.standardError.write(Data("host-test-phase: \(phase)\n".utf8))
     }
 
     @Test func malformedResponsesRejectInvalidPayloadAndNumericExitCodes() throws {
