@@ -12,6 +12,7 @@ public final class HostExtensionSessions {
     }
     @ObservationIgnored public var didChange: @MainActor () -> Void = {}
     @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { id in
+        try await HostRemoteCarrierCheckIn.stop(extensionID: id)
         try await HostRemoteSession.stopAll(extensionID: id)
     }
     public private(set) var versions: [String: String] = [:]
@@ -171,10 +172,13 @@ public final class HostExtensionSessions {
     }
 
     @discardableResult public func shutdown() async -> Bool {
-        for id in Set(workers.keys).union(HostRemoteSession.extensionIDs) {
+        for id in Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
+            HostRemoteCarrierCheckIn.extensionIDs)
+        {
             do { try await disable(id: id, remember: false) } catch { failures.insert(id) }
         }
         return workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
+            && HostRemoteCarrierCheckIn.extensionIDs.isEmpty
     }
 
     private func save(_ ids: Set<String>) {

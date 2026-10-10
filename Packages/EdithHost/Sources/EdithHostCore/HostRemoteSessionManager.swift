@@ -12,6 +12,7 @@ public final class HostRemoteSessionManager {
     private var presentations: [UUID: HostRemoteSceneHandle] = [:]
     private var admissions: [String: Set<UUID>] = [:]
     private var pendingCleanup: [UUID: String] = [:]
+    var checkIn: @MainActor (HostRemoteConfiguration) async throws -> Void
     var discover: @MainActor (String) async throws -> [AppExtensionIdentity] = { point in
         try await Task.detached {
             var iterator = try AppExtensionIdentity.matching(appExtensionPointIDs: point)
@@ -22,10 +23,15 @@ public final class HostRemoteSessionManager {
 
     public init(marketplace: HostMarketplace) {
         self.marketplace = marketplace
+        checkIn = { configuration in
+            try await HostRemoteCarrierCheckIn.register(
+                configuration: configuration, store: marketplace.packageStore)
+        }
         marketplace.sessions.willDisable = { [weak self] id in
             if let self {
                 try await self.stop(extensionID: id)
             } else {
+                try await HostRemoteCarrierCheckIn.stop(extensionID: id)
                 try await HostRemoteSession.stopAll(extensionID: id)
             }
         }
@@ -76,6 +82,8 @@ public final class HostRemoteSessionManager {
         } else {
             if let current = sessions[id] { detach(id); try await current.stop() }
             let task = Task { [self] in
+                try await checkIn(configuration)
+                try Task.checkCancellation()
                 let identities = try await discover(
                     configuration.worker.identifier + ".ExtensionUI")
                 try Task.checkCancellation()
@@ -168,6 +176,7 @@ public final class HostRemoteSessionManager {
         if let task = starting[extensionID] { _ = try? await task.value }
         starting[extensionID] = nil
         detach(extensionID)
+        try await HostRemoteCarrierCheckIn.stop(extensionID: extensionID)
         try await HostRemoteSession.stopAll(extensionID: extensionID)
     }
 

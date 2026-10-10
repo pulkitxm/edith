@@ -36,6 +36,7 @@ import Testing
         let marketplace = try fixture.marketplace()
         let manager = HostRemoteSessionManager(marketplace: marketplace)
         let state = RemoteDiscoveryState()
+        manager.checkIn = { _ in }
         manager.discover = { _ in
             state.starts += 1
             state.active += 1
@@ -79,6 +80,90 @@ import Testing
         #expect(HostRemoteSession.extensionIDs.isEmpty)
         #expect(marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.network.count == 0)
+    }
+
+    @Test func sealedCarrierCheckInPrecedesDiscoveryWithoutStartingSettingsEngine() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace()
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        var checkedIn = false
+        manager.checkIn = { configuration in
+            #expect(configuration.package == fixture.package("1.0.0"))
+            #expect(configuration.uiOnly)
+            checkedIn = true
+        }
+        manager.discover = { _ in
+            #expect(checkedIn)
+            return []
+        }
+        await #expect(throws: HostRemoteAvailabilityError.approvalRequired) {
+            try await manager.scene(
+                for: HostExtensionContentRequest(
+                    extensionID: "sample", location: "settings", section: "extension"))
+        }
+        #expect(checkedIn)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.network.count == 0)
+    }
+
+    @Test func failedCarrierVerificationPreventsPublicDiscoveryAndReleasesLease() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let package = fixture.package("1.0.0")
+        try fixture.store.commit([package])
+        let marketplace = try fixture.marketplace()
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        var discovered = false
+        manager.discover = { _ in
+            discovered = true
+            return []
+        }
+        await #expect(throws: (any Error).self) {
+            try await manager.scene(
+                for: HostExtensionContentRequest(
+                    extensionID: "sample", location: "settings", section: "extension"))
+        }
+        #expect(!discovered)
+        #expect(HostRemoteCarrierCheckIn.extensionIDs.isEmpty)
+        let lease = try PackageFileLock(url: fixture.store.leaseURL(for: package), exclusive: true)
+        lease.close()
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.network.count == 0)
+    }
+
+    @Test func cancellingCheckInCancelsLastAdmissionBeforeDiscovery() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.store.commit([fixture.package("1.0.0")])
+        let marketplace = try fixture.marketplace()
+        let manager = HostRemoteSessionManager(marketplace: marketplace)
+        let state = RemoteDiscoveryState()
+        manager.checkIn = { _ in
+            state.active += 1
+            defer { state.active -= 1 }
+            try await Task.sleep(for: .seconds(20))
+        }
+        manager.discover = { _ in
+            Issue.record("Cancelled registration reached discovery")
+            return []
+        }
+        let task = Task {
+            try await manager.scene(
+                for: HostExtensionContentRequest(
+                    extensionID: "sample", location: "settings", section: "extension"))
+        }
+        let deadline = ContinuousClock.now + .seconds(3)
+        while state.active == 0 {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
+            await Task.yield()
+        }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(state.active == 0)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await marketplace.sessions.shutdown())
     }
 
     @MainActor private final class RemoteDiscoveryState {
