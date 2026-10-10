@@ -401,6 +401,57 @@ import Testing
         #expect(window.styleMask.contains(.fullSizeContentView))
     }
 
+    @Test func originalSidebarFocusesExplicitDetachedSectionsAndOtherwiseUsesMainSelection()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let defaults = fixture.marketplace.surfaces.preferences
+        defaults.set("extensions", forKey: AppStorageKeys.General.mainWindowSection)
+        var focused: [NSWindow] = []
+        let sections = HostSectionWindows(
+            saveFrames: false,
+            makeWindow: {
+                TestWindowHost.window(
+                    contentRect: $0, styleMask: [.titled, .closable, .resizable, .miniaturizable])
+            },
+            present: {
+                focused.append($0); $0.orderBack(nil)
+            }
+        ) { AnyView(Text("Synthetic " + $0.title)) }
+        defer { sections.closeAll() }
+        let detached = try #require(sections.open("home"))
+        let restore = enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: HostWorkspace(
+                marketplace: fixture.marketplace, sectionWindows: sections, defaults: defaults
+            )
+            .environment(\.automaticViewActionsEnabled, false)
+            .environment(\.surfaceSampleContent, true))
+        host.frame = NSRect(x: 0, y: 0, width: 1240, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        let home = try #require(find(host, label: "Home"))
+        #expect((home as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(focused.last === detached)
+        #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "extensions")
+        #expect(sections.openDestinations == ["home"])
+        detached.close()
+        let windows = Set(NSApp.windows.map(\.windowNumber))
+        #expect((home as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "home")
+        #expect(sections.openDestinations.isEmpty)
+        #expect(Set(NSApp.windows.map(\.windowNumber)) == windows)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+        #expect(!TestWindowHost.isExposedOnDesktop(window))
+    }
+
     @Test func originalHomeLayoutControlsChangeLayoutAndOpenItsEditorWithoutStartingWorkers()
         async throws
     {

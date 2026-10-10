@@ -14,6 +14,7 @@ struct HostWorkspace: View {
     var coreSummary = "Not running"
     @State private var permissions = HostPermissions()
     var presenter: (any HostExtensionContentPresenting)? = nil
+    var sectionWindows: HostSectionWindows? = nil
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
         var selection = "home"
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
@@ -48,14 +49,14 @@ struct HostWorkspace: View {
         panelShortcutChanged: @escaping () -> Void = {},
         additionalSettings: ((String) -> AnyView?)? = nil,
         coreOnline: Bool = false, coreSummary: String = "Not running",
-        defaults: UserDefaults = SharedDefaults.store
+        sectionWindows: HostSectionWindows? = nil, defaults: UserDefaults = SharedDefaults.store
     ) {
         self.marketplace = marketplace
         self.updater = updater ?? HostUpdater(startingUpdater: false)
         self.showWelcome = showWelcome; self.panelShortcutChanged = panelShortcutChanged
         self.additionalSettings = additionalSettings
         self.coreOnline = coreOnline; self.coreSummary = coreSummary
-        self.presenter = presenter
+        self.presenter = presenter; self.sectionWindows = sectionWindows
         navigationDefaults = defaults
         _selection = AppStorage(
             wrappedValue: "home", AppStorageKeys.General.mainWindowSection, store: defaults)
@@ -228,10 +229,12 @@ struct HostWorkspace: View {
         let expandable = !page.sections.isEmpty || pages.contains { $0.parentID == page.id }
         return ZStack(alignment: .trailing) {
             Button {
-                if expandable, destination.id == page.id {
+                if page.detachable, NSEvent.modifierFlags.contains(.command), let sectionWindows {
+                    _ = sectionWindows.open(page.id)
+                } else if expandable, destination.id == page.id {
                     toggle(page)
                 } else {
-                    selection = page.id
+                    select(page.id)
                 }
             } label: {
                 HStack(spacing: UIScale.pt(11)) {
@@ -272,11 +275,15 @@ struct HostWorkspace: View {
         -> some View
     {
         Button {
-            selection = parent.id
             if parent.id == "settings" {
                 settings = section.id
             } else {
                 maintenanceSection = section.id
+            }
+            if NSEvent.modifierFlags.contains(.command), let sectionWindows {
+                _ = sectionWindows.open(parent.id)
+            } else {
+                select(parent.id)
             }
         } label: {
             HStack(spacing: UIScale.pt(9)) {
@@ -318,94 +325,19 @@ struct HostWorkspace: View {
             .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
         }.background(DashSkin.paper(scheme == .dark))
     }
-    @ViewBuilder private var detail: some View {
-        switch destination.id {
-        case "home":
-            HostHomePage(
-                marketplace: marketplace, customize: customize,
-                extensions: { selection = "extensions" }, openExtension: openExtension)
-        case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
-        case "settings": HostSettingsContainer(category: $settings) { settingsContent }
-        case "about": HostAboutPage(identity: marketplace.identity)
-        default:
-            if destination.id == "appMaintenance",
-                let child = HostNavigationCatalog.maintenance.first(where: {
-                    $0.id == maintenanceSection
-                }), let id = child.extensionID
-            {
-                content(id, section: child.id)
-            } else if let id = destination.extensionID {
-                content(id)
-            } else {
-                landing
-            }
-        }
-    }
-    @ViewBuilder private var settingsContent: some View {
-        switch settings {
-        case "surfaces": HostSurfaceEditor(marketplace: marketplace)
-        case "general":
-            HostSettingsPage(
-                marketplace: marketplace, permissions: permissions, defaults: defaults,
-                openPermissions: { settings = "permissions" }, showWelcome: showWelcome,
-                panelShortcutChanged: panelShortcutChanged)
-        case "permissions":
-            HostPermissionsPane(
-                marketplace: marketplace, permissions: permissions,
-                openExtensions: { selection = "extensions" })
-        case "updates": HostUpdatesPane(updater: updater)
-        case "shortcuts":
-            HostShortcutsPane(marketplace: marketplace, panelShortcutChanged: panelShortcutChanged)
-        default:
-            if let section = HostNavigationCatalog.settings.first(where: { $0.id == settings }),
-                let id = section.extensionID
-            {
-                content(id, section: settings)
-            } else if let view = additionalSettings?(settings) {
-                view
-            } else {
-                ContentUnavailableView(
-                    HostNavigationCatalog.settings.first(where: { $0.id == settings })?.title
-                        ?? "General", systemImage: "gearshape")
-            }
-        }
-    }
-    private func openExtension(_ id: String) {
-        if let route = HostNavigationCatalog.route(extensionID: id) {
-            if route.page == "appMaintenance", let section = route.section {
-                maintenanceSection = section
-            }
-            selection = route.page
-        } else {
-            defaults.set(id, forKey: HostMarketplaceKeys.expandedExtension)
-            selection = "extensions"
-        }
-    }
-    private func content(_ id: String, section: String? = nil) -> some View {
-        HostExtensionContent(
-            marketplace: marketplace, extensionID: id,
-            location: destination.id == "settings" ? "settings" : "main",
-            section: section ?? destination.id,
-            presenter: presenter, openMarketplace: { selection = "extensions" })
-    }
-    private var landing: some View {
-        PageScaffold(width: .fluid) {
-            PageHeader(destination.title)
-        } content: {
-            ForEach(
-                marketplace.entries.filter {
-                    active.contains($0.id)
-                        && (HostNavigationCatalog.suiteProviders[destination.suite ?? ""] ?? [])
-                            .contains($0.id)
-                }
-            ) { entry in
-                HostSurfaceCard(
-                    marketplace: marketplace, target: .home, tile: .init(.ability(entry.id))
-                )
-            }
-        }
+    private var detail: some View {
+        HostPageContent(
+            marketplace: marketplace, updater: updater, permissions: permissions,
+            destination: destination, settings: $settings, maintenanceSection: $maintenanceSection,
+            presenter: presenter, showWelcome: showWelcome,
+            panelShortcutChanged: panelShortcutChanged, additionalSettings: additionalSettings,
+            defaults: defaults, select: select)
     }
     private func customize() { settings = "surfaces"; selection = "settings" }
+    private func select(_ id: String) {
+        guard sectionWindows?.focusExisting(id) != true else { return }
+        selection = id
+    }
     private func installKeys() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
@@ -425,7 +357,7 @@ struct HostWorkspace: View {
                         for: command, count: pages.count,
                         current: pages.firstIndex(of: destination) ?? 0)
                 else { return false }
-                selection = pages[index].id; return true
+                select(pages[index].id); return true
             }
             return handled ? nil : event
         }
