@@ -398,9 +398,16 @@ import Testing
 
     @Test func originalHomeMeasuresSharedAggregateCardsOffscreenAtBothLayoutsAndZooms() async throws
     {
+        try await measureHome([saved(.desk), saved(.media)])
+    }
+
+    @Test func customAgentsAndFocusHomeCardsMeasureOffscreenAtBothLayoutsAndZooms() async throws {
+        try await measureHome([saved(.agents), saved(.focus)])
+    }
+
+    private func measureHome(_ tiles: [SurfaceTile]) async throws {
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
-        let tiles = [saved(.agents), saved(.focus)]
         try fixture.publish(versions(for: tiles))
         _ = try fixture.attach()
         let controller = fixture.bind()
