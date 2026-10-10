@@ -37,7 +37,9 @@ import Testing
         let accounts = MusicAccounts(
             defaults: defaults,
             spotify: MusicSpotifySession(libraryURL: nil, defaults: defaults), pauseLocal: {})
-        let worker = MusicWorker(accounts: accounts, startImmediately: false)
+        let worker = try MusicWorker(
+            admission: { nil }, makeLiveResources: { .live(accounts: accounts) },
+            startImmediately: false)
         let service = MusicUIService(worker: worker, version: "1.2.3", invalidateHostSlots: {})
         let model = EmbeddedMusicSettingsModel(expectedVersion: "1.2.3", invoke: service.execute)
         defer { model.stop(); service.stop(); worker.stop() }
