@@ -41,9 +41,7 @@ enum AgentActivityFixture {
         let config = URL(fileURLWithPath: home).appendingPathComponent(".claude/settings.json")
         let bytes = try Data(contentsOf: config)
         if active {
-            guard String(decoding: bytes, as: UTF8.self).contains("activity.hook.claude") else {
-                throw HostWorkerError.invalidResponse
-            }
+            try validateSyntheticHooks(bytes)
         } else {
             guard bytes == Data("{\n  \"synthetic\": true\n}\n".utf8) else {
                 throw HostWorkerError.invalidResponse
@@ -200,9 +198,7 @@ enum AgentActivityFixture {
             else { throw HostWorkerError.invalidResponse }
             replacement.append(chunk.bytes)
         }
-        guard String(decoding: replacement, as: UTF8.self).contains("activity.hook.claude") else {
-            throw HostWorkerError.invalidResponse
-        }
+        try validateSyntheticHooks(replacement)
         let applied = try JSONDecoder().decode(
             Applied.self,
             from: await invoke(
@@ -210,6 +206,35 @@ enum AgentActivityFixture {
                 JSONSerialization.data(withJSONObject: ["id": preview.id.uuidString])))
         guard applied.url == configuration, applied.changed,
             try readConfiguration() == replacement
+        else { throw HostWorkerError.invalidResponse }
+    }
+
+    static func validateSyntheticHooks(_ bytes: Data) throws {
+        guard bytes.count <= 2_097_152,
+            let object = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+            object["synthetic"] as? Bool == true,
+            let hooks = object["hooks"] as? [String: [[String: Any]]],
+            Set(["PreToolUse", "PermissionRequest", "SubagentStart"]).isSubset(of: Set(hooks.keys)),
+            hooks.values.allSatisfy({ groups in
+                !groups.isEmpty
+                    && groups.allSatisfy { group in
+                        guard let handlers = group["hooks"] as? [[String: Any]], !handlers.isEmpty
+                        else {
+                            return false
+                        }
+                        return handlers.allSatisfy { handler in
+                            guard handler["type"] as? String == "command",
+                                let command = handler["command"] as? String
+                            else { return false }
+                            return command.hasPrefix("set -- ")
+                                && command.contains(
+                                    " agent activity hook --provider claude --integration-id edith-surfaces;"
+                                )
+                                && command.contains(
+                                    "exec /usr/bin/env EDITH_PROVIDER_HOOK=edith-surfaces \"$@\"")
+                        }
+                    }
+            })
         else { throw HostWorkerError.invalidResponse }
     }
 
