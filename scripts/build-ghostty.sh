@@ -85,8 +85,8 @@ rm -rf "$out"
 cp -R "$built" "$out"
 
 lib="$(find "$out" -name 'libghostty-*.a' | head -1)"
-symbols="$(nm -g "$lib" 2>/dev/null | grep -c -E ' T _ghostty_(config_new|surface_external_output|surface_external_exit)$' || true)"
-if [ "$symbols" != "3" ]; then
+symbols="$(nm -g "$lib" 2>/dev/null | grep -c -E ' T _ghostty_(config_new|surface_external_output|surface_external_set_termios|surface_external_exit)$' || true)"
+if [ "$symbols" != "4" ]; then
   echo "built archive is missing the libghostty API" >&2
   exit 1
 fi

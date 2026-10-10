@@ -1,5 +1,5 @@
 diff --git a/include/ghostty.h b/include/ghostty.h
-index 518af3ff2..e4248bf7d 100644
+index 518af3ff2..15573aed7 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
 @@ -505,6 +505,15 @@ typedef enum {
@@ -26,11 +26,12 @@ index 518af3ff2..e4248bf7d 100644
  } ghostty_surface_config_s;
 
  typedef struct {
-@@ -1181,6 +1191,8 @@ GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
+@@ -1181,6 +1191,9 @@ GHOSTTY_API void ghostty_surface_draw(ghostty_surface_t);
  GHOSTTY_API void ghostty_surface_set_content_scale(ghostty_surface_t, double, double);
  GHOSTTY_API void ghostty_surface_set_focus(ghostty_surface_t, bool);
  GHOSTTY_API void ghostty_surface_set_occlusion(ghostty_surface_t, bool);
 +GHOSTTY_API bool ghostty_surface_external_output(ghostty_surface_t, const uint8_t*, size_t);
++GHOSTTY_API bool ghostty_surface_external_set_termios(ghostty_surface_t, bool, bool);
 +GHOSTTY_API bool ghostty_surface_external_exit(ghostty_surface_t);
  GHOSTTY_API void ghostty_surface_set_size(ghostty_surface_t, uint32_t, uint32_t);
  GHOSTTY_API ghostty_surface_size_s ghostty_surface_size(ghostty_surface_t);
@@ -126,7 +127,7 @@ index 8eddc14c8..33bc3d6e5 100644
      const runtime_str = try std.fmt.allocPrint(alloc, "{d} ms", .{info.runtime_ms});
 
 diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
-index 525bc856d..cf065af38 100644
+index 525bc856d..06adc8f83 100644
 --- a/src/apprt/embedded.zig
 +++ b/src/apprt/embedded.zig
 @@ -454,6 +454,8 @@ pub const Surface = struct {
@@ -166,7 +167,7 @@ index 525bc856d..cf065af38 100644
      pub fn core(self: *Surface) *CoreSurface {
          return &self.core_surface;
      }
-@@ -1953,6 +1962,27 @@ pub const CAPI = struct {
+@@ -1953,6 +1962,35 @@ pub const CAPI = struct {
 
      /// Update the size of a surface. This will trigger resize notifications
      /// to the pty and the renderer.
@@ -179,11 +180,19 @@ index 525bc856d..cf065af38 100644
 +        return true;
 +    }
 +
++    export fn ghostty_surface_external_set_termios(surface: *Surface, canonical: bool, echo: bool) bool {
++        const core_surface = &surface.core_surface;
++        if (core_surface.io.backend != .external or core_surface.io.backend.external.stopped.load(.acquire)) return false;
++        core_surface.handleMessage(.{ .password_input = canonical and !echo }) catch return false;
++        return true;
++    }
++
 +    export fn ghostty_surface_external_exit(surface: *Surface) bool {
 +        const core_surface = &surface.core_surface;
 +        if (core_surface.io.backend != .external) return false;
 +        core_surface.io.backend.external.stop();
 +        core_surface.child_exited = true;
++        core_surface.handleMessage(.{ .password_input = false }) catch {};
 +        core_surface.renderer_state.mutex.lockUncancelable(global.io());
 +        defer core_surface.renderer_state.mutex.unlock(global.io());
 +        core_surface.io.terminal.modes.set(.cursor_visible, false);
@@ -386,10 +395,10 @@ index 00000000..58edd07b
 +}
 diff --git a/vendor/ghostty/tests/external_io.m b/tests/external_io.m
 new file mode 100644
-index 00000000..887d4a1e
+index 00000000..f0873b84
 --- /dev/null
 +++ b/tests/external_io.m
-@@ -0,0 +1,361 @@
+@@ -0,0 +1,394 @@
 +#import <AppKit/AppKit.h>
 +#import <ghostty.h>
 +#import <IOSurface/IOSurface.h>
@@ -425,6 +434,8 @@ index 00000000..887d4a1e
 +static uint32_t resize_count;
 +static bool closed_alive;
 +static uint32_t close_count;
++static uint32_t secure_input_count;
++static ghostty_action_secure_input_e secure_input_action;
 +
 +static void require(bool passed, const char *message) {
 +    if (passed) return;
@@ -480,7 +491,12 @@ index 00000000..887d4a1e
 +}
 +
 +static void wakeup(void *context) {}
-+static bool action(ghostty_app_t app, ghostty_target_s target, ghostty_action_s value) { return false; }
++static bool action(ghostty_app_t app, ghostty_target_s target, ghostty_action_s value) {
++    if (value.tag != GHOSTTY_ACTION_SECURE_INPUT) return false;
++    secure_input_count++;
++    secure_input_action = value.action.secure_input;
++    return true;
++}
 +static ghostty_clipboard_read_result_e read_clipboard(void *context, ghostty_clipboard_e clipboard,
 +                                                      void *state, const char *const *mimes,
 +                                                      size_t count, bool list) {
@@ -616,9 +632,17 @@ index 00000000..887d4a1e
 +        options.platform_tag = GHOSTTY_PLATFORM_MACOS;
 +        options.platform.macos.nsview = (__bridge void *)view;
 +        options.command = "/usr/bin/false";
++        ghostty_external_io_s invalid_io = {.userdata = &input_count, .resize_cb = resize_engine};
++        options.external_io = &invalid_io;
++        require(ghostty_surface_new(app, &options) == NULL, "missing input callback rejected without process fallback");
++        invalid_io.write_cb = send_input;
++        invalid_io.resize_cb = NULL;
++        require(ghostty_surface_new(app, &options) == NULL, "missing resize callback rejected without process fallback");
 +        options.external_io = &io;
 +        ghostty_surface_t surface = ghostty_surface_new(app, &options);
 +        require(surface != NULL, "process-free native surface creation");
++        require(ghostty_surface_external_output(surface, NULL, 0), "empty output accepted");
++        require(!ghostty_surface_external_output(surface, NULL, 1), "invalid output buffer rejected");
 +        io.userdata = NULL;
 +        io.write_cb = NULL;
 +        io.resize_cb = NULL;
@@ -636,6 +660,16 @@ index 00000000..887d4a1e
 +                "native dimensions reach engine resize callback");
 +        pthread_mutex_unlock(&capture_lock);
 +        require(size.columns > 0 && size.rows > 0, "native font grid dimensions");
++        require(tcgetattr(engine_fd, &attributes) == 0, "owning engine termios snapshot");
++        require(ghostty_surface_external_set_termios(surface, (attributes.c_lflag & ICANON) != 0,
++                                                    (attributes.c_lflag & ECHO) != 0), "engine termios mode projected");
++        require(secure_input_count == 1 && secure_input_action == GHOSTTY_SECURE_INPUT_ON,
++                "original password input heuristic delivers secure input action");
++        require(ghostty_surface_external_set_termios(surface, true, false) && secure_input_count == 1,
++                "unchanged password input mode emits no redundant action");
++        require(ghostty_surface_external_set_termios(surface, false, false), "engine raw mode projected");
++        require(secure_input_count == 2 && secure_input_action == GHOSTTY_SECURE_INPUT_OFF,
++                "original raw mode releases secure input action");
 +        ghostty_surface_request_close(surface);
 +        require(close_count == 1, "user close delivered to owner");
 +        ghostty_surface_text(surface, "synthetic-input\r", strlen("synthetic-input\r"));
@@ -652,12 +686,13 @@ index 00000000..887d4a1e
 +        input_count = 0;
 +        pthread_mutex_unlock(&capture_lock);
 +        require(![surface_text(surface) containsString:@"alt-screen"], "alternate screen restored");
-+        const uint8_t output[] = "\033[2J\033[H\033[38;2;0;255;0mVT-state\033[0m\033[3;4H\033[6n";
++        const uint8_t output[] = "\033[2J\033[H\033[38;2;0;255;0mVT-state \xE2\x98\x83\033[0m\033[3;4H\033[6n";
 +        for (size_t index = 0; index < sizeof(output) - 1; index++) {
 +            require(ghostty_surface_external_output(surface, output + index, 1), "split VT sequence accepted");
 +        }
 +        drain(app, surface, 10);
 +        require([surface_text(surface) containsString:@"VT-state"], "split VT cursor and SGR parsed");
++        require([surface_text(surface) containsString:@"\u2603"], "split UTF8 output preserved by native parser");
 +        ghostty_surface_draw(surface);
 +        IOSurfaceRef frame = (__bridge IOSurfaceRef)view.layer.contents;
 +        require(frame != NULL && CFGetTypeID(frame) == IOSurfaceGetTypeID(), "native Metal IOSurface rendered offscreen");
@@ -714,6 +749,9 @@ index 00000000..887d4a1e
 +        require(input_count > 12 && memcmp(input_bytes, "\033[<0;", 5) == 0 && input_bytes[input_count - 1] == 'm', "original SGR mouse protocol encoded");
 +        input_count = 0;
 +        pthread_mutex_unlock(&capture_lock);
++        require(ghostty_surface_external_set_termios(surface, true, false), "password state restored before exit");
++        require(secure_input_count == 3 && secure_input_action == GHOSTTY_SECURE_INPUT_ON,
++                "secure input balanced before engine exit");
 +        atomic_store(&hold_input, true);
 +        ghostty_surface_text(surface, "x", 1);
 +        for (unsigned attempt = 0; attempt < 300 && !atomic_load(&input_entered); attempt++) usleep(10000);
@@ -728,6 +766,10 @@ index 00000000..887d4a1e
 +        input_count = 0;
 +        pthread_mutex_unlock(&capture_lock);
 +        require(ghostty_surface_process_exited(surface), "native lifecycle marked exited");
++        require(secure_input_count == 4 && secure_input_action == GHOSTTY_SECURE_INPUT_OFF,
++                "engine exit releases original secure input state");
++        require(!ghostty_surface_external_set_termios(surface, true, false) && secure_input_count == 4,
++                "stale engine mode update rejected after exit");
 +        require(!ghostty_surface_external_output(surface, output, sizeof(output) - 1), "stale output rejected");
 +        require(!ghostty_surface_needs_confirm_quit(surface), "exited surface needs no process confirmation");
 +        ghostty_surface_text(surface, "ignored", 7);
@@ -746,7 +788,7 @@ index 00000000..887d4a1e
 +        require(NSApp.windows.count == 0, "no visible or hidden windows created");
 +        require(atomic_load(&process_calls) == 0 && atomic_load(&pty_calls) == 0,
 +                "UI lifetime made zero child-process or PTY creation calls");
-+        puts("external IO: native Metal glyphs, real PTY input/resize, split VT, alternate screen, DSR, control/mouse/linefeed input, callback ownership, exit barrier and process audit passed");
++        puts("external IO: native Metal glyphs, real PTY input/resize, split VT, alternate screen, DSR, control/mouse/linefeed input, callback ownership, termios password actions, exit barrier and process audit passed");
 +        puts("renderer process creation calls: 0; renderer PTY creation calls: 0; visible windows: 0");
 +    }
 +    return 0;
