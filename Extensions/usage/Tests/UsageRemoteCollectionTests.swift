@@ -4,6 +4,49 @@ import Testing
 @testable import UsageExtension
 
 @Suite(.serialized) struct UsageRemoteCollectionTests {
+    @Test func savedMachinesUseTheAuthoritativeISO8601RegistrySchema() throws {
+        let directory = temporary()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("machines.json")
+        let machine = Machine(
+            name: "Synthetic remote", host: "builder.invalid", port: 2222,
+            username: "test", createdAt: Date(timeIntervalSince1970: 1_791_504_000))
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([machine]).write(to: file)
+        #expect(MachineRegistry.machines(file: file) == [machine])
+        try JSONEncoder().encode([machine]).write(to: file)
+        #expect(MachineRegistry.machines(file: file).isEmpty)
+        try FileManager.default.removeItem(at: file)
+        let target = directory.appendingPathComponent("target.json")
+        try encoder.encode([machine]).write(to: target)
+        try FileManager.default.createSymbolicLink(at: file, withDestinationURL: target)
+        #expect(MachineRegistry.machines(file: file).isEmpty)
+    }
+
+    @Test func remoteProjectPathsAcceptOnlyAbsoluteASCIIWindowsDrives() throws {
+        for path in [
+            "C:/workspace/project", "z:\\workspace\\project", "C:/", "Z:\\", "/remote/project",
+        ] {
+            try UsageRemoteProjectMetadata(
+                cwd: path, root: path, repositoryID: "sample", repositoryName: "Sample",
+                folderName: "sample"
+            ).validate()
+        }
+        for path in [
+            "1:\\project", "é:\\project", "_: /project", "C:project", "C:", "CC:/project",
+            "relative/project", "\\project",
+        ] {
+            #expect(throws: UsageNativeFailure.self) {
+                try UsageRemoteProjectMetadata(
+                    cwd: path, root: path, repositoryID: "sample", repositoryName: "Sample",
+                    folderName: "sample"
+                ).validate()
+            }
+        }
+    }
+
     @Test func remoteProjectsNeverResolveAnIdenticalLocalWorkingDirectory() async throws {
         let fixture = temporary()
         defer { try? FileManager.default.removeItem(at: fixture) }

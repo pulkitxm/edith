@@ -44,6 +44,14 @@ let package = Package(
             path: "bifrost/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
 
         .target(
+            name: "MachinesExtension",
+            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            path: "machines", exclude: ["Tests", "Runtime.swift", "UI", "Package.swift"],
+            resources: [.process("Resources")], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(
+            name: "MachinesExtensionTests", dependencies: ["MachinesExtension"],
+            path: "machines/Tests", exclude: ["UI"], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
             path: "clipboard", exclude: ["Tests", "Runtime.swift"],

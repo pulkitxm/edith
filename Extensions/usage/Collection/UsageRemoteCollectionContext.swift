@@ -43,8 +43,10 @@ public struct UsageRemoteProjectMetadata: Codable, Equatable, Sendable {
 
     private static func path(_ value: String) -> Bool {
         guard text(value, maximum: 4_096) else { return false }
-        return value.hasPrefix("/")
-            || (value.count >= 3 && value.dropFirst().hasPrefix(":\\"))
+        if value.hasPrefix("/") { return true }
+        let bytes = Array(value.utf8.prefix(3))
+        return bytes.count == 3 && ((65...90).contains(bytes[0]) || (97...122).contains(bytes[0]))
+            && bytes[1] == 58 && (bytes[2] == 47 || bytes[2] == 92)
     }
 
     var project: UsageNativeProject {
