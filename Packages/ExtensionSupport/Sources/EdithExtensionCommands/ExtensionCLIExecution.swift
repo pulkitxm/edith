@@ -8,16 +8,40 @@ import Foundation
     public static func run<Command: AsyncParsableCommand>(
         _ root: Command.Type, arguments: [String]
     ) async throws -> ExtensionCLIReply {
-        try ExtensionCLIRequest(arguments: arguments).validate()
+        try await run(root, request: ExtensionCLIRequest(arguments: arguments))
+    }
+
+    public static func run<Command: AsyncParsableCommand>(
+        _ root: Command.Type, request: ExtensionCLIRequest
+    ) async throws -> ExtensionCLIReply {
+        let buffer = CLIOutputBuffer()
+        let code = try await run(root, request: request) { text, error in
+            buffer.append(text, error: error)
+        }
+        return try buffer.reply(exitCode: code)
+    }
+
+    public static func run<Command: AsyncParsableCommand>(
+        _ root: Command.Type, request: ExtensionCLIRequest,
+        sink: @escaping @Sendable (String, Bool) -> Void
+    ) async throws -> Int32 {
+        try request.validate()
         guard !running else {
             throw ExtensionPeerError.rejected("Another terminal command is running.")
         }
         try Task.checkCancellation()
         running = true
-        let buffer = CLIOutputBuffer()
-        let previous = CLIOut.writeOutput
-        CLIOut.writeOutput = { text, error in buffer.append(text, error: error) }
-        defer { CLIOut.writeOutput = previous; running = false }
+        defer { running = false }
+        return try await ExtensionCLIContext.$request.withValue(request) {
+            try await ExtensionCLIContext.$outputSink.withValue(sink) {
+                try await execute(root, arguments: request.arguments)
+            }
+        }
+    }
+
+    private static func execute<Command: AsyncParsableCommand>(
+        _ root: Command.Type, arguments: [String]
+    ) async throws -> Int32 {
         var exitCode: Int32 = 0
         do {
             var parsed = try root.parseAsRoot(arguments)
@@ -42,7 +66,7 @@ import Foundation
             exitCode = resolved == .validationFailure ? 2 : resolved.rawValue
         }
         try Task.checkCancellation()
-        return try buffer.reply(exitCode: exitCode)
+        return exitCode
     }
 }
 

@@ -1,16 +1,35 @@
 import Foundation
 
 public struct ExtensionCLIRequest: Codable, Equatable, Sendable {
+    public static let maximumInputBytes = 4 * 1_024 * 1_024
     public let arguments: [String]
-    public init(arguments: [String]) throws {
+    public let standardInput: Data
+    public let workingDirectory: String
+    public let interactive: Bool
+
+    public init(
+        arguments: [String], standardInput: Data = Data(),
+        workingDirectory: String = "/", interactive: Bool = false
+    ) throws {
         guard arguments.count <= 128,
             arguments.allSatisfy({ $0.utf8.count <= 4_096 && !$0.utf8.contains(0) }),
             arguments.reduce(0, { $0 + $1.utf8.count }) <= 16_384
         else { throw ExtensionPeerError.invalidRequest }
+        guard standardInput.count <= Self.maximumInputBytes,
+            workingDirectory.hasPrefix("/"), workingDirectory.utf8.count <= 4_096,
+            !workingDirectory.utf8.contains(0)
+        else { throw ExtensionPeerError.invalidRequest }
         self.arguments = arguments
+        self.standardInput = standardInput
+        self.workingDirectory = workingDirectory
+        self.interactive = interactive
     }
 
-    public func validate() throws { _ = try Self(arguments: arguments) }
+    public func validate() throws {
+        _ = try Self(
+            arguments: arguments, standardInput: standardInput,
+            workingDirectory: workingDirectory, interactive: interactive)
+    }
 }
 
 public struct ExtensionCLIReply: Codable, Equatable, Sendable {
