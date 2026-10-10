@@ -4,12 +4,16 @@ import Foundation
 
 public enum WorkerFixtureError: Error { case invalid }
 
+public enum WorkerFixtureRole: String, Sendable { case helper, app }
+
 public struct WorkerFixtureAdmission: Sendable {
+    public let role: WorkerFixtureRole
     public let extensionID: String
     public let home: URL
     public let dataDirectory: URL
 
-    private init(extensionID: String, home: URL, dataDirectory: URL) {
+    private init(extensionID: String, role: WorkerFixtureRole, home: URL, dataDirectory: URL) {
+        self.role = role
         self.extensionID = extensionID
         self.home = home
         self.dataDirectory = dataDirectory
@@ -44,7 +48,9 @@ public struct WorkerFixtureAdmission: Sendable {
             "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker",
             "emoji", "presenter", "keystrokeHighlight",
         ]
-        guard helperIDs.contains(extensionID), let identifier = hostIdentifier,
+        let role: WorkerFixtureRole = extensionID == "music" ? .app : .helper
+        guard (helperIDs.contains(extensionID) || extensionID == "music"),
+            let identifier = hostIdentifier,
             identifier.hasPrefix(prefix),
             UUID(uuidString: String(identifier.dropFirst(prefix.count))) != nil,
             context["hostIdentifier"] as? String == identifier,
@@ -55,7 +61,7 @@ public struct WorkerFixtureAdmission: Sendable {
             let homePath = environment["EDITH_EXTENSION_FIXTURE_HOME"],
             let dataPath = environment["EDITH_EXTENSION_DATA_ROOT"],
             context["dataDirectory"] as? String == dataPath,
-            roleIdentifier == "com.pulkit.edith.extensions." + extensionID + ".helper",
+            roleIdentifier == "com.pulkit.edith.extensions." + extensionID + "." + role.rawValue,
             let version, validComponent(version), let hostABI, validComponent(hostABI)
         else { throw WorkerFixtureError.invalid }
         let home = URL(fileURLWithPath: homePath, isDirectory: true)
@@ -69,7 +75,7 @@ public struct WorkerFixtureAdmission: Sendable {
                 "/Extensions/" + extensionID + "/" + hostABI + "/arm64/" + version + "/"
                     + extensionID
                     + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
-                    + extensionID + "/helper.bundle")
+                    + extensionID + "/" + role.rawValue + ".bundle")
         else { throw WorkerFixtureError.invalid }
         for directory in [root, home, data, hostBundle, roleDirectory] {
             try validate(directory, directory: true)
@@ -99,7 +105,7 @@ public struct WorkerFixtureAdmission: Sendable {
             values["roleDirectory"] as? String == roleDirectory.path,
             values["version"] as? String == version, values["hostABI"] as? String == hostABI
         else { throw WorkerFixtureError.invalid }
-        return Self(extensionID: extensionID, home: home, dataDirectory: data)
+        return Self(extensionID: extensionID, role: role, home: home, dataDirectory: data)
     }
 
     private static func validComponent(_ value: String) -> Bool {

@@ -5,15 +5,26 @@ import Testing
 @Suite struct WorkerFixtureAdmissionTests {
     @Test(arguments: [
         "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji", "presenter",
-        "keystrokeHighlight",
+        "keystrokeHighlight", "music",
     ])
     func admitsBoundOwnedFixture(_ owner: String) throws {
         let fixture = try Fixture(owner: owner)
         defer { fixture.remove() }
         let admission = try #require(try fixture.admit())
         #expect(admission.extensionID == owner)
+        #expect(admission.role == (owner == "music" ? .app : .helper))
         #expect(admission.home.path == fixture.home.path)
         #expect(admission.dataDirectory.path == fixture.data.path)
+    }
+
+    @Test(arguments: [
+        "music", "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+        "presenter", "keystrokeHighlight",
+    ])
+    func rejectsWrongRole(_ owner: String) throws {
+        let fixture = try Fixture(owner: owner); defer { fixture.remove() }
+        let wrong = "com.pulkit.edith.extensions." + owner + (owner == "music" ? ".helper" : ".app")
+        #expect(throws: (any Error).self) { try fixture.admit(roleIdentifierOverride: wrong) }
     }
 
     @Test func productionHasNoFixture() throws {
@@ -81,7 +92,7 @@ import Testing
             role = root.appendingPathComponent(
                 "support/Extensions/" + owner + "/edith-host-2/arm64/1.0.0/" + owner
                     + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
-                    + owner + "/helper.bundle")
+                    + owner + "/" + (owner == "music" ? "app" : "helper") + ".bundle")
             for directory in [home, data, role, root.appendingPathComponent("Fixture.app")] {
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true,
@@ -110,12 +121,13 @@ import Testing
                 [.posixPermissions: 0o600], ofItemAtPath: markerURL.path)
         }
 
-        func admit() throws -> WorkerFixtureAdmission? {
+        func admit(roleIdentifierOverride: String? = nil) throws -> WorkerFixtureAdmission? {
             try WorkerFixtureAdmission.admit(
                 extensionID: owner, context: context as NSDictionary, environment: environment,
                 hostIdentifier: identifier, hostBundle: root.appendingPathComponent("Fixture.app"),
                 roleDirectory: role,
-                roleIdentifier: "com.pulkit.edith.extensions." + owner + ".helper",
+                roleIdentifier: roleIdentifierOverride ?? "com.pulkit.edith.extensions." + owner
+                    + "." + (owner == "music" ? "app" : "helper"),
                 version: "1.0.0", hostABI: "edith-host-2")
         }
 
