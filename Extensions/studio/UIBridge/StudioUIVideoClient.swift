@@ -236,10 +236,7 @@ import Foundation
         synchronizing?.cancel(); observing?.cancel(); action?.cancel(); relinkPanel?.cancel(nil)
         synchronizing = nil; observing = nil; action = nil
         if created {
-            Task {
-                let _: [String: String]? = try? await facade.read(
-                    "studio.ui.video.close", object: ["id": id.uuidString])
-            }
+            facade.cleanup("studio.ui.video.close", object: ["id": id.uuidString])
         }
     }
 

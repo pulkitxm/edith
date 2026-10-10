@@ -16,6 +16,15 @@ import Foundation
         _ operation: String, payload: Data, resources: StudioUIResources,
         work: StudioUILongOperations
     ) async throws -> Data {
+        try await StudioUILongOperations.scoped(payload: payload) { body in
+            try await executeBody(operation, payload: body, resources: resources, work: work)
+        }
+    }
+
+    private static func executeBody(
+        _ operation: String, payload: Data, resources: StudioUIResources,
+        work: StudioUILongOperations
+    ) async throws -> Data {
         guard let allowed = fields[operation], payload.count <= StudioCommands.maximumRequestBytes,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
             Set(object.keys).isSubset(of: allowed)

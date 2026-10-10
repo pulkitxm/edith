@@ -20,6 +20,15 @@ struct StudioUIRecordingState: Codable, Sendable {
     func execute(_ operation: String, payload: Data, work: StudioUILongOperations) async throws
         -> Data
     {
+        try await StudioUILongOperations.scoped(payload: payload) { body in
+            try await self.executeBody(operation, payload: body, work: work)
+        }
+    }
+
+    private func executeBody(_ operation: String, payload: Data, work: StudioUILongOperations)
+        async throws
+        -> Data
+    {
         guard #available(macOS 15.0, *) else {
             throw StudioUIOperationFailure(message: "Screen recording requires macOS 15 or newer.")
         }
@@ -102,10 +111,7 @@ struct StudioUIRecordingState: Codable, Sendable {
     func stop() async { await perform("stop") }
     func shutdown() async {
         closed = true; task?.cancel(); polling?.cancel(); completion = nil
-        if let facade {
-            let _: [String: String]? = try? await facade.read(
-                "studio.ui.record.close", object: ["id": id.uuidString])
-        }
+        facade?.cleanup("studio.ui.record.close", object: ["id": id.uuidString])
     }
     private func perform(_ action: String) async {
         guard let facade, !closed, !busy else { return }

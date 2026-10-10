@@ -202,7 +202,6 @@ final class StudioModel {
     func shutdown() {
         guard !isStopped else { return }
         isStopped = true
-        facade?.stop()
         for task in projectRemovalTasks.values { task.cancel() }
         projectRemovalTasks.removeAll()
         engineTask?.cancel()
@@ -220,6 +219,7 @@ final class StudioModel {
         libraryWatcher = nil
         for job in jobs { job.cancel(); job.preview.cancel() }
         closeEditors()
+        facade?.stop()
         installing = nil
     }
 

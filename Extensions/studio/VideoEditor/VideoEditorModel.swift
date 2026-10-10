@@ -176,6 +176,7 @@ final class VideoEditorModel {
 
     func close() {
         remoteClient?.close()
+        if facade != nil { remoteExporter.cancel() }
         transcriptionTask?.cancel()
         importTask?.cancel()
         isClosed = true

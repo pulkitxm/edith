@@ -10,9 +10,30 @@ struct StudioUIOperationState: Codable, Sendable {
 }
 
 @MainActor final class StudioUILongOperations {
+    @TaskLocal nonisolated static var requestedToken: UUID?
+    private var cancelled: [UUID: ContinuousClock.Instant] = [:]
+
+    static func scoped<Value>(payload: Data, operation: @MainActor (Data) async throws -> Value)
+        async throws -> Value
+    {
+        guard payload.count <= StudioCommands.maximumRequestBytes,
+            var object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+        else { throw ExtensionPeerError.invalidRequest }
+        guard let value = object.removeValue(forKey: "workToken") else {
+            return try await operation(payload)
+        }
+        guard let text = value as? String, let token = UUID(uuidString: text) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let body = try JSONSerialization.data(
+            withJSONObject: object, options: [.withoutEscapingSlashes])
+        return try await $requestedToken.withValue(token) { try await operation(body) }
+    }
+
     private struct Entry {
         let task: Task<Void, Never>
         var state: StudioUIOperationState
+        let started: ContinuousClock.Instant
         var accessed: ContinuousClock.Instant
         var ended = false
     }
@@ -30,8 +51,13 @@ struct StudioUIOperationState: Codable, Sendable {
     )
         throws -> StudioUIOperationState
     {
-        guard !stopped, entries.count < 8 else { throw ExtensionPeerError.unavailable }
-        let token = UUID()
+        try Task.checkCancellation()
+        pruneCancelled()
+        let token = Self.requestedToken ?? UUID()
+        guard cancelled[token] == nil else { throw CancellationError() }
+        guard !stopped, entries.count < 8, entries[token] == nil else {
+            throw ExtensionPeerError.unavailable
+        }
         let state = StudioUIOperationState(
             token: token, phase: "running", progress: 0,
             result: nil, failure: nil)
@@ -41,6 +67,9 @@ struct StudioUIOperationState: Codable, Sendable {
                     Task { @MainActor [weak self] in self?.progress(token, fraction) }
                 }
                 try Task.checkCancellation()
+                guard result.count <= ExtensionEngineWire.maximumPayloadBytes else {
+                    throw ExtensionPeerError.invalidRequest
+                }
                 self?.finish(token, phase: "completed", result: result, failure: nil)
             } catch is CancellationError {
                 self?.finish(token, phase: "cancelled", result: nil, failure: nil)
@@ -49,14 +78,17 @@ struct StudioUIOperationState: Codable, Sendable {
                     token, phase: "failed", result: nil, failure: error.localizedDescription)
             }
         }
-        entries[token] = Entry(task: task, state: state, accessed: .now)
+        entries[token] = Entry(task: task, state: state, started: .now, accessed: .now)
         if timer == nil {
             timer = Task { [weak self] in
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(10)) } catch { return }
                     guard let self else { return }
+                    self.pruneCancelled()
                     for (token, entry) in self.entries
-                    where entry.accessed.duration(to: .now) >= .seconds(60) {
+                    where entry.accessed.duration(to: .now) >= .seconds(60)
+                        || entry.started.duration(to: .now) >= .seconds(21_600)
+                    {
                         self.end(token)
                     }
                 }
@@ -69,19 +101,34 @@ struct StudioUIOperationState: Codable, Sendable {
         guard !stopped, payload.count <= 256,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: String],
             Set(object.keys) == ["token"], let text = object["token"],
-            let token = UUID(uuidString: text),
-            var entry = entries[token], !entry.ended
+            let token = UUID(uuidString: text)
         else { throw ExtensionPeerError.invalidRequest }
+        pruneCancelled()
         switch operation {
         case "studio.ui.work.read":
-            entry.accessed = .now
-            entries[token] = entry
+            guard var entry = entries[token], !entry.ended else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            entry.accessed = .now; entries[token] = entry
             return try JSONEncoder().encode(entry.state)
-        case "studio.ui.work.cancel": entry.task.cancel()
-        case "studio.ui.work.end": end(token)
+        case "studio.ui.work.cancel", "studio.ui.work.end":
+            if entries[token] == nil {
+                guard cancelled[token] != nil || cancelled.count < 128 else {
+                    throw ExtensionPeerError.unavailable
+                }
+                cancelled[token] = .now
+            } else if operation == "studio.ui.work.cancel" {
+                entries[token]?.task.cancel()
+            } else {
+                end(token)
+            }
         default: throw ExtensionPeerError.invalidRequest
         }
         return Data("{}".utf8)
+    }
+
+    private func pruneCancelled() {
+        cancelled = cancelled.filter { $0.value.duration(to: .now) < .seconds(60) }
     }
 
     func stopAndWait() async {
@@ -91,7 +138,7 @@ struct StudioUIOperationState: Codable, Sendable {
         let owned = entries.values.map(\.task)
         for token in Array(entries.keys) { end(token) }
         for task in owned { await task.value }
-        entries.removeAll()
+        entries.removeAll(); cancelled.removeAll()
     }
 
     private func progress(_ token: UUID, _ fraction: Double) {
@@ -129,16 +176,21 @@ extension StudioUIFacade {
         _ operation: String, object: [String: Any],
         progress: @escaping @MainActor (Double) -> Void = { _ in }
     ) async throws -> Value {
-        let started: StudioUIOperationState = try await read(operation, object: object)
-        let handle = ["token": started.token.uuidString]
+        let token = UUID()
+        var request = object; request["workToken"] = token.uuidString
+        let handle = ["token": token.uuidString]
+        activeWork.insert(token)
+        defer { activeWork.remove(token) }
         do {
+            let started: StudioUIOperationState = try await read(operation, object: request)
+            guard started.token == token else { throw ExtensionEngineError.rejected }
             var state = started
             while state.phase == "running" {
                 try Task.checkCancellation()
                 progress(state.progress)
                 try await Task.sleep(for: .milliseconds(80))
                 state = try await read("studio.ui.work.read", object: handle)
-                guard state.token == started.token else { throw ExtensionEngineError.rejected }
+                guard state.token == token else { throw ExtensionEngineError.rejected }
             }
             let _: [String: String] = try await read("studio.ui.work.end", object: handle)
             guard state.phase == "completed", let result = state.result else {
@@ -148,12 +200,8 @@ extension StudioUIFacade {
             progress(1)
             return try JSONDecoder().decode(Value.self, from: result)
         } catch {
-            Task {
-                let _: [String: String]? = try? await self.read(
-                    "studio.ui.work.cancel", object: handle)
-                let _: [String: String]? = try? await self.read(
-                    "studio.ui.work.end", object: handle)
-            }
+            cleanup("studio.ui.work.cancel", object: handle)
+            cleanup("studio.ui.work.end", object: handle)
             throw error
         }
     }

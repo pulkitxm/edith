@@ -10,6 +10,14 @@ import Observation
     private let invoke: Invoke
     private let invalidate: @MainActor () -> Void
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    var activeWork: Set<UUID> = []
+    private var activeRequests = 0
+    private var waiting: [(UUID, CheckedContinuation<Void, Error>)] = []
+    private var cleanupQueue: [(String, Data)] = []
+    private var cleanupTask: Task<Void, Never>?
+    private var invalidationDeadline: Task<Void, Never>?
+    private var invalidationTask: Task<Void, Never>?
+    private var invalidated = false
     private var versions: [String: UUID] = [:]
     var onState: (@MainActor (StudioUIState) -> Void)?
     var onFailure: (@MainActor (String) -> Void)?
@@ -121,6 +129,9 @@ import Observation
         guard payload.count <= StudioCommands.maximumRequestBytes else {
             throw ExtensionEngineError.rejected
         }
+        try await acquire()
+        defer { release() }
+        try Task.checkCancellation()
         let data = try await invoke(operation, payload)
         try Task.checkCancellation()
         guard !isStopped, data.count <= ExtensionEngineWire.maximumPayloadBytes else {
@@ -141,7 +152,80 @@ import Observation
         for task in tasks.values { task.cancel() }
         tasks.removeAll()
         versions.removeAll()
+        for (_, continuation) in waiting { continuation.resume(throwing: CancellationError()) }
+        waiting.removeAll()
+        for token in activeWork {
+            cleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
+            cleanup("studio.ui.work.end", object: ["token": token.uuidString])
+        }
+        if let cleanupTask {
+            invalidationTask = Task { [weak self] in
+                await cleanupTask.value
+                self?.finishInvalidation()
+            }
+            invalidationDeadline = Task { [weak self] in
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                self?.cleanupTask?.cancel()
+                self?.finishInvalidation()
+            }
+        } else {
+            finishInvalidation()
+        }
+    }
+
+    func cleanup(_ operation: String, object: [String: Any]) {
+        guard !invalidated, cleanupQueue.count < 128,
+            let payload = try? JSONSerialization.data(
+                withJSONObject: object, options: [.withoutEscapingSlashes]),
+            payload.count <= StudioCommands.maximumRequestBytes
+        else { return }
+        cleanupQueue.append((operation, payload))
+        guard cleanupTask == nil else { return }
+        cleanupTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.cleanupTask = nil }
+            while !self.cleanupQueue.isEmpty, !Task.isCancelled, !self.invalidated {
+                let (operation, payload) = self.cleanupQueue.removeFirst()
+                _ = try? await self.invoke(operation, payload)
+            }
+        }
+    }
+
+    private func finishInvalidation() {
+        guard !invalidated else { return }
+        invalidated = true
+        cleanupQueue.removeAll()
+        invalidationDeadline?.cancel(); invalidationTask?.cancel()
+        invalidationDeadline = nil; invalidationTask = nil
         invalidate()
+    }
+
+    private func acquire() async throws {
+        try Task.checkCancellation()
+        guard !isStopped else { throw ExtensionEngineError.unavailable }
+        if activeRequests < 6 { activeRequests += 1; return }
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                waiting.append((id, continuation))
+                if Task.isCancelled { cancelWaiting(id) }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelWaiting(id) }
+        }
+    }
+
+    private func cancelWaiting(_ id: UUID) {
+        guard let index = waiting.firstIndex(where: { $0.0 == id }) else { return }
+        waiting.remove(at: index).1.resume(throwing: CancellationError())
+    }
+
+    private func release() {
+        if !waiting.isEmpty, !isStopped {
+            waiting.removeFirst().1.resume()
+        } else {
+            activeRequests -= 1
+        }
     }
 
     private func mutate(_ operation: String, object: [String: Any] = [:]) {
