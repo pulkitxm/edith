@@ -17,6 +17,7 @@ struct HostApplication: App {
     @State private var musicSlots: HostMusicSlots?
     @State private var machinesWindows: HostMachinesWindows?
     @State private var herdrWindows: HostHerdrWindows?
+    @State private var herdrInteractions: HostHerdrInteractions?
     @State private var notchStartup: HostNotchStartup?
     @State private var remoteCleanupNotice = false
     @Environment(\.openWindow) private var openWindow
@@ -143,6 +144,15 @@ struct HostApplication: App {
                 manager: manager, presenter: presenter, navigation: navigation)
             let ownedHerdr = HostHerdrWindows(
                 manager: manager, presenter: presenter, navigation: navigation)
+            let interactions = HostHerdrInteractions(
+                marketplace: loaded, manager: manager, presenter: presenter,
+                navigation: navigation, windows: ownedHerdr)
+            interactions.install(delegate: delegate)
+            herdrInteractions = interactions
+            loaded.sessions.didRequestFolderChoice = { [weak interactions] request in
+                guard let interactions else { throw HostWorkerError.rejected }
+                return try await interactions.chooseFolder(request)
+            }
             let notch = HostNotchStartup(
                 marketplace: loaded, manager: manager, navigation: navigation)
             ownedNotch = notch
@@ -224,12 +234,14 @@ struct HostApplication: App {
             sectionWindows = windows
             windows.install()
             delegate.shutdown = {
+                await interactions.cancelPending()
                 do {
                     try await notch.stop()
                     try await ownedHerdr.stop()
                 } catch { return false }
                 let ready = await loaded.sessions.shutdown(reason: .applicationQuit)
                 if ready {
+                    await interactions.stop()
                     windows.closeAll(); windows.uninstall()
                     await slots.stop()
                     await services.shutdown(); core.shutdown(); control.shutdown()

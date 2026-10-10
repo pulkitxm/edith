@@ -99,4 +99,10 @@ public final class HostFolderChoiceCoordinator {
         stopped = true
         for token in Array(pending.keys) { cancel(token) }
     }
+
+    public func cancelAndWait() async {
+        let selections = Array(pending.values)
+        for token in Array(pending.keys) { cancel(token) }
+        for selection in selections { _ = await selection.result }
+    }
 }

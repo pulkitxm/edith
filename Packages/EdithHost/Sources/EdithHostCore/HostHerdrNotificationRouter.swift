@@ -103,6 +103,12 @@ public final class HostHerdrNotificationRouter {
         for task in Array(pending.values) { _ = await task.result }
     }
 
+    public func cancelAndDrain() async {
+        let tasks = Array(pending.values)
+        for task in tasks { task.cancel() }
+        for task in tasks { _ = await task.result }
+    }
+
     public func stop() {
         stopped = true
         for task in pending.values { task.cancel() }

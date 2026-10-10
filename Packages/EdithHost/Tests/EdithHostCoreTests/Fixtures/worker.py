@@ -46,6 +46,9 @@ for line in sys.stdin:
     request = json.loads(line)
     operation = request["operation"]
     if operation == "navigationReply":
+        if mode == "folder-choice":
+            with open(sys.argv[2], "w") as stream:
+                json.dump(request["navigation"], stream)
         original = navigation_requests.pop(request["token"], None)
         if original is not None:
             print(json.dumps({"token": original, "ok": request["navigation"]["ok"]}), flush=True)
@@ -60,6 +63,11 @@ for line in sys.stdin:
     if mode in ["ignore-stop", "child-group-ignore-stop"] and operation == "stop":
         time.sleep(30)
     response = {"token": request["token"], "ok": mode != "reject"}
+    if operation == "show" and mode == "folder-choice":
+        event = {"kind": "navigation", "token": str(uuid.uuid4()).upper(), "extensionID": configuration["extensionID"], "version": configuration["version"], "presentationID": str(uuid.uuid4()).upper(), "location": "settings", "section": "agentActivity", "folderChoice": True}
+        navigation_requests[event["token"]] = request["token"]
+        print(json.dumps(event), flush=True)
+        continue
     if operation == "show" and mode.startswith("navigation"):
         event = navigate()
         if mode in ["navigation-ack", "navigation-rejected", "navigation-cancel", "navigation-disconnect"]:

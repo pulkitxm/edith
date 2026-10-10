@@ -61,6 +61,16 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         return controller
     }
 
+    func herdrReadyWindow(for presentationID: UUID) -> NSWindow? {
+        guard closing[presentationID] == nil, let controller = controllers[presentationID],
+            controller.request.extensionID == "herdr", controller.connected,
+            controller.state.visible,
+            controller.failure == nil, controller.isViewLoaded, !controller.detached,
+            !controller.view.isHiddenOrHasHiddenAncestor
+        else { return nil }
+        return controller.view.window
+    }
+
     func window(for presentationID: UUID) -> NSWindow? {
         guard closing[presentationID] == nil, let controller = controllers[presentationID],
             controller.isViewLoaded, !controller.detached
