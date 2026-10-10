@@ -249,8 +249,7 @@ public final class HostRemoteSessionManager {
 
     public func herdrNotificationLease(
         presentationID: UUID, version: String,
-        validateWindow: @escaping @MainActor () throws -> Void,
-        open: @escaping @MainActor (HostWorkerNavigationRequest) async throws -> Void
+        validateWindow: @escaping @MainActor () throws -> Void
     ) throws -> HostHerdrNotificationLease {
         guard let handle = presentations[presentationID], handle.request.extensionID == "herdr",
             handle.request.location == "main", handle.configuration.worker.version == version

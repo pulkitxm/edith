@@ -53,8 +53,8 @@ final class HostHerdrInteractions {
                 return marketplace.sessions.versions["herdr"]
             }, navigation: navigation,
             preparedPresentation: {
-                [weak manager, weak presenter, weak navigation, weak windows] version in
-                guard let manager, let presenter, let navigation, let windows else {
+                [weak manager, weak presenter, weak navigation] version in
+                guard let manager, let presenter, let navigation else {
                     throw HostWorkerError.rejected
                 }
                 let deadline = ContinuousClock.now + .seconds(5)
@@ -80,10 +80,6 @@ final class HostHerdrInteractions {
                                         navigation.owningWorkspace(for: window) === window,
                                         window.isVisible, !window.isMiniaturized
                                     else { throw HostWorkerError.rejected }
-                                },
-                                open: { [weak windows] request in
-                                    guard let windows else { throw HostWorkerError.rejected }
-                                    try await windows.open(request)
                                 })
                         }
                     }
