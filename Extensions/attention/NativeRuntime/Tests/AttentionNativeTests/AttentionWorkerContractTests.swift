@@ -15,12 +15,22 @@ struct AttentionWorkerContractTests {
         let fixture = try AttentionWorkerFixture()
         defer { fixture.remove() }
         let deniedRoot = fixture.root.appendingPathComponent("must-remain-absent")
+        var holdNextFocusRead = false
+        var pendingFocusRead: CheckedContinuation<Data, Error>?
+        var heldFocusSnapshot: Data?
+        defer { pendingFocusRead?.resume(throwing: CancellationError()) }
         let uiClient: AttentionUIClient? =
             remote
             ? AttentionUIClient(send: { operation, payload in
-                try await AttentionUICommands.execute(
+                let response = try await AttentionUICommands.execute(
                     operation, payload: payload, repository: fixture.repository,
                     service: fixture.service)
+                if operation == "attention.ui.focus.get", holdNextFocusRead {
+                    holdNextFocusRead = false
+                    heldFocusSnapshot = response
+                    return try await withCheckedThrowingContinuation { pendingFocusRead = $0 }
+                }
+                return response
             }) : nil
         NSApplication.shared.setActivationPolicy(.prohibited)
         let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
@@ -59,10 +69,21 @@ struct AttentionWorkerContractTests {
             await settle()
         }
         await render(visible: true)
+        if remote {
+            holdNextFocusRead = true
+            tile.days += 1
+            await render(visible: true)
+            #expect(pendingFocusRead != nil)
+        }
         let start = try #require(find(host, label: "Start focus"))
         _ = (start as AnyObject).accessibilityPerformPress?()
         await settle()
         #expect(fixture.repository.activeFocus()?.plannedDuration == 1500)
+        if let heldFocusSnapshot {
+            pendingFocusRead?.resume(returning: heldFocusSnapshot)
+            pendingFocusRead = nil
+            await settle()
+        }
         #expect(find(host, label: "Deep work") != nil)
         #expect(find(host, label: "Finish") != nil)
         let open = try #require(find(host, label: "Open Focus timer"))

@@ -154,6 +154,8 @@ import SwiftUI
     }
 
     private func startFocus() {
+        load.cancel()
+        loading = false
         if let uiClient {
             do {
                 let payload = try AttentionPayload.encode(
@@ -163,6 +165,7 @@ import SwiftUI
                     do {
                         focus = try AttentionPayload.decode(
                             AttentionFocusSession.self, from: result.get());
+                        load.setContent()
                         error = nil
                     } catch { self.error = error.localizedDescription }
                 }
@@ -176,9 +179,11 @@ import SwiftUI
         } catch { self.error = error.localizedDescription }
     }
     private func finishFocus() {
+        load.cancel()
+        loading = false
         if let uiClient {
             uiClient.perform("attention.ui.focus.stop") { result in
-                do { _ = try result.get(); focus = nil; error = nil } catch {
+                do { _ = try result.get(); focus = nil; error = nil; load.setContent() } catch {
                     self.error = error.localizedDescription
                 }
             }
