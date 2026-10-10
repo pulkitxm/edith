@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -6,6 +7,8 @@ import SwiftUI
 
 @MainActor @objc(EdithAudioMixerExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var uiModel: AnyObject?
+    private var uiClient: ExtensionEngineClient?
     private var engine: AnyObject?
     private var surface: AnyObject?
     private let commands = ExtensionCommandRegistry()
@@ -15,6 +18,32 @@ final class ExtensionRuntime: NSObject {
             guard #available(macOS 14.4, *), let surface = self?.surface as? AudioMixerSurface
             else {
                 throw ExtensionPeerError.unavailable
+            }
+            if command == "audioMixer.cli.catalog" { return try AudioCLICatalog.data() }
+            if command == "audioMixer.cli" {
+                guard let engine = self?.engine as? MixerEngine else {
+                    throw ExtensionPeerError.unavailable
+                }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await AudioCLIExecution.run(request, engine: engine))
+            }
+            if command == "audioMixer.ui.snapshot" {
+                guard payload == Data("{}".utf8), let engine = self?.engine as? MixerEngine else {
+                    throw ExtensionPeerError.invalidRequest
+                }
+                engine.refresh()
+                let apps = engine.apps.map {
+                    AudioMixerAppRecord(
+                        objectID: $0.objectID, pid: $0.pid, bundleID: $0.bundleID, name: $0.name,
+                        volume: Double($0.volume))
+                }
+                let icons = Dictionary(
+                    uniqueKeysWithValues: engine.apps.compactMap { app in
+                        app.icon?.tiffRepresentation.map { (String(app.objectID), $0) }
+                    })
+                return try JSONEncoder().encode(
+                    AudioMixerUISnapshot(apps: apps, icons: icons, error: engine.errorMessage))
             }
             if command == "audioMixer.request" {
                 guard let engine = self?.engine as? MixerEngine,
@@ -53,8 +82,16 @@ final class ExtensionRuntime: NSObject {
                 engine = mixer
                 surface = AudioMixerSurface(engine: mixer)
             }
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI(); uiClient = client
+            if #available(macOS 14.4, *) { uiModel = AudioMixerRemoteModel(client: client) }
+        case "stopUI": stopUI()
         case "view":
-            if #available(macOS 14.4, *), let engine = engine as? MixerEngine {
+            guard uiClient != nil else { return ["ok": false] as NSDictionary }
+            if #available(macOS 14.4, *), let engine = uiModel as? AudioMixerRemoteModel {
                 return NSHostingController(
                     rootView: ExtensionPageHost {
                         PageWorkspace {
@@ -78,6 +115,20 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+
+    private func stopUI() {
+        if #available(macOS 14.4, *) { (uiModel as? AudioMixerRemoteModel)?.stop() }
+        uiModel = nil; uiClient?.invalidate(); uiClient = nil
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            if #available(macOS 14.4, *) { (engine as? MixerEngine)?.shutdown() }
+            completion()
+        }
     }
 
     @available(macOS 14.4, *)

@@ -41,7 +41,11 @@
         "Extensions/audioMixer/Models/AudioMixerAction.swift",
         "Extensions/audioMixer/Models/AudioMixerCommand.swift",
         "Extensions/audioMixer/Runtime.swift",
-        "Extensions/audioMixer/Views/AudioMixerView.swift"
+        "Extensions/audioMixer/Views/AudioMixerView.swift",
+        "Extensions/audioMixer/AudioMixerRemoteModel.swift",
+        "Extensions/audioMixer/CLI/AudioCommands.swift",
+        "Extensions/audioMixer/CLI/AudioCLIExecution.swift",
+        "Extensions/audioMixer/CLI/AudioCLICatalog.swift"
       ]
     },
     "inputs": [
@@ -56,7 +60,7 @@
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "testTargets": [
       "ci-extension-audio-mixer"
     ],

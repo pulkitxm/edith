@@ -272,7 +272,7 @@ typealias AudioMixerTapFactory =
 @available(macOS 14.4, *)
 @MainActor
 @Observable
-final class MixerEngine {
+final class MixerEngine: AudioMixerPresenting {
 
     private(set) var apps: [MixerApp] = []
     private(set) var actionError: String?

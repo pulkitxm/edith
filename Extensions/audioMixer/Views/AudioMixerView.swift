@@ -6,10 +6,10 @@ import SwiftUI
 @available(macOS 14.4, *)
 @MainActor
 struct AudioMixerView: View {
-    @State private var engine: MixerEngine
+    @State private var engine: any AudioMixerPresenting
     private let monitorsWhileVisible: Bool
 
-    init(engine: MixerEngine, monitorsWhileVisible: Bool = true) {
+    init(engine: any AudioMixerPresenting, monitorsWhileVisible: Bool = true) {
         self.monitorsWhileVisible = monitorsWhileVisible
         _engine = State(initialValue: engine)
     }
