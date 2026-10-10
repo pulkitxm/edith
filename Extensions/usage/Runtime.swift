@@ -113,7 +113,8 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         cliStreams?.stop()
         commands.shutdown()
-        uiCommands?.shutdown(); uiCommands = nil
+        let uiCommands = uiCommands; self.uiCommands = nil
+        uiCommands?.shutdown()
         controller?.beginShutdown()
         alertsTask?.cancel()
         backupRestoreTask?.cancel()
@@ -143,6 +144,7 @@ final class ExtensionRuntime: NSObject {
             await backup?.shutdown()
             await backupRestoreTask?.value
             await commands.shutdownAndWait()
+            await uiCommands?.shutdownAndWait()
             await cliStreams?.stopAndWait()
             await connectionTask?.value
             try? cliHooks?.shutdown()

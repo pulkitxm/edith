@@ -65,6 +65,34 @@ import Observation
             from: invoke(command, payload: JSONSerialization.data(withJSONObject: object)))
     }
 
+    func deliverExport(_ data: Data, filename: String, save: Bool) async throws -> String {
+        guard (1...16_777_216).contains(data.count) else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let begin = try JSONSerialization.data(withJSONObject: [
+            "byteCount": data.count, "sha256": UsageMachinesPeer.hash(data),
+            "filename": filename, "save": save,
+        ])
+        let id = try await JSONDecoder().decode(
+            UUID.self, from: invoke("usage.ui.export.begin", payload: begin))
+        let identity = try JSONSerialization.data(withJSONObject: ["id": id.uuidString])
+        do {
+            for offset in stride(from: 0, to: data.count, by: 65_536) {
+                let chunk = data.subdata(in: offset..<min(data.count, offset + 65_536))
+                let payload = try JSONSerialization.data(withJSONObject: [
+                    "id": id.uuidString, "offset": offset, "data": chunk.base64EncodedString(),
+                ])
+                _ = try await invoke("usage.ui.export.chunk", payload: payload)
+            }
+            return try await JSONDecoder().decode(
+                String.self, from: invoke("usage.ui.export.deliver", payload: identity))
+        } catch {
+            let operation = invokeOperation
+            _ = await Task { try? await operation("usage.ui.export.cancel", identity) }.value
+            throw error
+        }
+    }
+
     func document() async throws -> DashUsage {
         try await prepare()
         let data = try await checkedPayload("usage.ui.document")

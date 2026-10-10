@@ -1697,7 +1697,8 @@
         "Extensions/usage/CLI/UsageMachineCommands.swift",
         "Extensions/usage/CLI/UsageReport.swift",
         "Extensions/usage/CLI/UsageStatusLineCLICommands.swift",
-        "Extensions/usage/Services/UsageRefreshObservation.swift"
+        "Extensions/usage/Services/UsageRefreshObservation.swift",
+        "Extensions/usage/Services/UsageExportDelivery.swift"
       ]
     },
     "resources": {
@@ -1710,9 +1711,7 @@
         "Extensions/usage/Resources/share-icon.png"
       ]
     },
-    "inputs": [
-      "Extensions/usage"
-    ],
+    "inputs": ["Extensions/usage"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1725,9 +1724,7 @@
     ],
     "dependencies": [],
     "sameExecutableWorker": true,
-    "testTargets": [
-      "ci-extension-usage-native"
-    ]
+    "testTargets": ["ci-extension-usage-native"]
   },
   {
     "id": "bifrost",

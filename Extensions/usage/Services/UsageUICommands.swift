@@ -21,21 +21,31 @@ struct UsageUILimits: Codable, Sendable {
     private let defaults: UserDefaults
     private var documents: [UUID: (data: Data, expires: Date)] = [:]
     private var stopped = false
+    private let exports: UsageExportDelivery
 
     init(
         controller: UsageWorkerController, directory: URL = Repo.dataDir,
-        defaults: UserDefaults = SharedDefaults.store
+        defaults: UserDefaults = SharedDefaults.store, exports: UsageExportDelivery? = nil
     ) {
         self.controller = controller; self.directory = directory; self.defaults = defaults
+        self.exports = exports ?? UsageExportDelivery()
     }
 
-    func shutdown() { stopped = true; documents = [:] }
+    func shutdown() { stopped = true; documents = [:]; exports.stop() }
+
+    func shutdownAndWait() async {
+        shutdown()
+        await exports.stopAndWait()
+    }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
         try Task.checkCancellation()
         guard !stopped, payload.count <= 131_072,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
         else { throw ExtensionPeerError.invalidRequest }
+        if command.hasPrefix("usage.ui.export.") {
+            return try await exports.execute(command, payload: payload)
+        }
         documents = documents.filter { $0.value.expires > Date() }
         let encoder = JSONEncoder()
         switch command {

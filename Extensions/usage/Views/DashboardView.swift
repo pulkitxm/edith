@@ -173,7 +173,15 @@ struct DashboardView: View {
             )
             ExportCardButton(isEnabled: model.loaded, help: "Share usage cards") {
                 sharePresentation = ExportCardPresentation(
-                    deck: UsageExportDeck(snapshot: shareSnapshot), title: "Share usage cards")
+                    deck: UsageExportDeck(
+                        snapshot: shareSnapshot,
+                        delivery: { data, filename, save in
+                            guard let client = UsageUIClient.current else {
+                                throw ExtensionPeerError.unavailable
+                            }
+                            return try await client.deliverExport(
+                                data, filename: filename, save: save)
+                        }), title: "Share usage cards")
             }
         }
     }

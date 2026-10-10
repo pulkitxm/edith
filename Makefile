@@ -525,4 +525,4 @@ ci-extension-presenter:
 
 .PHONY: ci-extension-usage-native
 ci-extension-usage-native:
-	$(MAKE) -C Extensions/usage test $(if $(FILTER),FILTER='$(FILTER)')
+	$(MAKE) -C Extensions/usage format-check test $(if $(FILTER),FILTER='$(FILTER)')
