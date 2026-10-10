@@ -38,7 +38,7 @@ final class ShelfStore {
     }
 
     private(set) var items: [ShelfItem] = []
-    private let root: URL
+    let root: URL
     private var changeObserver: NSObjectProtocol?
     private var incomingDirectories: [UUID: ShelfIncomingDirectory] = [:]
     private var retainedActionSelection: ShelfPinnedSelection?

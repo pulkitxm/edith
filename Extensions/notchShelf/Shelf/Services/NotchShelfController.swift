@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
@@ -60,7 +61,7 @@ final class NotchShelfController {
     private(set) var selectedIDs: Set<UUID> = []
     private(set) var shelfOperationError: String?
 
-    private let store: ShelfStore
+    let store: ShelfStore
     private var panels: [CGDirectDisplayID: NSPanel] = [:]
     private var collapsedSizes: [CGDirectDisplayID: CGSize] = [:]
     private var builtinDisplayID: CGDirectDisplayID?
@@ -1018,6 +1019,13 @@ final class NotchShelfController {
             presentShelfFailure(error)
         } else {
             shelfOperationError = nil
+        }
+    }
+
+    func shareCLIItems(_ ids: [UUID]) throws {
+        guard !stopped, !isSharing else { throw ShelfActionSelectionError.busy }
+        if let error = perform(.share, itemIDs: Set(ids)) {
+            throw CLIFailure.unavailable(error)
         }
     }
 
