@@ -24,6 +24,7 @@ final class HostRemoteApplication {
     private var slots: [HostRemoteSceneSlot] = []
     private var configuration: HostRemoteConfiguration?
     private var runtimes: [ExtensionBundleRuntime] = []
+    private var presentationRuntimes: [UUID: ExtensionBundleRuntime] = [:]
     private var stopping = false
 
     private init() throws {
@@ -69,6 +70,10 @@ final class HostRemoteApplication {
                     present: { [weak self] context in
                         guard let self else { throw HostWorkerError.exited }
                         return try self.controller(presentation: context)
+                    },
+                    terminal: { [weak self] request in
+                        guard let self else { throw HostWorkerError.exited }
+                        return try self.terminal(request)
                     },
                     disconnected: { [weak self] in
                         guard self?.configuration == nil else { return }
@@ -134,6 +139,7 @@ final class HostRemoteApplication {
             guard slots.contains(where: { $0.request?.presentationID == id }) else {
                 throw HostWorkerError.rejected
             }
+            slots.first { $0.request?.presentationID == id }?.beginClosing()
             for runtime in runtimes {
                 try await runtime.preparePresentationToClose(id: extensionID, presentationID: id)
             }
@@ -144,6 +150,7 @@ final class HostRemoteApplication {
                 throw HostWorkerError.rejected
             }
             slot.release()
+            presentationRuntimes[id] = nil
             for runtime in runtimes {
                 _ = try runtime.response(
                     id: extensionID, operation: "releaseUI",
@@ -214,16 +221,42 @@ final class HostRemoteApplication {
                 intrinsic: !["main", "settings", "music.detail"].contains(
                     presentation.request.location))
             {
+                presentationRuntimes[presentation.request.presentationID] = runtime
                 return result
             }
         }
         throw HostWorkerError.rejected
     }
 
+    private func terminal(_ request: HostTerminalUIRequest) throws -> Data {
+        guard !stopping, let configuration, !configuration.uiOnly, extensionID == "terminal",
+            let runtime = presentationRuntimes[request.request.presentationID]
+        else { throw HostWorkerError.rejected }
+        try request.validate(
+            session: configuration.session, request: request.request,
+            operation: request.operation.rawValue)
+        let context = NSMutableDictionary(dictionary: [
+            "presentationID": request.request.presentationID.uuidString
+        ])
+        if let event = request.event {
+            context["payload"] = try event.encoded(presentationID: request.request.presentationID)
+        }
+        let result = try runtime.response(
+            id: extensionID, operation: request.operation.rawValue, context: context)
+        let data = try JSONSerialization.data(withJSONObject: result)
+        guard data.count <= 1024 else { throw HostWorkerError.invalidResponse }
+        if request.operation == .status {
+            _ = try HostTerminalUIStatus.decode(
+                data, presentationID: request.request.presentationID)
+        }
+        return data
+    }
+
     private func shutdown() {
         guard !stopping else { return }
         stopping = true
         slots.forEach { $0.release() }
+        presentationRuntimes.removeAll()
         for runtime in runtimes { _ = try? runtime.response(id: extensionID, operation: "stopUI") }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
             endpoint.invalidate()
@@ -251,6 +284,8 @@ private final class HostRemoteSceneSlot {
     private var presentation: HostRemotePresentation?
     weak var container: HostRemoteSceneController?
     private let present: (HostRemotePresentation) throws -> ExtensionBundlePresentation
+    private let terminal: (HostTerminalUIRequest) throws -> Data
+    private var closing = false
     private let disconnected: @MainActor () -> Void
     private let executable: URL
     private let requirement: String
@@ -260,6 +295,7 @@ private final class HostRemoteSceneSlot {
         index: Int, executable: URL, requirement: String,
         present:
             @escaping (HostRemotePresentation) throws -> ExtensionBundlePresentation,
+        terminal: @escaping (HostTerminalUIRequest) throws -> Data,
         disconnected: @escaping @MainActor () -> Void
     ) throws {
         self.index = index
@@ -268,6 +304,7 @@ private final class HostRemoteSceneSlot {
         identifier = try HostRemoteSceneDescriptor(slot: index, presentationID: UUID())
             .sceneIdentifier
         self.present = present
+        self.terminal = terminal
         self.disconnected = disconnected
         try resetEndpoint()
     }
@@ -292,10 +329,21 @@ private final class HostRemoteSceneSlot {
         guard self.request == nil, endpoint != nil else { throw HostWorkerError.rejected }
         self.request = request
         self.session = session
+        closing = false
     }
 
+    func beginClosing() { closing = true }
+
     private func execute(_ command: HostRemoteCommand) throws -> Data {
-        guard ["present", "update"].contains(command.operation), let request, let session
+        if HostTerminalUIRequest.Operation(rawValue: command.operation) != nil {
+            guard !closing, let request, let session, presentation != nil, content != nil else {
+                throw HostWorkerError.rejected
+            }
+            let input = try HostTerminalUIRequest.decode(
+                command.payload, session: session, request: request, operation: command.operation)
+            return try terminal(input)
+        }
+        guard !closing, ["present", "update"].contains(command.operation), let request, let session
         else {
             throw HostWorkerError.rejected
         }

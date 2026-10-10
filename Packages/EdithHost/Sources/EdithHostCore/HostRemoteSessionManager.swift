@@ -206,6 +206,34 @@ public final class HostRemoteSessionManager {
         }
     }
 
+    public func terminalUI(presentationID: UUID, event: HostTerminalUIEvent) async throws -> Bool {
+        let handle = try terminalHandle(presentationID)
+        let result = try await handle.terminalUI(event)
+        guard try terminalHandle(presentationID) === handle else { throw HostWorkerError.rejected }
+        return result
+    }
+
+    public func terminalUIStatus(presentationID: UUID) async throws -> HostTerminalUIStatus {
+        let handle = try terminalHandle(presentationID)
+        let result = try await handle.terminalUIStatus()
+        guard try terminalHandle(presentationID) === handle else { throw HostWorkerError.rejected }
+        return result
+    }
+
+    private func terminalHandle(_ id: UUID) throws -> HostRemoteSceneHandle {
+        guard let handle = presentations[id], handle.request.extensionID == "terminal",
+            handle.isPresented, pendingCleanup[id] == nil,
+            handle.processIdentity?.isRunning == true,
+            let pid = marketplace.sessions.processIdentifiers["terminal"],
+            handle.engineIdentity == (try HostRemoteKernelIdentity.read(pid))
+        else { throw HostWorkerError.rejected }
+        let current = try selectedConfiguration(for: handle.request)
+        guard !current.uiOnly, current.package == handle.configuration.package else {
+            throw HostWorkerError.rejected
+        }
+        return handle
+    }
+
     public func presentationCounts(excluding excluded: Set<UUID> = []) -> [String: Int] {
         var result: [String: Int] = [:]
         for (id, handle) in presentations where !excluded.contains(id) {
