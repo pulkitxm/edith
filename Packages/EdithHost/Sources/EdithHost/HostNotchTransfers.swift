@@ -44,7 +44,9 @@ struct HostNotchPanelTransfer: Codable, Equatable, Sendable {
 
     static func issuedDirectory(_ url: URL) -> Bool {
         let prefix = "edith-shelf-incoming-"
-        return url.isFileURL && url.path.hasPrefix("/") && url.query == nil && url.fragment == nil
+        return url.isFileURL && (url.host == nil || url.host == "localhost")
+            && url.path.utf8.count <= 4096 && !url.path.utf8.contains(0)
+            && url.path.hasPrefix("/") && url.query == nil && url.fragment == nil
             && url.standardizedFileURL == url && url.lastPathComponent.hasPrefix(prefix)
             && UUID(uuidString: String(url.lastPathComponent.dropFirst(prefix.count))) != nil
     }

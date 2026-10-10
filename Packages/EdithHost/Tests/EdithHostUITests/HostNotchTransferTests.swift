@@ -86,6 +86,16 @@ struct HostNotchTransferTests {
         try await proxy.stop()
     }
 
+    @Test func issuedDirectoryRejectsRemoteHostAndOversizedLocalPaths() {
+        let suffix = "edith-shelf-incoming-" + UUID().uuidString
+        #expect(
+            !HostNotchPanelTransfer.issuedDirectory(
+                URL(string: "file://remote.invalid/tmp/" + suffix)!))
+        #expect(
+            !HostNotchPanelTransfer.issuedDirectory(
+                URL(fileURLWithPath: "/" + String(repeating: "x", count: 4096) + "/" + suffix)))
+    }
+
     @Test func pinsRejectSymlinkAndReplacedFileBeforeNativeDelegation() async throws {
         let fixture = try NotchTransferFixture()
         defer { fixture.removeFiles() }
