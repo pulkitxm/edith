@@ -1034,8 +1034,14 @@ struct HostLifecycleHarness {
                 return temporary
             },
             verify: { directory in
+                let manifest = try JSONDecoder().decode(
+                    ExtensionPayloadManifest.self,
+                    from: Data(contentsOf: directory.appendingPathComponent("package.json")))
+                let carrier = try ExtensionUICarrier(payload: directory, manifest: manifest)
+                try carrier.verifyDevelopment()
                 for role in ExtensionBundleRuntime.Role.allCases {
-                    let bundle = directory.appendingPathComponent("\(role.rawValue).bundle")
+                    let bundle = carrier.payloadDirectory.appendingPathComponent(
+                        "\(role.rawValue).bundle")
                     if FileManager.default.fileExists(atPath: bundle.path) {
                         try ExtensionCodeSignature.verifyDevelopment(bundle)
                     }

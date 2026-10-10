@@ -359,3 +359,15 @@ func unsafeArchivesNeverWriteOutsideTheStagingArea(_ path: String) async throws 
     }
     #expect(try fixture.store.installedPackages().isEmpty)
 }
+
+@Test func currentWorkerABIRejectsPackagesWithoutASealedUIWorker() async throws {
+    let fixture = try PackageFixture()
+    defer { fixture.clean() }
+    let (package, archive) = try fixture.archive(hostABI: MarketplaceConfiguration.workerHostABI)
+    await #expect(throws: MarketplaceError.invalidArchive) {
+        try await fixture.installer(archives: [package.downloadURL: archive]).install(
+            [package], repository: "example/app")
+    }
+    #expect(try fixture.store.installedPackages().isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: package).path))
+}

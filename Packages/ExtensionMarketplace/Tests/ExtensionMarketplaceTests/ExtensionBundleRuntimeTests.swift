@@ -60,7 +60,8 @@ import Testing
         #expect(defaults.bool(forKey: "preventSleep"))
         try await runtime.prepareDisableAll()
         try runtime.stopAll()
-        let selectedDirectory = fixture.store.directory(for: package)
+        let selectedDirectory = fixture.store.payloadDirectory(for: package)
+            .deletingLastPathComponent()
         let ui = try ExtensionBundleRuntime(
             readOnlyPackage: package, directory: selectedDirectory, role: .helper,
             hostABI: package.hostABI, verify: ExtensionCodeSignature.verifyDevelopment)
@@ -98,8 +99,7 @@ import Testing
         try runtime.start(id: package.id, context: ["defaultsSuite": suite])
         #expect(try runtime.snapshot(id: package.id)?.version == package.version)
         try runtime.stopAll()
-        let privileged = fixture.store.directory(for: package).appendingPathComponent(package.id)
-            .appendingPathComponent("privileged.bundle")
+        let privileged = fixture.store.roleBundle(for: package, role: .privileged)
         try FileManager.default.createDirectory(at: privileged, withIntermediateDirectories: true)
         let privilegedRuntime = ExtensionBundleRuntime(
             store: fixture.store, role: .helper, hostABI: package.hostABI,

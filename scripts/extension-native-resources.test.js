@@ -195,7 +195,11 @@ test("native payloads can be limited to selected roles without eager dynamic lin
     nativeRoles: ["app"],
     nativeLink: false,
   };
-  expect(nativeRolePolicy(definition)).toEqual({ roles: ["app"], link: false });
+  expect(nativeRolePolicy(definition)).toEqual({
+    roles: ["app"],
+    link: false,
+    presentations: [],
+  });
   expect(
     nativePackageLinkFlags(
       "/workspace",
@@ -211,6 +215,7 @@ test("native payloads can be limited to selected roles without eager dynamic lin
   expect(nativeRolePolicy(existing)).toEqual({
     roles: ["app", "helper", "cameraCarrier"],
     link: true,
+    presentations: [],
   });
   expect(
     nativePackageLinkFlags(
@@ -222,7 +227,30 @@ test("native payloads can be limited to selected roles without eager dynamic lin
   expect(nativeRolePolicy({ roles: { app: [] } })).toEqual({
     roles: [],
     link: true,
+    presentations: [],
   });
+});
+
+test("native presentation factories require an owned dynamically linked role", () => {
+  const definition = {
+    roles: { app: [], helper: [] },
+    nativePackage: "Extensions/mock/Native",
+    nativeRoles: ["app"],
+    nativePresentationRoles: ["app"],
+  };
+  expect(nativeRolePolicy(definition).presentations).toEqual(["app"]);
+  for (const nativePresentationRoles of [
+    null,
+    "app",
+    ["helper"],
+    [1],
+    ["app", "app"],
+  ])
+    expect(() =>
+      nativeRolePolicy({ ...definition, nativePresentationRoles }),
+    ).toThrow();
+  for (const overrides of [{ nativeLink: false }, { nativePackage: undefined }])
+    expect(() => nativeRolePolicy({ ...definition, ...overrides })).toThrow();
 });
 
 test("native role policy rejects empty, duplicated, unknown and mistyped declarations", () => {

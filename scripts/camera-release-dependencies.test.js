@@ -9,10 +9,6 @@ test("copied host runtime changes select the camera carrier without rebuilding u
   for (const source of [
     "Packages/EdithHost/Sources/EdithHostCore/HostContainedRole.swift",
     "Packages/EdithHost/Sources/EdithHost/HostApplication.swift",
-    "Packages/EdithHost/Package.swift",
-    "Packages/EdithHost/Package.resolved",
-    "scripts/build-minimal-host.mjs",
-    "scripts/package-shipping-host.py",
     "scripts/prepare-camera-extension-release.py",
   ]) {
     const selected = planExtensionBuilds(definitions, [source]).map(
@@ -22,4 +18,19 @@ test("copied host runtime changes select the camera carrier without rebuilding u
     expect(selected).not.toContain("calendar");
     expect(selected).not.toContain("clipboard");
   }
+});
+
+test("shared host packaging changes rebuild all same-executable consumers", async () => {
+  const definitions = JSON.parse(
+    await readFile("Extensions/manifest.json", "utf8"),
+  );
+  for (const source of [
+    "Packages/EdithHost/Package.swift",
+    "Packages/EdithHost/Package.resolved",
+    "scripts/build-minimal-host.mjs",
+    "scripts/package-shipping-host.py",
+  ])
+    expect(
+      planExtensionBuilds(definitions, [source]).map(({ id }) => id),
+    ).toEqual(definitions.map(({ id }) => id));
 });

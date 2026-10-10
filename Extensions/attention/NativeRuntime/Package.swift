@@ -27,6 +27,9 @@ let package = Package(
             resources: [.copy("Resources/ChromeExtension")],
             swiftSettings: [
                 .swiftLanguageMode(.v5), .enableExperimentalFeature("CheckImplementationOnly"),
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-Xlinker", "-u", "-Xlinker", "_edith_extension_presentation_create"])
             ]),
         .testTarget(
             name: "AttentionNativeTests", dependencies: ["AttentionNative"],

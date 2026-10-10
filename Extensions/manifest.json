@@ -2,7 +2,7 @@
   {
     "id": "keepAwake",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -17,17 +17,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionSupport",
-    "surfaceContractVersion": 1
+    "supportProduct": "EdithExtensionUI",
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "audioMixer",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -44,7 +47,9 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
-      "scripts/build-extension-support.mjs"
+      "scripts/build-extension-support.mjs",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
@@ -52,12 +57,13 @@
     "supportProduct": "EdithExtensionUI",
     "testTargets": [
       "ci-extension-audio-mixer"
-    ]
+    ],
+    "sameExecutableWorker": true
   },
   {
     "id": "focusDim",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -74,17 +80,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "windowSweaters",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -117,17 +126,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "micMute",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -145,17 +157,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "keystrokeHighlight",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -174,17 +189,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "presenter",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -214,15 +232,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "colorPicker",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -242,17 +263,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "systemStats",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -268,17 +292,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "emoji",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -312,15 +339,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "homebrew",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -340,15 +370,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "calendar",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -375,15 +408,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "jev",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -411,15 +447,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "system",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -442,15 +481,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "timeLapse",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 15,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -476,15 +518,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "cleaner",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -507,15 +552,18 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "appMaintenance",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -537,17 +585,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "blitztree",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -569,17 +620,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "plugins",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "supportProduct": "EdithExtensionDocuments",
@@ -634,15 +688,18 @@
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
-      "Packages/ExtensionSupport/Sources/EdithExtensionDocuments"
+      "Packages/ExtensionSupport/Sources/EdithExtensionDocuments",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "notchShelf",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "helper": [
@@ -700,19 +757,22 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "clipboard",
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionUI",
     "inputs": [
       "Extensions/clipboard"
@@ -722,7 +782,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "roles": {
@@ -773,12 +835,13 @@
         "Extensions/clipboard/Runtime.swift"
       ]
     },
-    "minimumSystemVersion": 14
+    "minimumSystemVersion": 14,
+    "sameExecutableWorker": true
   },
   {
     "id": "music",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -846,17 +909,20 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "docs",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -883,7 +949,9 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "nativeLicenses": [
@@ -899,14 +967,15 @@
         "source": "Packages/EdithDocsWorker/Licenses/swift-markdown-notice.txt",
         "destination": "swift-markdown-notice.txt"
       }
-    ]
+    ],
+    "sameExecutableWorker": true
   },
   {
     "id": "latex",
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionArchive",
     "inputs": [
       "Extensions/latex"
@@ -917,7 +986,9 @@
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
-      "Packages/ExtensionSupport/Sources/EdithExtensionArchive"
+      "Packages/ExtensionSupport/Sources/EdithExtensionArchive",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "roles": {
@@ -950,14 +1021,15 @@
         "Extensions/latex/Resources/review.js"
       ]
     },
-    "minimumSystemVersion": 14
+    "minimumSystemVersion": 14,
+    "sameExecutableWorker": true
   },
   {
     "id": "companion",
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionUI",
     "inputs": [
       "Extensions/companion"
@@ -967,7 +1039,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "roles": {
@@ -1020,14 +1094,15 @@
         "Extensions/companion/Views/CompanionUI.swift"
       ]
     },
-    "minimumSystemVersion": 14
+    "minimumSystemVersion": 14,
+    "sameExecutableWorker": true
   },
   {
     "id": "terminal",
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionUI",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -1049,7 +1124,9 @@
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
-      "scripts/build-ghostty.sh"
+      "scripts/build-ghostty.sh",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "roles": {
@@ -1070,12 +1147,13 @@
         "Extensions/terminal/TerminalWorker.swift"
       ]
     },
-    "minimumSystemVersion": 14
+    "minimumSystemVersion": 14,
+    "sameExecutableWorker": true
   },
   {
     "id": "studio",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1303,18 +1381,21 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "testTargets": [
       "ci-extension-studio",
       "ci-extension-studio-native"
-    ]
+    ],
+    "sameExecutableWorker": true
   },
   {
     "id": "usage",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1452,14 +1533,17 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "sameExecutableWorker": true
   },
   {
     "id": "bifrost",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1526,17 +1610,20 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "testTargets": [
       "ci-extension-bifrost"
-    ]
+    ],
+    "sameExecutableWorker": true
   },
   {
     "id": "lidAwake",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1574,7 +1661,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "supportProducts": {
@@ -1582,12 +1671,13 @@
     },
     "testTargets": [
       "ci-extension-lid-awake"
-    ]
+    ],
+    "sameExecutableWorker": true
   },
   {
     "id": "attention",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -1602,7 +1692,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
@@ -1610,6 +1702,9 @@
     "supportProduct": null,
     "nativePackage": "Extensions/attention/NativeRuntime",
     "nativeProduct": "AttentionNative",
+    "nativePresentationRoles": [
+      "app"
+    ],
     "nativeResources": [
       "AttentionNative_AttentionNative.bundle"
     ],
@@ -1685,7 +1780,8 @@
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionPage.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionSettingsView.swift",
       "Extensions/attention/NativeRuntime/Sources/AttentionNative/UI/Views/AttentionTimelineView.swift"
-    ]
+    ],
+    "sameExecutableWorker": true
   },
   {
     "id": "machines",
@@ -1695,7 +1791,7 @@
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
@@ -1715,7 +1811,9 @@
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
-      "Extensions/terminal/Native"
+      "Extensions/terminal/Native",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "minimumSystemVersion": 14,
@@ -1852,12 +1950,13 @@
         "Extensions/machines/Resources/usage-snapshot.py",
         "Extensions/machines/Resources/machine-collector.sh"
       ]
-    }
+    },
+    "sameExecutableWorker": true
   },
   {
     "id": "downloads",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -1883,17 +1982,20 @@
     ],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
-      "scripts/build-extension-support.mjs"
+      "scripts/build-extension-support.mjs",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI"
+    "supportProduct": "EdithExtensionUI",
+    "sameExecutableWorker": true
   },
   {
     "id": "seoAudit",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1931,14 +2033,17 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
-    "dependencies": []
+    "dependencies": [],
+    "sameExecutableWorker": true
   },
   {
     "id": "virtualCamera",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -2087,7 +2192,8 @@
       "Packages/EdithHost/Package.resolved",
       "Packages/ExtensionMarketplace/Sources",
       "scripts/build-minimal-host.mjs",
-      "scripts/package-shipping-host.py"
+      "scripts/package-shipping-host.py",
+      "scripts/build-extension-ui-carrier.mjs"
     ],
     "dependencies": [],
     "testTargets": [
@@ -2100,12 +2206,13 @@
       "transport": "obs",
       "applicationIdentifier": "com.pulkit.edith.cameraCarrier",
       "minimumSystemVersion": 14
-    }
+    },
+    "sameExecutableWorker": true
   },
   {
     "id": "codeStats",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
@@ -2171,19 +2278,22 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport"
+      "Packages/ExtensionSupport",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
-    "surfaceContractVersion": 1
+    "surfaceContractVersion": 1,
+    "sameExecutableWorker": true
   },
   {
     "id": "herdr",
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
@@ -2205,7 +2315,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "Extensions/terminal/Native",
-      "scripts/build-ghostty.sh"
+      "scripts/build-ghostty.sh",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "nativeTaskRoles": [
@@ -2387,14 +2499,15 @@
         "Extensions/herdr/Resources/qoder.svg",
         "Extensions/herdr/Resources/qwen.svg"
       ]
-    }
+    },
+    "sameExecutableWorker": true
   },
   {
     "id": "quinjet",
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Extensions/terminal/Native",
@@ -2416,7 +2529,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "Extensions/terminal/Native",
-      "scripts/build-ghostty.sh"
+      "scripts/build-ghostty.sh",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "nativeTaskRoles": [
@@ -2481,12 +2596,13 @@
         "Extensions/quinjet/Resources/review.html",
         "Extensions/quinjet/Resources/review.js"
       ]
-    }
+    },
+    "sameExecutableWorker": true
   },
   {
     "id": "database",
     "version": "1.0.0",
-    "hostABI": "edith-host-1",
+    "hostABI": "edith-host-2",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "supportProduct": "EdithExtensionUI",
@@ -2503,7 +2619,9 @@
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport/Package.swift",
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "scripts/build-extension-ui-carrier.mjs",
+      "scripts/build-camera-carrier.mjs"
     ],
     "dependencies": [],
     "roles": {
@@ -2581,6 +2699,7 @@
       ".build/checkouts/swift-atomics/Sources/_AtomicsShims/include",
       ".build/checkouts/swift-numerics/Sources/_NumericsShims/include",
       ".build/checkouts/swift-nio/Sources/CNIOWindows/include"
-    ]
+    ],
+    "sameExecutableWorker": true
   }
 ]

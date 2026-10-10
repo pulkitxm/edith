@@ -22,7 +22,7 @@ struct MarketplaceHarness {
         guard arguments.count >= 4 else { throw MarketplaceError.invalidCatalog }
         let operation = arguments[0]
         guard
-            ["install", "update", "inspect", "queue-remove", "remove", "voice"].contains(operation)
+            ["install", "update", "inspect", "queue-remove", "remove"].contains(operation)
         else {
             throw MarketplaceError.invalidCatalog
         }
@@ -69,10 +69,17 @@ struct MarketplaceHarness {
                 return file
             },
             verify: { directory in
-                for bundle in try FileManager.default.contentsOfDirectory(
-                    at: directory, includingPropertiesForKeys: nil)
-                where bundle.pathExtension == "bundle" {
-                    try ExtensionCodeSignature.verifyDevelopment(bundle)
+                let manifest = try JSONDecoder().decode(
+                    ExtensionPayloadManifest.self,
+                    from: Data(contentsOf: directory.appendingPathComponent("package.json")))
+                let carrier = try ExtensionUICarrier(payload: directory, manifest: manifest)
+                try carrier.verifyDevelopment()
+                for role in ExtensionBundleRuntime.Role.allCases {
+                    let bundle = carrier.payloadDirectory.appendingPathComponent(
+                        "\(role.rawValue).bundle")
+                    if FileManager.default.fileExists(atPath: bundle.path) {
+                        try ExtensionCodeSignature.verifyDevelopment(bundle)
+                    }
                 }
             })
         if operation == "remove" {
@@ -80,36 +87,15 @@ struct MarketplaceHarness {
             print("{\"removed\":\(try store.installedPackages().isEmpty)}")
             return
         }
-        if operation == "install" || operation == "voice" {
+        if operation == "install" {
             let catalog = try await client.refresh().catalog
             _ = try await installer.install(
                 catalog.installationPlan(
-                    for: operation == "voice" ? "audioMixer" : "keepAwake",
-                    hostABI: operation == "voice"
-                        ? MarketplaceConfiguration.hostABI : MarketplaceConfiguration.workerHostABI,
+                    for: "keepAwake",
+                    hostABI: MarketplaceConfiguration.workerHostABI,
                     architecture: "arm64",
                     systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),
                 repository: "pulkitxm/edith")
-        }
-        if operation == "voice" {
-            let library = try ExtensionNativeLibrary.load(
-                id: "audioMixer", store: store,
-                hostABI: MarketplaceConfiguration.hostABI,
-                verify: ExtensionCodeSignature.verifyDevelopment)
-            typealias Create =
-                @convention(c) (
-                    UnsafePointer<CChar>?, UnsafePointer<CChar>?, UnsafeMutablePointer<CChar>?, Int
-                ) -> UnsafeMutableRawPointer?
-            let create = try library.symbol("MeetingVoiceCreate", as: Create.self)
-            var error = [CChar](repeating: 0, count: 2048)
-            guard
-                create(
-                    "/synthetic/missing-encoder.onnx", "/synthetic/missing-voice.onnx", &error,
-                    error.count) == nil,
-                error.first != 0
-            else { throw MarketplaceError.invalidBundle }
-            print("{\"nativeVoiceRuntime\":\"loaded\",\"missingModelRejected\":true}")
-            return
         }
         let runtime = ExtensionBundleRuntime(
             store: store, role: .helper, hostABI: MarketplaceConfiguration.workerHostABI,
@@ -120,7 +106,7 @@ struct MarketplaceHarness {
             let catalog = try await client.refresh().catalog
             _ = try await installer.install(
                 catalog.installationPlan(
-                    for: operation == "voice" ? "audioMixer" : "keepAwake",
+                    for: "keepAwake",
                     hostABI: MarketplaceConfiguration.workerHostABI,
                     architecture: "arm64",
                     systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion),

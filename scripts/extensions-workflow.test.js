@@ -6,6 +6,7 @@ const workflow = Bun.YAML.parse(
   readFileSync(".github/workflows/extensions.yml", "utf8"),
 );
 const { plan, build, publish } = workflow.jobs;
+const frozen = workflow.jobs["frozen-host"];
 const text = (value) => JSON.stringify(value).replaceAll("\\n", "\n");
 
 test("portable planning uses Ubuntu while native checks and publication keep macOS", () => {
@@ -43,28 +44,31 @@ test("downloaded Docs source and reference changes run independent package check
   ).toEqual(["docs"]);
 });
 
-test("OBS Camera release freezes the microphone host without provisioning profiles", () => {
-  const preparation = build.steps.findIndex(
-    (step) => step.name === "Prepare the frozen Camera microphone host",
-  );
-  const signing = build.steps.findIndex(
+test("all extension releases reuse one signed host without Camera provisioning", () => {
+  const signing = frozen.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
   );
-  const packaging = build.steps.findIndex(
-    (step) => step.name === "Build only this extension",
+  const preparation = frozen.steps.findIndex(
+    (step) =>
+      step.name ===
+      "Freeze the production host once for all changed extensions",
   );
   expect(preparation).toBeGreaterThan(signing);
-  expect(preparation).toBeLessThan(packaging);
-  expect(build.steps[preparation].run).toBe(
-    "python3 scripts/prepare-camera-extension-release.py",
+  expect(frozen.steps[preparation].run).toContain("package-shipping-host.py");
+  expect(frozen.steps[preparation].run).toContain("--release");
+  expect(text(frozen)).not.toContain("CAMERA_CARRIER_PROVISIONING_PROFILE");
+  expect(text(frozen)).not.toContain("CAMERA_EXTENSION_PROVISIONING_PROFILE");
+  const packaging = build.steps.find(
+    (step) => step.name === "Build only this extension",
   );
-  expect(build.steps[preparation].env.DEVELOPMENT).toContain(
-    "inputs.publish != true",
+  expect(packaging.env.EXTENSION_CONTAINING_HOST_APP).toContain(
+    "local/extension-release-host/Edith.app",
   );
-  expect(text(build)).not.toContain("CAMERA_CARRIER_PROVISIONING_PROFILE");
-  expect(text(build)).not.toContain("CAMERA_EXTENSION_PROVISIONING_PROFILE");
-  expect(build.steps.at(-1).if).toBe("always()");
-  expect(build.steps.at(-1).run).toContain("camera-release-*");
+  expect(packaging.env.EXTENSION_CONTAINING_HOST_APP).toContain(
+    "local/minimal-host/Edith.app",
+  );
+  for (const job of [frozen, build])
+    expect(job.steps.at(-1).if).toBe("always()");
 });
 
 test("release asset helper changes run the extension checks", () => {
@@ -77,7 +81,7 @@ test("extension builds consume independent fingerprints without a feature framew
   expect(text(plan)).toContain("extension-release-plan.mjs");
   expect(workflow.jobs.host).toBeUndefined();
   expect(plan.outputs.host).toBeUndefined();
-  expect(build.needs).toEqual(["tests", "plan"]);
+  expect(build.needs).toEqual(["tests", "plan", "frozen-host"]);
   expect(text(build)).not.toContain("host-interfaces");
   expect(text(build)).not.toContain("EXTENSION_HOST_PRODUCTS");
   const cache = build.steps.find(
@@ -94,9 +98,7 @@ test("every extension passes native lifecycle checks before release signing", ()
     (step) => step.name === "Require a native worker package",
   );
   const lifecycle = build.steps.findIndex(
-    (step) =>
-      step.name ===
-      "Build the isolated host and exercise this worker's lifecycle",
+    (step) => step.name === "Exercise this worker against the frozen host",
   );
   const signing = build.steps.findIndex(
     (step) => step.name === "Import the release signing certificate",
@@ -111,10 +113,9 @@ test("every extension passes native lifecycle checks before release signing", ()
   expect(guard).toBeLessThan(lifecycle);
   expect(lifecycle).toBeLessThan(signing);
   expect(signing).toBeLessThan(bundle);
-  expect(build.steps[lifecycle].run).toContain("make host");
-  expect(build.steps[lifecycle].run).toContain(
-    "make ci-extension-workers EXTENSION=",
-  );
+  expect(build.steps[lifecycle].run).not.toContain("make host");
+  expect(text(frozen)).toContain("make ci-host host");
+  expect(build.steps[lifecycle].run).toContain("test-extension-workers.mjs");
   expect(build.steps[bundle].run).toContain('"$EXTENSION_ID" --development');
   expect(text(build)).toContain("secrets.MACOS_CERT_P12");
   expect(text(build)).toContain("secrets.NOTARY_KEY");
@@ -168,9 +169,7 @@ test("terminal dependencies are restored before native lifecycle builds", () => 
     (step) => step.name === "Build the optional terminal library",
   );
   const lifecycle = build.steps.findIndex(
-    (step) =>
-      step.name ===
-      "Build the isolated host and exercise this worker's lifecycle",
+    (step) => step.name === "Exercise this worker against the frozen host",
   );
   expect(native).toBeGreaterThan(-1);
   expect(native).toBeLessThan(cache);
@@ -194,7 +193,7 @@ test("common extension checks do not repeat every native release build", () => {
   expect(checks).toContain("ci-extension-commands");
   expect(checks).not.toContain("ci-marketplace-host");
   expect(checks).not.toContain("ci-extension-workers");
-  expect(text(build)).toContain("ci-extension-workers EXTENSION=");
+  expect(text(build)).toContain("test-extension-workers.mjs");
 });
 
 test("selected optional native suites gate lifecycle and release signing", () => {
@@ -205,9 +204,7 @@ test("selected optional native suites gate lifecycle and release signing", () =>
     (step) => step.name === "Build the optional terminal library",
   );
   const lifecycle = build.steps.findIndex(
-    (step) =>
-      step.name ===
-      "Build the isolated host and exercise this worker's lifecycle",
+    (step) => step.name === "Exercise this worker against the frozen host",
   );
   const cache = build.steps.findIndex(
     (step) =>
@@ -220,4 +217,17 @@ test("selected optional native suites gate lifecycle and release signing", () =>
   expect(build.steps[suites].run).toBe(
     'bun scripts/test-extension-package.mjs "$EXTENSION_ID"',
   );
+});
+
+test("matrix jobs restore executable modes and never rebuild the shared host", () => {
+  for (const job of [workflow.jobs.tests, build]) {
+    expect(job.needs).toContain("frozen-host");
+    expect(text(job)).toContain("frozen-extension-host");
+    expect(text(job)).toContain("tar -xzf");
+    expect(text(job)).not.toContain("make host");
+  }
+  expect(frozen["runs-on"]).toBe("macos-26");
+  expect(text(frozen)).toContain("tar -czf");
+  expect(text(frozen)).toContain("HostLifecycleHarness");
+  expect(text(frozen)).toContain("MarketplaceHarness");
 });

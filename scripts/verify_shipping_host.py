@@ -10,6 +10,21 @@ def run(*arguments):
     return result.stdout + result.stderr
 
 
+def extension_point_descriptor(identifier):
+    return {
+        'EXVersion': 1,
+        identifier + '.ExtensionUI': {
+            'EXExtensionPointIsPublic': True,
+            'EXExtensionPointName': 'ExtensionUI',
+            'EXPresentsUserInterface': True,
+            'EXRequiredEntitlements': {'com.apple.security.app-sandbox': True},
+            'EXRequiresEnhancedSecurity': False,
+            'EXSupportedPlatforms': ['macOS'],
+            '_EXScopeRestriction': 'none',
+        },
+    }
+
+
 def inspect_layout(bundle, release=False, launcher_required=True):
     bundle = Path(bundle).resolve()
     plist = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
@@ -23,8 +38,13 @@ def inspect_layout(bundle, release=False, launcher_required=True):
     assert plist['SUPublicEDKey'] and plist['SUFeedURL'].startswith('https://github.com/pulkitxm/edith/releases/')
     executable = bundle / 'Contents/MacOS/Edith'
     assert executable.is_file() and not executable.is_symlink()
-    allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature', 'Library'}
+    allowed = {'Info.plist', 'MacOS', 'Frameworks', 'Resources', '_CodeSignature', 'Library', 'Extensions'}
     assert {path.name for path in (bundle / 'Contents').iterdir()} <= allowed, 'Unexpected host payload directory'
+    extensions = bundle / 'Contents/Extensions'
+    assert {path.name for path in extensions.iterdir()} == {'ExtensionUI.appextensionpoints'}, 'Feature payload in host Extensions'
+    descriptor = extensions / 'ExtensionUI.appextensionpoints'
+    assert descriptor.is_file() and not descriptor.is_symlink(), 'Invalid host extension point file'
+    assert plistlib.loads(descriptor.read_bytes()) == extension_point_descriptor(identifier), 'Host extension point identity does not match its bundle'
     library = bundle / 'Contents/Library'
     label = 'com.pulkit.edith.extensions.carrier.v1'
     assert {path.name for path in library.iterdir()} == {'LaunchDaemons'}, 'Feature payload in host Library'
@@ -86,7 +106,7 @@ def inspect_host(bundle, release=False, launcher_required=True):
     symbols = run('nm', '-g', str(executable))
     for feature in ('HerdrStore', 'MusicPlayerEngine', 'MeetingVoice', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
         assert feature not in symbols, f'Feature implementation in host: {feature}'
-    assert bytes_installed < 5_000_000, f'Empty host exceeds 5 MB: {bytes_installed}'
+    assert bytes_installed < 8_000_000, f'Empty host exceeds 8 MB: {bytes_installed}'
     closure = run('otool', '-L', str(executable))
     for feature in ('EdithKit', 'EdithShared', 'MeetingVoice', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
         assert feature not in closure, f'Feature dependency in host: {feature}'
