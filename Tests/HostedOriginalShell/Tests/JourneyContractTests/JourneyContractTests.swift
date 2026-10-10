@@ -188,3 +188,20 @@ private func fixture(identifier: String = identifier, directory: String = direct
         }
     }
 }
+
+@Test func replacementOperatorCredentialsNeverEnterTheApplicationEnvironment() throws {
+    let fixture = fixture()
+    let environment = runner.merging([
+        "EDITH_JOURNEY_ACCOUNT_HOME": "/Users/fixture",
+        "EDITH_APPLICATION_IDENTIFIER": identifier,
+        "EDITH_SHARED_DEFAULTS_SUITE": identifier,
+        "EDITH_EXTENSION_FIXTURE_HOME": fixture.home,
+        "EDITH_GUI_FIXTURE_DIRECTORY": fixture.directory,
+        "EDITH_JOURNEY_OPERATOR_ENDPOINT": "http://127.0.0.1:23456/replace",
+        "EDITH_JOURNEY_OPERATOR_TOKEN": String(repeating: "a", count: 64),
+    ]) { _, next in next }
+    let application = try fixture.applicationEnvironment(from: environment)
+    #expect(application["EDITH_JOURNEY_OPERATOR_ENDPOINT"] == nil)
+    #expect(application["EDITH_JOURNEY_OPERATOR_TOKEN"] == nil)
+    try fixture.validateApplicationEnvironment(application)
+}

@@ -14,6 +14,8 @@ const runnerKeys = [
   "EDITH_APPLICATION_IDENTIFIER",
   "EDITH_SHARED_DEFAULTS_SUITE",
   "EDITH_EXTENSION_FIXTURE_HOME",
+  "EDITH_JOURNEY_OPERATOR_ENDPOINT",
+  "EDITH_JOURNEY_OPERATOR_TOKEN",
 ];
 
 export function journeyRunnerEnvironment(environment) {
@@ -32,6 +34,20 @@ function validateRunnerEnvironment(environment) {
         value.length <= 4096 &&
         !/[\0\r\n]/.test(value),
     );
+  const endpoint = new URL(environment.EDITH_JOURNEY_OPERATOR_ENDPOINT);
+  assert.equal(endpoint.protocol, "http:");
+  assert.equal(endpoint.hostname, "127.0.0.1");
+  assert(
+    endpoint.port &&
+      Number(endpoint.port) >= 1 &&
+      Number(endpoint.port) <= 65535,
+  );
+  assert.equal(endpoint.pathname, "/replace");
+  assert.equal(
+    endpoint.username + endpoint.password + endpoint.search + endpoint.hash,
+    "",
+  );
+  assert.match(environment.EDITH_JOURNEY_OPERATOR_TOKEN, /^[a-f0-9]{64}$/);
   admitHostedJourney(
     environment,
     environment.EDITH_GUI_FIXTURE_DIRECTORY,

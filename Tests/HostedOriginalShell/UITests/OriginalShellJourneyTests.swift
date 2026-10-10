@@ -14,7 +14,7 @@ final class OriginalShellJourneyTests: XCTestCase {
     private var outcomeSequence = 0
     private var windowImages: [String: Data] = [:]
 
-    func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() throws {
+    func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() async throws {
         continueAfterFailure = false
         let environment = ProcessInfo.processInfo.environment
         root = URL(fileURLWithPath: try XCTUnwrap(environment["EDITH_GUI_FIXTURE_DIRECTORY"]))
@@ -113,9 +113,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         }
         application.terminate()
         XCTAssertTrue(wait(15) { !self.latestRunningProcesses() })
-        try replaceApplication(fixture)
-        try Data(contentsOf: root.appendingPathComponent("updated-catalog.json"))
-            .write(to: root.appendingPathComponent("active-catalog.json"), options: .atomic)
+        try await replaceApplication(fixture)
         try registerApplication(fixture)
         application.launch()
         XCTAssertTrue(application.windows.firstMatch.waitForExistence(timeout: 30))
@@ -389,18 +387,45 @@ final class OriginalShellJourneyTests: XCTestCase {
         XCTAssertTrue(matched)
     }
 
-    private func replaceApplication(_ fixture: JourneyFixture) throws {
-        let original = URL(fileURLWithPath: fixture.application)
-        let replacement = root.appendingPathComponent("replacement/Host.payload")
-        XCTAssertEqual(original.path, root.appendingPathComponent("Host.app").path)
-        XCTAssertFalse(
-            FileManager.default.fileExists(
-                atPath: root.appendingPathComponent("previous/Host.payload").path))
-        try FileManager.default.createDirectory(
-            at: root.appendingPathComponent("previous"), withIntermediateDirectories: false)
-        try FileManager.default.moveItem(
-            at: original, to: root.appendingPathComponent("previous/Host.payload"))
-        try FileManager.default.copyItem(at: replacement, to: original)
+    private func replaceApplication(_ fixture: JourneyFixture) async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let endpoint = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_ENDPOINT"])
+        let token = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_TOKEN"])
+        guard let url = URL(string: endpoint), url.scheme == "http",
+            url.host == "127.0.0.1", let port = url.port, (1...65535).contains(port),
+            url.path == "/replace", url.query == nil, url.fragment == nil,
+            url.user == nil, url.password == nil, token.utf8.count == 64,
+            token.allSatisfy({ $0.isHexDigit && !$0.isUppercase })
+        else { throw JourneyContractError.invalidEnvironment }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 15
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: [
+                "operation": "replaceApplication", "hostIdentifier": fixture.identifier,
+                "sourceCommit": fixture.sourceCommit, "previousVersion": "1.0.0",
+                "nextVersion": "2.0.0",
+            ], options: .sortedKeys)
+        XCTAssertLessThanOrEqual(request.httpBody?.count ?? 0, 1024)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let (bytes, response) = try await session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertLessThanOrEqual(bytes.count, 1024)
+        let result = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        XCTAssertEqual(result["schema"] as? Int, 1)
+        XCTAssertEqual(result["operation"] as? String, "replaceApplication")
+        XCTAssertEqual(result["hostIdentifier"] as? String, fixture.identifier)
+        XCTAssertEqual(result["sourceCommit"] as? String, fixture.sourceCommit)
+        XCTAssertEqual(result["applicationVersion"] as? String, "2.0.0")
+        XCTAssertEqual(result["executableSHA256"] as? String, fixture.executableSHA256["2.0.0"])
+        XCTAssertEqual(result["priorOwnedGenerationsExited"] as? Bool, true)
     }
 
     private func latestRunningProcesses() -> Bool {

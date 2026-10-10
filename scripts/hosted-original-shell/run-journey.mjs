@@ -16,7 +16,12 @@ import {
 } from "./attachments.mjs";
 import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
 import { validateDisabledJourneyProcesses } from "./outcomes.mjs";
+import { runOwnedJourneyCommand } from "./owned-command.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
+import {
+  createJourneyReplacement,
+  startJourneyReplacementOperator,
+} from "./replacement.mjs";
 import {
   configureUITestRun,
   journeyRunnerEnvironment,
@@ -43,6 +48,7 @@ let outcome = {
   actualJourneyValidated: false,
 };
 let failure;
+let replacementOperator;
 try {
   const receipt = JSON.parse(
     await readFile(join(output, "build-receipt.json"), "utf8"),
@@ -97,7 +103,32 @@ try {
     ],
     { stdio: "inherit" },
   );
-  const runnerVariables = journeyRunnerEnvironment(variables);
+  const fixture = JSON.parse(
+    await readFile(join(directory, "journey.json"), "utf8"),
+  );
+  assert.equal(fixture.identifier, identifier);
+  assert.equal(fixture.sourceCommit, receipt.sourceCommit);
+  const replacement = await createJourneyReplacement({
+    directory,
+    environment: variables,
+    accountHome: homedir(),
+    fixture,
+    audit: async () =>
+      JSON.parse(
+        execFileSync(auditExecutable, [directory], {
+          env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", ...variables },
+          encoding: "utf8",
+          timeout: 10_000,
+          maxBuffer: 131_072,
+        }),
+      ),
+  });
+  replacementOperator = await startJourneyReplacementOperator(replacement);
+  const runnerVariables = journeyRunnerEnvironment({
+    ...variables,
+    EDITH_JOURNEY_OPERATOR_ENDPOINT: replacementOperator.endpoint,
+    EDITH_JOURNEY_OPERATOR_TOKEN: replacementOperator.token,
+  });
   const project = await writeUIProject(output, runnerVariables);
   const args = [
     "-project",
@@ -126,7 +157,7 @@ try {
   configureUITestRun(plan, runnerVariables);
   let testFailure;
   try {
-    execFileSync(
+    await runOwnedJourneyCommand(
       "xcodebuild",
       [
         "test-without-building",
@@ -141,7 +172,7 @@ try {
         "-resultBundlePath",
         join(output, "HostedShellJourney.xcresult"),
       ],
-      { stdio: "inherit", timeout: 900_000 },
+      { stdio: "inherit" },
     );
   } catch (error) {
     testFailure = error;
@@ -248,6 +279,7 @@ try {
   failure = error;
   outcome = { ...outcome, reason: String(error.message).slice(0, 4096) };
 } finally {
+  if (replacementOperator) await replacementOperator.close();
   await mkdir(output, { recursive: true });
   for (const name of ["state.json", "journey.json"])
     try {
