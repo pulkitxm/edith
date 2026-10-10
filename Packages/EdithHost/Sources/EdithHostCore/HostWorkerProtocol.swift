@@ -35,11 +35,16 @@ public struct HostWorkerRequest: Codable, Sendable {
     public let token: UUID
     public let operation: String
     public let configuration: HostWorkerConfiguration?
+    public let navigation: HostWorkerNavigationReply?
 
-    public init(operation: String, configuration: HostWorkerConfiguration? = nil) {
-        token = UUID()
+    public init(
+        token: UUID = UUID(), operation: String, configuration: HostWorkerConfiguration? = nil,
+        navigation: HostWorkerNavigationReply? = nil
+    ) {
+        self.token = token
         self.operation = operation
         self.configuration = configuration
+        self.navigation = navigation
     }
 }
 
@@ -71,19 +76,94 @@ public struct HostWorkerProcessGroup: Codable, Sendable {
     }
 }
 
-public struct HostWorkerNavigation: Codable, Sendable {
+public struct HostWorkerNavigationRequest: Codable, Sendable {
     public let kind: String
+    public let token: UUID
+    public let extensionID: String
+    public let version: String
+    public let section: String?
+    public let relativePath: String?
+    public let presentationID: UUID?
+    public let location: String?
+
+    public init(
+        token: UUID = UUID(), configuration: HostWorkerConfiguration, section: String? = nil,
+        relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil
+    ) {
+        kind = "navigation"
+        self.token = token
+        extensionID = configuration.extensionID
+        version = configuration.version
+        self.section = section
+        self.relativePath = relativePath
+        self.presentationID = presentationID
+        self.location = location
+    }
+
+    public func validate(configuration: HostWorkerConfiguration) throws {
+        guard kind == "navigation", extensionID == configuration.extensionID,
+            version == configuration.version,
+            section.map({
+                !$0.isEmpty && $0.utf8.count <= 128
+                    && $0.allSatisfy {
+                        $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-")
+                    }
+            }) ?? true,
+            (presentationID == nil) == (location == nil),
+            location.map({
+                [
+                    "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
+                    "music.sidebar", "music.detail",
+                ].contains($0)
+            }) ?? true
+        else { throw HostWorkerError.invalidResponse }
+        if let relativePath {
+            guard extensionID == "music", relativePath.utf8.count <= 4096,
+                !relativePath.isEmpty, !relativePath.hasPrefix("/"),
+                !relativePath.utf8.contains(0), !relativePath.contains("\\"),
+                relativePath.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({
+                    !$0.isEmpty && $0 != "." && $0 != ".."
+                })
+            else { throw HostWorkerError.invalidResponse }
+        }
+    }
+}
+
+public struct HostWorkerNavigationReply: Codable, Sendable {
+    public let token: UUID
+    public let extensionID: String
+    public let version: String
+    public let ok: Bool
+
+    public init(request: HostWorkerNavigationRequest, ok: Bool) {
+        token = request.token
+        extensionID = request.extensionID
+        version = request.version
+        self.ok = ok
+    }
+
+    public func validate(configuration: HostWorkerConfiguration) throws {
+        guard extensionID == configuration.extensionID, version == configuration.version else {
+            throw HostWorkerError.invalidResponse
+        }
+    }
+}
+
+public struct HostWorkerNavigationCancel: Codable, Sendable {
+    public let kind: String
+    public let token: UUID
     public let extensionID: String
     public let version: String
 
-    public init(configuration: HostWorkerConfiguration) {
-        kind = "navigation"
+    public init(token: UUID, configuration: HostWorkerConfiguration) {
+        kind = "navigationCancel"
+        self.token = token
         extensionID = configuration.extensionID
         version = configuration.version
     }
 
     public func validate(configuration: HostWorkerConfiguration) throws {
-        guard kind == "navigation", extensionID == configuration.extensionID,
+        guard kind == "navigationCancel", extensionID == configuration.extensionID,
             version == configuration.version
         else { throw HostWorkerError.invalidResponse }
     }

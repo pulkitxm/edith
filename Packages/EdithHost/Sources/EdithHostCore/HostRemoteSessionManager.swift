@@ -129,6 +129,34 @@ public final class HostRemoteSessionManager {
         return handle
     }
 
+    public func validateNavigationOrigin(_ request: HostWorkerNavigationRequest) throws {
+        let id = request.extensionID
+        guard marketplace.sessions.activeIDs.contains(id),
+            marketplace.sessions.versions[id] == request.version,
+            !marketplace.pendingRemovalIDs.contains(id)
+        else { throw HostWorkerError.rejected }
+        if let presentationID = request.presentationID {
+            guard let handle = presentations[presentationID], handle.isPresented,
+                handle.request.extensionID == id, handle.request.location == request.location,
+                pendingCleanup[presentationID] == nil, handle.processIdentity?.isRunning == true
+            else { throw HostWorkerError.rejected }
+        } else if request.location != nil {
+            throw HostWorkerError.rejected
+        }
+    }
+
+    public func presentationCounts(excluding excluded: Set<UUID> = []) -> [String: Int] {
+        var result: [String: Int] = [:]
+        for (id, handle) in presentations where !excluded.contains(id) {
+            result[handle.request.extensionID, default: 0] += 1
+        }
+        for (id, extensionID) in pendingCleanup
+        where !excluded.contains(id) && presentations[id] == nil {
+            result[extensionID, default: 0] += 1
+        }
+        return result
+    }
+
     public func prepareToClose(id: UUID) async throws {
         try await presentations[id]?.prepareToClose()
     }

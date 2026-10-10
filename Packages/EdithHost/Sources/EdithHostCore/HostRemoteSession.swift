@@ -263,6 +263,7 @@ public final class HostRemoteSceneHandle {
     public let sceneIdentifier: String
     public var presentationID: UUID { request.presentationID }
     public var identity: AppExtensionIdentity { session.identity }
+    public var isPresented: Bool { presented && !closed }
     public var processIdentity: HostRemoteProcessIdentity? { session.peer }
     private let session: HostRemoteSession
     private var channel: HostRemoteChannel?

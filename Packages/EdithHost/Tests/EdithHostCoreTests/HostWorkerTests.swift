@@ -171,7 +171,7 @@ import Testing
     @Test func ownedNavigationIsDeliveredOnlyAfterStart() async throws {
         let worker = try fixture("navigation")
         var received = 0
-        worker.didRequestNavigation = { received += 1 }
+        worker.didRequestNavigation = { _ in received += 1 }
         try await worker.start()
         try await worker.show()
         try await worker.synchronize()
@@ -182,7 +182,7 @@ import Testing
     @Test func earlyNavigationDoesNotEnterHostRouting() async throws {
         let worker = try fixture("navigation-early")
         var received = 0
-        worker.didRequestNavigation = { received += 1 }
+        worker.didRequestNavigation = { _ in received += 1 }
         try await worker.start()
         try await worker.synchronize()
         #expect(received == 0)
@@ -192,7 +192,7 @@ import Testing
     @Test func recoveryNavigationCannotOpenHostContent() async throws {
         let worker = try fixture("navigation")
         var received = 0
-        worker.didRequestNavigation = { received += 1 }
+        worker.didRequestNavigation = { _ in received += 1 }
         try await worker.start(recoveryOnly: true)
         try await worker.show()
         try await worker.synchronize()
@@ -203,7 +203,7 @@ import Testing
     @Test func disablePreparationNavigationCannotOpenHostContent() async throws {
         let worker = try fixture("navigation-disable")
         var received = 0
-        worker.didRequestNavigation = { received += 1 }
+        worker.didRequestNavigation = { _ in received += 1 }
         try await worker.start()
         try await worker.prepareDisable()
         #expect(received == 0)
@@ -214,7 +214,7 @@ import Testing
     func forgedNavigationTerminatesTheOwnedWorker(mode: String) async throws {
         let worker = try fixture(mode)
         var received = 0
-        worker.didRequestNavigation = { received += 1 }
+        worker.didRequestNavigation = { _ in received += 1 }
         try await worker.start()
         do { try await worker.show(); try await worker.synchronize() } catch {}
         let deadline = ContinuousClock.now + .seconds(2)
@@ -223,6 +223,46 @@ import Testing
         }
         #expect(received == 0)
         #expect(!worker.ready)
+        try await worker.stop()
+    }
+
+    @Test func navigationAcknowledgesOnlyAfterTheOwningReceiverAppliesTheRoute() async throws {
+        let worker = try fixture("navigation-ack")
+        var applied = false
+        worker.didRequestNavigation = { request in
+            #expect(request.extensionID == "sample")
+            try await Task.sleep(for: .milliseconds(60))
+            applied = true
+        }
+        try await worker.start()
+        try await worker.show()
+        #expect(applied)
+        #expect(worker.ready)
+        try await worker.stop()
+    }
+
+    @Test func rejectedNavigationIsAcknowledgedWithoutKillingTheWorker() async throws {
+        let worker = try fixture("navigation-rejected")
+        worker.didRequestNavigation = { _ in throw HostWorkerError.rejected }
+        try await worker.start()
+        await #expect(throws: HostWorkerError.rejected) { try await worker.show() }
+        #expect(worker.ready)
+        #expect(try await worker.status().ok)
+        try await worker.stop()
+    }
+
+    @Test(arguments: ["navigation-cancel", "navigation-disconnect"])
+    func cancelledNavigationCannotApplyALateRoute(mode: String) async throws {
+        let worker = try fixture(mode)
+        var applied = false
+        worker.didRequestNavigation = { _ in
+            try await Task.sleep(for: .milliseconds(120))
+            applied = true
+        }
+        try await worker.start()
+        do { try await worker.show() } catch {}
+        try await Task.sleep(for: .milliseconds(180))
+        #expect(!applied)
         try await worker.stop()
     }
 
