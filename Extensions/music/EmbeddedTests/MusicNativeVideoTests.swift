@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import AudioToolbox
 import CoreVideo
 import EdithExtensionCommands
 import EdithExtensionSupport
@@ -23,6 +24,14 @@ import Testing
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32ARGB,
                 kCVPixelBufferWidthKey as String: 16, kCVPixelBufferHeightKey as String: 16,
             ])
+        let audio = AVAssetWriterInput(
+            mediaType: .audio,
+            outputSettings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 64_000,
+            ])
+        writer.add(audio)
         writer.add(input)
         #expect(writer.startWriting())
         writer.startSession(atSourceTime: .zero)
@@ -48,6 +57,44 @@ import Testing
                     pixels, withPresentationTime: CMTime(value: Int64(index), timescale: 2)))
         }
         input.markAsFinished()
+        var format = AudioStreamBasicDescription(
+            mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4, mChannelsPerFrame: 1,
+            mBitsPerChannel: 32, mReserved: 0)
+        var description: CMAudioFormatDescription?
+        #expect(
+            CMAudioFormatDescriptionCreate(
+                allocator: kCFAllocatorDefault, asbd: &format,
+                layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil, extensions: nil,
+                formatDescriptionOut: &description) == noErr)
+        var block: CMBlockBuffer?
+        #expect(
+            CMBlockBufferCreateWithMemoryBlock(
+                allocator: kCFAllocatorDefault, memoryBlock: nil,
+                blockLength: 192_000, blockAllocator: kCFAllocatorDefault, customBlockSource: nil,
+                offsetToData: 0, dataLength: 192_000, flags: 0, blockBufferOut: &block) == noErr)
+        #expect(
+            CMBlockBufferFillDataBytes(
+                with: 0, blockBuffer: try #require(block), offsetIntoDestination: 0,
+                dataLength: 192_000) == noErr)
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 1, timescale: 48_000), presentationTimeStamp: .zero,
+            decodeTimeStamp: .invalid)
+        var samples: CMSampleBuffer?
+        #expect(
+            CMSampleBufferCreateReady(
+                allocator: kCFAllocatorDefault, dataBuffer: block,
+                formatDescription: description, sampleCount: 48_000, sampleTimingEntryCount: 1,
+                sampleTimingArray: &timing, sampleSizeEntryCount: 0, sampleSizeArray: nil,
+                sampleBufferOut: &samples) == noErr)
+        while !audio.isReadyForMoreMediaData {
+            try Task.checkCancellation()
+            if let error = writer.error { throw error }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(audio.append(try #require(samples)))
+        audio.markAsFinished()
         await writer.finishWriting()
         #expect(writer.status == .completed)
     }
@@ -89,6 +136,12 @@ import Testing
         #expect(
             descriptions.contains {
                 CMFormatDescriptionGetMediaSubType($0) == kCMVideoCodecType_H264
+            })
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let audioDescriptions = try await #require(audioTracks.first).load(.formatDescriptions)
+        #expect(
+            audioDescriptions.contains {
+                CMFormatDescriptionGetMediaSubType($0) == kAudioFormatMPEG4AAC
             })
         #expect(!requests.isEmpty)
         #expect(requests.allSatisfy { $0.count <= 262_144 && $0.offset >= 0 && $0.id == lease.id })
@@ -193,6 +246,21 @@ import Testing
         #expect(state.videoControl?.volume == 0.2)
         #expect(state.videoControl?.seek == 0.25)
         #expect(state.videoControl?.revision == 3)
+        #expect(worker.player.nowPlayingSnapshot.title == "Mock Garden")
+        #expect(worker.player.nowPlayingSnapshot.elapsedSeconds == 0.5)
+        #expect(worker.player.nowPlayingSnapshot.durationSeconds == 1)
+        let home = try await worker.read(SurfaceTile(.music))
+        #expect(home.first?.trackKey == "Mock Garden.mov")
+        #expect(home.first?.elapsed == 0.5)
+        worker.player.perform(.pause)
+        worker.player.perform(.seek(0.75))
+        let controlled = try JSONDecoder().decode(
+            MusicUIState.self,
+            from: await service.execute(
+                "music.ui.read", payload: JSONEncoder().encode(MusicUIQuery())))
+        #expect(controlled.videoControl?.seek == 0.75)
+        #expect(controlled.videoControl?.revision == 5)
+        #expect(!worker.player.isPlaying)
         service.stop()
         await #expect(throws: (any Error).self) {
             try await service.execute(

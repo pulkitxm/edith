@@ -62,13 +62,14 @@ extension MusicExtensionTests {
                 ]))
             controller.view.frame = CGRect(x: 0, y: 0, width: 620, height: 800)
             let window = TestWindowHost.window(contentRect: controller.view.frame)
-            window.contentViewController = controller; window.orderBack(nil)
-            defer { window.orderOut(nil); window.contentViewController = nil }
+            window.contentViewController = controller
+            defer { window.contentViewController = nil }
             await settle(window)
             let button = try #require(find(controller.view, label: "Connect in Music"))
             #expect((button as AnyObject).accessibilityPerformPress?() == true)
             await settle(window)
             #expect(defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "music")
+            #expect(!window.isVisible)
             #expect(!TestWindowHost.isExposedOnDesktop(window))
         }
 
@@ -96,14 +97,15 @@ extension MusicExtensionTests {
                 let host = controller.view
                 host.frame = CGRect(x: 0, y: 0, width: 400, height: 150)
                 let window = TestWindowHost.window(contentRect: host.frame)
-                window.contentViewController = controller; window.orderBack(nil)
+                window.contentViewController = controller
                 await settle(window)
                 let button = try #require(find(host, label: label))
                 #expect((button as AnyObject).accessibilityPerformPress?() == true)
                 await settle(window)
                 #expect(defaults.bool(forKey: AppStorageKeys.Music.barCollapsed) == collapsed)
+                #expect(!window.isVisible)
                 #expect(!TestWindowHost.isExposedOnDesktop(window))
-                window.orderOut(nil); window.contentViewController = nil
+                window.contentViewController = nil
             }
         }
 
@@ -136,7 +138,6 @@ extension MusicExtensionTests {
                 let window = TestWindowHost.window(contentRect: host.frame)
                 window.contentViewController = controller
                 window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
-                window.orderBack(nil)
                 await settle(window)
                 #expect(find(host, label: "Collapse the player bar") != nil)
                 state.compact.toggle(); state.visible = true; state.availableWidth = width / 2
@@ -149,8 +150,9 @@ extension MusicExtensionTests {
                 defaults.set(false, forKey: AppStorageKeys.Music.barAutoHide)
                 await settle(window)
                 #expect(find(host, label: "Collapse the player bar") != nil)
+                #expect(!window.isVisible)
                 #expect(!TestWindowHost.isExposedOnDesktop(window))
-                window.orderOut(nil); window.contentViewController = nil
+                window.contentViewController = nil
             }
         }
 

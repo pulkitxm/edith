@@ -65,8 +65,8 @@ extension MusicExtensionTests {
             let host = NSHostingView(rootView: AnyView(EmptyView()))
             let window = TestWindowHost.window(
                 contentRect: .init(x: 0, y: 0, width: width, height: 400))
-            window.contentView = host; window.orderBack(nil)
-            defer { window.orderOut(nil) }
+            window.contentView = host
+            defer { window.contentView = nil }
             func render() async {
                 host.rootView = AnyView(
                     HomeMusicCard(
@@ -107,6 +107,7 @@ extension MusicExtensionTests {
             #expect(find(host, label: tracks[1].title) == nil)
             #expect(find(host, label: "1:15 / 3:00") == nil)
             #expect(find(host, label: tracks[0].title) != nil)
+            #expect(!window.isVisible)
             #expect(!TestWindowHost.isExposedOnDesktop(window))
         }
 

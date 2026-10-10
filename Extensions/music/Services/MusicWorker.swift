@@ -16,6 +16,7 @@ final class MusicWorker {
     private var stopped = false
     private let tasks = MusicTaskOwner()
     var browserPresentation: MusicBrowserPresentation?
+    var videoPresentation: MusicVideoPlayback?
 
     init(
         player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
@@ -35,11 +36,13 @@ final class MusicWorker {
     func read(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         var result: [MusicSurfacePlayback] = []
-        let track = player.current
+        let track = videoPresentation?.track ?? player.current
         var local = MusicSurfacePlayback(
             sourceID: "local", sourceTitle: "Local library", trackKey: track?.relativePath ?? "",
-            title: track?.title ?? "", playing: player.isPlaying, elapsed: player.elapsed,
-            duration: player.trackDuration, volume: player.volume, shuffle: player.isShuffling,
+            title: track?.title ?? "", playing: videoPresentation?.playing ?? player.isPlaying,
+            elapsed: videoPresentation?.elapsed ?? player.elapsed,
+            duration: videoPresentation?.duration ?? player.trackDuration,
+            volume: videoPresentation?.volume ?? player.volume, shuffle: player.isShuffling,
             repeating: player.isLooping)
         if tile.shows("queue") {
             local.queue = await player.upcoming(limit: 10).map {
@@ -94,14 +97,17 @@ final class MusicWorker {
                         $0.relativePath == command.trackKey
                     })
                 else { throw ExtensionPeerError.invalidRequest }
-                try Task.checkCancellation(); player.toggle(track); return
+                try Task.checkCancellation(); player.perform(.startTrack(track.relativePath));
+                return
             }
-            guard player.current?.relativePath == command.trackKey else {
+            guard (videoPresentation?.track ?? player.current)?.relativePath == command.trackKey
+            else {
                 throw ExtensionPeerError.invalidRequest
             }
             player.perform(
                 try transport(
-                    command, elapsed: player.elapsed, duration: player.trackDuration,
+                    command, elapsed: videoPresentation?.elapsed ?? player.elapsed,
+                    duration: videoPresentation?.duration ?? player.trackDuration,
                     shuffle: player.isShuffling, repeating: player.isLooping))
         } else if command.sourceID == "spotify" {
             let spotify = accounts.spotify
@@ -154,6 +160,7 @@ final class MusicWorker {
     func stop() {
         guard !stopped else { return }
         stopped = true
+        videoPresentation?.stop(); videoPresentation = nil
         browserPresentation?.stop(); browserPresentation = nil
         tasks.shutdown()
         session.invalidateAndCancel(); artwork.removeAll()

@@ -29,6 +29,18 @@ import WebKit
                 },
                 cookies: { await worker.accounts.presentationCookies() })
         worker.browserPresentation = self.browser
+        worker.player.presentationTransport = { [weak self] request in
+            guard let self, self.video != nil else { return false }
+            switch request {
+            case .shuffle, .repeat, .status: return false;
+            default: self.transport(request); return true
+            }
+        }
+        worker.player.presentationSnapshot = { [weak self] in
+            guard let self, let video = self.video else { return nil }
+            var snapshot = self.playbackSnapshot(); snapshot.title = video.track.title
+            return snapshot
+        }
         MusicHostNavigation.reset()
         worker.accounts.spotify.receiveUIEvent = { [weak self] event in
             guard let self, let data = try? JSONSerialization.data(withJSONObject: event),
@@ -176,6 +188,7 @@ import WebKit
             guard payload.count <= 2048, let video else { throw ExtensionPeerError.invalidRequest }
             try video.report(JSONDecoder().decode(MusicVideoReport.self, from: payload))
             videoActivity = Date()
+            worker.player.presentationDidChange()
             return Data("{}".utf8)
         case "music.ui.video.close":
             guard payload.count <= 2048 else { throw ExtensionPeerError.invalidRequest }
@@ -472,7 +485,8 @@ import WebKit
             playing: wasPlaying, volume: player.volume)
         resumeAudio = wasPlaying
         player.perform(.pause)
-        video = next
+        video = next; worker.videoPresentation = next
+        worker.player.presentationDidChange()
         videoActivity = Date()
         videoDeadline = Task { [weak self] in
             while !Task.isCancelled {
@@ -488,7 +502,8 @@ import WebKit
         guard let video else { return }
         let position = video.duration > 0 ? video.elapsed / video.duration : 0
         let same = worker.player.current?.relativePath == video.track.relativePath
-        video.stop(); self.video = nil
+        video.stop(); self.video = nil; worker.videoPresentation = nil
+        worker.player.presentationDidChange()
         if same { worker.player.perform(.seek(position)) }
         if resumeAudio { worker.player.perform(.play) }
         resumeAudio = false
