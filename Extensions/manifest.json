@@ -2950,7 +2950,8 @@
         "Extensions/quinjet/CLI/QuinjetCLICatalog.swift",
         "Extensions/quinjet/CLI/QuinjetCommands.swift",
         "Extensions/quinjet/Transport/OwnedTerminalPTY.swift",
-        "Extensions/quinjet/Transport/OwnedTerminalSession.swift"
+        "Extensions/quinjet/Transport/OwnedTerminalSession.swift",
+        "Extensions/quinjet/ViewModels/QuinjetUIProjection.swift"
       ]
     },
     "resources": {

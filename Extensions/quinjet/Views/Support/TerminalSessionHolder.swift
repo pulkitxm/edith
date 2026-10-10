@@ -253,10 +253,21 @@ final class TerminalSessionHolder {
 
     func executeTerminal(_ operation: String, payload: Data) async throws -> Data {
         guard let engineSession else { throw ExtensionPeerError.unavailable }
-        return try await engineSession.execute(operation, payload: payload)
+        let data = try await engineSession.execute(operation, payload: payload)
+        if operation == "quinjet.terminal.read" {
+            let output = try JSONDecoder().decode(OwnedTerminalPTY.Output.self, from: data)
+            if output.nextOffset > offset {
+                let count = min(output.bytes.count, Int(output.nextOffset - offset))
+                consumeOutput(Data(output.bytes.suffix(count)))
+                offset = output.nextOffset
+            }
+            if let exit = output.exitCode { exitMessage = Self.exitMessage(exit) }
+        }
+        return data
     }
 
     func stopRendering() {
+        generation += 1
         readTask?.cancel()
         deliveryTask?.cancel()
         readTask = nil
@@ -264,6 +275,7 @@ final class TerminalSessionHolder {
         events.removeAll()
         queuedBytes = 0
         client?.stop()
+        client = nil
         ghosttyView?.shutdown()
         ghosttyView = nil
     }

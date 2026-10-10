@@ -9,18 +9,21 @@ final class LauncherUsage {
     static let shared = LauncherUsage()
     private static let storageKey = "launcherLastUsed"
 
-    private let defaults: UserDefaults
+    private let defaults: UserDefaults?
     private(set) var history: LauncherUsageHistory
 
-    init(defaults: UserDefaults = SharedDefaults.store) {
+    init(defaults: UserDefaults? = SharedDefaults.store) {
         self.defaults = defaults
         history = LauncherUsageHistory(
-            timestamps: defaults.dictionary(forKey: Self.storageKey) as? [String: Date] ?? [:])
+            timestamps: defaults?.dictionary(forKey: Self.storageKey) as? [String: Date] ?? [:])
     }
+
+    var snapshot: [String: Date] { history.timestamps }
+    func adopt(_ timestamps: [String: Date]) { history = .init(timestamps: timestamps) }
 
     func record(_ keys: [[String]], at date: Date = Date()) {
         for key in keys { history.timestamps[LauncherUsageHistory.encoded(key)] = date }
-        defaults.set(history.timestamps, forKey: Self.storageKey)
+        defaults?.set(history.timestamps, forKey: Self.storageKey)
     }
 
     func lastUsed(_ key: [String]) -> Date {

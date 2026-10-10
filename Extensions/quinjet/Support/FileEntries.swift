@@ -1,6 +1,6 @@
 import Foundation
 
-public enum FileEntryKind: String, Equatable, Sendable {
+public enum FileEntryKind: String, Codable, Equatable, Sendable {
     case directory
     case file
     case symlink
@@ -16,7 +16,7 @@ public enum FileEntryKind: String, Equatable, Sendable {
     }
 }
 
-public struct RemoteFileEntry: Identifiable, Equatable, Sendable {
+public struct RemoteFileEntry: Codable, Identifiable, Equatable, Sendable {
     public var name: String
     public var path: String
     public var kind: FileEntryKind

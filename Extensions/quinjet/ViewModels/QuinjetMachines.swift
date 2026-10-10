@@ -7,17 +7,26 @@ import Observation
     static let localMachineID = Machine.localID
     let localMachine = Machine.local
     private var saved: [Machine] = []
+    private let renderingOnly: Bool
+    init(renderingOnly: Bool = false) { self.renderingOnly = renderingOnly }
+    func adopt(_ machines: [Machine], states: [QuinjetUIState.MachineState]) {
+        guard renderingOnly else { return }
+        saved = machines.filter { $0.id != Self.localMachineID }
+        for state in states { session(for: state.id).adopt(state) }
+    }
     private var sessions: [UUID: QuinjetMachineSession] = [:]
     var allMachines: [Machine] { [localMachine] + saved }
     func isLocal(_ id: UUID) -> Bool { id == Self.localMachineID }
     func refresh() async throws {
+        guard !renderingOnly else { throw ExtensionPeerError.unavailable }
         try await MachineRegistry.refresh()
         try Task.checkCancellation()
         saved = MachineRegistry.machines()
     }
     func session(for id: UUID) -> QuinjetMachineSession {
         if let session = sessions[id] { return session }
-        let session = QuinjetMachineSession(machine: allMachines.first { $0.id == id })
+        let session = QuinjetMachineSession(
+            machine: allMachines.first { $0.id == id }, renderingOnly: renderingOnly)
         sessions[id] = session
         return session
     }
@@ -39,14 +48,27 @@ import Observation
         }
     }
     private let machine: Machine?
+    private let renderingOnly: Bool
     private var work: Task<Void, Never>?
     private var stopped = false
     private(set) var state: State = .disconnected
     private(set) var connectionRef: SSHConnection?
     var isLocal: Bool { machine?.id == Machine.localID }
-    init(machine: Machine?) { self.machine = machine; if isLocal { state = .connected } }
+    init(machine: Machine?, renderingOnly: Bool = false) {
+        self.machine = machine; self.renderingOnly = renderingOnly
+        if isLocal { state = .connected }
+    }
+    func adopt(_ projection: QuinjetUIState.MachineState) {
+        guard renderingOnly else { return }
+        switch projection.state {
+        case "connected": state = .connected
+        case "connecting": state = .connecting
+        case "failed": state = .failed(projection.failure ?? "The connection is unavailable.")
+        default: state = .disconnected
+        }
+    }
     func start() {
-        guard !stopped, !isLocal, work == nil, let machine else { return }
+        guard !renderingOnly, !stopped, !isLocal, work == nil, let machine else { return }
         state = .connecting
         let connection = SSHConnection(machine: machine)
         work = QuinjetWorkOwnership.start { [weak self] in

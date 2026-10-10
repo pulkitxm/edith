@@ -10,6 +10,7 @@ import Foundation
     private(set) var isStopped = false
     private var started = false
     private var cliStreams: ExtensionCLIStreams?
+    private lazy var uiEngine = QuinjetUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
     private let attachment = UUID()
     private struct ProjectSelection: Equatable {
@@ -17,7 +18,7 @@ import Foundation
     }
     private var projects: [UUID: ProjectSelection] = [:]
     private let previewExecutable: @MainActor () -> URL?
-    private let resolveRemote: @MainActor (UUID) async throws -> QuinjetRemote
+    let resolveRemote: @MainActor (UUID) async throws -> QuinjetRemote
     private var worktrees: [UUID: (UUID, QuinjetWorktree, [QuinjetWorktree])] = [:]
 
     init(
@@ -165,6 +166,9 @@ import Foundation
         guard payload.count <= 16_384,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
         else { throw ExtensionPeerError.invalidRequest }
+        if command.hasPrefix("quinjet.ui.") {
+            return try await uiEngine.execute(command, object: object)
+        }
         if command == "quinjet.native.action" {
             guard Set(object.keys) == ["tabID", "action"], let id = object["tabID"] as? String,
                 let uuid = UUID(uuidString: id),

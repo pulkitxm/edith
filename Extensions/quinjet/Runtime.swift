@@ -8,6 +8,9 @@ import SwiftUI
 
 @MainActor @objc(EdithQuinjetExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var uiClient: ExtensionEngineClient?
+    private var uiModel: QuinjetPageModel?
+    private var uiController: NSViewController?
     private var worker: QuinjetWorker?
     private var surface: QuinjetSurface?
     private var startup: Task<Void, Never>?
@@ -56,8 +59,28 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard worker == nil, input["location"] as? String == "main",
+                let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            if let previous = uiModel { Task { await previous.shutdown() } }
+            uiClient?.invalidate()
+            uiClient = client
+            let model = QuinjetPageModel(uiClient: .init(client: client))
+            uiModel = model
+            uiController = NSHostingController(
+                rootView: ExtensionPageHost {
+                    QuinjetPage(model: model)
+                })
+        case "stopUI":
+            if let model = uiModel { Task { await model.shutdown() } }
+            uiClient?.invalidate()
+            uiClient = nil
+            uiModel = nil
+            uiController = nil
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex",
+            guard uiModel == nil, Bundle.main.bundleURL.pathExtension != "appex",
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -67,6 +90,7 @@ final class ExtensionRuntime: NSObject {
             surface = QuinjetSurface(worker: created)
             startup = Task { await created.start() }
         case "view":
+            if let uiController { return uiController }
             guard let worker else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {

@@ -247,6 +247,7 @@ final class TerminalSessionHolder {
     }
 
     func stopRendering() {
+        generation += 1
         readTask?.cancel()
         deliveryTask?.cancel()
         readTask = nil
@@ -254,6 +255,7 @@ final class TerminalSessionHolder {
         events.removeAll()
         queuedBytes = 0
         client?.stop()
+        client = nil
         ghosttyView?.shutdown()
         ghosttyView = nil
     }

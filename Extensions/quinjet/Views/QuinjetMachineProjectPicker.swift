@@ -14,7 +14,7 @@ struct QuinjetProjectPicker: View {
     @Bindable var model: QuinjetPageModel
     let tab: QuinjetTab
 
-    @State private var machines = QuinjetMachines.shared
+    private var machines: QuinjetMachines { model.machines }
 
     var body: some View {
         Group {
@@ -66,6 +66,7 @@ struct QuinjetProjectPicker: View {
     }
 
     private func select(_ machine: Machine) {
+        if model.isRemote { model.selectMachine(machine, in: tab); return }
         tab.machineID = machine.id
         tab.errorMessage = nil
         model.projectError = nil

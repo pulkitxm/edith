@@ -2,14 +2,14 @@ import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
 
-public enum QuinjetTerminal: String, CaseIterable, Identifiable, Sendable {
+public enum QuinjetTerminal: String, Codable, CaseIterable, Identifiable, Sendable {
     case embedded
     case cmux
 
     public var id: String { rawValue }
 }
 
-public struct QuinjetTheme: RawRepresentable, Hashable, Identifiable, Sendable {
+public struct QuinjetTheme: Codable, RawRepresentable, Hashable, Identifiable, Sendable {
     public let rawValue: String
 
     public var id: String { rawValue }
@@ -64,12 +64,12 @@ public enum QuinjetThemePreference {
     }
 }
 
-public enum QuinjetAppearance: String, CaseIterable, Sendable {
+public enum QuinjetAppearance: String, Codable, CaseIterable, Sendable {
     case light
     case dark
 }
 
-public struct QuinjetHostPalette: Equatable, Sendable {
+public struct QuinjetHostPalette: Codable, Equatable, Sendable {
     public let background: UInt32
     public let panel: UInt32
     public let panelAlt: UInt32
@@ -128,7 +128,7 @@ public struct QuinjetHostPalette: Equatable, Sendable {
     }
 }
 
-public struct QuinjetHostTheme: Equatable, Sendable {
+public struct QuinjetHostTheme: Codable, Equatable, Sendable {
     public let light: QuinjetHostPalette
     public let dark: QuinjetHostPalette
 
@@ -174,7 +174,7 @@ public struct QuinjetHostTheme: Equatable, Sendable {
     }
 }
 
-public struct QuinjetLaunchConfiguration: Equatable, Sendable {
+public struct QuinjetLaunchConfiguration: Codable, Equatable, Sendable {
     public var terminal: QuinjetTerminal
     public var theme: QuinjetTheme
     public var appearance: QuinjetAppearance
@@ -453,7 +453,7 @@ public enum QuinjetSessionOperation: String, CaseIterable, Codable, Equatable, S
     }
 }
 
-public struct QuinjetSessionRequest: Equatable, Sendable {
+public struct QuinjetSessionRequest: Codable, Equatable, Sendable {
     public let operation: QuinjetSessionOperation
     public let session: String?
     public let worktreePath: String?
