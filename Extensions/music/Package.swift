@@ -10,7 +10,7 @@ let package = Package(
             name: "MusicExtension",
             dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: ".",
-            exclude: ["Tests", "Runtime.swift", "Native", "Package.swift", "UI", "EmbeddedTests"],
+            exclude: ["Tests", "Runtime.swift", "Native", "Package.swift", "UI"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "MusicEmbeddedUI",
@@ -18,9 +18,10 @@ let package = Package(
             path: "UI", swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "MusicEmbeddedUITests", dependencies: ["MusicEmbeddedUI", "MusicExtension"],
-            path: "EmbeddedTests",
+            path: "Tests/Embedded",
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "MusicExtensionTests", dependencies: ["MusicExtension"], path: "Tests",
+            exclude: ["Embedded"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ])
