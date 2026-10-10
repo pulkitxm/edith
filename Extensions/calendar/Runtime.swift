@@ -10,10 +10,30 @@ final class ExtensionRuntime: NSObject {
     private var store: CalendarStore?
     private var presentation: CalendarPresentationState?
     private var surface: CalendarSurface?
+    private var uiEngine: CalendarUIEngine?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "calendar.cli.catalog" {
+                guard self?.store != nil, payload == Data("{}".utf8) else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try JSONSerialization.data(withJSONObject: [
+                    "version": 1, "owner": "calendar",
+                    "commands": [
+                        [
+                            "route": ["calendar"], "operation": "calendar.cli",
+                            "summary": "Read and open your schedule.", "destructive": false,
+                            "timeout": 30,
+                        ]
+                    ],
+                ])
+            }
+            if command.hasPrefix("calendar.ui.") {
+                guard let engine = self?.uiEngine else { throw ExtensionPeerError.unavailable }
+                return try await engine.execute(command, payload: payload)
+            }
             if command == "calendar.cli" {
                 guard let store = self?.store else { throw ExtensionPeerError.unavailable }
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
@@ -30,6 +50,16 @@ final class ExtensionRuntime: NSObject {
             }
             guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)
+        }
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        uiEngine?.shutdown()
+        store?.shutdown()
+        Task {
+            await commands.shutdownAndWait()
+            completion()
         }
     }
 
@@ -51,6 +81,8 @@ final class ExtensionRuntime: NSObject {
             if presentation == nil { presentation = CalendarPresentationState() }
             if let store, let presentation, surface == nil {
                 surface = CalendarSurface(store: store, presentation: presentation)
+                uiEngine = CalendarUIEngine(store: store, presentation: presentation)
+                store.start()
             }
         case "view":
             guard let store, let presentation else { return ["ok": false] as NSDictionary }
@@ -73,6 +105,8 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": store?.refreshAuthStatus()
         case "stop":
             commands.shutdown()
+            uiEngine?.shutdown()
+            uiEngine = nil
             surface = nil
             store?.shutdown()
             store = nil
