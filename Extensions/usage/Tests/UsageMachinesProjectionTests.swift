@@ -113,7 +113,8 @@ import Testing
     }
 
     @Test func ownedFirstWritesKeepRemoteProjectionRootPrivate() async throws {
-        for writer in ["lock", "transaction", "write", "append", "progress", "home"] {
+        for writer in ["lock", "transaction", "write", "append", "progress", "home", "hook-resume"]
+        {
             let directory = temporary()
             defer { try? FileManager.default.removeItem(at: directory) }
             let file = directory.appendingPathComponent("synthetic-history.jsonl")
@@ -124,8 +125,20 @@ import Testing
             case "write": try UsageDataFiles.write(Data(), to: file)
             case "append": try UsageDurableFile.append(Data(), to: file)
             case "progress": UsageRefreshProgress(directory: directory).close()
-            default:
+            case "home":
                 await HomeUsageSnapshotStore(file: file).store(HomeUsageSnapshot())
+            default:
+                let suite = "usage.storage." + UUID().uuidString
+                let defaults = try #require(UserDefaults(suiteName: suite))
+                defer { defaults.removePersistentDomain(forName: suite) }
+                let connection = UsageStatusLineConnection(
+                    settings: directory.appendingPathComponent("synthetic-provider/settings.json"),
+                    marker: directory.appendingPathComponent("claude-statusline-connection.json"),
+                    executable: "/synthetic/ed", defaults: defaults)
+                try connection.resumeOwnedHook()
+                #expect(
+                    !FileManager.default.fileExists(
+                        atPath: directory.appendingPathComponent("synthetic-provider").path))
             }
             #expect(
                 (try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions]
