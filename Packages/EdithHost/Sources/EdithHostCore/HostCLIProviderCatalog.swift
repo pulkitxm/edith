@@ -60,6 +60,8 @@ public struct HostCLIProviderCommand: Codable, Equatable, Sendable {
     public let summary: String
     public let destructive: Bool
     public let timeout: Double
+    public let streamOperation: String?
+    public let streamDeadline: Double?
 
     public var toolName: String {
         "edith_"
@@ -69,10 +71,11 @@ public struct HostCLIProviderCommand: Codable, Equatable, Sendable {
 
     public init(
         route: [String], operation: String, summary: String, destructive: Bool = false,
-        timeout: Double = 30
+        timeout: Double = 30, streamOperation: String? = nil, streamDeadline: Double? = nil
     ) {
         self.route = route; self.operation = operation; self.summary = summary
         self.destructive = destructive; self.timeout = timeout
+        self.streamOperation = streamOperation; self.streamDeadline = streamDeadline
     }
 }
 
@@ -82,13 +85,35 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     public let commands: [HostCLIProviderCommand]
     public let settings: [HostCLISetting]
     public let acceptsInput: Bool?
+    public let nativeTools: [HostCLINativeTool]?
+    public let completionOperation: String?
+    public let machineAliases: [String]?
+    public let aliasOperation: String?
 
     public init(
         owner: String, commands: [HostCLIProviderCommand], settings: [HostCLISetting] = [],
-        acceptsInput: Bool = false
+        acceptsInput: Bool = false, nativeTools: [HostCLINativeTool] = [],
+        completionOperation: String? = nil, machineAliases: [String] = [],
+        aliasOperation: String? = nil
     ) {
         version = 1; self.owner = owner; self.commands = commands; self.settings = settings
         self.acceptsInput = acceptsInput
+        self.nativeTools = nativeTools; self.completionOperation = completionOperation
+        self.machineAliases = machineAliases; self.aliasOperation = aliasOperation
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        owner = try container.decode(String.self, forKey: .owner)
+        commands = try container.decode([HostCLIProviderCommand].self, forKey: .commands)
+        settings = try container.decodeIfPresent([HostCLISetting].self, forKey: .settings) ?? []
+        acceptsInput = try container.decodeIfPresent(Bool.self, forKey: .acceptsInput)
+        nativeTools = try container.decodeIfPresent([HostCLINativeTool].self, forKey: .nativeTools)
+        completionOperation = try container.decodeIfPresent(
+            String.self, forKey: .completionOperation)
+        machineAliases = try container.decodeIfPresent([String].self, forKey: .machineAliases)
+        aliasOperation = try container.decodeIfPresent(String.self, forKey: .aliasOperation)
     }
 
     public static func decode(_ data: Data, owner: String) throws -> Self {
@@ -102,7 +127,9 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
 
     public func validate(owner expected: String) throws {
         guard version == 1, owner == expected, let prefixes = Self.prefixes[owner],
-            !commands.isEmpty, commands.count <= 1024, settings.count <= 512,
+            !commands.isEmpty || !(nativeTools ?? []).isEmpty || !settings.isEmpty,
+            commands.count <= 1024,
+            settings.count <= 512,
             Set(commands.map(\.toolName)).count == commands.count,
             Set(settings.map(\.key)).count == settings.count
         else { throw HostCLIError.rejected("Invalid extension command catalog.") }
@@ -115,8 +142,40 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
                 (1...120).contains(command.timeout)
             else { throw HostCLIError.rejected("Invalid extension command route.") }
             _ = try HostCLIRequest(action: .invoke, id: owner, operation: command.operation)
+            if let stream = command.streamOperation {
+                _ = try HostCLIRequest(action: .invoke, id: owner, operation: stream + ".start")
+                guard let deadline = command.streamDeadline, deadline.isFinite,
+                    (1...21600).contains(deadline)
+                else { throw HostCLIError.rejected("Invalid stream deadline.") }
+            } else if command.streamDeadline != nil {
+                throw HostCLIError.rejected("Missing stream operation.")
+            }
         }
         for setting in settings { try setting.validate() }
+        let tools = nativeTools ?? []
+        guard tools.count <= 1024,
+            Set(tools.map(\.name) + commands.map(\.toolName)).count == tools.count + commands.count
+        else { throw HostCLIError.rejected("Duplicate tool names.") }
+        for tool in tools { try tool.validate(owner: owner) }
+        if let completionOperation {
+            _ = try HostCLIRequest(action: .invoke, id: owner, operation: completionOperation)
+        }
+        let aliases = machineAliases ?? []
+        guard aliases.count <= 128, Set(aliases).count == aliases.count,
+            aliases.allSatisfy({ alias in
+                Self.word(alias) && !Self.prefixes.values.contains { $0.contains(alias) }
+                    && ![
+                        "guide", "schema", "version", "status", "completions", "install",
+                        "uninstall", "config", "app", "permissions", "extensions", "invoke", "mcp",
+                    ].contains(alias)
+            })
+        else { throw HostCLIError.rejected("Invalid machine aliases.") }
+        if !aliases.isEmpty {
+            guard owner == "machines", let aliasOperation else {
+                throw HostCLIError.rejected("Missing machine alias operation.")
+            }
+            _ = try HostCLIRequest(action: .invoke, id: owner, operation: aliasOperation)
+        }
     }
 
     private static func word(_ value: String) -> Bool {
@@ -128,13 +187,16 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     }
 
     public static let prefixes: [String: Set<String>] = [
+        "host": ["config", "app", "permissions"],
+        "keepAwake": [], "focusDim": [], "windowSweaters": [], "keystrokeHighlight": [],
+        "micMute": [], "blitztree": [], "timeLapse": [], "terminal": [],
         "calendar": ["calendar"], "music": ["music"], "usage": ["usage"],
         "machines": ["machines"], "herdr": ["herdr"], "quinjet": ["quinjet"],
         "studio": ["studio"], "database": ["database"], "docs": ["docs"],
         "latex": ["latex"], "companion": ["companion"], "bifrost": ["bifrost"],
         "plugins": ["skills"], "downloads": ["download"], "seoAudit": ["seo"],
         "codeStats": ["code-stats"], "clipboard": ["clipboard"], "attention": ["attention"],
-        "browser": ["browser"], "notchShelf": ["shelf"], "colorPicker": ["color"],
+        "notchShelf": ["shelf", "browser"], "colorPicker": ["color"],
         "emoji": ["emoji"], "presenter": ["presenter"], "lidAwake": ["lid-awake"],
         "system": ["system", "apps", "tools"], "systemStats": ["stats"],
         "homebrew": ["brew"], "cleaner": ["cleaner"], "appMaintenance": ["maintenance"],
@@ -209,24 +271,51 @@ public struct HostCLIProviderRegistry: Sendable {
     }
 
     public func execute(
-        _ arguments: [String], input: Data = Data(), invoke: Invoke
+        _ arguments: [String], input: Data = Data(),
+        workingDirectory: String = FileManager.default.currentDirectoryPath,
+        streamWrite: (@Sendable (Data, Bool) async throws -> Void)? = nil, invoke: @escaping Invoke
     ) async throws -> ExtensionCLIReply {
         guard let prefix = arguments.first,
             let provider = providers.first(where: {
                 $0.catalog.commands.contains { $0.route.first == prefix }
+                    || ($0.catalog.machineAliases ?? []).contains(prefix)
             }),
             let command = provider.catalog.commands.filter({ arguments.starts(with: $0.route) })
                 .max(by: { $0.route.count < $1.route.count })
-                ?? provider.catalog.commands.first(where: { $0.route.first == prefix })
+                ?? provider.catalog.commands.first(where: {
+                    $0.route.first == prefix
+                        || provider.catalog.owner == "machines"
+                            && (provider.catalog.machineAliases ?? []).contains(prefix)
+                })
         else { throw HostCLIError.rejected("No enabled extension provides this command.") }
         guard try await Self.states(invoke: invoke).contains(provider.state) else {
             throw HostCLIError.rejected("The command provider was disabled or changed.")
         }
+        let isAlias = (provider.catalog.machineAliases ?? []).contains(prefix)
+        let routedArguments = isAlias ? arguments : Array(arguments.dropFirst())
+        let executionOperation =
+            isAlias ? (provider.catalog.aliasOperation ?? command.operation) : command.operation
+        if let operation = command.streamOperation {
+            let context = try HostCLIInvocationContext(
+                arguments: routedArguments, standardInput: input,
+                workingDirectory: workingDirectory)
+            let stream = try await HostCLIStream.start(
+                owner: provider.state.id, operation: operation, request: context,
+                maximumDuration: command.streamDeadline ?? 1800, invoke: invoke)
+            if let streamWrite {
+                let code = try await stream.consume(write: streamWrite)
+                return try ExtensionCLIReply(stdout: "", stderr: "", exitCode: code)
+            }
+            let capture = HostCLIStreamCapture()
+            let code = try await stream.consume(write: { try await capture.append($0, stderr: $1) })
+            return try await capture.reply(code: code)
+        }
         let request = try Self.request(
-            arguments: Array(arguments.dropFirst()), input: input, catalog: provider.catalog)
+            arguments: routedArguments, input: input, catalog: provider.catalog,
+            workingDirectory: workingDirectory)
         let data = try await invoke(
             HostCLIRequest(
-                action: .invoke, id: provider.state.id, operation: command.operation,
+                action: .invoke, id: provider.state.id, operation: executionOperation,
                 payload: request, timeout: command.timeout))
         try Task.checkCancellation()
         guard try await Self.states(invoke: invoke).contains(provider.state) else {
@@ -237,17 +326,68 @@ public struct HostCLIProviderRegistry: Sendable {
         return reply
     }
 
-    public static func request(arguments: [String], input: Data, catalog: HostCLIProviderCatalog)
-        throws -> Data
-    {
-        let request = try ExtensionCLIRequest(arguments: arguments)
-        guard input.count <= 256 * 1024, input.isEmpty || catalog.acceptsInput == true else {
-            throw HostCLIError.usage(
-                "This command provider does not accept stdin or its input exceeds 256 KiB.")
+    public static func request(
+        arguments: [String], input: Data, catalog: HostCLIProviderCatalog,
+        workingDirectory: String = FileManager.default.currentDirectoryPath
+    ) throws -> Data {
+        guard input.isEmpty || catalog.acceptsInput == true else {
+            throw HostCLIError.usage("This provider does not accept stdin.")
         }
-        if input.isEmpty { return try JSONEncoder().encode(request) }
-        return try HostCLIJSON.object([
-            "arguments": .strings(arguments), "input": .string(input.base64EncodedString()),
-        ]).encoded()
+        return try JSONEncoder().encode(
+            HostCLIInvocationContext(
+                arguments: arguments, standardInput: input, workingDirectory: workingDirectory))
+    }
+}
+
+public struct HostCLINativeTool: Codable, Sendable {
+    public let name: String
+    public let title: String
+    public let summary: String
+    public let operation: String
+    public let inputSchema: HostCLIJSON
+    public init(
+        name: String, title: String, summary: String, operation: String, inputSchema: HostCLIJSON
+    ) {
+        self.name = name; self.title = title; self.summary = summary; self.operation = operation;
+        self.inputSchema = inputSchema
+    }
+    public func validate(owner: String) throws {
+        guard name.utf8.count <= 128,
+            name.utf8.allSatisfy({
+                (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0)
+                    || $0 == 95
+            }),
+            !title.isEmpty, title.utf8.count <= 256, summary.utf8.count <= 4096,
+            (owner == "database" && name.hasPrefix("database_"))
+                || (owner == "jev" && name == "edith_find"),
+            inputSchema.object?["type"] == .string("object"),
+            try inputSchema.encoded().count <= 65536
+        else { throw HostCLIError.rejected("Invalid native tool declaration.") }
+        _ = try HostCLIRequest(action: .invoke, id: owner, operation: operation)
+    }
+    public var tool: HostCLIJSON {
+        .object([
+            "name": .string(name), "title": .string(title), "description": .string(summary),
+            "inputSchema": inputSchema,
+        ])
+    }
+}
+
+private actor HostCLIStreamCapture {
+    private var stdout = Data()
+    private var stderr = Data()
+    func append(_ data: Data, stderr error: Bool) throws {
+        guard stdout.count + stderr.count + data.count <= ExtensionCLIReply.maximumOutputBytes
+        else { throw HostCLIError.rejected("The command output exceeds 4 MiB.") }
+        if error { stderr.append(data) } else { stdout.append(data) }
+    }
+    func reply(code: Int32) throws -> ExtensionCLIReply {
+        guard let stdout = String(data: stdout, encoding: .utf8),
+            let stderr = String(data: stderr, encoding: .utf8)
+        else {
+            throw HostCLIError.rejected(
+                "The command returned non-text output; use direct CLI streaming.")
+        }
+        return try ExtensionCLIReply(stdout: stdout, stderr: stderr, exitCode: code)
     }
 }

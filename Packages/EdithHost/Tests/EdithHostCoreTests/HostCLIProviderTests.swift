@@ -5,6 +5,23 @@ import Testing
 @testable import EdithHostCore
 
 @Suite struct HostCLIProviderTests {
+    @Test func allOptionalExtensionsCanPublishSettingsWithoutInventingCommandPrefixes() throws {
+        #expect(
+            Set(try HostIndex.bundled().map(\.id)).isSubset(
+                of: Set(HostCLIProviderCatalog.prefixes.keys)))
+        let catalog = HostCLIProviderCatalog(
+            owner: "focusDim", commands: [],
+            settings: [
+                .init(
+                    "focusDimIntensity", .number, group: "focusdim", summary: "Dim intensity",
+                    fallback: .number(0.3))
+            ])
+        try catalog.validate(owner: "focusDim")
+        let minimal = Data(
+            "{\"version\":1,\"owner\":\"music\",\"commands\":[{\"route\":[\"music\",\"ls\"],\"operation\":\"music.cli\",\"summary\":\"Read tracks\",\"destructive\":false,\"timeout\":30}]}"
+                .utf8)
+        #expect(try HostCLIProviderCatalog.decode(minimal, owner: "music").settings.isEmpty)
+    }
     @Test func catalogsCannotClaimCoreOrAnotherExtensionsRoutes() throws {
         for route in [["config", "set"], ["app", "quit"], ["calendar", "ls"]] {
             let catalog = HostCLIProviderCatalog(
@@ -78,10 +95,14 @@ import Testing
         let data = try HostCLIProviderRegistry.request(
             arguments: ["write"], input: Data("synthetic".utf8), catalog: withInput)
         let payload = try JSONDecoder().decode(HostCLIJSON.self, from: data)
-        #expect(payload.object?["input"]?.string == Data("synthetic".utf8).base64EncodedString())
+        #expect(
+            payload.object?["standardInput"]?.string == Data("synthetic".utf8).base64EncodedString()
+        )
         #expect(throws: HostCLIError.self) {
             try HostCLIProviderRegistry.request(
-                arguments: ["write"], input: Data(count: 256 * 1024 + 1), catalog: withInput)
+                arguments: ["write"],
+                input: Data(count: HostCLIInvocationContext.maximumInputBytes + 1),
+                catalog: withInput)
         }
     }
 
