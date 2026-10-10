@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -547,10 +547,11 @@ test("all39 workers rebuild for launcher and navigation code changes", async () 
     await readFile("Extensions/manifest.json", "utf8"),
   );
   expect(current).toHaveLength(39);
+  for (const path of workerRuntimeInputs) await access(path);
   for (const path of [
-    "Packages/EdithHost/Sources/EdithHost/HostPublicLauncher.swift",
-    "Packages/EdithHost/Sources/EdithHost/HostFolderChoiceNavigationClient.swift",
-    "Packages/EdithHost/Sources/EdithHost/HostWorkerNavigationClient.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
     "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
   ]) {
     expect(workerRuntimeInputs).toContain(path);
@@ -606,9 +607,9 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
     for (const path of [
       "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
       "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
-      "Packages/EdithHost/Sources/EdithHost/HostPublicLauncher.swift",
-      "Packages/EdithHost/Sources/EdithHost/HostFolderChoiceNavigationClient.swift",
-      "Packages/EdithHost/Sources/EdithHost/HostWorkerNavigationClient.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostPublicLauncher.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
       "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
     ]) {
       await writeFile(join(root, path), "changed ambient worker admission");
