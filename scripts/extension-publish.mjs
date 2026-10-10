@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import {
+  catalogPointer,
+  parseCatalogPointer,
+  verifyCatalogPointerData,
+} from "./extension-catalog-pointer.mjs";
+import {
   downloadReleaseAsset,
   releaseAssetMatchesFile,
   releaseFileDigest,
@@ -159,7 +164,7 @@ export async function verifiedPublicationState({
     throw new Error("Extension publication superseded: main changed");
   const current = await readCatalog();
   if (current?.asset) {
-    const trusted = JSON.parse(verifiedCatalogPayload(current.data, publicKey));
+    const trusted = trustedPublicationCatalog(current, publicKey);
     if (!isDeepStrictEqual(trusted, previous))
       throw new Error(
         "Extension publication superseded: trusted catalog changed",
@@ -185,8 +190,31 @@ export async function readPublicationCatalog(
 ) {
   const item = loadRelease(repository, tag);
   if (!item) return undefined;
-  const asset = item.assets.find((entry) => entry.name === "catalog.json");
-  if (!asset) return { release: item };
+  if (item.body == null || item.body === "") return { release: item };
+  const pointer = parseCatalogPointer(item.body);
+  const matches = item.assets.filter(
+    (entry) => entry.name === pointer.assetName,
+  );
+  if (matches.length !== 1)
+    throw new Error("Catalog pointer asset missing or duplicated");
+  const asset = matches[0];
+  if (asset.size !== pointer.bytes)
+    throw new Error("Catalog pointer asset size mismatch");
+  const data = await readPointerAsset(
+    repository,
+    asset,
+    pointer,
+    downloadAsset,
+  );
+  return { release: item, asset, data, pointer };
+}
+
+async function readPointerAsset(
+  repository,
+  asset,
+  pointer,
+  downloadAsset = downloadReleaseAsset,
+) {
   const directory = await mkdtemp(resolve(tmpdir(), "edith-release-catalog-"));
   try {
     const destination = resolve(directory, "catalog.json");
@@ -194,15 +222,24 @@ export async function readPublicationCatalog(
       repository,
       asset,
       maximumBytes: maximumEnvelopeBytes,
+      expectedBytes: pointer.bytes,
+      expectedSHA256: pointer.sha256,
       destination,
     });
     const data = await readFile(destination);
-    if (data.length > maximumEnvelopeBytes)
-      throw new Error("Catalog envelope exceeds its limit");
-    return { release: item, asset, data };
+    verifyCatalogPointerData(data, pointer);
+    return data;
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+export function trustedPublicationCatalog(current, publicKey) {
+  const catalog = JSON.parse(verifiedCatalogPayload(current.data, publicKey));
+  if (!current.pointer || catalog.revision !== current.pointer.revision)
+    throw new Error("Catalog pointer revision mismatch");
+  verifyCatalogPointerData(current.data, current.pointer);
+  return catalog;
 }
 
 export async function publicationPlanningState({
@@ -214,7 +251,7 @@ export async function publicationPlanningState({
   const current = await readCatalog();
   if (current?.asset)
     return {
-      catalog: JSON.parse(verifiedCatalogPayload(current.data, publicKey)),
+      catalog: trustedPublicationCatalog(current, publicKey),
       draft: current.release.draft === true,
     };
   if (current?.release && current.release.draft !== true)
@@ -237,24 +274,23 @@ export async function finalizeDraftCatalog({ verifyState, publish }) {
 }
 
 export async function promoteExtensionCatalog({
-  candidate,
+  pointer,
   verifyState,
-  rename,
+  verifyAsset,
+  updatePointer,
 }) {
+  const staged = await verifyState();
+  const matches =
+    staged?.release?.assets.filter(
+      (asset) => asset.name === pointer.assetName,
+    ) ?? [];
+  if (matches.length !== 1 || matches[0].size !== pointer.bytes)
+    throw new Error("Catalog upload did not finish");
+  await verifyAsset(matches[0], pointer);
   const current = await verifyState();
-  const nextAsset = current?.release?.assets.find(
-    (asset) => asset.name === candidate,
-  );
-  if (!nextAsset) throw new Error("Catalog upload did not finish");
-  const priorAsset = current.asset;
-  if (priorAsset)
-    await rename(priorAsset.id, `catalog-${current.catalogRevision}.json`);
-  try {
-    await rename(nextAsset.id, "catalog.json");
-  } catch (error) {
-    if (priorAsset) await rename(priorAsset.id, "catalog.json");
-    throw error;
-  }
+  if (current?.release?.id !== staged.release.id)
+    throw new Error("Catalog release changed");
+  await updatePointer(current.release.id, JSON.stringify(pointer));
 }
 
 export async function publishExtensions({
@@ -431,23 +467,37 @@ export async function publishExtensions({
       "--draft",
       "--prerelease",
       "--body",
-      "Signed extension catalog used by Edith.",
+      "",
     );
     catalog = release(repository, catalogTag);
   }
   const candidate = `catalog-${next.revision}.json`;
   await upload(repository, catalog.id, catalogTag, envelope, candidate);
   await promoteExtensionCatalog({
-    candidate,
+    pointer: catalogPointer(await readFile(envelope), next.revision),
     verifyState,
-    rename: async (id, name) =>
-      gh(
-        "api",
-        "--method",
-        "PATCH",
-        `repos/${repository}/releases/assets/${id}`,
-        "-f",
-        `name=${name}`,
+    verifyAsset: async (asset, pointer) => {
+      const data = await readPointerAsset(repository, asset, pointer);
+      const verified = JSON.parse(
+        verifiedCatalogPayload(
+          verifyCatalogPointerData(data, pointer),
+          publicKey,
+        ),
+      );
+      if (!isDeepStrictEqual(verified, next))
+        throw new Error("Staged catalog differs");
+    },
+    updatePointer: async (id, body) =>
+      mutate(
+        "release",
+        "edit",
+        "--repo",
+        repository,
+        String(id),
+        "--body",
+        body,
+        "--make-latest",
+        "false",
       ),
   });
   if (catalog.draft)
