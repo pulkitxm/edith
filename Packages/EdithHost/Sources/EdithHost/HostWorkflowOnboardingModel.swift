@@ -23,6 +23,7 @@ import Observation
     private(set) var presented = false
     private(set) var stage = Stage.workflows
     private(set) var workflow = HostWorkflow.custom
+    private(set) var icloudBackup = true
     private(set) var selected = Set<String>()
     private(set) var states: [String: InstallState] = [:]
     private(set) var failure: String?
@@ -39,6 +40,7 @@ import Observation
         self.entries = entries
         self.defaults = defaults
         self.environment = environment
+        icloudBackup = defaults.object(forKey: AppStorageKeys.Backup.icloud) as? Bool ?? true
     }
 
     var incomplete: Bool {
@@ -93,6 +95,8 @@ import Observation
         saveSelection()
     }
 
+    func setICloudBackup(_ enabled: Bool) { guard !busy else { return }; icloudBackup = enabled }
+
     func back() { guard !busy else { return }; stage = .workflows }
 
     func refreshCatalog() {
@@ -113,6 +117,8 @@ import Observation
             let result = try await model.environment.restore()
             model.imported = true
             model.defaults.set(false, forKey: HostSettingsCatalog.onboardingCompletedKey)
+            model.icloudBackup =
+                model.defaults.object(forKey: AppStorageKeys.Backup.icloud) as? Bool ?? true
             try Task.checkCancellation()
             model.selected = Set(result.suggestedExtensionIDs).intersection(
                 Set(model.entries.map(\.id)))
@@ -126,6 +132,8 @@ import Observation
     func installSelection() {
         guard canInstall else { return }
         let chosen = selected.sorted()
+        defaults.set(icloudBackup, forKey: AppStorageKeys.Backup.icloud)
+        environment.changed()
         states = Dictionary(uniqueKeysWithValues: chosen.map { ($0, .waiting) })
         stage = .installing
         run { model in
@@ -186,13 +194,20 @@ import Observation
 
     func dismiss() {
         guard !busy else { return }
-        if imported && !originalCompletion { return }
+        if imported && stage != .finished { return }
         defaults.set(
             stage == .finished || originalCompletion,
             forKey: HostSettingsCatalog.onboardingCompletedKey)
         defaults.set(false, forKey: Self.reviewPendingKey)
         presented = false
         environment.changed()
+    }
+
+    func openStorage() {
+        guard stage == .finished, !busy else { return }
+        dismiss()
+        defaults.set("storage", forKey: AppStorageKeys.General.settingsTab)
+        defaults.set("settings", forKey: AppStorageKeys.General.mainWindowSection)
     }
 
     func cancel() { task?.cancel() }
@@ -204,6 +219,7 @@ import Observation
     }
 
     private func complete() {
+        defaults.set(icloudBackup, forKey: AppStorageKeys.Backup.icloud)
         saveSelection()
         let categories = Set(entries.filter { selected.contains($0.id) }.map(\.category))
         for suite in HostMarketplaceCatalog.suites where categories.contains(suite.id) {

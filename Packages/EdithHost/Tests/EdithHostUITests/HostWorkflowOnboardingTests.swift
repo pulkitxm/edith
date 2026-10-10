@@ -178,6 +178,23 @@ import Testing
         #expect(fixture.active.isEmpty)
     }
 
+    @Test func explicitBackupChoiceIsPersistedBeforeWorkersStartAndNeverChangesOnSuggestion() async
+    {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        let model = fixture.model()
+        model.present()
+        model.choose(.custom)
+        model.toggle("usage")
+        #expect(fixture.defaults.object(forKey: AppStorageKeys.Backup.icloud) == nil)
+        model.setICloudBackup(false)
+        model.installSelection()
+        #expect(!fixture.defaults.bool(forKey: AppStorageKeys.Backup.icloud))
+        await finish(model)
+        #expect(!fixture.defaults.bool(forKey: AppStorageKeys.Backup.icloud))
+        #expect(!model.incomplete)
+    }
+
     @Test func explicitStartWithoutExtensionsCompletesAndNeverRemovesExistingUserSelection() {
         let fixture = Fixture()
         defer { fixture.remove() }
@@ -189,6 +206,42 @@ import Testing
         #expect(fixture.active == ["usage"])
         #expect(fixture.installs.isEmpty)
         #expect(!model.incomplete)
+    }
+
+    @Test func storageRouteWaitsForCompletedReviewAndUsesExistingSettingsNavigation() async throws {
+        let fixture = Fixture()
+        defer { fixture.remove() }
+        fixture.defaults.set("home", forKey: AppStorageKeys.General.mainWindowSection)
+        fixture.defaults.set("general", forKey: AppStorageKeys.General.settingsTab)
+        fixture.defaults.set(true, forKey: HostSettingsCatalog.onboardingCompletedKey)
+        fixture.restore = {
+            fixture.defaults.set(true, forKey: HostSettingsCatalog.onboardingCompletedKey)
+            return try JSONDecoder().decode(
+                HostSettingsBackupResult.self,
+                from: Data(
+                    "{\"restored\":true,\"exported\":false,\"suggestedExtensionIDs\":[\"usage\"],\"completedAt\":0}"
+                        .utf8))
+        }
+        let model = fixture.model()
+        model.present()
+        model.restoreSelection()
+        await finish(model)
+        model.dismiss()
+        #expect(model.presented)
+        #expect(model.incomplete)
+        model.openStorage()
+        #expect(model.presented)
+        #expect(fixture.defaults.string(forKey: AppStorageKeys.General.settingsTab) == "general")
+        model.installSelection()
+        await finish(model)
+        #expect(model.stage == .finished)
+        model.openStorage()
+        #expect(!model.presented)
+        #expect(!model.incomplete)
+        #expect(fixture.defaults.string(forKey: AppStorageKeys.General.settingsTab) == "storage")
+        #expect(
+            fixture.defaults.string(forKey: AppStorageKeys.General.mainWindowSection) == "settings")
+        #expect(fixture.active == ["usage"])
     }
 
     private static func package(_ id: String, dependencies: [String] = [], bytes: Int64 = 100)

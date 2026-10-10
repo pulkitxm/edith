@@ -7,6 +7,8 @@ struct HostWorkflowOnboardingView: View {
     let progress: () -> Double
     @Environment(\.colorScheme) private var scheme
     @Environment(\.compactLayout) private var compact
+    @State private var permissions = HostPermissions()
+    @State private var permissionTask: Task<Void, Never>?
     private var dark: Bool { scheme == .dark }
 
     var body: some View {
@@ -27,7 +29,13 @@ struct HostWorkflowOnboardingView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(DashSkin.paper2(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(14)))
         .overlay(RoundedRectangle(cornerRadius: UIScale.pt(14)).strokeBorder(DashSkin.line(dark)))
-        .pageTask { if model.stage == .workflows, !model.busy { model.refreshCatalog() } }
+        .pageTask {
+            if model.stage == .workflows, !model.busy { model.refreshCatalog() }
+            await permissions.refresh()
+        }
+        .onDisappear {
+            permissionTask?.cancel(); permissionTask = nil; model.cancel()
+        }
     }
 
     private var title: String {
@@ -92,6 +100,11 @@ struct HostWorkflowOnboardingView: View {
     private var selectionReview: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(14)) {
             costSummary
+            permissionReview
+            Toggle(
+                "Back up my settings to iCloud",
+                isOn: Binding(get: { model.icloudBackup }, set: { model.setICloudBackup($0) })
+            ).disabled(model.busy)
             ForEach(model.entries) { entry in
                 HStack(spacing: UIScale.pt(12)) {
                     Image(systemName: entry.symbolName).foregroundStyle(DashSkin.accent(dark))
@@ -124,11 +137,50 @@ struct HostWorkflowOnboardingView: View {
         }
     }
 
+    private var permissionReview: some View {
+        let selected = model.entries.filter { model.selected.contains($0.id) }
+        let required = Set(selected.flatMap(\.requiredPermissions))
+        let optional = Set(selected.flatMap(\.optionalPermissions)).subtracting(required)
+        return Group {
+            if !required.isEmpty || !optional.isEmpty {
+                DisclosureGroup("Permissions for your selection") {
+                    ForEach(
+                        HostPermission.allCases.filter {
+                            required.contains($0) || optional.contains($0)
+                        }, id: \.self
+                    ) { permission in
+                        HStack {
+                            Text(permission.displayName)
+                            HostPermissionInfoButton(permission)
+                            Text(required.contains(permission) ? "Required" : "Optional")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            if permissions.granted[permission] == true {
+                                Label("Granted", systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            } else if permission.grantsOnFirstUse {
+                                Text("Asked when needed").foregroundStyle(.secondary)
+                            } else {
+                                Button("Grant") {
+                                    permissionTask?.cancel()
+                                    permissionTask = Task { await permissions.request(permission) }
+                                }.disabled(model.busy || permissions.requesting != nil)
+                            }
+                        }.font(.edithText(.callout)).padding(.vertical, UIScale.pt(4))
+                    }
+                    Text(
+                        "Grant what you are comfortable with. Some tools need permission before they can start."
+                    ).font(.edithText(.caption)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     private var costSummary: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
             if model.cost.complete {
                 Text(
-                    "\(bytes(model.cost.downloadBytes)) download · \(bytes(model.cost.installedBytes)) additional storage"
+                    "\(bytes(model.cost.downloadBytes)) download · \(bytes(model.cost.installedBytes)) unpacked package contents"
                 ).font(.edithText(.headline))
                 if model.cost.packageIDs.subtracting(model.selected).isEmpty == false {
                     Text("Includes required extension dependencies.").font(.edithText(.caption))
@@ -142,6 +194,9 @@ struct HostWorkflowOnboardingView: View {
             Text("Already downloaded extensions do not add to this download.").font(
                 .edithText(.caption)
             ).foregroundStyle(.secondary)
+            Text(
+                "Package sizes estimate additional contents. Actual disk use can differ on APFS. Storage measures the app, packages, cache and retained data."
+            ).font(.edithText(.caption)).foregroundStyle(.secondary)
         }.padding(UIScale.pt(12)).frame(maxWidth: .infinity, alignment: .leading).background(
             DashSkin.paper(dark), in: RoundedRectangle(cornerRadius: UIScale.pt(10)))
     }
@@ -190,7 +245,10 @@ struct HostWorkflowOnboardingView: View {
                     : "\(model.selected.count) selected extensions are ready.",
                 systemImage: "checkmark.circle.fill"
             ).foregroundStyle(.green)
-            Button("Go to Home") { model.dismiss() }.buttonStyle(.edith(.primary))
+            HStack {
+                Button("Go to Home") { model.dismiss() }.buttonStyle(.edith(.primary))
+                Button("View Storage") { model.openStorage() }
+            }
         }
     }
     private func bytes(_ count: Int64) -> String {
