@@ -272,7 +272,9 @@ final class HerdrUIDefaults: UserDefaults {
             }
             try worker.spaces.apply(JSONDecoder().decode(HerdrUISpaceMutation.self, from: payload))
         case "herdr.ui.present":
-            return try JSONEncoder().encode(worker.spaces.present(object))
+            let presentation = try worker.spaces.present(object)
+            await worker.spaces.drainPendingRetirements()
+            return try JSONEncoder().encode(presentation)
         case "herdr.ui.presentation.admit", "herdr.ui.presentation.close",
             "herdr.ui.presentation.focus":
             let fields: Set<String> = operation.hasSuffix(".focus") ? ["token", "key"] : ["token"]
@@ -282,7 +284,7 @@ final class HerdrUIDefaults: UserDefaults {
             if operation.hasSuffix(".admit") {
                 try worker.spaces.admit(token)
             } else if operation.hasSuffix(".close") {
-                try worker.spaces.close(token)
+                try await worker.spaces.closeAndWait(token)
             } else {
                 guard let key = object["key"] as? NSNumber, CFGetTypeID(key) == CFBooleanGetTypeID()
                 else { throw ExtensionPeerError.invalidRequest }
@@ -429,6 +431,8 @@ final class HerdrUIDefaults: UserDefaults {
         }
         try Task.checkCancellation()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+        await worker.spaces.drainPendingRetirements()
+        await worker.terminalSessions.files.drainRetired { worker.terminalSessions.find($0) != nil }
         return try await snapshot()
     }
 

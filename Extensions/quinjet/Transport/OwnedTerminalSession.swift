@@ -160,6 +160,7 @@ enum OwnedTerminalContext {
         case "quinjet.terminal.close":
             guard Set(object.keys) == ["session"] else { throw ExtensionPeerError.invalidRequest }
             stop()
+            await files.drain([descriptor.handle])
         default: throw ExtensionPeerError.invalidRequest
         }
         return Data("{}".utf8)

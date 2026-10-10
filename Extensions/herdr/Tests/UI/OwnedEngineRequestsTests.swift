@@ -147,7 +147,9 @@ import Testing
                 }
                 let terminal = try JSONDecoder().decode(
                     OwnedTerminalRequest.self, from: request.payload)
-                let session = try #require(registry.find(terminal.session))
+                guard let session = registry.find(terminal.session) else {
+                    throw ExtensionPeerError.unavailable
+                }
                 sessionsSeen.insert(terminal.session.id)
                 let output = try await session.execute(request.operation, payload: request.payload)
                 try Task.checkCancellation()

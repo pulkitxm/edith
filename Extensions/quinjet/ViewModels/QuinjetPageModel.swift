@@ -661,7 +661,9 @@ final class QuinjetPageModel {
                 throw QuinjetSessionError.operationFailed(error.localizedDescription)
             }
         }
+        let retired = tab.holder.descriptor?.handle
         tab.holder.stop()
+        if let retired { await OwnedTerminalContext.registry?.files.drain([retired]) }
         tab.worktreeLoad.cancel()
         tabs.remove(at: index)
         if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }

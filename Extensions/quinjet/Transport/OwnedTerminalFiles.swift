@@ -34,6 +34,7 @@ struct OwnedTerminalDropReceipt: Codable {
     private var completedOrder: [UUID] = []
     private var directories: [UUID: Set<URL>] = [:]
     private var transfers: [UUID: Task<[String], Error>] = [:]
+    private var transferOwners: [UUID: OwnedTerminalHandle] = [:]
     private var observers: [UUID: Task<Void, Never>] = [:]
     private var failures: [UUID: (OwnedTerminalHandle, String)] = [:]
     private var expiry: Task<Void, Never>?
@@ -164,6 +165,7 @@ struct OwnedTerminalDropReceipt: Codable {
                 return try await uploader(session, group.files)
             }
             transfers[token] = task
+            transferOwners[token] = session
             observers[token] = Task { [weak self] in
                 let result = await task.result
                 self?.complete(token, group: group, local: local, result: result)
@@ -191,6 +193,7 @@ struct OwnedTerminalDropReceipt: Codable {
     private func complete(_ token: UUID, group: Group, local: Bool, result: Result<[String], Error>)
     {
         transfers[token] = nil
+        transferOwners[token] = nil
         observers[token] = nil
         guard !stopped, groups[token]?.session == group.session else {
             remove(group.directory, session: group.session.id); return
@@ -214,6 +217,18 @@ struct OwnedTerminalDropReceipt: Codable {
             failures[token] = (group.session, String(error.localizedDescription.prefix(4096)))
             remove(group.directory, session: group.session.id)
         }
+    }
+
+    func drainRetired(_ active: (OwnedTerminalHandle) -> Bool) async {
+        await drain(transferOwners.values.filter { !active($0) })
+    }
+
+    func drain(_ sessions: [OwnedTerminalHandle]) async {
+        let tokens = transferOwners.compactMap { sessions.contains($0.value) ? $0.key : nil }
+        let jobs = tokens.compactMap { transfers[$0] }
+        let observing = tokens.compactMap { observers[$0] }
+        for task in jobs { _ = await task.result }
+        for task in observing { await task.value }
     }
 
     func stopAndWait() async {

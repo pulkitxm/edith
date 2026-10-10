@@ -260,6 +260,7 @@ struct QuinjetUIState: Codable {
         }
         try Task.checkCancellation()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+        await worker.terminalSessions.files.drainRetired { worker.terminalSessions.find($0) != nil }
         return try snapshot()
     }
 

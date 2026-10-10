@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -23,6 +24,92 @@ import Testing
                 herdrPresent: true, reachable: true, agents: [agent("first"), agent("second")])
         ]
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
+    }
+
+    @Test func closingOriginalSpaceRetiresOnlyExactBoundShellsAndRemovedLayoutPanes() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "space-shell-fixture-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let defaults = HerdrUIDefaults()
+        let store = HerdrStore(defaults: defaults, machinesProvider: { [] })
+        let agents = ["First", "Second"].enumerated().map { index, space in
+            HerdrAgent.make(
+                machineID: "local", machineName: "Synthetic Mac", machineIsLocal: true,
+                sshTarget: nil, session: "fixture", pane: "p\(index)", kind: "Synthetic tool",
+                status: .working, title: space, workspace: space, cwd: root.path)
+        }
+        store.hosts = [
+            .init(
+                id: "local", name: "Synthetic Mac", isLocal: true, herdrPresent: true,
+                reachable: true, agents: agents)
+        ]
+        let worker = HerdrWorker(
+            store: store, defaults: defaults, automaticActions: false,
+            prepareShell: { _, _ in
+                .init(
+                    executable: "/bin/sh", arguments: ["-c", "printf '%s' $$; exec sleep 30"],
+                    environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"])
+            })
+        defer { worker.terminalSessions.stopAll() }
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        var presentations: [HerdrUIPresentation] = []
+        var descriptors: [OwnedTerminalDescriptor] = []
+        for space in HerdrAgentSpace.group(agents) {
+            let presentation = try JSONDecoder().decode(
+                HerdrUIPresentation.self,
+                from: await client.perform(
+                    "herdr.ui.present", object: ["kind": "space", "id": space.id]))
+            presentations.append(presentation)
+            _ = try await client.perform(
+                "herdr.ui.presentation.admit", object: ["token": presentation.token.uuidString])
+            #expect(worker.spaces.openTerminal(space.id) != nil)
+            let state = try #require(
+                worker.spaces.uiSpaces.first { $0.token == presentation.token })
+            let pane = try #require(state.tabs.last?.layout.root.panes.first)
+            descriptors.append(
+                try JSONDecoder().decode(
+                    OwnedTerminalDescriptor.self,
+                    from: await client.perform(
+                        "herdr.shell.open",
+                        object: [
+                            "paneID": pane.id.uuidString, "machineID": Machine.localID.uuidString,
+                            "directory": root.path,
+                        ])))
+        }
+        let first = try #require(descriptors.first)
+        let second = try #require(descriptors.last)
+        let firstClient = try OwnedTerminalClient(descriptor: first) {
+            try await worker.execute($0, payload: $1)
+        }
+        let secondClient = try OwnedTerminalClient(descriptor: second) {
+            try await worker.execute($0, payload: $1)
+        }
+        let pid = try #require(
+            Int32(String(decoding: try await firstClient.read(after: 0).bytes, as: UTF8.self)))
+        #expect(Darwin.kill(pid, 0) == 0)
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": presentations[0].token.uuidString])
+        #expect(
+            worker.terminalSessions.find(first.handle) == nil
+                && worker.terminalSessions.find(second.handle) != nil)
+        #expect(Darwin.kill(pid, 0) == -1 && errno == ESRCH)
+        #expect(!(try await secondClient.read(after: 0).bytes).isEmpty)
+        _ = try await client.perform(
+            "herdr.ui.presentation.close", object: ["token": presentations[0].token.uuidString])
+        let baseline = try #require(
+            worker.spaces.uiSpaces.first { $0.token == presentations[1].token })
+        var mutation = baseline
+        let removed = try #require(mutation.tabs.last?.id)
+        mutation.tabs.removeAll { $0.id == removed }
+        mutation.selected = mutation.tabs.first?.id
+        _ = try await client.perform(
+            "herdr.ui.space.layout",
+            payload: JSONEncoder().encode(HerdrUISpaceMutation(baseline: baseline, space: mutation))
+        )
+        #expect(worker.terminalSessions.find(second.handle) == nil)
+        await worker.shutdown()
     }
 
     @Test func exitedRetainedPTYRebindsAfterDiscoveryRetiresTheAgentWithoutStartingAnotherProcess()

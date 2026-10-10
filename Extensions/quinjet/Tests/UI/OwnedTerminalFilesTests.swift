@@ -223,6 +223,67 @@ import Testing
         await registry.stopAllAndWait()
     }
 
+    @Test func closingOneSessionWaitsOnlyForItsCancelledFileJobAndKeepsOtherScopesAlive()
+        async throws
+    {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("synthetic.bin")
+        let bytes = Data([0, 255, 128, 1])
+        try bytes.write(to: source)
+        let registry = OwnedTerminalSessionRegistry()
+        defer { registry.stopAll() }
+        let first = try session(registry, local: false)
+        let second = try session(registry, local: false)
+        var started: Set<UUID> = []
+        var stopped: Set<UUID> = []
+        var copied: [UUID: [URL]] = [:]
+        registry.files.upload = { handle, files in
+            started.insert(handle.id)
+            copied[handle.id] = files
+            defer { stopped.insert(handle.id) }
+            try await Task.sleep(for: .seconds(30))
+            return files.map(\.path)
+        }
+        let bridge = SyntheticPTYEngineBridge(registry: registry)
+        let sdk = try #require(
+            ExtensionEngineClient(bridge: bridge, presentationID: bridge.presentation))
+        defer { sdk.invalidate() }
+        let firstClient = try OwnedTerminalClient(descriptor: first.descriptor) {
+            try await sdk.invoke($0, payload: $1)
+        }
+        let secondClient = try OwnedTerminalClient(descriptor: second.descriptor) {
+            try await sdk.invoke($0, payload: $1)
+        }
+        let firstTransfer = Task { try await firstClient.uploadFiles([source]) }
+        let secondTransfer = Task { try await secondClient.uploadFiles([source]) }
+        defer { firstTransfer.cancel(); secondTransfer.cancel() }
+        for _ in 0..<300 {
+            if started.count == 2 { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(started.count == 2)
+        let closeStart = ContinuousClock.now
+        try await firstClient.close()
+        #expect(closeStart.duration(to: .now) < .seconds(2))
+        #expect(stopped == [first.descriptor.handle.id])
+        #expect(registry.find(first.descriptor.handle) == nil)
+        #expect(registry.find(second.descriptor.handle) === second)
+        #expect(
+            copied[first.descriptor.handle.id]?.allSatisfy {
+                !FileManager.default.fileExists(atPath: $0.path)
+            } == true)
+        #expect(
+            copied[second.descriptor.handle.id]?.allSatisfy {
+                FileManager.default.fileExists(atPath: $0.path)
+            } == true)
+        await #expect(throws: (any Error).self) { try await firstTransfer.value }
+        await registry.stopAllAndWait()
+        await #expect(throws: (any Error).self) { try await secondTransfer.value }
+        #expect(stopped.count == 2 && registry.find(second.descriptor.handle) == nil)
+        #expect(try Data(contentsOf: source) == bytes)
+    }
+
     @Test func disablingOwnerCancelsAndDrainsPendingFileServiceAndDeletesOnlyItsCopies()
         async throws
     {

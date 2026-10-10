@@ -34,6 +34,10 @@ struct HerdrUIPresentation: Codable {
     private let store: HerdrStore
     private var entries: [UUID: Entry] = [:]
     private var focused: UUID?
+    var retirePanes: @MainActor (Set<UUID>) -> [OwnedTerminalHandle] = { _ in [] }
+    var drain: @MainActor ([OwnedTerminalHandle]) async -> Void = { _ in }
+    private var pendingRetirements: [OwnedTerminalHandle] = []
+    private var retiredHandles: [UUID: [OwnedTerminalHandle]] = [:]
     private var stopped = false
     private var retired: Set<UUID> = []
     private var retiredOrder: [UUID] = []
@@ -113,10 +117,51 @@ struct HerdrUIPresentation: Codable {
         }
         retired.insert(token)
         retiredOrder.append(token)
-        if retiredOrder.count > 512 { retired.remove(retiredOrder.removeFirst()) }
+        if retiredOrder.count > 512 {
+            let expired = retiredOrder.removeFirst()
+            retired.remove(expired)
+            retiredHandles[expired] = nil
+        }
+        var handles = modelHandles(entry.model)
+        if entry.kind == "agent", let tab = store.detachedTab(id: entry.id) {
+            handles += [tab.holder, tab.quinjet.holder].compactMap { $0.descriptor?.handle }
+        }
+        handles += retirePanes(paneIDs(entry.model))
+        retiredHandles[token] = handles
+        pendingRetirements += handles
         entry.model?.stopAll()
         if entry.kind == "agent" { store.reattach(entry.id) }
         if focused == token { focused = nil }
+    }
+
+    func closeAndWait(_ token: UUID) async throws {
+        try close(token)
+        await drain(retiredHandles[token] ?? [])
+    }
+
+    func drainPendingRetirements() async {
+        let handles = pendingRetirements
+        pendingRetirements.removeAll()
+        await drain(handles)
+    }
+
+    private func paneIDs(_ model: HerdrSpaceWindowModel?) -> Set<UUID> {
+        Set(model?.tabs.flatMap { $0.layout.root.panes.map(\.id) } ?? [])
+    }
+
+    private func modelHandles(_ model: HerdrSpaceWindowModel?) -> [OwnedTerminalHandle] {
+        guard let model else { return [] }
+        let holders =
+            model.tabs.flatMap(\.holders) + model.tabs.compactMap { $0.agentTab?.quinjet.holder }
+        return holders.compactMap { $0.descriptor?.handle }
+    }
+
+    private func retireChanges(
+        _ model: HerdrSpaceWindowModel, panes: Set<UUID>, handles: [OwnedTerminalHandle]
+    ) {
+        let current = modelHandles(model)
+        pendingRetirements += handles.filter { !current.contains($0) }
+        pendingRetirements += retirePanes(panes.subtracting(paneIDs(model)))
     }
 
     func listed() -> [HerdrSpaceInfo] {
@@ -186,7 +231,10 @@ struct HerdrUIPresentation: Codable {
             }),
             Set(mutation.space.tabs.flatMap { $0.agents.values }).isSubset(of: agents)
         else { throw ExtensionPeerError.invalidRequest }
+        let panes = paneIDs(model)
+        let handles = modelHandles(model)
         model.adopt(mutation.space, store: store)
+        retireChanges(model, panes: panes, handles: handles)
     }
 
     func removeAgent(_ id: String) {
@@ -194,7 +242,10 @@ struct HerdrUIPresentation: Codable {
             if entry.kind == "agent", entry.id == id {
                 try? close(entry.token)
             } else if let model = entry.model {
+                let panes = paneIDs(model)
+                let handles = modelHandles(model)
                 model.removeAgent(id)
+                retireChanges(model, panes: panes, handles: handles)
                 if model.tabs.isEmpty { try? close(entry.token) }
             }
         }

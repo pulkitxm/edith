@@ -84,7 +84,23 @@ import Foundation
         self.prepareShell = prepareShell
         HerdrWorkOwnership.enable()
         ownedStore.ownsSpaceAgent = { [weak self] in self?.spaces.holds($0) ?? false }
-        ownedStore.prepareNotificationAgent = { [weak self] id in self?.spaces.removeAgent(id) }
+        ownedStore.prepareNotificationAgent = { [weak self] id in
+            guard let self else { return }
+            self.spaces.removeAgent(id)
+            await self.spaces.drainPendingRetirements()
+        }
+        spaces.retirePanes = { [weak self] panes in
+            guard let self else { return [] }
+            var handles: [OwnedTerminalHandle] = []
+            for pane in panes {
+                if let shell = self.shells.removeValue(forKey: pane) {
+                    if let handle = shell.holder.descriptor?.handle { handles.append(handle) }
+                    shell.holder.stop()
+                }
+            }
+            return handles
+        }
+        spaces.drain = { [weak self] handles in await self?.terminalSessions.files.drain(handles) }
         terminalSessions.files.upload = { [weak self] handle, urls in
             guard let self, !self.isStopped, self.terminalSessions.find(handle) != nil else {
                 throw ExtensionPeerError.unavailable
