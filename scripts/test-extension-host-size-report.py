@@ -382,7 +382,7 @@ class HostSizeReportTests(unittest.TestCase):
         self.final_fixture()
         clone = self.root / "camera-source/Edith.app"
         shutil.copytree(self.app, clone)
-        identifier = "com.pulkit.edith.tests.camera-build-00000000-0000-0000-0000-000000000001"
+        identifier = "com.pulkit.edith.tests.worker-00000000-0000-0000-0000-000000000001"
         info_path = clone / "Contents/Info.plist"
         info = plistlib.loads(info_path.read_bytes())
         info["CFBundleIdentifier"] = identifier
@@ -458,6 +458,19 @@ class HostSizeReportTests(unittest.TestCase):
             "executableAfterSigningSHA256": report.digest_file(executable)}))
         with self.assertRaisesRegex(ValueError, "frozen host code"):
             self.verify_host("virtualCamera", definition)
+
+    def test_camera_receipt_rejects_retired_or_broadened_synthetic_identity(self):
+        clone, receipt, roles, definition = self.camera_fixture()
+        path = self.packages / "virtualCamera.synthetic-host-provenance.json"
+        info_path = clone / "Contents/Info.plist"
+        for identifier in ["com.pulkit.edith.tests.camera-build-00000000-0000-0000-0000-000000000001",
+                           "com.pulkit.edith.tests.worker-not-a-uuid", "com.pulkit.edith.tests.remote-00000000-0000-0000-0000-000000000001"]:
+            info = plistlib.loads(info_path.read_bytes())
+            info["CFBundleIdentifier"] = identifier
+            info_path.write_bytes(plistlib.dumps(info))
+            path.write_text(json.dumps({**receipt, "identifier": identifier, "cloneInventory": report.tree_inventory(clone)}))
+            with self.subTest(identifier=identifier), self.assertRaisesRegex(ValueError, "synthetic identity"):
+                self.verify_host("virtualCamera", definition)
 
     def test_ordinary_package_cannot_use_camera_clone_exception(self):
         self.final_fixture()
