@@ -39,6 +39,7 @@ final class CalendarUIEngine {
     private let authorized: () -> Bool
     private let open: (URL) -> Bool
     private let grant: () async throws -> Void
+    private let navigate: (CalendarNavigationRequest) async throws -> Void
     private var stopped = false
     private var permissionTask: Task<Void, Error>?
     private var permissionID: UUID?
@@ -49,6 +50,9 @@ final class CalendarUIEngine {
         open: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) },
         grant: @escaping () async throws -> Void = {
             _ = try await EKEventStore().requestFullAccessToEvents()
+        },
+        navigate: @escaping (CalendarNavigationRequest) async throws -> Void = { _ in
+            throw ExtensionPeerError.unavailable
         }
     ) {
         self.store = store
@@ -56,11 +60,20 @@ final class CalendarUIEngine {
         self.authorized = authorized ?? { store.authStatus == .fullAccess }
         self.open = open
         self.grant = grant
+        self.navigate = navigate
     }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         switch operation {
+        case "calendar.ui.navigate":
+            try validateObject(payload, keys: ["presentationID", "location"])
+            let request = try JSONDecoder().decode(CalendarNavigationRequest.self, from: payload)
+            try request.validate()
+            try await navigate(request)
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return Data("{}".utf8)
         case "calendar.ui.metadata", "calendar.ui.list", "calendar.ui.loadMore":
             try validateObject(payload, keys: [])
             presentation.refresh()

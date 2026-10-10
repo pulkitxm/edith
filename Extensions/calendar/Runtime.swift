@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var presentation: CalendarPresentationState?
     private var surface: CalendarSurface?
     private var uiEngine: CalendarUIEngine?
+    private var navigation: CalendarHostNavigation?
     private let commands = ExtensionCommandRegistry()
     private var uiPresentations: [UUID: CalendarUIPresentation] = [:]
 
@@ -66,11 +67,13 @@ final class ExtensionRuntime: NSObject {
         commands.shutdown()
         uiEngine?.shutdown()
         store?.shutdown()
+        navigation?.invalidate()
         CalendarPermission.shutdown()
         Task {
             await commands.shutdownAndWait()
             await uiEngine?.stopAndWait()
             await store?.stopAndWait()
+            await navigation?.stopAndWait()
             await CalendarPermission.stopAndWait()
             presentation?.shutdown()
             completion()
@@ -96,8 +99,16 @@ final class ExtensionRuntime: NSObject {
             if store == nil { store = CalendarStore(startImmediately: false) }
             if presentation == nil { presentation = CalendarPresentationState() }
             if let store, let presentation, surface == nil {
+                let navigation = CalendarHostNavigation(
+                    bridge: input["hostNavigation"] as? NSObject)
+                self.navigation = navigation
                 surface = CalendarSurface(store: store, presentation: presentation)
-                uiEngine = CalendarUIEngine(store: store, presentation: presentation)
+                uiEngine = CalendarUIEngine(
+                    store: store, presentation: presentation,
+                    navigate: { [weak navigation] request in
+                        guard let navigation else { throw ExtensionPeerError.unavailable }
+                        try await navigation.navigate(request)
+                    })
                 store.start()
             }
         case "configureUI":
@@ -125,6 +136,8 @@ final class ExtensionRuntime: NSObject {
             for scene in uiPresentations.values { scene.shutdown() }
             uiPresentations.removeAll()
             commands.shutdown()
+            navigation?.invalidate()
+            navigation = nil
             uiEngine?.shutdown()
             uiEngine = nil
             surface = nil

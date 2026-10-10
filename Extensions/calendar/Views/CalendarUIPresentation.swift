@@ -57,7 +57,14 @@ final class CalendarUIPresentation {
 
     convenience init?(client: ExtensionEngineClient, context: NSDictionary) {
         guard let route = CalendarUISceneRoute(context: context) else { return nil }
-        self.init(facade: CalendarUIFacade(client: client), route: route)
+        self.init(
+            facade: CalendarUIFacade(
+                client: client,
+                navigation: route.location == .main
+                    ? nil
+                    : CalendarNavigationRequest(
+                        presentationID: client.presentationID, location: route.location.rawValue)),
+            route: route)
     }
 
     init(facade: CalendarUIFacade, route: CalendarUISceneRoute) {

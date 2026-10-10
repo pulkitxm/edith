@@ -14,22 +14,25 @@ final class CalendarUIFacade {
     private(set) var loaded = false
     private let invoke: (String, Data) async throws -> Data
     private let invalidate: () -> Void
+    private let navigation: CalendarNavigationRequest?
     private var stopped = false
     private var generation: UInt64 = 0
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
     @ObservationIgnored private var actions: [UUID: Task<Void, Never>] = [:]
 
-    convenience init(client: ExtensionEngineClient) {
+    convenience init(client: ExtensionEngineClient, navigation: CalendarNavigationRequest? = nil) {
         self.init(
-            invoke: { try await client.invoke($0, payload: $1) }, invalidate: client.invalidate)
+            invoke: { try await client.invoke($0, payload: $1) }, invalidate: client.invalidate,
+            navigation: navigation)
     }
 
     init(
         invoke: @escaping (String, Data) async throws -> Data,
-        invalidate: @escaping () -> Void = {}
+        invalidate: @escaping () -> Void = {}, navigation: CalendarNavigationRequest? = nil
     ) {
         self.invoke = invoke
         self.invalidate = invalidate
+        self.navigation = navigation
     }
 
     deinit {
@@ -86,12 +89,19 @@ final class CalendarUIFacade {
         actions[id] = Task { [weak self] in
             guard let self else { return }
             defer { actions.removeValue(forKey: id) }
-            do {
-                _ = try await invoke("calendar.ui.navigate", Data("{}".utf8))
-                try Task.checkCancellation()
-            } catch {
-                if !stopped, !Task.isCancelled { self.error = error.localizedDescription }
-            }
+            await openPageAndWait()
+        }
+    }
+
+    func openPageAndWait() async {
+        guard !stopped, !Task.isCancelled else { return }
+        do {
+            guard let navigation else { throw ExtensionPeerError.unavailable }
+            try navigation.validate()
+            _ = try await invoke("calendar.ui.navigate", JSONEncoder().encode(navigation))
+            try Task.checkCancellation()
+        } catch {
+            if !stopped, !Task.isCancelled { self.error = error.localizedDescription }
         }
     }
 
