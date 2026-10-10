@@ -311,6 +311,10 @@ ci-marketplace-runtime:
 	swift format lint --strict --parallel --recursive Packages/ExtensionMarketplace/Sources Packages/ExtensionMarketplace/Tests
 	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 
+.PHONY: ci-marketplace-runtime-diagnostics
+ci-marketplace-runtime-diagnostics:
+	python3 scripts/hosted-host-tests/marketplace.py
+
 ci-marketplace-host: ci-host host
 	$(MAKE) ci-host-cli
 	python3 -B scripts/test-extension-size-report.py

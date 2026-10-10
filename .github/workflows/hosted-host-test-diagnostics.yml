@@ -35,10 +35,14 @@ jobs:
         run: python3 -m unittest discover -s scripts/hosted-host-tests -p 'test_*.py'
       - name: Build then run required serial Core and UI batches
         run: python3 scripts/hosted-host-tests/watchdog.py
+      - name: Diagnose required Marketplace runtime tests with owned process deadlines
+        run: make ci-marketplace-runtime-diagnostics
       - name: Retain bounded hosted diagnostic outcome
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: hosted-host-test-diagnostics
           retention-days: 3
-          path: local/hosted-host-tests/
+          path: |
+            local/hosted-host-tests/
+            local/hosted-marketplace-tests/
