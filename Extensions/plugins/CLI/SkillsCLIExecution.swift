@@ -5,13 +5,24 @@ import Foundation
 
 @MainActor enum SkillsCLIEnvironment {
     static var clipboard = NSPasteboard.general
-    static var documents = SkillDocumentStore()
-    static var detectAgents: () -> [SkillAgent] = { SkillAgentCatalog.detected() }
-    static var installer = SkillInstaller(recordInstalled: { skill, document in
-        try await documents.recordInstalled(document, for: skill)
-    })
+    @TaskLocal static var model: SkillsModel?
+    static var documents: SkillDocumentStore {
+        get throws {
+            guard let model, !model.isStopped else { throw ExtensionPeerError.unavailable }
+            return model.documents
+        }
+    }
+    static func detectAgents() throws -> [SkillAgent] {
+        guard let model, !model.isStopped else { throw ExtensionPeerError.unavailable }
+        return model.agents
+    }
+    static var installer: SkillInstaller {
+        get throws {
+            guard let model, !model.isStopped else { throw ExtensionPeerError.unavailable }
+            return model.ownedInstaller
+        }
+    }
 }
-
 @MainActor enum SkillsCLIExecution {
     static func run(_ request: ExtensionCLIRequest, model: SkillsModel) async throws
         -> ExtensionCLIReply
@@ -19,17 +30,18 @@ import Foundation
         try request.validate()
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
         await model.discoverAgents()
-        let oldDocuments = SkillsCLIEnvironment.documents
-        let oldAgents = SkillsCLIEnvironment.detectAgents
-        let oldInstaller = SkillsCLIEnvironment.installer
-        SkillsCLIEnvironment.documents = model.documents
-        SkillsCLIEnvironment.detectAgents = { model.agents }
-        SkillsCLIEnvironment.installer = model.ownedInstaller
-        defer {
-            SkillsCLIEnvironment.documents = oldDocuments
-            SkillsCLIEnvironment.detectAgents = oldAgents
-            SkillsCLIEnvironment.installer = oldInstaller
+        return try await SkillsCLIEnvironment.$model.withValue(model) {
+            try await ExtensionCLIExecution.run(SkillsCommand.self, request: request)
         }
-        return try await ExtensionCLIExecution.run(SkillsCommand.self, arguments: request.arguments)
+    }
+    static func stream(
+        _ streams: ExtensionCLIStreams, operation: String, payload: Data, model: SkillsModel
+    ) async throws -> Data {
+        guard !model.isStopped else { throw ExtensionPeerError.unavailable }
+        await model.discoverAgents()
+        return try SkillsCLIEnvironment.$model.withValue(model) {
+            try streams.invoke(
+                SkillsCommand.self, operation: operation, prefix: "plugins.cli", payload: payload)
+        }
     }
 }

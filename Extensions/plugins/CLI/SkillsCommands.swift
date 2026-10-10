@@ -47,7 +47,7 @@ import Foundation
 
     static func targets(named ids: [String]) throws -> [String] {
         if !ids.isEmpty { return try agents(ids) }
-        let detected = SkillsCLIEnvironment.detectAgents().map(\.id)
+        let detected = try SkillsCLIEnvironment.detectAgents().map(\.id)
         let preferences =
             SharedDefaults.store.dictionary(forKey: "plugins.agentSelections")
             as? [String: Bool] ?? [:]
@@ -124,7 +124,7 @@ import Foundation
 
     func run() async throws {
         try await execute {
-            let detected = Set(SkillsCLIEnvironment.detectAgents().map(\.id))
+            let detected = Set(try SkillsCLIEnvironment.detectAgents().map(\.id))
             let agents =
                 allAgents
                 ? SkillAgentCatalog.agents
@@ -258,7 +258,7 @@ import Foundation
             let plan = CLIDestructivePlan(
                 action: "install \(skill.id)", targets: agents, confirmed: yes, json: json)
             guard plan.shouldApply() else { return }
-            let installer = SkillsCLIEnvironment.installer
+            let installer = try SkillsCLIEnvironment.installer
             do {
                 let emitLogs = !json
                 try await installer.install(skill: skill, agentIDs: agents) { line in

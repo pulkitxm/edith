@@ -13,11 +13,20 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private var surface: PluginsSurface?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model, !model.isStopped else {
                 throw ExtensionPeerError.unavailable
+            }
+            if command.hasPrefix("plugins.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "plugins")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try await SkillsCLIExecution.stream(
+                    streams, operation: command, payload: payload, model: model)
             }
             if command == "plugins.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
@@ -34,9 +43,13 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         Task {
-            await model?.shutdown(); completion()
+            await model?.shutdown()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
+            completion()
         }
     }
 
@@ -77,6 +90,8 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            let streams = cliStreams; cliStreams = nil; streams?.stop()
+            Task { await streams?.stopAndWait() }
             commands.shutdown()
             let stopping = model; model = nil; surface = nil
             Task { await stopping?.shutdown() }
