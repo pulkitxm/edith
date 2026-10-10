@@ -116,8 +116,21 @@ public struct JourneyFixture: Codable, Equatable, Sendable {
     public func homeCategory(_ value: String?, accountHome: String) -> String {
         guard let value else { return "absent" }
         if value == accountHome { return "account" }
+        if value == accountHome
+            + "/Library/Containers/com.pulkit.edith.tests.hosted-shell-ui.xctrunner/Data"
+        {
+            return "test-runner"
+        }
         if value == home { return "synthetic" }
         return "other"
+    }
+
+    public func validateRunnerHome(_ value: String?, accountHome: String, canonicalHome: String)
+        throws
+    {
+        guard let value, canonical(value), value == canonicalHome,
+            ["account", "test-runner"].contains(homeCategory(value, accountHome: accountHome))
+        else { throw JourneyContractError.invalidEnvironment }
     }
 
     public func validateRegistrationMetadata(
@@ -203,6 +216,35 @@ public struct JourneyProcessRegistry: Sendable {
             return JourneyProcessObservation(
                 role: String(role), pid: expected.pid, generation: expected.generation,
                 running: stillRunning, residentBytes: stillRunning ? bytes : nil)
+        }
+    }
+}
+
+public struct JourneyProducerReceipt: Encodable, Equatable, Sendable {
+    public let schema = 1
+    public let hostIdentifier: String
+    public let sourceCommit: String
+    public let phase: String
+    public let category: String
+
+    public init(fixture: JourneyFixture, phase: String, error: (any Error)? = nil) throws {
+        guard ["make", "telemetry"].contains(phase) else {
+            throw JourneyContractError.invalidMetadata
+        }
+        hostIdentifier = fixture.identifier
+        sourceCommit = fixture.sourceCommit
+        self.phase = phase
+        guard let error else { category = "ready"; return }
+        guard let contract = error as? JourneyContractError else {
+            category = "dependency-failure"; return
+        }
+        switch contract {
+        case .untrustedRunner: category = "runner-rejected"
+        case .invalidIdentity: category = "identity-rejected"
+        case .invalidPaths: category = "paths-rejected"
+        case .invalidMetadata: category = "metadata-rejected"
+        case .invalidEnvironment: category = "environment-rejected"
+        case .protectedDataChanged: category = "protected-data-changed"
         }
     }
 }

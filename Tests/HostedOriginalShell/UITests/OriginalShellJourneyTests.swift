@@ -12,6 +12,7 @@ final class OriginalShellJourneyTests: XCTestCase {
     private var snapshots: [[String: Any]] = []
     private var startup: [String: Any] = [:]
     private var outcomeSequence = 0
+    private var lastState: [String: Any] = [:]
     private var windowImages: [String: Data] = [:]
 
     func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() async throws {
@@ -38,7 +39,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertTrue(windowPresent)
-        try waitState("empty-idle") { state in
+        try await waitState("empty-idle") { state in
             (state["downloaded"] as? [String]) == [] && (state["workers"] as? [String: Int]) == [:]
         }
         XCTAssertFalse(application.buttons["journey.navigation.machines"].exists)
@@ -60,7 +61,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             XCTAssertEqual(checkbox.value as? String, "0")
         }
         try click(application.buttons["Install 1 extensions"], in: application)
-        try waitState("recommended-calendar-installed") {
+        try await waitState("recommended-calendar-installed") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
                 && ($0["active"] as? [String]) == ["calendar"]
         }
@@ -69,7 +70,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         try approveCalendarIfNeeded(application, identifier: fixture.identifier)
         XCTAssertTrue(
             application.staticTexts["Synthetic Calendar review"].waitForExistence(timeout: 45))
-        try waitState("calendar-native-view") {
+        try await waitState("calendar-native-view") {
             ($0["presentationCounts"] as? [String: Int])?["calendar", default: 0] ?? 0 > 0
                 && ($0["ownedProcesses"] as? [[String: Any]])?.contains {
                     $0["role"] as? String == "managedUI" && $0["running"] as? Bool == true
@@ -78,37 +79,37 @@ final class OriginalShellJourneyTests: XCTestCase {
         try click(application.buttons["Details"].firstMatch, in: application)
         XCTAssertTrue(
             application.staticTexts["Synthetic agenda notes"].waitForExistence(timeout: 15))
-        try capture("calendar-native-use")
+        try await capture("calendar-native-use")
         try click(application.buttons["journey.navigation.home"], in: application)
         try click(application.buttons["Widget editor"], in: application)
-        let before = try state()
+        let before = try await state()
         try click(application.buttons["Add Meetings"], in: application)
-        try waitState("home-customized") {
+        try await waitState("home-customized") {
             Self.tiles($0, target: "home").count > Self.tiles(before, target: "home").count
         }
         try click(application.buttons["Notch"], in: application)
-        let beforeNotch = try state()
+        let beforeNotch = try await state()
         try click(application.buttons["Add Meetings"], in: application)
-        try waitState("notch-customized") {
+        try await waitState("notch-customized") {
             Self.tiles($0, target: "notch").count > Self.tiles(beforeNotch, target: "notch").count
         }
-        let customized = try state()
+        let customized = try await state()
         let home = try canonical(customized["home"])
         let notch = try canonical(customized["notch"])
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
         try captureWindow(application, fixture: fixture, name: "marketplace-installed-calendar.png")
         try click(application.buttons["Disable"], in: application)
-        try waitState("disabled-drained") {
+        try await waitState("disabled-drained") {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
                 && !Self.running($0, role: "managedUI")
         }
-        try assertLayouts(home: home, notch: notch)
+        try await assertLayouts(home: home, notch: notch)
         XCTAssertFalse(application.buttons["journey.navigation.calendar"].exists)
         try click(application.buttons["Enable"], in: application)
-        try waitState("reenabled-original-version") {
+        try await waitState("reenabled-original-version") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
         }
         application.terminate()
@@ -117,19 +118,19 @@ final class OriginalShellJourneyTests: XCTestCase {
         try registerApplication(fixture)
         application.launch()
         XCTAssertTrue(application.windows.firstMatch.waitForExistence(timeout: 30))
-        try waitState("replacement-restored-installed-state") {
+        try await waitState("replacement-restored-installed-state") {
             $0["applicationVersion"] as? String == "2.0.0"
                 && ($0["versions"] as? [String: String])?["calendar"] == "1.0.0"
         }
-        try assertLayouts(home: home, notch: notch)
+        try await assertLayouts(home: home, notch: notch)
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
         try click(application.buttons["Check for Updates"], in: application)
         try click(application.buttons["Update"], in: application)
-        try waitState("updated-calendar-version") {
+        try await waitState("updated-calendar-version") {
             ($0["versions"] as? [String: String])?["calendar"] == "1.1.0"
         }
-        try assertLayouts(home: home, notch: notch)
+        try await assertLayouts(home: home, notch: notch)
         try click(application.buttons["Open"], in: application)
         try approveCalendarIfNeeded(application, identifier: fixture.identifier)
         XCTAssertTrue(
@@ -137,15 +138,15 @@ final class OriginalShellJourneyTests: XCTestCase {
         try click(application.buttons["journey.navigation.extensions"], in: application)
         try findCalendar(application)
         try click(application.buttons["Disable"], in: application)
-        try waitState("updated-disabled-drained") {
+        try await waitState("updated-disabled-drained") {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
                 && !Self.running($0, role: "managedUI")
         }
         try click(application.buttons["Remove"], in: application)
-        try waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }
-        try assertLayouts(home: home, notch: notch)
+        try await waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }
+        try await assertLayouts(home: home, notch: notch)
         try verifyProtected(fixture)
         try click(application.buttons["journey.navigation.settings"], in: application)
         try click(application.buttons["journey.section.settings.storage"], in: application)
@@ -154,7 +155,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             application.staticTexts[
                 "Actual files on this Mac, with download sizes shown separately."
             ].exists)
-        try capture("storage-after-removal")
+        try await capture("storage-after-removal")
         try captureWindow(application, fixture: fixture, name: "storage-distribution.png")
         application.terminate()
         try verifyProtected(fixture)
@@ -256,22 +257,63 @@ final class OriginalShellJourneyTests: XCTestCase {
         XCTAssertTrue(element.isHittable)
     }
 
-    private func state() throws -> [String: Any] {
-        let data = try Data(contentsOf: root.appendingPathComponent("state.json"))
-        XCTAssertLessThanOrEqual(data.count, 131_072)
-        let state = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        XCTAssertEqual(state["protectedDataUnchanged"] as? Bool, true)
-        XCTAssertEqual(state["declinedPermissionRequests"] as? Int, 0)
+    private func state() async throws -> [String: Any] {
+        let environment = ProcessInfo.processInfo.environment
+        let fixture = try JSONDecoder().decode(
+            JourneyFixture.self, from: Data(contentsOf: root.appendingPathComponent("journey.json"))
+        )
+        let endpoint = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_ENDPOINT"])
+        let token = try XCTUnwrap(environment["EDITH_JOURNEY_OPERATOR_TOKEN"])
+        guard let replacement = URL(string: endpoint), replacement.scheme == "http",
+            replacement.host == "127.0.0.1", let port = replacement.port,
+            (1...65535).contains(port), replacement.path == "/replace",
+            replacement.query == nil, replacement.fragment == nil,
+            replacement.user == nil, replacement.password == nil,
+            token.utf8.count == 64, token.allSatisfy({ $0.isHexDigit && !$0.isUppercase }),
+            let url = URL(string: "http://127.0.0.1:\(port)/state")
+        else { throw JourneyContractError.invalidEnvironment }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        request.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        let (data, response) = try await session.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200, data.count <= 131_072,
+            let result = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            result["schema"] as? Int == 1, result["operation"] as? String == "state",
+            result["hostIdentifier"] as? String == fixture.identifier,
+            result["sourceCommit"] as? String == fixture.sourceCommit,
+            let state = result["state"] as? [String: Any],
+            state["hostIdentifier"] as? String == fixture.identifier,
+            state["sourceCommit"] as? String == fixture.sourceCommit,
+            state["protectedDataUnchanged"] as? Bool == true,
+            state["declinedPermissionRequests"] as? Int == 0
+        else { throw JourneyContractError.invalidMetadata }
+        lastState = state
         return state
     }
 
-    private func waitState(_ stage: String, predicate: @escaping ([String: Any]) -> Bool) throws {
-        XCTAssertTrue(wait(45) { (try? self.state()).map(predicate) == true }, stage)
-        try capture(stage)
+    private func waitState(_ stage: String, predicate: @escaping ([String: Any]) -> Bool)
+        async throws
+    {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(45))
+        while ContinuousClock.now < deadline {
+            if let value = try? await state(), predicate(value) {
+                try await capture(stage)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTFail(stage)
+        throw JourneyContractError.invalidMetadata
     }
 
-    private func capture(_ stage: String) throws {
-        snapshots.append(["stage": stage, "state": try state()])
+    private func capture(_ stage: String) async throws {
+        snapshots.append(["stage": stage, "state": try await state()])
         try saveOutcome()
     }
 
@@ -294,8 +336,8 @@ final class OriginalShellJourneyTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: XCTUnwrap(value), options: .sortedKeys)
     }
 
-    private func assertLayouts(home: Data, notch: Data) throws {
-        let current = try state()
+    private func assertLayouts(home: Data, notch: Data) async throws {
+        let current = try await state()
         XCTAssertEqual(try canonical(current["home"]), home)
         XCTAssertEqual(try canonical(current["notch"]), notch)
     }
@@ -330,7 +372,10 @@ final class OriginalShellJourneyTests: XCTestCase {
         ]) { _, next in next }
         try saveOutcome()
         XCTAssertEqual(accountHome, actualHome)
-        XCTAssertEqual(environment["HOME"], actualHome)
+        let runnerHome = try XCTUnwrap(environment["HOME"])
+        try fixture.validateRunnerHome(
+            runnerHome, accountHome: actualHome,
+            canonicalHome: URL(fileURLWithPath: runnerHome).resolvingSymlinksInPath().path)
         XCTAssertNotEqual(environment["CFFIXED_USER_HOME"], fixture.home)
         let app = URL(fileURLWithPath: fixture.application)
         let executable = URL(fileURLWithPath: fixture.executable)
@@ -429,8 +474,7 @@ final class OriginalShellJourneyTests: XCTestCase {
     }
 
     private func latestRunningProcesses() -> Bool {
-        guard let value = try? state() else { return false }
-        let owned = value["ownedProcesses"] as? [[String: Any]] ?? []
+        let owned = lastState["ownedProcesses"] as? [[String: Any]] ?? []
         return owned.contains { item in
             guard let pid = item["pid"] as? Int32, let generation = item["generation"] as? String,
                 ["engine", "managedUI"].contains(item["role"] as? String ?? "")

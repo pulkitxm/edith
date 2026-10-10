@@ -6,6 +6,7 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import { constants } from "node:fs";
 import {
   cp,
   lstat,
@@ -268,10 +269,15 @@ export async function createJourneyReplacement({
 
 export function validateReplacementAuthorization(request, token) {
   assert.match(token, /^[a-f0-9]{64}$/);
-  assert.equal(request.method, "POST");
-  assert.equal(request.url, "/replace");
+  assert(
+    (request.method === "POST" &&
+      request.url === "/replace" &&
+      request.contentType === "application/json") ||
+      (request.method === "GET" &&
+        request.url === "/state" &&
+        request.contentType === undefined),
+  );
   assert.equal(request.remoteAddress, "127.0.0.1");
-  assert.equal(request.contentType, "application/json");
   assert(
     typeof request.authorization === "string" &&
       request.authorization.length === 71,
@@ -284,7 +290,109 @@ export function validateReplacementAuthorization(request, token) {
   );
 }
 
-export async function startJourneyReplacementOperator(replace) {
+export async function createJourneyStateReader({
+  directory,
+  environment,
+  accountHome,
+  fixture,
+  uid = process.getuid(),
+}) {
+  admitHostedJourney(environment, directory, fixture.identifier, accountHome);
+  assert.equal(fixture.directory, directory);
+  assert.match(fixture.sourceCommit, /^[a-f0-9]{40}$/);
+  const root = await lstat(directory);
+  assert(
+    root.isDirectory() &&
+      !root.isSymbolicLink() &&
+      root.uid === uid &&
+      (root.mode & 0o777) === 0o700,
+  );
+  assert.equal(await realpath(directory), directory);
+  return async () => {
+    const current = await lstat(directory);
+    assert(
+      current.isDirectory() &&
+        !current.isSymbolicLink() &&
+        current.uid === uid &&
+        (current.mode & 0o777) === 0o700,
+    );
+    assert.equal(current.dev, root.dev);
+    assert.equal(current.ino, root.ino);
+    assert.equal(await realpath(directory), directory);
+    const receipt = await open(
+      join(directory, "producer.json"),
+      constants.O_RDONLY | constants.O_NOFOLLOW,
+    );
+    try {
+      const info = await receipt.stat();
+      assert(
+        info.isFile() &&
+          info.uid === uid &&
+          (info.mode & 0o022) === 0 &&
+          info.size > 0 &&
+          info.size <= 1024,
+      );
+      const bytes = Buffer.alloc(info.size + 1);
+      const { bytesRead } = await receipt.read(bytes, 0, bytes.length, 0);
+      assert.equal(bytesRead, info.size);
+      const producer = JSON.parse(bytes.subarray(0, bytesRead));
+      assert.deepEqual(
+        Object.keys(producer).sort(),
+        [
+          "schema",
+          "hostIdentifier",
+          "sourceCommit",
+          "phase",
+          "category",
+        ].sort(),
+      );
+      assert.equal(producer.schema, 1);
+      assert.equal(producer.hostIdentifier, fixture.identifier);
+      assert.equal(producer.sourceCommit, fixture.sourceCommit);
+      assert.equal(producer.phase, "telemetry");
+      assert.equal(producer.category, "ready");
+    } finally {
+      await receipt.close();
+    }
+    const path = join(directory, "state.json");
+    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const info = await file.stat();
+      assert(info.isFile() && info.uid === uid && (info.mode & 0o022) === 0);
+      assert(info.size > 0 && info.size <= 131_072);
+      const bytes = Buffer.alloc(info.size + 1);
+      const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+      assert.equal(bytesRead, info.size);
+      const state = JSON.parse(bytes.subarray(0, bytesRead));
+      assert.equal(state.schema, 1);
+      assert.equal(state.hostIdentifier, fixture.identifier);
+      assert.equal(state.sourceCommit, fixture.sourceCommit);
+      assert(fixture.appVersions.includes(state.applicationVersion));
+      assert.equal(
+        state.producerExecutableSHA256,
+        fixture.executableSHA256[state.applicationVersion],
+      );
+      assert.equal(state.protectedDataUnchanged, true);
+      assert.equal(state.declinedPermissionRequests, 0);
+      const result = {
+        schema: 1,
+        operation: "state",
+        hostIdentifier: fixture.identifier,
+        sourceCommit: fixture.sourceCommit,
+        state,
+      };
+      assert(Buffer.byteLength(JSON.stringify(result)) <= 131_072);
+      return result;
+    } finally {
+      await file.close();
+    }
+  };
+}
+
+export async function startJourneyReplacementOperator(
+  replace,
+  { readState } = {},
+) {
   const token = randomBytes(32).toString("hex");
   const server = createServer(async (request, response) => {
     try {
@@ -298,6 +406,23 @@ export async function startJourneyReplacementOperator(replace) {
         },
         token,
       );
+      if (request.method === "GET") {
+        assert(
+          request.headers["content-length"] === undefined ||
+            request.headers["content-length"] === "0",
+        );
+        assert(request.headers["transfer-encoding"] === undefined);
+        assert.equal(typeof readState, "function");
+        const result = await readState();
+        const bytes = JSON.stringify(result);
+        assert(Buffer.byteLength(bytes) <= 131_072);
+        response.writeHead(200, {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        });
+        response.end(bytes);
+        return;
+      }
       let bytes = Buffer.alloc(0);
       for await (const chunk of request) {
         assert(bytes.length + chunk.length <= 1_024);
@@ -311,11 +436,20 @@ export async function startJourneyReplacementOperator(replace) {
       });
       response.end(JSON.stringify(result));
     } catch {
-      response.writeHead(409, {
+      response.writeHead(request.method === "GET" ? 503 : 409, {
         "Content-Type": "application/json",
         "Cache-Control": "no-store",
       });
-      response.end(JSON.stringify({ schema: 1, outcome: "rejected" }));
+      response.end(
+        JSON.stringify({
+          schema: 1,
+          outcome: "rejected",
+          category:
+            request.method === "GET"
+              ? "state-unavailable"
+              : "replacement-rejected",
+        }),
+      );
     }
   });
   server.requestTimeout = 15_000;

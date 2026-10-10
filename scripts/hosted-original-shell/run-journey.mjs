@@ -20,6 +20,7 @@ import { runOwnedJourneyCommand } from "./owned-command.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
 import {
   createJourneyReplacement,
+  createJourneyStateReader,
   startJourneyReplacementOperator,
 } from "./replacement.mjs";
 import {
@@ -123,7 +124,15 @@ try {
         }),
       ),
   });
-  replacementOperator = await startJourneyReplacementOperator(replacement);
+  const readState = await createJourneyStateReader({
+    directory,
+    environment: variables,
+    accountHome: homedir(),
+    fixture,
+  });
+  replacementOperator = await startJourneyReplacementOperator(replacement, {
+    readState,
+  });
   const runnerVariables = journeyRunnerEnvironment({
     ...variables,
     EDITH_JOURNEY_OPERATOR_ENDPOINT: replacementOperator.endpoint,
@@ -186,6 +195,10 @@ try {
     await retainJourneyAttachmentProof(attachments, output);
   } catch (error) {
     outcome.attachmentExportFailed = true;
+    outcome.attachmentExportFailure = {
+      phase: error.phase ?? "attachment-read",
+      category: error.category ?? "invalid-export",
+    };
     if (!testFailure) throw error;
   }
   if (testFailure) throw testFailure;
@@ -277,11 +290,11 @@ try {
   outcome.images = images;
 } catch (error) {
   failure = error;
-  outcome = { ...outcome, reason: String(error.message).slice(0, 4096) };
+  outcome = { ...outcome, reason: "hosted-journey-failed" };
 } finally {
   if (replacementOperator) await replacementOperator.close();
   await mkdir(output, { recursive: true });
-  for (const name of ["state.json", "journey.json"])
+  for (const name of ["state.json", "journey.json", "producer.json"])
     try {
       const bytes = await readFile(join(directory, name));
       assert(

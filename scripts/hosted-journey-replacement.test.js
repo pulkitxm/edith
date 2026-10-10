@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { runOwnedJourneyCommand } from "./hosted-original-shell/owned-command.mjs";
 import {
   createJourneyReplacement,
+  createJourneyStateReader,
   startJourneyReplacementOperator,
   validateReplacementAuthorization,
   validateReplacementProcesses,
@@ -103,6 +104,7 @@ async function setup(options = {}) {
     ...options,
   });
   return {
+    accountHome,
     fixture,
     directory,
     replace,
@@ -351,6 +353,118 @@ test("actual loopback operator serves authenticated requests while its owned ine
   } finally {
     await child;
     await server.close();
+    await value.cleanup();
+  }
+});
+
+test("authenticated fixed state endpoint observes delayed synthetic producer without accepting arbitrary paths", async () => {
+  const value = await setup();
+  const reader = await createJourneyStateReader({
+    directory: value.directory,
+    environment,
+    accountHome: value.accountHome,
+    fixture: value.fixture,
+  });
+  const server = await startJourneyReplacementOperator(value.replace, {
+    readState: reader,
+  });
+  const endpoint = server.endpoint.replace(/\/replace$/, "/state");
+  const get = (suffix = "", token = server.token) =>
+    fetch(endpoint + suffix, { headers: { Authorization: `Bearer ${token}` } });
+  try {
+    expect((await get()).status).toBe(503);
+    expect((await get("?file=outside")).status).toBe(503);
+    expect((await get("", "b".repeat(64))).status).toBe(503);
+    const state = {
+      schema: 1,
+      hostIdentifier: value.fixture.identifier,
+      sourceCommit: value.fixture.sourceCommit,
+      applicationVersion: "1.0.0",
+      producerExecutableSHA256: value.fixture.executableSHA256["1.0.0"],
+      protectedDataUnchanged: true,
+      declinedPermissionRequests: 0,
+      downloaded: [],
+      workers: {},
+    };
+    await writeFile(
+      join(value.directory, "state.json"),
+      JSON.stringify(state),
+      { mode: 0o600 },
+    );
+    const producer = {
+      schema: 1,
+      hostIdentifier: value.fixture.identifier,
+      sourceCommit: value.fixture.sourceCommit,
+      phase: "telemetry",
+      category: "ready",
+    };
+    expect((await get()).status).toBe(503);
+    await writeFile(
+      join(value.directory, "producer.json"),
+      JSON.stringify({ ...producer, category: "dependency-failure" }),
+      { mode: 0o600 },
+    );
+    expect((await get()).status).toBe(503);
+    await writeFile(
+      join(value.directory, "producer.json"),
+      JSON.stringify(producer),
+      { mode: 0o600 },
+    );
+
+    const response = await get();
+    expect(response.status).toBe(200);
+    expect((await response.json()).state).toEqual(state);
+    for (const change of [
+      { hostIdentifier: "com.pulkit.edith" },
+      { sourceCommit: "b".repeat(40) },
+      { producerExecutableSHA256: "0".repeat(64) },
+      { protectedDataUnchanged: false },
+      { declinedPermissionRequests: 1 },
+    ]) {
+      await writeFile(
+        join(value.directory, "state.json"),
+        JSON.stringify({ ...state, ...change }),
+      );
+      expect((await get()).status).toBe(503);
+    }
+    await rm(join(value.directory, "state.json"));
+    await symlink(
+      join(value.directory, "active-catalog.json"),
+      join(value.directory, "state.json"),
+    );
+    expect((await get()).status).toBe(503);
+  } finally {
+    await server.close();
+    await value.cleanup();
+  }
+});
+
+test("state reader rejects oversized files, different owner and replaced root before claiming application state", async () => {
+  const value = await setup();
+  try {
+    const reader = await createJourneyStateReader({
+      directory: value.directory,
+      environment,
+      accountHome: value.accountHome,
+      fixture: value.fixture,
+    });
+    await writeFile(join(value.directory, "state.json"), Buffer.alloc(131073), {
+      mode: 0o600,
+    });
+    await expect(reader()).rejects.toThrow();
+    await expect(
+      createJourneyStateReader({
+        directory: value.directory,
+        environment,
+        accountHome: value.accountHome,
+        fixture: value.fixture,
+        uid: process.getuid() + 1,
+      }),
+    ).rejects.toThrow();
+    await rm(value.directory, { recursive: true });
+    await mkdir(value.directory, { mode: 0o700 });
+    await expect(reader()).rejects.toThrow();
+  } finally {
     await value.cleanup();
   }
 });

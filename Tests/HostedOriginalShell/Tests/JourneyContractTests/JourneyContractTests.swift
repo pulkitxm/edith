@@ -205,3 +205,57 @@ private func fixture(identifier: String = identifier, directory: String = direct
     #expect(application["EDITH_JOURNEY_OPERATOR_TOKEN"] == nil)
     try fixture.validateApplicationEnvironment(application)
 }
+
+@Test func runnerHomeAdmitsOnlyAccountOrExactCanonicalTestRunnerContainer() throws {
+    let value = fixture()
+    let account = "/Users/fixture"
+    let container =
+        account + "/Library/Containers/com.pulkit.edith.tests.hosted-shell-ui.xctrunner/Data"
+    for home in [account, container] {
+        try value.validateRunnerHome(home, accountHome: account, canonicalHome: home)
+    }
+    #expect(value.homeCategory(container, accountHome: account) == "test-runner")
+    for home in [
+        value.home, container + "/child", container + "-other",
+        account + "/Library/Containers/other.xctrunner/Data", "/Users/other",
+        account + "/Library/Containers/com.pulkit.edith.tests.hosted-shell-ui.xctrunner/Other",
+    ] {
+        #expect(throws: JourneyContractError.invalidEnvironment) {
+            try value.validateRunnerHome(home, accountHome: account, canonicalHome: home)
+        }
+    }
+    #expect(throws: JourneyContractError.invalidEnvironment) {
+        try value.validateRunnerHome(container, accountHome: account, canonicalHome: account)
+    }
+    #expect(throws: JourneyContractError.invalidEnvironment) {
+        try value.validateRunnerHome(nil, accountHome: account, canonicalHome: account)
+    }
+}
+
+@Test func producerFailureReceiptsRetainSourceAndClosedCategoriesWithoutErrorText() throws {
+    struct PrivateFailure: Error { let path = "/synthetic/private/path" }
+    let value = fixture()
+    for phase in ["make", "telemetry"] {
+        let ready = try JourneyProducerReceipt(fixture: value, phase: phase)
+        #expect(ready.category == "ready")
+        for (error, category) in [
+            (JourneyContractError.invalidPaths, "paths-rejected"),
+            (.invalidMetadata, "metadata-rejected"), (.invalidEnvironment, "environment-rejected"),
+            (.protectedDataChanged, "protected-data-changed"),
+        ] {
+            let receipt = try JourneyProducerReceipt(fixture: value, phase: phase, error: error)
+            #expect(receipt.category == category)
+            #expect(receipt.hostIdentifier == identifier)
+            #expect(receipt.sourceCommit == value.sourceCommit)
+        }
+        let receipt = try JourneyProducerReceipt(
+            fixture: value, phase: phase, error: PrivateFailure())
+        let bytes = try JSONEncoder().encode(receipt)
+        #expect(bytes.count <= 1024)
+        #expect(receipt.category == "dependency-failure")
+        #expect(!String(decoding: bytes, as: UTF8.self).contains("private/path"))
+    }
+    #expect(throws: JourneyContractError.invalidMetadata) {
+        try JourneyProducerReceipt(fixture: value, phase: "arbitrary")
+    }
+}
