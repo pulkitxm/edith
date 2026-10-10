@@ -9,6 +9,7 @@ import Foundation
     private var cancellation: UsageBackupCancellation?
     private var restoreToken: UsageBackupRestoreToken?
     private var stopping = false
+    private var ownedCancelled = false
     private var events: UsageBackupEventQueue?
     private var observers: [NSObjectProtocol] = []
     private var observedCloudEnabled = false
@@ -63,6 +64,7 @@ import Foundation
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
+        guard !stopping else { throw ExtensionPeerError.unavailable }
         guard payload.count <= 512 else { throw ExtensionPeerError.invalidRequest }
         if !payload.isEmpty {
             guard let object = (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any],
@@ -101,9 +103,10 @@ import Foundation
         return await transfer(usage: true, limits: true, export: false)
     }
 
-    func startScheduling(debounce: Duration = .milliseconds(100)) {
+    func startScheduling(debounce: Duration = .milliseconds(100), restorePending: Bool = false) {
         guard !stopping, events == nil else { return }
         observedCloudEnabled = cloudEnabled
+        needsRestore = restorePending && cloudEnabled
         events = UsageBackupEventQueue(
             debounce: debounce,
             enabled: { [weak self] in
@@ -120,7 +123,8 @@ import Foundation
                 _ = try await exportCurrent()
             })
         for name in [UsageEvents.usageUpdated, UsageEvents.limitsUpdated] {
-            observers.append(UsageEvents.observe(name) { [weak self] in self?.events?.changed() })
+            observers.append(
+                UsageEvents.observe(name) { [weak self] in self?.preferencesChanged() })
         }
         observers.append(
             IPC.observe(IPC.Name.settingsChanged) { [weak self] in
@@ -136,6 +140,7 @@ import Foundation
         if enabled && !observedCloudEnabled { needsRestore = true }
         observedCloudEnabled = enabled
         if !enabled {
+            ownedCancelled = true
             restoreToken?.invalidate(); cancellation?.cancel(); work?.cancel()
         }
         events?.changed()
@@ -163,6 +168,7 @@ import Foundation
     }
 
     private func cancel() async {
+        ownedCancelled = true
         restoreToken?.invalidate()
         cancellation?.cancel()
         work?.cancel()
@@ -171,6 +177,7 @@ import Foundation
 
     private func transfer(usage: Bool, limits: Bool, export: Bool) async -> Bool {
         guard !stopping, work == nil else { return false }
+        ownedCancelled = false
         let cancellation = UsageBackupCancellation()
         let token = UsageBackupRestoreToken()
         self.cancellation = cancellation
@@ -210,7 +217,8 @@ import Foundation
             token.invalidate(); cancellation.cancel(); work.cancel()
         }
         self.work = nil; self.cancellation = nil; restoreToken = nil
-        failure = completed ? nil : "Usage backup could not finish."
+        failure =
+            completed || ownedCancelled || Task.isCancelled ? nil : "Usage backup could not finish."
         if completed {
             if token.restoredNames.contains("usage.json") {
                 UsageEvents.post(UsageEvents.usageUpdated)

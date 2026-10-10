@@ -69,7 +69,7 @@ import Testing
         #expect(newCalls == 1)
     }
 
-    @Test func failedTransferRetriesWithoutParallelWorkAndCancelStopsRetry() async {
+    @Test func failedTransferRetriesWithoutParallelWork() async {
         var calls = 0
         let queue = UsageBackupEventQueue(
             debounce: .zero, retry: .milliseconds(20), enabled: { true }
@@ -82,6 +82,22 @@ import Testing
         await queue.cancel()
         await queue.shutdown()
         #expect(calls == 2)
+    }
+
+    @Test func cancellingPendingRetryDrainsAndDiscardsTheRetry() async throws {
+        var calls = 0
+        let queue = UsageBackupEventQueue(debounce: .zero, retry: .seconds(30), enabled: { true }) {
+            calls += 1
+            throw Failure()
+        }
+        queue.changed()
+        await wait { calls == 1 }
+        #expect(queue.scheduled)
+        await queue.cancel()
+        #expect(!queue.scheduled)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(calls == 1)
+        await queue.shutdown()
     }
 
     private struct Failure: Error {}

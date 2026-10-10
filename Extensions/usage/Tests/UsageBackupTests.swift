@@ -113,6 +113,9 @@ import Testing
                 atPath: cloud.appendingPathComponent("limits-history.jsonl").path))
         await provider.shutdown()
         #expect(!(await provider.restoreOnEnable()))
+        await #expect(throws: ExtensionPeerError.self) {
+            try await provider.execute("backup.synchronize", payload: Data())
+        }
     }
 
     @Test @MainActor func commandsCannotChoosePathsAndDevelopmentCloudIsIsolated() async throws {

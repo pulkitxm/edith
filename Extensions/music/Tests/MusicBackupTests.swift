@@ -161,6 +161,120 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: fixture.local.path))
     }
 
+    @Test @MainActor func folderEventsRespectOptInAndReenableRestoresBeforeMirroring() async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.local, withIntermediateDirectories: true)
+        let selected = fixture.local.appendingPathComponent("selected.mp3")
+        try Data("selected".utf8).write(to: selected)
+        let provider = fixture.provider()
+        provider.startScheduling(debounce: .milliseconds(20))
+        MusicEvents.post(MusicEvents.Name.musicFolderChanged)
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(!FileManager.default.fileExists(atPath: fixture.cloud.path))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        provider.preferencesChanged()
+        await wait {
+            FileManager.default.fileExists(
+                atPath: fixture.cloud.appendingPathComponent("selected.mp3").path)
+        }
+        let added = fixture.local.appendingPathComponent("added.mp3")
+        try Data("added".utf8).write(to: added)
+        NotificationCenter.default.post(name: .musicFolderChangedLocally, object: nil)
+        await wait {
+            FileManager.default.fileExists(
+                atPath: fixture.cloud.appendingPathComponent("added.mp3").path)
+        }
+        fixture.defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
+        provider.preferencesChanged()
+        try Data("remote".utf8).write(to: fixture.cloud.appendingPathComponent("remote.mp3"))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        provider.preferencesChanged()
+        await wait {
+            FileManager.default.fileExists(
+                atPath: fixture.local.appendingPathComponent("remote.mp3").path)
+        }
+        #expect(
+            try Data(contentsOf: fixture.cloud.appendingPathComponent("remote.mp3"))
+                == Data("remote".utf8))
+        fixture.defaults.set(false, forKey: AppStorageKeys.Music.backup)
+        provider.preferencesChanged()
+        try Data("private".utf8).write(to: fixture.local.appendingPathComponent("private.mp3"))
+        MusicEvents.post(MusicEvents.Name.musicFolderChanged)
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.cloud.appendingPathComponent("private.mp3").path))
+        await provider.shutdown()
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        MusicEvents.post(MusicEvents.Name.musicFolderChanged)
+        provider.preferencesChanged()
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.cloud.appendingPathComponent("private.mp3").path))
+    }
+
+    @Test @MainActor func masterOptOutPreventsRestoreAndCustomFolderReenableNeverImportsCloud()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.cloud, withIntermediateDirectories: true)
+        try Data("remote".utf8).write(to: fixture.cloud.appendingPathComponent("remote.mp3"))
+        fixture.defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
+        let disabled = fixture.provider()
+        #expect(await disabled.restoreOnEnable())
+        #expect(!FileManager.default.fileExists(atPath: fixture.local.path))
+        await disabled.shutdown()
+        let custom = fixture.root.appendingPathComponent("custom")
+        try FileManager.default.createDirectory(at: custom, withIntermediateDirectories: true)
+        try Data("chosen".utf8).write(to: custom.appendingPathComponent("chosen.mp3"))
+        let provider = fixture.provider(directory: custom)
+        provider.startScheduling(debounce: .milliseconds(20))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        fixture.defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        provider.preferencesChanged()
+        await wait {
+            FileManager.default.fileExists(
+                atPath: fixture.cloud.appendingPathComponent("chosen.mp3").path)
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: custom.appendingPathComponent("remote.mp3").path))
+        await provider.shutdown()
+    }
+
+    @Test @MainActor func unavailableCloudNeverCreatesASyntheticBackupDirectory() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try FileManager.default.createDirectory(
+            at: fixture.local, withIntermediateDirectories: true)
+        try Data("selected".utf8).write(to: fixture.local.appendingPathComponent("selected.mp3"))
+        fixture.defaults.set(true, forKey: AppStorageKeys.Music.backup)
+        let provider = fixture.provider(cloudAvailable: { false })
+        provider.startScheduling(debounce: .zero)
+        MusicEvents.post(MusicEvents.Name.musicFolderChanged)
+        #expect(await provider.restoreOnEnable())
+        #expect(
+            String(
+                decoding: try await provider.execute("backup.synchronize", payload: Data()),
+                as: UTF8.self) == "{\"enabled\":false}")
+        await provider.shutdown()
+        #expect(!FileManager.default.fileExists(atPath: fixture.cloud.path))
+    }
+
+    @MainActor private func wait(_ ready: () -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !ready(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(ready())
+    }
+
     private struct Fixture {
         let root: URL
         let defaults: UserDefaults
@@ -177,11 +291,13 @@ import Testing
             defaults = try #require(UserDefaults(suiteName: suite))
         }
 
-        @MainActor func provider(directory: URL? = nil) -> MusicBackupProvider {
+        @MainActor func provider(
+            directory: URL? = nil, cloudAvailable: @escaping () -> Bool = { true }
+        ) -> MusicBackupProvider {
             let directory = directory ?? local
             return MusicBackupProvider(
                 directory: { directory }, ownedDirectory: local, cloud: cloud,
-                applicationDefaults: defaults, defaults: defaults)
+                applicationDefaults: defaults, defaults: defaults, cloudAvailable: cloudAvailable)
         }
 
         func remove() {
