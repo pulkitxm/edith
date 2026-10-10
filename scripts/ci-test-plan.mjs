@@ -38,7 +38,7 @@ export function planSwiftTests(
   const targets = [];
   if (
     matches(
-      /^Packages\/ExtensionSupport\/|^Extensions\/Package\.(swift|resolved)$/,
+      /^Packages\/ExtensionSupport\/|^Extensions\/Package\.(swift|resolved)$|^Extensions\/fixtureSupport\//,
     )
   ) {
     targets.push("ci-extension-support");

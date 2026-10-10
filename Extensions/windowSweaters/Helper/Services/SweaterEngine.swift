@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -10,7 +13,16 @@ final class SweaterEngine: FeatureModule {
     private var reconciler: SweaterReconciler?
     private var current = SweaterSettings()
 
-    init() {
+    private let fixture: WorkerFixtureAdmission?
+    var systemResourceCount: Int { (tracker == nil ? 0 : 1) + (reconciler == nil ? 0 : 1) }
+
+    convenience init() { self.init(fixture: nil) }
+
+    init(fixture: WorkerFixtureAdmission?) {
+        precondition(fixture == nil || fixture?.extensionID == "windowSweaters")
+        self.fixture = fixture
+        current = SweaterState.settings()
+        guard fixture == nil else { return }
         guard SkyLight.isAvailable else { return }
         current = SweaterState.settings()
         let renderer = renderer
@@ -38,6 +50,7 @@ final class SweaterEngine: FeatureModule {
     }
 
     func applySettings() {
+        if fixture != nil { current = SweaterState.settings(); return }
         guard let tracker else { return }
         let updated = SweaterState.settings()
         guard updated != current else { return }

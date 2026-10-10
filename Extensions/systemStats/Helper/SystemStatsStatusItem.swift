@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -8,7 +11,11 @@ import SwiftUI
 final class SystemStatsStatusItem: NSObject, FeatureModule {
     private let panel = StatusItemPanel()
     let snapshot = SystemMenuSnapshot()
-    private var item: NSStatusItem!
+    private var item: NSStatusItem?
+    private let fixture: WorkerFixtureAdmission?
+    var systemResourceCount: Int {
+        (item == nil ? 0 : 1) + (timer == nil ? 0 : 1) + sleepObservers.count + lockObservers.count
+    }
     private var timer: Timer?
     private var previous: CPUTicks?
     private var sleepObservers: [NSObjectProtocol] = []
@@ -19,13 +26,19 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
     private var numberAttributes: [NSAttributedString.Key: Any] = [:]
     private var percentAttributes: [NSAttributedString.Key: Any] = [:]
 
-    override init() {
+    override convenience init() { self.init(fixture: nil) }
+
+    init(fixture: WorkerFixtureAdmission?) {
+        precondition(fixture == nil || fixture?.extensionID == "systemStats")
+        self.fixture = fixture
         super.init()
+        if fixture != nil { snapshot.cpu = 12; snapshot.memory = 34; return }
         ensureStyleCache()
         previous = SystemStatsReader.readCPUTicks()
         let initialTitle = title(cpu: 0, memory: SystemStatsReader.memoryUsedPercent())
-        item = NSStatusBar.system.statusItem(
+        let item = NSStatusBar.system.statusItem(
             withLength: StatusItemSizing.titleLength(initialTitle))
+        self.item = item
         StatusItemMenu.attach(to: item, target: self, action: #selector(clicked))
         item.button?.attributedTitle = initialTitle
         startTimer()
@@ -83,10 +96,12 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
             DistributedNotificationCenter.default().removeObserver(observer)
         }
         lockObservers = []
-        NSStatusBar.system.removeStatusItem(item)
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        item = nil
     }
 
     @objc private func clicked() {
+        guard let item else { return }
         StatusItemMenu.handleClick(on: item) {
             let snapshot = snapshot
             panel.show(
@@ -116,8 +131,8 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
         if let displayedTitle, displayedTitle == shown { return }
         displayedTitle = shown
         let title = title(cpu: cpu, memory: memory)
-        item.length = StatusItemSizing.titleLength(title)
-        item.button?.attributedTitle = title
+        item?.length = StatusItemSizing.titleLength(title)
+        item?.button?.attributedTitle = title
     }
 
     private func title(cpu: Double, memory: Double) -> NSAttributedString {

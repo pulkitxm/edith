@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
@@ -12,6 +15,7 @@ final class ExtensionRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -33,6 +37,7 @@ final class ExtensionRuntime: NSObject {
                     guard action.action == "inputMonitoring", action.value.isEmpty else {
                         throw ExtensionPeerError.invalidRequest
                     }
+                    guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
                     _ = CGRequestListenEventAccess()
                     self.synchronize()
                 default: throw ExtensionPeerError.invalidRequest
@@ -94,16 +99,23 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            do {
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "keystrokeHighlight", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            } catch { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            HotKeyRegistrar.configure(
-                ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.keystrokeHighlight, carbonID: 9,
-                    prefix: "keystrokeHighlightHotKey", defaultCode: kVK_ANSI_K,
-                    defaultModifiers: controlKey | optionKey | cmdKey))
+            if fixture == nil {
+                HotKeyRegistrar.configure(
+                    ExtensionHotKeyBinding(
+                        id: HotKeyCatalog.keystrokeHighlight, carbonID: 9,
+                        prefix: "keystrokeHighlightHotKey", defaultCode: kVK_ANSI_K,
+                        defaultModifiers: controlKey | optionKey | cmdKey))
+            }
             SharedDefaults.store.set(true, forKey: AppStorageKeys.KeystrokeHighlight.enabled)
             if SharedDefaults.store.object(forKey: AppStorageKeys.KeystrokeHighlight.active) == nil
             {
@@ -146,15 +158,17 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func synchronize() {
-        HotKeyRegistrar.install(HotKeyCatalog.keystrokeHighlight) { [weak self] in
-            let defaults = SharedDefaults.store
-            defaults.set(
-                !defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.active),
-                forKey: AppStorageKeys.KeystrokeHighlight.active)
-            self?.synchronize()
+        if fixture == nil {
+            HotKeyRegistrar.install(HotKeyCatalog.keystrokeHighlight) { [weak self] in
+                let defaults = SharedDefaults.store
+                defaults.set(
+                    !defaults.bool(forKey: AppStorageKeys.KeystrokeHighlight.active),
+                    forKey: AppStorageKeys.KeystrokeHighlight.active)
+                self?.synchronize()
+            }
         }
         if SharedDefaults.store.bool(forKey: AppStorageKeys.KeystrokeHighlight.active) {
-            if service == nil { service = KeystrokeHighlightRuntime() }
+            if service == nil { service = KeystrokeHighlightRuntime(fixture: fixture) }
             service?.syncSettings()
         } else {
             service?.shutdown()

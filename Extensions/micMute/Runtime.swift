@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
@@ -12,6 +15,7 @@ final class ExtensionRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -93,17 +97,24 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            do {
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "micMute", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            } catch { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            HotKeyRegistrar.configure(
-                ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.micMute, carbonID: 6, prefix: "micHotKey",
-                    defaultCode: kVK_ANSI_M, defaultModifiers: cmdKey | shiftKey))
+            if fixture == nil {
+                HotKeyRegistrar.configure(
+                    ExtensionHotKeyBinding(
+                        id: HotKeyCatalog.micMute, carbonID: 6, prefix: "micHotKey",
+                        defaultCode: kVK_ANSI_M, defaultModifiers: cmdKey | shiftKey))
+            }
             SharedDefaults.store.set(true, forKey: AppStorageKeys.Mic.muteEnabled)
-            if service == nil { service = MicMuteEngine() }
+            if service == nil { service = MicMuteEngine(fixture: fixture) }
             service?.syncSettings()
             if observer == nil {
                 observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in

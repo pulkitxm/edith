@@ -470,9 +470,11 @@ test("a child behind its base routes the tested merge revision with the current 
 
 test("standalone owners keep their runtime tests outside the utility umbrella", () => {
   const umbrella = readFileSync("Extensions/Package.swift", "utf8");
-  const paths = [...umbrella.matchAll(/path: "([^"]+)"/g)].map(
-    (match) => match[1],
-  );
+  const paths = umbrella
+    .split(/\n {8}\.(?:target|testTarget)\(/)
+    .slice(1)
+    .map((block) => block.match(/path: "([^"]+)"/)?.[1])
+    .filter(Boolean);
   for (const path of paths.filter((path) => !path.startsWith("..")))
     expect(existsSync(join("Extensions", path, "Package.swift")), path).toBe(
       false,
@@ -517,6 +519,15 @@ test("every tracked standalone package declares an executable owning test target
   expect(packages.length).toBeGreaterThan(0);
   for (const path of packages) {
     const id = path.split("/")[1];
+    if (id === "fixtureSupport") {
+      expect(planSwiftTests([path]).include).toEqual([
+        { lane: "feature-models", targets: "ci-extension-support" },
+      ]);
+      expect(definitions.some((definition) => definition.id === id)).toBe(
+        false,
+      );
+      continue;
+    }
     const definition = definitions.find((candidate) => candidate.id === id);
     expect(definition, path).toBeDefined();
     expect(definition.testTargets?.length, path).toBeGreaterThan(0);
@@ -525,6 +536,50 @@ test("every tracked standalone package declares an executable owning test target
       lanes.some((lane) => lane.extension === id),
       path,
     ).toBe(true);
+  }
+});
+
+test("shared fixture test sources select one umbrella without a release build", async () => {
+  const { extensionFingerprint, planExtensionBuilds } = await import(
+    "./extension-release-plan.mjs"
+  );
+  const paths = [
+    "Extensions/fixtureSupport/Tests/WorkerFixtureAdmissionTests.swift",
+    "Extensions/fixtureSupport/Tests/Support/EngineFixture.swift",
+  ];
+  expect(planSwiftTests(paths).include).toEqual([
+    { lane: "feature-models", targets: "ci-extension-support" },
+  ]);
+  expect(planExtensionBuilds(definitions, paths)).toEqual([]);
+  const root = mkdtempSync(join(tmpdir(), "fixture-test-fingerprint-"));
+  const definition = {
+    id: "focusDim",
+    inputs: ["Extensions/focusDim"],
+    sharedInputs: ["Extensions/fixtureSupport/WorkerFixtureAdmission.swift"],
+    dependencies: [],
+  };
+  try {
+    mkdirSync(join(root, "Extensions/focusDim"), { recursive: true });
+    mkdirSync(join(root, "Extensions/fixtureSupport/Tests"), {
+      recursive: true,
+    });
+    writeFileSync(
+      join(root, "Extensions/focusDim/Runtime.swift"),
+      "owned runtime",
+    );
+    const helper = join(root, definition.sharedInputs[0]);
+    writeFileSync(helper, "owned admission");
+    const original = await extensionFingerprint(root, definition, [definition]);
+    writeFileSync(join(root, paths[0]), "updated admission regression");
+    expect(await extensionFingerprint(root, definition, [definition])).toBe(
+      original,
+    );
+    writeFileSync(helper, "updated production admission");
+    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
+      original,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

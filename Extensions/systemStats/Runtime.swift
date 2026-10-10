@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionCommands
@@ -27,12 +30,14 @@ final class ExtensionRuntime: NSObject {
 
     private var follow = SystemStatsFollow()
 
+    private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             if command.hasPrefix("systemStats.follow.") {
+                guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 return try await self.follow.execute(command, payload: payload)
             }
@@ -40,6 +45,7 @@ final class ExtensionRuntime: NSObject {
                 return try SystemStatsCLIExecution.catalog(payload)
             }
             if command.hasPrefix("systemStats.cli.stream.") {
+                guard self?.fixture == nil else { throw ExtensionPeerError.unavailable }
                 guard let self, self.service != nil, let streams = self.cliStreams else {
                     throw ExtensionPeerError.unavailable
                 }
@@ -53,6 +59,7 @@ final class ExtensionRuntime: NSObject {
                     return try JSONEncoder().encode(help)
                 }
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
+                guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
                 let reply = try await SystemStatsCLIExecution.run(request)
                 return try JSONEncoder().encode(reply)
             }
@@ -70,9 +77,11 @@ final class ExtensionRuntime: NSObject {
                 snapshot: { _ in
                     SystemStatsSurface.snapshot(
                         cpu: service.snapshot.cpu, memory: service.snapshot.memory,
-                        freeDiskBytes: try? URL(fileURLWithPath: "/").resourceValues(forKeys: [
-                            .volumeAvailableCapacityForImportantUsageKey
-                        ]).volumeAvailableCapacityForImportantUsage)
+                        freeDiskBytes: self.fixture != nil
+                            ? 1_000_000
+                            : try? URL(fileURLWithPath: "/").resourceValues(forKeys: [
+                                .volumeAvailableCapacityForImportantUsageKey
+                            ]).volumeAvailableCapacityForImportantUsage)
                 },
                 perform: { action in
                     throw ExtensionPeerError.invalidRequest
@@ -125,12 +134,17 @@ final class ExtensionRuntime: NSObject {
             cliStreams?.stop()
             return ["ok": true] as NSDictionary
         case "start":
+            do {
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "systemStats", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            } catch { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            if service == nil { service = SystemStatsStatusItem() }
+            if service == nil { service = SystemStatsStatusItem(fixture: fixture) }
             if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
