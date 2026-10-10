@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -8,11 +9,20 @@ import SwiftUI
 @objc(EdithCleanerExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: CleanerModel?
+    private var uiModel: CleanerModel?
+    private var uiClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let model = self?.model else { throw ExtensionPeerError.unavailable }
+            if command == "cleaner.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(try await CleanerCLIExecution.run(request))
+            }
+            if command.hasPrefix("cleaner.ui.") {
+                return try await CleanerUICommands.execute(command, payload: payload, model: model)
+            }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "cleaner", command: command, payload: payload,
@@ -27,8 +37,8 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        commands.shutdown()
         Task {
+            await commands.shutdownAndWait()
             await model?.shutdown()
             completion()
         }
@@ -49,8 +59,16 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = CleanerModel() }
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient,
+                let defaults = UserDefaults(suiteName: configuration.defaultsSuite)
+            else { return ["ok": false] as NSDictionary }
+            stopUI(); uiClient = client;
+            uiModel = CleanerModel(engineClient: client, defaults: defaults)
+        case "stopUI": stopUI()
         case "view":
-            guard let model else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(rootView: ExtensionPageHost { CleanerPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
@@ -63,6 +81,11 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    private func stopUI() {
+        let model = uiModel; uiModel = nil
+        uiClient?.invalidate(); uiClient = nil
+        Task { await model?.shutdown() }
+    }
 }
 
 @_cdecl("edith_extension_create")

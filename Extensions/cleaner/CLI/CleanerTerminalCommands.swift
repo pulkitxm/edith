@@ -1,0 +1,313 @@
+import ArgumentParser
+import EdithExtensionCommands
+import EdithExtensionSupport
+import Foundation
+
+struct CleanerCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "cleaner",
+        abstract: "Scan and trash the developer caches the disk cleaner can reclaim.",
+        discussion: """
+            Scanning walks your home directory, so it runs in this process and needs no
+            app. `ed cleaner clean` moves what it finds to the Trash, never deleting in
+            place, and refuses to run without --yes so a stray tab cannot cost you a
+            build cache.
+
+            Reads cache folders. scan does not change disk. clean changes disk by moving files to the Trash only after --yes.
+
+            ed cleaner scan
+            ed cleaner clean --yes
+            """,
+        subcommands: [
+            CleanerScanCommand.self, CleanerCategoriesCommand.self, CleanerCleanCommand.self,
+            CleanerDrivesCommand.self,
+        ],
+        defaultSubcommand: CleanerScanCommand.self)
+}
+
+@MainActor enum CleanerBridge {
+    static var home: URL { CleanerCLIEnvironment.home }
+
+    static var projectCategoryIDs: [String] {
+        var seen: [String] = []
+        for target in JunkScanner.projectTargets where !seen.contains(target.categoryID) {
+            seen.append(target.categoryID)
+        }
+        return seen
+    }
+
+    static func knownCategoryIDs() -> [String] {
+        JunkCatalog.entries.map(\.id) + projectCategoryIDs
+    }
+
+    static func categories(only: String?) throws -> [JunkCatalog.Entry] {
+        guard let only else { return JunkCatalog.entries }
+        guard let found = JunkCatalog.entries.first(where: { $0.id == only }) else {
+            guard projectCategoryIDs.contains(only) else {
+                throw CLIFailure.notFound(
+                    "no cleaner category named \(only)",
+                    hint: "categories: " + knownCategoryIDs().joined(separator: ", "))
+            }
+            throw CLIFailure(
+                "\(only) only turns up when a folder is swept for project junk",
+                hint: "pass --root, for example `ed cleaner scan --root ~/code --category \(only)`")
+        }
+        return [found]
+    }
+
+    static func roots(_ raw: [String]) throws -> [URL] {
+        try raw.map { path in
+            let expanded = (path as NSString).expandingTildeInPath
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
+                isDirectory.boolValue
+            else {
+                throw CLIFailure.notFound("there is no folder at \(path)")
+            }
+            return URL(fileURLWithPath: expanded)
+        }
+    }
+
+    static func scan(_ entries: [JunkCatalog.Entry], roots: [URL], only: String?) async throws
+        -> [JunkCategory]
+    {
+        let token = Progress(totalUnitCount: 0)
+        let home = CleanerCLIEnvironment.home
+        return try await withTaskCancellationHandler {
+            let result = try await BlockingWork.perform {
+                CleanerOperationExecution.scan(
+                    entries: entries, roots: roots, only: only, home: home,
+                    isCancelled: { token.isCancelled })
+            }
+            try Task.checkCancellation()
+            return result.categories
+        } onCancel: {
+            token.cancel()
+        }
+    }
+
+    static func json(_ category: JunkCategory) -> JSONValue {
+        .object([
+            "category": .string(category.id),
+            "name": .string(category.name),
+            "detail": .string(category.detail),
+            "sizeBytes": .number(category.sizeBytes),
+            "items": .array(
+                category.items.map { item in
+                    .object([
+                        "name": .string(item.name),
+                        "path": .string(item.path.path),
+                        "sizeBytes": .number(item.sizeBytes),
+                    ])
+                }),
+        ])
+    }
+}
+
+struct CleanerCategoriesCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "categories",
+        abstract: "List the cache categories the cleaner knows how to reclaim.",
+        discussion: """
+            List the cache categories the cleaner knows how to reclaim.
+            Reads the built-in category list. Does not change disk.
+
+            ed cleaner categories
+            ed cleaner categories --json
+            """,
+        aliases: ["ls"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            guard !json else {
+                CLIOut.json(
+                    .array(
+                        JunkCatalog.entries.map { entry in
+                            .object([
+                                "category": .string(entry.id),
+                                "name": .string(entry.name),
+                                "detail": .string(entry.detail),
+                                "paths": .strings(entry.relativePaths),
+                                "onByDefault": .bool(entry.defaultOn),
+                            ])
+                        }))
+                return
+            }
+            let rows = JunkCatalog.entries.map { entry in
+                [entry.id, entry.name, entry.defaultOn ? "default" : "", entry.detail]
+            }
+            CLIOut.out(
+                TextTable.render(headers: ["ID", "NAME", "", "WHAT"], rows: rows))
+        }
+    }
+}
+
+struct CleanerScanCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "scan", abstract: "Measure what could be reclaimed.",
+        discussion: """
+            Measure developer caches that could be reclaimed.
+            Reads the home directory, or --root. Does not change files. Does not delete anything.
+
+            ed cleaner scan
+            ed cleaner scan --root ~/Library --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Only this category.")
+    var category: String?
+
+    @Option(
+        name: .customLong("root"),
+        help: "Also sweep this folder for project junk. Repeat for more than one.")
+    var roots: [String] = []
+
+    @MainActor func run() async throws {
+        try await execute {
+            let sweep = try CleanerBridge.roots(roots)
+            let entries =
+                sweep.isEmpty || category == nil
+                ? try CleanerBridge.categories(only: category)
+                : ((try? CleanerBridge.categories(only: category)) ?? [])
+            let found = try await CleanerBridge.scan(
+                entries, roots: sweep, only: category)
+            let total = found.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "totalBytes": .number(total),
+                        "categories": .array(found.map(CleanerBridge.json)),
+                    ]))
+                return
+            }
+            guard !found.isEmpty else {
+                CLIOut.note("nothing to reclaim")
+                return
+            }
+            let rows = found.map { category in
+                [
+                    category.id, JunkScanner.format(category.sizeBytes),
+                    String(category.items.count), category.name,
+                ]
+            }
+            CLIOut.out(TextTable.render(headers: ["ID", "SIZE", "ITEMS", "NAME"], rows: rows))
+            CLIOut.out("")
+            CLIOut.out("total \(JunkScanner.format(total))")
+        }
+    }
+}
+
+struct CleanerCleanCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "clean", abstract: "Move the scanned caches to the Trash.",
+        discussion: """
+            Move scanned caches to the Trash.
+            Reads the last scan. Without --yes, prints the plan and does not change anything. With --yes, changes disk by moving files to the Trash, never deleting in place.
+
+            ed cleaner clean
+            ed cleaner clean --category xcode --yes
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Only this category.")
+    var category: String?
+
+    @Option(
+        name: .customLong("root"),
+        help: "Also sweep this folder for project junk. Repeat for more than one.")
+    var roots: [String] = []
+
+    @Flag(help: "Actually move the files. Without it nothing is touched.")
+    var yes = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            let sweep = try CleanerBridge.roots(roots)
+            let entries =
+                sweep.isEmpty || category == nil
+                ? try CleanerBridge.categories(only: category)
+                : ((try? CleanerBridge.categories(only: category)) ?? [])
+            let found = try await CleanerBridge.scan(
+                entries, roots: sweep, only: category)
+            let items = found.flatMap(\.items)
+            let total = items.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            guard yes else {
+                guard !json else {
+                    CLIOut.json(
+                        .object([
+                            "reclaimedBytes": .int(0),
+                            "wouldReclaimBytes": .number(total),
+                            "items": .int(items.count),
+                            "applied": .bool(false),
+                        ]))
+                    return
+                }
+                CLIOut.out(
+                    "would move \(items.count) items, \(JunkScanner.format(total)), "
+                        + "to the Trash")
+                CLIOut.note("pass --yes to do it")
+                return
+            }
+            let result = try await CleanerCLIEnvironment.clean(items)
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "reclaimedBytes": .number(result.reclaimedBytes),
+                        "wouldReclaimBytes": .number(total),
+                        "items": .int(items.count),
+                        "applied": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("moved \(JunkScanner.format(result.reclaimedBytes)) to the Trash")
+        }
+    }
+}
+
+struct CleanerDrivesCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "drives", abstract: "List the volumes the cleaner can scan.",
+        discussion: """
+            List the volumes the cleaner can scan.
+            Reads mounted volumes. Does not change them.
+
+            ed cleaner drives
+            ed cleaner drives --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @MainActor func run() async throws {
+        try await execute {
+            let drives = CleanerCLIEnvironment.drives()
+            guard !json else {
+                CLIOut.json(
+                    .array(
+                        drives.map { drive in
+                            .object([
+                                "id": .string(drive.id),
+                                "name": .string(drive.name),
+                                "totalBytes": .number(drive.totalBytes),
+                                "external": .bool(drive.isExternal),
+                            ])
+                        }))
+                return
+            }
+            let rows = drives.map { drive in
+                [
+                    drive.name, drive.id, JunkScanner.format(drive.totalBytes),
+                    drive.isExternal ? "external" : "internal",
+                ]
+            }
+            CLIOut.out(TextTable.render(headers: ["NAME", "MOUNT", "SIZE", "KIND"], rows: rows))
+        }
+    }
+}

@@ -581,7 +581,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/cleaner/CleanerCommands.swift",
@@ -592,7 +592,10 @@
         "Extensions/cleaner/CleanerViews.swift",
         "Extensions/cleaner/JunkScanner.swift",
         "Extensions/cleaner/Runtime.swift",
-        "Extensions/cleaner/Surface.swift"
+        "Extensions/cleaner/Surface.swift",
+        "Extensions/cleaner/CleanerUICommands.swift",
+        "Extensions/cleaner/CLI/CleanerCLIExecution.swift",
+        "Extensions/cleaner/CLI/CleanerTerminalCommands.swift"
       ]
     },
     "inputs": [
