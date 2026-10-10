@@ -26,6 +26,11 @@ function fixture(existing = false) {
     : undefined;
   const execute = (command, args) => {
     calls.push([command, ...args]);
+    if (command === "gh" && args[1].endsWith("git/ref/heads/main"))
+      return JSON.stringify({
+        ref: "refs/heads/main",
+        object: { type: "commit", sha: "a".repeat(40) },
+      });
     if (command === "gh" && args[1].includes("/tags/")) {
       if (release && !release.draft) return JSON.stringify(release);
       throw Object.assign(new Error("Missing release"), { stderr: "HTTP 404" });
@@ -259,4 +264,201 @@ test("a later asset preflight failure stops publication before release creation"
   } finally {
     value.clean();
   }
+});
+
+test("current main guards reject obsolete source and foreign release targets before mutation", async () => {
+  for (const options of [
+    { target: "b".repeat(40), sourceTarget: "a".repeat(40) },
+    { sourceTarget: "b".repeat(40) },
+  ]) {
+    const value = fixture();
+    try {
+      await expect(publish(value, options)).rejects.toThrow();
+      expect(
+        value.calls.some(
+          (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+        ),
+      ).toBe(false);
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("publication accepts only the exact intentional release child of the built source", async () => {
+  const value = fixture();
+  const source = "a".repeat(40);
+  const release = "b".repeat(40);
+  try {
+    const execute = (command, args, options) => {
+      if (command === "gh" && args[1].endsWith("git/ref/heads/main"))
+        return JSON.stringify({
+          ref: "refs/heads/main",
+          object: { type: "commit", sha: release },
+        });
+      if (command === "gh" && args[1].endsWith(`commits/${release}`))
+        return JSON.stringify({
+          sha: release,
+          parents: [{ sha: source }],
+          commit: { message: "Release v1.2.3 [skip ci]" },
+        });
+      return value.execute(command, args, options);
+    };
+    await publish(value, { execute, sourceTarget: source, target: release });
+    const creation = value.calls.find(
+      (args) => args[0] === "pukbot" && args[2] === "create",
+    );
+    expect(creation[creation.indexOf("--target") + 1]).toBe(release);
+    expect(value.calls.at(-1)).toContain("--make-latest");
+  } finally {
+    value.clean();
+  }
+});
+
+test("duplicate remote asset names stop resumable publication before mutation", async () => {
+  const value = fixture(true);
+  value.release.assets = [
+    { id: 1, name: "Edith.dmg" },
+    { id: 2, name: "Edith.dmg" },
+  ];
+  try {
+    await expect(publish(value, { rebuild: true })).rejects.toThrow(
+      "Ambiguous",
+    );
+    expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
+    expect(
+      value.calls.some(
+        (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("source advance during actual upload or immediately before promotion leaves the new release draft", async () => {
+  for (const failAt of [4, 7]) {
+    const value = fixture();
+    let reads = 0;
+    try {
+      const execute = (command, args, options) => {
+        if (command === "gh" && args[1].endsWith("git/ref/heads/main")) {
+          if (++reads === failAt)
+            return JSON.stringify({
+              ref: "refs/heads/main",
+              object: { type: "commit", sha: "b".repeat(40) },
+            });
+        }
+        return value.execute(command, args, options);
+      };
+      await expect(publish(value, { execute })).rejects.toThrow("superseded");
+      expect(value.release.draft).toBe(true);
+      expect(
+        value.calls.some((args) => args[0] === "pukbot" && args[2] === "edit"),
+      ).toBe(false);
+      expect(
+        value.calls.filter(
+          (args) =>
+            args[0] === "pukbot" &&
+            args[2] === "upload-asset" &&
+            !args.includes("--dry-run"),
+        ).length,
+      ).toBe(failAt === 4 ? 1 : 2);
+    } finally {
+      value.clean();
+    }
+  }
+});
+
+test("source advance during existing asset comparison never deletes or replaces the draft", async () => {
+  const value = fixture(true);
+  value.release.assets = [{ id: 9, name: "Edith.dmg" }];
+  let changed = false;
+  try {
+    await expect(
+      publish(value, {
+        rebuild: true,
+        execute: (command, args, options) =>
+          command === "gh" && args[1].endsWith("git/ref/heads/main") && changed
+            ? JSON.stringify({
+                ref: "refs/heads/main",
+                object: { type: "commit", sha: "b".repeat(40) },
+              })
+            : value.execute(command, args, options),
+        matchesAsset: async () => {
+          changed = true;
+          return false;
+        },
+      }),
+    ).rejects.toThrow("superseded");
+    expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
+    expect(
+      value.calls.some(
+        (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("published host assets stay immutable and identical rebuilds never change latest", async () => {
+  const value = fixture(true);
+  value.release.draft = false;
+  value.release.assets = ["Edith.dmg", "appcast.xml"].map((name, index) => ({
+    id: index + 1,
+    name,
+    bytes: readFileSync(join(value.directory, name)),
+  }));
+  try {
+    expect(await publish(value, { rebuild: true })).toEqual({
+      tag: "v1.2.3",
+      assets: ["Edith.dmg", "appcast.xml"],
+      unchanged: true,
+    });
+    expect(
+      value.calls.some(
+        (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+    value.release.assets[0].bytes = Buffer.from("changed");
+    await expect(publish(value, { rebuild: true })).rejects.toThrow(
+      "Publish a new version",
+    );
+    value.release.assets = [];
+    await expect(publish(value, { rebuild: true })).rejects.toThrow(
+      "Publish a new version",
+    );
+    expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
+    expect(
+      value.calls.some(
+        (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("rebuilt checksums follow successful publication and never precede immutable asset rejection", () => {
+  const workflow = Bun.YAML.parse(
+    readFileSync(".github/workflows/ci.yml", "utf8"),
+  );
+  const steps = workflow.jobs.publish.steps;
+  expect(
+    steps.findIndex(
+      (step) => step.name === "Update the rebuilt release checksum",
+    ),
+  ).toBeGreaterThan(
+    steps.findIndex((step) => step.name === "Publish the release"),
+  );
+  expect(
+    steps.findIndex(
+      (step) => step.name === "Update the rebuilt release checksum",
+    ),
+  ).toBeLessThan(
+    steps.findIndex(
+      (step) => step.name === "Mirror the cask to the tap repository",
+    ),
+  );
 });

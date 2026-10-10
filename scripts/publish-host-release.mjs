@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { verifyCurrentMain } from "./extension-release-ready.mjs";
 import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
 import {
   preflightReleaseAsset,
@@ -49,8 +50,26 @@ export async function publishHostRelease({
   tag,
   target,
   rebuild = false,
+  sourceTarget = target,
   execute = execFileSync,
   matchesAsset = releaseAssetMatchesFile,
+  verifySource = async () => {
+    const current = await verifyCurrentMain({
+      target: sourceTarget,
+      releaseTag: tag,
+      repository,
+      fetchMetadata: async (url) =>
+        new Response(
+          execute("gh", ["api", url], {
+            encoding: "utf8",
+            timeout: 60_000,
+            maxBuffer: 1024 ** 2,
+          }),
+        ),
+    });
+    if (current !== target)
+      throw new Error("Host release target differs from verified current main");
+  },
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
   const assets = preflightHostRelease({ directory, repository, tag, execute });
@@ -59,9 +78,11 @@ export async function publishHostRelease({
     execute("pukbot", [...args, "--repo", repository, "--json"], {
       encoding: "utf8",
     });
+  await verifySource();
   let release = lookupRelease({ repository, tag, execute });
   if (!release) {
     if (rebuild) throw new Error("Cannot rebuild a missing release");
+    await verifySource();
     mutate(
       "release",
       "create",
@@ -78,10 +99,24 @@ export async function publishHostRelease({
   }
   for (const name of assets) {
     const file = resolve(directory, name);
-    const existing = release.assets.find((asset) => asset.name === name);
+    const matches = release.assets.filter((asset) => asset.name === name);
+    if (matches.length > 1)
+      throw new Error(`Ambiguous host release asset: ${name}`);
+    const existing = matches[0];
     if (existing) {
-      if (await matchesAsset({ repository, asset: existing, file })) continue;
+      const identical = await matchesAsset({
+        repository,
+        asset: existing,
+        file,
+      });
+      await verifySource();
+      if (identical) continue;
+      if (!release.draft)
+        throw new Error(
+          `Published host assets are immutable: ${name}. Publish a new version.`,
+        );
       if (!rebuild) throw new Error(`Existing release asset differs: ${name}`);
+      await verifySource();
       gh(
         "api",
         "--method",
@@ -89,6 +124,11 @@ export async function publishHostRelease({
         `repos/${repository}/releases/assets/${existing.id}`,
       );
     }
+    if (!release.draft)
+      throw new Error(
+        `Published host asset is missing: ${name}. Publish a new version.`,
+      );
+    await verifySource();
     await uploadReleaseAsset({
       repository,
       releaseID: release.id,
@@ -96,7 +136,10 @@ export async function publishHostRelease({
       file,
       execute,
     });
+    await verifySource();
   }
+  await verifySource();
+  if (!release.draft) return { tag, assets, unchanged: true };
   mutate(
     "release",
     "edit",
@@ -129,7 +172,7 @@ if (
         encoding: "utf8",
       }).trim();
     process.stdout.write(
-      `${JSON.stringify(await publishHostRelease({ ...configuration, target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
+      `${JSON.stringify(await publishHostRelease({ ...configuration, target, sourceTarget: process.env.BUILT_SHA ?? target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
     );
   }
 }
