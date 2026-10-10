@@ -78,7 +78,8 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": break
         case "stop":
             commands.shutdown()
-            model = nil; surface = nil
+            let stopping = model; model = nil; surface = nil
+            Task { await stopping?.shutdown() }
             SkillBrand.shutdown()
             TextEditingCommands.shutdown()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
