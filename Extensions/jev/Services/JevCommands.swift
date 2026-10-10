@@ -12,7 +12,7 @@ final class JevCommands {
         self.engine =
             engine
             ?? JevEngine(
-                store: KeychainJevKeyStore(),
+                store: JevKeyStores.make(),
                 onKeyChange: { configured in
                     try? state?.publish(["configured": configured ? "1" : "0"])
                 })

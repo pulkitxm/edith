@@ -25,6 +25,44 @@ private final class JevResponseGate: @unchecked Sendable {
 }
 
 @Suite struct JevOwnershipTests {
+    @Test func syntheticKeysPersistAcrossWorkerInstancesWithoutKeychainAccess() throws {
+        let identifier = "com.pulkit.edith.tests.jev-" + UUID().uuidString
+        let suite = identifier + ".extensions.jev"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let environment = [
+            "EDITH_APPLICATION_IDENTIFIER": identifier,
+            "EDITH_SHARED_DEFAULTS_SUITE": suite,
+            "EDITH_EXTENSION_FIXTURE_HOME": NSTemporaryDirectory(),
+        ]
+        let first = JevKeyStores.make(environment: environment)
+        #expect(first is FixtureJevKeyStore)
+        #expect(first.read() == .missing)
+        #expect(first.write("synthetic-key"))
+        let replacement = JevKeyStores.make(environment: environment)
+        #expect(replacement.read() == .key("synthetic-key"))
+        #expect(replacement.write(nil))
+        #expect(first.read() == .missing)
+    }
+
+    @Test func productionAndMismatchedSuitesAlwaysUseKeychain() {
+        for environment in [
+            [String: String](),
+            [
+                "EDITH_APPLICATION_IDENTIFIER": "com.pulkit.edith",
+                "EDITH_SHARED_DEFAULTS_SUITE": "com.pulkit.edith.extensions.jev",
+                "EDITH_EXTENSION_FIXTURE_HOME": NSTemporaryDirectory(),
+            ],
+            [
+                "EDITH_APPLICATION_IDENTIFIER": "com.pulkit.edith.tests.synthetic",
+                "EDITH_SHARED_DEFAULTS_SUITE": "com.pulkit.edith.extensions.jev",
+                "EDITH_EXTENSION_FIXTURE_HOME": NSTemporaryDirectory(),
+            ],
+        ] {
+            #expect(JevKeyStores.make(environment: environment) is KeychainJevKeyStore)
+        }
+    }
+
     @Test func keyStoresAreIsolatedWithoutAccessingRealKeychainItems() {
         let first = KeychainJevKeyStore(service: "fixture.first.extensions.jev")
         let second = KeychainJevKeyStore(service: "fixture.second.extensions.jev")

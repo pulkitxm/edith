@@ -4,8 +4,6 @@ import ImageIO
 import UniformTypeIdentifiers
 import EdithHostCore
 import EdithExtensionSupport
-import LocalAuthentication
-import Security
 import ExtensionMarketplace
 import Foundation
 
@@ -112,19 +110,6 @@ struct HostLifecycleHarness {
         let endpoint = try ExtensionPeerEndpoint(
             namespace: identifier, owner: extensionID,
             directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
-        defer {
-            if extensionID == "jev" {
-                let context = LAContext()
-                context.interactionNotAllowed = true
-                let query: [String: Any] = [
-                    kSecClass as String: kSecClassGenericPassword,
-                    kSecAttrService as String: identifier + ".extensions.jev",
-                    kSecAttrAccount as String: "typesafe-api-key",
-                    kSecUseAuthenticationContext as String: context,
-                ]
-                _ = SecItemDelete(query as CFDictionary)
-            }
-        }
         var workerLogs: [URL] = []
         var logHandles: [FileHandle] = []
         func makeSessions(executable: URL) -> HostExtensionSessions {

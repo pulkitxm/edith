@@ -2,6 +2,38 @@ import Foundation
 import LocalAuthentication
 import Security
 
+enum JevKeyStores {
+    static func make(environment: [String: String] = ProcessInfo.processInfo.environment)
+        -> any JevKeyStore
+    {
+        if environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
+            let identifier = environment["EDITH_APPLICATION_IDENTIFIER"],
+            identifier.hasPrefix("com.pulkit.edith.tests."),
+            let suite = environment["EDITH_SHARED_DEFAULTS_SUITE"],
+            suite == identifier + ".extensions.jev", let defaults = UserDefaults(suiteName: suite)
+        {
+            return FixtureJevKeyStore(defaults: defaults)
+        }
+        return KeychainJevKeyStore()
+    }
+}
+
+struct FixtureJevKeyStore: JevKeyStore, @unchecked Sendable {
+    let defaults: UserDefaults
+
+    func read() -> JevKeyRead {
+        guard let key = defaults.string(forKey: "syntheticJevKey"), !key.isEmpty else {
+            return .missing
+        }
+        return .key(key)
+    }
+
+    func write(_ key: String?) -> Bool {
+        defaults.set(key, forKey: "syntheticJevKey")
+        return defaults.synchronize()
+    }
+}
+
 struct KeychainJevKeyStore: JevKeyStore {
     static let account = "typesafe-api-key"
     static let service =
