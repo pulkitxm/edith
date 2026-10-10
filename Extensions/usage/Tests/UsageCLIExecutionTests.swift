@@ -138,8 +138,6 @@ import Testing
     }
 
     @Test func exportWritesOriginalArtworkRelativeToCallerDirectory() async throws {
-        _ = NSApplication.shared
-        NSApp.setActivationPolicy(.prohibited)
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer {
             try? FileManager.default.removeItem(at: root);

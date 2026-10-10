@@ -89,6 +89,8 @@ import Vision
         await scene.shutdownAndWait()
         #expect(cancelled == 1 && scene.drained)
         #expect(clients.filter(\.stopped).count == 1)
+        registry.prune()
+        #expect(registry.scenes[scene.id] == nil && registry.scenes.count == 15)
         #expect(registry.configure(UsageUIPresentation(id: scene.id, route: route, client: nil)))
         await registry.stopAndWait()
         #expect(cancelled == 16 && clients.allSatisfy(\.stopped) && registry.isEmpty)

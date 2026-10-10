@@ -158,8 +158,10 @@ struct UsageUISceneRoute: Equatable {
     private(set) var scenes: [UUID: UsageUIPresentation] = [:]
     var isEmpty: Bool { scenes.isEmpty }
 
+    func prune() { scenes = scenes.filter { !$0.value.drained } }
+
     func configure(_ scene: UsageUIPresentation) -> Bool {
-        scenes = scenes.filter { !$0.value.drained }
+        prune()
         guard scenes[scene.id] == nil, scenes.count < 16 else { return false }
         scenes[scene.id] = scene
         scene.start()

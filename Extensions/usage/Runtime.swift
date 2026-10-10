@@ -190,6 +190,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
+            uiPresentations.prune()
             guard controller == nil, !recovering,
                 let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "usage",

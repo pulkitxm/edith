@@ -23,8 +23,6 @@ extension UsageDashboardRenderingTests {
     }
 
     @Test func everyOriginalShareCardRendersItsArtworkAsOpaquePNG() throws {
-        _ = NSApplication.shared
-        NSApp.setActivationPolicy(.prohibited)
         for card in UsageShareCard.allCases {
             let data = try UsageShareRenderer.pngData(snapshot: sharedFixture, card: card, scale: 1)
             let bitmap = try #require(NSBitmapImageRep(data: data))

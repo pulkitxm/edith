@@ -18,7 +18,8 @@ struct UsageHomeActivityCard: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        PageCard(title: tile.displayTitle, note: "daily activity") {
+        PageCard(title: tile.title.isEmpty ? "Activity" : tile.displayTitle, note: "daily activity")
+        {
             if model.homeUsage.hasDays {
                 ActivityHeatmap(
                     days: model.homeUsage.calendarDays, scale: model.homeUsage.heatScale,
@@ -26,21 +27,10 @@ struct UsageHomeActivityCard: View {
                     blur: presenter.active && presenter.money,
                     blurTokens: presenter.active
                         && presenter.usage)
+            } else if !model.loadAttempted {
+                UsageActivityHeatmapSkeleton()
             } else {
-                PageLoading(
-                    state: model.contentLoad.state, title: "No usage activity yet",
-                    message: model.contentLoad.errorMessage ?? "Refresh Usage to collect activity.",
-                    layout: .analytics,
-                    retry: {
-                        if let client {
-                            client.perform("usage.refresh")
-                        } else {
-                            _ = try? UsageWorkerOperations.requestRefresh()
-                        }
-                    }
-                ) {
-                    EmptyView()
-                }
+                Text("No usage activity yet").foregroundStyle(.secondary)
             }
         }
         .pageTask { await model.load() }
@@ -51,5 +41,27 @@ struct UsageHomeActivityCard: View {
                 await model.load()
             }
         }
+    }
+}
+
+private struct UsageActivityHeatmapSkeleton: View {
+    var body: some View {
+        SkeletonGroup {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: UIScale.pt(3)) {
+                    ForEach(0..<18, id: \.self) { _ in
+                        VStack(spacing: UIScale.pt(3)) {
+                            SkeletonBlock(width: 14, height: 8, corner: 3)
+                            ForEach(0..<7, id: \.self) { _ in
+                                SkeletonBlock(width: 14, height: 14, corner: 3)
+                            }
+                        }
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .frame(height: UIScale.pt(137))
+        }
+        .accessibilityLabel("Loading activity")
     }
 }
