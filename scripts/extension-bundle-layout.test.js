@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
@@ -12,7 +13,7 @@ import { join, resolve } from "node:path";
 
 const required = ["Sparkle.framework"];
 
-function verify({ missing, extra, pointIdentifier } = {}) {
+function verify({ missing, extra, pointIdentifier, artwork = "valid" } = {}) {
   const root = mkdtempSync(join(tmpdir(), "extension-bundle-layout-"));
   try {
     const app = join(root, "Edith.app");
@@ -28,6 +29,23 @@ function verify({ missing, extra, pointIdentifier } = {}) {
     }
     for (const name of ["AppIcon.icns", "index.json"])
       writeFileSync(join(contents, "Resources", name), "synthetic resource");
+    if (artwork !== "missing") {
+      const artworkBundle = join(
+        contents,
+        "Resources/EdithHost_EdithHost.bundle",
+      );
+      mkdirSync(artworkBundle);
+      const archive = join(artworkBundle, "MarketplaceArtwork.lzma");
+      copyFileSync(
+        resolve(
+          "Packages/EdithHost/Sources/EdithHost/Resources/MarketplaceArtwork.lzma",
+        ),
+        archive,
+      );
+      if (artwork === "corrupt") writeFileSync(archive, "invalid artwork");
+      if (artwork === "extra")
+        writeFileSync(join(artworkBundle, "unexpected.bin"), "extra resource");
+    }
     writeFileSync(
       join(contents, "Resources/ed-launcher"),
       "#!/bin/sh\nexit 0\n",
@@ -69,6 +87,15 @@ test("empty release bundle accepts only Sparkle", () => {
   const result = verify();
   expect(result.status, result.stderr).toBe(0);
 });
+
+test.each(["missing", "corrupt", "extra"])(
+  "release bundle rejects %s artwork resources",
+  (artwork) => {
+    const result = verify({ artwork });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toMatch(/artwork/i);
+  },
+);
 
 test.each(required)("release bundle rejects missing %s", (missing) => {
   expect(verify({ missing }).status).not.toBe(0);
