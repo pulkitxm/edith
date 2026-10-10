@@ -25,6 +25,59 @@ import Testing
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
     }
 
+    @Test func originalSemanticRankingUsesEngineCandidatesAndRejectsInjectedMeanings() async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let original = worker()
+        let worker = HerdrWorker(
+            store: original.store, defaults: original.store.uiDefaults,
+            searchDecider: { HerdrProjectionDecider() }, automaticActions: false)
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let ids = worker.store.agents.map(\.id)
+        let result = try await client.perform(
+            "herdr.ui.rank", object: ["query": "second", "agentIDs": ids])
+        #expect(try JSONDecoder().decode([String]?.self, from: result) == [ids[1]])
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.rank",
+                object: [
+                    "query": "second", "agentIDs": ids,
+                    "meaning": "untrusted replacement",
+                ])
+        }
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.rank", object: ["query": "second", "agentIDs": ["forged"]])
+        }
+        let model = HerdrSearchModel(
+            searcher: { request in
+                AgentSearchReply(
+                    machineID: request.machineID,
+                    hits: request.targets.map {
+                        AgentSearchHit(
+                            id: $0.id, source: .transcript, title: $0.id, snippet: "synthetic",
+                            summary: "synthetic", lastActivity: nil, score: 1)
+                    })
+            }, decider: { nil }, usage: worker.store.usage,
+            ranker: { query, candidates in
+                try JSONDecoder().decode(
+                    [String]?.self,
+                    from: await client.perform(
+                        "herdr.ui.rank", object: ["query": query, "agentIDs": candidates.map(\.id)])
+                )
+            })
+        model.query = "second"
+        model.search(agents: worker.store.agents, hosts: worker.store.hosts)
+        for _ in 0..<200 {
+            if model.bestRows.map(\.id) == [ids[1]] { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(model.bestRows.map(\.id) == [ids[1]])
+        model.cancel()
+        client.stop()
+        await worker.shutdown()
+    }
+
     @Test func originalLayoutsAndPreferencesReachOwningEngineWithoutUILaunchPlans() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()
@@ -379,5 +432,16 @@ import Testing
         pending?.resume(returning: second)
         await #expect(throws: CancellationError.self) { try await read.value }
         await worker.shutdown()
+    }
+}
+
+private struct HerdrProjectionDecider: JevDeciding {
+    func decide(_ request: JevRequest, purpose: String) async throws -> JevDecision {
+        #expect(purpose == AgentSearchJev.purpose)
+        guard case .choice(_, let options) = request.questions[AgentSearchJev.question] else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        #expect(options[1].meaning.contains("second"))
+        return HerdrDecisionFixture.decision(AgentSearchJev.question, ["s1": 0.9, "s0": 0.1])
     }
 }

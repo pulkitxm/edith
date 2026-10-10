@@ -2371,7 +2371,12 @@ final class HerdrStore {
                         "agentIDs": request.targets.map(\.id),
                     ])
                 return try JSONDecoder().decode(AgentSearchReply.self, from: data)
-            }, decider: { nil }, usage: usage)
+            }, decider: { nil }, usage: usage,
+            ranker: { query, candidates in
+                let data = try await uiClient.perform(
+                    "herdr.ui.rank", object: ["query": query, "agentIDs": candidates.map(\.id)])
+                return try JSONDecoder().decode([String]?.self, from: data)
+            })
     }
 
 }

@@ -218,6 +218,7 @@ final class HerdrUIDefaults: UserDefaults {
     private unowned let worker: HerdrWorker
     private let generation = UUID()
     private var sequence: UInt64 = 0
+    private var searchHits: [String: [String: AgentSearchHit]] = [:]
 
     init(worker: HerdrWorker) { self.worker = worker }
 
@@ -351,11 +352,35 @@ final class HerdrUIDefaults: UserDefaults {
             guard agents.count == ids.count,
                 agents.allSatisfy({ $0.machineID == machineID && !$0.isTerminal })
             else { throw ExtensionPeerError.invalidRequest }
-            return try JSONEncoder().encode(
-                await AgentSearchService.shared.search(
-                    .init(
-                        query: query, machineID: machineID,
-                        targets: agents.map(AgentSearchTarget.init(agent:)))))
+            let reply = await AgentSearchService.shared.search(
+                .init(
+                    query: query, machineID: machineID,
+                    targets: agents.map(AgentSearchTarget.init(agent:))))
+            if searchHits[query] == nil, searchHits.count >= 16 { searchHits.removeAll() }
+            var hits = searchHits[query] ?? [:]
+            for hit in reply.hits where ids.contains(hit.id) { hits[hit.id] = hit }
+            searchHits[query] = hits
+            return try JSONEncoder().encode(reply)
+        case "herdr.ui.rank":
+            guard Set(object.keys) == ["query", "agentIDs"],
+                let query = object["query"] as? String, query.utf8.count <= 4096,
+                let ids = object["agentIDs"] as? [String],
+                ids.count <= AgentSearchJev.maximumCandidates,
+                Set(ids).count == ids.count
+            else { throw ExtensionPeerError.invalidRequest }
+            let agents = ids.compactMap(worker.currentAgent)
+            guard agents.count == ids.count, agents.allSatisfy({ !$0.isTerminal }) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            guard let decider = worker.searchDecider() else {
+                return try JSONEncoder().encode(Optional<[String]>.none)
+            }
+            let rows = agents.map { HerdrSearchRow(agent: $0, hit: searchHits[query]?[$0.id]) }
+            let picks = try await AgentSearchJev.rank(
+                query, candidates: HerdrSearchPlan.jevOptions(rows), using: decider)
+            try Task.checkCancellation()
+            guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+            return try JSONEncoder().encode(picks)
         default: throw ExtensionPeerError.invalidRequest
         }
         try Task.checkCancellation()
