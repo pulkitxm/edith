@@ -10,9 +10,18 @@ import SwiftUI
 @MainActor
 @Suite(.serialized)
 struct AttentionWorkerContractTests {
-    @Test func originalHomeFocusControlsWriteOnlyTheOwnedRepository() async throws {
+    @Test(arguments: [false, true])
+    func originalHomeFocusControlsWriteOnlyTheOwnedRepository(remote: Bool) async throws {
         let fixture = try AttentionWorkerFixture()
         defer { fixture.remove() }
+        let deniedRoot = fixture.root.appendingPathComponent("must-remain-absent")
+        let uiClient: AttentionUIClient? =
+            remote
+            ? AttentionUIClient(send: { operation, payload in
+                try await AttentionUICommands.execute(
+                    operation, payload: payload, repository: fixture.repository,
+                    service: fixture.service)
+            }) : nil
         NSApplication.shared.setActivationPolicy(.prohibited)
         let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
             NSAccessibility.Attribute(rawValue: $0)
@@ -41,7 +50,9 @@ struct AttentionWorkerContractTests {
         func render(visible: Bool) async {
             host.rootView = AnyView(
                 AttentionHomeFocusCard(
-                    tile: tile, repository: fixture.repository, open: { _ in opened += 1 }
+                    tile: tile,
+                    repository: remote ? .init(root: deniedRoot) : fixture.repository,
+                    uiClient: uiClient, open: { _ in opened += 1 }
                 )
                 .environment(\.windowVisible, visible)
                 .transaction { $0.animation = nil })
@@ -71,6 +82,8 @@ struct AttentionWorkerContractTests {
         #expect(fixture.repository.activeFocus() == nil)
         #expect(find(host, label: "Start focus") != nil)
         #expect(!NSScreen.screens.contains { $0.frame.intersects(window.frame) })
+        #expect(!FileManager.default.fileExists(atPath: deniedRoot.path))
+        uiClient?.stop()
         await fixture.service.stop()
         try fixture.database.close()
     }

@@ -31,7 +31,9 @@ import SwiftUI
         self.open = open
     }
 
-    var body: some View { card }
+    var body: some View {
+        card.disabled(uiClient?.available == false || uiClient?.stopped == true)
+    }
 
     private var card: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(10)) {

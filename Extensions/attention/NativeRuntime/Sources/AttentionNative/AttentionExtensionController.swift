@@ -120,7 +120,8 @@ public final class AttentionExtensionController: NSObject {
             if let engine = configuration.engineClient {
                 client = AttentionUIClient(engine: engine)
             } else {
-                client = AttentionUIClient(send: { _, _ in throw ExtensionPeerError.unavailable })
+                client = AttentionUIClient(
+                    send: { _, _ in throw ExtensionPeerError.unavailable }, available: false)
             }
             uiClient = client
             uiModel = AttentionPageModel(

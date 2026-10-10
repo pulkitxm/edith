@@ -5,6 +5,52 @@ import Testing
 @testable import AttentionNative
 
 @Suite(.serialized) @MainActor struct AttentionUIClientTests {
+    @Test func disabledPresentationKeepsSettingsWithoutSendingEngineRequests() async throws {
+        var sent = false
+        let client = AttentionUIClient(
+            send: { _, _ in
+                sent = true; throw ExtensionPeerError.invalidRequest
+            }, available: false)
+        let model = AttentionPageModel(uiClient: client)
+        #expect(model.loaded)
+        #expect(model.section == .settings)
+        model.saveSettings()
+        await #expect(throws: ExtensionPeerError.self) { try await client.status() }
+        var rejected = false
+        client.perform("attention.ui.focus.start") { result in
+            if case .failure = result { rejected = true }
+        }
+        #expect(rejected)
+        #expect(!sent)
+        client.stop()
+        await model.shutdown()
+    }
+
+    @Test func settingsEditsCoalesceAndClosingCancelsPendingSave() async throws {
+        var saved: [AttentionSettings] = []
+        let client = AttentionUIClient(send: { operation, payload in
+            guard operation == "attention.settings.set" else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let settings = try AttentionPayload.decode(AttentionSettings.self, from: payload)
+            saved.append(settings)
+            return try AttentionPayload.encode(settings)
+        })
+        let model = AttentionPageModel(uiClient: client)
+        for count in 1...20 {
+            model.settings.profileNote = "Mock preference \(count)"
+            model.saveSettings()
+        }
+        for _ in 0..<100 where saved.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(saved.map(\.profileNote) == ["Mock preference 20"])
+        model.settings.profileNote = "Mock preference 21"
+        model.saveSettings()
+        client.stop()
+        await model.shutdown()
+        try await Task.sleep(for: .milliseconds(180))
+        #expect(saved.map(\.profileNote) == ["Mock preference 20"])
+    }
+
     @Test func stoppedPresentationRejectsLateSnapshotsAndQueuedActions() async throws {
         var continuation: CheckedContinuation<Data, Error>?
         var operations: [String] = []

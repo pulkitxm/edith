@@ -22,6 +22,7 @@ struct AttentionUIBreakdownRequest: Codable, Sendable {
 @MainActor final class AttentionUIClient {
     private let send: @MainActor (String, Data) async throws -> Data
     private let invalidate: @MainActor () -> Void
+    let available: Bool
     private(set) var stopped = false
     private var tasks: [UUID: Task<Void, Never>] = [:]
     private var tail: Task<Void, Never>?
@@ -33,14 +34,15 @@ struct AttentionUIBreakdownRequest: Codable, Sendable {
     }
     init(
         send: @escaping @MainActor (String, Data) async throws -> Data,
-        invalidate: @escaping @MainActor () -> Void = {}
+        invalidate: @escaping @MainActor () -> Void = {}, available: Bool = true
     ) {
         self.send = send
         self.invalidate = invalidate
+        self.available = available
     }
     func invoke(_ operation: String, payload: Data = Data("{}".utf8)) async throws -> Data {
         let current = generation
-        guard !stopped else { throw ExtensionPeerError.unavailable }
+        guard available, !stopped else { throw ExtensionPeerError.unavailable }
         guard
             [
                 "attention.ui.summary", "attention.ui.status", "attention.ui.focus.get",
@@ -72,6 +74,7 @@ struct AttentionUIBreakdownRequest: Codable, Sendable {
         completion: @escaping @MainActor (Result<Data, Error>) -> Void
     ) {
         guard !stopped else { return }
+        guard available else { completion(.failure(ExtensionPeerError.unavailable)); return }
         guard tasks.count < 8 else { completion(.failure(ExtensionPeerError.unavailable)); return }
         let id = UUID()
         let current = generation

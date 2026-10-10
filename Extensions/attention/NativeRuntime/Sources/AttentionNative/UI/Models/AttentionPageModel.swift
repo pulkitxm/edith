@@ -93,6 +93,7 @@ final class AttentionPageModel {
     private var timelineTask: Task<Void, Never>?
     private var breakdownTask: Task<Void, Never>?
     private var searchTask: Task<Void, Never>?
+    private var settingsTask: Task<Void, Never>?
 
     init(
         repository: AttentionRepository = AttentionRepository(), uiClient: AttentionUIClient? = nil
@@ -101,6 +102,10 @@ final class AttentionPageModel {
         self.repository = repository
         let interval = AttentionPeriod().interval()
         summary = AttentionSummary(from: interval.start, to: interval.end)
+        if uiClient?.available == false {
+            section = .settings
+            loading.setContent()
+        }
     }
 
     var needsSetup: Bool {
@@ -231,10 +236,12 @@ final class AttentionPageModel {
     func shutdown() async {
         let pending = [
             categorizeTask, backupTask, reloadTask, timelineTask, breakdownTask, searchTask,
+            settingsTask,
         ].compactMap { $0 }
         cancelLoading()
         categorizeTask?.cancel(); categorizeTask = nil
         backupTask?.cancel(); backupTask = nil
+        settingsTask?.cancel(); settingsTask = nil
         for task in pending { task.cancel() }
         for task in pending { await task.value }
     }
@@ -407,9 +414,26 @@ final class AttentionPageModel {
     }
 
     func saveSettings() {
-        if uiClient != nil {
+        if let uiClient {
+            guard uiClient.available, !uiClient.stopped else { return }
             settings.normalizeCategories()
-            remote("attention.settings.set", value: settings, message: "Settings saved")
+            settingsTask?.cancel()
+            let next = settings
+            settingsTask = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                guard let self, !Task.isCancelled, !uiClient.stopped else { return }
+                do {
+                    let payload = try AttentionPayload.encode(next)
+                    uiClient.perform("attention.settings.set", payload: payload) {
+                        [weak self] result in
+                        do {
+                            _ = try result.get()
+                            self?.message = "Settings saved"; self?.errorMessage = nil
+                            self?.reload(preserveSettings: true)
+                        } catch { self?.errorMessage = error.localizedDescription }
+                    }
+                } catch { self.errorMessage = error.localizedDescription }
+            }
             return
         }
         do {
