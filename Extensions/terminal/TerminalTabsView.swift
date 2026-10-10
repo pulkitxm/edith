@@ -22,7 +22,8 @@ struct TerminalTabsView: View {
             ZStack {
                 ForEach(model.tabs) { tab in
                     TerminalSessionView(
-                        holder: tab.holder, active: presented && tab.id == model.selected
+                        holder: tab.holder, active: presented && tab.id == model.selected,
+                        restart: { model.restart(tab.id) }
                     )
                     .opacity(tab.id == model.selected ? 1 : 0)
                     .allowsHitTesting(tab.id == model.selected)
@@ -39,11 +40,16 @@ struct TerminalTabsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             if model.broadcast { broadcastBar }
+            if let error = model.error {
+                Text(error).font(.edithText(.caption)).foregroundStyle(DashSkin.danger).padding(
+                    UIScale.pt(8))
+            }
         }
         .background(Color(nsColor: TerminalPalette.edith(dark: dark).background))
         .background(shortcuts)
         .background(TerminalWindowObserver(onShow: onWindowShow, onClose: onWindowClose))
-        .onAppear { model.ensureFirstTab() }
+        .onAppear { if presented { model.ensureFirstTab() } }
+        .onChange(of: presented) { _, visible in if visible { model.ensureFirstTab() } }
     }
 
     private var shortcuts: some View {
@@ -92,7 +98,7 @@ struct TerminalTabsView: View {
             .buttonStyle(.edith(.toolbar))
             .help("Terminal settings")
             .popover(isPresented: $showsSettings, arrowEdge: .bottom) {
-                TerminalSettingsView()
+                TerminalSettingsView(model: model)
             }
         }
         .padding(.horizontal, UIScale.pt(12))
@@ -160,13 +166,17 @@ struct TerminalTabsView: View {
         case let .failure(error):
             broadcastError = error.localizedDescription
         case let .success(plan):
-            let delivery = model.sendBroadcast(plan)
-            if let message = delivery.failureMessage, !delivery.isComplete {
-                broadcastError = message
-                return
+            Task { @MainActor in
+                do {
+                    let delivery = try await model.sendBroadcast(plan)
+                    if let message = delivery.failureMessage, !delivery.isComplete {
+                        broadcastError = message
+                        return
+                    }
+                    command = ""
+                    broadcastError = nil
+                } catch { broadcastError = "The owned terminal engine is unavailable." }
             }
-            command = ""
-            broadcastError = nil
         }
     }
 }

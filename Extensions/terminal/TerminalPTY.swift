@@ -17,6 +17,8 @@ final class TerminalPTY {
         let bytes: Data
         let nextOffset: UInt64
         let exitCode: Int32?
+        let canonical: Bool
+        let echo: Bool
     }
 
     init(launch: TerminalLaunch, columns: UInt16 = 80, rows: UInt16 = 24) throws {
@@ -62,7 +64,12 @@ final class TerminalPTY {
         let index = Int(cursor - beginning)
         let bytes = Data(output.dropFirst(index).prefix(limit))
         let next = cursor + UInt64(bytes.count)
-        return Output(bytes: bytes, nextOffset: next, exitCode: next == offset ? exitCode : nil)
+        var mode = termios()
+        guard tcgetattr(descriptor, &mode) == 0 else { throw Self.error() }
+        return Output(
+            bytes: bytes, nextOffset: next, exitCode: next == offset ? exitCode : nil,
+            canonical: mode.c_lflag & tcflag_t(ICANON) != 0,
+            echo: mode.c_lflag & tcflag_t(ECHO) != 0)
     }
 
     func close() {

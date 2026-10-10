@@ -30,6 +30,10 @@ import Observation
         await update("terminal.close", payload: request(session))
     }
 
+    func closeAll() async {
+        await update("terminal.closeAll")
+    }
+
     func restart(_ session: TerminalEngine.Session) async {
         await update("terminal.restart", payload: request(session))
     }
@@ -65,6 +69,20 @@ import Observation
             output.nextOffset - offset == UInt64(output.bytes.count)
         else { throw ExtensionEngineError.rejected }
         return output
+    }
+
+    func presentation(_ session: TerminalEngine.Session, title: String, directory: String)
+        async throws
+    {
+        guard title.utf8.count <= 512, directory.utf8.count <= 4_096,
+            !title.utf8.contains(0), !directory.utf8.contains(0)
+        else {
+            throw ExtensionEngineError.rejected
+        }
+        let payload = try JSONEncoder().encode(
+            TerminalEngine.PresentationRequest(
+                session: checkedRequest(session), title: title, directory: directory))
+        _ = try await invoke("terminal.presentation", payload: payload)
     }
 
     func broadcast(_ command: String) async throws -> TerminalBroadcastDelivery {
@@ -126,7 +144,11 @@ import Observation
     }
 
     private func invoke(_ operation: String, payload: Data) async throws -> Data {
-        guard !isStopped, tasks.count < 8 else { throw ExtensionEngineError.unavailable }
+        while !isStopped, tasks.count >= (operation == "terminal.read" ? 4 : 8) {
+            try Task.checkCancellation()
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        guard !isStopped else { throw ExtensionEngineError.unavailable }
         try Task.checkCancellation()
         let token = UUID()
         let task = Task { try await client.invoke(operation, payload: payload) }

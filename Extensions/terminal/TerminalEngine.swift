@@ -57,7 +57,7 @@ import Foundation
         "terminal.snapshot", "terminal.open", "terminal.select", "terminal.close",
         "terminal.restart", "terminal.input", "terminal.read", "terminal.resize",
         "terminal.presentation", "terminal.broadcast", "terminal.preferences",
-        "terminal.savePreferences",
+        "terminal.savePreferences", "terminal.closeAll",
     ]
 
     private var tabs: [Tab] = []
@@ -119,6 +119,12 @@ import Foundation
         case "terminal.select":
             let request = try decoder.decode(SessionRequest.self, from: payload)
             selected = try tab(request, allowFailed: true).id
+        case "terminal.closeAll":
+            try requireEmpty(payload)
+            for tab in tabs { tab.terminal.close() }
+            tabs.removeAll()
+            failures.removeAll()
+            selected = nil
         case "terminal.close":
             let request = try decoder.decode(SessionRequest.self, from: payload)
             let owned = try tab(request, allowFailed: true)

@@ -176,9 +176,9 @@ import Testing
     @Test @MainActor func anInactiveTerminalStackedAboveDoesNotCatchTheDrop() {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
         let visible = GhosttyTerminalView(
-            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+            externalIO: TestWindowHost.inertIO())
         let stacked = GhosttyTerminalView(
-            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+            externalIO: TestWindowHost.inertIO())
         for view in [visible, stacked] {
             view.frame = container.bounds
             container.addSubview(view)

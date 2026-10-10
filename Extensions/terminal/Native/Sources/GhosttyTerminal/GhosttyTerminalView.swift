@@ -13,13 +13,11 @@ public final class GhosttyTerminalView: NSView {
     public internal(set) var currentDirectory: String?
     public internal(set) var hoveredLink: String?
     public let allowsLocalFileLinks: Bool
-    private var launch: GhosttyLaunch?
-    var shouldResetTerminalAfterInterrupt: Bool {
-        launch?.resetTerminalAfterInterrupt == true
-    }
+    private var externalIO: GhosttyExternalIO?
+    private var externalExited = false
+    let shouldResetTerminalAfterInterrupt: Bool
     private var theme: GhosttyTheme?
     private var themeConfig: ghostty_config_t?
-    private var owned: GhosttyConfigStrings?
     var temporaryDropFiles = Set<URL>()
     private var closed = false
     private var pendingExitCode: Int32?
@@ -106,11 +104,16 @@ public final class GhosttyTerminalView: NSView {
 
     public override var wantsUpdateLayer: Bool { false }
 
-    public init(launch: GhosttyLaunch, theme: GhosttyTheme? = nil) {
-        self.launch = launch
+    public init(
+        externalIO: GhosttyExternalIO, workingDirectory: String? = nil,
+        allowsLocalFileLinks: Bool = true, resetTerminalAfterInterrupt: Bool = false,
+        theme: GhosttyTheme? = nil
+    ) {
+        self.externalIO = externalIO
         self.theme = theme
-        currentDirectory = launch.workingDirectory
-        allowsLocalFileLinks = launch.allowsLocalFileLinks
+        currentDirectory = workingDirectory
+        self.allowsLocalFileLinks = allowsLocalFileLinks
+        shouldResetTerminalAfterInterrupt = resetTerminalAfterInterrupt
         super.init(frame: .zero)
         registerForDraggedTypes(Array(Self.dropTypes))
         addSubview(linkHoverView)
@@ -176,6 +179,7 @@ public final class GhosttyTerminalView: NSView {
         GhosttySecureInput.shared.removeScoped(ObjectIdentifier(self))
         closed = true
         removeWindowObservers()
+        externalIO?.invalidate()
         if let surface {
             GhosttyRuntime.shared.drainPendingWork()
             ghostty_surface_free(surface)
@@ -185,7 +189,7 @@ public final class GhosttyTerminalView: NSView {
             ghostty_config_free(themeConfig)
             self.themeConfig = nil
         }
-        owned = nil
+        externalIO = nil
         TerminalDropPayload(files: [], temporaryFiles: temporaryDropFiles).removeTemporaryFiles()
         temporaryDropFiles.removeAll()
     }
@@ -209,7 +213,9 @@ public final class GhosttyTerminalView: NSView {
     }
 
     private func startIfNeeded() {
-        guard !closed, surface == nil, window != nil, !bounds.isEmpty, let launch else { return }
+        guard !closed, surface == nil, window != nil, !bounds.isEmpty, let externalIO else {
+            return
+        }
         GhosttyRuntime.shared.start()
         guard let app = GhosttyRuntime.shared.handle else { return }
 
@@ -222,17 +228,21 @@ public final class GhosttyTerminalView: NSView {
         config.context = GHOSTTY_SURFACE_CONTEXT_TAB
         config.wait_after_command = false
 
-        owned = GhosttyConfigStrings(launch: launch)
-        config.command = owned?.command
-        config.working_directory = owned?.workingDirectory
-        if let owned, !owned.environment.isEmpty {
-            owned.environment.withUnsafeBufferPointer { buffer in
-                config.env_vars = UnsafeMutablePointer(mutating: buffer.baseAddress)
-                config.env_var_count = buffer.count
-                surface = ghostty_surface_new(app, &config)
-            }
-        } else {
-            surface = ghostty_surface_new(app, &config)
+        var io = ghostty_external_io_s()
+        io.userdata = Unmanaged.passUnretained(externalIO).toOpaque()
+        io.write_cb = { userdata, bytes, count in
+            guard let userdata else { return }
+            Unmanaged<GhosttyExternalIO>.fromOpaque(userdata).takeUnretainedValue()
+                .enqueue(bytes: bytes, count: count)
+        }
+        io.resize_cb = { userdata, columns, rows, width, height in
+            guard let userdata else { return }
+            Unmanaged<GhosttyExternalIO>.fromOpaque(userdata).takeUnretainedValue()
+                .enqueue(columns: columns, rows: rows, width: width, height: height)
+        }
+        surface = withUnsafePointer(to: &io) { pointer in
+            config.external_io = pointer
+            return ghostty_surface_new(app, &config)
         }
 
         guard let surface else { return }
@@ -282,12 +292,37 @@ public final class GhosttyTerminalView: NSView {
         }
     }
 
-    func childExited(_ exitCode: Int32) {
-        pendingExitCode = exitCode
-        DispatchQueue.main.async { [weak self] in
-            guard let surface = self?.surface else { return }
-            ghostty_surface_request_close(surface)
+    @discardableResult
+    public func receiveOutput(_ bytes: Data) -> Bool {
+        guard let surface, !closed, !externalExited, !bytes.isEmpty, bytes.count <= 32_768 else {
+            return false
         }
+        let accepted = bytes.withUnsafeBytes { buffer in
+            ghostty_surface_external_output(
+                surface, buffer.bindMemory(to: UInt8.self).baseAddress, bytes.count)
+        }
+        if accepted { scheduleDraw() }
+        return accepted
+    }
+
+    @discardableResult
+    public func setTermios(canonical: Bool, echo: Bool) -> Bool {
+        guard let surface, !closed, !externalExited else { return false }
+        return ghostty_surface_external_set_termios(surface, canonical, echo)
+    }
+
+    @discardableResult
+    public func processExited(_ exitCode: Int32) -> Bool {
+        guard let surface, !closed, !externalExited else { return false }
+        pendingExitCode = exitCode
+        externalExited = ghostty_surface_external_exit(surface)
+        externalIO?.invalidate()
+        scheduleDraw()
+        return externalExited
+    }
+
+    func childExited(_ exitCode: Int32) {
+        _ = processExited(exitCode)
     }
 
     func reportClosed(processAlive: Bool) {

@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import TerminalExtension
 
-@MainActor private final class TerminalTestBridge: NSObject {
+@MainActor final class TerminalTestBridge: NSObject {
     let engine: TerminalEngine
     var holdSnapshots = false
     var held: [() -> Void] = []

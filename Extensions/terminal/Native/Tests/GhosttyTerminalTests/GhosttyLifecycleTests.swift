@@ -6,7 +6,7 @@ import Testing
 @Suite(.serialized) struct GhosttyLifecycleTests {
     @Test @MainActor func closingWithALiveProcessDoesNotRequireConfirmation() async {
         let view = GhosttyTerminalView(
-            launch: GhosttyLaunch(executable: "/bin/cat", arguments: [], environment: []))
+            externalIO: TestWindowHost.inertIO())
         var exitCodes: [Int32?] = []
         view.onClose = { exitCodes.append($0) }
 
@@ -18,11 +18,9 @@ import Testing
     }
 
     @Test @MainActor func anEmptyFrameDuringRehostingKeepsTheTerminalGrid() throws {
-        let environment = ["PATH=/usr/bin:/bin", "HOME=\(NSTemporaryDirectory())"]
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
         let view = GhosttyTerminalView(
-            launch: GhosttyLaunch(
-                executable: "/bin/sh", arguments: ["-c", "cat"], environment: environment))
+            externalIO: TestWindowHost.inertIO())
         defer {
             view.removeFromSuperview()
             window.contentView = nil
@@ -48,11 +46,9 @@ import Testing
     }
 
     @Test @MainActor func anInitiallyEmptyViewStartsAfterReceivingItsLayoutSize() throws {
-        let environment = ["PATH=/usr/bin:/bin", "HOME=\(NSTemporaryDirectory())"]
         let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
         let view = GhosttyTerminalView(
-            launch: GhosttyLaunch(
-                executable: "/bin/sh", arguments: ["-c", "cat"], environment: environment))
+            externalIO: TestWindowHost.inertIO())
         var readySizes: [NSSize] = []
         view.onReady = { readySizes.append(view.bounds.size) }
         defer {
@@ -79,42 +75,31 @@ import Testing
         #expect(readySizes == [pane])
     }
 
-    @Test @MainActor func anExitedChildCannotCloseTheSurfaceThatReusesItsSlot() async throws {
-        let environment = ["PATH=/usr/bin:/bin", "HOME=\(NSTemporaryDirectory())"]
-        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600))
-
+    @Test @MainActor func exitedRendererRetainsScreenAndRejectsLateOutput() async throws {
+        let window = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 640, height: 400))
         for _ in 0..<8 {
-            let marker = FileManager.default.temporaryDirectory
-                .appendingPathComponent("edith-ghostty-exit-\(UUID().uuidString)")
-            defer { try? FileManager.default.removeItem(at: marker) }
-            let exiting = GhosttyTerminalView(
-                launch: GhosttyLaunch(
-                    executable: "/bin/sh", arguments: ["-c", "echo done > '\(marker.path)'"],
-                    environment: environment))
+            let exiting = GhosttyTerminalView(externalIO: TestWindowHost.inertIO())
             exiting.frame = window.contentLayoutRect
             window.contentView = exiting
             _ = try #require(exiting.surface)
-            let deadline = Date().addingTimeInterval(5)
-            while !FileManager.default.fileExists(atPath: marker.path), Date() < deadline {
-                usleep(5_000)
-            }
-            #expect(FileManager.default.fileExists(atPath: marker.path))
-            usleep(200_000)
+            #expect(exiting.receiveOutput(Data("retained-screen".utf8)))
+            #expect(exiting.processExited(7))
+            #expect(!exiting.receiveOutput(Data("late-output".utf8)))
+            #expect(!exiting.setTermios(canonical: true, echo: false))
+            #expect(exiting.performBindingAction("select_all"))
+            #expect(exiting.selectedText()?.contains("retained-screen") == true)
             window.contentView = nil
             exiting.shutdown()
-
-            let replacement = GhosttyTerminalView(
-                launch: GhosttyLaunch(
-                    executable: "/bin/sh", arguments: ["-c", "cat"], environment: environment))
+            let replacement = GhosttyTerminalView(externalIO: TestWindowHost.inertIO())
             replacement.frame = window.contentLayoutRect
             window.contentView = replacement
             _ = try #require(replacement.surface)
-            for _ in 0..<20 {
-                try await Task.sleep(for: .milliseconds(10))
-            }
+            for _ in 0..<20 { try await Task.sleep(for: .milliseconds(10)) }
             #expect(replacement.surface != nil)
+            #expect(replacement.receiveOutput(Data("replacement".utf8)))
             window.contentView = nil
             replacement.shutdown()
         }
+        #expect(TestWindowHost.exposedWindows.isEmpty)
     }
 }
