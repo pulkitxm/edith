@@ -25,7 +25,7 @@ class HostBuildMetadataTests(unittest.TestCase):
 
     def test_repackaging_preserves_source_provenance_and_binds_the_resigned_executable(self):
         original = {'sourceCommit': 'synthetic-source', 'sourceTreeDirty': False,
-                    'configuration': 'Release', 'signature': 'ad-hoc',
+                    'configuration': 'Release', 'signature': 'ad-hoc', 'linkTimeOptimization': 'full',
                     'hostExecutableSHA256': executable_hash(self.source)}
         write_metadata(self.source, original, 'ad-hoc')
         source = load_metadata(self.source)
@@ -34,6 +34,7 @@ class HostBuildMetadataTests(unittest.TestCase):
         self.assertEqual(packaged['sourceCommit'], 'synthetic-source')
         self.assertIs(packaged['sourceTreeDirty'], False)
         self.assertEqual(packaged['configuration'], 'Release')
+        self.assertEqual(packaged['linkTimeOptimization'], 'full')
         self.assertEqual(packaged['signature'], 'Developer ID')
         self.assertEqual(packaged['hostExecutableSHA256'], executable_hash(self.destination))
         self.assertNotEqual(packaged['hostExecutableSHA256'], source['hostExecutableSHA256'])
