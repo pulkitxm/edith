@@ -64,6 +64,11 @@ public final class ExtensionBundleRuntime {
     public func start(id: String, context: NSDictionary) throws {
         let instance = try load(id: id)
         guard !instance.active else { return }
+        if context["recoveryOnly"] as? Bool == true,
+            !instance.object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+        {
+            return
+        }
         let response = try execute(instance, operation: "start", context: context)
         guard response["ok"] as? Bool == true else {
             _ = try? execute(instance, operation: "stop", context: [:])

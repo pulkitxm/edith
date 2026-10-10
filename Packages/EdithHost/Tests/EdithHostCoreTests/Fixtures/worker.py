@@ -44,12 +44,19 @@ for line in sys.stdin:
     response = {"token": request["token"], "ok": mode != "reject"}
     if operation == "prepareDisable":
         prepare_count += 1
-        if mode == "reject-disable-once" and prepare_count == 1:
+        if mode == "reject-disable-always" or (mode == "reject-disable-once" and prepare_count == 1):
             response["ok"] = False
             response["message"] = "Restore sleep settings and try again."
         if mode == "late-disable" and prepare_count == 1:
             time.sleep(0.3)
     if operation == "start":
+        recovery = request["configuration"]["recoveryOnly"]
+        if mode == "require-recovery" and not recovery:
+            response["ok"] = False
+        if mode == "require-normal" and recovery:
+            response["ok"] = False
+        if recovery != (os.environ.get("EDITH_EXTENSION_RECOVERY_ONLY") == "1"):
+            response["ok"] = False
         response["version"] = request["configuration"]["version"]
         if mode == "wrong-version":
             response["version"] = "99.0.0"

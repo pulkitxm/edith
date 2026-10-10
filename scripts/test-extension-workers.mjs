@@ -122,6 +122,7 @@ try {
       "updateWithoutAppRestart",
       "restoreAfterAppUpdate",
       "freshHostSessionRestored",
+      "pendingDisableRecoveryValidated",
       "removedPayloads",
       "isolatedSupportTypes",
       "surfaceLayoutRestored",

@@ -43,6 +43,34 @@ import Testing
             copy: { recorder.copied.append($0) })
     }
 
+    @Test func recoveryOnlyStoreStartsNoScanningNetworkingOrObservers() async throws {
+        let (defaults, indexStore, suiteName, directory) = makeWorld()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let store = BifrostStore(
+            store: defaults, indexStore: indexStore,
+            rateStore: BifrostRateStore(location: directory.appendingPathComponent("rates.json")),
+            startServices: false,
+            fetchRates: {
+                Issue.record("Recovery must not fetch rates"); return nil
+            },
+            scan: {
+                Issue.record("Recovery must not scan applications"); return []
+            },
+            open: { _ in
+                Issue.record("Recovery must not launch applications"); return false
+            },
+            copy: { _ in Issue.record("Recovery must not copy clipboard content") })
+        BifrostIPC.post(BifrostIPC.Name.requestBifrostReindex)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(store.applications.isEmpty)
+        #expect(!store.isIndexing)
+        try await store.prepareDisable()
+        store.shutdown()
+    }
+
     @Test func aCachedIndexIsAdoptedWithoutScanning() async {
         let (defaults, indexStore, suiteName, directory) = makeWorld()
         defer {

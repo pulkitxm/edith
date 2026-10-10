@@ -9,7 +9,7 @@ public final class HostWorker {
         let timeout: Task<Void, Never>
     }
 
-    public let configuration: HostWorkerConfiguration
+    public private(set) var configuration: HostWorkerConfiguration
     public private(set) var ready = false
     public var didExit: (@MainActor () -> Void)?
     public var processIdentifier: Int32? { process.isRunning ? process.processIdentifier : nil }
@@ -55,8 +55,12 @@ public final class HostWorker {
         process.standardError = errorOutput
     }
 
-    public func start() async throws {
+    public func start(recoveryOnly: Bool = false) async throws {
         guard !launched else { throw HostWorkerError.rejected }
+        configuration.recoveryOnly = recoveryOnly
+        var environment = process.environment ?? ProcessInfo.processInfo.environment
+        environment["EDITH_EXTENSION_RECOVERY_ONLY"] = recoveryOnly ? "1" : nil
+        process.environment = environment
         launched = true
         let descriptor = output.fileHandleForReading.fileDescriptor
         let flags = fcntl(descriptor, F_GETFL)
@@ -206,7 +210,7 @@ public final class HostWorker {
                         request.continuation.resume(
                             throwing: HostWorkerError.disableRejected(
                                 message
-                                    ?? "The extension could not restore its system settings. It remains enabled. Open the extension and try again."
+                                    ?? "Cleanup is pending. Restore system settings or finish macOS approval, then try again."
                             ))
                     } else {
                         request.continuation.resume(throwing: HostWorkerError.rejected)

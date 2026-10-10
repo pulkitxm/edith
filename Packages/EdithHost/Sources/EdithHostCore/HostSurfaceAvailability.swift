@@ -81,6 +81,9 @@ extension HostMarketplace {
     public var surfaceAvailability: HostSurfaceAvailability {
         HostSurfaceAvailability(
             knownIDs: Set(entries.map(\.id)), installedIDs: Set(installed.keys),
-            downloadedIDs: downloadedIDs, states: sessions.states)
+            downloadedIDs: downloadedIDs,
+            states: sessions.states.merging(
+                Dictionary(uniqueKeysWithValues: sessions.pendingDisableIDs.map { ($0, .failed) })
+            ) { _, pending in pending })
     }
 }

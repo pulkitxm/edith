@@ -12,6 +12,39 @@ private final class LidAwakeJournalProbe: @unchecked Sendable {
 }
 
 @Suite @MainActor struct LidAwakeWorkerTests {
+    @Test func recoveryOnlyWorkerRetriesRestorationWithoutActivation() async throws {
+        let suite = "lidAwake.recovery." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: LidAwakeState.activeKey)
+        LidAwakeState.setSession(.oneHour, defaults)
+        let deadline = Date().addingTimeInterval(600)
+        LidAwakeState.setSessionDeadline(deadline, defaults)
+        var mutations: [Bool] = []
+        let engine = LidAwakeEngine(
+            defaults: defaults, readSystemState: { true },
+            applySystemState: { value in
+                mutations.append(value); return .applied
+            },
+            startServices: false, recoveryOnly: true)
+        let worker = LidAwakeWorker(
+            defaults: defaults, engine: engine, recoveryOnly: true,
+            confirm: {
+                Issue.record("Recovery must not request activation approval"); return true
+            })
+        #expect(!defaults.bool(forKey: LidAwakeState.enabledKey))
+        #expect(engine.remaining == nil)
+        #expect(LidAwakeState.sessionDeadline(defaults) == deadline)
+        #expect(mutations.isEmpty)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.perform(.on(.indefinite), requiresConfirmation: true)
+        }
+        try await worker.prepareDisable()
+        #expect(mutations == [false])
+        #expect(!engine.snapshot().active)
+        worker.shutdown()
+    }
+
     @Test func failedPreparationKeepsTheWorkerEnabledAndRestorable() async throws {
         let suite = "lidAwake.worker." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))

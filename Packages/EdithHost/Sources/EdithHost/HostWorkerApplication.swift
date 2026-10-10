@@ -170,6 +170,7 @@ final class HostWorkerApplication {
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
                 "dataDirectory": identity.extensionDirectory(package.id).path,
                 "hostIdentifier": identity.identifier,
+                "recoveryOnly": next.recoveryOnly,
             ]
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
                 guard
@@ -191,6 +192,7 @@ final class HostWorkerApplication {
                 try runtime.start(id: package.id, context: context)
             }
             guard !runtimes.isEmpty else { throw HostWorkerError.rejected }
+            if next.recoveryOnly { return }
             let endpoint = try ExtensionPeerEndpoint(
                 namespace: identity.identifier, owner: package.id,
                 directory: identity.root.appendingPathComponent("ExtensionState/Commands"))
@@ -252,6 +254,7 @@ final class HostWorkerApplication {
         switch request.operation {
         case "show": try showWindow()
         case "synchronize":
+            guard !configuration.recoveryOnly else { return }
             if let next = request.configuration {
                 guard next.identifier == configuration.identifier,
                     next.extensionID == configuration.extensionID,
@@ -274,7 +277,9 @@ final class HostWorkerApplication {
     }
 
     private func showWindow() throws {
-        guard !stopping, let configuration else { throw HostWorkerError.rejected }
+        guard !stopping, let configuration, !configuration.recoveryOnly else {
+            throw HostWorkerError.rejected
+        }
         if let window {
             window.makeKeyAndOrderFront(nil);
             NSApplication.shared.activate(ignoringOtherApps: true); return
