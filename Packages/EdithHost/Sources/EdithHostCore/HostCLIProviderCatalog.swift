@@ -62,6 +62,7 @@ public struct HostCLIProviderCommand: Codable, Equatable, Sendable {
     public let timeout: Double
     public let streamOperation: String?
     public let streamDeadline: Double?
+    public let readsInput: Bool?
 
     public var toolName: String {
         "edith_"
@@ -71,11 +72,13 @@ public struct HostCLIProviderCommand: Codable, Equatable, Sendable {
 
     public init(
         route: [String], operation: String, summary: String, destructive: Bool = false,
-        timeout: Double = 30, streamOperation: String? = nil, streamDeadline: Double? = nil
+        timeout: Double = 30, streamOperation: String? = nil, streamDeadline: Double? = nil,
+        readsInput: Bool = false
     ) {
         self.route = route; self.operation = operation; self.summary = summary
         self.destructive = destructive; self.timeout = timeout
         self.streamOperation = streamOperation; self.streamDeadline = streamDeadline
+        self.readsInput = readsInput
     }
 }
 
@@ -89,17 +92,19 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
     public let completionOperation: String?
     public let machineAliases: [String]?
     public let aliasOperation: String?
+    public let parserHelp: [HostCLIJSON]?
 
     public init(
         owner: String, commands: [HostCLIProviderCommand], settings: [HostCLISetting] = [],
         acceptsInput: Bool = false, nativeTools: [HostCLINativeTool] = [],
         completionOperation: String? = nil, machineAliases: [String] = [],
-        aliasOperation: String? = nil
+        aliasOperation: String? = nil, parserHelp: [HostCLIJSON] = []
     ) {
         version = 1; self.owner = owner; self.commands = commands; self.settings = settings
         self.acceptsInput = acceptsInput
         self.nativeTools = nativeTools; self.completionOperation = completionOperation
         self.machineAliases = machineAliases; self.aliasOperation = aliasOperation
+        self.parserHelp = parserHelp
     }
 
     public init(from decoder: Decoder) throws {
@@ -114,10 +119,11 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             String.self, forKey: .completionOperation)
         machineAliases = try container.decodeIfPresent([String].self, forKey: .machineAliases)
         aliasOperation = try container.decodeIfPresent(String.self, forKey: .aliasOperation)
+        parserHelp = try container.decodeIfPresent([HostCLIJSON].self, forKey: .parserHelp)
     }
 
     public static func decode(_ data: Data, owner: String) throws -> Self {
-        guard data.count <= HostCLIRequest.maximumPayload else {
+        guard data.count <= 2 * 1024 * 1024 else {
             throw HostCLIError.rejected("The command catalog exceeds its limit.")
         }
         let catalog = try JSONDecoder().decode(Self.self, from: data)
@@ -141,6 +147,16 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
                 !command.summary.utf8.contains(0), command.timeout.isFinite,
                 (1...120).contains(command.timeout)
             else { throw HostCLIError.rejected("Invalid extension command route.") }
+            if owner == "systemStats" {
+                guard command.route.count >= 2,
+                    ["stats", "disks"].contains(command.route[1])
+                else { throw HostCLIError.rejected("Invalid system statistics route.") }
+            }
+            if owner == "system", command.route.first == "system", command.route.count >= 2,
+                ["stats", "disks"].contains(command.route[1])
+            {
+                throw HostCLIError.rejected("System statistics belong to their owning extension.")
+            }
             _ = try HostCLIRequest(action: .invoke, id: owner, operation: command.operation)
             if let stream = command.streamOperation {
                 _ = try HostCLIRequest(action: .invoke, id: owner, operation: stream + ".start")
@@ -152,6 +168,18 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
             }
         }
         for setting in settings { try setting.validate() }
+        let help = parserHelp ?? []
+        guard help.count <= prefixes.count else {
+            throw HostCLIError.rejected("Too many parser catalogs.")
+        }
+        for document in help {
+            guard document.object?["serializationVersion"] == .integer(0),
+                let command = document.object?["command"],
+                let name = command.object?["commandName"]?.string, prefixes.contains(name),
+                try document.encoded().count <= 1024 * 1024
+            else { throw HostCLIError.rejected("Invalid parser catalog.") }
+            try Self.validateHelp(command, route: [], commands: commands)
+        }
         let tools = nativeTools ?? []
         guard tools.count <= 1024,
             Set(tools.map(\.name) + commands.map(\.toolName)).count == tools.count + commands.count
@@ -178,6 +206,23 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         }
     }
 
+    private static func validateHelp(
+        _ value: HostCLIJSON, route: [String], commands: [HostCLIProviderCommand]
+    ) throws {
+        guard let object = value.object, let name = object["commandName"]?.string,
+            word(name), route.count < 12,
+            object["arguments"] == nil || object["arguments"]?.array != nil,
+            object["subcommands"] == nil || object["subcommands"]?.array != nil
+        else { throw HostCLIError.rejected("Invalid parser command metadata.") }
+        let path = route + [name]
+        guard commands.contains(where: { $0.route.starts(with: path) }) else {
+            throw HostCLIError.rejected("Parser metadata advertises an undeclared command.")
+        }
+        for child in object["subcommands"]?.array ?? [] {
+            try validateHelp(child, route: path, commands: commands)
+        }
+    }
+
     private static func word(_ value: String) -> Bool {
         !value.isEmpty && value.utf8.count <= 80
             && value.utf8.allSatisfy {
@@ -198,7 +243,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         "codeStats": ["code-stats"], "clipboard": ["clipboard"], "attention": ["attention"],
         "notchShelf": ["shelf", "browser"], "colorPicker": ["color"],
         "emoji": ["emoji"], "presenter": ["presenter"], "lidAwake": ["lid-awake"],
-        "system": ["system", "apps", "tools"], "systemStats": ["stats"],
+        "system": ["system", "apps", "tools"], "systemStats": ["system"],
         "homebrew": ["brew"], "cleaner": ["cleaner"], "appMaintenance": ["maintenance"],
         "jev": ["jev"], "virtualCamera": ["camera"], "audioMixer": ["audio"],
     ]
@@ -276,18 +321,25 @@ public struct HostCLIProviderRegistry: Sendable {
         workingDirectory: String = FileManager.default.currentDirectoryPath,
         streamWrite: (@Sendable (Data, Bool) async throws -> Void)? = nil, invoke: @escaping Invoke
     ) async throws -> ExtensionCLIReply {
-        guard let prefix = arguments.first,
-            let provider = providers.first(where: {
-                $0.catalog.commands.contains { $0.route.first == prefix }
-                    || ($0.catalog.machineAliases ?? []).contains(prefix)
-            }),
-            let command = provider.catalog.commands.filter({ arguments.starts(with: $0.route) })
-                .max(by: { $0.route.count < $1.route.count })
-                ?? provider.catalog.commands.first(where: {
-                    $0.route.first == prefix
-                        || provider.catalog.owner == "machines"
-                            && (provider.catalog.machineAliases ?? []).contains(prefix)
-                })
+        guard let prefix = arguments.first else {
+            throw HostCLIError.usage("Missing extension command.")
+        }
+        let matching = providers.flatMap { provider in
+            provider.catalog.commands.filter { arguments.starts(with: $0.route) }
+                .map { (provider, $0) }
+        }.sorted { $0.1.route.count > $1.1.route.count }
+        let families = providers.filter {
+            $0.catalog.commands.contains { $0.route.first == prefix }
+                || ($0.catalog.machineAliases ?? []).contains(prefix)
+        }
+        let selected =
+            matching.first
+            ?? (families.count == 1
+                ? families.first.flatMap { provider in
+                    provider.catalog.commands.first.map { (provider, $0) }
+                } : nil)
+        guard let (provider, command) = selected,
+            matching.count < 2 || matching[0].1.route.count != matching[1].1.route.count
         else { throw HostCLIError.rejected("No enabled extension provides this command.") }
         guard try await Self.states(invoke: invoke).contains(provider.state) else {
             throw HostCLIError.rejected("The command provider was disabled or changed.")
@@ -296,6 +348,9 @@ public struct HostCLIProviderRegistry: Sendable {
         let routedArguments = isAlias ? arguments : Array(arguments.dropFirst())
         let executionOperation =
             isAlias ? (provider.catalog.aliasOperation ?? command.operation) : command.operation
+        guard input.isEmpty || provider.catalog.acceptsInput == true else {
+            throw HostCLIError.usage("The command provider does not accept stdin.")
+        }
         if let operation = command.streamOperation {
             let context = try HostCLIInvocationContext(
                 arguments: routedArguments, standardInput: input,

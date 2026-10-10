@@ -3,6 +3,7 @@ import Foundation
 
 public final class HostMCPStdio: @unchecked Sendable {
     public static let maximumMessageBytes = 512 * 1024
+    public static let maximumResponseBytes = 32 * 1024 * 1024
     private let input: Int32
     private let output: Int32
     private let wakeRead: Int32
@@ -22,7 +23,6 @@ public final class HostMCPStdio: @unchecked Sendable {
             if outputCopy >= 0 { Darwin.close(outputCopy) }
             throw HostCLIError.rejected("Could not open MCP stdio.")
         }
-        self.input = inputCopy; self.output = outputCopy; wakeRead = wake[0]; wakeWrite = wake[1]
         for descriptor in [inputCopy, outputCopy, wake[0], wake[1]] {
             _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         }
@@ -30,9 +30,14 @@ public final class HostMCPStdio: @unchecked Sendable {
         guard inputFlags >= 0, outputFlags >= 0,
             fcntl(inputCopy, F_SETFL, inputFlags | O_NONBLOCK) == 0,
             fcntl(outputCopy, F_SETFL, outputFlags | O_NONBLOCK) == 0
-        else { throw HostCLIError.rejected("Could not configure bounded MCP stdio.") }
+        else {
+            Darwin.close(inputCopy); Darwin.close(outputCopy)
+            Darwin.close(wake[0]); Darwin.close(wake[1])
+            throw HostCLIError.rejected("Could not configure bounded MCP stdio.")
+        }
         _ = fcntl(wake[1], F_SETFL, O_NONBLOCK)
         _ = signal(SIGPIPE, SIG_IGN)
+        self.input = inputCopy; self.output = outputCopy; wakeRead = wake[0]; wakeWrite = wake[1]
     }
     deinit {
         Darwin.close(input); Darwin.close(output); Darwin.close(wakeRead); Darwin.close(wakeWrite)
@@ -59,7 +64,7 @@ public final class HostMCPStdio: @unchecked Sendable {
     }
 
     public func send(_ data: Data) async throws {
-        guard !data.isEmpty, data.count <= Self.maximumMessageBytes, !data.contains(10),
+        guard !data.isEmpty, data.count <= Self.maximumResponseBytes, !data.contains(10),
             String(data: data, encoding: .utf8) != nil
         else { throw HostCLIError.rejected("Invalid MCP output frame.") }
         try await withTaskCancellationHandler {

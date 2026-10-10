@@ -187,6 +187,25 @@ import Foundation
             AppStorageKeys.General.homeClockZones, .csv, group: "appearance",
             summary: "Comma separated Home clock time zones."),
         .init(
+            "surfaceLayoutProfiles", .string, group: "appearance",
+            summary: "Named Home and Notch layout profiles."),
+        .init(
+            SurfaceTarget.home.key, .string, group: "appearance",
+            summary: "Home widget layout and configuration."),
+        .init(
+            SurfaceTarget.notch.key, .string, group: "appearance",
+            summary: "Notch widget layout and configuration."),
+        .init(
+            AppStorageKeys.General.settingsSection, .string, group: "panel",
+            summary: "Settings section a deep link opens."),
+        .init(
+            "extensionsExpand", .string, group: "panel",
+            summary: "Extension card selected by a deep link."),
+        .init(
+            AppStorageKeys.General.editMainWindowFullScreen, .bool, group: "panel",
+            summary: "Whether the main window opens in full screen.", scope: "standard",
+            fallback: .bool(false)),
+        .init(
             AppStorageKeys.General.mainWindowZoom, .number, group: "panel",
             summary: "Main window zoom factor.", fallback: .number(1)),
         .init(

@@ -10,9 +10,11 @@ public enum HostCommandCLITransport {
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
         guard descriptor >= 0 else { throw HostCLIError.unavailable }
         let connection = HostCLIConnection(descriptor)
+        let cancellation = HostCommandCLICancellation()
         return try await withTaskCancellationHandler {
             let work = Task.detached {
                 defer { connection.close() }
+                try cancellation.check()
                 try connection.configure(timeout: request.timeout + 2)
                 var address = try HostCLITransport.address(
                     HostCLITransport.socketPath(identity: identity))
@@ -22,8 +24,10 @@ public enum HostCommandCLITransport {
                     }
                 }
                 guard connected == 0 else { throw HostCLIError.unavailable }
+                try cancellation.check()
                 let peer = try HostCLIProcess.peer(descriptor)
                 try connection.write(request.encoded(), limit: HostCLITransport.maximumRequest)
+                try cancellation.check()
                 let response = try HostCLIResponse.decoded(
                     connection.read(limit: HostCLITransport.maximumFrame))
                 guard HostCLIProcess.read(peer.pid) == peer else { throw HostCLIError.unavailable }
@@ -48,7 +52,17 @@ public enum HostCommandCLITransport {
                 throw error
             }
         } onCancel: {
+            cancellation.cancel()
             connection.cancel()
         }
+    }
+}
+
+private final class HostCommandCLICancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+    func cancel() { lock.withLock { cancelled = true } }
+    func check() throws {
+        if lock.withLock({ cancelled }) { throw CancellationError() }
     }
 }

@@ -12,10 +12,11 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
         self.arguments = arguments; self.input = input
     }
     public func validate() throws { _ = try Self(arguments: arguments, input: input) }
-    public func request() throws -> HostCLIRequest {
+    public func request(timeout: Double = 30) throws -> HostCLIRequest {
         try validate()
         return try HostCLIRequest(
-            action: .invoke, id: "host", operation: "host.cli", payload: JSONEncoder().encode(self))
+            action: .invoke, id: "host", operation: "host.cli", payload: JSONEncoder().encode(self),
+            timeout: timeout)
     }
 }
 
@@ -64,7 +65,7 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
             reply = try configuration.execute(
                 Array(envelope.arguments.dropFirst()), input: envelope.input)
         } else {
-            guard ["app", "permissions"].contains(envelope.arguments.first ?? ""),
+            guard ["app", "permissions", "camera"].contains(envelope.arguments.first ?? ""),
                 envelope.input.isEmpty
             else {
                 throw HostCLIError.usage("Unknown core command.")

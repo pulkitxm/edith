@@ -167,14 +167,11 @@ public actor HostMCPCLI {
                     action: .invoke, id: provider.state.id, operation: tool.operation,
                     payload: (params["arguments"] ?? .object([:])).encoded()))
             try Task.checkCancellation()
-            guard data.count <= HostMCPStdio.maximumMessageBytes,
+            guard data.count <= 8 * 1024 * 1024,
                 try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state),
                 let result = try JSONDecoder().decode(HostCLIJSON.self, from: data).object,
                 let content = result["content"]?.array, content.count <= 256,
-                content.allSatisfy({
-                    ["text", "image", "audio", "resource", "resource_link"].contains(
-                        $0.object?["type"]?.string ?? "")
-                }),
+                content.allSatisfy(Self.validContent),
                 result["isError"] == nil || result["isError"]?.bool != nil
             else { throw HostCLIError.rejected("Invalid or stale native tool result.") }
             return .object(result)
@@ -208,14 +205,13 @@ public actor HostMCPCLI {
         routed += arguments
         do {
             let reply: ExtensionCLIReply
-            if coreCatalog?.commands.contains(command) == true {
-                if let coreExecute {
-                    reply = try await coreExecute(routed)
-                } else {
-                    reply = try JSONDecoder().decode(
-                        ExtensionCLIReply.self,
-                        from: await invoke(HostCoreCLIEnvelope(arguments: routed).request()))
-                }
+            if let coreExecute {
+                reply = try await coreExecute(routed)
+                try reply.validate()
+            } else if coreCatalog?.commands.contains(command) == true {
+                reply = try JSONDecoder().decode(
+                    ExtensionCLIReply.self,
+                    from: await invoke(HostCoreCLIEnvelope(arguments: routed).request()))
                 try reply.validate()
             } else {
                 reply = try await registry.execute(routed, invoke: invoke)
@@ -260,6 +256,19 @@ public actor HostMCPCLI {
                 "additionalProperties": .bool(false),
             ]),
         ])
+    }
+    private static func validContent(_ value: HostCLIJSON) -> Bool {
+        guard let object = value.object, let type = object["type"]?.string else { return false }
+        switch type {
+        case "text": return object["text"]?.string != nil
+        case "image", "audio":
+            return object["mimeType"]?.string?.isEmpty == false
+                && object["data"]?.string.flatMap { Data(base64Encoded: $0) } != nil
+        case "resource": return object["resource"]?.object?["uri"]?.string != nil
+        case "resource_link":
+            return object["uri"]?.string != nil && object["name"]?.string != nil
+        default: return false
+        }
     }
     private static func key(_ id: HostCLIJSON) -> String? {
         switch id {
