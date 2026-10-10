@@ -28,7 +28,7 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
     func controller(for request: HostExtensionContentRequest) async throws -> NSViewController {
         let handle = try await manager.scene(for: request)
         guard !Task.isCancelled else {
-            try await manager.endPresentation(id: request.presentationID)
+            endPresentation(id: request.presentationID)
             throw CancellationError()
         }
         let remote = EXHostViewController()

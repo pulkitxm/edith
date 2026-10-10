@@ -11,6 +11,8 @@ struct HostApplication: App {
     @State private var cliServer: HostCLIServer?
     @State private var coreServices: HostCoreServices?
     @State private var sectionWindows: HostSectionWindows?
+    @State private var remotePresenter: HostRemoteContentPresenter?
+    @State private var remoteCleanupNotice = false
     @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
@@ -25,7 +27,7 @@ struct HostApplication: App {
                 Group {
                     if let marketplace {
                         HostWorkspace(
-                            marketplace: marketplace, updater: updater,
+                            marketplace: marketplace, presenter: remotePresenter, updater: updater,
                             panelShortcutChanged: { coreServices?.panelShortcutChanged() },
                             additionalSettings: { coreServices?.settings($0) },
                             coreOnline: coreServices?.online ?? false,
@@ -39,6 +41,9 @@ struct HostApplication: App {
                     }
                 }
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(720))
+                .font(.system(size: UIScale.pt(13)))
+                .controlSize(UIScale.controlSize)
+                .disclosureGroupStyle(EdithDisclosureGroupStyle())
                 .tint(themeColor(theme))
                 #if EDITH_GUI_FIXTURE
                 .background { HostGUIVisibilityProbe() }
@@ -65,6 +70,9 @@ struct HostApplication: App {
                         }
                         try control.start()
                         cliServer = control
+                        let presenter = HostRemoteContentPresenter(
+                            manager: HostRemoteSessionManager(marketplace: loaded))
+                        remotePresenter = presenter
                         marketplace = loaded
                         delegate.openMainWindow = { openWindow(id: "main") }
                         let services = try HostCoreServices(
@@ -76,6 +84,7 @@ struct HostApplication: App {
                             AnyView(
                                 HostDetachedSection(
                                     marketplace: loaded, updater: updater, destination: page,
+                                    presenter: presenter,
                                     panelShortcutChanged: { services.panelShortcutChanged() },
                                     additionalSettings: { services.settings($0) },
                                     select: { id in
@@ -115,6 +124,17 @@ struct HostApplication: App {
                 applyAppearance(appearance); synchronizeAppearance()
             }
             .onChange(of: theme) { synchronizeAppearance() }
+            .onChange(of: remotePresenter?.cleanupFailed ?? false) {
+                if remotePresenter?.cleanupFailed == true { remoteCleanupNotice = true }
+            }
+            .alert("Extension cleanup pending", isPresented: $remoteCleanupNotice) {
+                Button("Retry cleanup") { remotePresenter?.retryCleanup() }
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(
+                    "The extension interface has closed, but its process has not confirmed cleanup. Retry before removing or updating it."
+                )
+            }
         }
         .commands {
             CommandGroup(after: .appInfo) {

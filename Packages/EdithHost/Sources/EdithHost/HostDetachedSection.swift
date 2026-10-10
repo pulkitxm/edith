@@ -33,6 +33,9 @@ struct HostDetachedSection: View {
                     additionalSettings: additionalSettings,
                     select: select
                 )
+                .font(.system(size: UIScale.pt(13)))
+                .controlSize(UIScale.controlSize)
+                .disclosureGroupStyle(EdithDisclosureGroupStyle())
                 .tint(themeColor(theme))
                 .environment(\.compactLayout, geometry.size.width < UIScale.pt(640))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -35,7 +35,8 @@ struct HostExtensionContent: View {
         active
             || (location == "settings" && surface == nil
                 && marketplace.installed[extensionID] != nil
-                && !marketplace.pendingRemovalIDs.contains(extensionID))
+                && !marketplace.pendingRemovalIDs.contains(extensionID)
+                && !marketplace.sessions.pendingDisableIDs.contains(extensionID))
     }
     private var title: String {
         marketplace.entries.first { $0.id == extensionID }?.title ?? extensionID
