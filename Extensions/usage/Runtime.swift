@@ -246,7 +246,10 @@ final class ExtensionRuntime: NSObject {
                 return try await UsageMachinesPeer.merge(
                     local: local, policy: policy, onEvent: event)
             }
-            do { cliStreams = try ExtensionCLIStreams(owner: "usage") } catch {
+            do {
+                try controller.applyAmbientPolicy(context: input)
+                cliStreams = try ExtensionCLIStreams(owner: "usage")
+            } catch {
                 return ["ok": false, "error": error.localizedDescription] as NSDictionary
             }
             self.controller = controller
@@ -301,6 +304,9 @@ final class ExtensionRuntime: NSObject {
             return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
+            do { try controller?.applyAmbientPolicy(context: input) } catch {
+                return ["ok": false, "error": error.localizedDescription] as NSDictionary
+            }
             usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
             backup?.preferencesChanged()
         case "stop": prepareToStop(completion: {})

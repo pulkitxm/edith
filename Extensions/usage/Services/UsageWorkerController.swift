@@ -23,6 +23,13 @@ public final class UsageWorkerController {
     var refreshObservation: UsageRefreshObservation? { refreshRecorder?.snapshot }
     var refreshRecording: UsageRefreshRecorder? { refreshRecorder }
     private var backgroundTask: Task<Void, Never>?
+    private var backgroundSleepTask: Task<Void, Never>?
+    private var backgroundContinuation: AsyncStream<Void>.Continuation?
+    private let ambientPolicy: ExtensionAmbientPolicy
+    private let allowsBackgroundCollection: @MainActor () -> Bool
+    private let clock: @MainActor () -> Date
+    private let sleep: @Sendable (Duration) async throws -> Void
+    private var periodicAdmissions: [String: Date] = [:]
     private let fetchLimits: FetchLimits
     private let collect: Collect
     private let dataDirectory: URL
@@ -38,8 +45,25 @@ public final class UsageWorkerController {
         dataDirectory: URL = Repo.dataDir,
         fetchLimits: @escaping FetchLimits = { session in
             await LimitsCollector.refresh(force: true, refreshSession: session, announce: { _ in })
+        },
+        ambientPolicy: ExtensionAmbientPolicy? = nil,
+        allowsBackgroundCollection: @escaping @MainActor () -> Bool = {
+            UsageExecutionEnvironment.fixtureHome == nil
+        },
+        clock: @escaping @MainActor () -> Date = Date.init,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = {
+            try await Task.sleep(for: $0)
         }, collect: @escaping Collect
     ) {
+        self.ambientPolicy =
+            ambientPolicy
+            ?? ExtensionAmbientPolicy(jobs: [
+                "usage.refresh": ExtensionAmbientCadence(ambient: 900),
+                "usage.limits": ExtensionAmbientCadence(ambient: 900, live: 300),
+            ])
+        self.allowsBackgroundCollection = allowsBackgroundCollection
+        self.clock = clock
+        self.sleep = sleep
         self.dataDirectory = dataDirectory
         self.collect = collect
         self.fetchLimits = fetchLimits
@@ -160,8 +184,46 @@ public final class UsageWorkerController {
         guard !stopped else { throw ExtensionPeerError.unavailable }
     }
 
-    public func startBackgroundCollection(interval: Duration = .seconds(300)) {
-        guard !stopped, backgroundTask == nil, UsageExecutionEnvironment.fixtureHome == nil else {
+    func applyAmbientPolicy(context: NSDictionary) throws {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        try ambientPolicy.apply(context: context)
+    }
+
+    func requestPeriodicCollection(now: Date) throws {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        for job in ["usage.refresh", "usage.limits"] {
+            guard let interval = ambientPolicy.interval(for: job),
+                now.timeIntervalSince(periodicAdmissions[job] ?? .distantPast) >= interval
+            else { continue }
+            if job == "usage.refresh" {
+                _ = try requestRefresh()
+            } else {
+                try requestLimitsRefresh()
+            }
+            periodicAdmissions[job] = now
+        }
+    }
+
+    func nextPeriodicDelay(now: Date) -> TimeInterval? {
+        guard !stopped else { return nil }
+        return ["usage.refresh", "usage.limits"].compactMap { job in
+            ambientPolicy.interval(for: job).map { interval in
+                max(0, interval - now.timeIntervalSince(periodicAdmissions[job] ?? now))
+            }
+        }.min()
+    }
+
+    public func startBackgroundCollection() {
+        guard !stopped, backgroundTask == nil, allowsBackgroundCollection() else {
+            return
+        }
+        let (events, continuation) = AsyncStream<Void>.makeStream(
+            bufferingPolicy: .bufferingNewest(1))
+        backgroundContinuation = continuation
+        do { try ambientPolicy.start { continuation.yield() } } catch {
+            failure = error.localizedDescription
+            continuation.finish()
+            backgroundContinuation = nil
             return
         }
         let cachedURL = dataDirectory.appendingPathComponent("usage.json")
@@ -177,13 +239,27 @@ public final class UsageWorkerController {
             if !Task.isCancelled, let cached, self?.stopped == false {
                 self?.notice = Self.pricingNotice(cached)
             }
-            while !Task.isCancelled {
-                guard let self, !self.stopped else { return }
-                _ = try? self.requestRefresh()
-                try? self.requestLimitsRefresh()
-                do { try await Task.sleep(for: interval) } catch { return }
+            for await _ in events {
+                guard !Task.isCancelled, let self, !self.stopped else { return }
+                let previous = backgroundSleepTask
+                previous?.cancel()
+                await previous?.value
+                guard !Task.isCancelled, !stopped else { return }
+                let now = clock()
+                try? requestPeriodicCollection(now: now)
+                guard let delay = nextPeriodicDelay(now: now) else {
+                    backgroundSleepTask = nil
+                    continue
+                }
+                let sleep = sleep
+                backgroundSleepTask = Task {
+                    do { try await sleep(.seconds(delay)) } catch { return }
+                    guard !Task.isCancelled else { return }
+                    continuation.yield()
+                }
             }
         }
+        continuation.yield()
     }
 
     public func cancelRefresh(matching identifier: String? = nil) async {
@@ -243,6 +319,9 @@ public final class UsageWorkerController {
 
     public func beginShutdown() {
         stopped = true
+        ambientPolicy.stop()
+        backgroundContinuation?.finish()
+        backgroundSleepTask?.cancel()
         backgroundTask?.cancel()
         progress?.close()
         usageTask?.cancel()
@@ -256,6 +335,9 @@ public final class UsageWorkerController {
     public func shutdown() async {
         beginShutdown()
         await backgroundTask?.value
+        await backgroundSleepTask?.value
+        backgroundSleepTask = nil
+        backgroundContinuation = nil
         await limitsSession.clear()
         await usageTask?.value
         await limitsTask?.value

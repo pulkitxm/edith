@@ -72,7 +72,13 @@ import Testing
         try Data(CLIUsageTests.document.utf8).write(to: Repo.usageJSON)
         defer { try? FileManager.default.removeItem(at: Repo.usageJSON) }
         let runtime = ExtensionRuntime()
-        let started = runtime.execute(["operation": "start", "defaultsSuite": suite])
+        let started = runtime.execute([
+            "operation": "start", "defaultsSuite": suite,
+            "ambientPolicy": [
+                "pauseAmbientOnBattery": false,
+                "subscribers": ["usage.refresh": 0, "usage.limits": 0],
+            ],
+        ])
         try #require((started as? NSDictionary)?["ok"] as? Bool == true)
         let catalog = try await invoke(runtime, command: "usage.cli.catalog", payload: Data())
         let metadata = try #require(
