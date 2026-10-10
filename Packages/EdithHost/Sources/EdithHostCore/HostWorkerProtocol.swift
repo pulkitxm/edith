@@ -92,11 +92,13 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
     public let location: String?
     public let machinesWindow: HostMachinesWindowTarget?
     public let herdrWindow: HostHerdrWindowTarget?
+    public let folderChoice: Bool?
 
     public init(
         token: UUID = UUID(), configuration: HostWorkerConfiguration, section: String? = nil,
         relativePath: String? = nil, presentationID: UUID? = nil, location: String? = nil,
-        machinesWindow: HostMachinesWindowTarget? = nil, herdrWindow: HostHerdrWindowTarget? = nil
+        machinesWindow: HostMachinesWindowTarget? = nil, herdrWindow: HostHerdrWindowTarget? = nil,
+        folderChoice: Bool? = nil
     ) {
         kind = "navigation"
         self.token = token
@@ -108,6 +110,7 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
         self.location = location
         self.machinesWindow = machinesWindow
         self.herdrWindow = herdrWindow
+        self.folderChoice = folderChoice
     }
 
     public func validate(configuration: HostWorkerConfiguration) throws {
@@ -128,6 +131,12 @@ public struct HostWorkerNavigationRequest: Codable, Sendable {
                 ].contains($0)
             }) ?? true
         else { throw HostWorkerError.invalidResponse }
+        if let folderChoice {
+            guard folderChoice, extensionID == "herdr", presentationID != nil,
+                location == "settings", section == "agentActivity", relativePath == nil,
+                machinesWindow == nil, herdrWindow == nil
+            else { throw HostWorkerError.invalidResponse }
+        }
         if let machinesWindow {
             guard extensionID == "machines", presentationID != nil, location == nil,
                 section == nil, relativePath == nil, herdrWindow == nil
@@ -157,17 +166,28 @@ public struct HostWorkerNavigationReply: Codable, Sendable {
     public let extensionID: String
     public let version: String
     public let ok: Bool
+    public let selectedPath: String?
+    public let folderCancelled: Bool?
 
-    public init(request: HostWorkerNavigationRequest, ok: Bool) {
+    public init(
+        request: HostWorkerNavigationRequest, ok: Bool, folderResult: HostFolderChoiceResult? = nil
+    ) {
         token = request.token
         extensionID = request.extensionID
         version = request.version
         self.ok = ok
+        selectedPath = folderResult?.selectedPath
+        folderCancelled = folderResult?.cancelled
     }
 
     public func validate(configuration: HostWorkerConfiguration) throws {
         guard extensionID == configuration.extensionID, version == configuration.version else {
             throw HostWorkerError.invalidResponse
+        }
+        if selectedPath != nil || folderCancelled != nil {
+            guard ok, extensionID == "herdr" else { throw HostWorkerError.invalidResponse }
+            try HostFolderChoiceResult(selectedPath: selectedPath, cancelled: folderCancelled)
+                .validate()
         }
     }
 }

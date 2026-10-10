@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-public final class HostWorkerNavigationClient: NSObject {
+open class HostWorkerNavigationClient: NSObject {
     private struct Pending {
         let finish: @MainActor (Result<Void, any Error>) -> Void
         let deadline: Task<Void, Never>
@@ -128,32 +128,37 @@ public final class HostWorkerNavigationClient: NSObject {
     }
 
     @objc(cancelNavigation:)
-    public func cancelNavigation(_ token: NSString) {
+    open func cancelNavigation(_ token: NSString) {
         guard let id = UUID(uuidString: token as String) else { return }
         cancel(id)
     }
 
-    public func receive(_ reply: HostWorkerNavigationReply) throws {
+    open func receive(_ reply: HostWorkerNavigationReply) throws {
         try reply.validate(configuration: configuration)
+        guard reply.selectedPath == nil, reply.folderCancelled == nil else {
+            throw HostWorkerError.invalidResponse
+        }
         finish(reply.token, result: reply.ok ? .success(()) : .failure(HostWorkerError.rejected))
     }
 
-    public func cancelPending() {
+    open func cancelPending() {
         for token in Array(pending.keys) { cancel(token, error: HostWorkerError.rejected) }
     }
 
-    public func invalidate() {
+    open func invalidate() {
         guard !invalidated else { return }
         invalidated = true
         for token in Array(pending.keys) { cancel(token, error: HostWorkerError.exited) }
     }
+
+    open var pendingRequestCount: Int { pending.count }
 
     private func begin(
         _ request: HostWorkerNavigationRequest, timeout: Duration,
         finish: @escaping @MainActor (Result<Void, any Error>) -> Void
     ) throws {
         guard !invalidated, available(), !configuration.recoveryOnly,
-            pending.count < 8, pending[request.token] == nil,
+            pendingRequestCount < 8, pending[request.token] == nil,
             timeout > .zero, timeout <= .seconds(5)
         else { throw HostWorkerError.rejected }
         try request.validate(configuration: configuration)
