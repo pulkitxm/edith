@@ -50,6 +50,32 @@ export function nativeTaskLinkerFlags(definition, role) {
     : [];
 }
 
+export async function copySupportLicenses(
+  root,
+  selections,
+  contents,
+  resourceNames = new Set(),
+) {
+  const products = selections.flatMap((selection) =>
+    selection == null ? [] : supportProducts(selection),
+  );
+  if (!products.includes("EdithExtensionCommands")) return;
+  const name = "swift-argument-parser-license.txt";
+  const expected = await readFile(
+    resolve(root, "Packages/ExtensionSupport/Licenses", name),
+  );
+  const resources = resolve(contents, "Resources");
+  const destination = resolve(resources, name);
+  if (resourceNames.has(name)) {
+    if (!(await readFile(destination)).equals(expected))
+      throw new Error("Conflicting private SDK license resource");
+    return;
+  }
+  await mkdir(resources, { recursive: true });
+  await writeFile(destination, expected);
+  resourceNames.add(name);
+}
+
 export async function copyNativeResources(
   root,
   definition,
@@ -539,6 +565,17 @@ export async function buildExtensionPackage({
       );
       nativeFlags.push(...nativePackageLinkFlags(root, definition, contents));
     }
+    await copySupportLicenses(
+      root,
+      [
+        supportProduct,
+        nativePolicy.roles.includes(role)
+          ? definition.nativeSupportProduct
+          : undefined,
+      ],
+      contents,
+      resourceNames,
+    );
     execFileSync(
       "xcrun",
       [

@@ -14,6 +14,7 @@ import { join } from "node:path";
 import {
   copyNativeFrameworks,
   copyNativeResources,
+  copySupportLicenses,
   nativeClangModuleFlags,
   nativePackageLinkFlags,
   nativeRolePolicy,
@@ -313,5 +314,83 @@ test("native system module directories remain inside their owned package", () =>
         nativeClangDirectories,
       }),
     ).toThrow("Invalid native Clang directory");
+  }
+});
+
+const parserLicense = "swift-argument-parser-license.txt";
+
+async function licenseFixture() {
+  const root = await mkdtemp(join(tmpdir(), "extension-sdk-license-"));
+  const source = join(root, "Packages/ExtensionSupport/Licenses");
+  await mkdir(source, { recursive: true });
+  await writeFile(join(source, parserLicense), "synthetic parser notice\n");
+  return root;
+}
+
+test.each([
+  ["EdithExtensionCommands"],
+  [["EdithExtensionDocuments", "EdithExtensionCommands"]],
+  [null, "EdithExtensionCommands"],
+])(
+  "every linked Commands closure carries its parser notice %j",
+  async (...selections) => {
+    const root = await licenseFixture();
+    try {
+      const contents = join(root, "role.bundle/Contents");
+      const names = new Set();
+      await copySupportLicenses(root, selections, contents, names);
+      expect(
+        await readFile(join(contents, "Resources", parserLicense), "utf8"),
+      ).toBe("synthetic parser notice\n");
+      expect([...names]).toEqual([parserLicense]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test("an explicit identical SDK notice remains valid while conflicting bytes fail", async () => {
+  const root = await licenseFixture();
+  try {
+    const contents = join(root, "role.bundle/Contents");
+    const resources = join(contents, "Resources");
+    await mkdir(resources, { recursive: true });
+    const destination = join(resources, parserLicense);
+    const names = new Set([parserLicense]);
+    await writeFile(destination, "synthetic parser notice\n");
+    await copySupportLicenses(
+      root,
+      ["EdithExtensionCommands"],
+      contents,
+      names,
+    );
+    expect(names.size).toBe(1);
+    await writeFile(destination, "conflicting notice");
+    await expect(
+      copySupportLicenses(root, ["EdithExtensionCommands"], contents, names),
+    ).rejects.toThrow("Conflicting private SDK license resource");
+    expect(await readFile(destination, "utf8")).toBe("conflicting notice");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("UI-only and absent SDK selections need no parser notice", async () => {
+  const root = await mkdtemp(join(tmpdir(), "extension-sdk-no-license-"));
+  try {
+    const contents = join(root, "role.bundle/Contents");
+    const names = new Set();
+    await copySupportLicenses(
+      root,
+      ["EdithExtensionUI", null],
+      contents,
+      names,
+    );
+    expect(names.size).toBe(0);
+    await expect(
+      readFile(join(contents, "Resources", parserLicense)),
+    ).rejects.toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
