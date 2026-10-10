@@ -5,6 +5,12 @@ name: Hosted host test diagnostics
       expected_sha:
         required: true
         type: string
+      release:
+        required: true
+        type: boolean
+      rebuild:
+        required: true
+        type: string
 permissions:
   contents: read
 concurrency:
@@ -12,12 +18,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   serial-core-and-ui:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' && inputs.expected_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-host-test-diagnostics' || github.ref == 'refs/heads/feat/extension-marketplace' || github.ref == 'refs/heads/main') && inputs.expected_sha == github.sha && !inputs.release && inputs.rebuild == ''
     runs-on: macos-26
     timeout-minutes: 50
     env:
       EDITH_HOSTED_HOST_TESTS: "1"
       EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
+      EDITH_HOSTED_RELEASE: "${{ inputs.release }}"
+      EDITH_HOSTED_REBUILD: "${{ inputs.rebuild }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

@@ -18,8 +18,16 @@ class WatchdogTests(unittest.TestCase):
                        'RUNNER_ENVIRONMENT': 'github-hosted', 'EDITH_HOSTED_HOST_TESTS': '1',
                        'GITHUB_REPOSITORY': 'pulkitxm/edith',
                        'GITHUB_REF': 'refs/heads/feat/hosted-host-test-diagnostics',
-                       'EXPECTED_SOURCE_SHA': 'a' * 40}
+                       'GITHUB_ACTOR_ID': '65671483', 'EDITH_HOSTED_RELEASE': 'false',
+                       'EDITH_HOSTED_REBUILD': '', 'EXPECTED_SOURCE_SHA': 'a' * 40}
         watchdog.admit(environment, 'a' * 40)
+        for ref in ['refs/heads/main', 'refs/heads/feat/extension-marketplace',
+                    'refs/heads/feat/hosted-host-test-diagnostics']:
+            for actor in ['65671483', '320458784']:
+                watchdog.admit({**environment, 'GITHUB_REF': ref, 'GITHUB_ACTOR_ID': actor}, 'a' * 40)
+        for ref in ['refs/heads/feature', 'refs/tags/main', 'refs/pull/1220/merge']:
+            with self.assertRaises(ValueError):
+                watchdog.admit({**environment, 'GITHUB_REF': ref}, 'a' * 40)
         for key in environment:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 watchdog.admit({**environment, key: 'invalid'}, 'a' * 40)

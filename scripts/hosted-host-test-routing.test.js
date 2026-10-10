@@ -67,3 +67,80 @@ test("normal script CI executes pure watchdog ownership and deadline tests witho
   );
   expect(output).toBe("");
 });
+
+test("maintained diagnostics admit only reviewed nonpublishing owner refs and immutable source", () => {
+  const route = ci
+    .split("  hosted-host-tests:\n")[1]
+    .split("  hosted-original-shell:\n")[0];
+  const routeExpression = route.match(/ {4}if: ([^\n]+)/)[1];
+  const calledExpression = diagnostic.match(/ {4}if: ([^\n]+)/)[1];
+  const routeAllows = new Function(
+    "github",
+    "inputs",
+    `return Boolean(${routeExpression})`,
+  );
+  const calledAllows = new Function(
+    "github",
+    "inputs",
+    `return Boolean(${calledExpression})`,
+  );
+  const github = {
+    event_name: "workflow_dispatch",
+    repository: "pulkitxm/edith",
+    actor_id: "65671483",
+    ref: "refs/heads/main",
+    sha: "a".repeat(40),
+  };
+  const inputs = {
+    hosted_host_tests_sha: github.sha,
+    hosted_shell_journey_sha: "",
+    expected_sha: github.sha,
+    release: false,
+    rebuild: "",
+  };
+  for (const ref of [
+    "refs/heads/main",
+    "refs/heads/feat/extension-marketplace",
+    "refs/heads/feat/hosted-host-test-diagnostics",
+  ]) {
+    for (const actor of ["65671483", "320458784"]) {
+      expect(routeAllows({ ...github, ref, actor_id: actor }, inputs)).toBe(
+        true,
+      );
+      expect(calledAllows({ ...github, ref, actor_id: actor }, inputs)).toBe(
+        true,
+      );
+    }
+  }
+  for (const changed of [
+    { ref: "refs/heads/other" },
+    { ref: "refs/tags/main" },
+    { ref: "refs/pull/1220/merge" },
+    { actor_id: "999" },
+    { repository: "other/edith" },
+    { event_name: "pull_request" },
+    { sha: "b".repeat(40) },
+  ]) {
+    expect(routeAllows({ ...github, ...changed }, inputs)).toBe(false);
+    expect(calledAllows({ ...github, ...changed }, inputs)).toBe(false);
+  }
+  for (const changed of [{ release: true }, { rebuild: "v1.0.0" }]) {
+    expect(routeAllows(github, { ...inputs, ...changed })).toBe(false);
+    expect(calledAllows(github, { ...inputs, ...changed })).toBe(false);
+  }
+  expect(
+    routeAllows(github, { ...inputs, hosted_shell_journey_sha: github.sha }),
+  ).toBe(false);
+  expect(routeAllows(github, { ...inputs, hosted_host_tests_sha: "" })).toBe(
+    false,
+  );
+  expect(calledAllows(github, { ...inputs, expected_sha: "" })).toBe(false);
+  expect(route).toContain(`release: \${{ inputs.release }}`);
+  expect(route).toContain(`rebuild: \${{ inputs.rebuild }}`);
+  expect(diagnostic).toContain(
+    `EDITH_HOSTED_RELEASE: "\${{ inputs.release }}"`,
+  );
+  expect(diagnostic).toContain(
+    `EDITH_HOSTED_REBUILD: "\${{ inputs.rebuild }}"`,
+  );
+});

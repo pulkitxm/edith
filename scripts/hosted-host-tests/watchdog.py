@@ -93,9 +93,13 @@ class OwnedProcesses:
 def admit(environment, source):
     required = {'GITHUB_ACTIONS': 'true', 'RUNNER_OS': 'macOS',
                 'RUNNER_ENVIRONMENT': 'github-hosted', 'EDITH_HOSTED_HOST_TESTS': '1',
-                'GITHUB_REPOSITORY': 'pulkitxm/edith',
-                'GITHUB_REF': 'refs/heads/feat/hosted-host-test-diagnostics'}
-    if any(environment.get(key) != value for key, value in required.items()):
+                'GITHUB_REPOSITORY': 'pulkitxm/edith', 'EDITH_HOSTED_RELEASE': 'false',
+                'EDITH_HOSTED_REBUILD': ''}
+    allowed_refs = {'refs/heads/feat/hosted-host-test-diagnostics',
+                    'refs/heads/feat/extension-marketplace', 'refs/heads/main'}
+    if (any(environment.get(key) != value for key, value in required.items())
+            or environment.get('GITHUB_REF') not in allowed_refs
+            or environment.get('GITHUB_ACTOR_ID') not in {'65671483', '320458784'}):
         raise ValueError('Disposable hosted test admission failed')
     expected = environment.get('EXPECTED_SOURCE_SHA', '')
     if not re.fullmatch('[a-f0-9]{40}', expected) or expected != source:
