@@ -14,6 +14,21 @@ public struct ExtensionPackageStore: Sendable {
             .appendingPathComponent(package.architecture).appendingPathComponent(package.version)
     }
 
+    public func payloadDirectory(for package: ExtensionPackage) -> URL {
+        let payload = directory(for: package).appendingPathComponent(package.id)
+        let carrier = payload.appendingPathComponent("ExtensionCarrier.app")
+        guard FileManager.default.fileExists(atPath: carrier.path) else { return payload }
+        return carrier.appendingPathComponent(
+            "Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload"
+        ).appendingPathComponent(package.id)
+    }
+
+    public func roleBundle(
+        for package: ExtensionPackage, role: ExtensionBundleRuntime.Role
+    ) -> URL {
+        payloadDirectory(for: package).appendingPathComponent("\(role.rawValue).bundle")
+    }
+
     public func installedPackages() throws -> [ExtensionPackage] {
         let state = root.appendingPathComponent("installed.json")
         guard FileManager.default.fileExists(atPath: state.path) else { return [] }

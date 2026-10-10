@@ -10,6 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { extensionUIExtensionPoint } from "./build-extension-ui-carrier.mjs";
 
 const root = process.cwd();
 const packageDirectory = resolve(root, "Packages/EdithHost");
@@ -157,6 +158,13 @@ execFileSync("python3", [
   JSON.stringify(plist),
   join(contents, "Info.plist"),
 ]);
+await mkdir(join(contents, "Extensions"), { recursive: true });
+execFileSync("python3", [
+  "-c",
+  "import json,plistlib,sys; plistlib.dump(json.loads(sys.argv[1]),open(sys.argv[2],'wb'))",
+  JSON.stringify(extensionUIExtensionPoint(identity)),
+  join(contents, "Extensions/ExtensionUI.appextensionpoints"),
+]);
 const linked = execFileSync("otool", ["-L", executable], { encoding: "utf8" });
 for (const line of linked.split("\n").slice(1)) {
   const dependency = line.trim().split(" ")[0];
@@ -172,6 +180,11 @@ for (const line of linked.split("\n").slice(1)) {
 execFileSync("install_name_tool", [
   "-add_rpath",
   "@executable_path/../Frameworks",
+  executable,
+]);
+execFileSync("install_name_tool", [
+  "-add_rpath",
+  "@executable_path/../../../../Frameworks",
   executable,
 ]);
 for (const file of [executable]) {
