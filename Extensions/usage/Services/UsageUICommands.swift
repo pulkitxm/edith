@@ -121,8 +121,11 @@ struct UsageUILimits: Codable, Sendable {
             }
             try Task.checkCancellation()
             guard !stopped else { throw ExtensionPeerError.unavailable }
-            return try encoder.encode(
-                UsageCompactLimitsSnapshot.project(snapshot, tile: request.tile))
+            let value = UsageCompactLimitsSnapshot.project(snapshot, tile: request.tile)
+            try value.validate()
+            let data = try encoder.encode(value)
+            guard data.count <= 131_072 else { throw ExtensionPeerError.invalidRequest }
+            return data
         case "usage.ui.card":
             let tile = try JSONDecoder().decode(SurfaceTile.self, from: payload)
             guard [.usage, .activity].contains(tile.widget), (1...365).contains(tile.days),

@@ -48,6 +48,25 @@ struct UsageCompactLimitsSnapshot: Codable, Equatable, Sendable {
     let updatedAt: Date
     let sources: [SurfaceSourceChoice]
 
+    func validate() throws {
+        let text: (String) -> Bool = { $0.utf8.count <= 4096 && !$0.utf8.contains(0) }
+        guard metrics.count <= 16, rows.count <= 64, sources.count <= 16,
+            Set(metrics.map(\.id)).count == metrics.count, Set(rows.map(\.id)).count == rows.count,
+            updatedAt.timeIntervalSince1970.isFinite,
+            metrics.allSatisfy({
+                text($0.id) && text($0.title) && text($0.value)
+                    && ($0.fraction.map { $0.isFinite && (0...1).contains($0) } ?? true)
+            }),
+            rows.allSatisfy({
+                text($0.id) && text($0.title) && text($0.value) && text($0.icon) && text($0.source)
+                    && text($0.field) && $0.details.count <= 16
+                    && $0.details.allSatisfy { text($0.field) && text($0.text) }
+                    && ($0.progress.map { $0.isFinite && (0...1).contains($0) } ?? true)
+            }),
+            sources.allSatisfy({ text($0.id) && text($0.title) }), message.map(text) ?? true
+        else { throw ExtensionPeerError.invalidRequest }
+    }
+
     static func project(
         _ snapshot: LimitsTopicSnapshot, tile: SurfaceTile, now: Date = Date()
     ) -> UsageCompactLimitsSnapshot {

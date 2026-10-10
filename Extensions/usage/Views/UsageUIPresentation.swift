@@ -110,10 +110,12 @@ struct UsageUISceneRoute: Equatable {
         guard !stopping, let client, let request = route.surfaceRequest,
             request.tile.widget == .limits
         else { throw ExtensionPeerError.unavailable }
-        let value = try await JSONDecoder().decode(
-            UsageCompactLimitsSnapshot.self,
-            from: client.invoke(
-                "usage.ui.compact.limits", payload: request.encoded(providerID: "usage")))
+        let data = try await client.invoke(
+            "usage.ui.compact.limits", payload: request.encoded(providerID: "usage"))
+        guard data.count <= 131_072 else { throw ExtensionPeerError.invalidRequest }
+        let value = try JSONDecoder().decode(UsageCompactLimitsSnapshot.self, from: data)
+        try value.validate()
+        try Task.checkCancellation()
         guard !stopping else { throw ExtensionPeerError.unavailable }
         return value
     }
@@ -125,6 +127,7 @@ struct UsageUISceneRoute: Equatable {
         let data = try await client.invoke(
             "surface.snapshot", payload: request.encoded(providerID: "usage"))
         let value = try SurfaceSnapshot.decode(data, providerID: "usage")
+        try Task.checkCancellation()
         guard !stopping else { throw ExtensionPeerError.unavailable }
         return value
     }

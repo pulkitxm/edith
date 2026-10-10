@@ -22,16 +22,28 @@ final class UsagePresenterState {
     }
 
     private var values: [String: String] {
-        (client ?? UsageUIClient.current)?.presentationValues ?? privacy?.values ?? [:]
+        if let client = client ?? UsageUIClient.current {
+            return client.stopped ? [:] : client.presentationValues ?? [:]
+        }
+        return privacy?.values ?? [:]
     }
     var active: Bool {
-        if let client = client ?? UsageUIClient.current, client.presentationValues == nil {
+        if let client = client ?? UsageUIClient.current,
+            client.stopped || client.presentationValues == nil
+        {
             return true
         }
         return values["active"] == "1"
     }
     var money: Bool { values["blurMoney"].map { $0 != "0" } ?? true }
-    var usage: Bool { values["blurUsage"].map { $0 != "0" } ?? false }
+    var usage: Bool {
+        if let client = client ?? UsageUIClient.current,
+            client.stopped || client.presentationValues == nil
+        {
+            return true
+        }
+        return values["blurUsage"].map { $0 != "0" } ?? false
+    }
     func hides(_ category: String) -> Bool {
         active && (values["blur" + category].map { $0 != "0" } ?? true)
     }
@@ -63,7 +75,9 @@ private struct UsageCategoryPrivacy: ViewModifier {
         let hidden: Bool
         if let client {
             let values = client.presentationValues
-            hidden = values == nil || (values?["active"] == "1" && values?["blur" + key] != "0")
+            hidden =
+                client.stopped || values == nil
+                || (values?["active"] == "1" && values?["blur" + key] != "0")
         } else {
             hidden = UsagePresenterState.shared.hides(key)
         }

@@ -4,6 +4,7 @@ import EdithExtensionUI
 import Foundation
 import SwiftUI
 import Testing
+import Vision
 
 @testable import UsageExtension
 
@@ -179,6 +180,88 @@ import Testing
         #expect(selected.rows.allSatisfy { $0.source == "claude" })
         tile.sourceIDs = []
         #expect(UsageCompactLimitsSnapshot.project(snapshot, tile: tile, now: now).rows.isEmpty)
+    }
+
+    @Test func privacyIsClosedBeforeValidationAndAfterRelease() async throws {
+        let client = UsageUIClient(invoke: { _, _ in throw ExtensionPeerError.unavailable })
+        let presenter = UsagePresenterState(client: client)
+        #expect(presenter.active && presenter.money && presenter.usage && presenter.hides("Usage"))
+        await client.stopAndWait()
+        #expect(presenter.active && presenter.money && presenter.usage && presenter.hides("Usage"))
+        presenter.shutdown()
+    }
+
+    @Test func nativeCompactInteriorsRenderWithoutCreatingAnyWindow() async throws {
+        let oldZoom = UIScale.current
+        defer { UIScale.apply(oldZoom) }
+        let tile = SurfaceTile(.usage)
+        let route = try #require(UsageUISceneRoute(context: context("notch", tile)))
+        let scene = UsageUIPresentation(id: UUID(), route: route, client: nil)
+        defer { scene.shutdown() }
+        let snapshot = SurfaceUsageSnapshot(
+            document: try JSONDecoder().decode(
+                SurfaceUsageDocument.self, from: Data(CLIUsageTests.document.utf8)), tile: tile)
+        let limitsTile = SurfaceTile(.limits)
+        let limits = UsageCompactLimitsSnapshot.project(
+            LimitsTopicSnapshot(
+                refreshedAt: Date(),
+                providers: [
+                    .init(
+                        provider: .claude,
+                        session: .init(percent: 25, resetsAt: Date().addingTimeInterval(3600)),
+                        week: nil)
+                ], failure: nil), tile: limitsTile)
+        for width in [300.0, 640.0] {
+            for zoom in [1.0, 1.5] {
+                UIScale.apply(zoom)
+                for scheme in [ColorScheme.light, .dark] {
+                    let views: [(AnyView, String)] = [
+                        (
+                            AnyView(
+                                UsageHomeUsageCard(tile: tile, snapshot: snapshot, scene: scene)),
+                            "Today"
+                        ),
+                        (
+                            AnyView(
+                                UsageHomeLimitsCard(
+                                    tile: limitsTile, scene: scene, snapshot: limits)), "Providers"
+                        ),
+                    ]
+                    for (view, heading) in views {
+                        let host = NSHostingView(
+                            rootView: view.environment(\.automaticViewActionsEnabled, false)
+                                .environment(\.compactLayout, width < 500).environment(
+                                    \.colorScheme, scheme
+                                ).transaction { $0.animation = nil }.frame(
+                                    width: width, height: 500
+                                ).background(UsageExtension.DashSkin.paper(scheme == .dark)))
+                        host.sizingOptions = []
+                        host.frame = CGRect(x: 0, y: 0, width: width, height: 500)
+                        host.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+                        host.wantsLayer = true
+                        #expect(host.window == nil)
+                        for _ in 0..<3 {
+                            host.layoutSubtreeIfNeeded();
+                            try await Task.sleep(for: .milliseconds(20))
+                        }
+                        let bitmap = try #require(
+                            host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                        host.cacheDisplay(in: host.bounds, to: bitmap)
+                        let image = try #require(bitmap.cgImage)
+                        let request = VNRecognizeTextRequest()
+                        request.recognitionLevel = .accurate
+                        try VNImageRequestHandler(cgImage: image).perform([request])
+                        #expect(
+                            request.results?.contains(where: {
+                                $0.topCandidates(1).first?.string.localizedCaseInsensitiveContains(
+                                    heading) == true
+                            }) == true)
+                        #expect(host.window == nil)
+                    }
+                }
+            }
+        }
+        await scene.shutdownAndWait()
     }
 
     @Test func compactNavigationUsesExactOwningPresentationAndUnavailableHostFailsClosed()

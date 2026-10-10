@@ -14,6 +14,11 @@ struct UsageHomeLimitsCard: View {
     @Environment(\.surfaceFillHeight) private var fillHeight
     @Environment(\.automaticViewActionsEnabled) private var active
 
+    init(tile: SurfaceTile, scene: UsageUIPresentation, snapshot: UsageCompactLimitsSnapshot? = nil)
+    {
+        self.tile = tile; self.scene = scene; _snapshot = State(initialValue: snapshot)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(tile.dense ? 8 : 12)) {
             if tile.showTitle || tile.showActions {
