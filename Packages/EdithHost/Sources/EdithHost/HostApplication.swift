@@ -37,7 +37,9 @@ struct HostApplication: App {
                             marketplace: marketplace, presenter: remotePresenter, updater: updater,
                             showWelcome: { coreServices?.showWelcome() },
                             panelShortcutChanged: { coreServices?.panelShortcutChanged() },
-                            additionalSettings: { coreServices?.settings($0) },
+                            additionalSettings: {
+                                coreServices?.settings($0, presenter: remotePresenter)
+                            },
                             coreOnline: coreServices?.online ?? false,
                             coreSummary: coreServices?.activityLabel ?? "Starting",
                             sectionWindows: sectionWindows, windowNavigation: windowNavigation,
@@ -222,7 +224,7 @@ struct HostApplication: App {
                         marketplace: loaded, updater: updater, destination: page,
                         presenter: presenter, showWelcome: { services.showWelcome() },
                         panelShortcutChanged: { services.panelShortcutChanged() },
-                        additionalSettings: { services.settings($0) },
+                        additionalSettings: { services.settings($0, presenter: presenter) },
                         select: { id in
                             guard detached?.focusExisting(id) != true else { return }
                             SharedDefaults.store.set(

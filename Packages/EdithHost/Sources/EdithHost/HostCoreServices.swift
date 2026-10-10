@@ -183,9 +183,11 @@ import SwiftUI
         NSPasteboard.general.setString(value, forType: .string)
     }
 
-    func settings(_ category: String) -> AnyView? {
+    func settings(
+        _ category: String, presenter: (any HostExtensionContentPresenting)?
+    ) -> AnyView? {
         switch category {
-        case "agent": AnyView(HostBackgroundPage(services: self))
+        case "agent": AnyView(HostBackgroundPage(services: self, presenter: presenter))
         case "data": AnyView(HostDataPage(services: self))
         case "icloud": AnyView(HostCloudPage(services: self))
         case "home-setup":
