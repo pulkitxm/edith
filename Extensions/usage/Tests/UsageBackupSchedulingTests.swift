@@ -8,7 +8,9 @@ import Testing
         var calls = 0
         var active = 0
         var maximum = 0
-        let queue = UsageBackupEventQueue(debounce: .milliseconds(20), enabled: { true }) {
+        let queue = UsageBackupEventQueue(
+            debounce: .milliseconds(20), onBattery: { false }, enabled: { true }
+        ) {
             calls += 1; active += 1; maximum = max(maximum, active)
             defer { active -= 1 }
             if calls == 1 { try await Task.sleep(for: .milliseconds(60)) }
@@ -29,7 +31,9 @@ import Testing
         var calls = 0
         var active = false
         var cancelled = false
-        let queue = UsageBackupEventQueue(debounce: .zero, enabled: { enabled }) {
+        let queue = UsageBackupEventQueue(
+            debounce: .zero, onBattery: { false }, enabled: { enabled }
+        ) {
             calls += 1; active = true
             defer { active = false }
             if calls == 1 {
@@ -55,11 +59,15 @@ import Testing
 
     @Test func stopCancelsDebounceAndDoesNotRestartAfterReplacement() async {
         var oldCalls = 0, newCalls = 0
-        let old = UsageBackupEventQueue(debounce: .seconds(30), enabled: { true }) { oldCalls += 1 }
+        let old = UsageBackupEventQueue(
+            debounce: .seconds(30), onBattery: { false }, enabled: { true }
+        ) { oldCalls += 1 }
         old.changed()
         await old.shutdown()
         old.changed()
-        let replacement = UsageBackupEventQueue(debounce: .zero, enabled: { true }) {
+        let replacement = UsageBackupEventQueue(
+            debounce: .zero, onBattery: { false }, enabled: { true }
+        ) {
             newCalls += 1
         }
         replacement.changed()
@@ -72,7 +80,7 @@ import Testing
     @Test func failedTransferRetriesWithoutParallelWork() async {
         var calls = 0
         let queue = UsageBackupEventQueue(
-            debounce: .zero, retry: .milliseconds(20), enabled: { true }
+            debounce: .zero, retry: .milliseconds(20), onBattery: { false }, enabled: { true }
         ) {
             calls += 1
             if calls == 1 { throw Failure() }
@@ -86,7 +94,9 @@ import Testing
 
     @Test func cancellingPendingRetryDrainsAndDiscardsTheRetry() async throws {
         var calls = 0
-        let queue = UsageBackupEventQueue(debounce: .zero, retry: .seconds(30), enabled: { true }) {
+        let queue = UsageBackupEventQueue(
+            debounce: .zero, retry: .seconds(30), onBattery: { false }, enabled: { true }
+        ) {
             calls += 1
             throw Failure()
         }
