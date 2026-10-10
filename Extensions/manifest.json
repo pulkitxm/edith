@@ -722,9 +722,7 @@
         "Extensions/plugins/Resources/qwen.svg"
       ]
     },
-    "inputs": [
-      "Extensions/plugins"
-    ],
+    "inputs": ["Extensions/plugins"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -733,7 +731,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "Packages/ExtensionSupport/Sources/EdithExtensionDocuments",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
@@ -982,9 +981,7 @@
     "supportProduct": "EdithExtensionDocuments",
     "nativePackage": "Packages/EdithDocsWorker",
     "nativeProduct": "EdithDocsWorker",
-    "nativeResources": [
-      "EdithDocsWorker_EdithDocsWorker.bundle"
-    ],
+    "nativeResources": ["EdithDocsWorker_EdithDocsWorker.bundle"],
     "roles": {
       "app": [
         "Extensions/docs/CLI/DocsCLIExecution.swift",
@@ -998,16 +995,14 @@
         "Extensions/docs/Surface.swift"
       ]
     },
-    "inputs": [
-      "Extensions/docs",
-      "Packages/EdithDocsWorker"
-    ],
+    "inputs": ["Extensions/docs", "Packages/EdithDocsWorker"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "nativeLicenses": [
@@ -1033,9 +1028,7 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionArchive",
-    "inputs": [
-      "Extensions/latex"
-    ],
+    "inputs": ["Extensions/latex"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1044,7 +1037,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "Packages/ExtensionSupport/Sources/EdithExtensionArchive",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "roles": {
@@ -1091,9 +1085,7 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "supportProduct": "EdithExtensionCommands",
-    "inputs": [
-      "Extensions/companion"
-    ],
+    "inputs": ["Extensions/companion"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1101,7 +1093,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "roles": {
@@ -1677,9 +1670,7 @@
         "Extensions/bifrost/Views/BifrostSettings.swift"
       ]
     },
-    "inputs": [
-      "Extensions/bifrost"
-    ],
+    "inputs": ["Extensions/bifrost"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1687,12 +1678,11 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
-    "testTargets": [
-      "ci-extension-bifrost"
-    ],
+    "testTargets": ["ci-extension-bifrost"],
     "sameExecutableWorker": true
   },
   {
@@ -2069,14 +2059,13 @@
         "Extensions/downloads/Worker.swift"
       ]
     },
-    "inputs": [
-      "Extensions/downloads"
-    ],
+    "inputs": ["Extensions/downloads"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "contractVersion": 1,
@@ -2126,15 +2115,14 @@
         "Extensions/seoAudit/Views/SEOAuditProjectView.swift"
       ]
     },
-    "inputs": [
-      "Extensions/seoAudit"
-    ],
+    "inputs": ["Extensions/seoAudit"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "sameExecutableWorker": true
@@ -2377,15 +2365,14 @@
         "Extensions/codeStats/Views/CodeStatsTrendCards.swift"
       ]
     },
-    "inputs": [
-      "Extensions/codeStats"
-    ],
+    "inputs": ["Extensions/codeStats"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "contractVersion": 1,
