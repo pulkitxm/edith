@@ -14,7 +14,8 @@ import Testing
             let executable = URL(fileURLWithPath: path)
             let value = try #require(
                 UsageLauncherFixture.capture(
-                    extensionID: "usage", executable: executable, hostIdentifier: identifier
+                    fixtureOwner: "usage", extensionID: "usage", executable: executable,
+                    hostIdentifier: identifier
                 ) { application, actualIdentifier in
                     #expect(actualIdentifier == identifier)
                     captured.append(application)
@@ -27,10 +28,23 @@ import Testing
         #expect(captured[1] == captured[2])
     }
 
+    @Test func machinesUsagePeerNeverCapturesMissingPublicLauncher() {
+        let executable = URL(fileURLWithPath: "/synthetic/MachinesFixture.app/Contents/MacOS/Edith")
+        let value: String? = UsageLauncherFixture.capture(
+            fixtureOwner: "machines", extensionID: "usage", executable: executable,
+            hostIdentifier: "synthetic"
+        ) { _, _ in
+            Issue.record("An authenticated Usage peer is not the owning Usage fixture")
+            return "unexpected"
+        }
+        #expect(value == nil)
+    }
+
     @Test func unrelatedOwnersNeverCaptureAndInvalidSelectedLauncherFailsClosed() {
         let executable = URL(fileURLWithPath: "/synthetic/Fixture.app/Contents/MacOS/Edith")
         let absent: String? = UsageLauncherFixture.capture(
-            extensionID: "calendar", executable: executable, hostIdentifier: "unused"
+            fixtureOwner: "usage", extensionID: "calendar", executable: executable,
+            hostIdentifier: "unused"
         ) { _, _ in
             Issue.record("Only the Usage fixture admits the public launcher")
             return "unexpected"
@@ -39,7 +53,8 @@ import Testing
         enum Failure: Error { case rejected }
         #expect(throws: Failure.self) {
             try UsageLauncherFixture.capture(
-                extensionID: "usage", executable: executable, hostIdentifier: "synthetic"
+                fixtureOwner: "usage", extensionID: "usage", executable: executable,
+                hostIdentifier: "synthetic"
             ) { _, _ -> String in
                 throw Failure.rejected
             }

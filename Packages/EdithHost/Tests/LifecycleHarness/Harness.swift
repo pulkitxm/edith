@@ -193,7 +193,7 @@ struct HostLifecycleHarness {
                 workerLogs.append(log)
                 logHandles.append(handle)
                 let publicLauncher = try UsageLauncherFixture.capture(
-                    extensionID: package.id, executable: executable,
+                    fixtureOwner: extensionID, extensionID: package.id, executable: executable,
                     hostIdentifier: identity.identifier)
                 return
                     HostWorker(
