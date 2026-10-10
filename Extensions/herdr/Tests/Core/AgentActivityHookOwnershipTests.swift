@@ -20,14 +20,14 @@ import Testing
             enabled: true)
         #expect(
             String(decoding: try Data(contentsOf: url), as: UTF8.self).contains(
-                "activity.hook.claude"))
+                "agent activity hook --provider claude"))
         let restart = AgentActivityHookFiles(root: root.appendingPathComponent("private"))
         try await restart.suspend(installer)
         #expect(try Data(contentsOf: url) == original)
         try await restart.resume(installer)
         #expect(
             String(decoding: try Data(contentsOf: url), as: UTF8.self).contains(
-                "activity.hook.claude"))
+                "agent activity hook --provider claude"))
         #expect(
             !FileManager.default.fileExists(
                 atPath: installer.configurationURL(provider: .codex, scope: .global).path))
@@ -51,7 +51,7 @@ import Testing
         try await files.suspend(installer)
         let clean = try Data(contentsOf: url)
         #expect(String(decoding: clean, as: UTF8.self).contains("foreign"))
-        #expect(!String(decoding: clean, as: UTF8.self).contains("activity.hook."))
+        #expect(!String(decoding: clean, as: UTF8.self).contains("agent activity hook"))
         let changed = Data("{\"theme\":\"new-owner\"}".utf8)
         try changed.write(to: url)
         try await files.resume(installer)

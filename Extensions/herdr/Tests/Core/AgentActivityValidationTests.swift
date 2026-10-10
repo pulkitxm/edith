@@ -1,6 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 import Testing
+
 @testable import HerdrUI
 
 @Suite struct AgentActivityValidationTests {
@@ -25,15 +26,19 @@ import Testing
     }
 
     @Test(arguments: AgentActivityProvider.allCases)
-    func providerSetupUsesOwnedSameExecutableGateway(_ provider: AgentActivityProvider) throws {
+    func providerSetupUsesOriginalPublicSameExecutableHook(_ provider: AgentActivityProvider) throws
+    {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let installer = AgentActivityHookInstaller(
             home: root, executable: root.appendingPathComponent("Edith.app/Contents/MacOS/Edith"))
         let plan = try installer.plan(provider: provider, enabled: true)
         let text = String(decoding: try #require(plan.replacement), as: UTF8.self)
-        #expect(text.contains("invoke"))
-        #expect(text.contains("herdr"))
-        #expect(text.contains("activity.hook." + provider.rawValue))
+        #expect(text.contains("--provider"))
+        #expect(text.contains(provider.rawValue))
+        #expect(text.contains("--integration-id"))
+        #expect(text.contains("edith-surfaces"))
+        #expect(text.contains("TMUX_PANE"))
+        #expect(!text.contains("activity.hook."))
         #expect(!text.contains("Contents/MacOS/ed\""))
         #expect(!FileManager.default.fileExists(atPath: root.path))
     }
