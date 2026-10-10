@@ -15,6 +15,8 @@ import Observation
     private var preparation: Task<Void, Error>?
     private(set) var prepared = false
     private var preferencesTask: Task<Void, Never>?
+    private var preferencesGeneration: UUID?
+    private var pendingPreferenceChanges: [String: UsageUIPreferences.Value]?
     private var observer: NSObjectProtocol?
     private(set) var presentationValues: [String: String]?
     private var usageUpdatedAt: Double?
@@ -118,7 +120,7 @@ import Observation
     func prepare() async throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         if preparation == nil {
-            preparation = Task {
+            preparation = Task { [self] in
                 do {
                     let snapshot: UsageUIPreferences = try await value("usage.ui.preferences")
                     try Task.checkCancellation()
@@ -160,6 +162,7 @@ import Observation
     }
 
     func refreshState() async throws {
+        try await refreshPreferences()
         presentationValues = try await value("usage.ui.presentation", as: [String: String].self)
         let data = try await invoke("usage.status")
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -188,6 +191,22 @@ import Observation
         }
     }
 
+    func refreshPreferences() async throws {
+        guard prepared, preferencesTask == nil, let previous = preferences else { return }
+        let snapshot: UsageUIPreferences = try await value("usage.ui.preferences")
+        guard !stopped, preferencesTask == nil else { return }
+        let local = UsageUIPreferences.read(SharedDefaults.store)
+        if local.values.contains(where: {
+            UsageUIPreferences.editableKeys.contains($0.key) && previous.values[$0.key] != $0.value
+        }) {
+            syncPreferences(); return
+        }
+        guard snapshot != previous else { return }
+        preferences = snapshot
+        snapshot.apply(to: SharedDefaults.store, replacing: true)
+        preferences = UsageUIPreferences.read(SharedDefaults.store)
+    }
+
     func perform(_ command: String, object: [String: Any] = [:]) {
         guard !stopped else { return }
         let id = UUID()
@@ -208,10 +227,19 @@ import Observation
         let changes = next.values.filter {
             UsageUIPreferences.editableKeys.contains($0.key) && previous.values[$0.key] != $0.value
         }
-        guard !changes.isEmpty else { return }
+        guard !changes.isEmpty, changes != pendingPreferenceChanges else { return }
         preferencesTask?.cancel()
+        pendingPreferenceChanges = changes
+        let generation = UUID()
+        preferencesGeneration = generation
         preferencesTask = Task { [weak self] in
             guard let self else { return }
+            defer {
+                if preferencesGeneration == generation {
+                    preferencesTask = nil; preferencesGeneration = nil
+                    pendingPreferenceChanges = nil
+                }
+            }
             do {
                 _ = try await invoke(
                     "usage.ui.preferences.set",
@@ -228,6 +256,8 @@ import Observation
         preparation?.cancel(); preparation = nil
         polling?.cancel(); polling = nil
         preferencesTask?.cancel(); preferencesTask = nil
+        preferencesGeneration = nil
+        pendingPreferenceChanges = nil
         for task in tasks.values { task.cancel() }
         tasks = [:]
         for request in requests.values { request.cancel() }

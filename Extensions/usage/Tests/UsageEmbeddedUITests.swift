@@ -4,6 +4,73 @@ import Testing
 @testable import UsageExtension
 
 @MainActor @Suite(.serialized) struct UsageEmbeddedUITests {
+    @Test func owningCLIConfigChangesReachOpenUIWithoutSendingThemBack() async throws {
+        let suite = "usage-ui-live-config-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("all", forKey: "dashRange")
+        let controller = UsageWorkerController(
+            dataDirectory: Repo.dataDir, collect: { _, _ in Data() })
+        let service = UsageUICommands(controller: controller, defaults: defaults)
+        var writes = 0
+        let client = UsageUIClient(invoke: { command, payload in
+            if command == "usage.ui.preferences.set" { writes += 1 }
+            return try await service.execute(command, payload: payload)
+        })
+        defer { client.stop(); service.shutdown() }
+        try await client.prepare()
+        #expect(SharedDefaults.store.string(forKey: "dashRange") == "all")
+        let executor = UsageConfigurationExecutor(shared: defaults, announceChange: {})
+        try executor.set("week", forKey: "dashRange")
+        try await client.refreshPreferences()
+        #expect(SharedDefaults.store.string(forKey: "dashRange") == "week")
+        try executor.unset("dashRange")
+        try await client.refreshPreferences()
+        #expect(SharedDefaults.store.object(forKey: "dashRange") == nil)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(writes == 0)
+        await controller.shutdown()
+    }
+
+    @Test func enginePreferencePollingKeepsAnUnacknowledgedUIEdit() async throws {
+        let suite = "usage-ui-pending-config-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("all", forKey: "dashRange")
+        defaults.set("tokens", forKey: "dashHeatMetric")
+        let controller = UsageWorkerController(
+            dataDirectory: Repo.dataDir, collect: { _, _ in Data() })
+        let service = UsageUICommands(controller: controller, defaults: defaults)
+        var gate: CheckedContinuation<Void, Never>?
+        let client = UsageUIClient(invoke: { command, payload in
+            if command == "usage.ui.preferences.set" {
+                await withCheckedContinuation { gate = $0 }
+            }
+            return try await service.execute(command, payload: payload)
+        })
+        defer { gate?.resume(); client.stop(); service.shutdown() }
+        try await client.prepare()
+        SharedDefaults.store.set("week", forKey: "dashRange")
+        try await client.refreshPreferences()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while gate == nil && ContinuousClock.now < deadline { await Task.yield() }
+        try #require(gate != nil)
+        let executor = UsageConfigurationExecutor(shared: defaults, announceChange: {})
+        try executor.set("cost", forKey: "dashHeatMetric")
+        try await client.refreshPreferences()
+        #expect(SharedDefaults.store.string(forKey: "dashRange") == "week")
+        gate?.resume(); gate = nil
+        while defaults.string(forKey: "dashRange") != "week" && ContinuousClock.now < deadline {
+            await Task.yield()
+        }
+        try #require(defaults.string(forKey: "dashRange") == "week")
+        try await Task.sleep(for: .milliseconds(30))
+        try await client.refreshPreferences()
+        #expect(SharedDefaults.store.string(forKey: "dashRange") == "week")
+        #expect(SharedDefaults.store.string(forKey: "dashHeatMetric") == "cost")
+        await controller.shutdown()
+    }
+
     private let data = Data(
         #"{"schemaVersion":8,"generatedAt":"2026-10-09T12:00:00Z","sources":["sample"],"defaultSources":["sample"],"sourceMeta":{"sample":{"label":"Sample source"}},"sessions":[],"totals":{"cost":2,"tokens":150,"inputTokens":120,"outputTokens":30,"cacheCreationTokens":0,"cacheReadTokens":0,"bySource":{"sample":{"cost":2,"tokens":150}}},"daily":[{"period":"2026-10-09","bySource":{"sample":[{"modelName":"Sample model","inputTokens":120,"outputTokens":30,"cacheCreationTokens":0,"cacheReadTokens":0,"cost":2}]},"projects":[],"hours":[{"hour":0,"cost":0,"tokens":0,"bySource":{}},{"hour":1,"cost":0,"tokens":0,"bySource":{}},{"hour":2,"cost":0,"tokens":0,"bySource":{}},{"hour":3,"cost":0,"tokens":0,"bySource":{}},{"hour":4,"cost":0,"tokens":0,"bySource":{}},{"hour":5,"cost":0,"tokens":0,"bySource":{}},{"hour":6,"cost":0,"tokens":0,"bySource":{}},{"hour":7,"cost":0,"tokens":0,"bySource":{}},{"hour":8,"cost":0,"tokens":0,"bySource":{}},{"hour":9,"cost":0,"tokens":0,"bySource":{}},{"hour":10,"cost":0,"tokens":0,"bySource":{}},{"hour":11,"cost":0,"tokens":0,"bySource":{}},{"hour":12,"cost":0,"tokens":0,"bySource":{}},{"hour":13,"cost":0,"tokens":0,"bySource":{}},{"hour":14,"cost":0,"tokens":0,"bySource":{}},{"hour":15,"cost":0,"tokens":0,"bySource":{}},{"hour":16,"cost":0,"tokens":0,"bySource":{}},{"hour":17,"cost":0,"tokens":0,"bySource":{}},{"hour":18,"cost":0,"tokens":0,"bySource":{}},{"hour":19,"cost":0,"tokens":0,"bySource":{}},{"hour":20,"cost":0,"tokens":0,"bySource":{}},{"hour":21,"cost":0,"tokens":0,"bySource":{}},{"hour":22,"cost":0,"tokens":0,"bySource":{}},{"hour":23,"cost":0,"tokens":0,"bySource":{}}]}]}"#
             .utf8)
