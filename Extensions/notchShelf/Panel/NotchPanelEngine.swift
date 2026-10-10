@@ -714,8 +714,11 @@ import Foundation
     }
 
     private func admissible(_ slot: NotchPanelSlot, state: NotchPanelState) -> Bool {
-        guard let controller, state.visible, slot.section != nil, !slot.tile.hidden,
-            slot.tile.widget.providerIDs == [slot.providerID],
+        guard let controller, state.visible, context.activeVersions["notchShelf"] == version,
+            slot.section != nil, !slot.tile.hidden,
+            slot.providerID
+                == NotchPanelSlot.anchorProvider(
+                    tile: slot.tile, kind: slot.kind, activeVersions: context.activeVersions),
             context.activeVersions[slot.providerID] == slot.providerVersion,
             !controller.privacy.hides(slot.tile.widget)
         else { return false }

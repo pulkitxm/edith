@@ -275,8 +275,7 @@ import Observation
     func drainActions() async { await actionTask?.value }
 
     func supportsNative(tile: SurfaceTile, kind: NotchPanelSlot.Kind) -> Bool {
-        guard tile.widget.providerIDs.count == 1, let provider = tile.widget.providerIDs.first
-        else { return false }
+        guard let provider = slotProvider(tile: tile, kind: kind) else { return false }
         return NotchPanelSlot(
             id: UUID(), providerID: provider, providerVersion: "", kind: kind, tile: tile,
             rectangle: .init(x: 0, y: 0, width: 1, height: 1)
@@ -301,13 +300,19 @@ import Observation
     }
 
     func slot(tile: SurfaceTile, kind: NotchPanelSlot.Kind, rectangle: CGRect) -> NotchPanelSlot? {
-        guard let snapshot, snapshot.panel.visible, !hides(tile.widget),
-            tile.widget.providerIDs.count == 1, let provider = tile.widget.providerIDs.first,
-            let version = snapshot.activeVersions[provider]
+        guard let snapshot, snapshot.panel.visible, !tile.hidden, !hides(tile.widget),
+            let provider = slotProvider(tile: tile, kind: kind),
+            let version = snapshot.activeVersions[provider],
+            [rectangle.minX, rectangle.minY, rectangle.width, rectangle.height].allSatisfy(
+                \.isFinite),
+            rectangle.width > 0, rectangle.height > 0,
+            kind != .card
+                || (snapshot.panel.phase == .expanded && snapshot.panel.activeTab == "home"
+                    && snapshot.layout.visible.contains(tile))
         else { return nil }
         let key = kind.rawValue + ":" + provider + ":" + tile.id
         let id = slotsByKey[key] ?? UUID()
-        slotsByKey[key] = id
+        if slotsByKey[key] == nil { slotsByKey[key] = id }
         let clipped = rectangle.intersection(snapshot.panel.bounds)
         guard !clipped.isNull, clipped.width > 0, clipped.height > 0 else { return nil }
         let slot = NotchPanelSlot(
@@ -343,17 +348,23 @@ import Observation
     }
 
     func slotHeight(tile: SurfaceTile, kind: NotchPanelSlot.Kind) -> Double? {
-        guard let provider = tile.widget.providerIDs.first,
+        guard let provider = slotProvider(tile: tile, kind: kind),
             let id = slotsByKey[kind.rawValue + ":" + provider + ":" + tile.id]
         else { return nil }
         return snapshot?.heights[id]
     }
 
     func slotFailure(tile: SurfaceTile, kind: NotchPanelSlot.Kind) -> String? {
-        guard let provider = tile.widget.providerIDs.first,
+        guard let provider = slotProvider(tile: tile, kind: kind),
             let id = slotsByKey[kind.rawValue + ":" + provider + ":" + tile.id]
         else { return nil }
         return snapshot?.failures[id]
+    }
+
+    private func slotProvider(tile: SurfaceTile, kind: NotchPanelSlot.Kind) -> String? {
+        guard !stopped, error == nil, let snapshot else { return nil }
+        return NotchPanelSlot.anchorProvider(
+            tile: tile, kind: kind, activeVersions: snapshot.activeVersions)
     }
 
     var activeTab: NotchTab { NotchTab(rawValue: snapshot?.panel.activeTab ?? "home") ?? .home }
