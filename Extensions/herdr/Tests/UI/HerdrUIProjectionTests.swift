@@ -25,6 +25,45 @@ import Testing
         return HerdrWorker(store: store, defaults: defaults, automaticActions: false)
     }
 
+    @Test func runtimeRejectsUnvalidatedUIAndNeverReturnsAnEnginePage() {
+        let runtime = ExtensionRuntime()
+        #expect(
+            (runtime.execute(["operation": "view", "location": "main"]) as? NSDictionary)?["ok"]
+                as? Bool == false)
+        #expect(
+            (runtime.execute([
+                "operation": "configureUI", "location": "main", "remoteUI": true,
+                "engineClient": NSObject(),
+            ]) as? NSDictionary)?["ok"] as? Bool == false)
+        #expect(
+            (runtime.execute(["operation": "view", "location": "settings"]) as? NSDictionary)?["ok"]
+                as? Bool == false)
+    }
+
+    @Test func ownerStopCancelsInflightOriginalCatalogDiscoveryBeforeCommandDrain() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let signal = HerdrCatalogCancellationFixture()
+        let catalogs = AgentLaunchCatalogs { _, _, _ in
+            await signal.started()
+            do { try await Task.sleep(for: .seconds(30)) } catch { await signal.cancelled() }
+            return nil
+        }
+        let original = worker()
+        let worker = HerdrWorker(
+            store: original.store, defaults: original.store.uiDefaults,
+            catalogs: catalogs, automaticActions: false)
+        let discovery = Task { await catalogs.catalog(for: .codex, refresh: true) }
+        for _ in 0..<200 {
+            if await signal.didStart { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(await signal.didStart)
+        await worker.cancelPendingWork()
+        #expect(await signal.didCancel)
+        _ = await discovery.value
+        await worker.shutdown()
+    }
+
     @Test func originalSemanticRankingUsesEngineCandidatesAndRejectsInjectedMeanings() async throws
     {
         defer { HerdrWorkOwnership.enable() }
@@ -444,4 +483,11 @@ private struct HerdrProjectionDecider: JevDeciding {
         #expect(options[1].meaning.contains("second"))
         return HerdrDecisionFixture.decision(AgentSearchJev.question, ["s1": 0.9, "s0": 0.1])
     }
+}
+
+private actor HerdrCatalogCancellationFixture {
+    private(set) var didStart = false
+    private(set) var didCancel = false
+    func started() { didStart = true }
+    func cancelled() { didCancel = true }
 }

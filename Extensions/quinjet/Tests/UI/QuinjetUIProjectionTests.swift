@@ -7,6 +7,18 @@ import Testing
 @testable import QuinjetUI
 
 @MainActor @Suite(.serialized) struct QuinjetUIProjectionTests {
+    @Test func runtimeRejectsUnvalidatedUIAndNeverReturnsAnEnginePage() {
+        let runtime = ExtensionRuntime()
+        #expect(
+            (runtime.execute(["operation": "view", "location": "main"]) as? NSDictionary)?["ok"]
+                as? Bool == false)
+        #expect(
+            (runtime.execute([
+                "operation": "configureUI", "location": "main", "remoteUI": true,
+                "engineClient": NSObject(),
+            ]) as? NSDictionary)?["ok"] as? Bool == false)
+    }
+
     @Test func originalReviewActionsUseOwnedEngineModelsAndRejectInjectedLaunchFields() async throws
     {
         defer { QuinjetWorkOwnership.enable() }

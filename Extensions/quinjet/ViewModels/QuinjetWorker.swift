@@ -12,7 +12,6 @@ import Foundation
     private var cliStreams: ExtensionCLIStreams?
     private lazy var uiEngine = QuinjetUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
-    private let attachment = UUID()
     private struct ProjectSelection: Equatable {
         let project: QuinjetProject; let remote: QuinjetRemote?
     }
@@ -40,9 +39,6 @@ import Foundation
         guard !started, !isStopped else { return }
         started = true
         QuinjetPrivacy.shared.start()
-        TextEditingCommands.install()
-        QuinjetSessionBridge.shared.install()
-        QuinjetSessionBridge.shared.attach(model, token: attachment)
         model.setSessionLaunchEnabled(automaticActions)
         guard automaticActions else { return }
         _ = try? await refresh()
@@ -277,6 +273,12 @@ import Foundation
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         return try JSONEncoder().encode(result)
     }
+    func cancelPendingWork() async {
+        maintenance?.cancel()
+        model.cancelDiscovery()
+        await cliStreams?.stopAndWait()
+    }
+
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
@@ -285,8 +287,6 @@ import Foundation
         maintenance?.cancel()
         model.cancelDiscovery()
         model.stopAll()
-        QuinjetSessionBridge.shared.detach(token: attachment)
-        QuinjetSessionBridge.shared.shutdown()
         await model.shutdown()
         await QuinjetWorkOwnership.shutdown()
         await QuinjetMachines.shared.shutdown()
@@ -295,6 +295,5 @@ import Foundation
         projects.removeAll()
         worktrees.removeAll()
         QuinjetPrivacy.shared.shutdown()
-        TextEditingCommands.shutdown()
     }
 }

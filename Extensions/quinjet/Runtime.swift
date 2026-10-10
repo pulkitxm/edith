@@ -3,7 +3,6 @@ import AppKit
 import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
-import GhosttyTerminal
 import SwiftUI
 
 @MainActor @objc(EdithQuinjetExtensionRuntime)
@@ -38,13 +37,13 @@ final class ExtensionRuntime: NSObject {
         startup?.cancel()
         commands.shutdown()
         Task {
+            await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await startup?.value
             await worker?.shutdown()
             worker = nil
             surface = nil
             startup = nil
-            GhosttyRuntime.shared.shutdown()
             completion()
         }
     }
@@ -62,9 +61,12 @@ final class ExtensionRuntime: NSObject {
         case "configureUI":
             guard worker == nil, input["location"] as? String == "main",
                 let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "quinjet",
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
-            if let previous = uiModel { Task { await previous.shutdown() } }
+            if let previous = uiModel {
+                previous.stopRendering(); Task { await previous.shutdown() }
+            }
             uiClient?.invalidate()
             uiClient = client
             let model = QuinjetPageModel(uiClient: .init(client: client))
@@ -72,9 +74,10 @@ final class ExtensionRuntime: NSObject {
             uiController = NSHostingController(
                 rootView: ExtensionPageHost {
                     QuinjetPage(model: model)
+                        .environment(\.terminalLaunchEnabled, true)
                 })
         case "stopUI":
-            if let model = uiModel { Task { await model.shutdown() } }
+            if let model = uiModel { model.stopRendering(); Task { await model.shutdown() } }
             uiClient?.invalidate()
             uiClient = nil
             uiModel = nil
@@ -91,13 +94,7 @@ final class ExtensionRuntime: NSObject {
             startup = Task { await created.start() }
         case "view":
             if let uiController { return uiController }
-            guard let worker else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    QuinjetPage(model: worker.model)
-                        .environment(\.automaticViewActionsEnabled, worker.automaticActions)
-                        .environment(\.terminalLaunchEnabled, worker.automaticActions)
-                })
+            return ["ok": false] as NSDictionary
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary

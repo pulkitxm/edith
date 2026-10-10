@@ -581,10 +581,18 @@ final class QuinjetPageModel {
         }
     }
 
+    func stopRendering() {
+        guard let uiClient else { return }
+        stopped = true
+        uiClient.stop()
+        for task in uiActions.values { task.cancel() }
+        for tab in tabs { tab.holder.stopRendering() }
+    }
+
     func shutdown() async {
         stopped = true
         if let uiClient {
-            uiClient.stop()
+            stopRendering()
             let actions = Array(uiActions.values)
             for task in actions { task.cancel() }
             uiActions.removeAll()

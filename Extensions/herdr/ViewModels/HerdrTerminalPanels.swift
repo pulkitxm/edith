@@ -719,13 +719,17 @@ final class HerdrTerminalPanels {
         height = state.height
     }
 
-    func shutdownRendering() async {
+    func stopRendering() {
         uiStopped = true
-        let tasks = Array(uiTasks.values)
-        for task in tasks { task.cancel() }
+        for task in uiTasks.values { task.cancel() }
         for terminal in terminals.values {
             terminal.holder.stopRendering(); terminal.scroll.shutdown()
         }
+    }
+
+    func shutdownRendering() async {
+        let tasks = Array(uiTasks.values)
+        stopRendering()
         for task in tasks { await task.value }
         uiTasks.removeAll()
         uiAction = nil

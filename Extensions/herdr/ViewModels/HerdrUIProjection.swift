@@ -249,6 +249,7 @@ final class HerdrUIDefaults: UserDefaults {
             try await HerdrUIPanelActions.execute(object, store: store)
         case "herdr.ui.read":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
+            _ = await worker.activity.surfaceSnapshot()
         case "herdr.ui.refresh":
             guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
             await store.refresh()
@@ -445,6 +446,7 @@ final class HerdrUIDefaults: UserDefaults {
             agentFocuser: { _, _, _ in throw ExtensionPeerError.unavailable },
             machinesProvider: { [] }, messaging: messaging)
         self.uiClient = uiClient
+        configureRenderingOnly()
         terminalPanels.uiAction = { [weak self] operation, object in
             guard let self else { throw ExtensionPeerError.unavailable }
             var object = object

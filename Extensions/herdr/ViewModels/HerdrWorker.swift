@@ -57,7 +57,14 @@ import Foundation
                 attention: .init(
                     inspect: { await HerdrPaneReader.inspect($0) },
                     decider: { await MainActor.run { AgentJevDecider.configured() } },
-                    appIsRunning: { true }), currentHosts: { ownedStore.hosts })
+                    appIsRunning: { true }), currentHosts: { ownedStore.hosts },
+                open: { request in
+                    HerdrWorkOwnership.start {
+                        await ownedStore.open(request)
+                        guard !Task.isCancelled else { return }
+                        ExtensionPresentation.showWindow()
+                    }
+                })
         self.activity = activity ?? AgentActivityMonitor(defaults: defaults)
         self.activityInstaller =
             activityInstaller
@@ -85,10 +92,6 @@ import Foundation
         guard !Task.isCancelled else { return }
         await activity.start()
         PresenterState.shared.start()
-        TextEditingCommands.install()
-        HerdrOpenBridge.install()
-        HerdrLayoutBridge.install()
-        HerdrSpaceBridge.install()
         guard automaticActions else { return }
         _ = try? await MachineRegistry.refresh()
         await store.watch()
@@ -370,6 +373,12 @@ import Foundation
         try await activity.hookFiles.suspend(activityInstaller)
     }
 
+    func cancelPendingWork() async {
+        maintenance?.cancel()
+        await catalogs.shutdown()
+        await cliStreams?.stopAndWait()
+    }
+
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
@@ -386,11 +395,6 @@ import Foundation
         attention.shutdown()
         notifications.shutdown()
         maintenance?.cancel()
-        HerdrOpenBridge.shutdown()
-        HerdrLayoutBridge.shutdown()
-        HerdrSpaceBridge.shutdown()
-        HerdrAgentWindow.shutdown()
-        HerdrSpaceWindow.shutdown()
         await hooks.stop()
         await store.shutdown()
         await AgentSearchService.shared.shutdown()
@@ -398,7 +402,6 @@ import Foundation
         maintenance = nil
         HerdrTopicFeed.shutdown()
         PresenterState.shared.shutdown()
-        TextEditingCommands.shutdown()
         MachineRegistry.shutdown()
     }
 

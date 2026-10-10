@@ -94,6 +94,7 @@ final class HerdrStore {
     static let boardID = "board"
     var terminalClient: OwnedTerminalClient.Invoke?
     var uiClient: HerdrUIClient?
+    @ObservationIgnored weak var uiActivity: AgentActivityMonitor?
     private var uiBaseline = HerdrUILayoutState(
         tabs: [], selected: HerdrStore.boardID, views: [:], arrangements: [])
     private var uiOpenedAgents: [HerdrAgent] = []
@@ -102,6 +103,11 @@ final class HerdrStore {
     private var uiPoll: Task<Void, Never>?
     private var uiDirty = false
     private(set) var uiError: String?
+    func configureRenderingOnly() {
+        HerdrIPC.stopObserving(machinesObserver)
+        machinesObserver = nil
+    }
+
     var uiDefaults: UserDefaults { defaults }
 
     var hosts: [HerdrHostSnapshot] = [] {
@@ -595,12 +601,18 @@ final class HerdrStore {
             + terminalPanels.terminals.values.map(\.holder)
     }
 
+    func stopRendering() {
+        guard let uiClient else { return }
+        uiClient.stop()
+        uiPoll?.cancel()
+        uiMutation?.cancel()
+        for holder in terminalHolders { holder.stopRendering() }
+        terminalPanels.stopRendering()
+    }
+
     func shutdown() async {
-        if let uiClient {
-            uiClient.stop()
-            uiPoll?.cancel()
-            uiMutation?.cancel()
-            for holder in terminalHolders { holder.stopRendering() }
+        if uiClient != nil {
+            stopRendering()
             await terminalPanels.shutdownRendering()
             await uiPoll?.value
             await uiMutation?.value
@@ -2310,6 +2322,7 @@ final class HerdrStore {
         terminalPanels.adoptUI(state.panels)
         agentStartupMessages = state.startupMessages
         messaging.adopt(state.hooks)
+        uiActivity?.adoptUI(state)
         uiError = nil
     }
 
