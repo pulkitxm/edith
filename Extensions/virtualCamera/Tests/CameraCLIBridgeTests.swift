@@ -75,7 +75,11 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suite) }
         #expect(ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil)
         VirtualCameraStore.save(VirtualCameraState(privacy: .stopped), to: defaults)
-        let worker = CameraAppWorker(defaults: defaults, host: "com.pulkit.edith.tests.cli")
+        let layout = try CameraSelectedPackageLayoutTests.Fixture(
+            hostIdentifier: "com.pulkit.edith.tests.cli")
+        defer { layout.remove() }
+        let worker = try CameraAppWorker(
+            defaults: defaults, host: "com.pulkit.edith.tests.cli", roleURL: layout.role)
         do { try await body(worker, defaults); try await worker.prepareDisable() } catch {
             await worker.drain(); throw error
         }

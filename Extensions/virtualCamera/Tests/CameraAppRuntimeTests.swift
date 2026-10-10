@@ -19,7 +19,11 @@ import Testing
             var state = VirtualCameraState(privacy: .stopped)
             state.composition.framing.zoom = 2
             VirtualCameraStore.save(state, to: defaults)
-            let worker = CameraAppWorker(defaults: defaults, host: "com.pulkit.edith.tests.worker")
+            let layout = try CameraSelectedPackageLayoutTests.Fixture(
+                hostIdentifier: "com.pulkit.edith.tests.worker")
+            defer { layout.remove() }
+            let worker = try CameraAppWorker(
+                defaults: defaults, host: "com.pulkit.edith.tests.worker", roleURL: layout.role)
             #expect(worker.model.state.composition.framing.zoom == 2)
             #expect(!worker.engine.streaming)
             try await worker.prepareDisable()
@@ -37,7 +41,11 @@ import Testing
     @Test func pendingDisableSurvivesRestartWithoutResumingCameraOrAudio() async throws {
         try await fixture { defaults in
             defaults.set(true, forKey: CameraAppWorker.pendingKey)
-            let worker = CameraAppWorker(defaults: defaults, host: "com.pulkit.edith.tests.worker")
+            let layout = try CameraSelectedPackageLayoutTests.Fixture(
+                hostIdentifier: "com.pulkit.edith.tests.worker")
+            defer { layout.remove() }
+            let worker = try CameraAppWorker(
+                defaults: defaults, host: "com.pulkit.edith.tests.worker", roleURL: layout.role)
             #expect(worker.draining)
             #expect(!worker.engine.streaming)
             #expect(worker.client.currentStatus == nil)
@@ -60,7 +68,11 @@ import Testing
         }
         try await fixture { defaults in
             #expect(!defaults.bool(forKey: CameraAppWorker.pendingKey))
-            let worker = CameraAppWorker(defaults: defaults, host: "com.pulkit.edith.tests.worker")
+            let layout = try CameraSelectedPackageLayoutTests.Fixture(
+                hostIdentifier: "com.pulkit.edith.tests.worker")
+            defer { layout.remove() }
+            let worker = try CameraAppWorker(
+                defaults: defaults, host: "com.pulkit.edith.tests.worker", roleURL: layout.role)
             #expect(worker.draining)
             #expect(!worker.engine.streaming)
             #expect(worker.client.currentStatus == nil)

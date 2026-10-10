@@ -124,7 +124,9 @@ final class ExtensionRuntime: NSObject {
                 host == ProcessInfo.processInfo.environment["EDITH_APPLICATION_IDENTIFIER"],
                 SurfaceHostContext.current != nil, let defaults = UserDefaults(suiteName: suite)
             else { return ["ok": false] as NSDictionary }
-            worker = CameraAppWorker(defaults: defaults, host: host)
+            do { worker = try CameraAppWorker(defaults: defaults, host: host) } catch {
+                return ["ok": false] as NSDictionary
+            }
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let defaults = UserDefaults(suiteName: configuration.defaultsSuite),
@@ -160,6 +162,76 @@ final class ExtensionRuntime: NSObject {
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
         if let model { Task { await model.shutdown() } }
+    }
+}
+
+struct CameraSelectedPackageLayout {
+    let carrier: URL
+    let privileged: URL
+
+    init(roleURL role: URL, hostIdentifier: String) throws {
+        guard role.isFileURL, role.path == role.standardizedFileURL.path,
+            role.path == role.resolvingSymlinksInPath().path,
+            let roleBundle = Bundle(url: role),
+            roleBundle.bundleIdentifier == "com.pulkit.edith.extensions.virtualCamera.app",
+            let version = roleBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                as? String, !version.isEmpty, version.utf8.count <= 80,
+            roleBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-2"
+        else { throw ExtensionPeerError.invalidRequest }
+        let suffix = [
+            "ExtensionCarrier.app", "Contents", "Extensions", "ExtensionWorker.appex",
+            "Contents", "Resources", "Payload", "virtualCamera", "app.bundle",
+        ]
+        var package = role
+        for component in suffix.reversed() {
+            guard package.lastPathComponent == component else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            package.deleteLastPathComponent()
+        }
+        let manifestURL = role.deletingLastPathComponent().appendingPathComponent("package.json")
+        let attributes = try FileManager.default.attributesOfItem(atPath: manifestURL.path)
+        guard package.lastPathComponent == "virtualCamera", package.path != "/",
+            manifestURL.path == manifestURL.resolvingSymlinksInPath().path,
+            attributes[.type] as? FileAttributeType == .typeRegular,
+            let size = attributes[.size] as? Int, size > 0, size <= 16_384,
+            let manifest = try JSONSerialization.jsonObject(
+                with: Data(contentsOf: manifestURL)) as? [String: Any],
+            manifest["id"] as? String == "virtualCamera",
+            manifest["version"] as? String == version,
+            manifest["hostABI"] as? String == "edith-host-2",
+            manifest["architecture"] as? String == "arm64"
+        else { throw ExtensionPeerError.invalidRequest }
+        let carrier = package.appendingPathComponent("CameraCarrier.app")
+        let privileged = role.deletingLastPathComponent().appendingPathComponent(
+            "privileged.bundle")
+        for url in [carrier, privileged] {
+            guard url.path == url.resolvingSymlinksInPath().path else {
+                throw ExtensionPeerError.invalidRequest
+            }
+        }
+        guard let carrierBundle = Bundle(url: carrier),
+            carrierBundle.bundleIdentifier == hostIdentifier + ".cameraCarrier",
+            carrierBundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String == "Edith",
+            carrierBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                == version,
+            carrierBundle.object(forInfoDictionaryKey: "EdithContainedExtensionID") as? String
+                == "virtualCamera",
+            carrierBundle.object(forInfoDictionaryKey: "EdithContainedRole") as? String
+                == "cameraCarrier",
+            carrierBundle.object(forInfoDictionaryKey: "EdithHostIdentifier") as? String
+                == hostIdentifier,
+            carrierBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == "edith-host-2",
+            let privilegedBundle = Bundle(url: privileged),
+            privilegedBundle.bundleIdentifier
+                == "com.pulkit.edith.extensions.virtualCamera.privileged",
+            privilegedBundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                == version,
+            privilegedBundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
+                == "edith-host-2"
+        else { throw ExtensionPeerError.invalidRequest }
+        self.carrier = carrier
+        self.privileged = privileged
     }
 }
 
@@ -203,11 +275,14 @@ enum CameraCarrierLaunchEnvironment {
     private(set) var draining = false
     static let pendingKey = "cameraPendingDisable"
 
-    init(defaults: UserDefaults, host: String) {
+    init(
+        defaults: UserDefaults, host: String,
+        roleURL: URL = Bundle(for: ExtensionRuntime.self).bundleURL
+    ) throws {
         self.defaults = defaults
-        let bundle = Bundle(for: ExtensionRuntime.self)
-        let directory = bundle.bundleURL.deletingLastPathComponent()
-        source = directory.appendingPathComponent("CameraCarrier.app").resolvingSymlinksInPath()
+        let layout = try CameraSelectedPackageLayout(roleURL: roleURL, hostIdentifier: host)
+        guard let bundle = Bundle(url: roleURL) else { throw ExtensionPeerError.invalidRequest }
+        source = layout.carrier
         installed = URL(
             fileURLWithPath: "/Applications/Edith Extensions/" + host + ".cameraCarrier.app")
         fixture =
@@ -223,7 +298,7 @@ enum CameraCarrierLaunchEnvironment {
                 if fixture { return source }
                 let privilege = ExtensionPrivilegedClient(
                     owner: "virtualCamera",
-                    source: directory.appendingPathComponent("privileged.bundle"),
+                    source: layout.privileged,
                     version: version)
                 if privilege.status != .enabled { try privilege.requestApproval() }
                 let payload = try JSONSerialization.data(withJSONObject: ["source": source.path])
@@ -282,7 +357,8 @@ enum CameraCarrierLaunchEnvironment {
         surface = CameraSurface(engine: engine)
         manager = VirtualCameraExtensionManager(
             environment: .init(
-                bundleURL: directory, hasInstallEntitlement: { false }, deviceVisible: { false }))
+                bundleURL: bundle.bundleURL.deletingLastPathComponent(),
+                hasInstallEntitlement: { false }, deviceVisible: { false }))
         model = VirtualCameraPageModel(
             defaults: defaults, extensionManager: manager,
             accessProvider: environment.authorization, sourceProvider: environment.sources,
