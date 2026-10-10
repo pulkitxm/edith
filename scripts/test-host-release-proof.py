@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from host_release_proof import appcast_enclosure, collect_proof, pinned_sources
+from host_release_proof import appcast_enclosure, collect_proof, main, pinned_sources, qualify_source
 
 
 class HostReleaseProofTests(unittest.TestCase):
@@ -120,13 +120,52 @@ class HostReleaseProofTests(unittest.TestCase):
         path.parent.mkdir()
         path.write_bytes(plistlib.dumps({**original, 'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '123'}))
         calls = lambda args: self.source + '\n' if args[1] == 'rev-parse' else 'Resources/Info.plist\n'
-        with patch('host_release_proof.document', return_value=path.read_bytes()), patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(original), plistlib.dumps(original), b'[]']):
+        with patch('host_release_proof.document', return_value=path.read_bytes()), patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(original), plistlib.dumps(original), self.index.read_bytes(), self.index.read_bytes()]):
             self.assertTrue(pinned_sources(self.source, '1.2.3', '123', calls)[2])
         changed = {**original, 'SUPublicEDKey': 'foreign', 'CFBundleShortVersionString': '1.2.3', 'CFBundleVersion': '123'}
         with patch('host_release_proof.document', return_value=plistlib.dumps(changed)), patch('host_release_proof.subprocess.check_output', return_value=plistlib.dumps(original)), self.assertRaises(ValueError):
             pinned_sources(self.source, '1.2.3', '123', calls)
         with self.assertRaises(ValueError):
             pinned_sources(self.source, '1.2.3', '123', lambda args: 'b' * 40)
+        with patch('host_release_proof.document', return_value=path.read_bytes()), patch('host_release_proof.subprocess.check_output', side_effect=[plistlib.dumps(original), plistlib.dumps(original), self.index.read_bytes(), b'[]']), self.assertRaises(ValueError):
+            pinned_sources(self.source, '1.2.3', '123', calls)
+
+    def test_workflow_records_proof_after_signing_without_changing_public_assets_or_executing_host(self):
+        workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/ci.yml').read_text()
+        job = workflow.split('  dmg:\n')[1].split('  publish:')[0]
+        self.assertLess(job.index('- name: Verify code signatures'), job.index('- name: Record the source-bound static host release proof'))
+        self.assertLess(job.index('- name: Verify notarized disk image'), job.index('- name: Record the source-bound static host release proof'))
+        self.assertIn('--source "$BUILT_SHA"', job)
+        self.assertIn('name: host-release-proof', job)
+        self.assertIn('notary=skipped', job)
+        self.assertIn('notary=verified', job)
+        self.assertIn('cp Edith.dmg release-macos/', job)
+        self.assertIn('cp dist/appcast/appcast.xml release-macos/', job)
+        self.assertNotIn('cp local/host-release-proof', job)
+        script = Path(__file__).with_name('host_release_proof.py').read_text()
+        self.assertNotIn('inspect_host', script)
+        self.assertNotIn('inspect_cli', script)
+        self.assertNotIn('hdiutil', script)
+
+    def test_wrong_workflow_source_rejects_before_any_subprocess_or_artifact(self):
+        arguments = ['host_release_proof.py', str(self.bundle), str(self.dmg), str(self.appcast), str(self.root / 'proof'), '--source', self.source, '--tag', 'v1.2.3', '--version', '1.2.3', '--build', '123', '--notarization', 'skipped']
+        with patch('sys.argv', arguments), patch.dict('os.environ', {'GITHUB_SHA': 'b' * 40}), patch('host_release_proof.subprocess.run') as execute, self.assertRaises(ValueError):
+            main()
+        execute.assert_not_called()
+        self.assertFalse((self.root / 'proof').exists())
+
+    def test_rebuild_separately_binds_dispatch_and_exact_tag_source_without_current_source_waiver(self):
+        current = 'b' * 40
+        self.assertEqual(qualify_source(self.source, 'v1.2.3', {'GITHUB_SHA': self.source})['sourceMode'], 'current-workflow-source')
+        environment = {'GITHUB_SHA': current, 'REBUILD': 'v1.2.3'}
+        result = qualify_source(self.source, 'v1.2.3', environment, lambda args: self.source)
+        self.assertEqual(result['workflowSourceCommit'], current)
+        self.assertEqual(result['sourceMode'], 'tag-rebuild')
+        for variables in [{'GITHUB_SHA': current}, {'GITHUB_SHA': current, 'REBUILD': 'v1.2.4'}, {'GITHUB_SHA': 'invalid', 'REBUILD': 'v1.2.3'}]:
+            with self.assertRaises(ValueError):
+                qualify_source(self.source, 'v1.2.3', variables, lambda args: self.source)
+        with self.assertRaises(ValueError):
+            qualify_source(self.source, 'v1.2.3', environment, lambda args: current)
 
 
 class HostReleaseCryptoTests(unittest.TestCase):

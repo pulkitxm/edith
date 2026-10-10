@@ -128,7 +128,21 @@ def pinned_sources(source, version, build, run=command):
         require(plistlib.loads(document(path)) == original, 'Source has changes beyond release version stamping')
     info = plistlib.loads(subprocess.check_output(['git', 'show', f'{source}:Resources/Info.plist']))
     index = subprocess.check_output(['git', 'show', f'{source}:Packages/EdithHost/Sources/EdithHostCore/Resources/index.json'])
+    definitions = json.loads(subprocess.check_output(['git', 'show', f'{source}:Extensions/manifest.json']))
+    ids = [row['id'] for row in definitions]
+    require(len(ids) == 39 and len(set(ids)) == 39 and sorted(ids) == sorted(row['id'] for row in json.loads(index)), 'Pinned source index differs from39-owner manifest')
     return info, index, bool(paths)
+
+
+def qualify_source(source, tag, environment, run=command):
+    workflow = environment.get('GITHUB_SHA', '')
+    rebuild = environment.get('REBUILD', '')
+    require(re.fullmatch('[a-f0-9]{40}', workflow) is not None, 'Invalid workflow source')
+    if rebuild:
+        require(rebuild == tag and run(['git', 'rev-parse', f'refs/tags/{tag}^{{commit}}']).strip() == source, 'Rebuild tag source differs')
+    else:
+        require(workflow == source, 'Workflow source differs')
+    return {'workflowSourceCommit': workflow, 'sourceMode': 'tag-rebuild' if rebuild else 'current-workflow-source'}
 
 
 def main():
@@ -141,12 +155,13 @@ def main():
     parser.add_argument('--build', required=True)
     parser.add_argument('--notarization', choices=('verified', 'skipped'), required=True)
     args = parser.parse_args()
-    require(os.environ.get('GITHUB_SHA') == args.source, 'Workflow source differs')
+    qualification = qualify_source(args.source, args.tag, os.environ)
     info, index, dirty = pinned_sources(args.source, args.version, args.build)
     metadata = json.loads(document(args.bundle.parent / 'build-metadata.json'))
     require(metadata['sourceTreeDirty'] is dirty, 'Build metadata source state differs')
     proof, sanitized = collect_proof(args.bundle, args.dmg, args.appcast, metadata, info, index, args.source, args.tag, args.version, args.build, args.notarization)
     proof['sourceQualification'] = 'release-version-stamp-only' if dirty else 'clean'
+    proof.update(qualification)
     args.output.mkdir(mode=0o700)
     for name, value in [('host-release-proof.json', proof), ('build-metadata.json', sanitized)]:
         with (args.output / name).open('x') as target:

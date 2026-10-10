@@ -264,7 +264,7 @@ test("superseded release builds yield the lane before packaging", () => {
   expect(
     dmgJob.match(/if: steps\.release_build\.outputs\.superseded != 'true'/g)
       ?.length,
-  ).toBe(10);
+  ).toBe(12);
   expect(publish.if).toContain("needs.dmg.outputs.superseded != 'true'");
 });
 
