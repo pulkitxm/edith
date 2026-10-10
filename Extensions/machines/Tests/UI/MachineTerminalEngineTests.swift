@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import EdithExtensionCommands
 import EdithExtensionSupport
 import GhosttyTerminal
@@ -255,6 +256,51 @@ import Testing
         await engine.shutdown()
     }
 
+    @Test func liveCLIInputWaitsForPTYCapacityAndPreservesBinaryBytes() async throws {
+        let session = MachineSession(machine: .local, local: true, synthetic: true)
+        let bytes = Data((0..<32_768).map { UInt8($0 % 251) })
+        let capture = MachineTerminalRawCapture()
+        let engine = MachineTerminalEngine(
+            session: { _ in session },
+            interactiveLaunch: { _, _, _ in
+                launch(
+                    "stty raw -echo; printf ready; sleep 0.2; dd bs=1 count=32768 2>/dev/null | shasum -a 256; exit 7"
+                )
+            })
+        let id = UUID()
+        let task = Task {
+            try await MachineWorkingDirectory.$terminalSession.withValue(id.uuidString) {
+                try await ExtensionCLIContext.$rawOutputSink.withValue({ data, _ in
+                    capture.append(data)
+                }) {
+                    try await engine.runCLI(
+                        machine: session.machine, arguments: [], environment: [])
+                }
+            }
+        }
+        try await wait { String(decoding: capture.bytes, as: UTF8.self).contains("ready") }
+        struct Input: Encodable { let session: UUID; let bytes: Data }
+        struct Resize: Encodable { let session: UUID; let columns: UInt16; let rows: UInt16 }
+        _ = try await engine.cliInvoke(
+            "machines.cli.pty.resize",
+            payload: JSONEncoder().encode(Resize(session: id, columns: 104, rows: 35)))
+        for offset in stride(from: 0, to: bytes.count, by: 16_384) {
+            _ = try await engine.cliInvoke(
+                "machines.cli.pty.input",
+                payload: JSONEncoder().encode(
+                    Input(session: id, bytes: bytes.subdata(in: offset..<offset + 16_384))))
+        }
+        #expect(try await task.value == 7)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        #expect(String(decoding: capture.bytes, as: UTF8.self).contains(digest))
+        await #expect(throws: MachineUIError.self) {
+            try await engine.cliInvoke(
+                "machines.cli.pty.input",
+                payload: JSONEncoder().encode(Input(session: id, bytes: Data([0]))))
+        }
+        await engine.shutdown()
+    }
+
     @Test func originalTTYCliRunsARealPTYAndPreservesOutputAndExit() async throws {
         let machine = Machine(name: "fixture-box", host: "fixture.invalid")
         let owner = MachineSession(machine: machine, synthetic: true)
@@ -357,4 +403,11 @@ import Testing
     }
     @objc func cancel(_ token: NSString) {}
     @objc func invalidate() {}
+}
+
+private final class MachineTerminalRawCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = Data()
+    var bytes: Data { lock.withLock { storage } }
+    func append(_ bytes: Data) { lock.withLock { storage.append(bytes) } }
 }

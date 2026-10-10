@@ -46,7 +46,7 @@ final class ExtensionRuntime: NSObject {
                 guard let terminals = self.terminalEngine else {
                     throw ExtensionPeerError.unavailable
                 }
-                return try terminals.cliInvoke(command, payload: payload)
+                return try await terminals.cliInvoke(command, payload: payload)
             }
             if command.hasPrefix("machines.cli.stream.") {
                 guard let cli = self.cli else { throw ExtensionPeerError.unavailable }

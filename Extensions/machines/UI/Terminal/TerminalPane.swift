@@ -36,7 +36,7 @@ struct TerminalPane: View {
                 holder: holder,
                 theme: GhosttyTheme(
                     palette: palette,
-                    fontSize: TerminalSettings.clampedFontSize(preferredFontSize)),
+                    fontSize: TerminalSettings.clampedFontSize(preferredFontSize) * UIScale.current),
                 active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles, onFocus: onFocus
             )
             .id(holder.generation)

@@ -310,7 +310,7 @@ import GhosttyTerminal
         let rows: UInt16
     }
 
-    func cliInvoke(_ operation: String, payload: Data) throws -> Data {
+    func cliInvoke(_ operation: String, payload: Data) async throws -> Data {
         guard !stopped, payload.count <= 32_768 else { throw MachineUIError.unavailable }
         switch operation {
         case "machines.cli.pty.input":
@@ -318,7 +318,7 @@ import GhosttyTerminal
             guard let pty = cliPTYs[input.session], !input.bytes.isEmpty,
                 input.bytes.count <= 16_384
             else { throw MachineUIError.invalidRequest }
-            try pty.send(input.bytes)
+            try await send(input.bytes, to: pty)
         case "machines.cli.pty.resize":
             let value = try JSONDecoder().decode(CLIResize.self, from: payload)
             guard let pty = cliPTYs[value.session], (1...1000).contains(value.rows),
