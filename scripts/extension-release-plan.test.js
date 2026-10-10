@@ -548,7 +548,7 @@ test("same-executable worker inputs rebuild consumers while host presentation ch
   ).toEqual(["music", "shelf"]);
 });
 
-test("all39 workers rebuild for launcher and navigation code changes", async () => {
+test("all39 workers rebuild for launcher, navigation and privileged ownership changes", async () => {
   const { readFile } = await import("node:fs/promises");
   const current = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
@@ -560,6 +560,12 @@ test("all39 workers rebuild for launcher and navigation code changes", async () 
     "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
     "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
     "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedProcess.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedWorker.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCarrier.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedAdmission.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCaller.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostContainedRole.swift",
   ]) {
     expect(workerRuntimeInputs).toContain(path);
     expect(planPullRequestBuilds(current, [path], current)).toEqual(current);
@@ -618,6 +624,12 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
       "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceNavigationClient.swift",
       "Packages/EdithHost/Sources/EdithHostCore/HostWorkerNavigationClient.swift",
       "Packages/EdithHost/Sources/EdithHostCore/HostFolderChoiceResult.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedProcess.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedWorker.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCarrier.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedAdmission.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostPrivilegedCaller.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostContainedRole.swift",
     ]) {
       await writeFile(join(root, path), "changed ambient worker admission");
       expect(
