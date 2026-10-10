@@ -5,6 +5,7 @@ public enum HostRequirementObservation: Equatable, Sendable {
     case missing(String)
     case unknown(String)
     case unsupported(String)
+    case failed(String)
 }
 
 public enum HostRequirementPackageState: Equatable, Sendable {
@@ -235,7 +236,15 @@ public struct HostRequirementSetupPreview: Sendable {
                     .init(
                         id: "tool.provider", title: "Usage provider",
                         status: passed ? .passed : .failed,
-                        runtimePhase: passed ? .installed : .uninstalled,
+                        runtimePhase: passed
+                            ? .installed
+                            : requiredTools.contains(where: { $0.runtimePhase == .error })
+                                ? .error
+                                : requiredTools.contains(where: { $0.runtimePhase == .loading })
+                                    ? .loading
+                                    : requiredTools.contains(where: {
+                                        $0.runtimePhase == .unsupported
+                                    }) ? .unsupported : .uninstalled,
                         detail: requiredTools.map { $0.title + ": " + $0.detail }.joined(
                             separator: "; "),
                         recoveryCommand: passed ? nil : "ed tools ls"))
@@ -287,7 +296,10 @@ public struct HostRequirementSetupPreview: Sendable {
         if id == "herdr" {
             checks.append(try await herdrCheck())
         } else if let owned = try await environment.ownerInspection(id) {
-            guard owned.owner == id, HostCoreReadinessReport.text(owned.detail) else {
+            guard owned.owner == id, HostCoreReadinessReport.text(owned.detail),
+                owned.status != .passed || [.installed, .empty].contains(owned.phase),
+                owned.status != .skipped || owned.phase == .loading
+            else {
                 throw HostCLIError.rejected("Invalid pure owning requirement inspection.")
             }
             checks.append(
@@ -299,7 +311,8 @@ public struct HostRequirementSetupPreview: Sendable {
                 .init(
                     id: "owner.inspection", title: "Pure owning inspection", status: .failed,
                     runtimePhase: .loading,
-                    detail: "Pure owned inspection is unavailable. " + entry.setupInstruction))
+                    detail: "Pure owned inspection is unavailable. Original setup guidance: "
+                        + entry.setupInstruction))
         }
         try Task.checkCancellation()
         let failed = checks.filter { $0.status == .failed }
@@ -328,7 +341,10 @@ public struct HostRequirementSetupPreview: Sendable {
             owner: id, id: id, title: entry.title,
             state: .init(
                 extensionID: id, phase: phase, runtimePhase: runtime,
-                summary: issues.first?.detail ?? "Original readonly requirements are satisfied.",
+                summary: issues.first?.detail
+                    ?? (phase == .checking
+                        ? "Waiting for actual pure owning inspection."
+                        : "Original readonly requirements are satisfied."),
                 issues: issues), checks: checks)
         try result.validate(owner: id)
         return result
@@ -347,6 +363,8 @@ public struct HostRequirementSetupPreview: Sendable {
             status = required ? .failed : .warning; runtime = .uninstalled; detail = value
         case let .unknown(value):
             status = required ? .failed : .warning; runtime = .loading; detail = value
+        case let .failed(value):
+            status = required ? .failed : .warning; runtime = .error; detail = value
         case let .unsupported(value):
             status = required ? .failed : .warning; runtime = .unsupported; detail = value
         }

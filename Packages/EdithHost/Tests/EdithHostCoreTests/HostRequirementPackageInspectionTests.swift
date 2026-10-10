@@ -57,6 +57,29 @@ import Testing
         }
     }
 
+    @Test func outerExecutablePayloadCannotBypassSealedRoleInspection() throws {
+        let fixture = try RequirementPackageFixture()
+        defer { fixture.remove() }
+        try fixture.writeState(); try fixture.makeCarrier(); try fixture.sign()
+        let outside = fixture.payload.appendingPathComponent("helper.bundle")
+        try FileManager.default.copyItem(at: fixture.role, to: outside)
+        if case .invalid = try fixture.inspector().inspect(
+            id: "systemStats", enabled: false, active: false)
+        {
+        } else {
+            Issue.record("Flat executable payload was accepted")
+        }
+        try FileManager.default.removeItem(at: outside)
+        let auxiliary = fixture.payload.appendingPathComponent("CameraCarrier.app")
+        try FileManager.default.createDirectory(at: auxiliary, withIntermediateDirectories: true)
+        if case .invalid = try fixture.inspector().inspect(
+            id: "systemStats", enabled: false, active: false)
+        {
+        } else {
+            Issue.record("Unowned auxiliary executable was accepted")
+        }
+    }
+
     @Test func wrongHostOrRoleMetadataCannotBeInspectedAsCompatible() throws {
         let fixture = try RequirementPackageFixture()
         defer { fixture.remove() }

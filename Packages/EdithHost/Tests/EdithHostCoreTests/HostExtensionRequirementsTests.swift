@@ -178,6 +178,26 @@ import Testing
         }
     }
 
+    @Test func malformedOwnerObservationsVersionReplacementAndToolFailuresAreRejected() async throws
+    {
+        let fixture = RequirementFixture()
+        fixture.ownerStatus = .skipped
+        await #expect(throws: HostCLIError.self) { try await fixture.service.inspect(id: "system") }
+        fixture.ownerStatus = .passed; fixture.ownerPhase = .unsupported
+        await #expect(throws: HostCLIError.self) { try await fixture.service.inspect(id: "system") }
+        fixture.ownerPhase = .installed
+        fixture.toolStates = [
+            "claude": .failed("Version probe failed"), "codex": .missing("Not installed"),
+        ]
+        let report = try await fixture.service.inspect(id: "usage")
+        #expect(report.state.phase == .failed && report.state.runtimePhase == .error)
+        fixture.changeVersionDuringSetup = true
+        await #expect(throws: HostCLIError.self) {
+            try await fixture.service.setup(id: "downloads", dryRun: false, installTools: false)
+        }
+        #expect(fixture.setupCalls == 1)
+    }
+
     @Test func originalPublicCLIUnhealthyReportsExitZeroAndInactiveDryRunWorks() async throws {
         let fixture = RequirementFixture(); fixture.package = .absent;
         fixture.ownerAvailable = false
@@ -216,7 +236,9 @@ import Testing
     var permissions: [String] = []; var tools: [String] = []
     var ownerAvailable = true; var inspectionOwner: String?; var cancelTool = false
     var hosts: [HostRequirementHerdrHost]? = [.init(id: "local", present: true, liveSessions: 1)]
-    var setupCalls = 0; var disableDuringSetup = false
+    var setupCalls = 0; var disableDuringSetup = false; var changeVersionDuringSetup = false
+    var ownerPhase: HostCoreReadinessRuntimePhase = .installed
+    var ownerStatus: HostCoreReadinessCheckStatus = .passed
     var service: HostExtensionRequirementsService {
         HostExtensionRequirementsService(
             environment: .init(
@@ -236,7 +258,8 @@ import Testing
                     self.ownerAvailable
                         ? .init(
                             owner: self.inspectionOwner ?? id,
-                            phase: .installed, status: .passed, detail: "Synthetic pure inspection")
+                            phase: self.ownerPhase, status: self.ownerStatus,
+                            detail: "Synthetic pure inspection")
                         : nil
                 },
                 herdrInventory: { self.hosts },
@@ -245,6 +268,9 @@ import Testing
                     let report = try await self.service.inspect(id: id)
                     if self.disableDuringSetup {
                         self.package = .installed(version: "1.0.0", enabled: false, active: false)
+                    }
+                    if self.changeVersionDuringSetup {
+                        self.package = .installed(version: "2.0.0", enabled: true, active: true)
                     }
                     return .init(
                         owner: id, id: id, dryRun: false, changed: false,
@@ -310,8 +336,38 @@ import Testing
             run: { _, _ in .init(status: 1, stdout: "v22.20.0", stderr: "failed") })
         #expect(
             try await broken.inspect(id: "node")
-                == .unknown("node was found, but its version probe failed."))
+                == .failed("node was found, but its version probe failed."))
         await #expect(throws: HostCLIError.self) { try await fresh.inspect(id: "invented") }
+    }
+
+    @Test func liveProbeUsesExplicitInterpreterPathAndNoUserConfiguration() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "requirement-path-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let scripts = [
+            "node": "#!/bin/sh\nexec /usr/bin/printf 'v22.20.0\\n'\n",
+            "npx": "#!/usr/bin/env node\n",
+        ]
+        for (name, script) in scripts {
+            let path = root.appendingPathComponent(name)
+            try Data(script.utf8).write(to: path)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o700], ofItemAtPath: path.path)
+        }
+        let probe = HostRequirementToolProbe(directories: [root])
+        #expect(try await probe.inspect(id: "node") == .available("22.20.0"))
+        #expect(try await probe.inspect(id: "npx") == .available("22.20.0"))
+        let environment = try await HostRequirementToolProbe.execute(
+            URL(fileURLWithPath: "/usr/bin/env"), arguments: [])
+        #expect(environment.stdout.contains("HOME=/var/empty"))
+        #expect(environment.stdout.contains("npm_config_userconfig=/dev/null"))
+        #expect(!environment.stdout.contains("USER="))
+        #expect(
+            try FileManager.default.contentsOfDirectory(atPath: root.path).sorted() == [
+                "node", "npx",
+            ])
+        #expect(!HostRequirementToolProbe.nodeSupported("22.20.0-beta.1"))
     }
 
     @Test func originalMacOSCapabilitiesRetainVersionGates() {

@@ -34,8 +34,10 @@ public struct HostRequirementToolSpec: Equatable, Sendable {
     public typealias Run = (URL, [String]) async throws -> Output
     private let directories: [URL]
     private let run: Run
-    public init(directories: [URL], run: @escaping Run = { try await execute($0, arguments: $1) }) {
-        self.directories = directories; self.run = run
+    public init(directories: [URL], run: Run? = nil) {
+        self.directories = directories
+        self.run =
+            run ?? { try await Self.execute($0, arguments: $1, searchDirectories: directories) }
     }
 
     public func inspect(id: String) async throws -> HostRequirementObservation {
@@ -55,7 +57,7 @@ public struct HostRequirementToolSpec: Equatable, Sendable {
             try Task.checkCancellation()
             guard output.status == 0,
                 let version = Self.version(in: output.stdout + "\n" + output.stderr)
-            else { return .unknown(spec.executable + " was found, but its version probe failed.") }
+            else { return .failed(spec.executable + " was found, but its version probe failed.") }
             if id == "node", !Self.nodeSupported(version) {
                 return .unsupported(
                     "Plugins installation requires Node.js 22.20 or later. Found " + version
@@ -63,7 +65,7 @@ public struct HostRequirementToolSpec: Equatable, Sendable {
             }
             return .available(version)
         } catch is CancellationError { throw CancellationError() } catch {
-            return .unknown(
+            return .failed(
                 spec.executable + " version inspection failed: "
                     + String(error.localizedDescription.prefix(512)))
         }
@@ -85,17 +87,23 @@ public struct HostRequirementToolSpec: Equatable, Sendable {
 
     public static func execute(
         _ executable: URL, arguments: [String], timeout: Duration = .seconds(5),
-        maximumOutputBytes: Int = 32_768
+        maximumOutputBytes: Int = 32_768, searchDirectories: [URL] = []
     ) async throws -> Output {
         guard executable.isFileURL, arguments.count <= 16, maximumOutputBytes > 0,
-            maximumOutputBytes <= 65_536, timeout > .zero, timeout <= .seconds(30)
+            maximumOutputBytes <= 65_536, timeout > .zero, timeout <= .seconds(30),
+            searchDirectories.count <= 64,
+            searchDirectories.allSatisfy({
+                $0.isFileURL && $0.path.hasPrefix("/") && !$0.path.contains(":")
+            })
         else { throw HostCLIError.rejected("Invalid readonly executable probe bounds.") }
         try Task.checkCancellation()
         let process = Process()
         let stdout = Pipe(); let stderr = Pipe()
         process.executableURL = executable; process.arguments = arguments
         process.environment = [
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C",
+            "PATH": (searchDirectories.map(\.path) + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"])
+                .joined(separator: ":"),
+            "LANG": "C", "LC_ALL": "C",
             "HOMEBREW_NO_AUTO_UPDATE": "1", "HOMEBREW_NO_ANALYTICS": "1", "NO_UPDATE_NOTIFIER": "1",
             "npm_config_update_notifier": "false", "npm_config_offline": "true",
             "HOME": "/var/empty", "XDG_CONFIG_HOME": "/var/empty",
@@ -103,6 +111,7 @@ public struct HostRequirementToolSpec: Equatable, Sendable {
             "npm_config_cache": "/dev/null", "npm_config_audit": "false",
             "npm_config_fund": "false",
         ]
+        process.currentDirectoryURL = URL(fileURLWithPath: "/var/empty")
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = stdout; process.standardError = stderr
         let descriptors = [

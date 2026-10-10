@@ -87,7 +87,17 @@ public struct HostRequirementPackageInspection: Sendable {
                     FileManager.default.isExecutableFile(atPath: executable.path)
                 else { throw MarketplaceError.invalidBundle }
             }
-            try verify(carrier, bundles)
+            let outerCode = try FileManager.default.contentsOfDirectory(
+                at: payload, includingPropertiesForKeys: nil
+            ).filter { $0.pathExtension == "bundle" || $0.pathExtension == "app" }
+            let allowedApplications: Set<String> =
+                id == "virtualCamera"
+                ? ["ExtensionCarrier.app", "CameraCarrier.app"] : ["ExtensionCarrier.app"]
+            guard Set(outerCode.map(\.lastPathComponent)) == allowedApplications else {
+                throw MarketplaceError.invalidBundle
+            }
+            try verify(
+                carrier, bundles + outerCode.filter { $0.lastPathComponent == "CameraCarrier.app" })
             try Task.checkCancellation()
             return .installed(version: package.version, enabled: enabled, active: active)
         } catch is CancellationError { throw CancellationError() } catch {
