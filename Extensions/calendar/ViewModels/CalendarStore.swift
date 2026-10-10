@@ -17,6 +17,7 @@ public final class CalendarStore: FeatureModule {
     private static let eventStore = EKEventStore()
     private let snapshotStore: CalendarAgendaSnapshotStore
     private let fetchOverride: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?
+    private let authorization: @MainActor () -> EKAuthorizationStatus
     @ObservationIgnored private nonisolated(unsafe) var changeObserver: NSObjectProtocol?
     @ObservationIgnored private nonisolated(unsafe) var wakeObserver: NSObjectProtocol?
     @ObservationIgnored private nonisolated(unsafe) var wakeCenter: NotificationCenter?
@@ -36,11 +37,15 @@ public final class CalendarStore: FeatureModule {
 
     public init(
         snapshotStore: CalendarAgendaSnapshotStore,
-        fetch: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?
+        fetch: (@Sendable (CalendarEventQuery) async -> [CalendarEventPayload]?)?,
+        authorization: @escaping @MainActor () -> EKAuthorizationStatus = {
+            EKEventStore.authorizationStatus(for: .event)
+        }
     ) {
         self.snapshotStore = snapshotStore
         fetchOverride = fetch
-        authStatus = EKEventStore.authorizationStatus(for: .event)
+        self.authorization = authorization
+        authStatus = authorization()
     }
 
     deinit {
@@ -55,7 +60,11 @@ public final class CalendarStore: FeatureModule {
     public func start() {
         guard changeObserver == nil else { return }
         stopped = false
-        authStatus = EKEventStore.authorizationStatus(for: .event)
+        authStatus = authorization()
+        if fetchOverride != nil {
+            refresh()
+            return
+        }
         if fetchOverride == nil {
             if authStatus == .fullAccess {
                 refresh()
@@ -123,7 +132,7 @@ public final class CalendarStore: FeatureModule {
     }
 
     public func refreshAuthStatus() {
-        let status = EKEventStore.authorizationStatus(for: .event)
+        let status = authorization()
         guard status != authStatus else { return }
         authStatus = status
         if status == .fullAccess, changeObserver != nil { refresh() }

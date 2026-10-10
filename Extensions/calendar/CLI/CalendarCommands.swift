@@ -158,7 +158,7 @@ struct CalendarOpenCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             let url = await CalendarEventOperationExecution.openCalendar(
-                using: CalendarCLIEnvironment.openCalendar)
+                using: CalendarCLIEnvironment.performOpenCalendar)
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -202,7 +202,7 @@ struct CalendarJoinCommand: AsyncParsableCommand {
                     hint: "run `ed calendar ls --json` and choose an event with meetingURL")
             }
             let opened = await CalendarEventOperationExecution.join(
-                url, using: CalendarCLIEnvironment.openURL)
+                url, using: CalendarCLIEnvironment.performOpenURL)
             guard !json else {
                 CLIOut.json(
                     .object([
@@ -244,7 +244,7 @@ struct CalendarDirectionsCommand: AsyncParsableCommand {
                     CalendarEventQuery(days: CalendarEventQuery.maximumDays)))
             guard
                 let result = await CalendarEventOperationExecution.directions(
-                    found, using: CalendarCLIEnvironment.openURL),
+                    found, using: CalendarCLIEnvironment.performOpenURL),
                 let location = found.location?.trimmingCharacters(in: .whitespacesAndNewlines),
                 !location.isEmpty
             else {

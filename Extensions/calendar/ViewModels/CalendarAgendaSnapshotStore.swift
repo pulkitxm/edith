@@ -8,16 +8,21 @@ public actor CalendarAgendaSnapshotStore {
         ExtensionData.root.appendingPathComponent("Snapshots/calendar-agenda.json")
     }
 
-    private let file: URL
+    private let file: URL?
     private var memory: [CalendarEventPayload]?
 
     public init(file: URL) {
         self.file = file
     }
 
+    public init(events: [CalendarEventPayload]) {
+        file = nil
+        memory = events
+    }
+
     public func load() -> [CalendarEventPayload]? {
         if let memory { return memory }
-        guard let data = try? Data(contentsOf: file),
+        guard let file, let data = try? Data(contentsOf: file),
             let decoded = try? JSONDecoder().decode([CalendarEventPayload].self, from: data)
         else { return nil }
         memory = decoded
@@ -27,6 +32,7 @@ public actor CalendarAgendaSnapshotStore {
     public func save(_ events: [CalendarEventPayload]) {
         guard !Task.isCancelled else { return }
         memory = events
+        guard let file else { return }
         try? FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard let data = try? JSONEncoder().encode(events) else { return }
