@@ -1,4 +1,5 @@
 import Darwin
+import EdithExtensionSupport
 import Foundation
 
 final class TerminalPTY {
@@ -28,6 +29,12 @@ final class TerminalPTY {
         pid = spawned.pid
         _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
         _ = fcntl(descriptor, F_SETFL, O_NONBLOCK)
+        do {
+            try ExtensionCommandOwnership.register(pid)
+        } catch {
+            close()
+            throw error
+        }
         if let command = launch.startupCommand { try send(Data((command + "\n").utf8)) }
     }
 
@@ -49,7 +56,7 @@ final class TerminalPTY {
 
     func read(after cursor: UInt64, limit: Int = 32_768) throws -> Output {
         guard !closed, limit > 0, limit <= 32_768 else { throw POSIXError(.EINVAL) }
-        try pump()
+        try poll()
         let beginning = offset - UInt64(output.count)
         guard cursor >= beginning, cursor <= offset else { throw POSIXError(.EOVERFLOW) }
         let index = Int(cursor - beginning)
@@ -65,6 +72,7 @@ final class TerminalPTY {
         pendingInput.removeAll()
         output.removeAll()
         reap()
+        ExtensionCommandOwnership.release(pid)
         guard exitCode == nil else { return }
         _ = kill(-pid, SIGHUP)
         _ = kill(pid, SIGHUP)
@@ -77,8 +85,9 @@ final class TerminalPTY {
         }
     }
 
-    private func pump() throws {
-        try flushInput()
+    func poll() throws {
+        reap()
+        if exitCode == nil { try flushInput() } else { pendingInput.removeAll() }
         var buffer = [UInt8](repeating: 0, count: 8_192)
         for _ in 0..<32 {
             let count = Darwin.read(descriptor, &buffer, buffer.count)

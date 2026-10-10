@@ -11,8 +11,8 @@ enum TerminalSettingsKeys {
     static let confirmClose = "terminalConfirmClose"
 }
 
-struct TerminalSettings: Equatable, Sendable {
-    enum StartFolder: String, CaseIterable, Sendable {
+struct TerminalSettings: Codable, Equatable, Sendable {
+    enum StartFolder: String, Codable, CaseIterable, Sendable {
         case home
         case custom
 
@@ -64,6 +64,25 @@ struct TerminalSettings: Equatable, Sendable {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "",
             confirmClose: defaults.object(forKey: TerminalSettingsKeys.confirmClose) as? Bool
                 ?? true)
+    }
+
+    func validate() throws {
+        guard fontSize.isFinite, Self.fontSizeRange.contains(fontSize),
+            [shell, customFolder, startupCommand].allSatisfy({
+                $0.utf8.count <= 4_096 && !$0.utf8.contains(0)
+            })
+        else { throw CocoaError(.validationMissingMandatoryProperty) }
+    }
+
+    func save(to defaults: UserDefaults) throws {
+        try validate()
+        defaults.set(Self.clampedFontSize(fontSize), forKey: TerminalSettingsKeys.fontSize)
+        defaults.set(shell, forKey: TerminalSettingsKeys.shell)
+        defaults.set(loginShell, forKey: TerminalSettingsKeys.loginShell)
+        defaults.set(startFolder.rawValue, forKey: TerminalSettingsKeys.startFolder)
+        defaults.set(customFolder, forKey: TerminalSettingsKeys.customFolder)
+        defaults.set(startupCommand, forKey: TerminalSettingsKeys.startupCommand)
+        defaults.set(confirmClose, forKey: TerminalSettingsKeys.confirmClose)
     }
 
     static func clampedFontSize(_ size: Double) -> Double {

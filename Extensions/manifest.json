@@ -1181,6 +1181,8 @@
     "roles": {
       "app": [
         "Extensions/terminal/Runtime.swift",
+        "Extensions/terminal/TerminalEngine.swift",
+        "Extensions/terminal/TerminalPTY.swift",
         "Extensions/terminal/TerminalLaunchPlan.swift",
         "Extensions/terminal/TerminalLoadingSkeleton.swift",
         "Extensions/terminal/TerminalPage.swift",

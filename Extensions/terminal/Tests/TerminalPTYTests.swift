@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import TerminalExtension
@@ -13,7 +14,7 @@ import Testing
     private func collect(_ terminal: TerminalPTY) async throws -> (Data, Int32?) {
         var bytes = Data()
         var offset: UInt64 = 0
-        for _ in 0..<300 {
+        for _ in 0..<1000 {
             try Task.checkCancellation()
             let next = try terminal.read(after: offset)
             bytes.append(next.bytes)
@@ -53,7 +54,7 @@ import Testing
         let terminal = try TerminalPTY(launch: launch("head -c 400000 /dev/zero"))
         defer { terminal.close() }
         var cursor: UInt64 = 0
-        for _ in 0..<300 {
+        for _ in 0..<1000 {
             let next = try terminal.read(after: cursor)
             cursor = next.nextOffset
             if next.exitCode != nil { break }
@@ -63,6 +64,23 @@ import Testing
         #expect(throws: POSIXError.self) { try terminal.read(after: 0) }
         let replay = try terminal.read(after: cursor - 100)
         #expect(replay.bytes == Data(repeating: 0, count: 100))
+    }
+
+    @Test func shutdownTerminatesAndReapsTheExactOwnedChild() async throws {
+        let terminal = try TerminalPTY(launch: launch("printf '%s' $$; exec cat"))
+        defer { terminal.close() }
+        var bytes = Data()
+        for _ in 0..<100 where bytes.isEmpty {
+            bytes = try terminal.read(after: 0).bytes
+            if bytes.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        let pid = try #require(Int32(String(decoding: bytes, as: UTF8.self)))
+        #expect(kill(pid, 0) == 0)
+        terminal.close()
+        for _ in 0..<100 where kill(pid, 0) == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(kill(pid, 0) == -1 && errno == ESRCH)
     }
 
     @Test func inputAndOutputAreBoundedAndClosedSessionsRejectOperations() async throws {
