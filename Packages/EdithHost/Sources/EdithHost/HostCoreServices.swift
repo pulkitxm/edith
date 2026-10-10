@@ -71,6 +71,7 @@ import SwiftUI
             update(try await process.start())
             failure = nil
             startSettingsScheduler()
+            refreshExistingCompletions()
             if workflowModel.incomplete,
                 marketplace.downloadedIDs.isEmpty
                     || defaults.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)
@@ -372,6 +373,15 @@ import SwiftUI
             if error is CancellationError { throw error }
             throw HostCoreCommandFailure("background agent", hint: failure)
         }
+    }
+
+    private func refreshExistingCompletions() {
+        guard let launcher = HostToolingCLI.bundledLauncher() else { return }
+        let tooling = HostToolingCLI(
+            home: FileManager.default.homeDirectoryForCurrentUser,
+            executable: launcher, path: [])
+        _ = tooling.refreshExistingCompletions(
+            enabled: defaults.object(forKey: "completionsAutoRefresh") as? Bool ?? true)
     }
 
     private func startObservation() {
