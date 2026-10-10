@@ -4,6 +4,7 @@ import {
   chmod,
   link,
   mkdtemp,
+  readFile,
   realpath,
   rm,
   stat,
@@ -13,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { managedProcessPaths } from "./hosted-managed-views/owned-cleanup.mjs";
 import {
   managedToolEnvironment,
   readOwnedManagedDocument,
@@ -80,6 +82,7 @@ async function setup() {
     extensionID: "music",
     package: {
       version: "1.0.0",
+      architecture: "arm64",
       hostABI: "edith-host-2",
       sha256: "c".repeat(64),
     },
@@ -106,6 +109,7 @@ test("producer observes actual execution concurrently and requires drain and man
       resultBundle: "synthetic-result",
       environment,
       configure: () => {},
+      cleanupControl: async () => [],
       pause: () => new Promise((resolve) => setTimeout(resolve, 1)),
       audit: async () => {
         reads++;
@@ -146,6 +150,7 @@ test("metadata-only fake completion, remaining Host and failed commands cannot b
           resultBundle: "result",
           environment,
           configure: () => {},
+          cleanupControl: async () => [],
           pause: () => new Promise((resolve) => setTimeout(resolve, 1)),
           audit: async () =>
             type === "remained" && done
@@ -259,6 +264,129 @@ test("owned receipt reader rejects FIFO, hardlink, public modes and real same-si
     ).rejects.toThrow();
   } finally {
     await chmod(fixture.directory, 0o700);
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("failed XCTest with a surviving LaunchServices Host performs pinned cleanup and remains failed", async () => {
+  const fixture = await setup();
+  const host = {
+    pid: 101,
+    generation: "100.1",
+    uid: process.getuid(),
+    executable: join(fixture.app, "Contents/MacOS/Edith"),
+    hostIdentifier: fixture.identifier,
+  };
+  let running = false;
+  const operations = [];
+  try {
+    let caught;
+    try {
+      await runManagedOwner({
+        fixture,
+        owner,
+        plan: "plan",
+        resultBundle: "result",
+        environment,
+        configure: () => {},
+        pause: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+        },
+        audit: async () => (running ? [host] : []),
+        inspectOwned: async () => (running ? [{ ...host, role: "host" }] : []),
+        cleanupControl: async (operation) => {
+          operations.push(operation);
+          if (operation === "--terminate-host") running = false;
+          return running ? [{ ...host, role: "host" }] : [];
+        },
+        runCommand: async () => {
+          running = true;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          throw Error("owned XCTest timed out");
+        },
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught.message).toBe("owned XCTest timed out");
+    expect(caught.cleanup.outcome).toBe("drained");
+    expect(caught.cleanup.managedViewPassed).toBe(false);
+    expect(caught.cleanup.initialOwnedGenerations).toBe(1);
+    expect(operations).toContain("--terminate-host");
+    expect(running).toBe(false);
+    expect(
+      JSON.parse(
+        await readFile(join(fixture.directory, "cleanup-result.json")),
+      ),
+    ).toEqual(caught.cleanup);
+    await expect(
+      readFile(join(fixture.directory, "execution-result.json")),
+    ).rejects.toThrow();
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test("independent peer observation acknowledges exact source and owned generation before managed fixture can close", async () => {
+  const fixture = await setup();
+  const host = {
+    pid: 101,
+    generation: "100.1",
+    uid: process.getuid(),
+    executable: join(fixture.app, "Contents/MacOS/Edith"),
+    hostIdentifier: fixture.identifier,
+  };
+  const paths = managedProcessPaths(fixture);
+  const peers = [
+    { ...host, role: "host" },
+    { ...host, pid: 102, role: "engine" },
+    { ...host, pid: 103, role: "ui", executable: paths.ui },
+  ];
+  let running = false;
+  try {
+    const result = await runManagedOwner({
+      fixture,
+      owner,
+      plan: "plan",
+      resultBundle: "result",
+      environment,
+      configure: () => {},
+      pause: async () => new Promise((resolve) => setTimeout(resolve, 1)),
+      audit: async () => (running ? [host] : []),
+      inspectOwned: async () => (running ? peers : []),
+      cleanupControl: async () => [],
+      runCommand: async () => {
+        running = true;
+        const deadline = Date.now() + 1000;
+        let acknowledgement;
+        while (Date.now() < deadline) {
+          try {
+            acknowledgement = JSON.parse(
+              await readFile(join(fixture.directory, "managed-peer-ack.json")),
+            );
+            break;
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+            await new Promise((resolve) => setTimeout(resolve, 1));
+          }
+        }
+        expect(acknowledgement.sourceCommit).toBe(source);
+        expect(acknowledgement.extensionID).toBe("music");
+        expect(acknowledgement.processes).toEqual(
+          peers.map(({ pid, generation, role }) => ({ pid, generation, role })),
+        );
+        await writeFile(
+          join(fixture.directory, "result-managed-shipping.json"),
+          JSON.stringify(proof),
+          { mode: 0o600 },
+        );
+        running = false;
+      },
+    });
+    expect(result.observedOwnedProcesses).toHaveLength(3);
+    expect(result.cleanup.independentlyPinnedGenerationsExited).toBe(true);
+    expect(result.cleanup.actions).toEqual([]);
+  } finally {
     await rm(fixture.directory, { recursive: true, force: true });
   }
 });

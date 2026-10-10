@@ -16,6 +16,7 @@ import { extensionFingerprint } from "../extension-release-plan.mjs";
 import { loadManagedViewReview } from "./contract.mjs";
 import {
   admitManagedExecution,
+  managedAuthenticatedFetch,
   parseManagedExecutionArguments,
   validateManagedExecutionResults,
 } from "./execution-contract.mjs";
@@ -109,15 +110,7 @@ assert.equal(
   1,
   "Expected one disposable hosted signing identity",
 );
-const token = process.env.GITHUB_TOKEN;
-assert(typeof token === "string" && token.length > 0);
-const authenticatedFetch = (url, init = {}) => {
-  assert.equal(new URL(url).origin, "https://api.github.com");
-  return fetch(url, {
-    ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${token}` },
-  });
-};
+const authenticatedFetch = managedAuthenticatedFetch(process.env, fetch);
 const fixtures = [],
   results = [];
 let failure;
@@ -277,6 +270,7 @@ try {
         outcome: "failed",
         stage,
         category: error.name,
+        cleanup: error.cleanup ?? null,
         completedOwners: results.map(({ extensionID }) => extensionID),
         fixtureSourceCommit: sourceCommit,
         originalSourceCommit: options.artifactSource,

@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, realpath, writeFile } from "node:fs/promises";
+import { lstat, open, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { validateManagedViewProof } from "./contract.mjs";
+import {
+  cleanupManagedOwnedProcesses,
+  recordManagedOwnedProcesses,
+} from "./owned-cleanup.mjs";
 import {
   recordManagedHostObservation,
   validateManagedApprovalReceipt,
@@ -123,6 +128,8 @@ export async function runManagedOwner({
   environment,
   runCommand,
   audit,
+  inspectOwned,
+  cleanupControl,
   configure = configureManagedUITestRun,
   pause = (milliseconds) =>
     new Promise((resolve) => setTimeout(resolve, milliseconds)),
@@ -141,6 +148,37 @@ export async function runManagedOwner({
       });
       return JSON.parse(stdout);
     });
+  const ownedInspect =
+    inspectOwned ??
+    (audit
+      ? async () => []
+      : async () => {
+          const { stdout } = await execute(
+            auditExecutable,
+            [fixture.directory, "--owned"],
+            {
+              env: auditEnvironment,
+              timeout: 10000,
+              maxBuffer: 16384,
+            },
+          );
+          return JSON.parse(stdout);
+        });
+  const control =
+    cleanupControl ??
+    (async (operation) => {
+      const { stdout } = await execute(
+        auditExecutable,
+        [fixture.directory, operation],
+        {
+          env: auditEnvironment,
+          timeout: 10000,
+          maxBuffer: 16384,
+        },
+      );
+      return JSON.parse(stdout);
+    });
+  const ownedLedger = [];
   const ledger = [];
   let stopping = false,
     observationFailure;
@@ -153,6 +191,35 @@ export async function runManagedOwner({
           fixture,
           process.getuid(),
         );
+        recordManagedOwnedProcesses(
+          ownedLedger,
+          await ownedInspect(),
+          fixture,
+          process.getuid(),
+        );
+        if (ownedLedger.some(({ role }) => role !== "host")) {
+          const pending = join(
+            fixture.directory,
+            `managed-peer-ack-${randomUUID()}.json`,
+          );
+          await writeFile(
+            pending,
+            JSON.stringify({
+              sourceCommit: fixture.sourceCommit,
+              extensionID: fixture.extensionID,
+              processes: ownedLedger.map(({ pid, generation, role }) => ({
+                pid,
+                generation,
+                role,
+              })),
+            }),
+            { flag: "wx", mode: 0o600 },
+          );
+          await rename(
+            pending,
+            join(fixture.directory, "managed-peer-ack.json"),
+          );
+        }
       } catch (error) {
         observationFailure = error;
         stopping = true;
@@ -193,7 +260,60 @@ export async function runManagedOwner({
     stopping = true;
     await observer;
   }
-  if (observationFailure) throw observationFailure;
+  let finalObservations;
+  try {
+    finalObservations = await inspect();
+    recordManagedHostObservation(
+      ledger,
+      finalObservations,
+      fixture,
+      process.getuid(),
+    );
+    recordManagedOwnedProcesses(
+      ownedLedger,
+      await ownedInspect(),
+      fixture,
+      process.getuid(),
+    );
+  } catch (error) {
+    observationFailure ??= error;
+  }
+  for (const row of ledger)
+    recordManagedOwnedProcesses(
+      ownedLedger,
+      [{ ...row, role: "host" }],
+      fixture,
+      process.getuid(),
+    );
+  let cleanup;
+  try {
+    cleanup = await cleanupManagedOwnedProcesses({
+      fixture,
+      ledger: ownedLedger,
+      control,
+      pause,
+    });
+  } catch (error) {
+    throw new AggregateError(
+      [observationFailure, commandFailure, error].filter(Boolean),
+      "Hosted fixture failed and cleanup was not verified",
+    );
+  }
+  if (
+    observationFailure ||
+    commandFailure ||
+    finalObservations?.length ||
+    cleanup.initialOwnedGenerations
+  ) {
+    const failure =
+      observationFailure ??
+      commandFailure ??
+      new Error(
+        "An exact owned fixture generation remained running after XCTest exit",
+      );
+    failure.cleanup = cleanup;
+    throw failure;
+  }
   assert.deepEqual(
     await inspect(),
     [],
@@ -247,6 +367,12 @@ export async function runManagedOwner({
       uid,
     })),
     hostExited: true,
+    cleanup,
+    observedOwnedProcesses: ownedLedger.map(({ pid, generation, role }) => ({
+      pid,
+      generation,
+      role,
+    })),
     approval,
     proof,
   };

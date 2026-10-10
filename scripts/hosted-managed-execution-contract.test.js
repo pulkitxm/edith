@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   admitManagedExecution,
   managedApplicationEnvironment,
+  managedAuthenticatedFetch,
   parseManagedExecutionArguments,
   validateManagedExecutionResults,
 } from "./hosted-managed-views/execution-contract.mjs";
@@ -149,4 +150,32 @@ test("all39 aggregation refuses missing views, stale archives, failed drain and 
       validateManagedExecutionResults(rows, review, fixtures),
     ).toThrow();
   }
+});
+
+test("artifact authentication captures its credential without exposing it to compiler environments", async () => {
+  const variables = { ...environment, GITHUB_TOKEN: "synthetic-credential" };
+  const requests = [];
+  const authenticated = managedAuthenticatedFetch(
+    variables,
+    async (url, init) => {
+      requests.push({ url, init });
+      return "synthetic-result";
+    },
+  );
+  expect(variables).not.toHaveProperty("GITHUB_TOKEN");
+  const compilerEnvironment = { ...variables, EXTENSION_SWIFT_JOBS: "1" };
+  expect(compilerEnvironment).not.toHaveProperty("GITHUB_TOKEN");
+  expect(
+    await authenticated(
+      "https://api.github.com/repos/pulkitxm/edith/actions/runs/42",
+      { headers: { Accept: "application/json" } },
+    ),
+  ).toBe("synthetic-result");
+  expect(requests[0].init.headers.Authorization).toBe(
+    "Bearer synthetic-credential",
+  );
+  expect(requests[0].init.headers.Accept).toBe("application/json");
+  expect(() => authenticated("https://foreign.invalid/asset")).toThrow();
+  expect(requests).toHaveLength(1);
+  expect(() => managedAuthenticatedFetch({}, async () => {})).toThrow();
 });

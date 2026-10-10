@@ -9,6 +9,19 @@ const reviewedRefs = new Set([
 ]);
 const sha = /^[a-f0-9]{40}$/;
 
+export function managedAuthenticatedFetch(environment, fetch_) {
+  const token = environment.GITHUB_TOKEN;
+  assert(typeof token === "string" && token.length > 0);
+  delete environment.GITHUB_TOKEN;
+  return (url, init = {}) => {
+    assert.equal(new URL(url).origin, "https://api.github.com");
+    return fetch_(url, {
+      ...init,
+      headers: { ...init.headers, Authorization: `Bearer ${token}` },
+    });
+  };
+}
+
 export function parseManagedExecutionArguments(args) {
   assert.equal(args.length, 4);
   assert.equal(args[0], "--artifact-run");
