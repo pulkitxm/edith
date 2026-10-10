@@ -1,4 +1,4 @@
-# Install
+# `ed extensions install`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 

@@ -1,4 +1,4 @@
-# Enable
+# `ed extensions enable`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 

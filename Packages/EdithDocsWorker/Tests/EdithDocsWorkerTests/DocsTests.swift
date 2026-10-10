@@ -22,9 +22,9 @@ enum DocsFixture {
 
     @Test func parsesHeadingsAnchorsTablesCodeListsAndLinks() {
         let page = DocsParser.page(
-            path: "herdr/ls.md",
+            path: "extensions/ls.md",
             markdown: """
-                # `ed herdr ls`
+                # `ed extensions ls`
 
                 Lists **live** panes with *care* and `--json`, see [the group](./README.md#notes) \
                 or [TypeSafe](https://typesafe.ai).
@@ -48,9 +48,9 @@ enum DocsFixture {
 
                 ---
                 """)
-        #expect(page.title == "ed herdr ls")
-        #expect(page.command == "ed herdr ls")
-        #expect(page.headings.map(\.anchor) == ["ed-herdr-ls", "options", "options-1"])
+        #expect(page.title == "ed extensions ls")
+        #expect(page.command == "ed extensions ls")
+        #expect(page.headings.map(\.anchor) == ["ed-extensions-ls", "options", "options-1"])
         #expect(page.outline.count == 2)
         guard case .paragraph(let spans) = page.blocks[1] else {
             Issue.record("the abstract is not a paragraph")
@@ -59,7 +59,7 @@ enum DocsFixture {
         #expect(spans.contains { $0.text == "live" && $0.style == .strong })
         #expect(spans.contains { $0.text == "care" && $0.style == .emphasis })
         #expect(spans.contains { $0.text == "--json" && $0.style == .code })
-        #expect(spans.contains { $0.link == .page(path: "herdr/README.md", anchor: "notes") })
+        #expect(spans.contains { $0.link == .page(path: "extensions/README.md", anchor: "notes") })
         #expect(spans.contains { $0.link == .external(URL(string: "https://typesafe.ai")!) })
         guard case .table(let table) = page.blocks[3] else {
             Issue.record("the options table did not parse")
@@ -91,7 +91,14 @@ enum DocsFixture {
     @Test func everyBundledCommandResolvesToADocumentedSection() throws {
         let library = DocsFixture.library
         let leaves = library.commands.map(\.path)
-        #expect(leaves.count > 300)
+        #expect(
+            Set(leaves)
+                == Set([
+                    "ed extensions", "ed extensions ls", "ed extensions info",
+                    "ed extensions install",
+                    "ed extensions update", "ed extensions enable", "ed extensions disable",
+                    "ed extensions remove", "ed invoke",
+                ]))
         for leaf in leaves {
             let location = try #require(library.location(forCommand: leaf), "\(leaf) has no page")
             let page = try #require(library.page(location.path), "\(leaf) points at no page")
@@ -106,14 +113,17 @@ enum DocsFixture {
 
     @Test func commandsResolveToTheirOwnSections() {
         let library = DocsFixture.library
-        #expect(library.location(forCommand: "ed herdr ls") == DocsLocation(path: "herdr/ls.md"))
-        #expect(library.location(forCommand: "herdr ls") == DocsLocation(path: "herdr/ls.md"))
         #expect(
-            library.location(forCommand: "ed machines power reboot")
-                == DocsLocation(path: "machines-power/power-reboot.md"))
-        #expect(library.location(forCommand: "ed quinjet sessions")?.anchor == "native-sessions")
-        #expect(library.lookup("herdr/ls") == DocsLocation(path: "herdr/ls.md"))
-        #expect(library.lookup("herdr") == DocsLocation(path: "herdr/README.md"))
+            library.location(forCommand: "ed extensions ls")
+                == DocsLocation(path: "extensions/ls.md"))
+        #expect(
+            library.location(forCommand: "extensions ls") == DocsLocation(path: "extensions/ls.md"))
+        #expect(
+            library.location(forCommand: "ed extensions enable")
+                == DocsLocation(path: "extensions/enable.md"))
+        #expect(library.location(forCommand: "ed invoke") == DocsLocation(path: "invoke/README.md"))
+        #expect(library.lookup("extensions/ls") == DocsLocation(path: "extensions/ls.md"))
+        #expect(library.lookup("extensions") == DocsLocation(path: "extensions/README.md"))
         #expect(library.lookup("nothing at all") == nil)
     }
 
@@ -149,33 +159,14 @@ enum DocsFixture {
 
 @Suite struct DocsAskTests {
     static let cases: [(String, String)] = [
-        ("pause the music", "ed music pause"),
-        ("stop the music", "ed music stop"),
-        ("how much of my claude limit is left", "ed usage limits"),
-        ("reboot tuf", "ed machines power reboot"),
-        ("clean up build caches", "ed cleaner clean"),
-        ("list my servers", "ed machines ls"),
-        ("free up docker space on my server", "ed machines docker prune"),
-        ("restart the background agent", "ed agent restart"),
-        ("skip to the next song", "ed music next"),
-        ("shut down the machine", "ed machines power shutdown"),
-        ("wake my server with wake on lan", "ed machines power wake"),
-        ("list docker containers on my server", "ed machines docker ps"),
-        ("tail container logs", "ed machines docker logs"),
-        ("delete a docker image", "ed machines docker rmi"),
-        ("upload a file to my server", "ed machines files put"),
-        ("install shell completions", "ed completions install"),
-        ("change the value of a setting", "ed config set"),
-        ("upgrade homebrew packages", "ed brew upgrade"),
+        ("list extensions", "ed extensions ls"),
+        ("inspect extension info", "ed extensions info"),
+        ("install an extension", "ed extensions install"),
+        ("update an extension", "ed extensions update"),
         ("enable an extension", "ed extensions enable"),
-        ("start a lid awake session", "ed lid-awake on"),
-        ("add a port forward", "ed machines forwards add"),
-        ("mount a server as a disk in finder", "ed machines mount"),
-        ("daily cost of tokens", "ed usage daily"),
-        ("clear clipboard history", "ed clipboard clear"),
-        ("make the music quieter", "ed music volume"),
-        ("stop presenter mode", "ed presenter stop"),
-        ("set the typesafe api key", "ed jev key set"),
+        ("disable an extension", "ed extensions disable"),
+        ("remove an extension", "ed extensions remove"),
+        ("invoke a worker operation", "ed invoke"),
     ]
 
     @Test(arguments: cases) func lexicalRankerFindsTheCommand(_ request: String, _ expected: String)
@@ -217,29 +208,31 @@ enum DocsFixture {
         return defaults
     }
 
-    static func musicDecider(_ calls: Calls, area: Double = 0.9) -> Decider {
+    static func gatewayDecider(_ calls: Calls, area: Double = 0.9) -> Decider {
         Decider(calls: calls) { request in
             if request.questions["area"] != nil {
                 return DocsJevFixture.decision(
-                    "area", ["music": area, "usage": min(area, 1 - area)])
+                    "area", ["extensions": area, "invoke": min(area, 1 - area)])
             }
-            guard case .fields(let state) = request.state, state["area"] == "music" else {
+            guard case .fields(let state) = request.state, state["area"] == "extensions" else {
                 return DocsJevFixture.decision(
-                    "command", ["usage limits": 0.6, "usage daily": 0.4])
+                    "command", ["invoke synthetic inspect": 0.6, "invoke synthetic reset": 0.4])
             }
-            return DocsJevFixture.decision("command", ["music pause": 0.8, "music stop": 0.2])
+            return DocsJevFixture.decision(
+                "command", ["extensions enable": 0.8, "extensions disable": 0.2])
         }
     }
 
     @Test func jevCombinesAreaAndCommandProbabilities() async {
         let calls = Calls()
         let answer = await DocsAsk.answer(
-            "hush the speakers", in: DocsFixture.library, decider: Self.musicDecider(calls),
+            "activate an extension", in: DocsJevFixture.library,
+            decider: Self.gatewayDecider(calls),
             defaults: Self.defaults(configured: true))
         #expect(answer.engine == .jev)
-        #expect(answer.picks.first?.command.path == "ed music pause")
+        #expect(answer.picks.first?.command.path == "ed extensions enable")
         #expect(abs((answer.picks.first?.probability ?? 0) - 0.72) < 0.0001)
-        #expect(answer.picks.first?.command.location == DocsLocation(path: "music/pause.md"))
+        #expect(answer.picks.first?.command.location == DocsLocation(path: "extensions/enable.md"))
         #expect(calls.value == 3)
     }
 
@@ -247,26 +240,26 @@ enum DocsFixture {
         let calls = Calls()
         let failing = Decider(calls: calls) { _ in throw JevError.noCredits("no credits") }
         let answer = await DocsAsk.answer(
-            "pause the music", in: DocsFixture.library, decider: failing,
+            "enable an extension", in: DocsJevFixture.library, decider: failing,
             defaults: Self.defaults(configured: true))
         #expect(calls.value == 1)
         #expect(answer.engine == .search)
-        #expect(answer.picks.first?.command.path == "ed music pause")
+        #expect(answer.picks.first?.command.path == "ed extensions enable")
     }
 
     @Test func unsureJevFallsBackToSearch() async {
         let answer = await DocsAsk.answer(
-            "pause the music", in: DocsFixture.library,
-            decider: Self.musicDecider(Calls(), area: 0.1),
+            "enable an extension", in: DocsJevFixture.library,
+            decider: Self.gatewayDecider(Calls(), area: 0.1),
             defaults: Self.defaults(configured: true))
         #expect(answer.engine == .search)
-        #expect(answer.picks.first?.command.path == "ed music pause")
+        #expect(answer.picks.first?.command.path == "ed extensions enable")
     }
 
     @Test func noKeyMakesNoJevCall() async {
         let calls = Calls()
         let answer = await DocsAsk.answer(
-            "pause the music", in: DocsFixture.library, decider: Self.musicDecider(calls),
+            "enable an extension", in: DocsJevFixture.library, decider: Self.gatewayDecider(calls),
             defaults: Self.defaults(configured: false))
         #expect(calls.value == 0)
         #expect(answer.engine == .search)
@@ -278,7 +271,9 @@ enum DocsFixture {
         #expect(groups.count >= 2 && groups.count <= JevQuestion.maximumOptions)
         #expect(groups.allSatisfy { $0.members.count <= JevQuestion.maximumOptions })
         #expect(
-            groups.contains { $0.id == "music" && $0.members.contains { $0.id == "music pause" } })
+            groups.contains {
+                $0.id == "extensions" && $0.members.contains { $0.id == "extensions enable" }
+            })
     }
 
     @Test func routeGroupsOfferTheCommandsRatherThanTheGroupPage() {

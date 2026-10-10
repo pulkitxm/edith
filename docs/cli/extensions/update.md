@@ -1,4 +1,4 @@
-# Update
+# `ed extensions update`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 

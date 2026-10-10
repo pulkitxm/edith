@@ -1,4 +1,4 @@
-# Info
+# `ed extensions info`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 
