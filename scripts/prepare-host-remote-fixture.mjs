@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFile,
   cp,
@@ -258,6 +259,9 @@ export async function prepareHostRemoteFixture({
       sha256: package_.sha256,
       sourceFingerprint: package_.sourceFingerprint,
       backgroundOnly: true,
+      hostExecutableSHA256: createHash("sha256")
+        .update(await readFile(executable))
+        .digest("hex"),
     };
     await writeFile(join(directory, "fixture.json"), JSON.stringify(result));
     return result;

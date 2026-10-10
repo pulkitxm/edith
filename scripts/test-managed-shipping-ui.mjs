@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { closeSync, createReadStream, openSync } from "node:fs";
-import { mkdir, readFile, unlink } from "node:fs/promises";
+import { readFile, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { extensionFingerprint } from "./extension-release-plan.mjs";
 import { validateManagedNativeProof } from "./extension-worker-proof.mjs";
+import { prepareManagedShippingData } from "./managed-shipping-fixture-data.mjs";
 
 const [directory_] = process.argv.slice(2);
 assert(directory_, "Usage: test-managed-shipping-ui.mjs fixture-directory");
@@ -16,12 +18,28 @@ const fixture = JSON.parse(
 assert.equal(fixture.directory, directory);
 assert.match(fixture.identifier, /^com\.pulkit\.edith\.tests\.remote-/);
 assert.equal(fixture.backgroundOnly, true);
+assert.equal(
+  createHash("sha256")
+    .update(await readFile(fixture.executable))
+    .digest("hex"),
+  fixture.hostExecutableSHA256,
+);
 const package_ = JSON.parse(
   await readFile(join(directory, "selected-package.json"), "utf8"),
 );
 assert.equal(fixture.extensionID, package_.id);
 assert.equal(fixture.version, package_.version);
 assert.equal(fixture.hostABI, package_.hostABI);
+const definitions = JSON.parse(
+  await readFile("Extensions/manifest.json", "utf8"),
+);
+const definition = definitions.find(({ id }) => id === package_.id);
+assert(definition);
+assert.equal(
+  await extensionFingerprint(process.cwd(), definition, definitions),
+  package_.sourceFingerprint,
+  "The managed fixture must use current shipping source",
+);
 const hash = createHash("sha256");
 let bytes = 0;
 for await (const chunk of createReadStream(fixture.archive)) {
@@ -35,9 +53,10 @@ const resultFile = join(directory, "result-managed-shipping.json");
 await unlink(resultFile).catch((error) => {
   if (error.code !== "ENOENT") throw error;
 });
-await mkdir(join(directory, "synthetic-data"), {
-  recursive: true,
-  mode: 0o700,
+const { fixtureHome } = await prepareManagedShippingData({
+  directory,
+  identifier: fixture.identifier,
+  package_,
 });
 const trace = openSync(join(directory, "managed-shipping-trace.log"), "w");
 const child = spawn(
@@ -50,7 +69,7 @@ const child = spawn(
       EDITH_REMOTE_OFFSCREEN_FIXTURE: "0",
       EDITH_REMOTE_RETAINED_NEGATIVE: "0",
       EDITH_REMOTE_UNCONNECTED_CLEANUP: "0",
-      EDITH_EXTENSION_FIXTURE_HOME: join(directory, "synthetic-data"),
+      EDITH_EXTENSION_FIXTURE_HOME: fixtureHome,
     },
   },
 );
@@ -91,6 +110,7 @@ try {
       ...result,
       sha256: package_.sha256,
       sourceFingerprint: package_.sourceFingerprint,
+      hostExecutableSHA256: fixture.hostExecutableSHA256,
     }),
   );
 } finally {
