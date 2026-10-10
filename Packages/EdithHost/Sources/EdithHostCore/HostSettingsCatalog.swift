@@ -3,6 +3,9 @@ import Foundation
 
 public enum HostSettingsCatalog {
     public static let onboardingCompletedKey = "onboardingCompleted"
+    public static let workflowKey = "onboardingWorkflow"
+    public static let workflowSelectionKey = "onboardingWorkflowSelection"
+    public static let onboardingReviewPendingKey = "onboardingReviewPending"
     public static let keys: Set<String> = [
         "SUAutomaticallyUpdate",
         "SUEnableAutomaticChecks",
@@ -57,7 +60,7 @@ public enum HostSettingsCatalog {
         "musicLastPosition",
         "musicLastTrack",
         "musicWasPlaying",
-        onboardingCompletedKey,
+        onboardingCompletedKey, workflowKey, workflowSelectionKey,
         "presenterHotKeyCode",
         "presenterHotKeyLabel",
         "presenterHotKeyMods",

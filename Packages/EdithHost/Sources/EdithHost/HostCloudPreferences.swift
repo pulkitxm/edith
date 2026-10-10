@@ -44,6 +44,7 @@ import Foundation
     var readyForSettingsBackup: Bool {
         enabled(.icloud) && enabled(.settings)
             && application.bool(forKey: HostSettingsCatalog.onboardingCompletedKey)
+            && !application.bool(forKey: HostWorkflowOnboardingModel.reviewPendingKey)
     }
 
     func set(_ option: Option, enabled: Bool) {

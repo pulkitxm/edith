@@ -28,6 +28,7 @@ struct HostApplication: App {
                     if let marketplace {
                         HostWorkspace(
                             marketplace: marketplace, presenter: remotePresenter, updater: updater,
+                            showWelcome: { coreServices?.showWelcome() },
                             panelShortcutChanged: { coreServices?.panelShortcutChanged() },
                             additionalSettings: { coreServices?.settings($0) },
                             coreOnline: coreServices?.online ?? false,
@@ -84,7 +85,7 @@ struct HostApplication: App {
                             AnyView(
                                 HostDetachedSection(
                                     marketplace: loaded, updater: updater, destination: page,
-                                    presenter: presenter,
+                                    presenter: presenter, showWelcome: { services.showWelcome() },
                                     panelShortcutChanged: { services.panelShortcutChanged() },
                                     additionalSettings: { services.settings($0) },
                                     select: { id in
