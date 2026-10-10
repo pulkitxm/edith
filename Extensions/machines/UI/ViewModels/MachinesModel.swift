@@ -9,7 +9,9 @@ import SwiftUI
 final class MachinesModel {
     static var shared = MachinesModel()
 
-    private(set) var store = MachineStore()
+    private(set) var store: MachineStore
+    let uiClient: MachineUIClient?
+    var operationError: String?
     private(set) var sessions: [UUID: MachineSession] = [:]
     private(set) var sshClipboardStates: [UUID: SSHClipboardSyncState] = [:]
     var selection: UUID?
@@ -22,7 +24,10 @@ final class MachinesModel {
     private var mutationJob: Task<Void, Never>?
     private var mutationSequence = 0
 
-    init() {
+    init(uiClient: MachineUIClient? = nil) {
+        self.uiClient = uiClient
+        store = MachineStore(inMemory: uiClient != nil)
+        guard uiClient == nil else { return }
         machinesObserver = IPC.observe("machinesChanged") { [weak self] in
             Task { @MainActor in
                 self?.store.reload()
@@ -30,6 +35,25 @@ final class MachinesModel {
             }
         }
     }
+
+    func applyUIState(_ state: MachineUIState) {
+        guard uiClient != nil else { return }
+        sshClipboardStates = state.clipboardStates
+        store.apply(
+            .init(machines: state.machines, forwards: state.forwards, snippets: state.snippets))
+        let known = Set(allMachines.map(\.id))
+        sessions = sessions.filter { known.contains($0.key) }
+        for value in state.sessions where known.contains(value.machine.id) {
+            if sessions[value.machine.id]?.machine != value.machine {
+                sessions[value.machine.id] = nil
+            }
+            session(for: value.machine.id).applyUIState(value)
+        }
+        ensureSelection()
+        operationError = nil
+    }
+
+    func reloadOwnedRecords() { store.reload(); ensureSelection() }
 
     var allMachines: [Machine] {
         [localMachine] + store.machines
@@ -47,7 +71,8 @@ final class MachinesModel {
         let machine = isLocal ? localMachine : store.machine(id: id)
         let session = MachineSession(
             machine: machine ?? Machine.missing(id: id), local: isLocal,
-            synthetic: ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil)
+            synthetic: ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil,
+            uiClient: uiClient)
         sessions[id] = session
         return session
     }
@@ -117,6 +142,13 @@ final class MachinesModel {
         secrets: MachineSecretChanges = MachineSecretChanges(),
         completion: @escaping @MainActor (Machine?) async -> Void
     ) {
+        if let uiClient {
+            uiClient.enqueue {
+                try await uiClient.mutate(
+                    MachineUIMutation(operation: operation, machine: machine, secrets: secrets))
+            }
+            return
+        }
         let predecessor = mutationJob
         mutationSequence += 1
         let sequence = mutationSequence
@@ -179,6 +211,24 @@ final class MachinesModel {
     func performForward(
         _ operation: MachineForwardOperation, forward: PortForward
     ) async -> Result<MachineForwardOperationResult, Error> {
+        if let uiClient {
+            if operation == .enable || operation == .disable {
+                if let error = await session(for: forward.machineID).setForward(
+                    forward, active: operation == .enable)
+                {
+                    return .failure(MachineForwardOperationError.liveActionFailed(error))
+                }
+                return .success(
+                    .init(operation: operation, forward: forward, active: operation == .enable))
+            }
+            var value = MachineUIAction(
+                operation: operation == .add ? .forwardAdd : .forwardRemove,
+                machineID: forward.machineID)
+            value.forward = forward
+            do { return .success(try await uiClient.action(value)) } catch {
+                return .failure(error)
+            }
+        }
         let session = session(for: forward.machineID)
         let needsLiveAction =
             operation == .enable || operation == .disable
@@ -196,8 +246,17 @@ final class MachinesModel {
 
     func performSnippet(
         _ operation: MachineSnippetOperation, snippet: CommandSnippet
-    ) -> Result<MachineSnippetOperationResult, Error> {
-        MachineSnippetOperationExecution.perform(
+    ) async -> Result<MachineSnippetOperationResult, Error> {
+        if let uiClient {
+            var value = MachineUIAction(
+                operation: operation == .add ? .snippetAdd : .snippetRemove,
+                machineID: snippet.machineID ?? selection ?? Machine.localID)
+            value.snippet = snippet
+            do { return .success(try await uiClient.action(value)) } catch {
+                return .failure(error)
+            }
+        }
+        return MachineSnippetOperationExecution.perform(
             operation, snippet: snippet,
             persistAdd: { store.addSnippet($0) },
             persistRemove: { store.removeSnippet(id: $0) },
@@ -246,6 +305,7 @@ final class MachinesModel {
     }
 
     func reconcileSSHClipboards() {
+        guard uiClient == nil else { return }
         for machine in store.machines where machine.sshClipboardEnabled {
             if sshClipboardStates[machine.id] == .active
                 || sshClipboardStates[machine.id] == .configuring
@@ -304,31 +364,6 @@ enum MachineMutationReconciliation {
         var target = effectivePrevious ?? submitted
         target.sshClipboardEnabled = false
         return target
-    }
-}
-
-enum SSHClipboardSyncState: Equatable {
-    case disabled
-    case configuring
-    case active
-    case failed(String)
-
-    var label: String {
-        switch self {
-        case .disabled: return "Clipboard sync disabled"
-        case .configuring: return "Setting up clipboard sync"
-        case .active: return "Clipboard sync active"
-        case let .failed(message): return "Clipboard sync failed: \(message)"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .disabled: return "clipboard"
-        case .configuring: return "arrow.triangle.2.circlepath"
-        case .active: return "clipboard.fill"
-        case .failed: return "exclamationmark.triangle.fill"
-        }
     }
 }
 

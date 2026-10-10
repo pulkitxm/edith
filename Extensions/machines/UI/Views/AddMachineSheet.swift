@@ -340,13 +340,27 @@ struct AddMachineSheet: View {
     }
 
     private func load() {
-        configHosts = SSHConfigFile.concreteHosts()
+        if let client = MachinesModel.shared.uiClient {
+            Task {
+                do {
+                    let configuration = try await client.configuration()
+                    configHosts = configuration.hosts
+                    sudoPasswordStored =
+                        editing.map { configuration.sudoPasswordStored.contains($0.id) } ?? false
+                    if editing == nil, configHosts.isEmpty { mode = .manual }
+                } catch { testState = .failure(error.localizedDescription) }
+            }
+        } else {
+            configHosts = SSHConfigFile.concreteHosts()
+        }
         guard let editing else {
             if configHosts.isEmpty { mode = .manual }
             return
         }
         mode = .manual
-        sudoPasswordStored = SudoPassword.isStored(machineID: editing.id)
+        if MachinesModel.shared.uiClient == nil {
+            sudoPasswordStored = SudoPassword.isStored(machineID: editing.id)
+        }
         name = editing.name
         host = editing.host
         port = String(editing.port)
@@ -420,6 +434,24 @@ struct AddMachineSheet: View {
         let machine = makeMachine()
         let secretValue = secret
         testTask = Task {
+            if let client = MachinesModel.shared.uiClient {
+                do {
+                    let output = try await client.probe(
+                        machine,
+                        secrets: MachineSecretChanges(
+                            login: secretValue.isEmpty ? nil : secretValue))
+                    guard !Task.isCancelled else { return }
+                    let facts = MachineConnectionProbe.parse(output)
+                    var message = "Connected"
+                    if !facts.system.isEmpty { message += " to \(facts.system)" }
+                    if !facts.user.isEmpty { message += " as \(facts.user)" }
+                    if facts.dockerAvailable { message += ". Docker found." }
+                    testState = .success(message)
+                } catch {
+                    if !Task.isCancelled { testState = .failure(error.localizedDescription) }
+                }
+                return
+            }
             if !secretValue.isEmpty {
                 let kind: MachineSecretKind = machine.auth == .password ? .password : .passphrase
                 MachineSecrets.set(secretValue, machineID: machine.id, kind: kind)

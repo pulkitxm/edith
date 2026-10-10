@@ -18,6 +18,7 @@ private struct MachineLiveMetrics {
 public final class MachineSession {
     public let machine: Machine
     private let synthetic: Bool
+    public let uiClient: MachineUIClient?
     public nonisolated var id: UUID { machine.id }
 
     public private(set) var state: MachineConnectionState = .disconnected
@@ -93,19 +94,20 @@ public final class MachineSession {
 
     public init(
         machine: Machine, local: Bool = false, observesWakeRequests: Bool = true,
-        synthetic: Bool = false
+        synthetic: Bool = false, uiClient: MachineUIClient? = nil
     ) {
         self.machine = machine
         self.synthetic = synthetic
+        self.uiClient = uiClient
         isLocal = local
         connection =
-            local || synthetic
+            local || synthetic || uiClient != nil
             ? nil
             : SSHConnection(machine: machine, controlSocketMode: .shared)
         localSampler =
-            local && !synthetic
+            local && !synthetic && uiClient == nil
             ? LocalMachineSampler() : nil
-        if observesWakeRequests && !synthetic { observeWake() }
+        if observesWakeRequests && !synthetic && uiClient == nil { observeWake() }
     }
 
     deinit {
@@ -119,6 +121,12 @@ public final class MachineSession {
     public var collectsMetricsLocally: Bool { isCollecting }
 
     public func setForegroundObservation(_ token: UUID, active: Bool) {
+        if let uiClient {
+            var action = MachineUIAction(operation: .observe, machineID: id)
+            action.token = token; action.active = active
+            uiClient.enqueue(action)
+            return
+        }
         if active {
             foregroundObservers.insert(token)
             if case .disconnected = state { start() }
@@ -179,6 +187,9 @@ public final class MachineSession {
     }
 
     public func start() {
+        if let uiClient {
+            uiClient.enqueue(MachineUIAction(operation: .connect, machineID: id)); return
+        }
         if synthetic {
             state = .connected(latencyMillis: isLocal ? 0 : 12)
             remotePlatform = isLocal ? .darwin : .linux
@@ -215,6 +226,9 @@ public final class MachineSession {
     }
 
     public func stop() {
+        if let uiClient {
+            uiClient.enqueue(MachineUIAction(operation: .disconnect, machineID: id)); return
+        }
         reconnects = false
         cancelWork()
         rememberedForwards.removeAll()
@@ -226,6 +240,7 @@ public final class MachineSession {
     }
 
     public func shutdown() async {
+        if uiClient != nil { return }
         let tasks = [
             supervisor, dockerTask, latencyTask, localTask, metricsRestartTask,
             metricsWatchdog, probeTask, mountTask, platformProfileTask,
@@ -241,6 +256,9 @@ public final class MachineSession {
     }
 
     public func retry() {
+        if let uiClient {
+            uiClient.enqueue(MachineUIAction(operation: .retry, machineID: id)); return
+        }
 
         guard !isLocal else {
             stop()
@@ -490,6 +508,9 @@ public final class MachineSession {
     }
 
     public func refreshInternetSpeed() {
+        if let uiClient {
+            uiClient.enqueue(MachineUIAction(operation: .speedTest, machineID: id)); return
+        }
         guard !synthetic else { return }
 
         guard state.isConnected, !isTestingInternetSpeed else { return }
@@ -525,6 +546,10 @@ public final class MachineSession {
     }
 
     public func beginInternetSpeedObservation() {
+        if let uiClient {
+            var action = MachineUIAction(operation: .speedObserve, machineID: id);
+            action.active = true; uiClient.enqueue(action); return
+        }
         guard !synthetic else { return }
         internetSpeedObserverCount += 1
 
@@ -532,6 +557,10 @@ public final class MachineSession {
     }
 
     public func endInternetSpeedObservation() {
+        if let uiClient {
+            var action = MachineUIAction(operation: .speedObserve, machineID: id);
+            action.active = false; uiClient.enqueue(action); return
+        }
         internetSpeedObserverCount = max(0, internetSpeedObserverCount - 1)
 
         guard internetSpeedObserverCount == 0 else { return }
@@ -583,16 +612,27 @@ public final class MachineSession {
     }
 
     public func refreshDockerNow() {
+        if let uiClient {
+            uiClient.enqueue(MachineUIAction(operation: .refreshDocker, machineID: id)); return
+        }
         Task { await refreshDocker() }
     }
 
     public func beginDockerObservation() {
+        if let uiClient {
+            var action = MachineUIAction(operation: .dockerObserve, machineID: id);
+            action.active = true; uiClient.enqueue(action); return
+        }
         dockerObserverCount += 1
 
         if state.isConnected { refreshDockerNow() }
     }
 
     public func endDockerObservation() {
+        if let uiClient {
+            var action = MachineUIAction(operation: .dockerObserve, machineID: id);
+            action.active = false; uiClient.enqueue(action); return
+        }
         dockerObserverCount = max(0, dockerObserverCount - 1)
 
     }
@@ -659,6 +699,12 @@ public final class MachineSession {
     }
 
     public func refreshImagesAndVolumes() async {
+        if let uiClient {
+            let _: Bool? = try? await uiClient.action(
+                MachineUIAction(operation: .refreshInventory, machineID: id))
+                ;
+            return
+        }
 
         guard let connection, docker.isAvailable, !dockerInventoryRefreshRunning else { return }
         dockerInventoryRefreshRunning = true
@@ -697,6 +743,13 @@ public final class MachineSession {
     public func runDocker(
         _ command: String, timeout: TimeInterval = 120
     ) async -> Result<String, Error> {
+        if let uiClient {
+            var action = MachineUIAction(operation: .docker, machineID: id)
+            action.text = command; action.timeout = timeout
+            do { return .success(try await uiClient.action(action)) } catch {
+                return .failure(error)
+            }
+        }
         guard let connection else {
             return .failure(
                 SSHConnectionError.commandFailed(
@@ -723,6 +776,13 @@ public final class MachineSession {
     public func runCommand(
         _ command: String, stdin: Data? = nil, timeout: TimeInterval = 60
     ) async -> Result<String, Error> {
+        if let uiClient {
+            var action = MachineUIAction(operation: .command, machineID: id)
+            action.text = command; action.input = stdin; action.timeout = timeout
+            do { return .success(try await uiClient.action(action)) } catch {
+                return .failure(error)
+            }
+        }
         if synthetic { return .failure(ExtensionPeerError.unavailable) }
 
         guard let connection else {
@@ -745,6 +805,13 @@ public final class MachineSession {
     public func setPlatformProfile(
         _ profile: String, duration: MachineProfileDuration
     ) async -> Result<String, Error> {
+        if let uiClient {
+            var action = MachineUIAction(operation: .setProfile, machineID: id)
+            action.text = profile; action.duration = duration.rawValue
+            do { return .success(try await uiClient.action(action)) } catch {
+                return .failure(error)
+            }
+        }
         isApplyingPlatformProfile = true
         defer { isApplyingPlatformProfile = false }
         let result = await MachineThermalOperationExecution.set(
@@ -783,6 +850,12 @@ public final class MachineSession {
     }
 
     public func refreshPlatformProfile() async {
+        if let uiClient {
+            let _: Bool? = try? await uiClient.action(
+                MachineUIAction(operation: .refreshProfile, machineID: id))
+                ;
+            return
+        }
         let result = await MachineThermalOperationExecution.status(
             timeout: 10, platform: remotePlatform ?? .linux
         ) {
@@ -814,6 +887,12 @@ public final class MachineSession {
     }
 
     public func refreshServices() async {
+        if let uiClient {
+            let _: Bool? = try? await uiClient.action(
+                MachineUIAction(operation: .refreshServices, machineID: id))
+                ;
+            return
+        }
         guard !isLocal, let connection, let remotePlatform else { return }
         guard
             let result = try? await connection.run(
@@ -854,6 +933,11 @@ public final class MachineSession {
 
     @discardableResult
     public func restoreMount() async -> MountRepair {
+        if let uiClient {
+            return
+                (try? await uiClient.action(
+                    MachineUIAction(operation: .restoreMount, machineID: id))) ?? .nothingToDo
+        }
         guard !isLocal, !isRemounting else { return .nothingToDo }
         guard let wanted = MachineMounts.recorded(for: machine) else {
             mount = await MachineMounts.current(for: machine)
@@ -896,6 +980,13 @@ public final class MachineSession {
     }
 
     public func setForward(_ forward: PortForward, active: Bool) async -> String? {
+        if let uiClient {
+            var action = MachineUIAction(operation: .forward, machineID: id)
+            action.forward = forward; action.active = active
+            do { let result: String? = try await uiClient.action(action); return result } catch {
+                return error.localizedDescription
+            }
+        }
         guard let connection else { return "Not connected." }
         if active {
             do {
@@ -914,6 +1005,12 @@ public final class MachineSession {
     }
 
     public func listFiles(path: String) async -> Result<[RemoteFileEntry], Error> {
+        if let uiClient {
+            var action = MachineUIAction(operation: .listFiles, machineID: id); action.text = path;
+            do { return .success(try await uiClient.action(action)) } catch {
+                return .failure(error)
+            }
+        }
         if synthetic { return .success([]) }
 
         if isLocal { return .success(Self.listLocalFiles(path: path)) }
@@ -927,6 +1024,12 @@ public final class MachineSession {
     }
 
     public func homeDirectory() async -> Result<String, Error> {
+        if let uiClient {
+            do {
+                return .success(
+                    try await uiClient.action(MachineUIAction(operation: .home, machineID: id)))
+            } catch { return .failure(error) }
+        }
         if synthetic {
             return .success(
                 ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] ?? "/tmp")
@@ -941,6 +1044,12 @@ public final class MachineSession {
     }
 
     public func createDirectory(path: String) async -> Result<RemoteDirectoryCreation, Error> {
+        if let uiClient {
+            var action = MachineUIAction(operation: .mkdir, machineID: id); action.text = path;
+            do { return .success(try await uiClient.action(action)) } catch {
+                return .failure(error)
+            }
+        }
         if isLocal {
             do {
                 try FileManager.default.createDirectory(
@@ -1024,5 +1133,76 @@ enum MachineForwardReplay {
         _ forwards: [UUID: PortForward], failedIDs: Set<UUID>
     ) -> [UUID: PortForward] {
         forwards.filter { !failedIDs.contains($0.key) }
+    }
+}
+
+extension MachineSession {
+    func uiState() -> MachineUISessionState {
+        MachineUISessionState(
+            machine: machine, state: state, platform: remotePlatform, hello: hello,
+            slow: slow, sample: sample, docker: docker, containersLoaded: containersLoaded,
+            containersError: containersError, containers: containers, images: images,
+            volumes: volumes, diskUsage: diskUsage, networks: networks, services: services,
+            facts: facts, activeForwards: activeForwards, mount: mount, mountHealth: mountHealth,
+            isRemounting: isRemounting, isApplyingPlatformProfile: isApplyingPlatformProfile,
+            platformProfileRevertsAt: platformProfileRevertsAt, internetSpeed: internetSpeed,
+            internetSpeedError: internetSpeedError, isTestingInternetSpeed: isTestingInternetSpeed,
+            histories: [
+                cpuHistory, memHistory, netRxHistory, netTxHistory, diskReadHistory,
+                diskWriteHistory, internetDownloadHistory, internetUploadHistory,
+            ])
+    }
+
+    func applyUIState(_ value: MachineUISessionState) {
+        guard uiClient != nil, value.machine.id == id, value.histories.count == 8 else { return }
+        state = value.state; remotePlatform = value.platform; hello = value.hello
+        slow = value.slow; docker = value.docker; containersLoaded = value.containersLoaded
+        containersError = value.containersError; containers = value.containers
+        images = value.images; volumes = value.volumes; diskUsage = value.diskUsage
+        networks = value.networks; services = value.services; facts = value.facts
+        activeForwards = value.activeForwards; mount = value.mount; mountHealth = value.mountHealth
+        isRemounting = value.isRemounting;
+        isApplyingPlatformProfile = value.isApplyingPlatformProfile
+        platformProfileRevertsAt = value.platformProfileRevertsAt
+        internetSpeed = value.internetSpeed; internetSpeedError = value.internetSpeedError
+        isTestingInternetSpeed = value.isTestingInternetSpeed
+        liveMetrics = MachineLiveMetrics(
+            sample: value.sample, cpuHistory: value.histories[0], memHistory: value.histories[1],
+            netRxHistory: value.histories[2], netTxHistory: value.histories[3],
+            diskReadHistory: value.histories[4], diskWriteHistory: value.histories[5])
+        internetDownloadHistory = value.histories[6]; internetUploadHistory = value.histories[7]
+    }
+}
+
+extension MachineSession {
+    func performPower(_ operation: MachinePowerOperation) async -> Result<MachinePowerResult, Error>
+    {
+        if let uiClient {
+            var value = MachineUIAction(operation: .power, machineID: id)
+            value.text = operation.rawValue
+            do { return .success(try await uiClient.action(value)) } catch {
+                return .failure(error)
+            }
+        }
+        return await MachinePowerOperationExecution.perform(
+            operation, machine: machine, learnedMACAddress: facts.macAddress,
+            platform: remotePlatform ?? .linux,
+            run: { command, input, timeout in
+                await self.runCommand(command, stdin: input, timeout: timeout)
+            })
+    }
+
+    func performMount(_ operation: MachineMountOperation) async -> Result<
+        MachineMountOperationResult, Error
+    > {
+        if let uiClient {
+            let value = MachineUIAction(
+                operation: operation == .mount ? .mount : .unmount, machineID: id)
+            do { return .success(try await uiClient.action(value)) } catch {
+                return .failure(error)
+            }
+        }
+        return await MachineMountOperationExecution.perform(
+            operation, machine: machine, platform: remotePlatform ?? .linux)
     }
 }

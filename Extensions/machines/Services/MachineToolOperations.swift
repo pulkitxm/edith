@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public enum MachineForwardOperation: String, CaseIterable, Sendable {
+public enum MachineForwardOperation: String, Codable, CaseIterable, Sendable {
     case add
     case remove
     case enable
@@ -27,7 +27,7 @@ public enum MachineForwardOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachineForwardOperationResult: Equatable, Sendable {
+public struct MachineForwardOperationResult: Codable, Equatable, Sendable {
     public let operation: MachineForwardOperation
     public let forward: PortForward
     public let active: Bool?
@@ -115,7 +115,7 @@ public enum MachineForwardOperationExecution {
     }
 }
 
-public enum MachineSnippetOperation: String, CaseIterable, Sendable {
+public enum MachineSnippetOperation: String, Codable, CaseIterable, Sendable {
     case add
     case remove
 
@@ -128,7 +128,7 @@ public enum MachineSnippetOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachineSnippetOperationResult: Equatable, Sendable {
+public struct MachineSnippetOperationResult: Codable, Equatable, Sendable {
     public let operation: MachineSnippetOperation
     public let snippet: CommandSnippet
 
@@ -181,7 +181,7 @@ public enum MachineSnippetOperationExecution {
     }
 }
 
-public enum MachineServiceOperation: String, CaseIterable, Sendable {
+public enum MachineServiceOperation: String, Codable, CaseIterable, Sendable {
     case start
     case stop
     case restart
@@ -194,7 +194,7 @@ public enum MachineServiceOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachineServiceOperationResult: Equatable, Sendable {
+public struct MachineServiceOperationResult: Codable, Equatable, Sendable {
     public let operation: MachineServiceOperation
     public let unit: String
     public let output: String
@@ -246,7 +246,7 @@ public enum MachineServiceOperationExecution {
     }
 }
 
-public enum MachineProcessOperation: String, CaseIterable, Sendable {
+public enum MachineProcessOperation: String, Codable, CaseIterable, Sendable {
     case terminate
 
     public var descriptor: UserOperationDescriptor {
@@ -257,7 +257,7 @@ public enum MachineProcessOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachineProcessOperationResult: Equatable, Sendable {
+public struct MachineProcessOperationResult: Codable, Equatable, Sendable {
     public let pid: Int
     public let signal: String
     public let alreadyExited: Bool
@@ -310,7 +310,7 @@ public enum MachineProcessOperationExecution {
     }
 }
 
-public enum MachineDockerPauseOperation: String, CaseIterable, Sendable {
+public enum MachineDockerPauseOperation: String, Codable, CaseIterable, Sendable {
     case pause
     case unpause
 
@@ -322,7 +322,7 @@ public enum MachineDockerPauseOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachineDockerPauseOperationResult: Equatable, Sendable {
+public struct MachineDockerPauseOperationResult: Codable, Equatable, Sendable {
     public let operation: MachineDockerPauseOperation
     public let containerIDs: [String]
 

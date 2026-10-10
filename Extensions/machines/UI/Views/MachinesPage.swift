@@ -38,6 +38,12 @@ struct MachinesPage: View {
         }
         .navigationRoute("place", selection: placeBinding, isValid: placeIsValid)
         .navigationTitle("Machines")
+        .overlay(alignment: .bottom) {
+            if let message = model.operationError {
+                Text(message).font(.edithText(.caption)).padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
         .edithSheet(isPresented: $addSheetPresented, dismissible: false) {
             AddMachineSheet { machine, secrets in
                 model.add(machine, secrets: changes(secrets))

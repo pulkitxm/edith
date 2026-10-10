@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
+import EdithExtensionCommands
 import SwiftUI
 
 @MainActor @objc(EdithMachinesExtensionRuntime)
@@ -9,12 +10,31 @@ final class ExtensionRuntime: NSObject {
     private var peer: MachinePeerService?
     private var surface: MachineSurface?
     private var transport: MachinePeerTransport?
+    private var cli: MachineCLIService?
+    private var uiEngine: MachineUIEngine?
+    private var uiClient: MachineUIClient?
+    private var health: MachineHealthLifecycle?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard self?.running == true else { throw ExtensionPeerError.unavailable }
             guard let self else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("machines.ui.") {
+                guard let uiEngine = self.uiEngine else { throw ExtensionPeerError.unavailable }
+                return try await uiEngine.execute(command, payload: payload)
+            }
+            if command == "machines.cli" {
+                guard let cli = self.cli else { throw ExtensionPeerError.unavailable }
+                let request = try JSONDecoder().decode(MachineCLIInput.self, from: payload)
+                return try JSONEncoder().encode(try await cli.execute(request))
+            }
+            if command == "machines.health.snapshot" {
+                guard payload == Data("{}".utf8), let health = self.health?.latest else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try JSONEncoder().encode(health)
+            }
             if command.hasPrefix("machines.usage.snapshot.") {
                 guard let transport = self.transport else { throw ExtensionPeerError.unavailable }
                 return try transport.snapshots.execute(command, payload: payload)
@@ -48,7 +68,33 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard uiClient == nil, !running,
+                let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "machines", let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            let facade = MachineUIClient(client: client)
+            let model = MachinesModel(uiClient: facade)
+            MachinesModel.shared = model
+            let workspace = WorkspaceModel(machines: model)
+            WorkspaceModel.shared = workspace
+            facade.receive = { [weak model, weak workspace] state in
+                model?.applyUIState(state)
+                workspace?.applyUIState(state.workspaces)
+            }
+            facade.failure = { [weak model] message in model?.operationError = message }
+            uiClient = facade
+            facade.start()
+            return ["ok": true] as NSDictionary
+        case "stopUI":
+            uiClient?.shutdown(); uiClient = nil
+            FinderUndoBridge.shutdown()
+            PaneViewStore.shared.shutdown()
+            return ["ok": true] as NSDictionary
         case "start":
+            guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+                return ["ok": false] as NSDictionary
+            }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -103,32 +149,69 @@ final class ExtensionRuntime: NSObject {
                         let model = MachinesModel.shared
                         guard model.knows(id) else { return }
                         model.selection = id
-                        MachineWindow.open(
-                            machineID: id, title: model.session(for: id).machine.name)
+
                     }, stopped: { [weak self] in self?.running != true })
+                uiEngine = MachineUIEngine(
+                    session: { id in
+                        guard MachinesModel.shared.knows(id) else {
+                            throw MachineUIError.invalidRequest
+                        }
+                        return MachinesModel.shared.session(for: id)
+                    },
+                    state: {
+                        let model = MachinesModel.shared
+                        model.reloadOwnedRecords()
+                        return MachineUIState(
+                            machines: model.store.machines, forwards: model.store.forwards,
+                            snippets: model.store.snippets,
+                            sessions: model.allMachines.map { model.session(for: $0.id).uiState() },
+                            workspaces: WorkspaceStore.load(),
+                            clipboardStates: model.sshClipboardStates)
+                    },
+                    mutation: { value in
+                        let model = MachinesModel.shared
+                        guard value.operation == .add || model.knows(value.machine.id) else {
+                            throw MachineUIError.invalidRequest
+                        }
+                        MachineMutationOperationExecution.perform(
+                            value.operation, machine: value.machine, secrets: value.secrets,
+                            notify: { model.reloadOwnedRecords() })
+                        if value.operation != .add {
+                            await model.sessions[value.machine.id]?.shutdown()
+                        }
+                    },
+                    workspace: { value in
+                        try WorkspaceStore.save(value)
+                        WorkspaceModel.shared.store = value
+                        if let current = value.current { WorkspaceModel.shared.layout = current }
+                    },
+                    observe: { _, active in
+                        if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
+                    })
+                cli = MachineCLIService()
+                MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
+                if !fixture {
+                    let health = MachineHealthLifecycle()
+                    self.health = health
+                    health.start()
+                }
                 MachinePrivacy.shared.start()
                 MachineTerminalBroadcastBridge.install()
                 TextEditingCommands.install()
                 running = true
             }
         case "view":
-            guard running else { return ["ok": false] as NSDictionary }
-            let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            guard uiClient != nil else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     MachinesPage().environment(\.machineConnectionsEnabled, true)
-                        .environment(\.terminalLaunchEnabled, !fixture)
+                        .environment(\.terminalLaunchEnabled, false)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             commands.shutdown()
             running = false
-            peer?.shutdown()
-            peer = nil; surface = nil
-            MachinesModel.shared.stopAll()
-            MachineTerminalBroadcastBridge.shutdown()
-            MachinePrivacy.shared.shutdown()
-            TextEditingCommands.shutdown()
+            Task { await shutdown() }
         case "status": return ["ok": true, "running": running] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -136,6 +219,11 @@ final class ExtensionRuntime: NSObject {
     }
     private func shutdown() async {
         running = false
+        await uiEngine?.shutdown(); uiEngine = nil
+        await commands.shutdownAndWait()
+        await health?.stop(); health = nil
+        await cli?.shutdown(); cli = nil
+        MachinesCLIEnvironment.changed = {}
         peer?.shutdown()
         MachineTerminalBroadcastBridge.shutdown()
         FinderUndoBridge.shutdown()

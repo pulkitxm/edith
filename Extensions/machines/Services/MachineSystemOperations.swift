@@ -160,7 +160,7 @@ public enum MachineExecOperationExecution {
     }
 }
 
-public enum MachineMountOperation: String, CaseIterable, Equatable, Sendable {
+public enum MachineMountOperation: String, Codable, CaseIterable, Equatable, Sendable {
     case mount
     case unmount
 
@@ -191,7 +191,7 @@ public enum MachineMountOperationError: LocalizedError, Equatable, Sendable {
     }
 }
 
-public struct MachineMountOperationResult: Equatable, Sendable {
+public struct MachineMountOperationResult: Codable, Equatable, Sendable {
     public let operation: MachineMountOperation
     public let mount: MachineMount
     public let restored: Bool

@@ -245,7 +245,7 @@ public enum ProcessCommands {
     }
 }
 
-public struct SystemdService: Identifiable, Equatable, Sendable {
+public struct SystemdService: Codable, Identifiable, Equatable, Sendable {
     public var unit: String
     public var load: String
     public var active: String

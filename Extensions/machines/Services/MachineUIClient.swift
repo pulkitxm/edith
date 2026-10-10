@@ -1,0 +1,135 @@
+import EdithExtensionSupport
+import Foundation
+
+@MainActor public final class MachineUIClient {
+    private let client: ExtensionEngineClient
+    private var generation = 0
+    private var stopped = false
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var polling: Task<Void, Never>?
+    var receive: (MachineUIState) -> Void = { _ in }
+    var failure: (String) -> Void = { _ in }
+
+    public init(client: ExtensionEngineClient) { self.client = client }
+
+    func start() {
+        guard polling == nil, !stopped else { return }
+        polling = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                do { try await refresh() } catch {
+                    guard !Task.isCancelled, !stopped else { return }
+                    failure(error.localizedDescription)
+                }
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
+            }
+        }
+    }
+
+    public func shutdown() {
+        guard !stopped else { return }
+        stopped = true
+        generation += 1
+        polling?.cancel(); polling = nil
+        for task in tasks.values { task.cancel() }
+        tasks = [:]
+        client.invalidate()
+    }
+
+    func refresh() async throws {
+        let state: MachineUIState = try await request(
+            "machines.ui.state", value: [String: String]())
+        guard state.machines.count <= 1_024, state.sessions.count <= 1_025,
+            Set(state.machines.map(\.id)).count == state.machines.count,
+            Set(state.sessions.map { $0.machine.id }).count == state.sessions.count,
+            state.sessions.allSatisfy({
+                $0.histories.count == 8 && $0.histories.allSatisfy { $0.count <= 60 }
+            })
+        else { throw MachineUIError.invalidRequest }
+        receive(state)
+    }
+
+    public func action<Value: Decodable>(_ value: MachineUIAction) async throws -> Value {
+        try value.validate()
+        return try await job("machines.ui.action", value: value)
+    }
+
+    func mutate(_ value: MachineUIMutation) async throws {
+        let state: MachineUIState = try await request("machines.ui.mutate", value: value)
+        receive(state)
+    }
+
+    func configuration() async throws -> MachineUIConfigurationState {
+        try await request("machines.ui.configuration", value: [String: String]())
+    }
+
+    func probe(_ machine: Machine, secrets: MachineSecretChanges) async throws -> String {
+        try await job(
+            "machines.ui.probe",
+            value: MachineUIMutation(operation: .add, machine: machine, secrets: secrets))
+    }
+
+    func workspace(_ value: WorkspaceStore) async throws -> WorkspaceStore {
+        try await request("machines.ui.workspace", value: value)
+    }
+
+    public func enqueue(_ value: MachineUIAction) {
+        enqueue {
+            let _: Bool = try await self.action(value)
+        }
+    }
+
+    func enqueue(_ work: @escaping @MainActor () async throws -> Void) {
+        guard !stopped else { return }
+        let id = UUID()
+        tasks[id] = Task { [weak self] in
+            do { try await work() } catch {
+                if !Task.isCancelled, let self, !stopped { failure(error.localizedDescription) }
+            }
+            self?.tasks.removeValue(forKey: id)
+        }
+    }
+
+    private func job<Request: Encodable, Reply: Decodable>(
+        _ operation: String, value: Request
+    ) async throws -> Reply {
+        let id: UUID = try await request(
+            "machines.ui.begin",
+            value: MachineUIJobInput(operation: operation, payload: JSONEncoder().encode(value)))
+        return try await withTaskCancellationHandler {
+            while true {
+                try Task.checkCancellation()
+                let state: MachineUIJobState = try await request(
+                    "machines.ui.poll", value: MachineUIJobPoll(id: id, consume: true))
+                if state.complete {
+                    guard let reply = state.reply else { throw MachineUIError.invalidRequest }
+                    if let error = reply.error { throw MachineUIFailure(message: error) }
+                    guard let data = reply.value else { throw MachineUIError.invalidRequest }
+                    return try JSONDecoder().decode(Reply.self, from: data)
+                }
+                try await Task.sleep(for: .milliseconds(200))
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let _: Bool? = try? await request("machines.ui.cancel", value: id)
+            }
+        }
+    }
+
+    private func request<Request: Encodable, Reply: Decodable>(
+        _ operation: String, value: Request
+    ) async throws -> Reply {
+        guard !stopped else { throw MachineUIError.unavailable }
+        let generation = generation
+        let bytes = try await client.invoke(operation, payload: JSONEncoder().encode(value))
+        try Task.checkCancellation()
+        guard !stopped, generation == self.generation else { throw MachineUIError.stale }
+        let reply = try JSONDecoder().decode(MachineUIReply.self, from: bytes)
+        if let error = reply.error { throw MachineUIFailure(message: error) }
+        guard let value = reply.value, value.count <= 6_291_456 else {
+            throw MachineUIError.invalidRequest
+        }
+        return try JSONDecoder().decode(Reply.self, from: value)
+    }
+}

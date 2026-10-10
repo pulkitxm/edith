@@ -80,7 +80,7 @@ struct MachineToolsTab: View {
             Button("Remove", role: .destructive) {
                 guard let snippet = pendingSnippetRemoval else { return }
                 pendingSnippetRemoval = nil
-                removeSnippet(snippet)
+                Task { await removeSnippet(snippet) }
             }
             Button("Cancel", role: .cancel) { pendingSnippetRemoval = nil }
         } message: {
@@ -181,9 +181,7 @@ struct MachineToolsTab: View {
         mounting = true
         message = nil
         Task {
-            let result = await MachineMountOperationExecution.perform(
-                .mount, machine: session.machine,
-                platform: session.remotePlatform ?? .linux)
+            let result = await session.performMount(.mount)
             switch result {
             case let .success(outcome):
                 message = "Mounted at \(outcome.mount.mountPoint)."
@@ -202,8 +200,7 @@ struct MachineToolsTab: View {
         mounting = true
         message = nil
         Task {
-            switch await MachineMountOperationExecution.perform(
-                .unmount, machine: session.machine)
+            switch await session.performMount(.unmount)
             {
             case let .success(outcome):
                 message = "Unmounted \(outcome.mount.mountPoint)."
@@ -323,7 +320,7 @@ struct MachineToolsTab: View {
                         .frame(width: UIScale.pt(140))
                     TextField("Command", text: $snippetCommand)
                         .textFieldStyle(.roundedBorder)
-                    Button("Save") { saveSnippet() }
+                    Button("Save") { Task { await saveSnippet() } }
                         .disabled(
                             snippetTitle.trimmingCharacters(in: .whitespaces).isEmpty
                                 || snippetCommand.trimmingCharacters(in: .whitespaces).isEmpty
@@ -447,12 +444,12 @@ struct MachineToolsTab: View {
         }
     }
 
-    private func saveSnippet() {
+    private func saveSnippet() async {
         let snippet = CommandSnippet(
             machineID: session.machine.id,
             title: snippetTitle.trimmingCharacters(in: .whitespaces),
             command: snippetCommand.trimmingCharacters(in: .whitespaces))
-        switch model.performSnippet(.add, snippet: snippet) {
+        switch await model.performSnippet(.add, snippet: snippet) {
         case .success:
             snippetTitle = ""
             snippetCommand = ""
@@ -461,8 +458,8 @@ struct MachineToolsTab: View {
         }
     }
 
-    private func removeSnippet(_ snippet: CommandSnippet) {
-        switch model.performSnippet(.remove, snippet: snippet) {
+    private func removeSnippet(_ snippet: CommandSnippet) async {
+        switch await model.performSnippet(.remove, snippet: snippet) {
         case .success:
             message = "Removed \(snippet.title)."
         case let .failure(error):

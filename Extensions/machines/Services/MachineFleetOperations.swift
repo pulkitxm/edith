@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public enum MachineMutationOperation: String, CaseIterable, Sendable {
+public enum MachineMutationOperation: String, Codable, CaseIterable, Sendable {
     case add
     case edit
     case remove
@@ -29,7 +29,7 @@ public enum MachineMutationOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachineSecretChanges: Equatable, Sendable {
+public struct MachineSecretChanges: Codable, Equatable, Sendable {
     public var login: String?
     public var sudoPassword: String?
     public var forgetSudoPassword: Bool
@@ -133,7 +133,7 @@ public enum MachineMutationOperationExecution {
     }
 }
 
-public enum MachinePowerOperation: String, CaseIterable, Sendable {
+public enum MachinePowerOperation: String, Codable, CaseIterable, Sendable {
     case reboot
     case shutdown
     case wake
@@ -164,7 +164,7 @@ public enum MachinePowerOperation: String, CaseIterable, Sendable {
     }
 }
 
-public struct MachinePowerResult: Equatable, Sendable {
+public struct MachinePowerResult: Codable, Equatable, Sendable {
     public let operation: MachinePowerOperation
     public let machine: Machine
     public let macAddress: String?
