@@ -198,10 +198,16 @@ public final class HostRemoteSessionManager {
         else { throw HostWorkerError.rejected }
         if let presentationID = request.presentationID {
             guard let handle = presentations[presentationID], handle.isPresented,
-                handle.request.extensionID == id, handle.request.location == request.location,
+                handle.request.extensionID == id,
+                request.machinesWindow != nil || handle.request.location == request.location,
                 pendingCleanup[presentationID] == nil, handle.processIdentity?.isRunning == true
             else { throw HostWorkerError.rejected }
-        } else if request.location != nil {
+            let selected = try selectedConfiguration(for: handle.request)
+            guard !selected.uiOnly, selected.package == handle.configuration.package,
+                let pid = marketplace.sessions.processIdentifiers[id],
+                handle.engineIdentity == (try HostRemoteKernelIdentity.read(pid))
+            else { throw HostWorkerError.rejected }
+        } else if request.location != nil || request.machinesWindow != nil {
             throw HostWorkerError.rejected
         }
     }

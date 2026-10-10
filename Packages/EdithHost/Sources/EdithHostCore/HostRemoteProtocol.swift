@@ -21,26 +21,37 @@ public struct HostExtensionContentRequest: Codable, Equatable, Sendable {
     public let section: String?
     public let presentationID: UUID
     public let surface: SurfaceSnapshotRequest?
+    public let machinesWindow: HostMachinesWindowTarget?
 
     public init(
         extensionID: String, location: String, section: String? = nil,
-        presentationID: UUID = UUID(), surface: SurfaceSnapshotRequest? = nil
+        presentationID: UUID = UUID(), surface: SurfaceSnapshotRequest? = nil,
+        machinesWindow: HostMachinesWindowTarget? = nil
     ) {
         self.extensionID = extensionID
         self.location = location
         self.section = section
         self.presentationID = presentationID
         self.surface = surface
+        self.machinesWindow = machinesWindow
     }
 
     public func validate(extensionID: String) throws {
         guard self.extensionID == extensionID,
             [
                 "main", "settings", "home", "notch", "sidebar.utility", "music.footer",
-                "music.sidebar", "music.detail",
+                "music.sidebar", "music.detail", "machines.window",
             ].contains(location),
             section.map({ !$0.isEmpty && $0.utf8.count <= 128 && !$0.utf8.contains(0) }) ?? true
         else { throw HostWorkerError.rejected }
+        if let machinesWindow {
+            guard extensionID == "machines", location == "machines.window", section == "machines",
+                surface == nil
+            else { throw HostWorkerError.rejected }
+            try machinesWindow.validate()
+        } else if location == "machines.window" {
+            throw HostWorkerError.rejected
+        }
         if let surface {
             guard location == surface.target.rawValue else { throw HostWorkerError.rejected }
             _ = try surface.encoded(providerID: extensionID)

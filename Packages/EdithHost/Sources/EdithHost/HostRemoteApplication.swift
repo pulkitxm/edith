@@ -207,6 +207,10 @@ final class HostRemoteApplication {
                 endpoint: endpoint, presentationID: presentation.request.presentationID)
         }
         input["section"] = presentation.request.section
+        if let target = presentation.request.machinesWindow {
+            input["target"] = try target.context(
+                presentationID: presentation.request.presentationID)
+        }
         if let surface = presentation.request.surface {
             input["tile"] = try JSONEncoder().encode(surface.tile)
             input["target"] = surface.target.rawValue
