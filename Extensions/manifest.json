@@ -809,7 +809,6 @@
         "Extensions/notchShelf/Browser/Services/ChromeLocalStorage.swift",
         "Extensions/notchShelf/Browser/Services/ChromeProfileImporter.swift",
         "Extensions/notchShelf/Browser/Services/LevelDBReader.swift",
-        "Extensions/notchShelf/Browser/Services/NotchBrowserActionBridge.swift",
         "Extensions/notchShelf/Browser/Services/NotchBrowserActions.swift",
         "Extensions/notchShelf/Browser/Services/NotchBrowserWebDelegate.swift",
         "Extensions/notchShelf/Browser/Services/Snappy.swift",

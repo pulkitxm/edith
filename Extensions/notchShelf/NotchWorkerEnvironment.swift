@@ -38,8 +38,6 @@ enum NotchWorkerIPC {
         static let shelfOperationResult = "shelfOperationResult"
         static let settingsChanged = "settingsChanged"
         static let permissionsRefreshed = "permissionsRefreshed"
-        static let requestNotchBrowserAction = "requestNotchBrowserAction"
-        static let notchBrowserActionResult = "notchBrowserActionResult"
     }
 
     static func post(_ name: String, userInfo: [String: Any]? = nil) {
