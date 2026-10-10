@@ -233,7 +233,6 @@ final class HostWorkerApplication {
             guard identity.development || team != nil else {
                 throw MarketplaceError.invalidSignature
             }
-            configuration = next
             let navigation = HostFolderChoiceNavigationClient(
                 configuration: next,
                 available: { [weak self] in
@@ -242,13 +241,6 @@ final class HostWorkerApplication {
                 },
                 send: { [control] request in try control.send(request) },
                 cancel: { [control] request in try control.send(request) })
-            self.navigation = navigation
-            setenv(
-                "EDITH_EXTENSION_NATIVE_CONTEXT",
-                try JSONEncoder().encode(next).base64EncodedString(), 1)
-            setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
-            setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
-            try applyAppearance(next)
             var values: [String: Any] = [
                 "defaultsSuite": identity.extensionDefaultsSuite(package.id),
                 "dataDirectory": identity.extensionDirectory(package.id).path,
@@ -263,26 +255,71 @@ final class HostWorkerApplication {
                 values[key] = value
             }
             let context = values as NSDictionary
-            for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
-                guard
-                    FileManager.default.fileExists(
-                        atPath: store.roleBundle(for: package, role: role).path)
-                else { continue }
-                let runtime = ExtensionBundleRuntime(
-                    store: store, role: role, hostABI: HostContract.compatibility,
-                    packageVersion: next.version,
-                    verify: { url in
-                        if identity.development {
-                            try ExtensionCodeSignature.verifyDevelopment(url)
-                        } else {
-                            guard let team else { throw MarketplaceError.invalidSignature }
-                            try ExtensionCodeSignature.verify(url, teamIdentifier: team)
-                        }
-                    })
-                runtimes.append(runtime)
-                try runtime.start(id: package.id, context: context)
+            let environment = ProcessInfo.processInfo.environment
+            let fixtureIntent = HostWorkerStartAdmission.hasFixtureIntent(
+                identifier: identity.identifier, environment: environment)
+            if !fixtureIntent { _ = try HostCoreAdmission.admitParent() }
+            let verify: (URL) throws -> Void = { url in
+                if identity.development {
+                    try ExtensionCodeSignature.verifyDevelopment(url)
+                } else {
+                    guard let team else { throw MarketplaceError.invalidSignature }
+                    try ExtensionCodeSignature.verify(url, teamIdentifier: team)
+                }
             }
-            guard !runtimes.isEmpty else { throw HostWorkerError.rejected }
+            try HostWorkerStartAdmission.perform(
+                admit: {
+                    let roles = [ExtensionBundleRuntime.Role.helper, .agent, .app].filter {
+                        FileManager.default.fileExists(
+                            atPath: store.roleBundle(for: package, role: $0).path)
+                    }
+                    var fixtureRoles: [HostWorkerStartAdmission.FixtureRole] = []
+                    for role in roles {
+                        let url = store.roleBundle(for: package, role: role)
+                        try verify(url)
+                        guard let bundle = Bundle(url: url), bundle.executableURL != nil,
+                            bundle.bundleIdentifier
+                                == "com.pulkit.edith.extensions.\(package.id).\(role.rawValue)",
+                            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                                as? String == next.version,
+                            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String
+                                == HostContract.compatibility
+                        else { throw MarketplaceError.invalidBundle }
+                        fixtureRoles.append(
+                            .init(
+                                directory: url, identifier: bundle.bundleIdentifier,
+                                version: next.version, hostABI: HostContract.compatibility))
+                    }
+                    if fixtureIntent {
+                        try HostWorkerStartAdmission.admitFixture(
+                            identifier: identity.identifier, owner: package.id,
+                            version: next.version,
+                            hostABI: HostContract.compatibility,
+                            supportDirectory: next.supportDirectory,
+                            hostBundle: Bundle.main.bundleURL,
+                            dataDirectory: identity.extensionDirectory(package.id),
+                            defaultsSuite: identity.extensionDefaultsSuite(package.id),
+                            roles: fixtureRoles, environment: environment)
+                    }
+                    return roles
+                },
+                appearance: {
+                    configuration = next
+                    self.navigation = navigation
+                    setenv(
+                        "EDITH_EXTENSION_NATIVE_CONTEXT",
+                        try JSONEncoder().encode(next).base64EncodedString(), 1)
+                    setenv("EDITH_EXTENSION_NATIVE_PARENT", String(getpid()), 1)
+                    setenv("EDITH_EXTENSION_NATIVE_TOKEN", nativeAdmission.token, 1)
+                    try applyAppearance(next)
+                },
+                start: { role in
+                    let runtime = ExtensionBundleRuntime(
+                        store: store, role: role, hostABI: HostContract.compatibility,
+                        packageVersion: next.version, verify: verify)
+                    runtimes.append(runtime)
+                    try runtime.start(id: package.id, context: context)
+                })
             if next.recoveryOnly { return }
             let endpoint = try ExtensionPeerEndpoint(
                 namespace: identity.identifier, owner: package.id,

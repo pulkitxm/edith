@@ -13,6 +13,7 @@ let package = Package(
     dependencies: [
         .package(path: "../ExtensionMarketplace"),
         .package(path: "../ExtensionSupport"),
+        .package(path: "../../Extensions/fixtureSupport"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     ],
     targets: [
@@ -28,6 +29,7 @@ let package = Package(
             name: "EdithHost",
             dependencies: [
                 "HostBootstrap", "EdithHostCore", .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
             ],
             resources: [.copy("Resources/MarketplaceArtwork.lzma")],
