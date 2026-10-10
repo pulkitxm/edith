@@ -1,7 +1,12 @@
 import AppKit
+import GhosttyTerminal
 
 @MainActor
 enum TestWindowHost {
+    static func inertIO() -> GhosttyExternalIO {
+        GhosttyExternalIO(write: { _ in }, resize: { _, _, _, _ in }, failure: {})
+    }
+
     static let application: NSApplication = {
         let application = NSApplication.shared
         application.setActivationPolicy(.prohibited)

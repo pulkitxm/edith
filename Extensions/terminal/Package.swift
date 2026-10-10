@@ -12,7 +12,7 @@ let package = Package(
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
             ],
-            path: ".", exclude: ["Tests", "Runtime.swift", "Native"],
+            path: ".", exclude: ["Tests", "Native"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "TerminalExtensionTests", dependencies: ["TerminalExtension"],

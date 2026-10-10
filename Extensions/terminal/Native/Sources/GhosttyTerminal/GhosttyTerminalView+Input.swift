@@ -122,7 +122,7 @@ extension GhosttyTerminalView {
         window.makeFirstResponder(self)
         guard
             Self.shouldConsumeFocusClick(
-                appActive: NSApp.isActive, keyWindow: window.isKeyWindow,
+                appActive: owningApplicationActive, keyWindow: owningWindowKey,
                 focused: focused, hitSurface: true,
                 activatesTerminalLink: activatesTerminalLink)
         else { return event }
@@ -445,7 +445,7 @@ extension GhosttyTerminalView {
         guard let target = terminalTargetAtPointer(),
             Self.linkTarget(
                 for: target, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
+                allowsLocalFiles: allowsLocalFileLinks, fileExists: { _ in true }) != nil
         else { return nil }
         return target
     }
@@ -718,7 +718,7 @@ extension GhosttyTerminalView {
         if let link,
             Self.linkTarget(
                 for: link, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks) != nil
+                allowsLocalFiles: allowsLocalFileLinks, fileExists: { _ in true }) != nil
         {
             let open = menu.addItem(
                 withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")

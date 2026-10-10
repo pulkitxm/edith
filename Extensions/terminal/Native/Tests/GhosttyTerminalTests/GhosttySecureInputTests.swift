@@ -63,4 +63,24 @@ import Testing
         #expect(transitions == [true, false])
         #expect(!secureInput.enabled)
     }
+    @Test func hostActivityRemainsScopedAndReleasesOnDetach() {
+        var transitions: [Bool] = []
+        let center = NotificationCenter()
+        let secureInput = GhosttySecureInput(applicationActive: false, center: center) {
+            transitions.append($0); return true
+        }
+        let first = NSObject()
+        let second = NSObject()
+        secureInput.setScoped(ObjectIdentifier(first), focused: true, applicationActive: true)
+        secureInput.setScoped(ObjectIdentifier(second), focused: true, applicationActive: false)
+        center.post(name: NSApplication.didResignActiveNotification, object: nil)
+        #expect(transitions == [true])
+        secureInput.removeScoped(ObjectIdentifier(first))
+        #expect(transitions == [true, false])
+        secureInput.setScoped(ObjectIdentifier(second), focused: true, applicationActive: true)
+        #expect(transitions == [true, false, true])
+        secureInput.removeScoped(ObjectIdentifier(second))
+        #expect(transitions == [true, false, true, false] && !secureInput.enabled)
+    }
+
 }

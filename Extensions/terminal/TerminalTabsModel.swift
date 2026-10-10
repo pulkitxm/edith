@@ -1,4 +1,5 @@
 import Foundation
+import GhosttyTerminal
 import Observation
 
 struct TerminalBroadcastPlan: Equatable, Sendable {
@@ -47,118 +48,192 @@ struct TerminalBroadcastDelivery: Equatable, Sendable {
     }
 }
 
-@MainActor
-@Observable
-final class TerminalTabsModel {
-    typealias UserCloseRequester =
-        @MainActor (TerminalSessionHolder, @escaping @MainActor (Bool) -> Void) -> Void
-
+@MainActor @Observable final class TerminalTabsModel {
     @MainActor struct Tab: Identifiable {
         let id: UUID
-        var title: String
         let holder: TerminalSessionHolder
-
-        var displayTitle: String { holder.currentTitle ?? title }
+        var displayTitle: String { holder.currentTitle ?? holder.session.title }
     }
 
     static let maximumTabs = 32
-
     private(set) var tabs: [Tab] = []
-    var selected: UUID?
+    private(set) var selected: UUID?
     var broadcast = false
-    private var nextNumber = 1
-    private let requestUserClose: UserCloseRequester
-    private let makeHolder: @MainActor () -> TerminalSessionHolder
+    private(set) var settings = TerminalSettings()
+    private(set) var error: String?
+    let client: TerminalRemoteClient
+    private var stopped = false
+    private var polling: Task<Void, Never>?
+    private var actions: [UUID: Task<Void, Never>] = [:]
+    private var didEnsureFirstTab = false
+    private var preferenceRevision = 0
+    private var hostWindowState: (active: Bool, key: Bool)?
 
-    init(
-        requestUserClose: @escaping UserCloseRequester = { holder, completion in
-            guard TerminalSettings.load().confirmClose else {
-                holder.stop()
-                completion(true)
-                return
-            }
-            holder.requestUserClose(completion)
-        },
-        makeHolder: @escaping @MainActor () -> TerminalSessionHolder = {
-            TerminalSessionHolder()
-        }
-    ) {
-        self.requestUserClose = requestUserClose
-        self.makeHolder = makeHolder
-    }
+    init(client: TerminalRemoteClient) { self.client = client }
 
     var selectedTab: Tab? { tabs.first { $0.id == selected } }
 
     func ensureFirstTab() {
-        guard tabs.isEmpty else { return }
-        addTab()
+        guard !stopped, polling == nil else { return }
+        polling = Task { [weak self] in
+            guard let self else { return }
+            do { self.settings = try await self.client.preferences() } catch {
+                self.error = "Terminal preferences are unavailable."
+            }
+            await self.client.refresh()
+            if !self.didEnsureFirstTab, self.client.snapshot.sessions.isEmpty {
+                self.didEnsureFirstTab = true
+                await self.client.open()
+            }
+            self.synchronize()
+            while !Task.isCancelled, !self.stopped {
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                await self.client.refresh()
+                self.synchronize()
+            }
+        }
     }
 
-    @discardableResult
-    func addTab() -> Tab? {
-        guard tabs.count < Self.maximumTabs else { return nil }
-        let tab = Tab(id: UUID(), title: "Shell \(nextNumber)", holder: makeHolder())
-        nextNumber += 1
-        tabs.append(tab)
-        selected = tab.id
-        return tab
+    func synchronize() {
+        guard !stopped else { return }
+        settings = client.snapshot.preferences
+        let sessions = client.snapshot.sessions
+        for tab in tabs
+        where !sessions.contains(where: {
+            $0.id == tab.id && $0.generation == tab.holder.generation
+        }) { tab.holder.stop() }
+        tabs = sessions.map { session in
+            if let previous = tabs.first(where: {
+                $0.id == session.id && $0.holder.generation == session.generation
+            }) {
+                previous.holder.update(session)
+                previous.holder.fontSize = settings.fontSize
+                return previous
+            }
+            let holder = TerminalSessionHolder(
+                session: session, client: client,
+                onClose: { [weak self] in self?.closeTab(session.id, confirm: false) },
+                onPaneAction: { [weak self] action in
+                    guard let self else { return }
+                    switch action {
+                    case .newTab: self.addTab()
+                    case let .selectTab(index):
+                        if index == -1 {
+                            self.selectNext(backwards: true)
+                        } else if index == -2 {
+                            self.selectNext(backwards: false)
+                        } else if index == -3, let last = self.tabs.last {
+                            self.select(last.id)
+                        } else if index > 0, Int(index) <= self.tabs.count {
+                            self.select(self.tabs[Int(index) - 1].id)
+                        }
+                    default: break
+                    }
+                })
+            if let hostWindowState {
+                holder.setHostWindowState(active: hostWindowState.active, key: hostWindowState.key)
+            }
+            holder.fontSize = settings.fontSize
+            return Tab(id: session.id, holder: holder)
+        }
+        selected = sessions.first(where: \.selected)?.id
+        error = client.error
+    }
+
+    func applyHostWindowState(active: Bool, key: Bool) {
+        guard !stopped else { return }
+        hostWindowState = (active, key)
+        for tab in tabs { tab.holder.setHostWindowState(active: active, key: key) }
+    }
+
+    func addTab() {
+        guard tabs.count < Self.maximumTabs else { return }
+        perform { await $0.client.open() }
     }
 
     func select(_ id: UUID) {
-        guard tabs.contains(where: { $0.id == id }) else { return }
-        selected = id
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        perform { await $0.client.select(tab.holder.session) }
     }
 
-    func closeTab(_ id: UUID) {
-        guard let index = tabs.firstIndex(where: { $0.id == id }) else { return }
-        let holder = tabs[index].holder
-        requestUserClose(holder) { [weak self, weak holder] confirmed in
+    func restart(_ id: UUID) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        tab.holder.stop()
+        perform { await $0.client.restart(tab.holder.session) }
+    }
+
+    func closeTab(_ id: UUID, confirm: Bool = true) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        let close: @MainActor (Bool) -> Void = { [weak self, weak holder = tab.holder] confirmed in
             guard confirmed, let self, let holder else { return }
-            self.removeTab(id, holder: holder)
+            holder.stop()
+            self.perform { await $0.client.close(holder.session) }
         }
-    }
-
-    private func removeTab(_ id: UUID, holder: TerminalSessionHolder) {
-        guard let index = tabs.firstIndex(where: { $0.id == id && $0.holder === holder }) else {
-            return
+        if confirm && settings.confirmClose {
+            tab.holder.requestUserClose(close)
+        } else {
+            close(true)
         }
-        holder.stop()
-        tabs.remove(at: index)
-        if selected == id { selected = tabs.last?.id }
     }
 
     func selectNext(backwards: Bool) {
         guard let selected, let index = tabs.firstIndex(where: { $0.id == selected }),
             tabs.count > 1
         else { return }
-        let next =
-            backwards ? (index - 1 + tabs.count) % tabs.count : (index + 1) % tabs.count
-        self.selected = tabs[next].id
+        select(tabs[(index + (backwards ? tabs.count - 1 : 1)) % tabs.count].id)
     }
 
-    @discardableResult
-    func sendBroadcast(
-        _ plan: TerminalBroadcastPlan,
-        isLive: @MainActor (TerminalSessionHolder) -> Bool = { $0.started },
-        send: @MainActor (TerminalSessionHolder, String) -> Void = { $0.sendInput($1) }
-    ) -> TerminalBroadcastDelivery {
-        var sent = 0
-        var unavailable = 0
-        for tab in tabs {
-            guard isLive(tab.holder) else {
-                unavailable += 1
-                continue
-            }
-            send(tab.holder, plan.terminalInput)
-            sent += 1
+    func sendBroadcast(_ plan: TerminalBroadcastPlan) async throws -> TerminalBroadcastDelivery {
+        try await client.broadcast(plan.command)
+    }
+
+    func windowClosed() {
+        for tab in tabs { tab.holder.stop() }
+        perform { await $0.client.closeAll() }
+    }
+
+    func queuePreferences(_ settings: TerminalSettings) {
+        perform { await $0.savePreferences(settings) }
+    }
+
+    func savePreferences(_ settings: TerminalSettings) async {
+        preferenceRevision += 1
+        let revision = preferenceRevision
+        do {
+            let saved = try await client.savePreferences(settings)
+            guard !stopped, revision == preferenceRevision else { return }
+            self.settings = saved
+            for tab in tabs { tab.holder.fontSize = saved.fontSize }
+            error = nil
+        } catch {
+            guard !stopped, revision == preferenceRevision else { return }
+            self.error = "Terminal preferences could not be saved."
         }
-        return TerminalBroadcastDelivery(sent: sent, unavailable: unavailable)
     }
 
     func stopAll() {
+        guard !stopped else { return }
+        stopped = true
+        polling?.cancel()
+        polling = nil
+        for task in actions.values { task.cancel() }
+        actions.removeAll()
+        client.stop()
         for tab in tabs { tab.holder.stop() }
-        tabs = []
+        tabs.removeAll()
         selected = nil
-        broadcast = false
+    }
+
+    private func perform(_ action: @escaping @MainActor (TerminalTabsModel) async -> Void) {
+        guard !stopped, actions.count < 32 else { return }
+        let token = UUID()
+        actions[token] = Task { [weak self] in
+            guard let self else { return }
+            defer { self.actions[token] = nil }
+            guard !Task.isCancelled, !self.stopped else { return }
+            await action(self)
+            guard !Task.isCancelled, !self.stopped else { return }
+            self.synchronize()
+        }
     }
 }

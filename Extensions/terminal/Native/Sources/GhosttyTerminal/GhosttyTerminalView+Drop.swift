@@ -2,13 +2,23 @@ import AppKit
 @_implementationOnly import GhosttyKit
 import UniformTypeIdentifiers
 
+public struct TerminalDropMedia: Sendable {
+    public let data: Data
+    public let fileExtension: String
+    public init(data: Data, fileExtension: String) {
+        self.data = data; self.fileExtension = fileExtension
+    }
+}
+
 public struct TerminalDropPayload: Sendable {
     public let files: [URL]
     public let temporaryFiles: Set<URL>
+    public let media: TerminalDropMedia?
 
-    public init(files: [URL], temporaryFiles: Set<URL> = []) {
+    public init(files: [URL], temporaryFiles: Set<URL> = [], media: TerminalDropMedia? = nil) {
         self.files = files
         self.temporaryFiles = temporaryFiles
+        self.media = media
     }
 
     private static let legacyFilenames = NSPasteboard.PasteboardType("NSFilenamesPboardType")
@@ -38,8 +48,8 @@ public struct TerminalDropPayload: Sendable {
     public static func files(from pasteboard: NSPasteboard) -> TerminalDropPayload? {
         let urls = fileURLs(from: pasteboard)
         if !urls.isEmpty { return TerminalDropPayload(files: urls, temporaryFiles: []) }
-        guard let temporary = materializeMedia(from: pasteboard) else { return nil }
-        return TerminalDropPayload(files: [temporary], temporaryFiles: [temporary])
+        guard let media = mediaPayload(from: pasteboard) else { return nil }
+        return TerminalDropPayload(files: [], media: media)
     }
 
     @discardableResult
@@ -99,15 +109,15 @@ public struct TerminalDropPayload: Sendable {
         return urls.map(\.standardizedFileURL).filter { seen.insert($0.path).inserted }
     }
 
-    private static func materializeMedia(from pasteboard: NSPasteboard) -> URL? {
+    private static func mediaPayload(from pasteboard: NSPasteboard) -> TerminalDropMedia? {
         for item in pasteboard.pasteboardItems ?? [] {
             guard let media = media(in: item) else { continue }
-            return write(media.data, fileExtension: media.fileExtension)
+            return TerminalDropMedia(data: media.data, fileExtension: media.fileExtension)
         }
         guard let image = NSImage(pasteboard: pasteboard), let png = pngData(from: image) else {
             return nil
         }
-        return write(png, fileExtension: "png")
+        return TerminalDropMedia(data: png, fileExtension: "png")
     }
 
     private static func media(in item: NSPasteboardItem) -> (data: Data, fileExtension: String)? {
@@ -132,18 +142,6 @@ public struct TerminalDropPayload: Sendable {
             )
         }
         return nil
-    }
-
-    private static func write(_ data: Data, fileExtension: String) -> URL? {
-        guard let directory = temporaryDirectory() else { return nil }
-        let url = directory.appendingPathComponent("drop.\(fileExtension)")
-        do {
-            try data.write(to: url, options: .atomic)
-            return url
-        } catch {
-            try? FileManager.default.removeItem(at: directory)
-            return nil
-        }
     }
 
     private static func pngData(from image: NSImage) -> Data? {
@@ -241,7 +239,8 @@ extension GhosttyTerminalView {
     func deliverDroppedFiles(from pasteboard: NSPasteboard) -> Bool {
         let receivingPromises = TerminalDropPayload.receivePromisedFiles(from: pasteboard) {
             [weak self] payload in
-            _ = self?.accept(payload)
+            guard let self else { payload.removeTemporaryFiles(); return }
+            _ = self.accept(payload)
         }
         if receivingPromises { return true }
         guard let payload = TerminalDropPayload.files(from: pasteboard) else { return false }
@@ -249,8 +248,10 @@ extension GhosttyTerminalView {
     }
 
     func accept(_ payload: TerminalDropPayload) -> Bool {
-        if onDropFiles?(payload) == true { return true }
+        guard surface != nil else { payload.removeTemporaryFiles(); return false }
         temporaryDropFiles.formUnion(payload.temporaryFiles)
+        if onDropFiles?(payload) == true { return true }
+        guard payload.media == nil else { return false }
         return insertText(payload.shellText)
     }
 
@@ -259,7 +260,7 @@ extension GhosttyTerminalView {
     }
 
     static func dropped(from pasteboard: NSPasteboard) -> String? {
-        if let payload = TerminalDropPayload.files(from: pasteboard) {
+        if let payload = TerminalDropPayload.files(from: pasteboard), payload.media == nil {
             return payload.shellText
         }
         if let rawURL = pasteboard.string(forType: .URL), !rawURL.isEmpty {
@@ -276,4 +277,8 @@ extension GhosttyTerminalView {
         }
         return "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
+}
+
+extension GhosttyTerminalView {
+    public static func quotePath(_ path: String) -> String { quote(path) }
 }

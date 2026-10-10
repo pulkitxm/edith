@@ -2,36 +2,6 @@ import AppKit
 @_implementationOnly import GhosttyKit
 import OSLog
 
-public struct GhosttyLaunch: Sendable {
-    public let executable: String
-    public let arguments: [String]
-    public let environment: [String]
-    public let workingDirectory: String?
-    public let allowsLocalFileLinks: Bool
-    public let resetTerminalAfterInterrupt: Bool
-
-    public init(
-        executable: String, arguments: [String], environment: [String],
-        workingDirectory: String? = nil, allowsLocalFileLinks: Bool = true,
-        resetTerminalAfterInterrupt: Bool = false
-    ) {
-        self.executable = executable
-        self.arguments = arguments
-        self.environment = environment.filter { !$0.hasPrefix("NO_COLOR=") }
-        self.workingDirectory = workingDirectory
-        self.allowsLocalFileLinks = allowsLocalFileLinks
-        self.resetTerminalAfterInterrupt = resetTerminalAfterInterrupt
-    }
-
-    var command: String {
-        ([executable] + arguments).map(Self.quote).joined(separator: " ")
-    }
-
-    private static func quote(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-}
-
 public final class GhosttyRuntime {
     public static let shared = GhosttyRuntime()
 
@@ -44,6 +14,7 @@ public final class GhosttyRuntime {
     private var tickScheduled = false
     private var observers: [NSObjectProtocol] = []
     private var modifierMonitor: Any?
+    private var hostFocus: [ObjectIdentifier: Bool] = [:]
 
     public var isReady: Bool { app != nil }
 
@@ -120,7 +91,8 @@ public final class GhosttyRuntime {
         config = cfg
         app = created
         started = true
-        ghostty_app_set_focus(created, NSApp.isActive)
+        ghostty_app_set_focus(
+            created, hostFocus.isEmpty ? NSApp.isActive : hostFocus.values.contains(true))
         installApplicationObservers()
     }
 
@@ -137,7 +109,15 @@ public final class GhosttyRuntime {
         if let config { ghostty_config_free(config) }
         config = nil
         tickScheduled = false
+        hostFocus.removeAll()
         started = false
+    }
+
+    @MainActor func setHostFocus(_ owner: ObjectIdentifier, active: Bool?) {
+        hostFocus[owner] = active
+        guard let app else { return }
+        ghostty_app_set_focus(
+            app, hostFocus.isEmpty ? NSApp.isActive : hostFocus.values.contains(true))
     }
 
     var handle: ghostty_app_t? { app }
@@ -158,9 +138,17 @@ public final class GhosttyRuntime {
 
     func configuration(for theme: GhosttyTheme?) -> ghostty_config_t? {
         guard let cfg = ghostty_config_new() else { return nil }
-        ghostty_config_load_default_files(cfg)
+        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let fixture {
+            fixture.appendingPathComponent("ghostty.conf").path.withCString {
+                ghostty_config_load_file(cfg, $0)
+            }
+        } else {
+            ghostty_config_load_default_files(cfg)
+        }
         let configuration = Self.selectionConfiguration + (theme?.configuration ?? "")
-        let directory = FileManager.default.temporaryDirectory
+        let directory = (fixture ?? FileManager.default.temporaryDirectory)
             .appendingPathComponent("edith-ghostty", isDirectory: true)
         try? FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true)
@@ -211,14 +199,17 @@ public final class GhosttyRuntime {
                 forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
             ) { [weak self] _ in
                 guard let app = self?.app else { return }
-                ghostty_app_set_focus(app, true)
+                ghostty_app_set_focus(
+                    app,
+                    self?.hostFocus.isEmpty == false
+                        ? self?.hostFocus.values.contains(true) == true : true)
             })
         observers.append(
             center.addObserver(
                 forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
             ) { [weak self] _ in
                 guard let app = self?.app else { return }
-                ghostty_app_set_focus(app, false)
+                ghostty_app_set_focus(app, self?.hostFocus.values.contains(true) == true)
             })
         observers.append(
             center.addObserver(
@@ -239,6 +230,53 @@ public final class GhosttyRuntime {
         case GHOSTTY_ACTION_RENDER:
             GhosttySurfaceRegistry.shared.render(target)
             return true
+        case GHOSTTY_ACTION_NEW_TAB:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.newTab) ?? false
+        case GHOSTTY_ACTION_GOTO_TAB:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(
+                .selectTab(Int32(action.action.goto_tab.rawValue))) ?? false
+        case GHOSTTY_ACTION_NEW_SPLIT:
+            let direction: GhosttyPaneAction.Direction
+            switch action.action.new_split {
+            case GHOSTTY_SPLIT_DIRECTION_UP: direction = .up
+            case GHOSTTY_SPLIT_DIRECTION_DOWN: direction = .down
+            case GHOSTTY_SPLIT_DIRECTION_LEFT: direction = .left
+            case GHOSTTY_SPLIT_DIRECTION_RIGHT: direction = .right
+            default: return false
+            }
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.split(direction))
+                ?? false
+        case GHOSTTY_ACTION_GOTO_SPLIT:
+            let focus: GhosttyPaneAction.Focus
+            switch action.action.goto_split {
+            case GHOSTTY_GOTO_SPLIT_PREVIOUS: focus = .previous
+            case GHOSTTY_GOTO_SPLIT_NEXT: focus = .next
+            case GHOSTTY_GOTO_SPLIT_UP: focus = .up
+            case GHOSTTY_GOTO_SPLIT_DOWN: focus = .down
+            case GHOSTTY_GOTO_SPLIT_LEFT: focus = .left
+            case GHOSTTY_GOTO_SPLIT_RIGHT: focus = .right
+            default: return false
+            }
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.focus(focus))
+                ?? false
+        case GHOSTTY_ACTION_RESIZE_SPLIT:
+            let resize = action.action.resize_split
+            let direction: GhosttyPaneAction.Direction
+            switch resize.direction {
+            case GHOSTTY_RESIZE_SPLIT_UP: direction = .up
+            case GHOSTTY_RESIZE_SPLIT_DOWN: direction = .down
+            case GHOSTTY_RESIZE_SPLIT_LEFT: direction = .left
+            case GHOSTTY_RESIZE_SPLIT_RIGHT: direction = .right
+            default: return false
+            }
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(
+                .resize(direction, resize.amount)) ?? false
+        case GHOSTTY_ACTION_EQUALIZE_SPLITS:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.equalize)
+                ?? false
+        case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.toggleZoom)
+                ?? false
         case GHOSTTY_ACTION_CLOSE_TAB, GHOSTTY_ACTION_CLOSE_WINDOW:
             GhosttySurfaceRegistry.shared.requestClose(target)
             return true

@@ -143,44 +143,28 @@ struct TerminalUntrustedURL: Equatable {
 
 @MainActor
 enum TerminalUntrustedURLPresenter {
-    static func open(_ target: TerminalUntrustedURL, from window: NSWindow?) {
-        switch target.decision {
-        case .allow(let url):
-            NSWorkspace.shared.open(url)
-        case .confirm(let url):
-            confirm(url, target: target.displayValue, from: window)
-        case .deny(let reason):
-            block(reason, target: target.displayValue, from: window)
-        }
-    }
-
-    private static func confirm(_ url: URL, target: String, from window: NSWindow?) {
-        let workspace = NSWorkspace.shared
-        let handler =
-            workspace.urlForApplication(toOpen: url)
-            .map { $0.deletingPathExtension().lastPathComponent }
-            ?? "the default application"
-        let alert = alert(
-            title: "Open Link from Terminal Output?",
-            detail:
-                "This link will open in \(handler). Continue only if you trust the destination.",
-            target: target, buttons: ["Cancel", "Open Link"])
-        present(alert, from: window) { response in
-            guard response == .alertSecondButtonReturn else { return }
-            workspace.open(url)
-        }
-    }
-
-    private static func block(
-        _ reason: TerminalURLDenial, target: String, from window: NSWindow?
+    static func present(
+        _ resolution: TerminalLinkResolution, from window: NSWindow?, open: @escaping () -> Void
     ) {
-        let alert = alert(
-            title: "Edith Blocked This Terminal Link", detail: reason.message,
-            target: target, buttons: ["OK", "Copy Target"])
-        present(alert, from: window) { response in
-            guard response == .alertSecondButtonReturn else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(target, forType: .string)
+        switch resolution.disposition {
+        case .allow: open()
+        case .confirm:
+            let alert = alert(
+                title: "Open Link from Terminal Output?", detail: resolution.detail,
+                target: resolution.target, buttons: ["Cancel", "Open Link"])
+            present(alert, from: window) { response in
+                if response == .alertSecondButtonReturn { open() }
+            }
+        case .deny:
+            let alert = alert(
+                title: "Edith Blocked This Terminal Link", detail: resolution.detail,
+                target: resolution.target, buttons: ["OK", "Copy Target"])
+            present(alert, from: window) { response in
+                if response == .alertSecondButtonReturn {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(resolution.target, forType: .string)
+                }
+            }
         }
     }
 

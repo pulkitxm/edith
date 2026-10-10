@@ -11,11 +11,4 @@ import Testing
         #expect(unsetNames == ["NO_COLOR"])
     }
 
-    @Test func childLaunchesRemoveExplicitNoColor() {
-        let launch = GhosttyLaunch(
-            executable: "/bin/zsh", arguments: [],
-            environment: ["TERM=xterm-256color", "NO_COLOR=1", "COLORTERM=truecolor"])
-
-        #expect(launch.environment == ["TERM=xterm-256color", "COLORTERM=truecolor"])
-    }
 }

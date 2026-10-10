@@ -47,7 +47,7 @@ enum TerminalLaunchPolicy {
 struct TerminalSessionView: View {
     let holder: TerminalSessionHolder
     var active = true
-    var launch: () -> TerminalLaunch = { TerminalLaunchPlan.make(settings: .load()) }
+    var restart: () -> Void = {}
     @Environment(\.colorScheme) private var scheme
 
     private var dark: Bool { scheme == .dark }
@@ -55,11 +55,26 @@ struct TerminalSessionView: View {
 
     var body: some View {
         let presentation = TerminalSessionPresentation.make(
-            started: holder.started, exitMessage: holder.exitMessage)
+            started: holder.started, exitMessage: holder.error ?? holder.exitMessage)
         Group {
             if presentation.showsTerminal {
-                TerminalPane(holder: holder, palette: palette, active: active)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    TerminalPane(holder: holder, palette: palette, active: active)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    if let actionError = holder.actionError {
+                        Text(actionError).font(.edithText(.caption)).foregroundStyle(
+                            DashSkin.danger
+                        ).padding(UIScale.pt(8))
+                    }
+                    if let exitMessage = holder.exitMessage {
+                        HStack {
+                            Text(exitMessage).font(.edithText(.caption))
+                            Spacer()
+                            Button("Restart", action: restart).buttonStyle(.edith(.toolbar))
+                        }
+                        .padding(UIScale.pt(8))
+                    }
+                }
             } else if presentation.showsProgress {
                 TerminalLoadingSkeleton(palette: palette)
             } else {
@@ -67,10 +82,6 @@ struct TerminalSessionView: View {
             }
         }
         .background(Color(nsColor: palette.background))
-        .onAppear(perform: startIfPossible)
-        .onChange(of: active) { _, active in
-            if active { startIfPossible() }
-        }
     }
 
     private func unavailable(_ presentation: TerminalSessionPresentation) -> some View {
@@ -96,22 +107,7 @@ struct TerminalSessionView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func startIfPossible() {
-        guard
-            TerminalLaunchPolicy.shouldStart(
-                active: active, started: holder.started, exited: holder.exitMessage != nil)
-        else { return }
-        holder.start(launch())
-    }
-
     private func perform(_ action: TerminalSessionAction) {
-        switch action {
-        case .start:
-            holder.reset()
-            holder.start(launch())
-        case .restart:
-            holder.reset()
-            holder.start(launch())
-        }
+        restart()
     }
 }

@@ -317,29 +317,12 @@ extension GhosttyTerminalView {
         _ rawValue: String,
         kind: ghostty_action_open_url_kind_e = GHOSTTY_ACTION_OPEN_URL_KIND_UNKNOWN
     ) -> Bool {
-        if kind == GHOSTTY_ACTION_OPEN_URL_KIND_OSC8 {
-            commandClickOpenedTarget = true
-            let target = TerminalUntrustedURL(
-                value: rawValue, allowsLocalFiles: allowsLocalFileLinks)
-            let presentingWindow = window
-            DispatchQueue.main.async {
-                TerminalUntrustedURLPresenter.open(target, from: presentingWindow)
-            }
-            return true
-        }
-        guard
-            let url = Self.linkTarget(
-                for: rawValue, workingDirectory: currentDirectory,
-                allowsLocalFiles: allowsLocalFileLinks)
-        else {
-            return false
-        }
-        commandClickOpenedTarget = true
-        let openResolvedURL = openResolvedURL
-        DispatchQueue.main.async {
-            openResolvedURL(url)
-        }
-        return true
+        guard rawValue.utf8.count <= 4_096, !rawValue.utf8.contains(0),
+            let onOpenTarget
+        else { return false }
+        let accepted = onOpenTarget(rawValue, kind == GHOSTTY_ACTION_OPEN_URL_KIND_OSC8)
+        commandClickOpenedTarget = accepted
+        return accepted
     }
 
     func setHoveredLink(_ value: String?) {

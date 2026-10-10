@@ -21,8 +21,10 @@ let package = Package(
                 .linkedFramework("Metal"), .linkedFramework("QuartzCore"),
                 .linkedFramework("IOSurface"), .linkedFramework("CoreText"),
             ]),
+        .target(name: "RendererAudit", path: "Tests/RendererAudit"),
         .testTarget(
-            name: "GhosttyTerminalTests", dependencies: ["GhosttyTerminal", "GhosttyKit"],
+            name: "GhosttyTerminalTests",
+            dependencies: ["GhosttyTerminal", "GhosttyKit", "RendererAudit"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
