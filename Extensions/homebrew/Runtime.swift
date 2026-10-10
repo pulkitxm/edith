@@ -44,7 +44,6 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if operations == nil { operations = HomebrewEngineCommands() }
             if surface == nil { surface = HomebrewSurface() }
-            TextEditingCommands.install()
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
@@ -52,6 +51,7 @@ final class ExtensionRuntime: NSObject {
             stopUI()
             uiClient = client
             uiModel = HomebrewPageModel(engineClient: client)
+            TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
@@ -68,7 +68,7 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             surface?.shutdown(); surface = nil
             operations?.shutdown(); operations = nil
-            TextEditingCommands.shutdown()
+            stopUI()
         case "cancel":
             return ["ok": true, "cancelled": operations?.cancel() ?? false] as NSDictionary
         case "synchronize": break
@@ -78,6 +78,7 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
+        TextEditingCommands.shutdown()
         uiModel?.shutdown()
         uiModel = nil
         uiClient?.invalidate()
@@ -86,6 +87,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopUI()
         Task {
             await commands.shutdownAndWait()
             await operations?.shutdownAndWait()

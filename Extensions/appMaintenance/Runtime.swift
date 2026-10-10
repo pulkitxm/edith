@@ -83,7 +83,6 @@ final class ExtensionRuntime: NSObject {
                     model?.startBackgroundDiscovery()
                 }
             }
-            TextEditingCommands.install()
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "appMaintenance", !configuration.uiOnly,
@@ -92,6 +91,7 @@ final class ExtensionRuntime: NSObject {
             guard configurePresentation(input, client: client) else {
                 return ["ok": false] as NSDictionary
             }
+            TextEditingCommands.install()
         case "stopUI":
             guard input["presentationID"] as? String == uiClient?.presentationID.uuidString else {
                 return ["ok": false] as NSDictionary
@@ -119,7 +119,6 @@ final class ExtensionRuntime: NSObject {
             ownedModel?.stopBackgroundDiscovery()
             Task { await ownedModel?.shutdown() }
             model = nil
-            TextEditingCommands.shutdown()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -152,6 +151,7 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func stopUI() {
+        TextEditingCommands.shutdown()
         settingsModel?.stop(); settingsModel = nil
         uiLocation = nil; uiSection = nil
         let model = uiModel; uiModel = nil

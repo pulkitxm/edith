@@ -38,6 +38,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopUI()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         Task {
@@ -66,18 +67,13 @@ final class ExtensionRuntime: NSObject {
             engineClient = client
             uiModel = LaTeXModel(remote: LaTeXUIBridge(client: client))
             TextEditingCommands.install()
-        case "stopUI":
-            engineClient?.invalidate(); engineClient = nil
-            let model = uiModel; uiModel = nil
-            Task { await model?.shutdown() }
-            TextEditingCommands.shutdown()
+        case "stopUI": stopUI()
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 Self.hasEditorResources
             else { return ["ok": false] as NSDictionary }
             if worker == nil { worker = LaTeXWorker() }
-            TextEditingCommands.install()
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -90,11 +86,18 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             let stopping = worker; worker = nil
             Task { await stopping?.shutdown() }
-            TextEditingCommands.shutdown()
+            stopUI()
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+
+    private func stopUI() {
+        engineClient?.invalidate(); engineClient = nil
+        let model = uiModel; uiModel = nil
+        Task { await model?.shutdown() }
+        TextEditingCommands.shutdown()
     }
 
     private static var hasEditorResources: Bool {
