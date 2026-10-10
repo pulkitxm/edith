@@ -9,6 +9,7 @@ struct HostApplication: App {
     @NSApplicationDelegateAdaptor(HostApplicationDelegate.self) private var delegate
     @State private var marketplace: HostMarketplace?
     @State private var cliServer: HostCLIServer?
+    @State private var coreCLI: HostCoreCLIService?
     @State private var coreServices: HostCoreServices?
     @State private var sectionWindows: HostSectionWindows?
     @State private var remotePresenter: HostRemoteContentPresenter?
@@ -66,11 +67,23 @@ struct HostApplication: App {
                         let loaded = try HostMarketplace.live(identity: identity)
                         #endif
                         let gateway = HostCLIGateway(marketplace: loaded)
+                        let core = try HostCoreCLIAdapter.make(
+                            identity: identity, marketplace: loaded, updater: updater,
+                            shared: SharedDefaults.store, standard: .standard,
+                            showMainWindow: { delegate.showMainWindow() },
+                            navigation: { action, route in
+                                NavigationCommands.perform(action: action, route: route)
+                            }, core: { coreServices },
+                            changed: { coreServices?.panelShortcutChanged() })
                         let control = HostCLIServer(identity: identity) { request in
-                            try await gateway.execute(request)
+                            if HostCoreCLIService.handles(request) {
+                                return try await core.execute(request)
+                            }
+                            return try await gateway.execute(request)
                         }
                         try control.start()
                         cliServer = control
+                        coreCLI = core
                         let presenter = HostRemoteContentPresenter(
                             manager: HostRemoteSessionManager(marketplace: loaded))
                         remotePresenter = presenter
@@ -102,7 +115,7 @@ struct HostApplication: App {
                             let ready = await loaded.sessions.shutdown()
                             if ready {
                                 windows.closeAll(); windows.uninstall()
-                                await services.shutdown(); control.shutdown()
+                                await services.shutdown(); core.shutdown(); control.shutdown()
                             }
                             return ready
                         }
