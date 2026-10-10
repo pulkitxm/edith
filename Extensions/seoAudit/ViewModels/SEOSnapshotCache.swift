@@ -11,6 +11,7 @@ final class SEOSnapshotCache: @unchecked Sendable {
     private var network: SEOAuditHTTPClient?
     private var generation = 0
     private var stopped = false
+    private var remote: (@Sendable (URL) async throws -> Data?)?
 
     init(
         root: URL = ExtensionData.root.appendingPathComponent("SEOAudit"),
@@ -27,20 +28,29 @@ final class SEOSnapshotCache: @unchecked Sendable {
         }
     }
 
+    func configureRemote(_ read: @escaping @Sendable (URL) async throws -> Data?) {
+        lock.withLock {
+            generation += 1; stopped = false; remote = read; network = nil;
+            memory.removeAllObjects()
+        }
+    }
+
     func shutdown() {
         lock.withLock {
-            stopped = true; generation += 1; network = nil; memory.removeAllObjects()
+            stopped = true; generation += 1; network = nil; remote = nil; memory.removeAllObjects()
         }
     }
 
     static func image(for fileURL: URL) async -> NSImage? { await shared.image(for: fileURL) }
 
     func image(for url: URL) async -> NSImage? {
-        let state = lock.withLock { stopped ? nil : (generation, root, network) }
+        let state = lock.withLock { stopped ? nil : (generation, root, network, remote) }
         guard let state, !Task.isCancelled else { return nil }
         if let image = memory.object(forKey: url as NSURL) { return image }
         let data: Data?
-        if url.isFileURL {
+        if let remote = state.3 {
+            data = try? await remote(url)
+        } else if url.isFileURL {
             data = await BlockingWork.value {
                 SEOAuditOwnedIO.read(url, root: state.1, limit: 25 * 1_024 * 1_024)
             }

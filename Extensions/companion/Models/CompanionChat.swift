@@ -190,7 +190,7 @@ public enum CompanionMedia {
     }
 }
 
-public enum CompanionChatEvent: Equatable, Sendable {
+public enum CompanionChatEvent: Codable, Equatable, Sendable {
     case meta(conversationId: String, model: String)
     case delta(String)
     case citations([CompanionAskCitation])
@@ -283,7 +283,10 @@ extension CompanionClient {
             CompanionChatEvent, Error
         >
     {
-        AsyncThrowingStream { continuation in
+        if let remote = CompanionTransport.shared.remoteBridge {
+            return remote.chat(message: message, conversationID: conversationId, persona: persona)
+        }
+        return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     var request = URLRequest(url: url(for: "chat"))

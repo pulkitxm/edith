@@ -32,6 +32,7 @@ final class BifrostStore: FeatureModule {
     private var actionTasks: [UUID: Task<Void, Never>] = [:]
     private var observers: [NSObjectProtocol] = []
     private var isShutDown = false
+    private var drainingTasks: [Task<Void, Never>] = []
     private let store: UserDefaults
     private let indexStore: BifrostIndexStore
     private let rateStore: BifrostRateStore
@@ -100,6 +101,9 @@ final class BifrostStore: FeatureModule {
     func shutdown() {
         guard !isShutDown else { return }
         isShutDown = true
+        drainingTasks =
+            [indexTask, sourcesTask, ratesTask, modeTask].compactMap { $0 }
+            + Array(actionTasks.values)
         indexTask?.cancel()
         indexTask = nil
         sourcesTask?.cancel()
@@ -111,6 +115,13 @@ final class BifrostStore: FeatureModule {
         actionTasks.values.forEach { $0.cancel() }; actionTasks.removeAll()
         for observer in observers { BifrostIPC.stopObserving(observer) }
         observers = []
+    }
+
+    func drain() async {
+        shutdown()
+        let active = drainingTasks
+        for task in active { await task.value }
+        drainingTasks.removeAll()
     }
 
     var resultLimit: Int { BifrostSummary.resultLimit(store: store) }

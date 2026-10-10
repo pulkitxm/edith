@@ -73,7 +73,7 @@ public struct DownloadToolStatus: Equatable, Sendable {
     public var installed: Bool { executable != nil && version != nil }
 }
 
-public struct DownloadToolUpdate: Equatable, Sendable {
+public struct DownloadToolUpdate: Codable, Equatable, Sendable {
     public let executable: URL
     public let before: String?
     public let after: String?

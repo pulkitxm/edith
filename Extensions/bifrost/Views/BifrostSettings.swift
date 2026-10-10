@@ -3,18 +3,18 @@ import EdithExtensionUI
 import SwiftUI
 
 extension Binding {
-    func bifrostSetting(_ key: String) -> Binding<Value> {
+    @MainActor func bifrostSetting(_ key: String) -> Binding<Value> {
         Binding(
             get: { wrappedValue },
             set: { value in
                 wrappedValue = value
-                SharedDefaults.store.set(value, forKey: key)
-                BifrostIPC.post(BifrostIPC.Name.settingsChanged)
+                BifrostUIContext.write(key, value: value)
             })
     }
 }
 
 struct BifrostSettings: View {
+    var context: BifrostUIContext? = nil
     var body: some View {
         PageWorkspace {
             PageHeader(
@@ -25,7 +25,11 @@ struct BifrostSettings: View {
                     ).foregroundStyle(.secondary)
                 })
         } content: {
-            Form { BifrostRows() }.formStyle(.grouped)
-        }
+            if context == nil || context?.loaded == true {
+                Form { BifrostRows() }.formStyle(.grouped)
+            } else {
+                PageLoading(state: .loading, layout: .cards) { EmptyView() }
+            }
+        }.pageTask { await context?.load() }
     }
 }

@@ -2,7 +2,7 @@ import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
 
-public struct CompanionHost: Identifiable, Equatable, Sendable {
+public struct CompanionHost: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public let name: String
     public let target: String

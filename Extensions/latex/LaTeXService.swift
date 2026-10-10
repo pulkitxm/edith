@@ -432,7 +432,7 @@ public struct LaTeXService: Sendable {
     }
 }
 
-public struct LaTeXPullRequest: Decodable, Sendable {
+public struct LaTeXPullRequest: Codable, Sendable {
     public let number: Int
     public let title: String
     public let state: String
@@ -441,13 +441,13 @@ public struct LaTeXPullRequest: Decodable, Sendable {
     public let mergeable: String
 }
 
-public struct LaTeXReview: Sendable {
+public struct LaTeXReview: Codable, Sendable {
     public let pullRequest: LaTeXPullRequest
     public let diff: String
     public let checks: [LaTeXCheck]
 }
 
-public struct LaTeXCheck: Decodable, Sendable {
+public struct LaTeXCheck: Codable, Sendable {
     public let name: String
     public let workflow: String
     public let status: String

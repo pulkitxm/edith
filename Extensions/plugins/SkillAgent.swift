@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public struct SkillAgent: Identifiable, Equatable, Sendable {
+public struct SkillAgent: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let name: String
     public let directory: String
@@ -57,8 +57,11 @@ public struct SkillAgent: Identifiable, Equatable, Sendable {
 
 public enum SkillAgentCatalog {
     public static func detected(
-        home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = UserShellEnvironment.userEnvironment(),
+        home: URL = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+            URL(fileURLWithPath: $0)
+        } ?? FileManager.default.homeDirectoryForCurrentUser,
+        environment: [String: String] = ProcessInfo.processInfo.environment[
+            "EDITH_EXTENSION_FIXTURE_HOME"] == nil ? UserShellEnvironment.userEnvironment() : [:],
         exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }
     ) -> [SkillAgent] {
         agents.filter { $0.isDetected(home: home, environment: environment, exists: exists) }

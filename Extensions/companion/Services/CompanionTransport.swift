@@ -6,11 +6,19 @@ final class CompanionTransport: @unchecked Sendable {
     private let lock = NSLock()
     private var current: URLSession?
     private var closed = false
+    private var remote: CompanionUIBridge?
+    private var remoteOnly = false
+    func configureRemote(_ value: CompanionUIBridge?) {
+        lock.withLock {
+            remote = value; remoteOnly = true; closed = value == nil
+        }
+    }
+    var remoteBridge: CompanionUIBridge? { lock.withLock { remote } }
 
     var session: URLSession {
         get throws {
             try lock.withLock {
-                guard !closed else { throw CancellationError() }
+                guard !closed, !remoteOnly else { throw CancellationError() }
                 if let current { return current }
                 let configuration = URLSessionConfiguration.ephemeral
                 configuration.httpCookieStorage = nil
@@ -27,7 +35,11 @@ final class CompanionTransport: @unchecked Sendable {
     var isClosed: Bool { lock.withLock { closed } }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await session.data(for: request)
+        let state = lock.withLock { (closed, remoteOnly, remote) }
+        guard !state.0 else { throw CancellationError() }
+        if let remote = state.2 { return try await remote.http(request) }
+        guard !state.1 else { throw CancellationError() }
+        return try await session.data(for: request)
     }
 
     func bytes(for request: URLRequest) async throws -> (URLSession.AsyncBytes, URLResponse) {

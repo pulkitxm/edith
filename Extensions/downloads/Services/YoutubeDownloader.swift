@@ -196,6 +196,9 @@ public final class YoutubeDownloader {
     @ObservationIgnored private var updateTask: Task<Void, Never>?
     public var errorMessage: String?
     @ObservationIgnored private let client: DownloadsClient
+    let remote: DownloadsUIBridge?
+    let tools: DownloadsTools
+    private var remoteDirectories: [String: URL] = [:]
     @ObservationIgnored private let toolStatus: @Sendable (URL?) async -> DownloadToolStatus
     @ObservationIgnored private var streamTask: Task<Void, Never>?
     @ObservationIgnored private var availabilityTask: Task<Void, Never>?
@@ -281,12 +284,15 @@ public final class YoutubeDownloader {
 
     init(
         client: DownloadsClient = DownloadsClient(), start: Bool = true,
+        remote: DownloadsUIBridge? = nil,
         toolStatus: @escaping @Sendable (URL?) async -> DownloadToolStatus = {
             await DownloadToolOperationExecution.status(executable: $0)
         }
     ) {
         self.toolStatus = toolStatus
         self.client = client
+        self.remote = remote
+        tools = remote.map { DownloadsTools(remote: $0) } ?? .shared
         observesWorker = start
         guard start else { return }
         checkAvailability()
@@ -338,7 +344,17 @@ public final class YoutubeDownloader {
                 try Task.checkCancellation()
                 apply(snapshot)
                 guard snapshot.enabled, snapshot.problem == nil else { return }
-                let status = await toolStatus(snapshot.executable)
+                let status: DownloadToolStatus
+                if let remote {
+                    let configuration = try await remote.configuration()
+                    remoteDirectories = configuration.directories
+                    SharedDefaults.store.set(
+                        configuration.kind.rawValue, forKey: AppStorageKeys.Music.downloadKind)
+                    tools.apply(configuration.tools)
+                    status = .init(executable: snapshot.executable, version: configuration.version)
+                } else {
+                    status = await toolStatus(snapshot.executable)
+                }
                 try Task.checkCancellation()
                 guard downloadsEnabled else { return }
                 unavailableReason =
@@ -378,8 +394,13 @@ public final class YoutubeDownloader {
         updateTask?.cancel()
         updateTask = Task {
             do {
-                let update = try await DownloadToolOperationExecution.update(
-                    executable: CLIToolEnvironment.executable(named: "yt-dlp"))
+                let update: DownloadToolUpdate
+                if let remote {
+                    update = try await remote.update()
+                } else {
+                    update = try await DownloadToolOperationExecution.update(
+                        executable: CLIToolEnvironment.executable(named: "yt-dlp"))
+                }
                 try Task.checkCancellation()
                 let text = update.output.isEmpty ? "yt-dlp updated" : update.output
                 updateResult = .success(text)
@@ -417,7 +438,7 @@ public final class YoutubeDownloader {
         mutate(
             .enqueue(
                 urls: urls, prefix: prefix, kind: kind,
-                outputDirectory: outputDirectory ?? MediaDownloadInput.defaultDirectory(for: kind),
+                outputDirectory: outputDirectory ?? defaultDirectory(for: kind),
                 browser: browser))
     }
 
@@ -453,12 +474,50 @@ public final class YoutubeDownloader {
 
     @discardableResult
     public func openResult(_ item: DownloadItem) -> Bool {
-        (try? DownloadOperationExecution.open(id: item.id)) != nil
+        if let remote { remoteResult(item.id, action: "open"); return true }
+        return (try? DownloadOperationExecution.open(id: item.id)) != nil
     }
 
     @discardableResult
     public func revealResult(_ item: DownloadItem) -> Bool {
-        (try? DownloadOperationExecution.reveal(id: item.id)) != nil
+        if let remote { remoteResult(item.id, action: "reveal"); return true }
+        return (try? DownloadOperationExecution.reveal(id: item.id)) != nil
+    }
+
+    func defaultDirectory(for kind: DownloadKind) -> URL {
+        remoteDirectories[kind.rawValue] ?? MediaDownloadInput.defaultDirectory(for: kind)
+    }
+
+    func setPreferredKind(_ kind: DownloadKind) {
+        guard let remote else { return }
+        let token = UUID()
+        mutationTasks[token] = Task {
+            defer { mutationTasks[token] = nil }
+            do { try await remote.perform(.init(action: "kind", kind: kind)) } catch {
+                if !Task.isCancelled { errorMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    func setAudioDirectory(_ url: URL) {
+        if let remote {
+            remoteResult(nil, action: "audioFolder", directory: url)
+        } else {
+            DownloadsStorage.setAudioDirectory(url)
+        }
+    }
+
+    private func remoteResult(_ id: UUID?, action: String, directory: URL? = nil) {
+        guard let remote else { return }
+        let token = UUID()
+        mutationTasks[token] = Task {
+            defer { mutationTasks[token] = nil }
+            do {
+                try await remote.perform(.init(action: action, id: id, directory: directory))
+                try Task.checkCancellation()
+                checkAvailability()
+            } catch { if !Task.isCancelled { errorMessage = error.localizedDescription } }
+        }
     }
 
     nonisolated static let intermediateExtensions: Set<String> =

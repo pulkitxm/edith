@@ -26,16 +26,26 @@ import Observation
     @ObservationIgnored private var discoveryTask: Task<Void, Never>?
     @ObservationIgnored private var jobs: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let installer: SkillInstaller
+    var ownedInstaller: SkillInstaller { installer }
+    private let remote: PluginsUIBridge?
+    private var remoteGeneration = 0
     private static let agentSelectionsKey = "plugins.agentSelections"
 
-    public init(
+    init(
+        remote: PluginsUIBridge? = nil,
         defaults: UserDefaults = SharedDefaults.store,
         documents: SkillDocumentStore? = nil,
         installer: SkillInstaller? = nil,
         detectAgents: @escaping @Sendable () -> [SkillAgent] = { SkillAgentCatalog.detected() }
     ) {
         self.defaults = defaults
-        let store = documents ?? SkillDocumentStore()
+        self.remote = remote
+        let store =
+            documents ?? remote.map { bridge in
+                SkillDocumentStore(
+                    remoteLoad: { try await bridge.document($0.id) },
+                    remoteCopy: { try await bridge.copy($0.id) })
+            } ?? SkillDocumentStore()
         self.documents = store
         self.installer =
             installer
@@ -46,6 +56,7 @@ import Observation
     }
 
     public func discoverAgents() async {
+        if remote != nil { await remoteAction(.init(action: "discover")); return }
         guard !isStopped, !Task.isCancelled else { return }
         if let existing = discoveryTask {
             await existing.value
@@ -72,6 +83,10 @@ import Observation
     }
 
     public func present(_ skill: EdithSkill, agentID: String? = nil) async {
+        if remote != nil {
+            await remoteAction(.init(action: "present", skillID: skill.id, agentID: agentID));
+            return
+        }
         guard !isStopped, !isInstalling, skills.contains(skill), !Task.isCancelled else { return }
         let token = UUID()
         installationID = token
@@ -101,6 +116,11 @@ import Observation
     }
 
     public func setSelected(_ id: String, enabled: Bool) {
+        if remote != nil {
+            if enabled { selectedAgentIDs.insert(id) } else { selectedAgentIDs.remove(id) }
+            ownRemoteAction(.init(action: "select", agentID: id, enabled: enabled))
+            return
+        }
         guard !isStopped, !isInstalling, !isDiscovering,
             agents.contains(where: { $0.id == id })
         else { return }
@@ -113,6 +133,7 @@ import Observation
     }
 
     public func install() async {
+        if remote != nil { await remoteAction(.init(action: "install")); return }
         guard !isStopped, let skill = presentedSkill, !isInstalling, !isDiscovering,
             !selectedAgentIDs.isEmpty, !Task.isCancelled
         else { return }
@@ -156,8 +177,57 @@ import Observation
         }
     }
 
+    private var remoteInstallLaunch: Task<Void, Never>?
+    var remoteInstallIsPending: Bool { remoteInstallLaunch != nil }
+    func beginRemoteInstall() {
+        guard remoteInstallLaunch == nil else { return }
+        remoteInstallLaunch = Task { [weak self] in
+            await self?.install(); self?.remoteInstallLaunch = nil
+        }
+    }
+
+    private func ownRemoteAction(_ request: PluginsUIAction) {
+        let id = UUID()
+        jobs[id] = Task { [weak self] in
+            defer { self?.jobs[id] = nil }
+            await self?.remoteAction(request)
+        }
+    }
+
+    private func remoteAction(_ request: PluginsUIAction) async {
+        guard let remote, !isStopped else { return }
+        remoteGeneration &+= 1
+        let generation = remoteGeneration
+        let loading = discoveryLoad.begin(preservingContent: discoveryLoad.hasContent)
+        if request.action == "install" { isInstalling = true }
+        do {
+            var value = try await remote.perform(request)
+            if request.action == "install" {
+                while value.isInstalling, !Task.isCancelled, !isStopped {
+                    try await Task.sleep(for: .milliseconds(250))
+                    value = try await remote.perform(.init(action: "snapshot"))
+                }
+            }
+            guard !isStopped, !Task.isCancelled, remoteGeneration == generation else { return }
+            agents = value.agents; selectedAgentIDs = value.selectedAgentIDs
+            presentedSkill = skills.first { $0.id == value.presentedSkillID }
+            installedAgents = value.installedAgents
+            isInstalling = value.isInstalling; installerAvailable = value.installerAvailable
+            installationSucceeded = value.installationSucceeded
+            installationLog = value.installationLog; installationError = value.installationError
+            singleAgentOverride = value.singleAgentOverride
+            discoveryLoad.complete(loading)
+        } catch {
+            guard !isStopped, !Task.isCancelled, remoteGeneration == generation else { return }
+            isInstalling = false; installationError = error.localizedDescription
+            discoveryLoad.fail(loading, error: error)
+        }
+    }
+
     public func shutdown() async {
         isStopped = true
+        remoteInstallLaunch?.cancel()
+        remoteGeneration &+= 1
         installationID = UUID()
         discoveryLoad.reset()
         let discovering = discoveryTask
@@ -166,6 +236,7 @@ import Observation
         for task in tasks { task.cancel() }
         await discovering?.value
         for task in tasks { await task.value }
+        await remoteInstallLaunch?.value; remoteInstallLaunch = nil
         await documents.shutdown()
         discoveryTask = nil
         jobs.removeAll()

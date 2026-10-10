@@ -34,7 +34,7 @@ private final class CompanionRecordingResources {
 @MainActor
 @Observable
 final class CompanionCaptureModel {
-    enum Phase {
+    enum Phase: String, Codable {
         case idle
         case recording
         case preview
@@ -53,7 +53,11 @@ final class CompanionCaptureModel {
     private(set) var waiting: [CompanionOutboxItem] = []
     private(set) var draining = false
 
-    @ObservationIgnored private let recording = CompanionRecordingResources()
+    @ObservationIgnored private lazy var recording = CompanionRecordingResources()
+    @ObservationIgnored private let remote: CompanionUIBridge?
+    @ObservationIgnored private var remoteTask: Task<Void, Never>?
+    private var remoteStopped = false
+    private var remotePolling: Task<Void, Never>?
     private var fileURL: URL?
     private var startedAt: Date?
     private var startGeneration = 0
@@ -61,7 +65,9 @@ final class CompanionCaptureModel {
     private var captureActive = false
     @ObservationIgnored private nonisolated(unsafe) var outboxObserver: NSObjectProtocol?
 
-    init() {
+    init(remote: CompanionUIBridge? = nil) {
+        self.remote = remote
+        guard remote == nil else { return }
         outboxObserver = IPC.observe(CompanionBackgroundOperation.outboxChanged) { [weak self] in
             Task { @MainActor in await self?.refreshWaiting() }
         }
@@ -72,6 +78,10 @@ final class CompanionCaptureModel {
     }
 
     func shutdown() {
+        if remote != nil {
+            remoteStopped = true; remotePolling?.cancel(); remotePolling = nil;
+            remoteTask?.cancel(); remoteTask = nil; return
+        }
         setCaptureActive(false)
         if let outboxObserver { IPC.stopObserving(outboxObserver) }
         outboxObserver = nil
@@ -83,6 +93,7 @@ final class CompanionCaptureModel {
     }
 
     func toggleRecording() async {
+        if remote != nil { await remoteAction("toggle"); return }
         guard captureActive, !starting, !remembering else { return }
         switch phase {
         case .recording: stopRecording()
@@ -222,6 +233,20 @@ final class CompanionCaptureModel {
     }
 
     func setCaptureActive(_ active: Bool) {
+        if remote != nil {
+            remoteTask?.cancel(); remotePolling?.cancel(); remotePolling = nil
+            remoteTask = Task { await remoteAction(active ? "activate" : "deactivate") }
+            if active {
+                remotePolling = Task { [weak self] in
+                    while !Task.isCancelled {
+                        guard let self, !remoteStopped else { return }
+                        await remoteAction("snapshot")
+                        do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+                    }
+                }
+            }
+            return
+        }
         captureActive = active
         if !active { leaveCapture() }
     }
@@ -233,6 +258,7 @@ final class CompanionCaptureModel {
     }
 
     func discard() {
+        if remote != nil { remoteTask = Task { await remoteAction("discard") }; return }
         leaveCapture()
         if let fileURL {
             try? FileManager.default.removeItem(at: fileURL)
@@ -244,6 +270,7 @@ final class CompanionCaptureModel {
     }
 
     func remember() async {
+        if remote != nil { await remoteAction("remember"); return }
         guard let fileURL, !remembering else { return }
         leaveCapture()
         remembering = true
@@ -266,12 +293,14 @@ final class CompanionCaptureModel {
     }
 
     func refreshWaiting() async {
+        if remote != nil { await remoteAction("snapshot"); return }
         waiting = await Task.detached(priority: .utility) {
             CompanionOutbox.waiting()
         }.value
     }
 
     func drainOutbox() async {
+        if remote != nil { await remoteAction("drain"); return }
         guard !draining, !waiting.isEmpty else { return }
         draining = true
         defer { draining = false }
@@ -286,6 +315,7 @@ final class CompanionCaptureModel {
     }
 
     func rememberNote() async {
+        if remote != nil { await remoteAction("note"); return }
         let text = note.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !savingNote else { return }
         savingNote = true
@@ -303,6 +333,19 @@ final class CompanionCaptureModel {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func remoteAction(_ action: String) async {
+        guard let remote, !remoteStopped else { return }
+        do {
+            let value = try await remote.capture(action, note: note)
+            guard !remoteStopped, !Task.isCancelled else { return }
+            phase = value.phase; transcript = value.transcript; level = value.level;
+            duration = value.duration
+            remembering = value.remembering; outcome = value.outcome; error = value.error
+            note = value.note; noteOutcome = value.noteOutcome; savingNote = value.savingNote
+            waiting = value.waiting; draining = value.draining
+        } catch { if !remoteStopped, !Task.isCancelled { self.error = error.localizedDescription } }
     }
 
     private static func stamp() -> String {

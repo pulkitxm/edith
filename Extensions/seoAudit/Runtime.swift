@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -7,10 +8,14 @@ import SwiftUI
 @MainActor @objc(EdithSEOAuditExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var service: SEOAuditService?
+    private var uiService: SEOAuditService?
+    private var uiEngine: SEOAuditUIEngine?
+    private var engineClient: ExtensionEngineClient?
     private var operations: SEOAuditCommands?
     private var surface: SEOAuditSurface?
     private var startup: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
     private var fixture: Bool {
         ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
@@ -20,6 +25,23 @@ final class ExtensionRuntime: NSObject {
             guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
             try Task.checkCancellation()
+            if command.hasPrefix("seoAudit.cli.") {
+                guard let service = self.service else { throw ExtensionPeerError.unavailable }
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "seoAudit")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try SEOCLIExecution.stream(
+                    streams, operation: command, payload: payload, service: service)
+            }
+            if command == "seoAudit.cli", let service = self.service {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await SEOCLIExecution.run(request, service: service))
+            }
+            if command.hasPrefix("seoAudit.ui."), let engine = self.uiEngine {
+                return try await engine.execute(command, payload: payload)
+            }
             if command.hasPrefix("surface."), let surface = self.surface {
                 return try await surface.execute(command, payload: payload)
             }
@@ -30,8 +52,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        guard service != nil else { commands.shutdown(); completion(); return }
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown(); startup?.cancel()
+        uiEngine?.shutdown(); uiEngine = nil
         SEOAuditModel.shared.shutdown(); SEOAuditPrivacyState.shared.shutdown()
         SEOSnapshotCache.shared.shutdown(); SEOAuditWorkerOperations.service = nil
         operations?.shutdown(); operations = nil; surface = nil
@@ -41,6 +64,8 @@ final class ExtensionRuntime: NSObject {
             await service?.shutdown()
             await startup?.value
             await SEOAuditModel.shared.drain()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }
@@ -55,6 +80,24 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "seoAudit", let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            engineClient = client
+            let bridge = SEOAuditUIBridge(client: client)
+            let service = SEOAuditService(remote: bridge)
+            uiService = service
+            SEOAuditModel.shared = SEOAuditModel(service: service)
+            SEOSnapshotCache.shared.configureRemote {
+                try await bridge.call("image", url: $0, as: Data?.self)
+            }
+        case "stopUI":
+            engineClient?.invalidate(); engineClient = nil
+            SEOAuditModel.shared.shutdown()
+            SEOSnapshotCache.shared.shutdown()
+            let service = uiService; uiService = nil
+            Task { await service?.shutdown() }
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -68,12 +111,13 @@ final class ExtensionRuntime: NSObject {
             )
             let service = SEOAuditService(workflow: workflow)
             self.service = service; SEOAuditWorkerOperations.service = service
+            uiEngine = SEOAuditUIEngine(service: service)
             operations = SEOAuditCommands(service: service);
             surface = SEOAuditSurface(service: service)
             SEOSnapshotCache.shared.configure(root: root, network: network)
             startup = Task { await SEOAuditModel.shared.refreshProjects() }
         case "view":
-            guard service != nil else { return ["ok": false] as NSDictionary }
+            guard uiService != nil else { return ["ok": false] as NSDictionary }
             let automatic = !fixture
             return NSHostingController(
                 rootView: ExtensionPageHost {

@@ -20,7 +20,7 @@ let package = Package(
             path: "lidAwake/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "DownloadsExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "downloads", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
@@ -29,16 +29,16 @@ let package = Package(
 
         .target(
             name: "SEOAuditExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "seoAudit", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "seoAudit", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "SEOAuditExtensionTests", dependencies: ["SEOAuditExtension"],
             path: "seoAudit/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CodeStatsExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "codeStats", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "codeStats", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "CodeStatsExtensionTests", dependencies: ["CodeStatsExtension"],
@@ -66,24 +66,24 @@ let package = Package(
             path: "herdr/Tests/Core", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "LaTeXExtension",
-            dependencies: [.product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
-            path: "latex", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport"), .product(name: "EdithExtensionArchive", package: "ExtensionSupport")],
+            path: "latex", exclude: ["Tests", "Runtime.swift", "Package.swift"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "LaTeXExtensionTests", dependencies: ["LaTeXExtension"],
             path: "latex/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "CompanionExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "companion", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "companion", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "CompanionExtensionTests", dependencies: ["CompanionExtension"],
             path: "companion/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "BifrostExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "bifrost", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "bifrost", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "BifrostExtensionTests", dependencies: ["BifrostExtension"],
@@ -260,8 +260,8 @@ let package = Package(
 
         .target(
             name: "PluginsExtension",
-            dependencies: [.product(name: "EdithExtensionDocuments", package: "ExtensionSupport")],
-            path: "plugins", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport"), .product(name: "EdithExtensionDocuments", package: "ExtensionSupport")],
+            path: "plugins", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
@@ -278,9 +278,10 @@ let package = Package(
         .target(
             name: "DocsExtension",
             dependencies: [
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
                 .product(name: "EdithDocsWorker", package: "EdithDocsWorker"),
-            ], path: "docs", exclude: ["Tests", "Runtime.swift"],
+            ], path: "docs", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "DocsExtensionTests", dependencies: ["DocsExtension"],

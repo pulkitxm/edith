@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 public enum DownloadsOperation {
@@ -67,20 +68,56 @@ public struct DownloadWorkerSnapshot: Codable, Sendable {
 }
 
 public struct DownloadsClient: Sendable {
-    public let worker: DownloadWorker
-    public init(worker: DownloadWorker = .shared) { self.worker = worker }
-    public func snapshot() async throws -> DownloadWorkerSnapshot { await worker.snapshot() }
-    public func mutateAsync(_ request: DownloadsMutation) async throws
-        -> DownloadsMutationResult
-    {
-        try await worker.mutate(request)
+    private let read: @Sendable () async throws -> DownloadWorkerSnapshot
+    private let change: @Sendable (DownloadsMutation) async throws -> DownloadsMutationResult
+    private let measure: @Sendable (URL) async throws -> DownloadEstimate?
+    private let observe: @Sendable () async throws -> AsyncStream<DownloadWorkerSnapshot>
+
+    public init(worker: DownloadWorker = .shared) {
+        read = { await worker.snapshot() }
+        change = { try await worker.mutate($0) }
+        measure = { try await worker.estimate($0) }
+        observe = { try await worker.values() }
     }
-    public func estimate(_ url: URL) async throws -> DownloadEstimate? {
-        try await worker.estimate(url)
+
+    @MainActor init(client: ExtensionEngineClient) {
+        read = {
+            let data = try await client.invoke("downloads.snapshot")
+            return try JSONDecoder().decode(DownloadWorkerSnapshot.self, from: data)
+        }
+        change = { request in
+            let data = try await client.invoke(
+                "downloads.mutate", payload: JSONEncoder().encode(request))
+            return try JSONDecoder().decode(DownloadsMutationResult.self, from: data)
+        }
+        measure = { url in
+            let data = try await client.invoke(
+                "downloads.estimate", payload: JSONEncoder().encode(url))
+            return try JSONDecoder().decode(DownloadEstimate?.self, from: data)
+        }
+        let read = read
+        observe = {
+            AsyncStream { continuation in
+                let task = Task {
+                    do {
+                        while !Task.isCancelled {
+                            continuation.yield(try await read())
+                            try await Task.sleep(for: .seconds(1))
+                        }
+                    } catch {}
+                    continuation.finish()
+                }
+                continuation.onTermination = { _ in task.cancel() }
+            }
+        }
     }
-    public func values() async throws -> AsyncStream<DownloadWorkerSnapshot> {
-        try await worker.values()
+
+    public func snapshot() async throws -> DownloadWorkerSnapshot { try await read() }
+    public func mutateAsync(_ request: DownloadsMutation) async throws -> DownloadsMutationResult {
+        try await change(request)
     }
+    public func estimate(_ url: URL) async throws -> DownloadEstimate? { try await measure(url) }
+    public func values() async throws -> AsyncStream<DownloadWorkerSnapshot> { try await observe() }
 }
 
 struct DownloadsError: LocalizedError {

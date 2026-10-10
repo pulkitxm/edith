@@ -10,7 +10,7 @@ struct SEOAuditInputError: Error, Equatable, LocalizedError {
     var errorDescription: String? { message }
 }
 
-enum SEOAuditPageEdit: Equatable, Sendable {
+enum SEOAuditPageEdit: Codable, Equatable, Sendable {
     case all
     case none
     case only([String])

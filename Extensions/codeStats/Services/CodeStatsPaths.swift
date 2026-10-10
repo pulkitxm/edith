@@ -31,7 +31,8 @@ public enum CodeStatsPaths {
                 || defaults.string(forKey: AppStorageKeys.CodeStats.folderConfirmation) == path
         else { return nil }
         let normalized = standardizedURL(path, homeDirectory: homeDirectory).path
-        if let fixture = CodeStatsExecutionEnvironment.fixtureHome,
+        if defaults === SharedDefaults.store,
+            let fixture = CodeStatsExecutionEnvironment.fixtureHome,
             normalized != fixture.path && !normalized.hasPrefix(fixture.path + "/")
         {
             return nil

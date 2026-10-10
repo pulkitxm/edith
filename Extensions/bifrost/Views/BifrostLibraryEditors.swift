@@ -115,7 +115,6 @@ struct BifrostLibrarySection<Item: Identifiable & Codable & Equatable, Fields: V
     }
 
     private func save() {
-        SharedDefaults.store.set(BifrostLibrary.encode(items), forKey: store)
-        BifrostIPC.post(BifrostIPC.Name.settingsChanged)
+        BifrostUIContext.write(store, value: BifrostLibrary.encode(items))
     }
 }

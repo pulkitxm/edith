@@ -325,7 +325,7 @@ struct SEOAuditRunSummary: Codable, Equatable, Sendable {
     }
 }
 
-enum SEOAuditStage: Equatable, Sendable {
+enum SEOAuditStage: Codable, Equatable, Sendable {
     case idle
     case discovering
     case auditing(current: Int, total: Int, url: String)

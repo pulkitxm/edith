@@ -38,7 +38,9 @@ public struct SkillInstaller: Sendable {
 
     public func install(
         skill: EdithSkill, agentIDs: [String],
-        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        home: URL = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"].map {
+            URL(fileURLWithPath: $0)
+        } ?? FileManager.default.homeDirectoryForCurrentUser,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         log: @escaping Log = { _ in }
     ) async throws {

@@ -32,6 +32,8 @@ final class CodeStatsModel {
     private(set) var lastPreset = CodeStatsRange.days(90)
 
     @ObservationIgnored private var reportRevision: UInt64 = 0
+    let remote: CodeStatsUIBridge?
+    private var remotePreferencesLoaded = false
     @ObservationIgnored private let service: CodeStatsPageService
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let calendar: Calendar
@@ -41,10 +43,12 @@ final class CodeStatsModel {
     let computation = ContentLoad()
 
     init(
-        service: CodeStatsPageService = .live, defaults: UserDefaults = SharedDefaults.store,
+        service: CodeStatsPageService = .live, remote: CodeStatsUIBridge? = nil,
+        defaults: UserDefaults = SharedDefaults.store,
         calendar: Calendar = .current, today: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.service = service
+        self.remote = remote
         self.defaults = defaults
         self.calendar = calendar
         self.today = today
@@ -311,6 +315,15 @@ final class CodeStatsModel {
     func apply(_ next: CodeStatsStatus) async {
         let previous = status
         guard next.revision >= previous?.revision ?? 0 else { return }
+        if remote != nil, !remotePreferencesLoaded {
+            CodeStatsPreferences.setIdentity(next.settings.identity, in: defaults)
+            CodeStatsPreferences.setSchedule(next.settings.schedule, in: defaults)
+            defaults.set(next.settings.folder ?? "", forKey: AppStorageKeys.CodeStats.folder)
+            defaults.set(next.settings.includeForks, forKey: AppStorageKeys.CodeStats.includeForks)
+            defaults.set(
+                next.settings.includeArchived, forKey: AppStorageKeys.CodeStats.includeArchived)
+            remotePreferencesLoaded = true
+        }
         status = next
         if !statusLoad.isRunning, !statusLoad.hasContent { statusLoad.setContent() }
         identity = next.settings.identity
@@ -375,6 +388,7 @@ final class CodeStatsModel {
 
     func chooseFolder(_ path: String) async {
         do {
+            if let remote { try await remote.folder(path); await loadStatus(); return }
             _ = try CodeStatsPreferences.selectFolder(
                 path, defaults: defaults, homeDirectory: CodeStatsExecutionEnvironment.home)
             await loadStatus()
@@ -386,11 +400,13 @@ final class CodeStatsModel {
     func useSeededIdentity() {
         guard let seededIdentity else { return }
         CodeStatsPreferences.setIdentity(seededIdentity, in: defaults)
+        publishSettings()
         identity = seededIdentity
     }
 
     func addIdentity(_ value: String) {
         CodeStatsPreferences.addIdentity(value, in: defaults)
+        publishSettings()
         identity = CodeStatsPreferences.identity(in: defaults)
         identityPendingRecount = true
         authors = CodeStatsAuthorMarking.marked(authors, identity: identity)
@@ -398,6 +414,7 @@ final class CodeStatsModel {
 
     func removeIdentity(_ value: String) {
         CodeStatsPreferences.removeIdentity(value, in: defaults)
+        publishSettings()
         identity = CodeStatsPreferences.identity(in: defaults)
         authors = CodeStatsAuthorMarking.marked(authors, identity: identity)
     }
@@ -415,7 +432,22 @@ final class CodeStatsModel {
                 hour: hour ?? CodeStatsPreferences.defaultHour)
         }
         CodeStatsPreferences.setSchedule(next, in: defaults)
+        if let remote { try? await remote.settings(defaults) }
         await loadStatus()
+    }
+
+    private func publishSettings() {
+        guard let remote else { return }
+        Task { try? await remote.settings(defaults) }
+    }
+
+    func settingsChanged() async {
+        if let remote {
+            guard remotePreferencesLoaded else { await loadStatus(); return }
+            try? await remote.settings(defaults)
+        } else {
+            await CodeStatsWorkerOperations.workflow?.settingsChanged()
+        }
     }
 
     private func saveSelection() {

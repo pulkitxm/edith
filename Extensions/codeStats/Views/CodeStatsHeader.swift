@@ -24,7 +24,7 @@ struct CodeStatsHeader: View {
                 ) {
                     guard let shareSnapshot else { return }
                     sharePresentation = ExportCardPresentation(
-                        deck: CodeStatsExportDeck(snapshot: shareSnapshot),
+                        deck: CodeStatsExportDeck(snapshot: shareSnapshot, remote: model.remote),
                         title: "Share code stats")
                 }
                 if model.isRunning {

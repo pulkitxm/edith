@@ -46,6 +46,12 @@ import Foundation
         await BifrostClipboardPreviewService.shared.shutdown()
     }
 
+    func drain() async {
+        shutdown()
+        await store.drain()
+        await BifrostClipboardPreviewService.shared.shutdown()
+    }
+
     func shutdown() {
         guard !stopped else { return }; stopped = true
         if let observer { BifrostIPC.stopObserving(observer) }; observer = nil

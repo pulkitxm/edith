@@ -160,7 +160,7 @@ public enum CompanionStackCommands {
     }
 }
 
-public struct CompanionServiceStatus: Equatable, Sendable {
+public struct CompanionServiceStatus: Codable, Equatable, Sendable {
     public let service: String
     public let status: String
     public let ports: String

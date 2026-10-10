@@ -20,7 +20,7 @@ struct BifrostRows: View {
         Group {
             Section {
                 Button("Open Bifrost") {
-                    _ = BifrostOperationExecution.request(.open)
+                    BifrostUIContext.perform("open")
                 }
                 LabeledContent {
                     HotKeyRecorderControl(keyPrefix: "bifrostHotKey", defaultLabel: "⌥␣")
@@ -106,11 +106,11 @@ struct BifrostRows: View {
             if bifrostEnabled {
                 Section {
                     Button("Rebuild index") {
-                        _ = BifrostOperationExecution.request(.reindex)
+                        BifrostUIContext.perform("reindex")
                     }
                     Button("Clear frequently opened", role: .destructive) {
-                        _ = BifrostOperationExecution.clear()
-                        index = BifrostIndexStore.shared.load()
+                        BifrostUIContext.perform("clear")
+                        index = BifrostUIContext.loadIndex()
                     }
                 } header: {
                     Text("Index")
@@ -122,10 +122,10 @@ struct BifrostRows: View {
                 }
             }
         }
-        .onAppear { index = BifrostIndexStore.shared.load() }
+        .onAppear { index = BifrostUIContext.loadIndex() }
         .onReceive(NotificationCenter.default.publisher(for: BifrostIPC.Name.bifrostIndexChanged)) {
             _ in
-            index = BifrostIndexStore.shared.load()
+            index = BifrostUIContext.loadIndex()
         }
     }
 }
@@ -139,8 +139,7 @@ private struct BifrostSourceToggle: View {
         VStack(alignment: .leading, spacing: UIScale.pt(4)) {
             Toggle(source.title, isOn: $isOn)
                 .onChange(of: isOn) { _, value in
-                    SharedDefaults.store.set(value, forKey: source.defaultsKey)
-                    BifrostIPC.post(BifrostIPC.Name.settingsChanged)
+                    BifrostUIContext.write(source.defaultsKey, value: value)
                 }
             Text(source.summary)
                 .font(.system(size: UIScale.pt(10)))

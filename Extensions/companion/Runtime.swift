@@ -1,17 +1,38 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import SwiftUI
 
 @MainActor @objc(EdithCompanionExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var worker: CompanionWorker?
+    private var uiWorkspace: CompanionWorkspaceSession?
+    private var uiEngine: CompanionUIEngine?
+    private var engineClient: ExtensionEngineClient?
     private var surface: CompanionSurface?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("companion.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "companion")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try CompanionCLIExecution.stream(
+                    streams, operation: command, payload: payload)
+            }
+            if command == "companion.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await CompanionCLIExecution.run(request))
+            }
+            if command.hasPrefix("companion.ui."), let engine = self.uiEngine {
+                return try await engine.execute(command, payload: payload)
+            }
             if command.hasPrefix("surface.") {
                 guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
                 return try await surface.execute(command, payload: payload)
@@ -22,10 +43,16 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
+        _ = CompanionCLIExecution.stopChats()
         commands.shutdown()
+        let engine = uiEngine; uiEngine = nil
         let worker = worker
         Task {
+            await engine?.shutdown()
             await worker?.shutdown()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }
@@ -40,6 +67,20 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "companion", let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            engineClient = client
+            let bridge = CompanionUIBridge(client: client)
+            CompanionTransport.shared.configureRemote(bridge)
+            uiWorkspace = CompanionWorkspaceSession(remote: bridge)
+            TextEditingCommands.install()
+        case "stopUI":
+            uiWorkspace?.shutdown(); uiWorkspace = nil
+            CompanionTransport.shared.configureRemote(nil)
+            engineClient?.invalidate(); engineClient = nil
+            TextEditingCommands.shutdown()
         case "start":
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -47,6 +88,10 @@ final class ExtensionRuntime: NSObject {
             guard worker == nil else { return ["ok": true] as NSDictionary }
             let worker = CompanionWorker()
             self.worker = worker
+            uiEngine = CompanionUIEngine(worker: worker)
+            CompanionCLIEnvironment.stopGenerations = { [weak self] in
+                (self?.uiEngine?.stopGenerations() ?? 0) + CompanionGeneration.stopAll()
+            }
             surface = CompanionSurface(
                 monitor: worker.monitor,
                 isStopped: { [weak worker] in worker?.isStopped != false },
@@ -54,18 +99,37 @@ final class ExtensionRuntime: NSObject {
             worker.start()
             TextEditingCommands.install()
         case "view":
-            guard let worker, !worker.isStopped else { return ["ok": false] as NSDictionary }
+            guard let workspace = uiWorkspace else { return ["ok": false] as NSDictionary }
             return NSHostingController(
-                rootView: ExtensionPageHost { CompanionPage(session: worker.workspace) })
+                rootView: ExtensionPageHost {
+                    if workspace.preferences?.loaded != false {
+                        CompanionPage(session: workspace)
+                    } else {
+                        PageScaffold(header: { PageHeader("Companion") }) {
+                            PageLoading(
+                                state: workspace.preferences?.error == nil ? .loading : .error,
+                                message: workspace.preferences?.error
+                                    ?? "Loading Companion settings.", layout: .cards,
+                                retry: { workspace.preferences?.refresh() }
+                            ) { EmptyView() }
+                        }
+                    }
+                })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": IPC.post(IPC.Name.settingsChanged)
         case "stop":
+            _ = CompanionCLIExecution.stopChats()
+            let streams = cliStreams; cliStreams = nil; streams?.stop()
+            Task { await streams?.stopAndWait() }
             commands.shutdown()
+            let engine = uiEngine; uiEngine = nil
             let worker = worker
             self.worker = nil
             surface = nil
             TextEditingCommands.shutdown()
-            Task { await worker?.shutdown() }
+            Task {
+                await engine?.shutdown(); await worker?.shutdown()
+            }
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

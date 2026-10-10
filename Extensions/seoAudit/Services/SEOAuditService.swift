@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Observation
 
@@ -6,7 +7,7 @@ enum SEOAuditJobState: String, Codable, Sendable {
     case running
 }
 
-struct SEOAuditActivity: Equatable, Sendable {
+struct SEOAuditActivity: Codable, Equatable, Sendable {
     let taskID: UUID
     let kind: SEOAuditJobKind
     var state: SEOAuditJobState
@@ -105,9 +106,13 @@ final class SEOAuditService {
     @ObservationIgnored private var listeners: [UUID: (SEOAuditEvent) -> Void] = [:]
     @ObservationIgnored private var recovery: Task<Void, Never>?
     @ObservationIgnored private let gate = SEOAuditGate()
+    @ObservationIgnored private let remote: SEOAuditUIBridge?
+    @ObservationIgnored private var remoteObservation: Task<Void, Never>?
 
-    init(workflow: SEOAuditWorkflow = SEOAuditWorkflow()) {
+    init(workflow: SEOAuditWorkflow = SEOAuditWorkflow(), remote: SEOAuditUIBridge? = nil) {
         self.workflow = workflow
+        self.remote = remote
+        guard remote == nil else { return }
         recovery = Task { try? await workflow.recoverInterruptedRuns() }
     }
 
@@ -117,6 +122,26 @@ final class SEOAuditService {
     func observe(_ listener: @escaping (SEOAuditEvent) -> Void) -> UUID {
         let id = UUID()
         listeners[id] = listener
+        if let remote, remoteObservation == nil {
+            remoteObservation = Task { [weak self] in
+                var previous: Set<UUID> = []
+                while !Task.isCancelled {
+                    do {
+                        let state = try await remote.state()
+                        guard let self, !isStopped, !Task.isCancelled else { return }
+                        activities = state.activities
+                        let current = Set(state.projects.map(\.id))
+                        for id in previous.subtracting(current) { publish(.deleted(id)) }
+                        for project in state.projects { publish(.project(project)) }
+                        for (id, draft) in state.drafts { publish(.draft(id, draft)) }
+                        previous = current
+                        try await Task.sleep(for: .seconds(1))
+                    } catch {
+                        do { try await Task.sleep(for: .seconds(1)) } catch { return }
+                    }
+                }
+            }
+        }
         return id
     }
 
@@ -139,15 +164,18 @@ final class SEOAuditService {
     }
 
     func lighthouseAvailable() async -> Bool {
-        await workflow.lighthouseAuditor.isAvailable()
+        if let remote { return (try? await remote.call("available", as: Bool.self)) ?? false }
+        return await workflow.lighthouseAuditor.isAvailable()
     }
 
     func list() async throws -> [SEOAuditProjectSummary] {
+        if let remote { return try await remote.call("list") }
         try await ready()
         return try await workflow.projects()
     }
 
     func project(_ id: UUID) async throws -> SEOAuditProject {
+        if let remote { return try await remote.call("project", id: id) }
         try await ready()
         return try await workflow.project(id)
     }
@@ -157,6 +185,7 @@ final class SEOAuditService {
     }
 
     func create(_ project: SEOAuditProject) async throws -> SEOAuditProject {
+        if let remote { return try await remote.call("create", project: project) }
         try await ready()
         let created = try await workflow.create(project)
         publish(.project(created))
@@ -164,6 +193,7 @@ final class SEOAuditService {
     }
 
     func rename(_ id: UUID, name: String) async throws -> SEOAuditProject {
+        if let remote { return try await remote.call("rename", id: id, name: name) }
         try await ready()
         try requireIdle(id)
         let project = try await workflow.rename(id, name: name)
@@ -172,6 +202,7 @@ final class SEOAuditService {
     }
 
     func delete(_ id: UUID) async throws {
+        if let remote { let _: Bool = try await remote.call("delete", id: id); return }
         try await ready()
         try requireIdle(id)
         try await workflow.delete(id)
@@ -179,11 +210,13 @@ final class SEOAuditService {
     }
 
     func draft(_ id: UUID) async throws -> SEOAuditDraft {
+        if let remote { return try await remote.call("draft", id: id) }
         try await ready()
         return try await workflow.draft(id)
     }
 
     func setDraft(_ id: UUID, _ draft: SEOAuditDraft) async throws -> SEOAuditDraft {
+        if let remote { return try await remote.call("setDraft", id: id, draft: draft) }
         try await ready()
         let saved = try await workflow.setDraft(id, draft)
         publish(.draft(id, saved))
@@ -191,6 +224,7 @@ final class SEOAuditService {
     }
 
     func choose(_ id: UUID, edit: SEOAuditPageEdit) async throws -> SEOAuditDraft {
+        if let remote { return try await remote.call("choose", id: id, edit: edit) }
         try await ready()
         let draft = try await workflow.updateDraft(id) { draft in
             draft.selectedPageURLs = try SEOAuditSelection.choose(
@@ -202,6 +236,7 @@ final class SEOAuditService {
     }
 
     func setLighthouse(_ id: UUID, enabled: Bool) async throws -> SEOAuditDraft {
+        if let remote { return try await remote.call("setLighthouse", id: id, enabled: enabled) }
         try await ready()
         let draft = try await workflow.updateDraft(id) { $0.includeLighthouse = enabled }
         publish(.draft(id, draft))
@@ -209,6 +244,10 @@ final class SEOAuditService {
     }
 
     func discover(_ id: UUID) async throws -> SEOAuditJob {
+        if let remote {
+            let launch: SEOAuditUIJob = try await remote.call("discover", id: id);
+            return remote.job(launch)
+        }
         try await ready()
         let project = try await workflow.project(id)
         guard let url = SEOAuditURLInput.normalize(project.baseURL) else {
@@ -231,6 +270,11 @@ final class SEOAuditService {
     }
 
     func start(_ id: UUID, lighthouse: Bool?) async throws -> SEOAuditLaunch {
+        if let remote {
+            let launch: SEOAuditUIJob = try await remote.call("start", id: id, enabled: lighthouse);
+            guard let request = launch.request else { throw ExtensionPeerError.invalidRequest };
+            return .init(request: request, job: remote.job(launch), state: launch.state)
+        }
         try await ready()
         _ = try await workflow.project(id)
         let draft = try await workflow.draft(id)
@@ -248,6 +292,13 @@ final class SEOAuditService {
     }
 
     func lighthouse(_ id: UUID, runID: UUID, url: URL) async throws -> SEOAuditLaunch {
+        if let remote {
+            let launch: SEOAuditUIJob = try await remote.call(
+                "lighthouse", id: id, runID: runID, url: url)
+                ;
+            guard let request = launch.request else { throw ExtensionPeerError.invalidRequest };
+            return .init(request: request, job: remote.job(launch), state: launch.state)
+        }
         try await ready()
         let project = try await workflow.project(id)
         guard let run = project.runs.first(where: { $0.id == runID }),
@@ -260,6 +311,7 @@ final class SEOAuditService {
     }
 
     func stop(_ id: UUID) async throws -> [UUID] {
+        if let remote { return try await remote.call("stop", id: id) }
         try await ready()
         _ = try await workflow.project(id)
         let matching = jobs.values.filter { $0.projectID == id }
@@ -272,12 +324,17 @@ final class SEOAuditService {
 
     @discardableResult
     func cancel(_ taskID: UUID) -> Bool {
+        if let remote {
+            Task { let _: Bool? = try? await remote.call("cancel", id: taskID) }
+            return true
+        }
         guard let job = jobs[taskID] else { return false }
         job.task.cancel()
         return true
     }
 
     func run(_ id: UUID, runID: UUID?, offset: Int) async throws -> SEOAuditRun {
+        if let remote { return try await remote.call("run", id: id, runID: runID, offset: offset) }
         let project = try await project(id)
         guard let run = SEOAuditSelection.run(in: project, id: runID, offset: offset) else {
             throw SEOAuditInputError("That audit run is not in this project.")
@@ -288,6 +345,7 @@ final class SEOAuditService {
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        remoteObservation?.cancel(); remoteObservation = nil
         recovery?.cancel()
         listeners.removeAll()
         let pending = Array(jobs.values)
@@ -297,7 +355,7 @@ final class SEOAuditService {
         activities.removeAll()
         await recovery?.value
         recovery = nil
-        await workflow.shutdown()
+        if remote == nil { await workflow.shutdown() }
     }
 
     private func ready() async throws {

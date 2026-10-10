@@ -200,6 +200,36 @@ import Testing
         #expect(store.resultLimit == BifrostQuery.minimumResultLimit)
     }
 
+    @Test func drainWaitsForCancelledOwnedRateFetch() async throws {
+        actor Fetch {
+            var started = false
+            var ended = false
+            func run() async -> BifrostRates? {
+                started = true
+                try? await Task.sleep(for: .seconds(3600))
+                ended = true
+                return nil
+            }
+        }
+        let (defaults, indexStore, suiteName, directory) = makeWorld()
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let fetch = Fetch()
+        let store = BifrostStore(
+            store: defaults, indexStore: indexStore,
+            rateStore: BifrostRateStore(location: directory.appendingPathComponent("rates.json")),
+            startServices: false, fetchRates: { await fetch.run() }, scan: { [] },
+            open: { _ in false }, copy: { _ in })
+        store.refreshRates()
+        while await !fetch.started { await Task.yield() }
+        await store.drain()
+        #expect(await fetch.ended)
+        store.refreshRates()
+        #expect(store.rates == nil)
+    }
+
     @Test func shutdownStopsFurtherIndexing() async throws {
         let (defaults, indexStore, suiteName, directory) = makeWorld()
         defer {

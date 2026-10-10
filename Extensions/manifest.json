@@ -671,16 +671,21 @@
   },
   {
     "id": "plugins",
+    "testTargets": ["ci-extension-plugins-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "roles": {
       "app": [
+        "Extensions/plugins/CLI/CLIDestructivePlan.swift",
+        "Extensions/plugins/CLI/SkillsCLIExecution.swift",
+        "Extensions/plugins/CLI/SkillsCommands.swift",
         "Extensions/plugins/PluginResources.swift",
         "Extensions/plugins/PluginsPage.swift",
         "Extensions/plugins/PluginsSurface.swift",
+        "Extensions/plugins/PluginsUIBridge.swift",
         "Extensions/plugins/Runtime.swift",
         "Extensions/plugins/SkillAgent.swift",
         "Extensions/plugins/SkillBrand.swift",
@@ -718,9 +723,7 @@
         "Extensions/plugins/Resources/qwen.svg"
       ]
     },
-    "inputs": [
-      "Extensions/plugins"
-    ],
+    "inputs": ["Extensions/plugins"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -729,7 +732,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "Packages/ExtensionSupport/Sources/EdithExtensionDocuments",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
@@ -970,37 +974,37 @@
   },
   {
     "id": "docs",
+    "testTargets": ["ci-extension-docs", "ci-extension-docs-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "nativePackage": "Packages/EdithDocsWorker",
     "nativeProduct": "EdithDocsWorker",
-    "nativeResources": [
-      "EdithDocsWorker_EdithDocsWorker.bundle"
-    ],
+    "nativeResources": ["EdithDocsWorker_EdithDocsWorker.bundle"],
     "roles": {
       "app": [
+        "Extensions/docs/CLI/DocsCLIExecution.swift",
+        "Extensions/docs/CLI/DocsCommands.swift",
         "Extensions/docs/DocsBrowser.swift",
         "Extensions/docs/DocsDocumentView.swift",
         "Extensions/docs/DocsPeerDecider.swift",
         "Extensions/docs/DocsScreen.swift",
+        "Extensions/docs/DocsUIBridge.swift",
         "Extensions/docs/Runtime.swift",
         "Extensions/docs/Surface.swift"
       ]
     },
-    "inputs": [
-      "Extensions/docs",
-      "Packages/EdithDocsWorker"
-    ],
+    "inputs": ["Extensions/docs", "Packages/EdithDocsWorker"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "nativeLicenses": [
@@ -1021,14 +1025,13 @@
   },
   {
     "id": "latex",
+    "testTargets": ["ci-extension-latex-native"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": "EdithExtensionArchive",
-    "inputs": [
-      "Extensions/latex"
-    ],
+    "supportProduct": ["EdithExtensionArchive", "EdithExtensionCommands"],
+    "inputs": ["Extensions/latex"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1037,11 +1040,15 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "Packages/ExtensionSupport/Sources/EdithExtensionArchive",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "roles": {
       "app": [
+        "Extensions/latex/CLI/CLIDestructivePlan.swift",
+        "Extensions/latex/CLI/LaTeXCLIExecution.swift",
+        "Extensions/latex/CLI/LaTeXCommands.swift",
         "Extensions/latex/EditorWebView.swift",
         "Extensions/latex/LaTeXAddProject.swift",
         "Extensions/latex/LaTeXEditorResources.swift",
@@ -1053,6 +1060,7 @@
         "Extensions/latex/LaTeXSourceEditor.swift",
         "Extensions/latex/LaTeXSurface.swift",
         "Extensions/latex/LaTeXTools.swift",
+        "Extensions/latex/LaTeXUIBridge.swift",
         "Extensions/latex/LaTeXWorker.swift",
         "Extensions/latex/LaTeXWrappingLayout.swift",
         "Extensions/latex/QuinjetDiffView.swift",
@@ -1075,14 +1083,13 @@
   },
   {
     "id": "companion",
+    "testTargets": ["ci-extension-companion-native"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": "EdithExtensionUI",
-    "inputs": [
-      "Extensions/companion"
-    ],
+    "supportProduct": "EdithExtensionCommands",
+    "inputs": ["Extensions/companion"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1090,11 +1097,21 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "roles": {
       "app": [
+        "Extensions/companion/CLI/CLIDestructivePlan.swift",
+        "Extensions/companion/CLI/CompanionBrainCommands.swift",
+        "Extensions/companion/CLI/CompanionCLIExecution.swift",
+        "Extensions/companion/CLI/CompanionChatCommands.swift",
+        "Extensions/companion/CLI/CompanionCommands.swift",
+        "Extensions/companion/CLI/CompanionDataCommands.swift",
+        "Extensions/companion/CLI/CompanionSettingsOperationBridge.swift",
+        "Extensions/companion/CLI/CompanionStackCommands.swift",
+        "Extensions/companion/CompanionUIBridge.swift",
         "Extensions/companion/Models/CompanionBrain.swift",
         "Extensions/companion/Models/CompanionChat.swift",
         "Extensions/companion/Models/CompanionDataport.swift",
@@ -1604,9 +1621,12 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
+        "Extensions/bifrost/BifrostUIContext.swift",
+        "Extensions/bifrost/CLI/BifrostCLIExecution.swift",
+        "Extensions/bifrost/CLI/BifrostOriginalCommands.swift",
         "Extensions/bifrost/Models/BifrostApplication.swift",
         "Extensions/bifrost/Models/BifrostCommand.swift",
         "Extensions/bifrost/Models/BifrostCurrency.swift",
@@ -1659,9 +1679,7 @@
         "Extensions/bifrost/Views/BifrostSettings.swift"
       ]
     },
-    "inputs": [
-      "Extensions/bifrost"
-    ],
+    "inputs": ["Extensions/bifrost"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -1669,12 +1687,11 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
-    "testTargets": [
-      "ci-extension-bifrost"
-    ],
+    "testTargets": ["ci-extension-bifrost", "ci-extension-bifrost-native"],
     "sameExecutableWorker": true
   },
   {
@@ -2030,6 +2047,10 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/downloads/CLI/CLIDestructivePlan.swift",
+        "Extensions/downloads/CLI/DownloadCommands.swift",
+        "Extensions/downloads/CLI/DownloadsCLIExecution.swift",
+        "Extensions/downloads/DownloadsUIBridge.swift",
         "Extensions/downloads/Models/DownloadQueue.swift",
         "Extensions/downloads/Models/MediaDownloadInput.swift",
         "Extensions/downloads/Runtime.swift",
@@ -2047,19 +2068,18 @@
         "Extensions/downloads/Worker.swift"
       ]
     },
-    "inputs": [
-      "Extensions/downloads"
-    ],
+    "inputs": ["Extensions/downloads"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "sameExecutableWorker": true,
     "testTargets": [
       "ci-extension-downloads"
@@ -2067,17 +2087,22 @@
   },
   {
     "id": "seoAudit",
+    "testTargets": ["ci-extension-seo-audit-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
+        "Extensions/seoAudit/CLI/CLIDestructivePlan.swift",
+        "Extensions/seoAudit/CLI/SEOOriginalCommands.swift",
+        "Extensions/seoAudit/CLI/SEOCLIExecution.swift",
         "Extensions/seoAudit/Models/SEOAuditModels.swift",
         "Extensions/seoAudit/Models/SEOAuditSelection.swift",
         "Extensions/seoAudit/Runtime.swift",
+        "Extensions/seoAudit/SEOAuditUIBridge.swift",
         "Extensions/seoAudit/Services/LighthouseAuditor.swift",
         "Extensions/seoAudit/Services/SEOAuditCommands.swift",
         "Extensions/seoAudit/Services/SEOAuditHTTPClient.swift",
@@ -2100,15 +2125,14 @@
         "Extensions/seoAudit/Views/SEOAuditProjectView.swift"
       ]
     },
-    "inputs": [
-      "Extensions/seoAudit"
-    ],
+    "inputs": ["Extensions/seoAudit"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "sameExecutableWorker": true
@@ -2284,11 +2308,18 @@
   },
   {
     "id": "codeStats",
+    "testTargets": ["ci-extension-code-stats-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/codeStats/CLI/CLIDestructivePlan.swift",
+        "Extensions/codeStats/CLI/CodeStatsCLIExecution.swift",
+        "Extensions/codeStats/CLI/CodeStatsExportCommand.swift",
+        "Extensions/codeStats/CLI/CodeStatsOriginalCommands.swift",
+        "Extensions/codeStats/CLI/ExportPlan.swift",
+        "Extensions/codeStats/CodeStatsUIBridge.swift",
         "Extensions/codeStats/Models/CodeStatsAttribution.swift",
         "Extensions/codeStats/Models/CodeStatsCommit.swift",
         "Extensions/codeStats/Models/CodeStatsDay.swift",
@@ -2345,19 +2376,18 @@
         "Extensions/codeStats/Views/CodeStatsTrendCards.swift"
       ]
     },
-    "inputs": [
-      "Extensions/codeStats"
-    ],
+    "inputs": ["Extensions/codeStats"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-camera-carrier.mjs"
+      "scripts/build-camera-carrier.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
     "sameExecutableWorker": true
   },

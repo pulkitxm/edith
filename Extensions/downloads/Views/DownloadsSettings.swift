@@ -5,7 +5,7 @@ import SwiftUI
 
 struct DownloadsSettings: View {
     let downloader: YoutubeDownloader
-    @State private var tools = DownloadsTools.shared
+    private var tools: DownloadsTools { downloader.tools }
     @AppStorage(AppStorageKeys.Music.downloadKind, store: SharedDefaults.store) private
         var downloadKind = DownloadKind.post.rawValue
     @State private var folderError: String?
@@ -31,7 +31,7 @@ struct DownloadsSettings: View {
                     LabeledContent("Audio folder") {
                         Button("Choose folder...", action: chooseAudioFolder)
                     }
-                    Text(DownloadsStorage.audioDirectory.path).font(.edithText(.caption))
+                    Text(downloader.defaultDirectory(for: .audio).path).font(.edithText(.caption))
                         .textSelection(.enabled)
                     if let folderError { Text(folderError).foregroundStyle(.red) }
                 }
@@ -58,7 +58,12 @@ struct DownloadsSettings: View {
                     }
                 }
             }.edithForm()
-        }.pageTask { tools.refresh() }
+        }.pageTask {
+            tools.refresh(); downloader.checkAvailability()
+        }
+        .onChange(of: downloadKind) { _, value in
+            if let kind = DownloadKind(rawValue: value) { downloader.setPreferredKind(kind) }
+        }
     }
     private func chooseAudioFolder() {
         let panel = NSOpenPanel()
@@ -68,7 +73,7 @@ struct DownloadsSettings: View {
         panel.prompt = "Choose"
         panel.message = "Choose where audio downloads are saved"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        DownloadsStorage.setAudioDirectory(url)
+        downloader.setAudioDirectory(url)
         folderError = nil
     }
 }

@@ -2,7 +2,7 @@ import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
 
-public struct CompanionOutboxItem: Identifiable, Equatable, Sendable {
+public struct CompanionOutboxItem: Codable, Identifiable, Equatable, Sendable {
     public let url: URL
     public let recordedAt: Date
 

@@ -6,7 +6,7 @@ import Observation
 @MainActor
 @Observable
 final class SEOAuditModel {
-    static let shared = SEOAuditModel()
+    static var shared = SEOAuditModel()
 
     var projects: [SEOAuditProjectSummary] = []
     let projectsLoad = ContentLoad()

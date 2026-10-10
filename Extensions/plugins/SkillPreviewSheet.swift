@@ -60,9 +60,8 @@ struct SkillPreviewSheet: View {
                 .frame(width: UIScale.pt(210))
                 Spacer()
                 Button {
-                    guard let document else { return }
-                    NSPasteboard.general.clearContents()
-                    copied = NSPasteboard.general.setString(document.markdown, forType: .string)
+                    guard document != nil else { return }
+                    Task { copied = (try? await documents.copy(skill)) ?? false }
                 } label: {
                     Label(
                         copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc"

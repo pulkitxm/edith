@@ -1,0 +1,291 @@
+import ArgumentParser
+import EdithExtensionCommands
+import EdithExtensionSupport
+import Foundation
+
+@MainActor struct BifrostCLICommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "bifrost",
+        abstract: "Open the Bifrost launcher and query the apps, sums, and conversions it knows.",
+        discussion: """
+            Open the Bifrost launcher and query the apps, sums, and conversions it knows.
+            Reads the application index on disk. open and reindex ask the running app. calc and convert do not change the index. clear changes the frequent list.
+
+            ed bifrost ls --search code
+            ed bifrost calc "12 * 8"
+            """,
+        subcommands: [
+            BifrostOpenCommand.self, BifrostListCommand.self, BifrostCalcCommand.self,
+            BifrostConvertCommand.self, BifrostReindexCommand.self, BifrostClearCommand.self,
+        ],
+        defaultSubcommand: BifrostListCommand.self)
+}
+
+@MainActor enum BifrostBridge {
+    static func requireExtension() throws {
+        guard
+            SharedDefaults.store.object(forKey: AppStorageKeys.Bifrost.enabled) as? Bool
+                == true
+        else {
+            throw CLIFailure.unavailable(
+                "the Bifrost extension is off",
+                hint: "run `ed extensions enable bifrost`, then retry")
+        }
+    }
+
+    static func index() throws -> BifrostIndex {
+        guard let index = BifrostIndexStore.shared.load(), index.isUsable else {
+            throw CLIFailure.notFound(
+                "no applications are indexed yet",
+                hint: "run `ed bifrost reindex` with Edith running")
+        }
+        return index
+    }
+}
+
+@MainActor struct BifrostOpenCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "open", abstract: "Open the Bifrost launcher bar.",
+        discussion: """
+            Open the Bifrost launcher bar.
+            Reads whether the extension is on. Changes focus by opening the bar. Needs the running app.
+
+            ed bifrost open
+            ed bifrost open --json
+            """)
+
+    @Argument(help: "Text to put in the bar before it opens.")
+    var query: String?
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            try BifrostBridge.requireExtension()
+            let text = query ?? ""
+            try BifrostCLIEnvironment.open(text)
+            let descriptor = BifrostOperation.open.descriptor
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "operation": .string(descriptor.id.rawValue),
+                        "requested": .bool(true),
+                        "query": .string(text),
+                    ]))
+                return
+            }
+            CLIOut.out("launcher requested")
+        }
+    }
+}
+
+@MainActor struct BifrostListCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "ls", abstract: "List the applications Bifrost has indexed.",
+        discussion: """
+            List applications in the Bifrost index.
+            Reads the cached index. Does not change it. --search filters the names.
+
+            ed bifrost ls --search code
+            ed bifrost ls --json
+            """,
+        aliases: ["list"])
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(help: "Rank the index against this query, exactly as the bar does.")
+    var search: String?
+
+    @Option(help: "Show at most this many applications.")
+    var limit: Int = 50
+
+    func run() async throws {
+        try await execute {
+            let limit = try ArgumentChecks.nonNegative(self.limit, "--limit")
+            let index = try BifrostBridge.index()
+            let matches = select(from: index, limit: limit)
+            guard !json else {
+                CLIOut.json(
+                    .array(
+                        matches.map { application in
+                            .object([
+                                "name": .string(application.name),
+                                "path": .string(application.path),
+                                "bundleID": application.bundleID.map { .string($0) } ?? .null,
+                            ])
+                        }))
+                return
+            }
+            guard !matches.isEmpty else {
+                CLIOut.note("no application matches")
+                return
+            }
+            for application in matches { CLIOut.out("\(application.name)  \(application.path)") }
+        }
+    }
+
+    private func select(from index: BifrostIndex, limit: Int) -> [BifrostApplication] {
+        guard let search, !search.isEmpty else {
+            return limit == 0 ? index.applications : Array(index.applications.prefix(limit))
+        }
+        let ledger = BifrostUsageLedger.load(
+            from: SharedDefaults.store, key: AppStorageKeys.Bifrost.usage)
+        let ranked = BifrostQuery.matches(
+            query: search, applications: index.applications, ledger: ledger, now: Date(),
+            limit: limit == 0 ? index.applications.count : limit)
+        let byPath = Dictionary(
+            index.applications.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        var found: [BifrostApplication] = []
+        for result in ranked {
+            guard case .launch(let path) = result.action, let application = byPath[path] else {
+                continue
+            }
+            found.append(application)
+        }
+        return found
+    }
+}
+
+@MainActor struct BifrostCalcCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "calc", abstract: "Evaluate an expression the way the bar does.",
+        discussion: """
+            Evaluate an arithmetic expression the way the bar does.
+            Reads the expression. Does not change the index or the frequent list.
+
+            ed bifrost calc "12 * 8 + 4%"
+            ed bifrost calc "12 * 8" --json
+            """)
+
+    @Argument(help: "The expression, for example \"12 * 8 + 4%\".")
+    var expression: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            guard let calculation = BifrostCalculator.evaluate(expression) else {
+                throw CLIFailure.notFound(
+                    "\(expression) is not an expression Bifrost can evaluate",
+                    hint: "try a sum such as `ed bifrost calc \"2 + 2\"`")
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "expression": .string(calculation.expression),
+                        "value": .double(calculation.value),
+                        "display": .string(calculation.display),
+                    ]))
+                return
+            }
+            CLIOut.out(calculation.copyText)
+        }
+    }
+}
+
+@MainActor struct BifrostConvertCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "convert", abstract: "Convert between units the way the bar does.",
+        discussion: """
+            Convert units the way the bar does.
+            Reads the conversion phrase. Does not change the index.
+
+            ed bifrost convert "12 km in miles"
+            ed bifrost convert "12 km in miles" --json
+            """)
+
+    @Argument(help: "The conversion, for example \"12 km in miles\".")
+    var sentence: String
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            guard let conversion = BifrostConversionParser.parse(sentence) else {
+                throw CLIFailure.notFound(
+                    "\(sentence) is not a conversion Bifrost understands",
+                    hint: "try `ed bifrost convert \"12 km in miles\"`")
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "value": .double(conversion.value),
+                        "from": .string(conversion.source.id),
+                        "to": .string(conversion.target.id),
+                        "result": .double(conversion.result),
+                        "display": .string(conversion.display),
+                        "dimension": .string(conversion.source.dimension.rawValue),
+                    ]))
+                return
+            }
+            CLIOut.out(conversion.detail)
+        }
+    }
+}
+
+@MainActor struct BifrostReindexCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "reindex", abstract: "Rebuild the Bifrost application index.",
+        discussion: """
+            Rebuild the application index by scanning application folders.
+            Reads the application folders. Changes the cached index. Needs the running app.
+
+            ed bifrost reindex
+            ed bifrost reindex --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            try BifrostBridge.requireExtension()
+            try BifrostCLIEnvironment.reindex()
+            let descriptor = BifrostOperation.reindex.descriptor
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "operation": .string(descriptor.id.rawValue),
+                        "requested": .bool(true),
+                    ]))
+                return
+            }
+            CLIOut.out("index rebuild requested")
+        }
+    }
+}
+
+@MainActor struct BifrostClearCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "clear", abstract: "Forget what Bifrost ranks as frequently opened.",
+        discussion: """
+            Forget applications Bifrost ranks as frequently opened.
+            Reads the frequent list. Changes it by clearing it.
+
+            ed bifrost clear
+            ed bifrost clear --json
+            """)
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    func run() async throws {
+        try await execute {
+            var ledger = BifrostUsageLedger.load(
+                from: SharedDefaults.store, key: AppStorageKeys.Bifrost.usage)
+            let removed = ledger.entries.count
+            ledger.clear()
+            ledger.save(to: SharedDefaults.store, key: AppStorageKeys.Bifrost.usage)
+            BifrostIPC.post(BifrostIPC.Name.settingsChanged)
+            guard !json else {
+                CLIOut.json(.object(["cleared": .int(removed)]))
+                return
+            }
+            CLIOut.out("cleared \(removed) frequently opened applications")
+        }
+    }
+}

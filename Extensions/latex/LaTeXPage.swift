@@ -248,9 +248,7 @@ struct LaTeXPage: View {
                     Button("Reload source") { model.launch { await model.reload() } }
                     if project.location == .disk {
                         Button("Reveal source in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([
-                                URL(fileURLWithPath: project.sourcePath)
-                            ])
+                            model.revealSource()
                         }
                     }
                     Button("Remove from library", role: .destructive) { model.remove() }
@@ -353,7 +351,13 @@ struct LaTeXPage: View {
                         .font(.system(size: UIScale.pt(12), design: .monospaced))
                         .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     }
-                } else if FileManager.default.fileExists(atPath: project.pdfURL.path) {
+                } else if let data = model.pdfPreview, model.remote != nil {
+                    LaTeXPDFPane(
+                        data: data, generation: model.buildGeneration,
+                        delivery: { model.openPDF(save: $0) })
+                } else if model.remote == nil,
+                    FileManager.default.fileExists(atPath: project.pdfURL.path)
+                {
                     LaTeXPDFPane(url: project.pdfURL, generation: model.buildGeneration)
                 } else {
                     ContentUnavailableView(
@@ -375,9 +379,13 @@ struct LaTeXPage: View {
                         Button("Refresh PDF") { model.refreshPDF() }.disabled(
                             model.busy || model.dirty)
                     }
-                    if let url = model.buildURL { Link("View PDF build", destination: url) }
+                    if model.buildURL != nil {
+                        Button("View PDF build") { model.openBuildURL() }.buttonStyle(.link)
+                    }
                     if let data = model.pdfPreview {
-                        LaTeXPDFPane(data: data, generation: model.buildGeneration)
+                        LaTeXPDFPane(
+                            data: data, generation: model.buildGeneration,
+                            delivery: { model.openPDF(save: $0) })
                     } else {
                         ContentUnavailableView(
                             model.buildingPDF
