@@ -39,6 +39,7 @@ enum ControlPresentationContract {
     ]
     static let readable: Set<String> = writable.union([
         "presenterAutoActive", "presenterAutoPaused", "presenterAutoReason", "presenterEnabled",
+        "theme", "appearance", "mainWindowZoom",
     ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {

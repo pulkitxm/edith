@@ -31,7 +31,9 @@ enum ControlPresentationContract {
         "colorPickerCopyFormat", "colorPickerHistorySize", "colorPickerHotKeyCode",
         "colorPickerHotKeyLabel", "colorPickerHotKeyMods", "colorPickerProfile",
     ]
-    static let readable: Set<String> = writable.union(["colorPickerEnabled", "colorPickerHistory"])
+    static let readable: Set<String> = writable.union([
+        "colorPickerEnabled", "colorPickerHistory", "theme", "appearance", "mainWindowZoom",
+    ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(
@@ -219,7 +221,7 @@ final class ControlPresentation {
         }
     }
 
-    func perform(_ action: String, value: String = "") {
+    func perform(_ action: String, value: String = "", completion: ((Error?) -> Void)? = nil) {
         guard active, ready, !stopped, actions.count < 8 else { return }
         revision += 1
         let token = UUID()
@@ -232,7 +234,10 @@ final class ControlPresentation {
                 _ = try await self.invoke("colorPicker.ui.action", payload)
                 guard !self.stopped else { return }
                 self.error = nil
-            } catch { if !self.stopped { self.error = error.localizedDescription } }
+                completion?(nil)
+            } catch {
+                if !self.stopped { self.error = error.localizedDescription; completion?(error) }
+            }
         }
     }
 

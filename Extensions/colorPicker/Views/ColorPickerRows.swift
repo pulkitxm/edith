@@ -131,6 +131,7 @@ private struct ColorSwatchChip: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.iconOnly))
+        .disabled(!presentation.active)
         .accessibilityLabel("Copy \(swatch.string(for: defaultFormat))")
         .contextMenu {
             ForEach(ColorCopyFormat.allCases, id: \.self) { format in
@@ -151,6 +152,8 @@ private struct ColorSwatchChip: View {
     }
 
     private func copy(_ format: ColorCopyFormat) {
-        presentation.perform("copy", value: swatch.id.uuidString + ":" + format.rawValue)
+        presentation.perform("copy", value: swatch.id.uuidString + ":" + format.rawValue) { error in
+            copyError = error?.localizedDescription
+        }
     }
 }

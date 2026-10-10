@@ -33,7 +33,9 @@ enum ControlPresentationContract {
         "windowSweatersGauge", "windowSweatersOrder", "windowSweatersPattern",
         "windowSweatersStitch", "windowSweatersUnfocusedDim",
     ]
-    static let readable: Set<String> = writable.union(["theme", "windowSweatersEnabled"])
+    static let readable: Set<String> = writable.union([
+        "theme", "windowSweatersEnabled", "theme", "appearance", "mainWindowZoom",
+    ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(
@@ -91,8 +93,9 @@ enum ControlPresentationContract {
     ]
     static let boolKeys: Set<String> = ["windowSweatersAccessibilityFocus", "windowSweatersActive"]
     static let ranges: [String: ClosedRange<Double>] = [
-        "windowSweatersBorderWidth": 1...100, "windowSweatersGauge": 1...100,
-        "windowSweatersUnfocusedDim": 0...1,
+        "windowSweatersBorderWidth": SweaterLimits.borderWidthRange,
+        "windowSweatersGauge": SweaterLimits.gaugeRange,
+        "windowSweatersUnfocusedDim": SweaterLimits.dimRange,
     ]
 
     @MainActor static func snapshot(defaults: UserDefaults, state: ControlPresentationState) throws

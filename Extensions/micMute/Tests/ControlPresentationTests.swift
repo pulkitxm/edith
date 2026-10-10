@@ -116,4 +116,82 @@ import Testing
         }
         model.stop()
     }
+    @Test func ownedPreferenceWriteProtectsNewerEditsFromStaleReads() async throws {
+        let engine = fixture()
+        let local = fixture()
+        let key = try #require(ControlPresentationContract.writable.sorted().first)
+        let original: Any =
+            ControlPresentationContract.stringKeys.contains(key)
+            ? "original"
+            : ControlPresentationContract.boolKeys.contains(key)
+                ? NSNumber(value: false) : NSNumber(value: 1)
+        let changed: Any =
+            ControlPresentationContract.stringKeys.contains(key)
+            ? "changed"
+            : ControlPresentationContract.boolKeys.contains(key)
+                ? NSNumber(value: true) : NSNumber(value: 2)
+        engine.set(original, forKey: key)
+        var reads = 0
+        var writes = 0
+        var pending: CheckedContinuation<Data, any Error>?
+        let stale = try ControlPresentationContract.snapshot(
+            defaults: engine, state: ControlPresentationState())
+        let model = ControlPresentation(client: nil, defaults: local) { operation, payload in
+            if operation == "micMute.ui.read" {
+                reads += 1
+                if reads > 1 { return try await withCheckedThrowingContinuation { pending = $0 } }
+                return try ControlPresentationContract.snapshot(
+                    defaults: engine, state: ControlPresentationState())
+            }
+            #expect(operation == "micMute.ui.update")
+            try ControlPresentationContract.update(payload, defaults: engine)
+            writes += 1
+            return Data("{}".utf8)
+        }
+        await model.refresh()
+        let read = Task { await model.refresh() }
+        while pending == nil { await Task.yield() }
+        local.set(changed, forKey: key)
+        model.changed()
+        for _ in 0..<100 where writes == 0 { await Task.yield() }
+        #expect(writes == 1)
+        pending?.resume(returning: stale)
+        await read.value
+        #expect(
+            NSDictionary(dictionary: [key: local.object(forKey: key) ?? NSNull()]).isEqual(to: [
+                key: changed
+            ]))
+        #expect(
+            NSDictionary(dictionary: [key: engine.object(forKey: key) ?? NSNull()]).isEqual(to: [
+                key: changed
+            ]))
+        model.stop()
+    }
+
+    @Test func stopCancelsOwnedActionTask() async throws {
+        let defaults = fixture()
+        var began = false
+        var cancelled = false
+        let packet = try ControlPresentationContract.snapshot(
+            defaults: defaults, state: ControlPresentationState())
+        let model = ControlPresentation(client: nil, defaults: defaults) { operation, payload in
+            if operation == "micMute.ui.read" { return packet }
+            #expect(operation == "micMute.ui.action")
+            let request = try JSONDecoder().decode(ControlPresentationAction.self, from: payload)
+            #expect(request.action == "fixtureAction")
+            began = true
+            do { try await Task.sleep(for: .seconds(30)) } catch { cancelled = true; throw error }
+            Issue.record("stopped action ran to completion")
+            return Data("{}".utf8)
+        }
+        await model.refresh()
+        model.perform("fixtureAction")
+        for _ in 0..<100 where !began { await Task.yield() }
+        #expect(began)
+        model.stop()
+        for _ in 0..<100 where !cancelled { await Task.yield() }
+        #expect(cancelled)
+        #expect(model.error == nil)
+    }
+
 }

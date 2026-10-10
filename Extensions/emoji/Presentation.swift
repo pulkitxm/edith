@@ -31,7 +31,9 @@ enum ControlPresentationContract {
         "emojiFrequentCount", "emojiHotKeyCode", "emojiHotKeyLabel", "emojiHotKeyMods",
         "emojiPopupAt", "emojiSkinTone",
     ]
-    static let readable: Set<String> = writable.union(["emojiEnabled", "emojiUsage"])
+    static let readable: Set<String> = writable.union([
+        "emojiEnabled", "emojiUsage", "theme", "appearance", "mainWindowZoom",
+    ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(

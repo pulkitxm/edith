@@ -97,7 +97,7 @@ struct KeystrokeHighlightRows: View {
                         .foregroundStyle(.orange)
                     Button("Allow Input Monitoring") {
                         presentation.perform("inputMonitoring")
-                    }
+                    }.disabled(!presentation.active)
                 }
             }
         }

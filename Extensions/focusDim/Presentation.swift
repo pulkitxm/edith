@@ -31,7 +31,9 @@ enum ControlPresentationContract {
         "focusDimActive", "focusDimAnimationDuration", "focusDimHotKeyCode", "focusDimHotKeyLabel",
         "focusDimHotKeyMods", "focusDimIntensity", "focusDimOtherDisplaysMode",
     ]
-    static let readable: Set<String> = writable.union(["focusDimEnabled"])
+    static let readable: Set<String> = writable.union([
+        "focusDimEnabled", "theme", "appearance", "mainWindowZoom",
+    ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(
@@ -86,7 +88,8 @@ enum ControlPresentationContract {
     static let stringKeys: Set<String> = ["focusDimHotKeyLabel", "focusDimOtherDisplaysMode"]
     static let boolKeys: Set<String> = ["focusDimActive"]
     static let ranges: [String: ClosedRange<Double>] = [
-        "focusDimAnimationDuration": 0...5, "focusDimIntensity": 0...1,
+        "focusDimAnimationDuration": FocusDimMath.animationDurationRange,
+        "focusDimIntensity": FocusDimMath.intensityRange,
     ]
 
     @MainActor static func snapshot(defaults: UserDefaults, state: ControlPresentationState) throws

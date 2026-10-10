@@ -30,7 +30,9 @@ enum ControlPresentationContract {
     static let writable: Set<String> = [
         "micHotKeyCode", "micHotKeyLabel", "micHotKeyMods", "micMuteInMenuBar",
     ]
-    static let readable: Set<String> = writable.union(["micMuteEnabled", "micMuted"])
+    static let readable: Set<String> = writable.union([
+        "micMuteEnabled", "micMuted", "theme", "appearance", "mainWindowZoom",
+    ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(

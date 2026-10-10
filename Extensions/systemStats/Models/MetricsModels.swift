@@ -284,35 +284,3 @@ public struct MachineSlow: Codable, Equatable, Sendable {
         self.gpu = gpu
     }
 }
-
-public enum MachineMetricRecord: Equatable, Sendable {
-    case hello(MachineHello)
-    case sample(MachineSample)
-    case slow(MachineSlow)
-}
-
-public enum MachineMetricsDecoder {
-    public static let sentinel = "@EDITH@"
-
-    public static func decode(line: String) -> MachineMetricRecord? {
-        guard line.hasPrefix(sentinel) else { return nil }
-        let json = line.dropFirst(sentinel.count)
-        guard let data = json.data(using: .utf8) else { return nil }
-        let decoder = JSONDecoder()
-        guard let kind = try? decoder.decode(RecordKind.self, from: data) else { return nil }
-        switch kind.t {
-        case "hello":
-            return (try? decoder.decode(MachineHello.self, from: data)).map { .hello($0) }
-        case "sample":
-            return (try? decoder.decode(MachineSample.self, from: data)).map { .sample($0) }
-        case "slow":
-            return (try? decoder.decode(MachineSlow.self, from: data)).map { .slow($0) }
-        default:
-            return nil
-        }
-    }
-
-    private struct RecordKind: Codable {
-        let t: String
-    }
-}

@@ -35,6 +35,7 @@ enum ControlPresentationContract {
     static let readable: Set<String> = writable.union([
         "keystrokeHighlightEnabled", "keystrokeHighlightRuntimeActive",
         "keystrokeHighlightRuntimeError",
+        "theme", "appearance", "mainWindowZoom",
     ])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
@@ -91,7 +92,9 @@ enum ControlPresentationContract {
         "keystrokeHighlightHotKeyLabel", "keystrokeHighlightPosition",
     ]
     static let boolKeys: Set<String> = ["keystrokeHighlightActive"]
-    static let ranges: [String: ClosedRange<Double>] = ["keystrokeHighlightDuration": 0.5...10]
+    static let ranges: [String: ClosedRange<Double>] = [
+        "keystrokeHighlightDuration": KeystrokeHighlightSettings.durationRange
+    ]
 
     @MainActor static func snapshot(defaults: UserDefaults, state: ControlPresentationState) throws
         -> Data

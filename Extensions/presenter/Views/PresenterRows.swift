@@ -121,7 +121,7 @@ struct PresenterRows: View {
             Section {
                 Button("Open Screen Recording Settings…") {
                     presentation.perform("screenRecording")
-                }
+                }.disabled(!presentation.active)
             }
 
             Section {

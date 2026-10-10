@@ -28,7 +28,7 @@ struct ControlPresentationState: Codable {
 
 enum ControlPresentationContract {
     static let writable: Set<String> = []
-    static let readable: Set<String> = writable.union([])
+    static let readable: Set<String> = writable.union(["theme", "appearance", "mainWindowZoom"])
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(
