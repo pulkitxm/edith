@@ -6,6 +6,9 @@ import SwiftUI
 
 @MainActor @objc(EdithCompanionExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
+        CompanionMonitor.jobID: .init(ambient: 60, live: 20)
+    ])
     private var worker: CompanionWorker?
     private var uiWorkspace: CompanionWorkspaceSession?
     private var uiEngine: CompanionUIEngine?
@@ -43,6 +46,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        ambientPolicy.stop()
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         _ = CompanionCLIExecution.stopChats()
         commands.shutdown()
@@ -85,8 +89,15 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard worker == nil else { return ["ok": true] as NSDictionary }
-            let worker = CompanionWorker()
+            let policy = ambientPolicy
+            let monitor = CompanionMonitor(interval: {
+                policy.interval(for: CompanionMonitor.jobID)
+            })
+            let worker = CompanionWorker(monitor: monitor)
             self.worker = worker
             uiEngine = CompanionUIEngine(worker: worker)
             CompanionCLIEnvironment.stopGenerations = { [weak self] in
@@ -96,6 +107,11 @@ final class ExtensionRuntime: NSObject {
                 monitor: worker.monitor,
                 isStopped: { [weak worker] in worker?.isStopped != false },
                 open: { [weak worker] id in worker?.openEpisode(id) })
+            if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+                do { try policy.start { [weak monitor] in monitor?.reschedule() } } catch {
+                    return ["ok": false] as NSDictionary
+                }
+            }
             worker.start()
             TextEditingCommands.install()
         case "view":
@@ -116,8 +132,13 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": IPC.post(IPC.Name.settingsChanged)
+        case "synchronize":
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
+            IPC.post(IPC.Name.settingsChanged)
         case "stop":
+            ambientPolicy.stop()
             _ = CompanionCLIExecution.stopChats()
             let streams = cliStreams; cliStreams = nil; streams?.stop()
             Task { await streams?.stopAndWait() }
