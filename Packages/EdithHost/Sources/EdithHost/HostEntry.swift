@@ -2,11 +2,37 @@ import AppKit
 import EdithHostCore
 import EdithExtensionUI
 import EdithExtensionSupport
+import ExtensionFoundation
+import ExtensionKit
+import HostBootstrap
 import SwiftUI
 
+@_cdecl("edith_host_dispatch")
+func dispatchHostEntry() {
+    let arguments = Array(CommandLine.arguments.dropFirst())
+    let explicitRole =
+        arguments.first.map {
+            $0.hasPrefix("--extension-") || $0.hasPrefix("--contained-extension-")
+                || $0 == "--cli-fixture"
+        } ?? false
+    if Bundle.main.bundleURL.pathExtension == "appex", !explicitRole,
+        ProcessInfo.processInfo.environment["EDITH_CLI"] != "1"
+    {
+        return
+    }
+    MainActor.assumeIsolated { HostEntry.runHost() }
+    exit(0)
+}
+
 @main
-struct HostEntry {
-    @MainActor static func main() {
+struct HostEntry: AppExtension {
+    init() { edith_host_bootstrap_anchor() }
+
+    var configuration: AppExtensionSceneConfiguration {
+        HostRemoteApplication.shared.sceneConfiguration
+    }
+
+    @MainActor static func runHost() {
         signal(SIGPIPE, SIG_IGN)
         let arguments = Array(CommandLine.arguments.dropFirst())
         if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1"
@@ -36,6 +62,14 @@ struct HostEntry {
             return
         }
         #endif
+        if arguments == ["--extension-ui-carrier"] {
+            let application = NSApplication.shared
+            let delegate = HostUICarrierDelegate()
+            application.setActivationPolicy(.prohibited)
+            application.delegate = delegate
+            withExtendedLifetime(delegate) { application.run() }
+            return
+        }
         do { if try HostContainedRole.run(arguments: arguments) { return } } catch {
             FileHandle.standardError.write(
                 Data("The contained extension could not start: \(error).\n".utf8))
@@ -90,5 +124,11 @@ struct HostEntry {
         }
         guard arguments.isEmpty else { exit(HostCLI.run(arguments)) }
         HostApplication.main()
+    }
+}
+
+private final class HostUICarrierDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
     }
 }

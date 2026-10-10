@@ -1,6 +1,10 @@
 import EdithExtensionSupport
 import Foundation
 
+@objc public protocol HostRemoteBootstrap {
+    func endpoint(reply: @escaping (NSXPCListenerEndpoint) -> Void)
+}
+
 @objc public protocol HostRemoteControl {
     func exchange(_ data: Data, reply: @escaping (Data) -> Void)
 }
@@ -89,6 +93,30 @@ public struct HostRemoteEvent: Codable, Sendable {
         self.kind = kind
         self.presentationID = presentationID
         self.height = height
+    }
+}
+
+public struct HostRemoteCommand: Codable, Sendable {
+    public let token: UUID
+    public let operation: String
+    public let payload: Data
+
+    public init(operation: String, payload: Data = Data()) {
+        token = UUID()
+        self.operation = operation
+        self.payload = payload
+    }
+}
+
+public struct HostRemoteReply: Codable, Sendable {
+    public let token: UUID
+    public let ok: Bool
+    public let payload: Data
+
+    public init(token: UUID, ok: Bool, payload: Data = Data()) {
+        self.token = token
+        self.ok = ok
+        self.payload = payload
     }
 }
 
