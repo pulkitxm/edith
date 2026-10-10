@@ -5,6 +5,7 @@ import Foundation
 @MainActor public final class ExtensionCLIStreams {
     nonisolated public static let maximumSessions = 8
     nonisolated public static let maximumBufferedBytes = 1_024 * 1_024
+    nonisolated public static let maximumInputPayloadBytes = 48 * 1_024
     private struct Session {
         let handle: ExtensionCLIStreamHandle
         let buffer: CLIStreamBuffer
@@ -158,11 +159,15 @@ import Foundation
             return try encoder.encode(
                 read(decoder.decode(ExtensionCLIStreamRead.self, from: payload)))
         case prefix + ".write":
-            guard payload.count <= 32 * 1_024 else { throw ExtensionPeerError.invalidRequest }
+            guard payload.count <= Self.maximumInputPayloadBytes else {
+                throw ExtensionPeerError.invalidRequest
+            }
             return try encoder.encode(
                 write(decoder.decode(ExtensionCLIStreamWrite.self, from: payload)))
         case prefix + ".resize":
-            guard payload.count <= 32 * 1_024 else { throw ExtensionPeerError.invalidRequest }
+            guard payload.count <= Self.maximumInputPayloadBytes else {
+                throw ExtensionPeerError.invalidRequest
+            }
             return try encoder.encode(
                 resize(decoder.decode(ExtensionCLIStreamResize.self, from: payload)))
         case prefix + ".cancel":
