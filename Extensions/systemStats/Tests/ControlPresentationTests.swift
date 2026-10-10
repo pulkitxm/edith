@@ -24,7 +24,7 @@ import Testing
         if let key {
             let value: Any =
                 ControlPresentationContract.stringKeys.contains(key)
-                ? "sample"
+                ? (key == AppStorageKeys.MenuBar.statsColorMode ? "auto" : "12AB34")
                 : ControlPresentationContract.boolKeys.contains(key)
                     ? NSNumber(value: true) : NSNumber(value: 1)
             let update = try JSONEncoder().encode(
@@ -96,7 +96,9 @@ import Testing
         let local = fixture()
         if let key = ControlPresentationContract.readable.sorted().first {
             engine.set(
-                ControlPresentationContract.stringKeys.contains(key) ? "sample" : true, forKey: key)
+                ControlPresentationContract.stringKeys.contains(key)
+                    ? (key == AppStorageKeys.MenuBar.statsColorMode ? "auto" : "12AB34") : true,
+                forKey: key)
         }
         let packet = try ControlPresentationContract.snapshot(
             defaults: engine,

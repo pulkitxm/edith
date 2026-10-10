@@ -10,6 +10,7 @@ final class ExtensionRuntime: NSObject {
     private var service: SystemStatsStatusItem?
 
     private var presentation: ControlPresentation?
+    private var settingsDetail = false
 
     private var follow = SystemStatsFollow()
 
@@ -44,23 +45,8 @@ final class ExtensionRuntime: NSObject {
             }
             if command.hasPrefix("systemStats.ui.") {
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
-                let defaults = SharedDefaults.store
-                switch command {
-                case "systemStats.ui.read":
-                    guard payload == Data("{}".utf8) else {
-                        throw ExtensionPeerError.invalidRequest
-                    }
-                case "systemStats.ui.update":
-                    try ControlPresentationContract.update(payload, defaults: defaults)
-
-                case "systemStats.ui.action":
-                    _ = try JSONDecoder().decode(
-                        ControlPresentationAction.self, from: payload)
-                    throw ExtensionPeerError.invalidRequest
-                default: throw ExtensionPeerError.invalidRequest
-                }
-                return try ControlPresentationContract.snapshot(
-                    defaults: defaults,
+                return try ControlPresentationContract.execute(
+                    command, payload: payload, defaults: SharedDefaults.store,
                     state: ControlPresentationState(
                         cpu: self.service?.snapshot.cpu ?? 0,
                         memory: self.service?.snapshot.memory ?? 0))
@@ -107,7 +93,13 @@ final class ExtensionRuntime: NSObject {
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            guard
+                SystemStatsSettingsScene.accepts(input)
+                    || (!configuration.uiOnly && input["location"] as? String == "main"
+                        && input["section"] as? String == "systemStats")
+            else { return ["ok": false] as NSDictionary }
             presentation?.stop()
+            settingsDetail = SystemStatsSettingsScene.accepts(input)
             presentation = ControlPresentation(client: configuration.engineClient)
             return ["ok": true] as NSDictionary
         case "stopUI":
@@ -128,6 +120,9 @@ final class ExtensionRuntime: NSObject {
             if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
+            if settingsDetail {
+                return SystemStatsSettingsScene.controller(presentation: presentation)
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     ControlSettingsHost(presentation: presentation) {
