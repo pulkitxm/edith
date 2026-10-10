@@ -6,6 +6,24 @@ import Testing
 @testable import SystemExtension
 
 @Suite(.serialized) @MainActor struct SystemCLIBridgeTests {
+    @Test func checkedQuitPayloadRequiresTypedConfirmationAndOneSelector() throws {
+        let valid = try SystemAppsQuitRequest.decode(
+            Data("{\"pid\":424242,\"force\":false,\"confirmed\":true}".utf8))
+        _ = try valid.selection()
+        #expect(valid.confirmed && !valid.force)
+        for text in [
+            "{\"all\":true,\"force\":false,\"confirmed\":1}",
+            "{\"all\":true,\"force\":1,\"confirmed\":true}",
+            "{\"pid\":-1,\"force\":false,\"confirmed\":true}",
+            "{\"pid\":424242,\"all\":true,\"force\":false,\"confirmed\":true}",
+            "{\"query\":\"synthetic\",\"shell\":\"bad\",\"force\":false,\"confirmed\":true}",
+        ] {
+            #expect(throws: (any Error).self) {
+                try SystemAppsQuitRequest.decode(Data(text.utf8)).selection()
+            }
+        }
+    }
+
     @Test func originalListQuitPreviewAndConfirmedForceUseOwnedOperations() async throws {
         let app = RunningAppSnapshot(
             pid: 424242, name: "Synthetic Editor", bundleID: "synthetic.editor", active: true)

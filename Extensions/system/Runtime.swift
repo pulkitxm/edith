@@ -88,21 +88,9 @@ final class ExtensionRuntime: NSObject {
                 return try JSONSerialization.data(
                     withJSONObject: self.operations.list().map(Self.encode))
             case "apps.quit":
-                let input = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
-                let selection: RunningAppSelection
-                if input?["all"] as? Bool == true {
-                    selection = .all
-                } else if let pid = input?["pid"] as? Int, pid > 0, pid <= Int(Int32.max) {
-                    selection = .pid(Int32(pid))
-                } else if let query = input?["query"] as? String, !query.isEmpty {
-                    selection = .query(query)
-                } else {
-                    throw ExtensionPeerError.invalidRequest
-                }
-                let plan = try self.operations.plan(
-                    selection, force: input?["force"] as? Bool ?? false)
-                let outcome = self.operations.apply(
-                    plan, confirmed: input?["confirmed"] as? Bool ?? false)
+                let request = try SystemAppsQuitRequest.decode(payload)
+                let plan = try self.operations.plan(try request.selection(), force: request.force)
+                let outcome = self.operations.apply(plan, confirmed: request.confirmed)
                 return try JSONSerialization.data(withJSONObject: [
                     "applied": outcome.applied, "changed": outcome.changed,
                     "targets": plan.targets.map(Self.encode),
