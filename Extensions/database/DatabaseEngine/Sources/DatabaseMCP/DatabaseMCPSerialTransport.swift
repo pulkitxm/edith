@@ -12,6 +12,7 @@ public actor DatabaseMCPSerialTransport: Transport {
     private var writes: [UUID: Task<Void, Error>] = [:]
     private var connected = false
     private var stopping = false
+    private var terminalError: Error?
 
     public init(base: any Transport, logger: Logger) {
         self.base = base
@@ -35,8 +36,9 @@ public actor DatabaseMCPSerialTransport: Transport {
                     switch continuation.yield(message) {
                     case .enqueued: break
                     case .dropped:
-                        continuation.finish(
-                            throwing: MCPError.internalError("The input queue is full."))
+                        let error = MCPError.internalError("The input queue is full.")
+                        terminalError = error
+                        continuation.finish(throwing: error)
                         await base.disconnect()
                         return
                     case .terminated: return
@@ -45,6 +47,7 @@ public actor DatabaseMCPSerialTransport: Transport {
                 }
                 continuation.finish()
             } catch {
+                if !Task.isCancelled { terminalError = error }
                 continuation.finish(throwing: error)
             }
         }
@@ -92,5 +95,9 @@ public actor DatabaseMCPSerialTransport: Transport {
 
     public func receive() -> AsyncThrowingStream<Data, Error> {
         stream
+    }
+
+    public func checkCompletion() throws {
+        if let terminalError { throw terminalError }
     }
 }

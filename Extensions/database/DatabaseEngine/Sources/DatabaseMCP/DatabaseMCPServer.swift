@@ -53,5 +53,7 @@ public struct DatabaseMCPServer: Sendable {
         await handler.shutdownAndWait()
         await server.stop()
         try Task.checkCancellation()
+        try await transport.checkCompletion()
+        if let bytes = base as? DatabaseMCPByteTransport { try await bytes.checkCompletion() }
     }
 }

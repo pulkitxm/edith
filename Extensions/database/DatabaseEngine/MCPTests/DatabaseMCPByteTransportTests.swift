@@ -48,7 +48,17 @@ import Testing
                 for try await _ in await transport.receive() {}
             }
             await transport.disconnect()
+            await #expect(throws: (any Error).self) { try await transport.checkCompletion() }
             #expect(await output.data.isEmpty)
+            let serverInput = FiniteMCPInput([data])
+            let serverTransport = DatabaseMCPByteTransport(
+                read: { await serverInput.read() },
+                write: { _ in })
+            let sender = DatabaseMCPScriptedSender([])
+            await #expect(throws: (any Error).self) {
+                try await DatabaseMCPServer(sender: sender).run(transport: serverTransport)
+            }
+            #expect(await sender.recordedRequests().isEmpty)
         }
     }
 

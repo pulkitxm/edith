@@ -15,6 +15,8 @@ public actor DatabaseMCPByteTransport: Transport {
     private var connected = false
     private var pending: Set<String> = []
     private var waiter: CheckedContinuation<Void, Error>?
+    private var terminalError: Error?
+    private var stopped = false
 
     public init(
         read: @escaping @Sendable () async throws -> Data?,
@@ -28,7 +30,7 @@ public actor DatabaseMCPByteTransport: Transport {
     }
 
     public func connect() async throws {
-        guard task == nil, !connected else {
+        guard task == nil, !connected, !stopped else {
             throw MCPError.internalError("The transport is active.")
         }
         connected = true
@@ -37,6 +39,7 @@ public actor DatabaseMCPByteTransport: Transport {
 
     public func disconnect() async {
         connected = false
+        stopped = true
         let current = task
         task = nil
         current?.cancel()
@@ -53,7 +56,14 @@ public actor DatabaseMCPByteTransport: Transport {
         try Task.checkCancellation()
         var line = data
         line.append(10)
-        try await writeBytes(line)
+        do { try await writeBytes(line) } catch {
+            terminalError = error
+            connected = false
+            task?.cancel()
+            cancelWaiter()
+            continuation.finish(throwing: error)
+            throw error
+        }
         if let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
             object["method"] == nil, let key = try requestKey(object["id"])
         {
@@ -65,6 +75,10 @@ public actor DatabaseMCPByteTransport: Transport {
     }
 
     public func receive() -> AsyncThrowingStream<Data, Error> { stream }
+
+    public func checkCompletion() throws {
+        if let terminalError { throw terminalError }
+    }
 
     private func receiveBytes() async {
         var buffer = Data()
@@ -112,7 +126,10 @@ public actor DatabaseMCPByteTransport: Transport {
                     throw MCPError.invalidRequest("The MCP message exceeds 4 MiB.")
                 }
             }
-        } catch { continuation.finish(throwing: error) }
+        } catch {
+            if !Task.isCancelled { terminalError = error }
+            continuation.finish(throwing: error)
+        }
     }
 
     private func waitForChange() async throws {
