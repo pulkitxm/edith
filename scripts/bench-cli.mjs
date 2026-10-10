@@ -6,10 +6,10 @@ const defaultScenarios = [
   { name: "help", arguments: ["--help"] },
   { name: "version", arguments: ["--version"] },
   {
-    name: "completionScript",
-    arguments: ["--generate-completion-script", "zsh"],
+    name: "extensionsHelp",
+    arguments: ["extensions", "--help"],
   },
-  { name: "schema", arguments: ["schema"] },
+  { name: "invokeHelp", arguments: ["invoke", "--help"] },
 ];
 
 const positiveInteger = (value, flag) => {
@@ -22,7 +22,7 @@ const positiveInteger = (value, flag) => {
 
 export const parseArguments = (arguments_) => {
   const options = {
-    binary: "build/Build/Products/Release/ed",
+    binary: "dist/Edith.app/Contents/MacOS/ed",
     samples: 30,
     warmups: 3,
     label: "Edith CLI Release",

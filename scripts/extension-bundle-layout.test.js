@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-const required = ["Sparkle.framework", "libExtensionMarketplace.dylib"];
+const required = ["Sparkle.framework"];
 
 function verify({ missing, extra } = {}) {
   const root = mkdtempSync(join(tmpdir(), "extension-bundle-layout-"));
@@ -61,7 +61,7 @@ inspect_layout(app, release=True)
   }
 }
 
-test("empty release bundle accepts only Sparkle and the marketplace library", () => {
+test("empty release bundle accepts only Sparkle", () => {
   const result = verify();
   expect(result.status, result.stderr).toBe(0);
 });

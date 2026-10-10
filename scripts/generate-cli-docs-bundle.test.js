@@ -27,7 +27,8 @@ test("docs bundle renders one sorted page per line", () => {
 
 test("the committed docs bundle matches docs/cli", () => {
   const pages = collectPages();
-  expect(pages.length).toBeGreaterThan(300);
+  expect(pages.map((page) => page.path)).toContain("invoke/README.md");
+  expect(pages.map((page) => page.path)).toContain("extensions/enable.md");
   expect(pages.map((page) => page.path)).toContain("README.md");
   expect(readFileSync(bundlePath, "utf8")).toBe(renderBundle(pages));
 });

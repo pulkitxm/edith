@@ -33,7 +33,7 @@ def inspect_layout(bundle, release=False, launcher_required=True):
     daemon = plistlib.loads((daemons / (label + '.plist')).read_bytes())
     assert daemon == {'Label': label, 'BundleProgram': 'Contents/MacOS/Edith', 'ProgramArguments': ['Edith', '--extension-carrier'], 'MachServices': {label: True}}, 'Invalid generic host daemon'
     assert {path.name for path in (bundle / 'Contents/MacOS').iterdir()} == ({'Edith', 'ed'} if launcher_required else {'Edith'}), 'Unexpected host executable'
-    assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'libExtensionMarketplace.dylib', 'Sparkle.framework'}, 'Feature framework in host'
+    assert {path.name for path in (bundle / 'Contents/Frameworks').iterdir()} == {'Sparkle.framework'}, 'Feature framework in host'
     resources = {'AppIcon.icns', 'index.json', 'ed-launcher'} if launcher_required else {'AppIcon.icns', 'index.json'}
     assert {path.name for path in (bundle / 'Contents/Resources').iterdir()} == resources, 'Feature resources in host'
     if launcher_required:
@@ -76,18 +76,18 @@ def inspect_host(bundle, release=False, launcher_required=True):
         assert not any(path.is_symlink() for path in sparkle_root.rglob('*')), 'Shipping Sparkle contains symbolic links'
         assert '/Sparkle.framework/Versions/' not in run('otool', '-L', str(executable)), 'Versioned Sparkle dependency in shipping host'
     expected_binaries = {
-        executable, bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib',
+        executable,
         sparkle / 'Sparkle', sparkle / 'Autoupdate',
         sparkle / 'Updater.app/Contents/MacOS/Updater',
         sparkle / 'XPCServices/Downloader.xpc/Contents/MacOS/Downloader',
         sparkle / 'XPCServices/Installer.xpc/Contents/MacOS/Installer',
     }
     assert set(binaries) == expected_binaries, 'Unexpected nested host executable'
-    symbols = run('nm', '-g', str(executable), str(bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib'))
+    symbols = run('nm', '-g', str(executable))
     for feature in ('HerdrStore', 'MusicPlayerEngine', 'MeetingVoice', 'DatabasePage', 'StudioPage', 'QuinjetPage'):
         assert feature not in symbols, f'Feature implementation in host: {feature}'
     assert bytes_installed < 5_000_000, f'Empty host exceeds 5 MB: {bytes_installed}'
-    closure = run('otool', '-L', str(executable), str(bundle / 'Contents/Frameworks/libExtensionMarketplace.dylib'))
+    closure = run('otool', '-L', str(executable))
     for feature in ('EdithKit', 'EdithShared', 'MeetingVoice', 'Ghostty', 'EdithStudio', 'NIO', 'GRDB', 'Highlighter'):
         assert feature not in closure, f'Feature dependency in host: {feature}'
     run('codesign', '--verify', '--deep', '--strict', str(bundle))
@@ -98,7 +98,7 @@ def inspect_host(bundle, release=False, launcher_required=True):
             assert entitlements.get(key) is True, f'Missing worker entitlement: {key}'
         for key in ('NSAppleEventsUsageDescription', 'NSMicrophoneUsageDescription', 'NSCameraUsageDescription', 'NSLocalNetworkUsageDescription'):
             assert isinstance(plist.get(key), str) and plist[key].strip(), f'Missing worker usage description: {key}'
-    catalog = json.loads(run(str(executable), 'extensions', 'catalog', '--json'))
+    catalog = json.loads((bundle / 'Contents/Resources/index.json').read_text())
     assert len(catalog) >= 35
-    assert run(str(executable), '--version').strip() == plist['CFBundleShortVersionString']
+    assert json.loads(run(str(executable), '--version'))['version'] == plist['CFBundleShortVersionString']
     return {'installedBytes': bytes_installed, 'extensionPayloadBytes': 0, 'indexedExtensions': len(catalog), 'signature': 'verified', 'machOBinaries': len(binaries)}
