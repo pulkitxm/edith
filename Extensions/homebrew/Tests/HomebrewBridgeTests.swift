@@ -74,6 +74,26 @@ import Testing
         await owner.shutdownAndWait()
     }
 
+    @Test func packagePreferenceLivesInOwningDefaultsAndRejectsUnknownKinds() async throws {
+        let suite = "synthetic.brew.preference." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("cask", forKey: AppStorageKeys.Homebrew.defaultKind)
+        let owner = HomebrewEngineCommands(defaults: defaults)
+        let bridge = Bridge(owner: owner)
+        let client = try #require(ExtensionEngineClient(bridge: bridge, presentationID: UUID()))
+        let model = HomebrewPageModel(engineClient: client)
+        #expect(try await model.preferredKind() == .cask)
+        model.savePreferredKind(.formula)
+        try await wait { defaults.string(forKey: AppStorageKeys.Homebrew.defaultKind) == "formula" }
+        await #expect(throws: ExtensionPeerError.self) {
+            try await owner.execute(
+                "homebrew.preference.write", payload: Data("{\"kind\":\"invalid\"}".utf8))
+        }
+        #expect(defaults.string(forKey: AppStorageKeys.Homebrew.defaultKind) == "formula")
+        model.shutdown(); client.invalidate(); await owner.shutdownAndWait()
+    }
+
     @Test func originalCLIStreamRetainsOwningClientAndDrainsOnDisable() async throws {
         let recorder = Requests()
         let owner = makeOwner(recorder)

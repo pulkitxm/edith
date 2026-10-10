@@ -78,7 +78,7 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
-        uiModel?.cancel()
+        uiModel?.shutdown()
         uiModel = nil
         uiClient?.invalidate()
         uiClient = nil

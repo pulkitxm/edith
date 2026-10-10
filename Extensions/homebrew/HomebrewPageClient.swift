@@ -10,6 +10,23 @@ import Foundation
         Self(client: nil, engine: engine)
     }
 
+    func preferredKind() async throws -> HomebrewPackageKind {
+        if client != nil {
+            return HomebrewPackageKind(
+                rawValue: SharedDefaults.store.string(forKey: AppStorageKeys.Homebrew.defaultKind)
+                    ?? "") ?? .formula
+        }
+        return try await read("homebrew.preference.read", as: HomebrewPackageKind.self)
+    }
+    func savePreferredKind(_ kind: HomebrewPackageKind) async throws {
+        if client != nil {
+            SharedDefaults.store.set(kind.rawValue, forKey: AppStorageKeys.Homebrew.defaultKind);
+            return
+        }
+        _ = try await read(
+            "homebrew.preference.write", input: ["kind": kind.rawValue],
+            as: HomebrewPackageKind.self)
+    }
     func status() async -> HomebrewStatus {
         if let client { return await client.status() }
         return (try? await read("homebrew.status", as: HomebrewStatus.self))

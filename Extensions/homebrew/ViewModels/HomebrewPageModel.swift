@@ -29,6 +29,7 @@ final class HomebrewPageModel {
     private let client: HomebrewPageClient
     private let store: HomebrewListingStore?
     private var task: Task<Void, Never>?
+    private var preferenceTask: Task<Void, Never>?
     private var cachedPackages: [HomebrewPackageKind: [HomebrewPackage]] = [:]
     private var didRestoreSnapshot = false
 
@@ -44,6 +45,18 @@ final class HomebrewPageModel {
         client = .remote(engineClient)
         store = nil
     }
+
+    func preferredKind() async throws -> HomebrewPackageKind { try await client.preferredKind() }
+    func savePreferredKind(_ kind: HomebrewPackageKind) {
+        preferenceTask?.cancel()
+        preferenceTask = Task { [weak self] in
+            guard let self else { return }
+            do { try await client.savePreferredKind(kind) } catch is CancellationError {} catch {
+                if !Task.isCancelled { errorMessage = error.localizedDescription }
+            }
+        }
+    }
+    func shutdown() { preferenceTask?.cancel(); preferenceTask = nil; cancel() }
 
     var updateCount: Int { packages.count(where: \.outdated) }
     var installedCount: Int { packages.count(where: \.installed) }

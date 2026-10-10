@@ -6,15 +6,18 @@ import Foundation
     let uiJobs = HomebrewUIJobs()
     private let cliStreams = try? ExtensionCLIStreams(owner: "homebrew")
     let client: HomebrewClient
+    private let defaults: UserDefaults
     private let store: HomebrewListingStore
     private var mutations: [UUID: Task<HomebrewMutationResult, Error>] = [:]
     private var stopped = false
 
     init(
         client: HomebrewClient = HomebrewClient(),
-        store: HomebrewListingStore = HomebrewListingStore()
+        store: HomebrewListingStore = HomebrewListingStore(),
+        defaults: UserDefaults = SharedDefaults.store
     ) {
         self.client = client
+        self.defaults = defaults
         self.store = store
     }
 
@@ -41,6 +44,18 @@ import Foundation
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         switch command {
+        case "homebrew.preference.read":
+            guard values.isEmpty else { throw ExtensionPeerError.invalidRequest }
+            return try encoder.encode(
+                HomebrewPackageKind(
+                    rawValue: defaults.string(forKey: AppStorageKeys.Homebrew.defaultKind) ?? "")
+                    ?? .formula)
+        case "homebrew.preference.write":
+            guard Set(values.keys) == ["kind"],
+                let kind = values["kind"].flatMap(HomebrewPackageKind.init(rawValue:))
+            else { throw ExtensionPeerError.invalidRequest }
+            defaults.set(kind.rawValue, forKey: AppStorageKeys.Homebrew.defaultKind)
+            return try encoder.encode(kind)
         case "homebrew.status":
             guard values.isEmpty else { throw ExtensionPeerError.invalidRequest }
             return try encoder.encode(await client.status())

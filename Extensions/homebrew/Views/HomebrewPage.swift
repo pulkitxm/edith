@@ -6,8 +6,7 @@ struct HomebrewMaintenanceView: View {
     @State private var model: HomebrewPageModel
     @State private var query = ""
     @State private var pendingUninstall: HomebrewPackage?
-    @AppStorage(AppStorageKeys.Homebrew.defaultKind, store: SharedDefaults.store)
-    private var kindRaw = HomebrewPackageKind.formula.rawValue
+    @State private var kindRaw = HomebrewPackageKind.formula.rawValue
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var themeName = AppTheme.accent.rawValue
     @Environment(\.compactLayout) private var compact
@@ -53,11 +52,11 @@ struct HomebrewMaintenanceView: View {
             }
         }
         .pageTask(cancel: { model.cancel() }) {
+            if let restored = try? await model.preferredKind(), !Task.isCancelled {
+                kindRaw = restored.rawValue
+            }
+            guard !Task.isCancelled else { return }
             model.activate(kind: kind)
-        }
-        .onChange(of: kindRaw) { _, _ in
-            guard automaticActionsEnabled else { return }
-            refreshCurrentMode()
         }
         .onChange(of: model.mode) { _, mode in
             guard automaticActionsEnabled else { return }
@@ -144,7 +143,14 @@ struct HomebrewMaintenanceView: View {
 
     private var kindPicker: some View {
         EdithSegmentedPicker(
-            "Package kind", selection: $kindRaw,
+            "Package kind",
+            selection: Binding(
+                get: { kindRaw },
+                set: { value in
+                    guard let kind = HomebrewPackageKind(rawValue: value) else { return }
+                    kindRaw = value; model.savePreferredKind(kind)
+                    if automaticActionsEnabled { refreshCurrentMode() }
+                }),
             options: HomebrewPackageKind.allCases.map(\.rawValue),
             label: { HomebrewPackageKind(rawValue: $0)?.pluralTitle ?? $0 }
         )
