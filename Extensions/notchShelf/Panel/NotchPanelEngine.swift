@@ -556,7 +556,8 @@ import Foundation
     }
 
     func browser(_ request: NotchBrowserRemoteRequest) async throws -> Data {
-        let cleanup = [.leaseEnd, .downloadCancel, .importEnd].contains(request.operation)
+        let cleanup = [.leaseEnd, .downloadCancel, .importEnd, .commandEnd].contains(
+            request.operation)
         if cleanup {
             try validateOwnership(
                 request.identity, display: request.displayID, presentation: request.presentationID)
@@ -565,6 +566,17 @@ import Foundation
                 request.identity, display: request.displayID, presentation: request.presentationID)
         }
         guard let engine = controller?.browserEngine else { throw ExtensionPeerError.unavailable }
+        engine.cliQueue.admitted = { [weak self, weak controller] lease in
+            guard let self, let controller,
+                (try? self.validateChromeIdentity(
+                    request.identity, displayID: lease.displayID,
+                    presentationID: lease.presentationID)) != nil,
+                let state = try? self.state(for: lease.displayID)
+            else { return false }
+            return state.visible && state.phase == .expanded && state.activeTab == "browser"
+                && (controller.privacy.values["active"] != "1"
+                    || controller.privacy.values["blurBrowser"] == "0")
+        }
         let data = try await engine.execute(request)
         if !cleanup {
             do {

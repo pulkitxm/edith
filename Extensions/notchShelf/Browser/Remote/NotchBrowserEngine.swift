@@ -24,6 +24,7 @@ import Foundation
     private var leases: [UUID: NotchBrowserLease] = [:]
     private var leaseRevision: UInt64 = 0
     private var leaseExpiries: [UUID: Task<Void, Never>] = [:]
+    let cliQueue: NotchBrowserCLIQueue
     var held = false
     var changed: (() -> Void)?
 
@@ -38,6 +39,7 @@ import Foundation
         now: @escaping () -> Date = Date.init
     ) {
         self.now = now
+        self.cliQueue = NotchBrowserCLIQueue(now: now)
         self.openURL = openURL
         self.downloads = downloads ?? NotchBrowserDownloadEngine()
         self.installation = installation
@@ -46,6 +48,7 @@ import Foundation
         self.keyProvider = keyProvider
         self.open = open ?? { installation.open($0, profile: $1) }
         session = sessionFile.load()
+        cliQueue.changed = { [weak self] in self?.changed?() }
     }
 
     var size: CGSize { session.size ?? NotchBrowserGeometry.defaultSize }
@@ -91,6 +94,27 @@ import Foundation
         guard !stopped else { throw ExtensionPeerError.unavailable }
         let encoder = JSONEncoder()
         switch request.operation {
+        case .commandAttach:
+            return try encoder.encode(cliQueue.attach(request))
+        case .commandTake:
+            return try encoder.encode(cliQueue.take(request))
+        case .commandValidate:
+            try cliQueue.validateCommand(request)
+            return Data("{}".utf8)
+        case .commandResult:
+            try cliQueue.complete(request)
+            return Data("{}".utf8)
+        case .commandCancel:
+            try cliQueue.cancel(request)
+            return Data("{}".utf8)
+        case .commandEnd:
+            guard let lease = request.commandLease,
+                lease.presentationID == request.presentationID,
+                lease.ownershipID == request.identity.ownershipID,
+                lease.displayID == request.displayID
+            else { throw ExtensionPeerError.invalidRequest }
+            try cliQueue.end(request)
+            return Data("{}".utf8)
         case .leaseRenew:
             let current = try validateLease(request)
             let renewed = NotchBrowserLease(
@@ -171,7 +195,7 @@ import Foundation
             sessionFile.save(session)
             changed?()
         case .detach:
-            for owner in Array(leases.keys) { release(owner: owner) }
+            for owner in Array(leases.keys) { release(owner: owner, commands: false) }
             imported = nil; cookieKey = nil
             session.profile = nil; session.profileName = nil; session.tabs = [];
             session.selected = 0
@@ -293,13 +317,14 @@ import Foundation
     }
 
     func detach() {
-        for owner in Array(leases.keys) { release(owner: owner) }
+        for owner in Array(leases.keys) { release(owner: owner, commands: false) }
         imported = nil; cookieKey = nil
         session.profile = nil; session.profileName = nil; session.tabs = []; session.selected = 0
         sessionFile.save(session); changed?()
     }
 
-    func release(owner: UUID) {
+    func release(owner: UUID, commands: Bool = true) {
+        if commands { cliQueue.release(owner) }
         releaseLease(owner: owner)
         downloads.release(owner: owner)
         if heldOwner == owner { held = false; heldOwner = nil; changed?() }
@@ -310,6 +335,7 @@ import Foundation
     }
 
     func stop() {
+        cliQueue.stop()
         stopped = true; importTask?.cancel(); imported = nil; cookieKey = nil; changed = nil
         importExpiry?.cancel(); importExpiry = nil; downloads.stop()
         for task in leaseExpiries.values { task.cancel() }

@@ -46,6 +46,7 @@ struct NotchBrowserRemoteRequest: Codable, Sendable {
         case privacy, openInChrome, copyLink, held, downloadStart, downloadWrite, downloadCommit,
             downloadCancel
         case leaseRenew, leaseEnd
+        case commandAttach, commandTake, commandValidate, commandResult, commandCancel, commandEnd
     }
     let identity: NotchPanelIdentity
     let displayID: UInt32
@@ -62,4 +63,7 @@ struct NotchBrowserRemoteRequest: Codable, Sendable {
     var byteOffset: UInt64? = nil
     var bytes: Data? = nil
     var lease: NotchBrowserLease? = nil
+    var commandLease: NotchBrowserCommandLease? = nil
+    var commandResult: NotchBrowserCommandResult? = nil
+    var commandID: UUID? = nil
 }
