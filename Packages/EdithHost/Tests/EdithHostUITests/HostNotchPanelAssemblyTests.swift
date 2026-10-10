@@ -80,7 +80,10 @@ struct HostNotchPanelAssemblyTests {
         try assembly.accept(
             try advanced(first, revision: 3, slots: [changed]),
             admission: fixture.admission(previousRevision: 2, layout: .init(tiles: [tile])))
-        await settle { owner.requests.count == 3 && assembly.attachedCount == 2 }
+        await settle {
+            owner.requests.count == 3 && assembly.attachedCount == 2
+                && assembly.pendingCleanupCount == 0
+        }
         let music = owner.leases.filter { $0.request.extensionID == "music" }
         #expect(music.count == 2)
         #expect(music[0].request.presentationID != music[1].request.presentationID)
