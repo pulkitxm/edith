@@ -40,6 +40,23 @@ public struct LimitsHistory {
     private static let iso = ISO8601DateFormatter()
     private static let decoder = JSONDecoder()
     private static let maximumTailScanBytes = 16 * 1_024 * 1_024
+    private static let timestampStyle = Date.ISO8601FormatStyle()
+
+    static func parseTimestamp(_ value: String?) -> Date? {
+        guard let value else { return nil }
+        let bytes = Array(value.utf8)
+        if bytes.count == 20, bytes[4] == 45, bytes[7] == 45, bytes[10] == 84,
+            bytes[13] == 58, bytes[16] == 58, bytes[19] == 90,
+            (bytes[11] < 50 || (bytes[11] == 50 && bytes[12] < 52)),
+            bytes[14] < 54, bytes[17] < 54, value.prefix(4) >= "1970",
+            bytes.enumerated().allSatisfy({
+                [4, 7, 10, 13, 16, 19].contains($0.offset) || (48...57).contains($0.element)
+            }), let date = try? timestampStyle.parse(value)
+        {
+            return date
+        }
+        return EdithDate.parseISO(value)
+    }
 
     public static func isValidDocument(_ text: String) -> Bool {
         let lines = text.split(separator: "\n")
@@ -48,7 +65,7 @@ public struct LimitsHistory {
             guard let row = try? decoder.decode(Row.self, from: Data(line.utf8)) else {
                 return false
             }
-            return EdithDate.parseISO(row.ts) != nil
+            return Self.parseTimestamp(row.ts) != nil
         }
     }
 
@@ -98,7 +115,7 @@ public struct LimitsHistory {
         var result: String?
         FileTail.scanLinesReversed(url, maxScanBytes: maximumTailScanBytes) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
-                EdithDate.parseISO(row.ts) != nil,
+                Self.parseTimestamp(row.ts) != nil,
                 (row.p ?? .claude) == provider
             else { return true }
             result = key(for: row)
@@ -144,7 +161,7 @@ public struct LimitsHistory {
         let rowData = Data(tail[rowStart...])
         if (start == 0 || newline != nil),
             let row = try? decoder.decode(Row.self, from: rowData),
-            EdithDate.parseISO(row.ts) != nil
+            Self.parseTimestamp(row.ts) != nil
         {
             return true
         }
@@ -185,14 +202,14 @@ public struct LimitsHistory {
         for line in text.split(separator: "\n") {
             if Task.isCancelled { break }
             guard let row = try? Self.decoder.decode(Row.self, from: Data(line.utf8)),
-                let date = EdithDate.parseISO(row.ts), since.map({ date >= $0 }) ?? true,
+                let date = Self.parseTimestamp(row.ts), since.map({ date >= $0 }) ?? true,
                 (row.p ?? .claude) == provider
             else { continue }
             out.append(
                 LimitPoint(
                     date: date, s: row.s, w: row.w,
-                    sessionReset: row.sr.flatMap(EdithDate.parseISO),
-                    weekReset: row.wr.flatMap(EdithDate.parseISO)))
+                    sessionReset: row.sr.flatMap(Self.parseTimestamp),
+                    weekReset: row.wr.flatMap(Self.parseTimestamp)))
         }
         return out.sorted { $0.date < $1.date }
     }
@@ -281,7 +298,7 @@ public struct LimitsHistory {
             shouldContinue: { !Task.isCancelled }
         ) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
-                let date = EdithDate.parseISO(row.ts)
+                let date = Self.parseTimestamp(row.ts)
             else { return true }
             guard date >= since else { return false }
             let provider = row.p ?? .claude
@@ -292,7 +309,7 @@ public struct LimitsHistory {
                 guard let percent else { continue }
                 samples[LimitAlertTarget(provider, slot), default: []].append(
                     LimitAlertSample(
-                        date: date, percent: percent, resetsAt: reset.flatMap(EdithDate.parseISO)))
+                        date: date, percent: percent, resetsAt: reset.flatMap(Self.parseTimestamp)))
             }
             return true
         }
@@ -308,7 +325,7 @@ public struct LimitsHistory {
             shouldContinue: { !Task.isCancelled }
         ) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
-                EdithDate.parseISO(row.ts) != nil
+                Self.parseTimestamp(row.ts) != nil
             else { return true }
             let provider = row.p ?? .claude
             if providers.contains(provider), rows[provider] == nil { rows[provider] = row }
@@ -325,7 +342,7 @@ public struct LimitsHistory {
             shouldContinue: { !Task.isCancelled }
         ) { data in
             guard let row = try? decoder.decode(Row.self, from: data),
-                let date = EdithDate.parseISO(row.ts)
+                let date = Self.parseTimestamp(row.ts)
             else { return true }
             let provider = row.p ?? .claude
             if latest[provider] == nil {
@@ -345,19 +362,19 @@ public struct LimitsHistory {
     }
 
     private static func latest(row: Row) -> Latest? {
-        guard let date = EdithDate.parseISO(row.ts) else { return nil }
+        guard let date = Self.parseTimestamp(row.ts) else { return nil }
         return Latest(
             date: date,
             session: row.s.map {
-                LimitWindow(percent: $0, resetsAt: row.sr.flatMap(EdithDate.parseISO))
+                LimitWindow(percent: $0, resetsAt: row.sr.flatMap(Self.parseTimestamp))
             },
             week: row.w.map {
                 LimitWindow(
-                    percent: $0, resetsAt: row.wr.flatMap(EdithDate.parseISO),
+                    percent: $0, resetsAt: row.wr.flatMap(Self.parseTimestamp),
                     period: row.ga?.period)
             },
             fable: row.f.map {
-                LimitWindow(percent: $0, resetsAt: row.fr.flatMap(EdithDate.parseISO))
+                LimitWindow(percent: $0, resetsAt: row.fr.flatMap(Self.parseTimestamp))
             },
             grok: row.ga)
     }
@@ -365,8 +382,8 @@ public struct LimitsHistory {
     private static func point(row: Row, date: Date) -> LimitPoint {
         LimitPoint(
             date: date, s: row.s, w: row.w,
-            sessionReset: row.sr.flatMap(EdithDate.parseISO),
-            weekReset: row.wr.flatMap(EdithDate.parseISO))
+            sessionReset: row.sr.flatMap(Self.parseTimestamp),
+            weekReset: row.wr.flatMap(Self.parseTimestamp))
     }
 
     public static func downsample(
@@ -433,7 +450,7 @@ public struct LimitsHistory {
                 let line = String(sub)
                 if seen.contains(line) { continue }
                 guard let row = try? Self.decoder.decode(Row.self, from: Data(line.utf8)),
-                    let ts = EdithDate.parseISO(row.ts)
+                    let ts = Self.parseTimestamp(row.ts)
                 else { continue }
                 seen.insert(line)
                 rows.append((ts, line))

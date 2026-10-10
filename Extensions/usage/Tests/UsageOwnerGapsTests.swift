@@ -67,6 +67,29 @@ import Testing
         await controller.shutdown()
     }
 
+    @Test func fastHistoryDatesRetainOriginalNormalizationAndInvalidInputs() {
+        let samples = [
+            "2026-10-09T01:00:00Z", "2026-10-09T01:00:00.123456Z",
+            "2026-10-09T01:00:00+00:00", "2026-10-09T01:00:00-07:30",
+            "2026-02-30T00:00:00Z", "2026-02-29T00:00:00Z",
+            "2024-02-29T00:00:00Z", "2026-01-01T24:00:00Z",
+            "2026-01-01T25:00:00Z", "2026-01-01T00:00:60Z",
+            "2026-01-01T00:00:61Z", "2026-01-01T00:60:00Z",
+            "2026-00-01T00:00:00Z", "2026-13-01T00:00:00Z",
+            "2026-01-00T00:00:00Z", "2026-01-32T00:00:00Z",
+            "2026-01-01 00:00:00Z", "2026-01-01T00:00:00z",
+            "1582-10-04T00:00:00Z", "0001-01-01T00:00:00Z",
+            "1969-12-31T23:59:59Z", "1970-01-01T00:00:00Z", "", "malformed",
+        ]
+        for value in samples {
+            #expect(
+                LimitsHistory.parseTimestamp(value) == EdithDate.parseISO(value),
+                Comment(rawValue: value))
+        }
+        #expect(LimitsHistory.parseTimestamp(nil) == nil)
+        #expect(LimitsHistory.parseTimestamp("2026-01-01T00:00:60Z") == nil)
+    }
+
     @Test func fullHistoryPreparationProfilesDistinctOriginalRecords() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -81,8 +104,15 @@ import Testing
             rows +=
                 "{\"ts\":\"\(stamp)\",\"p\":\"claude\",\"s\":\(i % 101),\"w\":18,\"sr\":\"2027-02-01T13:00:00Z\",\"wr\":\"2027-02-02T12:00:00Z\"}\n"
         }
+        let maximum = 16 * 1_024 * 1_024
+        let padding = (maximum - rows.utf8.count) / count
+        rows = rows.replacingOccurrences(
+            of: "\n", with: String(repeating: " ", count: padding) + "\n")
+        rows.insert(
+            contentsOf: String(repeating: " ", count: maximum - rows.utf8.count),
+            at: rows.startIndex)
         let raw = Data(rows.utf8)
-        #expect(raw.count > 8 * 1_024 * 1_024 && raw.count < 16 * 1_024 * 1_024)
+        #expect(raw.count == maximum)
         try raw.write(to: root.appendingPathComponent("limits-history.jsonl"))
         let begin = ContinuousClock.now
         let snapshot = await LimitsHistory.loadSnapshot(
