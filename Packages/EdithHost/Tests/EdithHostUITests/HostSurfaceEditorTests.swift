@@ -10,6 +10,96 @@ import Testing
 
 @MainActor
 @Suite(.serialized) struct HostSurfaceEditorTests {
+    @Test func marketplaceRestoresSuiteGroupsSearchAndOriginalArtworkWithoutStartingWorkers()
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let entries = fixture.marketplace.entries
+        #expect(
+            HostMarketplaceCatalog.suites.map(\.id) == [
+                "agents", "maintenance", "system", "desk", "media", "data", "tools",
+            ])
+        #expect(Set(entries.map(\.id)) == Set(HostMarketplaceCatalog.subtitles.keys))
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "   clipboard  ", category: "media").map(
+                \.id) == ["clipboard", "colorPicker"])
+        #expect(
+            HostMarketplaceCatalog.filter(entries, query: "", category: "media").allSatisfy {
+                $0.category == "media"
+            })
+        for theme in AppTheme.allCases {
+            let images = HostMarketplaceArtwork.swatches(theme: theme.rawValue)
+            #expect(images.count == 4)
+            #expect(images.allSatisfy { $0.size == NSSize(width: 84, height: 50) })
+        }
+        #expect(HostMarketplaceArtwork.image("unknown") == nil)
+        #expect(!HostExtensionPreviewMotionPolicy.animates(hovering: true, reduceMotion: true))
+        let restore = enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: MarketplacePage(marketplace: fixture.marketplace)
+                .environment(\.compactLayout, false).environment(
+                    \.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: 1100, height: 850)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Extensions") != nil)
+        #expect(find(host, label: "Agents suite enabled") != nil)
+        #expect(
+            find(host, label: "Search extensions") != nil
+                || find(host, label: "Find extensions") != nil)
+        #expect(
+            find(host, label: "Claude, Codex and Cursor limits, usage stats, and alerts.") != nil)
+        #expect(find(host, label: "Download") != nil)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
+    @Test(arguments: [false, true])
+    func suiteDisableRetainsSelectionsWithoutDownloadOrRestartAndReenableIsExplicit(
+        rejectDisable: Bool
+    ) async throws {
+        let fixture = try SuiteFixture(rejectDisable: rejectDisable)
+        defer { fixture.clean() }
+        let suite = try #require(HostMarketplaceCatalog.suites.first { $0.id == "system" })
+        let selection = HostSuiteSelection(
+            marketplace: fixture.marketplace, defaults: fixture.defaults)
+        for id in ["keepAwake", "lidAwake", "clipboard"] {
+            await fixture.marketplace.enable(id: id)
+        }
+        #expect(fixture.marketplace.sessions.activeIDs == ["keepAwake", "lidAwake", "clipboard"])
+        let old = fixture.marketplace.sessions.processIdentifiers
+        await selection.setEnabled(false, suite: suite)
+        #expect(!selection.enabled(suite))
+        #expect(fixture.marketplace.sessions.activeIDs == ["clipboard"])
+        #expect(fixture.marketplace.sessions.processIdentifiers["clipboard"] == old["clipboard"])
+        #expect(
+            fixture.defaults.stringArray(forKey: suite.defaultsKey + "Selections") == [
+                "keepAwake", "lidAwake",
+            ])
+        #expect(
+            HostSuiteSelection(marketplace: fixture.marketplace, defaults: fixture.defaults)
+                .enabled(suite) == false)
+        #expect(fixture.marketplace.downloadedIDs == ["keepAwake", "lidAwake", "clipboard"])
+        if rejectDisable {
+            #expect(fixture.marketplace.sessions.pendingDisableIDs == ["lidAwake"])
+            #expect(fixture.marketplace.sessions.processIdentifiers["lidAwake"] == old["lidAwake"])
+        } else {
+            #expect(fixture.marketplace.sessions.processIdentifiers.count == 1)
+            for id in ["keepAwake", "lidAwake"] { #expect(kill(try #require(old[id]), 0) == -1) }
+        }
+        await selection.setEnabled(true, suite: suite)
+        #expect(selection.enabled(suite))
+        #expect(fixture.marketplace.sessions.activeIDs == ["keepAwake", "lidAwake", "clipboard"])
+        #expect(fixture.marketplace.sessions.pendingDisableIDs.isEmpty)
+        #expect(fixture.marketplace.sessions.processIdentifiers["keepAwake"] != old["keepAwake"])
+        if rejectDisable { #expect(await fixture.marketplace.sessions.shutdown() == false) }
+        #expect(await fixture.marketplace.sessions.shutdown())
+    }
+
     @Test func generalSettingsKeepOriginalControlsAndExecuteOwnedActions() async throws {
         let fixture = try Fixture()
         defer { fixture.clean() }
@@ -669,6 +759,84 @@ import Testing
         func reject() throws -> Data {
             count += 1
             throw MarketplaceError.downloadFailed
+        }
+    }
+
+    @MainActor private struct SuiteFixture {
+        let directory: URL
+        let marketplace: HostMarketplace
+        let defaults: UserDefaults
+
+        init(rejectDisable: Bool) throws {
+            directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+                UUID().uuidString)
+            let identity = try HostIdentity(
+                identifier: "com.pulkit.edith.tests.suites-\(UUID().uuidString)",
+                supportDirectory: directory)
+            defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
+            let store = ExtensionPackageStore(
+                root: identity.root.appendingPathComponent("Extensions"))
+            try FileManager.default.createDirectory(
+                at: store.root, withIntermediateDirectories: true)
+            var packages: [ExtensionPackage] = []
+            for id in ["keepAwake", "lidAwake", "clipboard"] {
+                let package = ExtensionPackage(
+                    id: id, version: "1.0.0", hostABI: HostContract.compatibility,
+                    downloadURL: URL(
+                        string:
+                            "https://github.com/pulkitxm/edith/releases/download/synthetic/\(id).zip"
+                    )!,
+                    sha256: String(repeating: "a", count: 64), downloadBytes: 128,
+                    installedBytes: 128)
+                try FileManager.default.createDirectory(
+                    at: store.directory(for: package), withIntermediateDirectories: true)
+                try Data(repeating: 1, count: 128).write(
+                    to: store.directory(for: package).appendingPathComponent("synthetic-payload"))
+                packages.append(package)
+            }
+            try store.commit(packages)
+            let script = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("EdithHostCoreTests/Fixtures/worker.py")
+            let sessions = HostExtensionSessions(defaults: defaults) { package in
+                HostWorker(
+                    configuration: HostWorkerConfiguration(
+                        identity: identity, extensionID: package.id, version: package.version),
+                    executable: URL(fileURLWithPath: "/usr/bin/python3"),
+                    arguments: [
+                        script.path,
+                        rejectDisable && package.id == "lidAwake"
+                            ? "reject-disable-once" : "normal",
+                    ], requestTimeout: .seconds(2))
+            }
+            let client = ExtensionCatalogClient(
+                url: URL(string: "https://github.com/pulkitxm/edith/catalog")!,
+                publicKey: Data(repeating: 0, count: 32),
+                repository: MarketplaceConfiguration.repository,
+                cache: directory.appendingPathComponent("catalog.json"),
+                fetch: { _ in
+                    Issue.record("Suite actions must not fetch the catalog");
+                    throw MarketplaceError.downloadFailed
+                })
+            let installer = ExtensionPackageInstaller(
+                store: store,
+                download: { _, _ in
+                    Issue.record("Suite actions must not download packages");
+                    throw MarketplaceError.downloadFailed
+                },
+                verify: { _ in throw MarketplaceError.invalidSignature })
+            marketplace = try HostMarketplace(
+                identity: identity,
+                entries: try HostIndex.bundled().filter {
+                    ["keepAwake", "lidAwake", "clipboard"].contains($0.id)
+                },
+                store: store, catalogClient: client, installer: installer, sessions: sessions)
+        }
+        func clean() {
+            defaults.removePersistentDomain(forName: marketplace.identity.defaultsSuite)
+            marketplace.surfaces.navigation.shutdown(); marketplace.surfaces.requests.shutdown();
+            marketplace.surfaces.privacy.shutdown()
+            try? FileManager.default.removeItem(at: directory)
         }
     }
 

@@ -309,7 +309,7 @@ struct HostWorkspace: View {
             HostHomePage(
                 marketplace: marketplace, customize: customize,
                 extensions: { selection = "extensions" })
-        case "extensions": MarketplacePage(marketplace: marketplace)
+        case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
         case "settings": HostSettingsContainer(category: $settings) { settingsContent }
         case "about": HostAboutPage(identity: marketplace.identity)
         default:
@@ -357,7 +357,9 @@ struct HostWorkspace: View {
     }
     private func content(_ id: String, section: String? = nil) -> some View {
         HostExtensionContent(
-            marketplace: marketplace, extensionID: id, location: destination.id, section: section,
+            marketplace: marketplace, extensionID: id,
+            location: destination.id == "settings" ? "settings" : "main",
+            section: section ?? destination.id,
             presenter: presenter, openMarketplace: { selection = "extensions" })
     }
     private var landing: some View {
