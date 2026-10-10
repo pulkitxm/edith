@@ -13,10 +13,33 @@ final class ExtensionRuntime: NSObject {
     private let embeddedUI = MusicEmbeddedRuntime()
     private var backup: MusicBackupLifecycle?
     private let commands = ExtensionCommandRegistry()
+    private var inertFixture = false
+    private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
+
+    override init() {
+        fixtureAdmission = { input in
+            try MusicWorker.resolveFixture(
+                admission: {
+                    try WorkerFixtureAdmission.current(
+                        extensionID: "music", context: input,
+                        roleBundle: Bundle(for: ExtensionRuntime.self))
+                },
+                applicationIdentifier: ProcessInfo.processInfo.environment[
+                    "EDITH_APPLICATION_IDENTIFIER"])
+        }
+        super.init()
+    }
+
+    init(fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?) {
+        self.fixtureAdmission = fixtureAdmission
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let self, self.worker != nil else { throw ExtensionPeerError.unavailable }
+            guard let self, self.worker != nil, !self.inertFixture else {
+                throw ExtensionPeerError.unavailable
+            }
             if command.hasPrefix("backup."), let backup = self.backup {
                 return try await backup.execute(command, payload: payload)
             }
@@ -31,6 +54,15 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        if inertFixture {
+            commands.shutdown()
+            Task {
+                await commands.shutdownAndWait()
+                await worker?.shutdown(); worker = nil
+                completion()
+            }
+            return
+        }
         embeddedUI.stop()
         uiService?.stop()
         navigation?.invalidate(); MusicHostNavigation.navigate = nil; MusicHostNavigation.reset()
@@ -62,6 +94,12 @@ final class ExtensionRuntime: NSObject {
     }
 
     @objc func execute(_ input: NSDictionary) -> NSObject {
+        if inertFixture,
+            !["describe", "start", "stop", "status", "cancelCommand", "synchronize"].contains(
+                input["operation"] as? String ?? "")
+        {
+            return ["ok": false] as NSDictionary
+        }
         switch input["operation"] as? String {
         case "describe":
             let bundle = Bundle(for: ExtensionRuntime.self)
@@ -72,6 +110,14 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
+            do {
+                let fixture = try fixtureAdmission(input)
+                if let fixture {
+                    if worker == nil { worker = try MusicWorker(admission: { fixture }) }
+                    inertFixture = true
+                    return ["ok": true] as NSDictionary
+                }
+            } catch { return ["ok": false, "error": error.localizedDescription] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex",
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
@@ -89,7 +135,9 @@ final class ExtensionRuntime: NSObject {
                 {
                     return ["ok": false, "error": error.localizedDescription] as NSDictionary
                 }
-                worker = MusicWorker()
+                do { worker = try MusicWorker(admission: { nil }) } catch {
+                    return ["ok": false, "error": error.localizedDescription] as NSDictionary
+                }
             }
             if let worker, surface == nil {
                 surface = MusicSurface(
@@ -117,6 +165,10 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": backup?.preferencesChanged()
         case "stop":
+            if inertFixture {
+                commands.shutdown(); worker?.stop(); worker = nil
+                return ["ok": true] as NSDictionary
+            }
             embeddedUI.stop()
             navigation?.invalidate(); navigation = nil; MusicHostNavigation.navigate = nil;
             MusicHostNavigation.reset()
