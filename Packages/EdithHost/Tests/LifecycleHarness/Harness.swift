@@ -28,6 +28,17 @@ struct HostLifecycleHarness {
         let releases = URL(fileURLWithPath: arguments[2])
         let app = fixture.appendingPathComponent("Fixture.app")
         try FileManager.default.copyItem(at: sourceApp, to: app)
+        if extensionID == "usage" {
+            let launcher = app.appendingPathComponent("Contents/Resources/ed-launcher")
+            try FileManager.default.createDirectory(
+                at: launcher.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.copyItem(
+                at: URL(fileURLWithPath: "Resources/ed-launcher"), to: launcher)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: launcher.path)
+            try FileManager.default.createSymbolicLink(
+                atPath: app.appendingPathComponent("Contents/MacOS/ed").path,
+                withDestinationPath: "../Resources/ed-launcher")
+        }
         let requestedIdentifier = ProcessInfo.processInfo.environment[
             "EDITH_EXTENSION_TEST_HOST_IDENTIFIER"]
         if let requestedIdentifier {
@@ -306,6 +317,7 @@ struct HostLifecycleHarness {
             }
             await sessions.shutdown()
             if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
+            if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
             }
@@ -415,8 +427,10 @@ struct HostLifecycleHarness {
                 }
             }
             stage = "disable"
+            if extensionID == "usage" { try await verifyUsageDisableFailure(sessions: sessions) }
             try await sessions.disable(id: first.id)
             if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
+            if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface,
                 sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty
@@ -433,6 +447,14 @@ struct HostLifecycleHarness {
             }
             try await requireExited(terminalChildren)
             try await requireExited(cameraChildren)
+            if extensionID == "usage" {
+                try await sessions.enable(second)
+                try await verifyUsageHook(endpoint, restored: true)
+                guard let crashedPID = sessions.processIdentifiers["usage"],
+                    kill(crashedPID, SIGKILL) == 0
+                else { throw HostWorkerError.invalidResponse }
+                try await requireExited([crashedPID])
+            }
             stage = "pending disable in fresh replacement host"
             let recoveryDefaults = UserDefaults(suiteName: suite)!
             recoveryDefaults.set([extensionID], forKey: "enabledExtensions")
@@ -450,6 +472,7 @@ struct HostLifecycleHarness {
                 sessions.states[extensionID] == .disabled, surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
+            if extensionID == "usage" { try verifyUsageStoppedHook() }
             stage = "manual enable after pending disable recovery"
             try await sessions.enable(second)
             guard sessions.activeIDs == [extensionID], sessions.pendingDisableIDs.isEmpty,
@@ -457,7 +480,9 @@ struct HostLifecycleHarness {
             else { throw HostWorkerError.invalidResponse }
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
+            if extensionID == "usage" { try await verifyUsageHook(endpoint, restored: true) }
             try await sessions.disable(id: extensionID)
+            if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard sessions.processIdentifiers.isEmpty, sessions.pendingDisableIDs.isEmpty,
                 sessions.enabledIDs.isEmpty, surfaces.context.activeIDs.isEmpty
             else { throw HostWorkerError.invalidResponse }
@@ -476,7 +501,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {

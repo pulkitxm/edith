@@ -39,6 +39,21 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    @objc(prepareDisableWithCompletion:)
+    func prepareDisable(completion: @escaping (NSError?) -> Void) {
+        UsageWorkerOperations.statusLineCommands = nil
+        commands.shutdown()
+        statusLineConnectionTask?.cancel()
+        Task {
+            await commands.shutdownAndWait()
+            await statusLineConnectionTask?.value
+            do {
+                try await statusLine?.shutdown()
+                completion(nil)
+            } catch { completion(error as NSError) }
+        }
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
@@ -121,8 +136,8 @@ final class ExtensionRuntime: NSObject {
                 controller: controller, store: cache,
                 forgetMachine: { try await projection.forget(machineID: $0) })
             usageStore = UsageStore(showMenuBar: !fixture)
+            statusLineConnectionTask = Task { try? await statusLine.resumeOwnedHook() }
             if !fixture {
-                statusLineConnectionTask = Task { try? await statusLine.resumeOwnedHook() }
                 let alerts = UsageLimitAlerts(); self.alerts = alerts
                 _ = LimitNotifier.shared
                 observers.append(

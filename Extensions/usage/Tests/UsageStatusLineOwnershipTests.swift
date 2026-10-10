@@ -131,6 +131,24 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: fixture.history.path))
     }
 
+    @Test func failedCleanupRetainsOwnershipAndCanRetryAfterSettingsRepair() async throws {
+        let fixture = try Fixture(previous: "printf synthetic")
+        defer { fixture.remove() }
+        let service = fixture.service()
+        _ = try await service.execute("usage.statusline.install", payload: Data("{}".utf8))
+        let installed = try Data(contentsOf: fixture.settings)
+        try Data("{synthetic malformed settings".utf8).write(to: fixture.settings)
+        await #expect(throws: Error.self) { try await service.shutdown() }
+        #expect(FileManager.default.fileExists(atPath: fixture.marker.path))
+        try installed.write(to: fixture.settings)
+        try await service.shutdown()
+        #expect(
+            try ClaudeStatusLine.configuredCommand(settings: fixture.settings) == "printf synthetic"
+        )
+        try await fixture.service().resumeOwnedHook()
+        #expect(ClaudeStatusLine.isInstalled(settings: fixture.settings))
+    }
+
     private struct Fixture {
         let root: URL
         let settings: URL
