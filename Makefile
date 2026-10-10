@@ -94,6 +94,15 @@ ci-comments:
 	bun scripts/strip-comments.mjs --selftest
 	bun scripts/strip-comments.mjs --check
 
+.PHONY: ci-hosted-managed-probe-check ci-hosted-managed-native
+ci-hosted-managed-probe-check:
+	swift format lint --strict --recursive Tests/HostedManagedNativeProbe/Package.swift Tests/HostedManagedNativeProbe/Sources Tests/HostedManagedNativeProbe/Tests Tests/HostedManagedNativeProbe/UITests scripts/hosted-managed-native/ProbeHost.swift
+	swift test --package-path Tests/HostedManagedNativeProbe --jobs $(EXTENSION_SWIFT_JOBS) --disable-build-manifest-caching
+	bun scripts/hosted-managed-native/build-probe.mjs --check
+
+ci-hosted-managed-native:
+	bun scripts/hosted-managed-native/run-probe.mjs
+
 ci-secrets:
 	bun run check-secrets
 

@@ -1,0 +1,79 @@
+name: Hosted managed native probe
+"on":
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact reviewed feature commit
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: hosted-managed-native-probe
+  cancel-in-progress: false
+jobs:
+  calendar-probe:
+    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor == 'pulkitxm' || github.actor == 'pukbot[bot]') && github.ref == 'refs/heads/feat/hosted-managed-native-probe'
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      EXTENSION_SWIFT_JOBS: "1"
+      EDITH_HOSTED_MANAGED_PROBE: "1"
+      EDITH_MAKE_GATE: skip
+      EXPECTED_SOURCE_SHA: "${{ inputs.expected_sha }}"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: "${{ github.sha }}"
+          persist-credentials: false
+      - name: Admit only the reviewed owned hosted ref
+        run: |
+          test "$GITHUB_ACTIONS" = true
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$RUNNER_OS" = macOS
+          test "$(uname -m)" = arm64
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun swift --version
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: make ci-hosted-managed-probe-check
+      - name: Import signing into an owned disposable keychain
+        env:
+          MACOS_CERT_P12: "${{ secrets.MACOS_CERT_P12 }}"
+          MACOS_CERT_PASSWORD: "${{ secrets.MACOS_CERT_PASSWORD }}"
+        run: |
+          test -n "$MACOS_CERT_P12"
+          test -n "$MACOS_CERT_PASSWORD"
+          keychain="$RUNNER_TEMP/hosted-managed-native.keychain-db"
+          test ! -e "$keychain"
+          security create-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$MACOS_CERT_PASSWORD" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/hosted-managed-native.p12"
+          security import "$RUNNER_TEMP/hosted-managed-native.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_CERT_PASSWORD" "$keychain"
+          security list-keychains -d user -s "$keychain"
+          rm "$RUNNER_TEMP/hosted-managed-native.p12"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          if [ -z "$identity" ]; then
+            identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Apple Development:.*\)"/\1/p' | head -n 1)"
+          fi
+          test -n "$identity"
+          echo "EXTENSION_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+      - name: Build the isolated same-executable fixture
+        run: bun scripts/hosted-managed-native/build-probe.mjs
+      - name: Public XCTest approval and actual managed Calendar view
+        run: make ci-hosted-managed-native
+      - name: Remove the owned disposable signing keychain
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/hosted-managed-native.p12"
+          keychain="$RUNNER_TEMP/hosted-managed-native.keychain-db"
+          if [ -e "$keychain" ]; then
+            security delete-keychain "$keychain"
+          fi
