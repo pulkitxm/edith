@@ -21,9 +21,12 @@ final class ExtensionRuntime: NSObject {
                 return try EmojiCLIExecution.catalog(payload)
             }
             if command == "emoji.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                if let help = try await EmojiCLIExecution.help(request) {
+                    return try JSONEncoder().encode(help)
+                }
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 guard let service = self.service else { throw ExtensionPeerError.unavailable }
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 let reply = try await EmojiCLIExecution.run(
                     request, defaults: SharedDefaults.store,
                     catalog: service.catalog, pick: { EmojiPanel.shared.show() },

@@ -7,6 +7,26 @@ import Testing
 
 @MainActor @Suite(.serialized) struct EmojiCLITests {
 
+    @Test func unstartedHelpUsesOnlyDeclaredParserPathsAndRejectsActionOptions() async throws {
+        for arguments in [["--help"], ["insert", "--help"], ["insert", "-h"]] {
+            let request = try ExtensionCLIRequest(
+                arguments: arguments, workingDirectory: "/tmp/synthetic-help-context")
+            let reply = try #require(try await EmojiCLIExecution.help(request))
+            #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+            #expect(reply.stdout.contains("USAGE:"))
+        }
+        let action = try ExtensionCLIRequest(arguments: ["insert"])
+        #expect(try await EmojiCLIExecution.help(action) == nil)
+        await #expect(throws: (any Error).self) {
+            try await EmojiCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["insert", "--unexpected", "--help"]))
+        }
+        await #expect(throws: (any Error).self) {
+            try await EmojiCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["foreign-command", "--help"]))
+        }
+    }
+
     @Test func discoveryCatalogContainsOnlyOriginalParserRoutesAndRejectsForeignPayloads()
         throws
     {

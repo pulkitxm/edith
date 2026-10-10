@@ -23,8 +23,11 @@ final class ExtensionRuntime: NSObject {
                 return try PresenterCLIExecution.catalog(payload)
             }
             if command == "presenter.cli" {
-                guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                if let help = try await PresenterCLIExecution.help(request) {
+                    return try JSONEncoder().encode(help)
+                }
+                guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
                 let reply = try await PresenterCLIExecution.run(
                     request, defaults: SharedDefaults.store
                 ) { operation in

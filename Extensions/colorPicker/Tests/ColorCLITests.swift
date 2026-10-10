@@ -7,6 +7,26 @@ import Testing
 
 @MainActor @Suite(.serialized) struct ColorCLITests {
 
+    @Test func unstartedHelpUsesOnlyDeclaredParserPathsAndRejectsActionOptions() async throws {
+        for arguments in [["--help"], ["pick", "--help"], ["pick", "-h"]] {
+            let request = try ExtensionCLIRequest(
+                arguments: arguments, workingDirectory: "/tmp/synthetic-help-context")
+            let reply = try #require(try await ColorCLIExecution.help(request))
+            #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+            #expect(reply.stdout.contains("USAGE:"))
+        }
+        let action = try ExtensionCLIRequest(arguments: ["pick"])
+        #expect(try await ColorCLIExecution.help(action) == nil)
+        await #expect(throws: (any Error).self) {
+            try await ColorCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["pick", "--unexpected", "--help"]))
+        }
+        await #expect(throws: (any Error).self) {
+            try await ColorCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["foreign-command", "--help"]))
+        }
+    }
+
     @Test func discoveryCatalogContainsOnlyOriginalParserRoutesAndRejectsForeignPayloads()
         throws
     {
@@ -30,6 +50,7 @@ import Testing
         #expect(documents[0]["serializationVersion"] as? Int == 0)
         let help = try #require(documents[0]["command"] as? [String: Any])
         #expect(help["commandName"] as? String == "color")
+        #expect(help["aliases"] as? [String] == ["colour"])
 
         #expect(throws: (any Error).self) {
             try ColorCLIExecution.catalog(Data("{\"arguments\":[]}".utf8))

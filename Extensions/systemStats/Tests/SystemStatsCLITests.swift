@@ -30,6 +30,26 @@ private struct FixtureStatsSampler: SystemStatsSampling {
 }
 
 @MainActor @Suite(.serialized) struct SystemStatsCLITests {
+
+    @Test func unstartedHelpUsesOnlyDeclaredParserPathsAndRejectsActionOptions() async throws {
+        for arguments in [["--help"], ["stats", "--help"], ["stats", "-h"]] {
+            let request = try ExtensionCLIRequest(
+                arguments: arguments, workingDirectory: "/tmp/synthetic-help-context")
+            let reply = try #require(try await SystemStatsCLIExecution.help(request))
+            #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+            #expect(reply.stdout.contains("USAGE:"))
+        }
+        let action = try ExtensionCLIRequest(arguments: ["stats"])
+        #expect(try await SystemStatsCLIExecution.help(action) == nil)
+        await #expect(throws: (any Error).self) {
+            try await SystemStatsCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["stats", "--unexpected", "--help"]))
+        }
+        await #expect(throws: (any Error).self) {
+            try await SystemStatsCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["foreign-command", "--help"]))
+        }
+    }
     @Test func originalFollowStreamsCallerContextAndStopsBeforeOwnerReturns() async throws {
         let previous = SystemStatsCLIEnvironment.makeSampler
         var observed: ExtensionCLIRequest?

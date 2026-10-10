@@ -11,6 +11,26 @@ import Foundation
 }
 
 @MainActor enum ColorCLIExecution {
+    static func help(_ request: ExtensionCLIRequest) async throws -> ExtensionCLIReply? {
+        try request.validate()
+        guard ["--help", "-h"].contains(request.arguments.last ?? "") else { return nil }
+        guard
+            let document = try JSONSerialization.jsonObject(
+                with: Data(ColorCommand._dumpHelp().utf8)) as? [String: Any],
+            var command = document["command"] as? [String: Any]
+        else { throw ExtensionPeerError.invalidRequest }
+        for name in request.arguments.dropLast() {
+            guard
+                let child = (command["subcommands"] as? [[String: Any]] ?? []).first(where: {
+                    $0["commandName"] as? String == name
+                        || ($0["aliases"] as? [String] ?? []).contains(name)
+                })
+            else { throw ExtensionPeerError.invalidRequest }
+            command = child
+        }
+        return try await ExtensionCLIExecution.run(ColorCommand.self, request: request)
+    }
+
     static func catalog(_ payload: Data) throws -> Data {
         guard payload == Data("{}".utf8),
             let help = try JSONSerialization.jsonObject(with: Data(ColorCommand._dumpHelp().utf8))

@@ -7,6 +7,26 @@ import Testing
 
 @MainActor @Suite(.serialized) struct PresenterCLITests {
 
+    @Test func unstartedHelpUsesOnlyDeclaredParserPathsAndRejectsActionOptions() async throws {
+        for arguments in [["--help"], ["start", "--help"], ["start", "-h"]] {
+            let request = try ExtensionCLIRequest(
+                arguments: arguments, workingDirectory: "/tmp/synthetic-help-context")
+            let reply = try #require(try await PresenterCLIExecution.help(request))
+            #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+            #expect(reply.stdout.contains("USAGE:"))
+        }
+        let action = try ExtensionCLIRequest(arguments: ["start"])
+        #expect(try await PresenterCLIExecution.help(action) == nil)
+        await #expect(throws: (any Error).self) {
+            try await PresenterCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["start", "--unexpected", "--help"]))
+        }
+        await #expect(throws: (any Error).self) {
+            try await PresenterCLIExecution.help(
+                ExtensionCLIRequest(arguments: ["foreign-command", "--help"]))
+        }
+    }
+
     @Test func discoveryCatalogContainsOnlyOriginalParserRoutesAndRejectsForeignPayloads()
         throws
     {

@@ -34,8 +34,11 @@ final class ExtensionRuntime: NSObject {
                     prefix: "systemStats.cli.stream", payload: payload)
             }
             if command == "systemStats.cli" {
-                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                if let help = try await SystemStatsCLIExecution.help(request) {
+                    return try JSONEncoder().encode(help)
+                }
+                guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 let reply = try await SystemStatsCLIExecution.run(request)
                 return try JSONEncoder().encode(reply)
             }
