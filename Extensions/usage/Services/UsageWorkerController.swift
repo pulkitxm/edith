@@ -28,6 +28,8 @@ public final class UsageWorkerController {
     private let limitsSession = LimitsRefreshSession()
     private var usageTask: Task<Void, Never>?
     private var limitsTask: Task<Void, Never>?
+    private var refreshWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
+    private var limitsWaiters: [UUID: CheckedContinuation<Void, Never>] = [:]
     private var usageID: UUID?
     private var stopped = false
 
@@ -118,6 +120,7 @@ public final class UsageWorkerController {
             self.usageTask = nil
             self.usageID = nil
             self.refreshing = false
+            self.finishRefreshWaiters()
             UsageEvents.post(UsageEvents.refreshFinished)
         }
         return id.uuidString
@@ -132,12 +135,25 @@ public final class UsageWorkerController {
             guard !Task.isCancelled, let self, !self.stopped else { return }
             self.latestLimits = result
             self.limitsTask = nil
+            self.finishLimitsWaiters()
             UsageEvents.post(UsageEvents.limitsUpdated)
         }
     }
 
     public func waitForLimitsRefresh() async throws {
-        await limitsTask?.value
+        let token = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard limitsTask != nil, !Task.isCancelled else {
+                    continuation.resume(); return
+                }
+                limitsWaiters[token] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.limitsWaiters.removeValue(forKey: token)?.resume()
+            }
+        }
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
     }
@@ -168,17 +184,46 @@ public final class UsageWorkerController {
         }
     }
 
-    public func cancelRefresh() async {
+    public func cancelRefresh(matching identifier: String? = nil) async {
+        if let identifier, usageID?.uuidString != identifier { return }
+        let id = usageID
+        let task = usageTask
         progress?.close()
-        usageTask?.cancel()
-        await usageTask?.value
+        task?.cancel()
+        await task?.value
+        guard usageID == id else { return }
         usageTask = nil
         usageID = nil
         refreshing = false
+        finishRefreshWaiters()
     }
 
     public func waitForRefresh() async {
-        await usageTask?.value
+        let token = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard usageTask != nil, !Task.isCancelled else {
+                    continuation.resume(); return
+                }
+                refreshWaiters[token] = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.refreshWaiters.removeValue(forKey: token)?.resume()
+            }
+        }
+    }
+
+    private func finishRefreshWaiters() {
+        let pending = refreshWaiters.values
+        refreshWaiters.removeAll()
+        for continuation in pending { continuation.resume() }
+    }
+
+    private func finishLimitsWaiters() {
+        let pending = limitsWaiters.values
+        limitsWaiters.removeAll()
+        for continuation in pending { continuation.resume() }
     }
 
     public static func pricingNotice(_ data: Data) -> String? {
@@ -202,6 +247,8 @@ public final class UsageWorkerController {
         limitsTask?.cancel()
         usageID = nil
         refreshing = false
+        finishRefreshWaiters()
+        finishLimitsWaiters()
     }
 
     public func shutdown() async {

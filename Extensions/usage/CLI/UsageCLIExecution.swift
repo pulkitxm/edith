@@ -3,13 +3,16 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor enum UsageCLIEnvironment {
-    static var controller: UsageWorkerController?
-    static var hookOwner: UsageCLIHookOwner?
-    static var forgetMachine: @MainActor (UUID) async throws -> Void = {
-        try UsageMachinesPeer.forget(machineID: $0)
+    @TaskLocal static var resources: UsageCLIResources?
+    static var controller: UsageWorkerController? { resources?.controller }
+    static var hookOwner: UsageCLIHookOwner? { resources?.hookOwner }
+    static var standardInput: Data { ExtensionCLIContext.request?.standardInput ?? Data() }
+    static var workingDirectory: String { ExtensionCLIContext.request?.workingDirectory ?? "/" }
+
+    static func forgetMachine(_ id: UUID) async throws {
+        guard let resources else { throw ExtensionPeerError.unavailable }
+        try await resources.forgetMachine(id)
     }
-    static var standardInput = Data()
-    static var workingDirectory = FileManager.default.currentDirectoryPath
     static var machines: () -> [Machine] = { MachineRegistry.machines() }
     static var collectMachine: (Machine, TimeInterval, Bool) async throws -> Data = {
         machine, timeout, _ in
@@ -20,13 +23,7 @@ import Foundation
     }
 
     static func fileURL(_ path: String) throws -> URL {
-        guard !path.isEmpty, path.utf8.count <= 4_096, !path.utf8.contains(0) else {
-            throw CLIFailure.usage("the file path is invalid")
-        }
-        return URL(
-            fileURLWithPath: path,
-            relativeTo: URL(fileURLWithPath: workingDirectory, isDirectory: true)
-        ).standardizedFileURL
+        try ExtensionCLIContext.resolvePath(path)
     }
 
     static func refreshLimits() async throws {
@@ -59,7 +56,11 @@ import Foundation
             }
             policy = .skip
         }
-        if !follow { _ = try controller.requestRefresh(policy: policy) }
+        var ownedRun: String?
+        if !follow {
+            let identifier = try controller.requestRefresh(policy: policy)
+            if !attached { ownedRun = identifier }
+        }
         let observer = Task { @MainActor in
             var seen = 0
             while !Task.isCancelled {
@@ -70,10 +71,10 @@ import Foundation
             }
         }
         defer { observer.cancel() }
-        await withTaskCancellationHandler {
-            await controller.waitForRefresh()
-        } onCancel: {
-            if !attached, !follow { Task { @MainActor in await controller.cancelRefresh() } }
+        await controller.waitForRefresh()
+        if Task.isCancelled {
+            if let ownedRun { await controller.cancelRefresh(matching: ownedRun) }
+            throw CancellationError()
         }
         try Task.checkCancellation()
         if let failure = controller.failure { throw CLIFailure.unavailable(failure) }
@@ -102,7 +103,8 @@ import Foundation
         let request = CLICommandRequest(
             executableURL: URL(fileURLWithPath: "/bin/sh"),
             arguments: ["-c", command], environment: ProcessInfo.processInfo.environment,
-            timeout: 10, maximumOutputBytes: 65_536, standardInputData: input,
+            currentDirectoryURL: try ExtensionCLIContext.resolvePath("."), timeout: 10,
+            maximumOutputBytes: 65_536, standardInputData: input,
             discardsStandardError: true, terminatesProcessGroup: true)
         return try await CLICommandRunner.runLocal(request, onLine: { _ in }).standardOutputData
     }
@@ -114,32 +116,14 @@ import Foundation
         hookOwner: UsageCLIHookOwner? = nil,
         forgetMachine: @escaping @MainActor (UUID) async throws -> Void = {
             try UsageMachinesPeer.forget(machineID: $0)
-        },
-        standardInput: Data = Data(),
-        workingDirectory: String = FileManager.default.currentDirectoryPath
+        }
     ) async throws -> ExtensionCLIReply {
         try request.validate()
-        guard standardInput.count <= 512 * 1_024, workingDirectory.hasPrefix("/"),
-            workingDirectory.utf8.count <= 4_096, !workingDirectory.utf8.contains(0)
-        else { throw ExtensionPeerError.invalidRequest }
-        let previous = UsageCLIEnvironment.controller
-        let previousHooks = UsageCLIEnvironment.hookOwner
-        let previousForget = UsageCLIEnvironment.forgetMachine
-        let previousInput = UsageCLIEnvironment.standardInput
-        let previousDirectory = UsageCLIEnvironment.workingDirectory
-        UsageCLIEnvironment.controller = controller
-        UsageCLIEnvironment.hookOwner = hookOwner
-        UsageCLIEnvironment.forgetMachine = forgetMachine
-        UsageCLIEnvironment.standardInput = standardInput
-        UsageCLIEnvironment.workingDirectory = workingDirectory
-        defer {
-            UsageCLIEnvironment.controller = previous
-            UsageCLIEnvironment.hookOwner = previousHooks
-            UsageCLIEnvironment.forgetMachine = previousForget
-            UsageCLIEnvironment.standardInput = previousInput
-            UsageCLIEnvironment.workingDirectory = previousDirectory
+        let resources = UsageCLIResources(
+            controller: controller, hookOwner: hookOwner, forgetMachine: forgetMachine)
+        return try await UsageCLIEnvironment.$resources.withValue(resources) {
+            try await ExtensionCLIExecution.run(UsageCommand.self, request: request)
         }
-        return try await ExtensionCLIExecution.run(UsageCommand.self, arguments: request.arguments)
     }
 }
 

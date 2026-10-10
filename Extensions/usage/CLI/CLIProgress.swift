@@ -6,6 +6,7 @@ public enum CLIStyle {
 
     public static var isInteractive: Bool {
         if let forcedColor { return forcedColor }
+        if let request = ExtensionCLIContext.request { return request.interactive }
         if ProcessInfo.processInfo.environment["NO_COLOR"] != nil { return false }
         if ProcessInfo.processInfo.environment["TERM"] == "dumb" { return false }
         return isatty(FileHandle.standardError.fileDescriptor) == 1

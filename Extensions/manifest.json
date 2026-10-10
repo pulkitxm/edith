@@ -1685,6 +1685,7 @@
         "Extensions/usage/CLI/ExportPlan.swift",
         "Extensions/usage/CLI/UsageAttributionCommands.swift",
         "Extensions/usage/CLI/UsageCLIExecution.swift",
+        "Extensions/usage/CLI/UsageCLIResources.swift",
         "Extensions/usage/CLI/UsageCLIMachines.swift",
         "Extensions/usage/CLI/UsageCommands.swift",
         "Extensions/usage/CLI/UsageExportCommand.swift",

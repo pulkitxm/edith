@@ -1,7 +1,7 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
-import EdithExtensionCommands
 import Foundation
 import SwiftUI
 
@@ -22,6 +22,7 @@ final class ExtensionRuntime: NSObject {
     private var observers: [NSObjectProtocol] = []
     private let commands = ExtensionCommandRegistry()
     private var cliHooks: UsageCLIHookOwner?
+    private var cliStreams: ExtensionCLIStreams?
     private var uiCommands: UsageUICommands?
     private var uiClient: UsageUIClient?
     private var uiOnly = false
@@ -31,27 +32,28 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.controller != nil else { throw ExtensionPeerError.unavailable }
-            if command == "usage.cli", let controller = self.controller {
-                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
-                guard let object,
-                    Set(object.keys).isSubset(of: [
-                        "arguments", "standardInput", "workingDirectory",
-                    ])
-                else { throw ExtensionPeerError.invalidRequest }
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                let context = try JSONDecoder().decode(UsageCLIContext.self, from: payload)
-                let reply = try await UsageCLIExecution.run(
-                    request, controller: controller, hookOwner: self.cliHooks,
-                    forgetMachine: { id in
-                        guard let projection = self.machinesProjection else {
-                            throw ExtensionPeerError.unavailable
-                        }
-                        try await projection.forget(machineID: id)
-                    },
-                    standardInput: context.standardInput ?? Data(),
-                    workingDirectory: context.workingDirectory
-                        ?? FileManager.default.currentDirectoryPath)
-                return try JSONEncoder().encode(reply)
+            if command.hasPrefix("usage.cli"), let controller = self.controller {
+                let forget: @MainActor (UUID) async throws -> Void = { id in
+                    guard let projection = self.machinesProjection else {
+                        throw ExtensionPeerError.unavailable
+                    }
+                    try await projection.forget(machineID: id)
+                }
+                if command == "usage.cli" {
+                    let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                    let reply = try await UsageCLIExecution.run(
+                        request, controller: controller, hookOwner: self.cliHooks,
+                        forgetMachine: forget)
+                    return try JSONEncoder().encode(reply)
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                let resources = UsageCLIResources(
+                    controller: controller, hookOwner: self.cliHooks, forgetMachine: forget)
+                return try UsageCLIEnvironment.$resources.withValue(resources) {
+                    try streams.invoke(
+                        UsageCommand.self, operation: command,
+                        prefix: "usage.cli", payload: payload)
+                }
             }
             if command.hasPrefix("usage.ui."), let uiCommands = self.uiCommands {
                 return try await uiCommands.execute(command, payload: payload)
@@ -81,10 +83,12 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareDisableWithCompletion:)
     func prepareDisable(completion: @escaping (NSError?) -> Void) {
         UsageWorkerOperations.statusLineCommands = nil
+        cliStreams?.stop()
         commands.shutdown()
         statusLineConnectionTask?.cancel()
         Task {
             await commands.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             await statusLineConnectionTask?.value
             do {
                 try cliHooks?.shutdown()
@@ -96,6 +100,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        cliStreams?.stop()
         commands.shutdown()
         uiCommands?.shutdown(); uiCommands = nil
         controller?.beginShutdown()
@@ -116,6 +121,7 @@ final class ExtensionRuntime: NSObject {
         let projection = machinesProjection; machinesProjection = nil
         let statusLine = self.statusLine; self.statusLine = nil
         let cliHooks = self.cliHooks; self.cliHooks = nil
+        let cliStreams = self.cliStreams; self.cliStreams = nil
         let connectionTask = statusLineConnectionTask; statusLineConnectionTask = nil
         let backup = self.backup; self.backup = nil
         let backupRestoreTask = self.backupRestoreTask; self.backupRestoreTask = nil
@@ -126,6 +132,7 @@ final class ExtensionRuntime: NSObject {
             await backup?.shutdown()
             await backupRestoreTask?.value
             await commands.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             await connectionTask?.value
             try? cliHooks?.shutdown()
             try? await statusLine?.shutdown()
@@ -205,6 +212,9 @@ final class ExtensionRuntime: NSObject {
                 if fixture { return local }
                 return try await UsageMachinesPeer.merge(
                     local: local, policy: policy, onEvent: event)
+            }
+            do { cliStreams = try ExtensionCLIStreams(owner: "usage") } catch {
+                return ["ok": false, "error": error.localizedDescription] as NSDictionary
             }
             self.controller = controller
             UsageWorkerOperations.controller = controller
@@ -293,9 +303,4 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
-}
-
-private struct UsageCLIContext: Decodable {
-    let standardInput: Data?
-    let workingDirectory: String?
 }

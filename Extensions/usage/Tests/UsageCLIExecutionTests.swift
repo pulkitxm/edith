@@ -15,8 +15,9 @@ import Testing
         async throws -> ExtensionCLIReply
     {
         try await UsageCLIExecution.run(
-            ExtensionCLIRequest(arguments: arguments), controller: controller, hookOwner: hooks,
-            standardInput: input, workingDirectory: workingDirectory)
+            ExtensionCLIRequest(
+                arguments: arguments, standardInput: input,
+                workingDirectory: workingDirectory), controller: controller, hookOwner: hooks)
     }
 
     @Test func originalCommandTreeParsesEveryUsageLeaf() throws {
