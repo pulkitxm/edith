@@ -207,6 +207,36 @@ ci-extension-camera-voice:
 ci-extension-docs:
 	swift test --package-path Packages/EdithDocsWorker --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
 
+.PHONY: ci-extension-docs-native ci-extension-plugins-native ci-extension-latex-native ci-extension-code-stats-native ci-extension-seo-audit-native ci-extension-companion-native ci-extension-bifrost-native
+ci-extension-docs-native:
+	swift format lint --strict --recursive Extensions/docs
+	fixture=$$(mktemp -d /tmp/edith-docs-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.docs.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/docs --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-plugins-native:
+	swift format lint --strict --recursive Extensions/plugins
+	fixture=$$(mktemp -d /tmp/edith-plugins-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.plugins.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/plugins --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-latex-native:
+	swift format lint --strict --recursive Extensions/latex
+	fixture=$$(mktemp -d /tmp/edith-latex-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.latex.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/latex --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-code-stats-native:
+	swift format lint --strict --recursive Extensions/codeStats
+	fixture=$$(mktemp -d /tmp/edith-codeStats-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.codeStats.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/codeStats --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-seo-audit-native:
+	swift format lint --strict --recursive Extensions/seoAudit
+	fixture=$$(mktemp -d /tmp/edith-seoAudit-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.seoAudit.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/seoAudit --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-companion-native:
+	swift format lint --strict --recursive Extensions/companion
+	fixture=$$(mktemp -d /tmp/edith-companion-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.companion.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/companion --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-bifrost-native:
+	swift format lint --strict --recursive Extensions/bifrost
+	fixture=$$(mktemp -d /tmp/edith-bifrost-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.bifrost.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/bifrost --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+
 ci-extension-workers:
 	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostLifecycleHarness
 	bun scripts/test-extension-workers.mjs $(EXTENSION)
@@ -426,7 +456,7 @@ ci-extension-machines: ci-machines ci-machines-ui
 .PHONY: ci-extension-downloads
 ci-extension-downloads:
 	swift format lint --strict --recursive Extensions/downloads
-	swift test --package-path Extensions/downloads --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter DownloadsExtensionTests
+	fixture=$$(mktemp -d /tmp/edith-downloads-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.downloads.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/downloads --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
 .PHONY: ci-extension-native-tasks
 ci-extension-native-tasks:

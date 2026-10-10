@@ -671,6 +671,7 @@
   },
   {
     "id": "plugins",
+    "testTargets": ["ci-extension-plugins-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
@@ -973,6 +974,7 @@
   },
   {
     "id": "docs",
+    "testTargets": ["ci-extension-docs", "ci-extension-docs-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
@@ -1023,6 +1025,7 @@
   },
   {
     "id": "latex",
+    "testTargets": ["ci-extension-latex-native"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1080,6 +1083,7 @@
   },
   {
     "id": "companion",
+    "testTargets": ["ci-extension-companion-native"],
     "version": "1.0.0",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
@@ -1682,7 +1686,7 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
-    "testTargets": ["ci-extension-bifrost"],
+    "testTargets": ["ci-extension-bifrost", "ci-extension-bifrost-native"],
     "sameExecutableWorker": true
   },
   {
@@ -2078,6 +2082,7 @@
   },
   {
     "id": "seoAudit",
+    "testTargets": ["ci-extension-seo-audit-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
@@ -2298,6 +2303,7 @@
   },
   {
     "id": "codeStats",
+    "testTargets": ["ci-extension-code-stats-native"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
