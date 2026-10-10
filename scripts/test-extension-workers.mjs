@@ -83,14 +83,10 @@ try {
     }
     if (id === "machines") {
       await buildExtensionPackage({
-        id: "usage", output: join(releases, "usage-peer", "1.0.0"),
-        development: true, version: "1.0.0",
-      });
-    }
-    if (id === "machines") {
-      await buildExtensionPackage({
-        id: "usage", output: join(releases, "usage-peer", "1.0.0"),
-        development: true, version: "1.0.0",
+        id: "usage",
+        output: join(releases, "usage-peer", "1.0.0"),
+        development: true,
+        version: "1.0.0",
       });
     }
     await mkdir(join(root, `${id}-host`));
