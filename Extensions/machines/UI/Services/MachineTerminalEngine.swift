@@ -9,6 +9,7 @@ import GhosttyTerminal
         let machineID: UUID
         let presentationID: UUID?
         let tabID: UUID
+        let workspaceTabID: UUID?
         let pty: MachinePTY
         var touched = ContinuousClock.now
         var link: (UUID, TerminalLinkResolution)?
@@ -53,6 +54,15 @@ import GhosttyTerminal
         self.session = session
         self.launch = launch
         self.interactiveLaunch = interactiveLaunch
+    }
+
+    func admitsPaneAction(_ request: MachineTerminalRequest, workspaceTabID: UUID) -> Bool {
+        guard !stopped, request.operation == .read, let handle = request.handle,
+            let terminal = terminals[handle], terminal.machineID == request.machineID,
+            terminal.presentationID == request.presentationID, terminal.tabID == request.tabID,
+            terminal.workspaceTabID == workspaceTabID
+        else { return false }
+        return true
     }
 
     private static func originalLaunch(_ session: MachineSession, _ request: MachineTerminalRequest)
@@ -139,7 +149,7 @@ import GhosttyTerminal
             let handle = UUID()
             terminals[handle] = Terminal(
                 machineID: session.id, presentationID: request.presentationID, tabID: request.tabID,
-                pty: pty)
+                workspaceTabID: request.workspaceTabID, pty: pty)
             startReaper()
             return MachineTerminalFrame(handle: handle)
         case .upload:

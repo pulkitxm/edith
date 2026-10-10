@@ -131,6 +131,7 @@ final class ExtensionRuntime: NSObject {
                 "focused": facade.terminalUI.focused,
             ] as NSDictionary
         case "stopUI":
+            WorkspaceModel.shared.stopPaneActions()
             uiClient?.shutdown(); uiClient = nil
             FinderUndoBridge.shutdown()
             PaneViewStore.shared.shutdown()
@@ -276,6 +277,7 @@ final class ExtensionRuntime: NSObject {
                         WorkspaceModel.shared.store = value
                         if let current = value.current { WorkspaceModel.shared.layout = current }
                     },
+                    paneAdmission: { terminals.admitsPaneAction($0, workspaceTabID: $1) },
                     observe: { _, active in
                         if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
                     }, files: { value in try await files.execute(value) },

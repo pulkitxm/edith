@@ -38,7 +38,9 @@ import Foundation
             return try JSONEncoder().encode(
                 Hosts(
                     machines: machines.map {
-                        Host(id: $0.id, name: $0.name, sshTarget: $0.sshTarget)
+                        Host(
+                            id: $0.id, name: $0.name, sshTarget: $0.sshTarget,
+                            aliases: Self.aliases($0))
                     }))
         case "machines.connection.prepare":
             let request = try MachineCommandPayload.decode(
@@ -172,7 +174,20 @@ import Foundation
         let machineID: UUID; let localPort: Int; let remotePort: Int
     }
     private struct PrepareRequest: Decodable { let ports: [Int] }
-    private struct Host: Encodable { let id: UUID; let name: String; let sshTarget: String }
+    private static func aliases(_ machine: Machine) -> [String]? {
+        guard case let .sshConfigAlias(alias) = machine.source,
+            SSHConfigFile.isConcreteAlias(alias),
+            !alias.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        else { return nil }
+        return [alias]
+    }
+
+    private struct Host: Encodable {
+        let id: UUID
+        let name: String
+        let sshTarget: String
+        let aliases: [String]?
+    }
     private struct Hosts: Encodable { let machines: [Host] }
     private struct Output: Encodable { let output: String }
     private struct Connected: Encodable { let connected: Bool }

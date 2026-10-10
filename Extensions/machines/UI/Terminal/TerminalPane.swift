@@ -26,6 +26,8 @@ struct TerminalPane: View {
     var wantsFocus = true
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
+    var hostPaneAction:
+        ((GhosttyPaneAction, Double, MachineTerminalRequest, @escaping () -> Bool) -> Void)?
 
     @AppStorage(TerminalSettingsKeys.fontSize, store: SharedDefaults.store)
     private var preferredFontSize = TerminalSettings.fontSizeDefault
@@ -37,7 +39,8 @@ struct TerminalPane: View {
                 theme: GhosttyTheme(
                     palette: palette,
                     fontSize: TerminalSettings.clampedFontSize(preferredFontSize) * UIScale.current),
-                active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles, onFocus: onFocus
+                active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles, onFocus: onFocus,
+                hostPaneAction: hostPaneAction
             )
             .id(holder.generation)
         }
@@ -51,6 +54,8 @@ struct GhosttyPane: NSViewRepresentable {
     var wantsFocus = true
     var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
+    var hostPaneAction:
+        ((GhosttyPaneAction, Double, MachineTerminalRequest, @escaping () -> Bool) -> Void)?
 
     final class Coordinator {
         weak var holder: TerminalSessionHolder?
@@ -67,6 +72,7 @@ struct GhosttyPane: NSViewRepresentable {
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
         context.coordinator.holder = holder
+        holder.hostPaneAction = hostPaneAction
         holder.presented = active
         let view = holder.retainedGhosttyView(theme: theme)
         view.onFocus = onFocus
@@ -77,9 +83,11 @@ struct GhosttyPane: NSViewRepresentable {
 
     static func dismantleNSView(_ view: GhosttyTerminalView, coordinator: Coordinator) {
         coordinator.holder?.presented = false
+        coordinator.holder?.hostPaneAction = nil
     }
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
+        holder.hostPaneAction = hostPaneAction
         holder.presented = active
         view.apply(theme: theme)
         view.onFocus = onFocus

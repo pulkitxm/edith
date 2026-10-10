@@ -2,6 +2,7 @@ import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
+import GhosttyTerminal
 
 @MainActor
 final class PaneViewStore {
@@ -29,6 +30,7 @@ final class PaneViewStore {
         let key = Key(tab: tabID, machine: session.id)
         if let existing = terminals[key] { return existing }
         let holder = TerminalSessionHolder()
+        holder.workspaceTabID = tabID
         terminals[key] = holder
         return holder
     }
@@ -75,6 +77,8 @@ struct PaneContentView: View {
     let presented: Bool
     let wantsFocus: Bool
     var onFocus: (() -> Void)?
+    var hostPaneAction:
+        ((GhosttyPaneAction, Double, MachineTerminalRequest, @escaping () -> Bool) -> Void)?
     var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
 
     var body: some View {
@@ -87,7 +91,7 @@ struct PaneContentView: View {
                 session: session,
                 active: presented,
                 wantsFocus: wantsFocus,
-                onFocus: onFocus, hostTabAction: hostTabAction,
+                onFocus: onFocus, hostTabAction: hostTabAction, hostPaneAction: hostPaneAction,
                 holder: PaneViewStore.shared.terminal(for: tabID, session: session))
         case .files:
             FinderPane(model: PaneViewStore.shared.finder(for: tabID, session: session))
@@ -98,6 +102,7 @@ struct PaneContentView: View {
 
 struct WorkspacePaneView: View {
     let pane: PaneNode
+    var size: CGSize = .zero
     let model: WorkspaceModel
     let machines: MachinesModel
     let dark: Bool
@@ -165,6 +170,13 @@ struct WorkspacePaneView: View {
                         machines: machines, screen: tab.target.screen, tabID: tab.id,
                         presented: live, wantsFocus: live && focused,
                         onFocus: { model.apply { $0.focused = pane.id } },
+                        hostPaneAction: {
+                            [weak model, paneID = pane.id, tabID = tab.id, size]
+                            action, cell, owner, current in
+                            model?.performNativePaneAction(
+                                action, paneID: paneID, tabID: tabID, size: size,
+                                cellExtent: cell, terminal: owner, isCurrent: current)
+                        },
                         hostTabAction: {
                             [weak model, paneID = pane.id, target = tab.target] action in
                             model?.performHostTabAction(action, paneID: paneID, target: target)

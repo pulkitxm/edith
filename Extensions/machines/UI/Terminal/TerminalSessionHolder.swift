@@ -16,6 +16,11 @@ final class TerminalSessionHolder {
     }
 
     let id = UUID()
+    var workspaceTabID: UUID?
+    var hostPaneAction:
+        ((GhosttyPaneAction, Double, MachineTerminalRequest, @escaping () -> Bool) -> Void)?
+    private var terminalColumns: UInt16 = 0
+    private var terminalRows: UInt16 = 0
     var hostTabAction: ((MachineTerminalUIEvent.Action) -> Bool)?
     var presented = false {
         didSet { engineClient?.terminalUI.update(self) }
@@ -70,12 +75,13 @@ final class TerminalSessionHolder {
         engineClient = client
         client.terminalUI.register(self)
         engineRequest = MachineTerminalRequest(
-            operation: .open, machineID: session.id, tabID: id,
+            operation: .open, machineID: session.id, tabID: id, workspaceTabID: workspaceTabID,
             directory: context?.startingDirectory, containerID: containerID,
             windowsShell: windowsShell)
         externalIO = GhosttyExternalIO(
             write: { [weak self] bytes in self?.enqueueInput(bytes) },
             resize: { [weak self] columns, rows, _, _ in
+                self?.terminalColumns = columns; self?.terminalRows = rows
                 self?.enqueueResize(columns: columns, rows: rows)
             },
             failure: { [weak self] in self?.fail("The terminal input queue is full.") })
@@ -283,7 +289,8 @@ final class TerminalSessionHolder {
         linkTask?.cancel(); linkTask = nil
         externalIO?.invalidate(); externalIO = nil
         engineClient?.terminalUI.unregister(self)
-        hostTabAction = nil; presented = false
+        hostTabAction = nil; hostPaneAction = nil; presented = false
+        terminalColumns = 0; terminalRows = 0
         engineRequest = nil; engineClient = nil
         pendingUserClose = nil
         queuedGhosttyInput = ""
@@ -402,6 +409,34 @@ final class TerminalSessionHolder {
                 }
             }
             return true
+        }
+        view.onPaneAction = { [weak self, weak view] action in
+            guard let self, let view, generation == viewGeneration, ghosttyView === view,
+                let scope = engineClient?.terminalUI, scope.admitsPaneAction(self),
+                let sequence = scope.eventSequence, var owner = engineRequest, owner.handle != nil
+            else { return }
+            if action == .newTab {
+                _ = hostTabAction?(.newTab)
+                return
+            }
+            let cellExtent: Double
+            if case let .resize(direction, _) = action {
+                let horizontal = direction == .left || direction == .right
+                let cells = horizontal ? terminalColumns : terminalRows
+                guard cells > 0 else { return }
+                cellExtent =
+                    Double(horizontal ? view.bounds.width : view.bounds.height)
+                    / Double(cells)
+            } else {
+                cellExtent = 0
+            }
+            owner.operation = .read
+            hostPaneAction?(action, cellExtent, owner) { [weak self, weak view, weak scope] in
+                guard let self, let view, let scope, generation == viewGeneration,
+                    ghosttyView === view
+                else { return false }
+                return scope.admitsPaneAction(self, eventSequence: sequence)
+            }
         }
         view.onReady = { [weak self, weak view] in
             guard let self, let view, self.generation == viewGeneration else { return }
