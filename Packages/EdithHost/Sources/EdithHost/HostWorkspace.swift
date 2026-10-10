@@ -420,6 +420,17 @@ struct HostWorkspace: View {
                     let command = WindowKeyCommand.resolve(
                         characters: characters, keyCode: code, modifiers: modifiers)
                 else { return false }
+                if let remote = presenter as? HostRemoteContentPresenter,
+                    remote.consumeTerminalZoom(
+                        command, window: NSApp.keyWindow,
+                        fallback: {
+                            if let next = WindowZoom.adjusted(zoom, for: command) {
+                                zoom = next; UIScale.apply(next)
+                            }
+                        })
+                {
+                    return true
+                }
                 if let next = WindowZoom.adjusted(zoom, for: command) {
                     zoom = next; UIScale.apply(next); return true
                 }
