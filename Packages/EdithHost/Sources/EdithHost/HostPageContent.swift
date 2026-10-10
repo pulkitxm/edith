@@ -68,6 +68,7 @@ struct HostPageContent: View {
             HostPermissionsPane(
                 marketplace: marketplace, permissions: permissions,
                 openExtensions: { select("extensions") })
+        case "storage": HostStoragePage(marketplace: marketplace, updater: updater)
         case "updates": HostUpdatesPane(updater: updater)
         case "shortcuts":
             HostShortcutsPane(marketplace: marketplace, panelShortcutChanged: panelShortcutChanged)
