@@ -11,15 +11,21 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: NotchSettingsModel?
     private var uiClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private var panelEngine: NotchPanelEngine?
     private let cliStreams = try! ExtensionCLIStreams(owner: "notchShelf")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let controller = self?.controller else { throw ExtensionPeerError.unavailable }
+            guard let self else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("notch.panel.") || command == "notch.chrome.read"
+                || command == "notch.chrome.action"
+            {
+                return try await self.executePanel(command, payload: payload)
+            }
+            guard let controller = self.controller else { throw ExtensionPeerError.unavailable }
             if ["notch.cli.start", "notch.cli.read", "notch.cli.cancel", "notch.cli.end"].contains(
                 command)
             {
-                guard let self else { throw ExtensionPeerError.unavailable }
                 let configuration = ShelfCLIConfiguration(
                     root: controller.store.root, defaults: controller.context.defaults,
                     open: { NSWorkspace.shared.open($0) },
@@ -42,10 +48,72 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    private func executePanel(_ command: String, payload: Data) async throws -> Data {
+        guard Bundle.main.bundleURL.pathExtension != "appex",
+            payload.count <= NotchPanelEngine.maximumBytes,
+            let context = SurfaceHostContext.current
+        else { throw ExtensionPeerError.invalidRequest }
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        if command == "notch.panel.attach" {
+            guard controller == nil, panelEngine == nil else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let engine = NotchPanelEngine(
+                context: context,
+                connectedDisplays: {
+                    Dictionary(
+                        uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
+                            guard
+                                let id = screen.deviceDescription[
+                                    NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32
+                            else { return nil }
+                            return (id, screen.frame.size)
+                        })
+                },
+                invalidate: { presentation in
+                    DistributedNotificationCenter.default().postNotificationName(
+                        Notification.Name(
+                            context.sharedState.namespace + ".notchPanel." + presentation.uuidString
+                        ),
+                        object: nil, userInfo: nil, deliverImmediately: true)
+                })
+            let batch = try engine.attach(decoder.decode(NotchPanelAttach.self, from: payload))
+            panelEngine = engine
+            return try encoder.encode(batch)
+        }
+        guard let engine = panelEngine else { throw ExtensionPeerError.unavailable }
+        switch command {
+        case "notch.panel.wait":
+            return try encoder.encode(
+                await engine.wait(decoder.decode(NotchPanelWait.self, from: payload)))
+        case "notch.panel.geometry":
+            try engine.geometry(decoder.decode(NotchPanelGeometry.self, from: payload))
+        case "notch.panel.measure":
+            try engine.measure(decoder.decode(NotchPanelMeasure.self, from: payload))
+        case "notch.panel.pointer":
+            try engine.pointer(decoder.decode(NotchPanelPointer.self, from: payload))
+        case "notch.panel.detach":
+            try engine.detach(decoder.decode(NotchPanelIdentity.self, from: payload))
+        case "notch.chrome.read":
+            return try encoder.encode(
+                engine.chrome(decoder.decode(NotchChromeRead.self, from: payload)))
+        case "notch.chrome.action":
+            let request = try decoder.decode(NotchChromeAction.self, from: payload)
+            try engine.action(request)
+            return try encoder.encode(
+                engine.chrome(
+                    .init(displayID: request.displayID, presentationID: request.presentationID)))
+        default: throw ExtensionPeerError.invalidRequest
+        }
+        return Data("{}".utf8)
+    }
+
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
         cliStreams.stop()
+        panelEngine?.stop()
         stopUI()
         controller?.shutdown()
         controller = nil
@@ -92,7 +160,11 @@ final class ExtensionRuntime: NSObject {
                 let context = SurfaceHostContext.current
             else { return ["ok": false] as NSDictionary }
             if controller == nil {
-                controller = NotchShelfController(context: context)
+                controller = NotchShelfController(
+                    context: context,
+                    hostDisplays: panelEngine?.attached == true
+                        ? Array(panelEngine!.displays.values) : nil)
+                if let controller, panelEngine?.attached == true { panelEngine?.bind(controller) }
                 NotchPresenterState.shared.privacy = controller?.privacy
                 controller?.synchronize()
             }
