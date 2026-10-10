@@ -2148,9 +2148,9 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "supportProducts": {
-      "app": "EdithExtensionUI",
+      "app": "EdithExtensionCommands",
       "cameraCarrier": "EdithExtensionSupport",
       "privileged": null
     },
@@ -2162,7 +2162,6 @@
         "Extensions/virtualCamera/CameraCarrierRuntime.swift",
         "Extensions/virtualCamera/CameraCarrierSession.swift",
         "Extensions/virtualCamera/CameraContext.swift",
-        "Extensions/virtualCamera/CameraJSONValue.swift",
         "Extensions/virtualCamera/CameraNativeLibrary.swift",
         "Extensions/virtualCamera/CameraReadiness.swift",
         "Extensions/virtualCamera/CameraSurface.swift",
@@ -2226,7 +2225,14 @@
         "Extensions/virtualCamera/Views/VirtualCameraMeetingControls.swift",
         "Extensions/virtualCamera/Views/VirtualCameraPage.swift",
         "Extensions/virtualCamera/Views/VirtualCameraPageModel.swift",
-        "Extensions/virtualCamera/Views/VirtualCameraPreviewView.swift"
+        "Extensions/virtualCamera/Views/VirtualCameraPreviewView.swift",
+        "Extensions/virtualCamera/CLI/CameraExtensionCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraMediaCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraAudioCommands.swift",
+        "Extensions/virtualCamera/CLI/CameraCLICatalog.swift",
+        "Extensions/virtualCamera/CLI/CameraCLIExecution.swift",
+        "Extensions/virtualCamera/CameraUICommands.swift"
       ],
       "cameraCarrier": [
         "Extensions/virtualCamera/CameraCarrierRuntime.swift",

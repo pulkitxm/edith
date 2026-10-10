@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -10,7 +11,10 @@ import SwiftUI
 @MainActor @objc(EdithCameraExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var worker: CameraAppWorker?
+    private var uiClient: ExtensionEngineClient?
+    private var uiModel: VirtualCameraPageModel?
     private let commands = ExtensionCommandRegistry()
+    private let cliStreams = try? ExtensionCLIStreams(owner: "virtualCamera")
     private var disable: Task<Void, Error>?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -24,6 +28,25 @@ final class ExtensionRuntime: NSObject {
                     values: ExtensionSharedState.current?.values(for: "presenter") ?? [:])
             {
                 throw ExtensionPeerError.rejected("Camera is hidden while presenting.")
+            }
+            if command == "virtualCamera.cli.catalog" { return try CameraCLICatalog.data() }
+            if command.hasPrefix("camera.cli.stream.") {
+                guard let cliStreams = self?.cliStreams else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try CameraCLIEnvironment.$streamEngine.withValue(worker.engine) {
+                    try cliStreams.invoke(
+                        CameraCommand.self, operation: command, prefix: "camera.cli.stream",
+                        payload: payload)
+                }
+            }
+            if command == "camera.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await CameraCLIExecution.run(request, engine: worker.engine))
+            }
+            if command.hasPrefix("camera.ui.") {
+                return try await worker.ui.execute(command, payload: payload)
             }
             if command == "camera.fixture" { return try worker.fixtureRequest(payload) }
             if command == "camera.snapshot" {
@@ -62,6 +85,7 @@ final class ExtensionRuntime: NSObject {
             disable = Task { [weak self] in
                 guard let self, let worker else { return }
                 await commands.shutdownAndWait()
+                await cliStreams?.stopAndWait()
                 try await worker.prepareDisable()
             }
         }
@@ -77,6 +101,7 @@ final class ExtensionRuntime: NSObject {
         worker?.markDraining()
         Task { [weak self] in
             await self?.commands.shutdownAndWait()
+            await self?.cliStreams?.stopAndWait()
             try? await self?.worker?.prepareDisable(); completion()
         }
     }
@@ -100,26 +125,23 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             worker = CameraAppWorker(defaults: defaults, host: host)
             TextEditingCommands.install()
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let defaults = UserDefaults(suiteName: configuration.defaultsSuite),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI(); uiClient = client;
+            uiModel = VirtualCameraPageModel(engineClient: client, defaults: defaults)
+        case "stopUI": stopUI()
         case "view":
-            guard let worker else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
-                rootView: ExtensionPageHost {
-                    if worker.draining {
-                        PageScaffold {
-                            PageHeader("Camera")
-                        } content: {
-                            Text(
-                                "Camera is releasing its capture and meeting audio resources. Restart macOS if its microphone removal requests it, then finish disabling it in Extensions."
-                            )
-                        }
-                    } else {
-                        VirtualCameraPage(model: worker.model)
-                    }
-                })
+                rootView: ExtensionPageHost { VirtualCameraPage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
+            stopUI()
+            commands.shutdown(); cliStreams?.stop()
             worker?.engine.shutdown()
             worker = nil
             TextEditingCommands.shutdown(); InputFocus.uninstall()
@@ -132,6 +154,11 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+    private func stopUI() {
+        let model = uiModel; uiModel = nil
+        uiClient?.invalidate(); uiClient = nil
+        if let model { Task { await model.shutdown() } }
+    }
 }
 
 @MainActor final class CameraAppWorker {
@@ -139,6 +166,7 @@ final class ExtensionRuntime: NSObject {
     let model: VirtualCameraPageModel
     let client: CameraCarrierClient
     let surface: CameraSurface
+    let ui: CameraUICommands
     private let defaults: UserDefaults
     private let source: URL
     private let installed: URL
@@ -234,7 +262,9 @@ final class ExtensionRuntime: NSObject {
         model = VirtualCameraPageModel(
             defaults: defaults, extensionManager: manager,
             accessProvider: environment.authorization, sourceProvider: environment.sources,
-            previewBus: bus)
+            previewBus: bus,
+            requestHandler: { [engine = self.engine] in try await engine.performRecording($0) })
+        ui = CameraUICommands(engine: engine, model: model, defaults: defaults)
         draining =
             defaults.bool(forKey: Self.pendingKey)
             || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
@@ -252,6 +282,7 @@ final class ExtensionRuntime: NSObject {
             drainTask = Task { [self] in
                 CameraExtensionBridge.shutdown()
                 await actions.shutdown()
+                await ui.shutdown()
                 await model.shutdown()
                 await manager.shutdown()
                 await engine.finishShutdown()

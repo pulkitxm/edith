@@ -48,7 +48,7 @@ import Testing
                 "CFBundleIdentifier": host + ".cameraCarrier", "CFBundleExecutable": "Edith",
                 "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "1.0.0",
                 "EdithContainedRole": "cameraCarrier", "EdithContainedExtensionID": "virtualCamera",
-                "EdithHostIdentifier": host, "EdithHostABI": "edith-host-1",
+                "EdithHostIdentifier": host, "EdithHostABI": "edith-host-2",
                 "EdithExecutableProvenance": String(repeating: "a", count: 64),
                 "EdithCameraTransport": obs ? "obs" : "native",
             ])
@@ -58,10 +58,10 @@ import Testing
             try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
                 .write(to: source.appendingPathComponent("Contents/Info.plist"))
         }
-        func installer() throws -> CameraSealedInstallation {
+        func installer(hostABI: String = "edith-host-2") throws -> CameraSealedInstallation {
             try CameraSealedInstallation(
                 configuration: .init(
-                    hostIdentifier: host, version: "1.0.0", hostABI: "edith-host-1",
+                    hostIdentifier: host, version: "1.0.0", hostABI: hostABI,
                     destination: root.appendingPathComponent("Installed"),
                     microphoneDestination: root.appendingPathComponent("HAL"), owner: geteuid(),
                     protectedBoundary: root), privilegedBundle: privilege,
@@ -94,6 +94,24 @@ import Testing
                         digest: Data([digest]))
                 })
         }
+    }
+
+    @Test func currentABIIsAcceptedAndLegacyConfigurationAndCarrierAreRejected() throws {
+        let fixture = try Fixture(obs: true)
+        _ = try fixture.installer()
+        #expect(throws: (any Error).self) { try fixture.installer(hostABI: "edith-host-1") }
+        let infoURL = fixture.source.appendingPathComponent("Contents/Info.plist")
+        var info = try #require(
+            PropertyListSerialization.propertyList(from: Data(contentsOf: infoURL), format: nil)
+                as? [String: Any])
+        info["EdithHostABI"] = "edith-host-1"
+        try fixture.writeInfo(info)
+        #expect(throws: (any Error).self) {
+            try fixture.installer().installCarrier(source: fixture.source, providerExited: true)
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.root.appendingPathComponent("Installed").path))
     }
 
     @Test func obsCarrierInstallsOnlyItsVerifiedMicrophone() throws {
@@ -130,7 +148,7 @@ import Testing
             JSONSerialization.jsonObject(with: Data(contentsOf: receipt)) as? [String: String])
         #expect(values["originalHostSHA256"] == String(repeating: "a", count: 64))
         #expect(values["executableSHA256"]?.count == 64)
-        #expect(values["hostABI"] == "edith-host-1")
+        #expect(values["hostABI"] == "edith-host-2")
         let reused = try installer.installCarrier(source: fixture.source, providerExited: false)
         #expect(reused.path == installed.path)
         let modes =

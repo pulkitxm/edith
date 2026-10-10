@@ -3,6 +3,7 @@ import AppKit
 import EdithExtensionUI
 import EdithExtensionSupport
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 enum VirtualCameraInspectorTab: String, CaseIterable, Identifiable {
@@ -94,6 +95,11 @@ final class VirtualCameraPageModel: ObservableObject {
     let display = VirtualCameraPreviewDisplay()
     let extensionManager: VirtualCameraExtensionManager
     private let defaults: UserDefaults
+    private var engineClient: ExtensionEngineClient?
+    private var stopped = false
+    private var remotePoll: Task<Void, Never>?
+    private var localRequests: [UUID: Task<Void, Never>] = [:]
+    private let requestHandler: ((VirtualCameraRequest) async throws -> VirtualCameraSnapshot)?
     private var pipeline: VirtualCameraPipeline?
     private var pipelineTask: Task<Void, Never>?
     private var pipelineGeneration = 0
@@ -130,6 +136,7 @@ final class VirtualCameraPageModel: ObservableObject {
         },
         sourceProvider: (() -> [VirtualCameraSource])? = nil,
         previewBus: VirtualCameraPreviewBus = VirtualCameraPreviewBus(),
+        requestHandler: ((VirtualCameraRequest) async throws -> VirtualCameraSnapshot)? = nil,
         clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         let state = VirtualCameraStore.load(defaults)
@@ -150,6 +157,7 @@ final class VirtualCameraPageModel: ObservableObject {
         self.extensionManager = extensionManager ?? VirtualCameraExtensionManager()
         self.accessProvider = accessProvider
         self.clock = clock
+        self.requestHandler = requestHandler
         self.sourceProvider = sourceProvider
         self.previewBus = previewBus
         self.cameraAccess = accessProvider()
@@ -165,6 +173,148 @@ final class VirtualCameraPageModel: ObservableObject {
                 self?.previewStartedAt = nil
             }
         }
+    }
+
+    convenience init(engineClient: ExtensionEngineClient, defaults: UserDefaults) {
+        self.init(
+            defaults: defaults,
+            extensionManager: VirtualCameraExtensionManager(
+                environment: .init(
+                    bundleURL: Bundle.main.bundleURL, hasInstallEntitlement: { false },
+                    deviceVisible: { false })), accessProvider: { .denied }, sourceProvider: { [] })
+        self.engineClient = engineClient
+    }
+
+    func performRequest(_ request: VirtualCameraRequest, timeout: Duration = .seconds(30))
+        async throws -> VirtualCameraSnapshot
+    {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        if let engineClient {
+            let runtime = VirtualCameraRuntimeRequest(
+                request: request, deadline: Date().addingTimeInterval(30))
+            guard let input = runtime.payload else { throw ExtensionPeerError.invalidRequest }
+            let data = try await engineClient.invoke(
+                "camera.request", payload: JSONSerialization.data(withJSONObject: input),
+                timeout: 30)
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try JSONDecoder().decode(VirtualCameraSnapshot.self, from: data)
+        }
+        if let requestHandler { return try await requestHandler(request) }
+        return try await VirtualCameraOperationExecution.request(request, timeout: timeout)
+    }
+
+    func runAction(_ action: @escaping @MainActor () async throws -> Void) {
+        guard !stopped else { return }
+        let id = UUID()
+        localRequests[id] = Task { [weak self] in
+            defer { self?.localRequests[id] = nil }
+            do { try await action() } catch is CancellationError {} catch {
+                guard let self, !stopped else { return }
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func loadAudioDevices() async -> [MeetingAudioDevice] {
+        if let engineClient {
+            guard let data = try? await engineClient.invoke("camera.ui.devices"), !stopped,
+                !Task.isCancelled
+            else { return [] }
+            return (try? JSONDecoder().decode([MeetingAudioDevice].self, from: data)) ?? []
+        }
+        return await Task.detached { MeetingAudioDevices.list() }.value
+    }
+
+    func makeScreenCatalog() -> ScreenCaptureSourceCatalog {
+        ScreenCaptureSourceCatalog(engineClient: engineClient)
+    }
+
+    func assetThumbnail(_ url: URL) async -> NSImage? {
+        if let engineClient {
+            guard let payload = try? JSONEncoder().encode(["path": url.path]),
+                let data = try? await engineClient.invoke("camera.ui.asset", payload: payload),
+                !stopped, !Task.isCancelled,
+                let image = try? JSONDecoder().decode(CameraUIImage.self, from: data)
+            else { return nil }
+            return image.image.flatMap(NSImage.init(data:))
+        }
+        return await Task.detached {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+                let image = CGImageSourceCreateThumbnailAtIndex(
+                    source, 0,
+                    [
+                        kCGImageSourceCreateThumbnailFromImageAlways: true,
+                        kCGImageSourceThumbnailMaxPixelSize: 1024,
+                    ] as CFDictionary)
+            else { return nil as NSImage? }
+            return NSImage(cgImage: image, size: .zero)
+        }.value
+    }
+
+    func refreshRemote() async {
+        guard let engineClient, !stopped else { return }
+        do {
+            let data = try await engineClient.invoke("camera.ui.snapshot")
+            let value = try JSONDecoder().decode(CameraUISnapshot.self, from: data)
+            guard !stopped, !Task.isCancelled else { return }
+            snapshot = value.snapshot; helperReachable = true; statusPending = false
+            if saveTimer == nil
+                && (awaitingHelperState == nil || awaitingHelperState == value.snapshot.state)
+            {
+                awaitingHelperState = nil; state = value.snapshot.state
+            }
+            sources = value.snapshot.sources; sourcesLoaded = true
+            cameraAccess =
+                value.snapshot.cameraAccess == "authorized"
+                ? .authorized
+                : value.snapshot.cameraAccess == "notDetermined" ? .notDetermined : .denied
+            previewStatistics.sourceWidth = value.snapshot.sourceWidth;
+            previewStatistics.sourceHeight = value.snapshot.sourceHeight
+            previewStatistics.systemBackgroundActive = value.snapshot.systemBackgroundActive
+            previewFailure = value.previewFailure
+            previewFeed = .helper; previewRunning = value.preview != nil
+            if let reference = value.reference.flatMap(Self.image) {
+                helperReference = reference;
+                if expandedInspectorSections.contains(.look) {
+                    updateLookThumbnails(from: reference)
+                }
+            }
+            if let preview = value.preview.flatMap(Self.image), let buffer = Self.buffer(preview) {
+                display.push(buffer)
+            }
+        } catch is CancellationError {} catch {
+            guard !stopped, !Task.isCancelled else { return }
+            helperReachable = false; statusPending = false;
+            previewFailure = error.localizedDescription
+        }
+    }
+
+    private static func image(_ data: Data) -> CGImage? {
+        CGImageSourceCreateWithData(data as CFData, nil).flatMap {
+            CGImageSourceCreateImageAtIndex($0, 0, nil)
+        }
+    }
+    private static func buffer(_ image: CGImage) -> CVPixelBuffer? {
+        var buffer: CVPixelBuffer?
+        guard
+            CVPixelBufferCreate(
+                kCFAllocatorDefault, image.width, image.height, kCVPixelFormatType_32BGRA,
+                [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &buffer)
+                == kCVReturnSuccess, let buffer
+        else { return nil }
+        CVPixelBufferLockBaseAddress(buffer, []);
+        defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+        guard let pixels = CVPixelBufferGetBaseAddress(buffer),
+            let context = CGContext(
+                data: pixels, width: image.width, height: image.height, bitsPerComponent: 8,
+                bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                    | CGBitmapInfo.byteOrder32Little.rawValue)
+        else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height));
+        return buffer
     }
 
     func setInspectorExpanded(_ section: VirtualCameraInspectorTab, _ expanded: Bool) {
@@ -245,10 +395,20 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func appear() {
+        guard !stopped else { return }
         attachments += 1
         guard attachments == 1 else { return }
         visible = true
         statusPending = true
+        if engineClient != nil {
+            remotePoll = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self, visible, !stopped else { return }
+                    await refreshRemote()
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                }
+            }; return
+        }
         setPreviewWanted(true)
         if saveTimer != nil { flushSave() } else { reloadState() }
         refreshSources()
@@ -284,6 +444,10 @@ final class VirtualCameraPageModel: ObservableObject {
         attachments = max(0, attachments - 1)
         guard visible, attachments == 0 else { return }
         visible = false
+        if engineClient != nil {
+            remotePoll?.cancel(); remotePoll = nil; statusTask?.cancel(); saveTimer?.invalidate();
+            saveTimer = nil; stopPreview(); return
+        }
         setPreviewWanted(false)
         flushSave()
         statusTask?.cancel()
@@ -302,6 +466,10 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func shutdown() async {
+        stopped = true
+        remotePoll?.cancel(); await remotePoll?.value; remotePoll = nil
+        let requests = Array(localRequests.values); for task in requests { task.cancel() };
+        for task in requests { await task.value }; localRequests.removeAll()
         let pending = [statusTask, sourceTask, thumbnailTask, pipelineTask].compactMap { $0 }
         for task in pending { task.cancel() }
         attachments = 1
@@ -381,8 +549,10 @@ final class VirtualCameraPageModel: ObservableObject {
         syncPreviewFeed()
     }
 
+    var canReceiveUIResult: Bool { !stopped && !Task.isCancelled }
+
     func receive(_ decoded: VirtualCameraSnapshot?) {
-        guard let decoded else { return }
+        guard !stopped, let decoded else { return }
         statusTask?.cancel()
         statusTask = nil
         statusPending = false
@@ -403,8 +573,7 @@ final class VirtualCameraPageModel: ObservableObject {
         let timeout: Duration = snapshot == nil ? .milliseconds(500) : .seconds(3)
         statusTask = Task { [weak self] in
             do {
-                let snapshot = try await VirtualCameraOperationExecution.request(
-                    request, timeout: timeout)
+                let snapshot = try await self?.performRequest(request, timeout: timeout)
                 guard !Task.isCancelled else { return }
                 self?.statusPending = false
                 self?.receive(snapshot)
@@ -419,6 +588,7 @@ final class VirtualCameraPageModel: ObservableObject {
 
     func reloadState(_ announced: VirtualCameraState? = nil) {
         if announced != nil { awaitingHelperState = nil }
+        if engineClient != nil && announced == nil { return }
         let stored = announced ?? VirtualCameraStore.load(defaults)
         guard stored != state else { return }
         state = stored
@@ -427,6 +597,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func refreshSources() {
+        if engineClient != nil { return }
         if let sourceProvider {
             sources = sourceProvider()
             sourcesLoaded = true
@@ -445,6 +616,7 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func syncPreviewFeed() {
+        if engineClient != nil { return }
         guard visible else { return }
         setPreviewWanted(state.privacy != .stopped)
         guard state.privacy != .stopped else {
@@ -556,6 +728,9 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func requestCameraAccess() {
+        if let engineClient {
+            runAction { _ = try await engineClient.invoke("camera.ui.permission") }; return
+        }
         guard cameraAccess == .notDetermined else {
             do {
                 guard
@@ -610,6 +785,15 @@ final class VirtualCameraPageModel: ObservableObject {
         guard saveTimer != nil else { return }
         saveTimer?.invalidate()
         saveTimer = nil
+        if let engineClient {
+            let intended = state; awaitingHelperState = intended
+            runAction { [weak self] in
+                let data = try await engineClient.invoke(
+                    "camera.ui.state", payload: JSONEncoder().encode(intended))
+                guard let self, !stopped, !Task.isCancelled else { return }
+                receive(try JSONDecoder().decode(VirtualCameraSnapshot.self, from: data))
+            }; return
+        }
         guard VirtualCameraStore.load(defaults) != state else { return }
         VirtualCameraStore.save(state, to: defaults)
         if visible { awaitingHelperState = state }
@@ -623,7 +807,7 @@ final class VirtualCameraPageModel: ObservableObject {
                 $0.framing, by: translation, viewSize: viewSize, source: sourceSize,
                 output: outputSize)
         }
-        if state != previous, snapshot?.live == true {
+        if engineClient == nil, state != previous, snapshot?.live == true {
             VirtualCameraStore.announceChange(from: "window", state: state)
         }
     }
@@ -738,6 +922,16 @@ final class VirtualCameraPageModel: ObservableObject {
     }
 
     func importImage(_ url: URL, for target: VirtualCameraImageTarget) {
+        if let engineClient {
+            runAction { [weak self] in
+                let input = CameraUIAsset(
+                    path: url.path, target: target == .logo ? "logo" : "background")
+                let data = try await engineClient.invoke(
+                    "camera.ui.importAsset", payload: JSONEncoder().encode(input))
+                guard let self, !stopped, !Task.isCancelled else { return }
+                receive(try JSONDecoder().decode(VirtualCameraSnapshot.self, from: data))
+            }; return
+        }
         do {
             let stored = try VirtualCameraStore.importAsset(from: url)
             updateComposition {
@@ -750,7 +944,7 @@ final class VirtualCameraPageModel: ObservableObject {
                     $0.background.mode = .image
                 }
             }
-            VirtualCameraStore.pruneAssets(keeping: state)
+            if engineClient == nil { VirtualCameraStore.pruneAssets(keeping: state) }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -768,7 +962,7 @@ final class VirtualCameraPageModel: ObservableObject {
             }
         }
         flushSave()
-        VirtualCameraStore.pruneAssets(keeping: state)
+        if engineClient == nil { VirtualCameraStore.pruneAssets(keeping: state) }
     }
 
     func showPreviewFrame(_ buffer: CVPixelBuffer) {

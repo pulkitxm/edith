@@ -282,7 +282,7 @@ struct VirtualCameraAudioPanel: View {
 
     private func refreshDevices() {
         Task {
-            devices = await Task.detached(priority: .utility) { MeetingAudioDevices.list() }.value
+            devices = await model.loadAudioDevices()
         }
     }
 
@@ -360,14 +360,14 @@ extension VirtualCameraPageModel {
         guard !audioPending else { return }
         flushSave()
         audioPending = true
-        Task { @MainActor in
+        runAction { [self] in
             defer { audioPending = false }
             do {
                 receive(
-                    try await VirtualCameraOperationExecution.request(
+                    try await performRequest(
                         .audio(request), timeout: .seconds(30)))
                 completion?()
-            } catch { errorMessage = error.localizedDescription }
+            } catch { if canReceiveUIResult { errorMessage = error.localizedDescription } }
         }
     }
 }

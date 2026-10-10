@@ -46,7 +46,7 @@ public final class CameraSealedInstallation {
         ownIdentity = try verify(privilegedBundle)
         guard ownIdentity.identifier == "com.pulkit.edith.extensions.virtualCamera.privileged",
             !ownIdentity.team.isEmpty, !configuration.version.isEmpty,
-            configuration.version.utf8.count <= 80, configuration.hostABI == "edith-host-1",
+            configuration.version.utf8.count <= 80, configuration.hostABI == "edith-host-2",
             configuration.hostIdentifier == "com.pulkit.edith"
                 || configuration.hostIdentifier.hasPrefix("com.pulkit.edith.dev.")
         else { throw failure("The camera installer identity is invalid.") }

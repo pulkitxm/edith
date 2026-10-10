@@ -67,8 +67,7 @@ struct VirtualCameraMeetingControls: View {
             VirtualCameraScreenPicker(model: model, compact: compact)
         }
         .pageTask {
-            audioDevices = await Task.detached(priority: .utility) { MeetingAudioDevices.list() }
-                .value
+            audioDevices = await model.loadAudioDevices()
         }
     }
 
@@ -195,7 +194,12 @@ struct VirtualCameraMeetingControls: View {
 struct VirtualCameraScreenPicker: View {
     @ObservedObject var model: VirtualCameraPageModel
     var compact = false
-    @State private var sources = ScreenCaptureSourceCatalog()
+    @State private var sources: ScreenCaptureSourceCatalog
+
+    init(model: VirtualCameraPageModel, compact: Bool = false) {
+        self.model = model; self.compact = compact;
+        _sources = State(initialValue: model.makeScreenCatalog())
+    }
 
     var body: some View {
         ScreenCaptureSourcePicker(
@@ -266,12 +270,12 @@ extension VirtualCameraPageModel {
             request = .recordStart(url.path)
         }
         flushSave()
-        Task { @MainActor in
+        runAction { [self] in
             do {
-                let snapshot = try await VirtualCameraOperationExecution.request(
+                let snapshot = try await performRequest(
                     request, timeout: .seconds(15))
                 receive(snapshot)
-            } catch { errorMessage = error.localizedDescription }
+            } catch { if canReceiveUIResult { errorMessage = error.localizedDescription } }
         }
     }
 

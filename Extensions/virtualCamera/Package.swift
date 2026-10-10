@@ -1,14 +1,20 @@
 // swift-tools-version:6.0
 import PackageDescription
+import Foundation
 
 let package = Package(
     name: "VirtualCameraExtension", platforms: [.macOS(.v14)],
-    dependencies: [.package(path: "../../Packages/ExtensionSupport")],
+    dependencies: [
+        .package(
+            name: "ExtensionSupport",
+            path: ProcessInfo.processInfo.environment["EDITH_EXTENSION_TEST_SDK"]
+                ?? "../../Packages/ExtensionSupport")
+    ],
     targets: [
         .target(
             name: "VirtualCameraExtension",
             dependencies: [
-                .product(name: "EdithExtensionUI", package: "ExtensionSupport")
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport")
             ], path: ".", exclude: ["Tests", "Provider", "Carrier", "Privileged", "NativeRuntime"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
