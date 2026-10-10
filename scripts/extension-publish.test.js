@@ -5,9 +5,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  extensionChecksum,
   mergeExtensionCatalog,
+  preflightExtensionBuilds,
+  publishExtensionAssets,
   restorePublishedExtension,
+  validateExtensionChecksum,
 } from "./extension-publish.mjs";
+import { extensionReleaseTag } from "./extension-release-plan.mjs";
 import { downloadReleaseAsset } from "./release-asset-read.mjs";
 import { verifiedCatalogPayload } from "./verify-extension-catalog.mjs";
 
@@ -69,10 +74,20 @@ test("an immutable published archive larger than 1 MiB resumes through a verifie
       downloadBytes: archive.length,
       sha256: createHash("sha256").update(archive).digest("hex"),
     };
+    const entry = {
+      id: published.id,
+      version: published.version,
+      fingerprint: published.sourceFingerprint,
+    };
+    entry.tag = extensionReleaseTag(entry);
+    published.downloadURL = `https://github.com/synthetic/fixture/releases/download/${encodeURIComponent(entry.tag)}/calendar.zip`;
     const recordPath = join(directory, "calendar.json");
     const zip = join(directory, "calendar.zip");
     const metadata = join(directory, "published.json");
     const publishedZip = join(directory, "published.zip");
+    const checksumPath = join(directory, "calendar.zip.sha256");
+    const publishedSHA = join(directory, "published.sha256");
+    writeFileSync(publishedSHA, extensionChecksum(published));
     writeFileSync(metadata, JSON.stringify(published));
     writeFileSync(publishedZip, archive);
     writeFileSync(zip, "different local archive");
@@ -80,12 +95,11 @@ test("an immutable published archive larger than 1 MiB resumes through a verifie
     const options = {
       repository: "synthetic/fixture",
       record: published,
-      entry: {
-        version: published.version,
-        fingerprint: published.sourceFingerprint,
-      },
+      entry,
       publishedRecord: { id: 1, size: readFileSync(metadata).length },
       publishedArchive: { id: 2, size: archive.length },
+      publishedChecksum: { id: 3, size: readFileSync(publishedSHA).length },
+      checksumPath,
       recordPath,
       zip,
       downloadAsset: (options) =>
@@ -97,7 +111,11 @@ test("an immutable published archive larger than 1 MiB resumes through a verifie
               [
                 "-e",
                 'require("node:fs").createReadStream(process.argv[1]).pipe(process.stdout)',
-                options.asset.id === 1 ? metadata : publishedZip,
+                options.asset.id === 1
+                  ? metadata
+                  : options.asset.id === 2
+                    ? publishedZip
+                    : publishedSHA,
               ],
               spawnOptions,
             ),
@@ -105,6 +123,17 @@ test("an immutable published archive larger than 1 MiB resumes through a verifie
     };
     expect(await restorePublishedExtension(options)).toEqual(published);
     expect(readFileSync(zip)).toEqual(archive);
+    expect(readFileSync(checksumPath, "utf8")).toBe(
+      extensionChecksum(published),
+    );
+    writeFileSync(
+      publishedSHA,
+      extensionChecksum({ ...published, sha256: "f".repeat(64) }),
+    );
+    await expect(restorePublishedExtension(options)).rejects.toThrow(
+      "Published extension checksum",
+    );
+    writeFileSync(publishedSHA, extensionChecksum(published));
     expect(JSON.parse(readFileSync(recordPath, "utf8"))).toEqual(published);
     writeFileSync(zip, "untouched local archive");
     writeFileSync(
@@ -113,6 +142,12 @@ test("an immutable published archive larger than 1 MiB resumes through a verifie
     );
     await expect(restorePublishedExtension(options)).rejects.toThrow(
       "checksum",
+    );
+    expect(readFileSync(zip, "utf8")).toBe("untouched local archive");
+    writeFileSync(metadata, JSON.stringify({ ...published, id: "foreign" }));
+    options.publishedRecord.size = readFileSync(metadata).length;
+    await expect(restorePublishedExtension(options)).rejects.toThrow(
+      "release identity",
     );
     expect(readFileSync(zip, "utf8")).toBe("untouched local archive");
     writeFileSync(
@@ -255,4 +290,145 @@ test("catalog limits fail closed instead of losing required compatibility or acc
       1,
     ),
   ).toThrow("dependency");
+});
+
+test("extension publication bootstraps all three immutable assets and retries without replacing them", async () => {
+  const files = [
+    ["package.zip", "calendar.zip"],
+    ["record.json", "calendar.json"],
+    ["checksum", "calendar.zip.sha256"],
+  ];
+  const uploaded = [];
+  const options = {
+    repository: "synthetic/fixture",
+    item: { id: 1, draft: true, assets: [] },
+    entry: { tag: "extension-calendar-v1.0.0" },
+    files,
+    uploadAsset: async (...args) => uploaded.push(args.at(-1)),
+    matches: async () => true,
+  };
+  await publishExtensionAssets(options);
+  expect(uploaded).toEqual(files.map(([, name]) => name));
+  uploaded.length = 0;
+  options.item = {
+    id: 1,
+    draft: false,
+    assets: files.map(([, name], index) => ({ name, id: index + 1 })),
+  };
+  await publishExtensionAssets(options);
+  expect(uploaded).toEqual([]);
+  options.matches = async ({ asset }) => asset.name !== "calendar.zip.sha256";
+  await expect(publishExtensionAssets(options)).rejects.toThrow(
+    "Immutable asset differs",
+  );
+  expect(uploaded).toEqual([]);
+  options.item.assets.pop();
+  await expect(publishExtensionAssets(options)).rejects.toThrow(
+    "missing an immutable asset",
+  );
+  expect(uploaded).toEqual([]);
+  options.item = {
+    id: 1,
+    draft: true,
+    assets: [{ id: 3, name: "calendar.zip.sha256" }],
+  };
+  await expect(publishExtensionAssets(options)).rejects.toThrow(
+    "Immutable asset differs",
+  );
+  expect(uploaded).toEqual([]);
+  options.matches = async () => true;
+  await publishExtensionAssets(options);
+  expect(uploaded).toEqual(["calendar.zip", "calendar.json"]);
+  uploaded.length = 0;
+  options.item.assets.push({ id: 4, name: "calendar.zip.sha256" });
+  await expect(publishExtensionAssets(options)).rejects.toThrow(
+    "Duplicate immutable release asset",
+  );
+  expect(uploaded).toEqual([]);
+});
+
+test("local checksum contents bind the actual archive hash and exact filename", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-checksum-"));
+  try {
+    const file = join(directory, "calendar.zip.sha256");
+    writeFileSync(file, extensionChecksum(packageRecord));
+    await validateExtensionChecksum(file, packageRecord);
+    for (const text of [
+      extensionChecksum({ ...packageRecord, sha256: "f".repeat(64) }),
+      `${packageRecord.sha256}  foreign.zip\n`,
+      `${extensionChecksum(packageRecord)}extra`,
+      `${packageRecord.sha256}  calendar.zip`,
+    ]) {
+      writeFileSync(file, text);
+      await expect(
+        validateExtensionChecksum(file, packageRecord),
+      ).rejects.toThrow("checksum");
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("all local package identities are checked before any release client request", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "extension-identity-"));
+  try {
+    const archive = Buffer.from("owned synthetic archive");
+    const entry = {
+      id: "calendar",
+      version: "1.0.0",
+      fingerprint: packageRecord.sourceFingerprint,
+    };
+    entry.tag = extensionReleaseTag(entry);
+    const record = {
+      ...packageRecord,
+      downloadBytes: archive.length,
+      sha256: createHash("sha256").update(archive).digest("hex"),
+      downloadURL: `https://github.com/synthetic/fixture/releases/download/${encodeURIComponent(entry.tag)}/calendar.zip`,
+    };
+    writeFileSync(join(directory, "calendar.zip"), archive);
+    writeFileSync(join(directory, "calendar.json"), JSON.stringify(record));
+    writeFileSync(
+      join(directory, "calendar.zip.sha256"),
+      extensionChecksum(record),
+    );
+    const calls = [];
+    const options = {
+      repository: "synthetic/fixture",
+      directory,
+      include: [entry],
+      preflightAsset: ({ file }) => calls.push(file),
+    };
+    await preflightExtensionBuilds(options);
+    expect(calls).toHaveLength(3);
+    for (const wrong of [
+      { ...record, id: "foreign" },
+      {
+        ...record,
+        downloadURL: record.downloadURL.replace(
+          "synthetic/fixture",
+          "foreign/project",
+        ),
+      },
+      {
+        ...record,
+        downloadURL: record.downloadURL.replace(
+          encodeURIComponent(entry.tag),
+          "foreign-tag",
+        ),
+      },
+    ]) {
+      calls.length = 0;
+      writeFileSync(join(directory, "calendar.json"), JSON.stringify(wrong));
+      writeFileSync(
+        join(directory, "calendar.zip.sha256"),
+        extensionChecksum(wrong),
+      );
+      await expect(preflightExtensionBuilds(options)).rejects.toThrow(
+        "release identity",
+      );
+      expect(calls).toEqual([]);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

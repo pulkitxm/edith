@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
@@ -9,12 +16,14 @@ import {
   validateCatalogPointer,
   verifyCatalogPointerData,
 } from "./extension-catalog-pointer.mjs";
+import { extensionReleaseTag } from "./extension-release-plan.mjs";
 import {
   downloadReleaseAsset,
   releaseAssetMatchesFile,
   releaseFileDigest,
 } from "./release-asset-read.mjs";
 import {
+  executeReleaseMutation,
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
@@ -77,22 +86,7 @@ function gh(...args) {
 }
 
 function mutate(...args) {
-  const result = JSON.parse(
-    execFileSync("pukbot", [...args, "--json"], { encoding: "utf8" }),
-  );
-  if (result.workflowUrl) {
-    const url = new URL(result.workflowUrl);
-    const parts = url.pathname.split("/").filter(Boolean);
-    gh(
-      "run",
-      "watch",
-      parts.at(-1),
-      "--repo",
-      `${parts[0]}/${parts[1]}`,
-      "--exit-status",
-    );
-  }
-  return result;
+  return executeReleaseMutation(args);
 }
 
 function release(repository, tag) {
@@ -103,18 +97,129 @@ async function upload(repository, releaseID, tag, file, name) {
   await uploadReleaseAsset({ repository, releaseID, tag, file, name });
 }
 
+export function extensionChecksum(record) {
+  if (
+    !/^[A-Za-z][A-Za-z0-9]*$/.test(record.id ?? "") ||
+    !/^[a-f0-9]{64}$/.test(record.sha256 ?? "")
+  )
+    throw new Error("Invalid extension checksum identity");
+  return `${record.sha256}  ${record.id}.zip\n`;
+}
+
+export async function validateExtensionChecksum(file, record) {
+  const expected = extensionChecksum(record);
+  if (
+    (await stat(file)).size !== Buffer.byteLength(expected) ||
+    (await readFile(file, "utf8")) !== expected
+  )
+    throw new Error("Extension checksum does not match the archive");
+}
+
+export function validateExtensionReleaseIdentity({
+  repository,
+  entry,
+  record,
+}) {
+  if (
+    record.id !== entry.id ||
+    entry.tag !==
+      extensionReleaseTag({
+        id: entry.id,
+        version: entry.version,
+        fingerprint: entry.fingerprint,
+      }) ||
+    record.downloadURL !==
+      `https://github.com/${repository}/releases/download/${encodeURIComponent(entry.tag)}/${entry.id}.zip`
+  )
+    throw new Error(
+      "Extension release identity does not match the source plan",
+    );
+}
+
+export async function validatedExtensionBuild({
+  repository,
+  directory,
+  entry,
+}) {
+  const record = JSON.parse(
+    await readFile(resolve(directory, `${entry.id}.json`), "utf8"),
+  );
+  validateExtensionReleaseIdentity({ repository, entry, record });
+  const digest = await releaseFileDigest(resolve(directory, `${entry.id}.zip`));
+  if (
+    record.sourceFingerprint !== entry.fingerprint ||
+    record.version !== entry.version ||
+    record.downloadBytes !== digest.size ||
+    record.sha256 !== digest.sha256
+  )
+    throw new Error("Build output does not match the release plan");
+  await validateExtensionChecksum(
+    resolve(directory, `${entry.id}.zip.sha256`),
+    record,
+  );
+  return record;
+}
+
+export async function preflightExtensionBuilds({
+  repository,
+  directory,
+  include,
+  preflightAsset = preflightReleaseAsset,
+}) {
+  for (const entry of include)
+    await validatedExtensionBuild({ repository, directory, entry });
+  for (const entry of include)
+    for (const suffix of ["zip", "json", "zip.sha256"])
+      preflightAsset({
+        repository,
+        file: resolve(directory, `${entry.id}.${suffix}`),
+      });
+}
+
+export async function publishExtensionAssets({
+  repository,
+  item,
+  entry,
+  files,
+  matches = releaseAssetMatchesFile,
+  uploadAsset = upload,
+}) {
+  for (const [, name] of files) {
+    const existing = item.assets.filter((asset) => asset.name === name);
+    if (existing.length > 1)
+      throw new Error("Duplicate immutable release asset");
+    if (existing.length === 0 && item.draft !== true)
+      throw new Error(
+        "Published extension release is missing an immutable asset",
+      );
+  }
+  const missing = [];
+  for (const [file, name] of files) {
+    const existing = item.assets.find((asset) => asset.name === name);
+    if (existing) {
+      if (!(await matches({ repository, asset: existing, file })))
+        throw new Error("Immutable asset differs from build output");
+    } else missing.push([file, name]);
+  }
+  for (const [file, name] of missing)
+    await uploadAsset(repository, item.id, entry.tag, file, name);
+}
+
 export async function restorePublishedExtension({
   repository,
   record,
   entry,
   publishedRecord,
   publishedArchive,
+  publishedChecksum,
+  checksumPath,
   recordPath,
   zip,
   downloadAsset = downloadReleaseAsset,
 }) {
   const { data } = await downloadAsset({ repository, asset: publishedRecord });
   const published = JSON.parse(data.toString("utf8"));
+  validateExtensionReleaseIdentity({ repository, entry, record: published });
   if (
     published.id !== record.id ||
     published.hostABI !== record.hostABI ||
@@ -134,7 +239,21 @@ export async function restorePublishedExtension({
       maximumBytes: 512 * 1024 ** 2,
       destination: archive,
     });
+    const checksum = extensionChecksum(published);
+    if (publishedChecksum) {
+      const result = await downloadAsset({
+        repository,
+        asset: publishedChecksum,
+        expectedBytes: Buffer.byteLength(checksum),
+        maximumBytes: 256,
+      });
+      if (result.data.toString("utf8") !== checksum)
+        throw new Error(
+          "Published extension checksum does not match the archive",
+        );
+    }
     await copyFile(archive, zip);
+    await writeFile(checksumPath, checksum);
     await writeFile(recordPath, data);
     return published;
   } finally {
@@ -354,27 +473,16 @@ export async function publishExtensions({
     await finalizeDraftCatalog({ verifyState, publish: publishDraft });
     return { published: [], revision: old.revision };
   }
-  for (const entry of include) {
-    for (const suffix of ["zip", "json"]) {
-      preflightReleaseAsset({
-        repository,
-        file: resolve(directory, `${entry.id}.${suffix}`),
-      });
-    }
-  }
+  await preflightExtensionBuilds({ repository, directory, include });
   const records = [];
   for (const entry of include) {
     const recordPath = resolve(directory, `${entry.id}.json`);
-    let record = JSON.parse(await readFile(recordPath, "utf8"));
+    let record = await validatedExtensionBuild({
+      repository,
+      directory,
+      entry,
+    });
     const zip = resolve(directory, `${entry.id}.zip`);
-    const digest = await releaseFileDigest(zip);
-    if (
-      record.sourceFingerprint !== entry.fingerprint ||
-      record.version !== entry.version ||
-      record.downloadBytes !== digest.size ||
-      record.sha256 !== digest.sha256
-    )
-      throw new Error("Build output does not match the release plan");
     let item = release(repository, entry.tag);
     if (!item) {
       mutate(
@@ -395,6 +503,10 @@ export async function publishExtensions({
       item = release(repository, entry.tag);
       if (!item) throw new Error("Created extension release is not available");
     }
+    const checksumPath = resolve(directory, `${entry.id}.zip.sha256`);
+    const publishedChecksum = item.assets.find(
+      (asset) => asset.name === `${entry.id}.zip.sha256`,
+    );
     const publishedRecord = item.assets.find(
       (asset) => asset.name === `${entry.id}.json`,
     );
@@ -408,26 +520,22 @@ export async function publishExtensions({
         entry,
         publishedRecord,
         publishedArchive,
+        publishedChecksum,
+        checksumPath,
         recordPath,
         zip,
       });
     }
-    for (const [file, name] of [
-      [zip, `${entry.id}.zip`],
-      [recordPath, `${entry.id}.json`],
-    ]) {
-      const existing = item.assets.find((asset) => asset.name === name);
-      if (existing) {
-        if (
-          !(await releaseAssetMatchesFile({
-            repository,
-            asset: existing,
-            file,
-          }))
-        )
-          throw new Error("Immutable asset differs from build output");
-      } else await upload(repository, item.id, entry.tag, file, name);
-    }
+    await publishExtensionAssets({
+      repository,
+      item,
+      entry,
+      files: [
+        [zip, `${entry.id}.zip`],
+        [recordPath, `${entry.id}.json`],
+        [checksumPath, `${entry.id}.zip.sha256`],
+      ],
+    });
     mutate(
       "release",
       "edit",

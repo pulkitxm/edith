@@ -87,6 +87,71 @@ export function preflightReleaseAsset({
   }
 }
 
+function releaseRequestDeadline({ totalTimeoutMs, now, operation }) {
+  if (
+    !Number.isSafeInteger(totalTimeoutMs) ||
+    totalTimeoutMs < 1 ||
+    totalTimeoutMs > 30 * 60_000
+  )
+    throw new Error(`Invalid release ${operation} deadline`);
+  const started = now();
+  if (!Number.isFinite(started))
+    throw new Error(`Invalid release ${operation} clock`);
+  const deadline = started + totalTimeoutMs;
+  const remaining = () => {
+    const current = now();
+    if (!Number.isFinite(current) || current < started)
+      throw new Error(`Invalid release ${operation} clock`);
+    const duration = Math.floor(deadline - current);
+    if (duration < 1)
+      throw new Error(`Release ${operation} total deadline exceeded`);
+    return duration;
+  };
+  return remaining;
+}
+
+export function executeReleaseMutation(
+  args,
+  {
+    execute = execFileSync,
+    totalTimeoutMs = 30 * 60_000,
+    now = () => performance.now(),
+  } = {},
+) {
+  const remaining = releaseRequestDeadline({
+    totalTimeoutMs,
+    now,
+    operation: "mutation",
+  });
+  const result = runAssetRequest(args, execute, remaining());
+  if (result.workflowUrl) {
+    const match =
+      /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/actions\/runs\/([1-9][0-9]*)$/.exec(
+        result.workflowUrl,
+      );
+    if (!match) throw new Error("Invalid release mutation workflow identity");
+    execute(
+      "gh",
+      [
+        "run",
+        "watch",
+        match[3],
+        "--repo",
+        `${match[1]}/${match[2]}`,
+        "--exit-status",
+      ],
+      {
+        encoding: "utf8",
+        timeout: remaining(),
+        killSignal: "SIGKILL",
+        maxBuffer: 2 * 1024 ** 2,
+      },
+    );
+  }
+  remaining();
+  return result;
+}
+
 export async function uploadReleaseAsset({
   repository,
   releaseID,
@@ -97,25 +162,11 @@ export async function uploadReleaseAsset({
   totalTimeoutMs = 30 * 60_000,
   now = () => performance.now(),
 }) {
-  if (
-    !Number.isSafeInteger(totalTimeoutMs) ||
-    totalTimeoutMs < 1 ||
-    totalTimeoutMs > 30 * 60_000
-  )
-    throw new Error("Invalid release asset upload deadline");
-  const started = now();
-  if (!Number.isFinite(started))
-    throw new Error("Invalid release asset upload clock");
-  const deadline = started + totalTimeoutMs;
-  const remaining = () => {
-    const current = now();
-    if (!Number.isFinite(current) || current < started)
-      throw new Error("Invalid release asset upload clock");
-    const duration = Math.floor(deadline - current);
-    if (duration < 1)
-      throw new Error("Release asset upload total deadline exceeded");
-    return duration;
-  };
+  const remaining = releaseRequestDeadline({
+    totalTimeoutMs,
+    now,
+    operation: "asset upload",
+  });
   const args = assetArguments({ repository, releaseID, file, name });
   try {
     const result = runAssetRequest(args, execute, remaining());
