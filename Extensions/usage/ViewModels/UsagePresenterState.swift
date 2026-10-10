@@ -17,11 +17,17 @@ final class UsagePresenterState {
                     namespace: "usage.fixture"))
     }
 
-    var active: Bool { privacy.values["active"] == "1" }
-    var money: Bool { privacy.values["blurMoney"].map { $0 != "0" } ?? true }
-    var usage: Bool { privacy.values["blurUsage"].map { $0 != "0" } ?? false }
+    private var values: [String: String] {
+        UsageUIClient.current?.presentationValues ?? privacy.values
+    }
+    var active: Bool {
+        if let client = UsageUIClient.current, client.presentationValues == nil { return true }
+        return values["active"] == "1"
+    }
+    var money: Bool { values["blurMoney"].map { $0 != "0" } ?? true }
+    var usage: Bool { values["blurUsage"].map { $0 != "0" } ?? false }
     func hides(_ category: String) -> Bool {
-        active && (privacy.values["blur" + category].map { $0 != "0" } ?? true)
+        active && (values["blur" + category].map { $0 != "0" } ?? true)
     }
     func shutdown() { privacy.shutdown() }
 }

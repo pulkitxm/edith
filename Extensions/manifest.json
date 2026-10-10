@@ -1676,7 +1676,11 @@
         "Extensions/usage/Views/UsageMachineSettingsRows.swift",
         "Extensions/usage/Views/UsageMachinesPicker.swift",
         "Extensions/usage/Views/UsageSettingsRows.swift",
-        "Extensions/usage/Views/UsageShareCardView.swift"
+        "Extensions/usage/Views/UsageShareCardView.swift",
+        "Extensions/usage/Models/UsageUIPreferences.swift",
+        "Extensions/usage/Services/UsageUICommands.swift",
+        "Extensions/usage/ViewModels/UsageUIClient.swift",
+        "Extensions/usage/Views/UsageHomeActivityCard.swift"
       ]
     },
     "resources": {

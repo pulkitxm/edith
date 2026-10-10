@@ -70,7 +70,9 @@ struct DashboardView: View {
             }
         } content: {
             if showLog { logView }
-            if let notice = UsageWorkerOperations.controller?.notice {
+            if let notice = UsageUIClient.current?.notice
+                ?? UsageWorkerOperations.controller?.notice
+            {
                 PageNotice(notice, tone: .information)
             }
             if model.loaded, let error = model.contentLoad.errorMessage {
@@ -123,6 +125,9 @@ struct DashboardView: View {
             guard automaticActionsEnabled else { return }
             model.reloadPreferences()
             syncCustomDates()
+        }
+        .onChange(of: automaticActionsEnabled) { _, enabled in
+            if !enabled { refresh.setLogVisible(false) }
         }
         .onChange(of: showLog) { _, shown in
             refresh.setLogVisible(shown)

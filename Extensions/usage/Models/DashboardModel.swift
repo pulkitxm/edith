@@ -524,7 +524,8 @@ final class DashboardModel {
     }
 
     private func watchDataDir() {
-        guard extensionEnabled, observers > 0, dataDirWatch == nil else { return }
+        guard UsageUIClient.current == nil, extensionEnabled, observers > 0, dataDirWatch == nil
+        else { return }
         let fd = open(Repo.dataDir.path, O_EVTONLY)
         guard fd >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -585,6 +586,13 @@ final class DashboardModel {
     func load() async {
         syncExtensionState()
         guard extensionEnabled else { return }
+        if let client = UsageUIClient.current {
+            await contentLoad.perform(operation: { try await client.document() }) { parsed in
+                self.ingest(parsed)
+            }
+            if !Task.isCancelled { loadAttempted = true }
+            return
+        }
         await restoreCachedHomeUsage()
         let url = Repo.usageJSON
         let request = contentLoad.begin()
@@ -694,13 +702,14 @@ final class DashboardModel {
     }
 
     func restoreCachedHomeUsage() async {
-        guard !homeUsage.hasDays else { return }
+        guard UsageUIClient.current == nil, !homeUsage.hasDays else { return }
         guard let cached = await homeUsageStore.load(), cached.hasDays else { return }
         homeUsage = cached
         heatDetail = cached.heatDetail
     }
 
     private func persistHomeUsage() {
+        guard UsageUIClient.current == nil else { return }
         homeUsageStoreTask?.cancel()
         let snapshot = homeUsage
         let store = homeUsageStore

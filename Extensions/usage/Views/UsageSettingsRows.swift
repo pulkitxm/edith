@@ -392,7 +392,15 @@ struct UsageSettingsRows: View {
                     notificationTest?.cancel()
                     testSent = true
                     notificationTest = Task {
-                        let result = await LimitNotifier.shared.sendTest()
+                        let result: String
+                        if let client = UsageUIClient.current {
+                            result =
+                                (try? await client.value(
+                                    "usage.ui.notifications.test", as: String.self))
+                                ?? "Notification test failed"
+                        } else {
+                            result = await LimitNotifier.shared.sendTest()
+                        }
                         guard !Task.isCancelled else { return }
                         testMessage = result
                         do { try await Task.sleep(for: .seconds(3)) } catch { return }
@@ -438,8 +446,12 @@ struct UsageSettingsRows: View {
                 if enabled {
                     notificationPermission?.cancel()
                     notificationPermission = Task {
-                        _ = try? await UNUserNotificationCenter.current().requestAuthorization(
-                            options: [.alert, .sound, .badge])
+                        if let client = UsageUIClient.current {
+                            _ = try? await client.invoke("usage.ui.notifications.authorize")
+                        } else {
+                            _ = try? await UNUserNotificationCenter.current().requestAuthorization(
+                                options: [.alert, .sound, .badge])
+                        }
                     }
                 }
             })

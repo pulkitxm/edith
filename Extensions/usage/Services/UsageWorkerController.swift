@@ -211,6 +211,14 @@ public enum UsageWorkerOperations {
     static var machinesProjection: UsageMachinesProjection?
 
     public static func forgetMachine(_ machineID: UUID) async throws {
+        if let client = UsageUIClient.current {
+            _ = try await client.invoke(
+                "usage.machines.forget",
+                payload: JSONSerialization.data(withJSONObject: [
+                    "machineID": machineID.uuidString, "confirm": true,
+                ]))
+            return
+        }
         guard let controller, let machinesProjection else { throw ExtensionPeerError.unavailable }
         await controller.cancelRefresh()
         try Task.checkCancellation()
@@ -221,11 +229,18 @@ public enum UsageWorkerOperations {
     public static func requestRefresh(machinePolicy: UsageMachineRefreshPolicy = .due) throws
         -> String
     {
+        if let client = UsageUIClient.current {
+            client.perform(
+                "usage.refresh",
+                object: ["machinePolicy": ["skip", "due", "all"][machinePolicy.rawValue]])
+            return "remote"
+        }
         guard let controller else { throw ExtensionPeerError.unavailable }
         return try controller.requestRefresh(policy: machinePolicy)
     }
 
     public static func requestLimitsRefresh() throws {
+        if let client = UsageUIClient.current { client.perform("usage.limits.refresh"); return }
         guard let controller else { throw ExtensionPeerError.unavailable }
         try controller.requestLimitsRefresh()
     }

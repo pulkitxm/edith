@@ -20,10 +20,18 @@ final class ExtensionRuntime: NSObject {
     private var backupRestoreTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private let commands = ExtensionCommandRegistry()
+    private var uiCommands: UsageUICommands?
+    private var uiClient: UsageUIClient?
+    private var uiOnly = false
+    private var uiLocation: String?
+    private var uiTile: SurfaceTile?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.controller != nil else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("usage.ui."), let uiCommands = self.uiCommands {
+                return try await uiCommands.execute(command, payload: payload)
+            }
             if command.hasPrefix("surface."), let surface = self.surface {
                 return try await surface.execute(command, payload: payload)
             }
@@ -64,6 +72,7 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
+        uiCommands?.shutdown(); uiCommands = nil
         controller?.beginShutdown()
         alertsTask?.cancel()
         backupRestoreTask?.cancel()
@@ -106,6 +115,13 @@ final class ExtensionRuntime: NSObject {
         }
     }
 
+    private func stopUI() {
+        uiClient?.stop(); uiClient = nil; UsageUIClient.current = nil
+        DashboardModel.shared.shutdown()
+        UsagePresenterState.shared.shutdown()
+        uiOnly = false; uiLocation = nil; uiTile = nil
+    }
+
     @objc func execute(_ input: NSDictionary) -> NSObject {
         switch input["operation"] as? String {
         case "describe":
@@ -116,7 +132,27 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input) else {
+                return ["ok": false] as NSDictionary
+            }
+            stopUI()
+            uiOnly = configuration.uiOnly
+            uiLocation = input["location"] as? String
+            if let data = input["tile"] as? Data, data.count <= 65_536 {
+                uiTile = try? JSONDecoder().decode(SurfaceTile.self, from: data)
+            }
+            if let client = configuration.engineClient {
+                let model = UsageUIClient(client: client)
+                uiClient = model; UsageUIClient.current = model
+                model.start()
+            }
+            return ["ok": true] as NSDictionary
+        case "stopUI": stopUI(); return ["ok": true] as NSDictionary
         case "start":
+            guard Bundle.main.bundleURL.pathExtension != "appex", uiLocation == nil else {
+                return ["ok": false] as NSDictionary
+            }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -143,6 +179,7 @@ final class ExtensionRuntime: NSObject {
             }
             self.controller = controller
             UsageWorkerOperations.controller = controller
+            uiCommands = UsageUICommands(controller: controller)
             let cache = SurfaceUsageStore(url: Repo.usageJSON)
             surface = UsageSurface(store: cache, controller: controller)
             UsageWorkerOperations.statusLineCommands = statusLine
@@ -175,11 +212,26 @@ final class ExtensionRuntime: NSObject {
                 }
             }
         case "view":
-            guard controller != nil else { return ["ok": false] as NSDictionary }
+            guard uiClient != nil || uiOnly else { return ["ok": false] as NSDictionary }
+            if uiLocation == "settings" {
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        UsageEmbeddedScene(client: self.uiClient, readOnly: self.uiOnly) {
+                            Form { UsageSettingsRows() }.formStyle(.grouped).disabled(self.uiOnly)
+                        }
+                    })
+            }
+            if let tile = uiTile, tile.widget == .activity {
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        UsageEmbeddedScene(client: self.uiClient) {
+                            UsageHomeActivityCard(tile: tile)
+                        }
+                    })
+            }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    UsageWorkerPage().environment(
-                        \.automaticViewActionsEnabled, UsageExecutionEnvironment.fixtureHome == nil)
+                    UsageEmbeddedScene(client: self.uiClient) { DashboardView() }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
@@ -191,21 +243,13 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
-private struct UsageWorkerPage: View {
-    @State private var settings = false
+private struct UsageEmbeddedScene<Content: View>: View {
+    let client: UsageUIClient?
+    var readOnly = false
+    @ViewBuilder let content: () -> Content
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Button("Dashboard") { settings = false }
-                Button("Settings") { settings = true }
-                Spacer()
-            }.padding(UIScale.pt(12))
-            if settings {
-                Form { UsageSettingsRows() }.formStyle(.grouped)
-            } else {
-                DashboardView()
-            }
-        }
+        content().environment(\.automaticViewActionsEnabled, !readOnly && client?.stopped == false)
     }
 }
 

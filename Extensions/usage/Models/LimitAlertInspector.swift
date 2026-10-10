@@ -26,7 +26,10 @@ public enum LimitAlertInspector {
     }
 
     public static func previewLines() async -> [String] {
-        await Task.detached(priority: .utility) {
+        if let client = await UsageUIClient.current {
+            return (try? await client.value("usage.ui.alerts", as: [String].self)) ?? []
+        }
+        return await Task.detached(priority: .utility) {
             let clock = LimitAlertClock()
             return inspect(clock: clock).map { $0.summary(clock: clock) }
         }.value

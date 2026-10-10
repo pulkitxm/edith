@@ -32,8 +32,14 @@ struct UsageMachineSettingsRows: View {
             if let failure { Text(failure).settingsCaption().foregroundStyle(.red) }
         }
         .pageTask {
-            guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else { return }
-            machines = MachineRegistry.machines().filter { $0.id != Machine.localID }
+            if let client = UsageUIClient.current {
+                machines = (try? await client.value("usage.ui.machines", as: [Machine].self)) ?? []
+            } else {
+                guard SurfaceHostContext.current?.activeIDs.contains("machines") == true else {
+                    return
+                }
+                machines = MachineRegistry.machines().filter { $0.id != Machine.localID }
+            }
             selected = Set(
                 (SharedDefaults.store.stringArray(forKey: UsageMachinesPeer.selectedDefaultsKey)
                     ?? []).compactMap(
@@ -63,8 +69,14 @@ struct UsageMachineSettingsRows: View {
 
     private func include(_ machine: Machine, _ included: Bool) {
         if included { selected.insert(machine.id) } else { selected.remove(machine.id) }
-        SharedDefaults.store.set(
-            selected.map(\.uuidString).sorted(), forKey: UsageMachinesPeer.selectedDefaultsKey)
+        if let client = UsageUIClient.current {
+            client.perform(
+                "usage.machines.select",
+                object: ["machineID": machine.id.uuidString, "included": included])
+        } else {
+            SharedDefaults.store.set(
+                selected.map(\.uuidString).sorted(), forKey: UsageMachinesPeer.selectedDefaultsKey)
+        }
         if let group = DashboardModel.shared.machineGroups.first(where: {
             $0.id.lowercased() == machine.id.uuidString.lowercased()
         }) {

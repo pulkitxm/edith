@@ -137,6 +137,7 @@ struct ProjectDrilldownView: View {
                 }
             }
         }
+        .onDisappear { actions.cancel() }
     }
 
     private var toggleButton: some View {

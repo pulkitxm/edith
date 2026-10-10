@@ -91,6 +91,13 @@ public final class DashboardRefreshBridge {
         reloadTask?.cancel()
         let url = logURL
         reloadTask = Task { [weak self] in
+            if let client = UsageUIClient.current {
+                guard let text = try? await client.value("usage.ui.log", as: String.self),
+                    !Task.isCancelled
+                else { return }
+                self?.log = text
+                return
+            }
             let text = await Task.detached(priority: .utility) {
                 FileTail.read(url, maxBytes: 64 * 1024)
             }.value
