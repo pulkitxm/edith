@@ -10,16 +10,23 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: LaTeXModel?
     private var engineClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let worker = self?.worker else { throw ExtensionPeerError.unavailable }
+            guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("latex.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "latex")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try LaTeXCLIExecution.stream(
+                    streams, operation: command, payload: payload, store: worker.model.store)
+            }
             if command == "latex.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                let input =
-                    try JSONDecoder().decode(LaTeXCLIInput.self, from: payload).input ?? Data()
                 return try JSONEncoder().encode(
-                    try await LaTeXCLIExecution.run(request, input: input))
+                    try await LaTeXCLIExecution.run(request, store: worker.model.store))
             }
             if command.hasPrefix("latex.ui.") {
                 return try await LaTeXUIBridge.execute(
@@ -31,9 +38,13 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
         Task {
-            await worker?.shutdown(); completion()
+            await worker?.shutdown()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
+            completion()
         }
     }
 
@@ -74,6 +85,8 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
+            let streams = cliStreams; cliStreams = nil; streams?.stop()
+            Task { await streams?.stopAndWait() }
             commands.shutdown()
             let stopping = worker; worker = nil
             Task { await stopping?.shutdown() }

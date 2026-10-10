@@ -5,16 +5,13 @@ import EdithExtensionSupport
 import Foundation
 
 enum LaTeXCLIEnvironment {
-    nonisolated(unsafe) static var store = LaTeXProjectStore()
-    nonisolated(unsafe) static var service = LaTeXService.live
-    nonisolated(unsafe) static var input: @Sendable () throws -> Data = {
-        Data()
-    }
-
-    static func reset() {
-        store = LaTeXProjectStore()
-        service = .live
-        input = { Data() }
+    @TaskLocal static var store = LaTeXProjectStore()
+    @TaskLocal static var service = LaTeXService.live
+    static func input() throws -> Data {
+        guard let request = ExtensionCLIContext.request else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        return request.standardInput
     }
 }
 
@@ -237,7 +234,11 @@ struct LaTeXTextEdit: Decodable {
             }
             let project = try await LaTeXCLIEnvironment.service.resolve(
                 LaTeXProject(
-                    name: name, location: location, sourcePath: file ?? source!, compiler: engine,
+                    name: name, location: location,
+                    sourcePath: try file.map {
+                        try ExtensionCLIContext.resolvePath(($0 as NSString).expandingTildeInPath)
+                            .path
+                    } ?? source!, compiler: engine,
                     repository: repo ?? "", baseBranch: branch))
             _ = try await LaTeXCLI.source(project)
             let projects = try LaTeXCLIEnvironment.store.load()

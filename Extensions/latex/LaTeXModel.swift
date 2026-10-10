@@ -30,7 +30,7 @@ final class LaTeXModel {
     private var remoteActionRunning = false
     private var draftTask: Task<Void, Never>?
     private let service: LaTeXService
-    private let store: LaTeXProjectStore
+    let store: LaTeXProjectStore
     private var operation: Task<Void, Never>?
     private var pdfID: UUID?
     private var jobs: [UUID: Task<Void, Never>] = [:]
