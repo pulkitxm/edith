@@ -22,6 +22,7 @@ import Foundation
     private(set) var isStopped = false
     private var started = false
     private var cliStreams: ExtensionCLIStreams?
+    private var agentCLIStreams: ExtensionCLIStreams?
     private struct ShellSelection {
         let target: PaneTarget
         let holder: TerminalSessionHolder
@@ -212,6 +213,25 @@ import Foundation
         }
         if command.hasPrefix("herdr.ui.") {
             return try await uiEngine.execute(command, payload: payload)
+        }
+        if command == "herdr.agent.cli" {
+            return try JSONEncoder().encode(
+                await HerdrAgentCLIExecution.run(
+                    JSONDecoder().decode(ExtensionCLIRequest.self, from: payload), worker: self))
+        }
+        if command == "herdr.agent.catalog" {
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+            return try JSONSerialization.data(withJSONObject: HerdrAgentCLIExecution.catalog)
+        }
+        if [
+            "herdr.agent.cli.start", "herdr.agent.cli.read", "herdr.agent.cli.write",
+            "herdr.agent.cli.resize", "herdr.agent.cli.cancel", "herdr.agent.cli.end",
+        ].contains(command) {
+            if agentCLIStreams == nil { agentCLIStreams = try ExtensionCLIStreams(owner: "herdr") }
+            guard let agentCLIStreams else { throw ExtensionPeerError.unavailable }
+            return try HerdrAgentCLIExecution.invokeStream(
+                command, payload: payload,
+                worker: self, streams: agentCLIStreams)
         }
         if command == "herdr.cli.catalog" {
             guard payload.count <= 16384,
@@ -492,6 +512,7 @@ import Foundation
         maintenance?.cancel()
         await catalogs.shutdown()
         await cliStreams?.stopAndWait()
+        await agentCLIStreams?.stopAndWait()
     }
 
     func shutdown() async {
@@ -506,7 +527,9 @@ import Foundation
         for selection in shells.values { selection.holder.stop() }
         shells.removeAll()
         await cliStreams?.stopAndWait()
+        await agentCLIStreams?.stopAndWait()
         cliStreams = nil
+        agentCLIStreams = nil
         do { try await activity.hookFiles.suspend(activityInstaller) } catch {
             activity.hookError = error.localizedDescription
         }

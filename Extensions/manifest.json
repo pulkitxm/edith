@@ -2846,6 +2846,7 @@
         "Extensions/herdr/CLI/OwnedTerminalCLI.swift",
         "Extensions/herdr/CLI/HerdrCLIExecution.swift",
         "Extensions/herdr/CLI/HerdrCLICatalog.swift",
+        "Extensions/herdr/CLI/HerdrAgentActivityCommands.swift",
         "Extensions/herdr/CLI/HerdrCommands.swift",
         "Extensions/herdr/CLI/HerdrLaunchCommands.swift",
         "Extensions/herdr/CLI/HerdrLayoutCommands.swift",

@@ -219,6 +219,24 @@ final class AgentActivityMonitor {
         decisionErrors = [:]
     }
 
+    func performHook(_ payload: Data, provider: AgentActivityProvider, pane: String? = nil)
+        async throws -> Data
+    {
+        guard !stopped, payload.count <= AgentActivityParser.maximumInputBytes,
+            pane.map({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }) ?? true
+        else { throw ExtensionPeerError.invalidRequest }
+        let choice: AgentApprovalChoice?
+        if let event = try AgentActivityParser.parse(payload, provider: provider, pane: pane) {
+            choice = await AgentActivityHookRunner { [weak self] command, input in
+                guard let self else { throw ExtensionPeerError.unavailable }
+                return try await self.execute(command, payload: input)
+            }.run(event)
+        } else {
+            choice = nil
+        }
+        return try AgentActivityHookOutput.data(provider: provider, choice: choice)
+    }
+
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !stopped, payload.count <= AgentActivityParser.maximumInputBytes else {
             throw ExtensionPeerError.invalidRequest
@@ -230,17 +248,9 @@ final class AgentActivityMonitor {
             else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let choice: AgentApprovalChoice?
-            if let event = try AgentActivityParser.parse(payload, provider: provider) {
-                choice = await AgentActivityHookRunner { [weak self] command, input in
-                    guard let self else { throw ExtensionPeerError.unavailable }
-                    return try await self.execute(command, payload: input)
-                }.run(event)
-            } else {
-                choice = nil
-            }
-            return try AgentActivityHookOutput.data(provider: provider, choice: choice)
+            return try await performHook(payload, provider: provider)
         }
+
         let allowed: Set<String>
         switch command {
         case "activity.status": allowed = []
