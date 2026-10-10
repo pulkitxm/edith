@@ -602,7 +602,9 @@
         "Extensions/cleaner/Surface.swift",
         "Extensions/cleaner/CleanerUICommands.swift",
         "Extensions/cleaner/CLI/CleanerCLIExecution.swift",
-        "Extensions/cleaner/CLI/CleanerTerminalCommands.swift"
+        "Extensions/cleaner/CLI/CleanerTerminalCommands.swift",
+        "Extensions/cleaner/CLI/CleanerCLIProgress.swift",
+        "Extensions/cleaner/CLI/CleanerCLICatalog.swift"
       ]
     },
     "inputs": [

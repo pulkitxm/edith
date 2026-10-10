@@ -40,6 +40,6 @@ import Foundation
     static func run(_ request: ExtensionCLIRequest) async throws -> ExtensionCLIReply {
         try request.validate()
         return try await ExtensionCLIExecution.run(
-            CleanerCommand.self, arguments: request.arguments)
+            CleanerCommand.self, request: request)
     }
 }

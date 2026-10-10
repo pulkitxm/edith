@@ -12,10 +12,20 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: CleanerModel?
     private var uiClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private let cliStreams = try? ExtensionCLIStreams(owner: "cleaner")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let model = self?.model else { throw ExtensionPeerError.unavailable }
+            if command == "cleaner.cli.catalog" { return try CleanerCLICatalog.data() }
+            if command.hasPrefix("cleaner.cli.stream.") {
+                guard let cliStreams = self?.cliStreams else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try cliStreams.invoke(
+                    CleanerCommand.self, operation: command, prefix: "cleaner.cli.stream",
+                    payload: payload)
+            }
             if command == "cleaner.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(try await CleanerCLIExecution.run(request))
@@ -39,6 +49,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         Task {
             await commands.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             await model?.shutdown()
             completion()
         }
@@ -73,7 +84,7 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown()
+            commands.shutdown(); cliStreams?.stop()
             model = nil
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

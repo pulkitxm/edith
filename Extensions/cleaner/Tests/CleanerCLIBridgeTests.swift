@@ -18,6 +18,15 @@ import Testing
         #expect(
             scan.exitCode == 0 && scan.stderr.isEmpty && scan.stdout.contains("node_modules")
                 && scan.stdout.contains("8192"))
+        let directory = FileManager.default.currentDirectoryPath
+        let relative = try await CleanerCLIExecution.run(
+            .init(
+                arguments: ["scan", "--root", "project", "--category", "nodeModules"],
+                workingDirectory: root.path, interactive: true))
+        #expect(
+            relative.exitCode == 0 && relative.stdout.contains("node_modules")
+                && relative.stderr.contains("scanning") && relative.stderr.contains("\u{1B}[K"))
+        #expect(FileManager.default.currentDirectoryPath == directory)
         let preview = try await CleanerCLIExecution.run(
             .init(arguments: ["clean", "--root", root.path, "--category", "nodeModules", "--json"])
         )
