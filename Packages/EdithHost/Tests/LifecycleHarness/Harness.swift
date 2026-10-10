@@ -17,17 +17,13 @@ struct HostLifecycleHarness {
             arguments.count == 5 || (arguments[3] == "database" && arguments[5] == "--headless-cli")
         else { throw HostWorkerError.rejected }
         let headlessCLI = arguments.count == 6
-        let validateSurface = arguments[4] == "1"
         let extensionID = arguments[3]
+        let validateSurface = arguments[4] == "1" && extensionID != "music"
         try WorkerLifecycleFixture.requireSupported(extensionID)
         let requestedFixture = URL(fileURLWithPath: arguments[0])
         let fixture =
             extensionID == "calendar"
             ? CalendarLifecycleFixture.canonicalDirectory(requestedFixture) : requestedFixture
-        if extensionID == "studio" {
-            setenv(
-                "EDITH_TEST_RUNTIME_ROOT", fixture.appendingPathComponent("studio-runtime").path, 1)
-        }
         let sourceApp = URL(fileURLWithPath: arguments[1])
         let releases = URL(fileURLWithPath: arguments[2])
         let requestedIdentifier = ProcessInfo.processInfo.environment[
@@ -287,7 +283,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "studio" {
-                try await verifyStudio(endpoint, fixture: fixture, seed: true)
+                try await verifyStudio(endpoint)
             } else if extensionID == "database" {
                 try await verifyDatabase(endpoint, seed: true, headlessCLI: true)
             } else if extensionID == "blitztree" {
@@ -309,8 +305,8 @@ struct HostLifecycleHarness {
                     field: "hasSavedKey", expected: true)
             } else if extensionID == "presenter" {
                 try await verify(
-                    endpoint, command: "presenter.start", input: [:], field: "active",
-                    expected: true)
+                    endpoint, command: "presenter.status", input: [:], field: "active",
+                    expected: false)
             }
             try removeWorkerFixtures()
             try await install(second, releases: releases, store: store)
@@ -363,7 +359,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
-                try await verifyStudio(endpoint, fixture: fixture, seed: false)
+                try await verifyStudio(endpoint)
             } else if extensionID == "database" {
                 try await verifyDatabase(endpoint, seed: false, headlessCLI: true)
             } else if extensionID == "blitztree" {
@@ -383,7 +379,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "presenter" {
                 try await verify(
                     endpoint, command: "presenter.status", input: [:], field: "active",
-                    expected: true)
+                    expected: false)
             }
             await sessions.shutdown()
             try removeWorkerFixtures()
@@ -474,7 +470,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "clipboard" {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
-                try await verifyStudio(endpoint, fixture: fixture, seed: false)
+                try await verifyStudio(endpoint)
             } else if extensionID == "database" {
                 try await verifyDatabase(endpoint, seed: false, headlessCLI: true)
             } else if extensionID == "blitztree" {
@@ -497,7 +493,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "presenter" {
                 try await verify(
                     endpoint, command: "presenter.status", input: [:], field: "active",
-                    expected: true)
+                    expected: false)
                 try await verify(
                     endpoint, command: "presenter.stop", input: [:], field: "active",
                     expected: false)
@@ -586,7 +582,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"calendarFixtureLifecycleValidated\":\(extensionID == "calendar"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":false,\"studioMetadataValidated\":\(extensionID == "studio"),\"inertFeatureDeclineValidated\":\(extensionID == "music"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"calendarFixtureLifecycleValidated\":\(extensionID == "calendar"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -617,6 +613,14 @@ struct HostLifecycleHarness {
             context.activeVersions[id] != nil, context.home == saved
         else {
             throw HostWorkerError.invalidResponse
+        }
+        if id == "music" {
+            try await InertCommandDecline.verify([
+                "surface.snapshot", "surface.perform", "music.ui.hostSlots", "music.cli",
+                "backup.synchronize",
+            ]) { command in
+                try await endpoint.invoke(command, payload: Data("{}".utf8), timeout: 5)
+            }
         }
         if validateData {
             var tile = SurfaceTile(.ability(id))

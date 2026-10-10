@@ -138,8 +138,10 @@ struct WorkerLifecycleFixtureTests {
                 defaultsSuite: suite)
         }
         try rejected { try issuer.issue(second, hostApp: app, defaultsSuite: identifier + ".host") }
-        try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
-        try rejected { _ = try WorkerLifecycleFixture(root: root, hostIdentifier: identifier) }
+        for mode in [0o755, 0o740] {
+            try manager.setAttributes([.posixPermissions: mode], ofItemAtPath: root.path)
+            try rejected { _ = try WorkerLifecycleFixture(root: root, hostIdentifier: identifier) }
+        }
         try manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
         let alias = root.appendingPathComponent("alias")
         try manager.createSymbolicLink(at: alias, withDestinationURL: root)
@@ -159,21 +161,26 @@ struct WorkerLifecycleFixtureTests {
         try issuer.issue(second, hostApp: app, defaultsSuite: suite)
         try issuer.validateExact(second, hostApp: app, defaultsSuite: suite)
         try issuer.remove(second)
-        for id in WorkerLifecycleFixture.blockedIDs {
-            try rejected { try WorkerLifecycleFixture.requireSupported(id) }
-        }
         try rejected { try WorkerLifecycleFixture.requireSupported("unknown") }
+        try rejected { _ = try issuer.home(for: "futureWorker") }
+        guard !manager.fileExists(atPath: root.appendingPathComponent("futureWorker-home").path)
+        else {
+            throw WorkerLifecycleFixtureError.path
+        }
         for id in WorkerLifecycleFixture.supportedIDs {
             try WorkerLifecycleFixture.requireSupported(id)
         }
-        let allIDs = WorkerLifecycleFixture.supportedIDs.union(WorkerLifecycleFixture.blockedIDs)
+        let allIDs = WorkerLifecycleFixture.supportedIDs
         guard allIDs.count == 39 else { throw WorkerLifecycleFixtureError.identity }
         for id in allIDs.subtracting(["calendar"]) {
             let selectedData = base.appendingPathComponent("Data").appendingPathComponent(id)
+            let admittedRole =
+                WorkerLifecycleFixture.inertIDs.contains(id)
+                    && !["music", "plugins", "studio"].contains(id) ? "helper" : "app"
             let role = base.appendingPathComponent(
                 "Extensions/" + id + "/1/arm64/1.1.0/" + id
                     + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
-                    + id + "/app.bundle")
+                    + id + "/" + admittedRole + ".bundle")
             try manager.createDirectory(
                 at: selectedData, withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700])
@@ -183,10 +190,43 @@ struct WorkerLifecycleFixtureTests {
             let selected = WorkerLifecycleFixture.Selection(
                 extensionID: id,
                 dataDirectory: selectedData, roleDirectory: role, version: "1.1.0", hostABI: "1")
+            if WorkerLifecycleFixture.inertIDs.contains(id) {
+                let wrongRole = role.deletingLastPathComponent().appendingPathComponent(
+                    admittedRole == "app" ? "helper.bundle" : "app.bundle")
+                try manager.createDirectory(at: wrongRole, withIntermediateDirectories: false)
+                let rejectedRole = WorkerLifecycleFixture.Selection(
+                    extensionID: id, dataDirectory: selectedData, roleDirectory: wrongRole,
+                    version: selected.version, hostABI: selected.hostABI)
+                try rejected {
+                    try issuer.issue(
+                        rejectedRole, hostApp: app, defaultsSuite: identifier + ".extensions." + id)
+                }
+            }
             try issuer.issue(
                 selected, hostApp: app, defaultsSuite: identifier + ".extensions." + id)
             try issuer.validateExact(
                 selected, hostApp: app, defaultsSuite: identifier + ".extensions." + id)
+            #if WORKER_ADMISSION_CONTRACT
+            if WorkerLifecycleFixture.inertIDs.contains(id) {
+                let selectedHome = try issuer.home(for: id)
+                let context: NSDictionary = [
+                    "hostIdentifier": identifier, "defaultsSuite": identifier + ".extensions." + id,
+                    "dataDirectory": selectedData.path,
+                ]
+                let environment = [
+                    "EDITH_APPLICATION_IDENTIFIER": identifier, "EDITH_EXTENSION_ID": id,
+                    "EDITH_SHARED_DEFAULTS_SUITE": identifier + ".extensions." + id,
+                    "EDITH_EXTENSION_DATA_ROOT": selectedData.path,
+                    "EDITH_EXTENSION_FIXTURE_HOME": selectedHome.path,
+                ]
+                let admission = try WorkerFixtureAdmission.admit(
+                    extensionID: id, context: context, environment: environment,
+                    hostIdentifier: identifier, hostBundle: app, roleDirectory: role,
+                    roleIdentifier: "com.pulkit.edith.extensions." + id + "." + admittedRole,
+                    version: selected.version, hostABI: selected.hostABI)
+                guard admission?.extensionID == id else { throw WorkerLifecycleFixtureError.marker }
+            }
+            #endif
             try issuer.remove(selected)
         }
         print(

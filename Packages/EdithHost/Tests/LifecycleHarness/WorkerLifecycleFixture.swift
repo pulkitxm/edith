@@ -7,11 +7,13 @@ enum WorkerLifecycleFixtureError: Error {
 }
 
 struct WorkerLifecycleFixture {
-    static let blockedIDs: Set<String> = [
+    static let inertIDs: Set<String> = [
         "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
     ]
     static let supportedIDs: Set<String> = [
+        "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter", "colorPicker",
+        "systemStats", "emoji", "music", "plugins", "studio",
         "keepAwake", "audioMixer", "homebrew", "calendar", "jev", "system", "timeLapse",
         "cleaner", "appMaintenance", "blitztree", "notchShelf", "clipboard", "docs",
         "latex", "companion", "terminal", "usage", "bifrost", "lidAwake", "attention",
@@ -20,7 +22,7 @@ struct WorkerLifecycleFixture {
     ]
 
     static func requireSupported(_ id: String) throws {
-        guard supportedIDs.contains(id), !blockedIDs.contains(id) else {
+        guard supportedIDs.contains(id) else {
             throw WorkerLifecycleFixtureError.unsupported
         }
     }
@@ -50,6 +52,7 @@ struct WorkerLifecycleFixture {
     }
 
     func home(for id: String) throws -> URL {
+        try Self.requireSupported(id)
         guard Self.validComponent(id) else { throw WorkerLifecycleFixtureError.identity }
         let home = root.appendingPathComponent(id + "-home", isDirectory: true)
         if !FileManager.default.fileExists(atPath: home.path) {
@@ -146,6 +149,14 @@ struct WorkerLifecycleFixture {
     }
 
     private func validate(_ selection: Selection, hostApp: URL, defaultsSuite: String) throws {
+        try Self.requireSupported(selection.extensionID)
+        if Self.inertIDs.contains(selection.extensionID) {
+            let role =
+                ["music", "plugins", "studio"].contains(selection.extensionID) ? "app" : "helper"
+            guard selection.roleDirectory.lastPathComponent == role + ".bundle" else {
+                throw WorkerLifecycleFixtureError.package
+            }
+        }
         guard ["app.bundle", "helper.bundle"].contains(selection.roleDirectory.lastPathComponent),
             Self.validComponent(selection.extensionID), Self.validComponent(selection.version),
             Self.validComponent(selection.hostABI),
