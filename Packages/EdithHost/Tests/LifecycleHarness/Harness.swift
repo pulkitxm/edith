@@ -18,7 +18,7 @@ struct HostLifecycleHarness {
         else { throw HostWorkerError.rejected }
         let headlessCLI = arguments.count == 6
         let extensionID = arguments[3]
-        let validateSurface = arguments[4] == "1" && extensionID != "music"
+        let validateSurface = arguments[4] == "1" && !["music", "notchShelf"].contains(extensionID)
         try WorkerLifecycleFixture.requireSupported(extensionID)
         let requestedFixture = URL(fileURLWithPath: arguments[0])
         let fixture =
@@ -582,7 +582,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":false,\"studioMetadataValidated\":\(extensionID == "studio"),\"inertFeatureDeclineValidated\":\(extensionID == "music"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"calendarFixtureLifecycleValidated\":\(extensionID == "calendar"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":false,\"studioMetadataValidated\":\(extensionID == "studio"),\"notchMetadataValidated\":\(extensionID == "notchShelf"),\"inertFeatureDeclineValidated\":\(["music", "notchShelf"].contains(extensionID)),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"calendarFixtureLifecycleValidated\":\(extensionID == "calendar"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -619,6 +619,11 @@ struct HostLifecycleHarness {
                 "surface.snapshot", "surface.perform", "music.ui.hostSlots", "music.cli",
                 "backup.synchronize",
             ]) { command in
+                try await endpoint.invoke(command, payload: Data("{}".utf8), timeout: 5)
+            }
+        }
+        if id == "notchShelf" {
+            try await NotchLifecycleMetadata.verify { command in
                 try await endpoint.invoke(command, payload: Data("{}".utf8), timeout: 5)
             }
         }

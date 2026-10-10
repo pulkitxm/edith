@@ -10,6 +10,7 @@ struct WorkerLifecycleFixture {
     static let inertIDs: Set<String> = [
         "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter",
         "colorPicker", "systemStats", "emoji", "music", "plugins", "studio",
+        "keepAwake", "notchShelf",
     ]
     static let supportedIDs: Set<String> = [
         "focusDim", "windowSweaters", "micMute", "keystrokeHighlight", "presenter", "colorPicker",

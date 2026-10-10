@@ -27,6 +27,8 @@ export const inertFixtureWorkers = new Set([
   "music",
   "plugins",
   "studio",
+  "keepAwake",
+  "notchShelf",
 ]);
 
 export const supportedFixtureWorkers = new Set([
@@ -97,9 +99,13 @@ export function validateWorkerFixtureProof(
   assert(supportedFixtureWorkers.has(id), `Unknown fixture owner ${id}`);
   assert.equal(
     result.surfaceDataValidated,
-    surfaceContractVersion === 1 && id !== "music",
+    surfaceContractVersion === 1 && !["music", "notchShelf"].includes(id),
   );
-  assert.equal(result.inertFeatureDeclineValidated, id === "music");
+  assert.equal(
+    result.inertFeatureDeclineValidated,
+    ["music", "notchShelf"].includes(id),
+  );
+  assert.equal(result.notchMetadataValidated, id === "notchShelf");
   assert.equal(result.studioDataValidated, false);
   assert.equal(result.studioMetadataValidated, id === "studio");
 }
