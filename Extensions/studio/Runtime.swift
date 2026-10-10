@@ -11,15 +11,20 @@ final class ExtensionRuntime: NSObject {
     private var model: StudioModel?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
+    private let streams = try! ExtensionCLIStreams(owner: "studio")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("studio.cli.") {
+                return try self.streams.invoke(
+                    StudioCommand.self, operation: command, prefix: "studio.cli", payload: payload)
+            }
             if command.hasPrefix("studio.ui.") {
                 return try await StudioUICommands.execute(command, payload: payload, model: model)
             }
             if command == "studio.cli" {
-                let request = try JSONDecoder().decode(StudioCLIRequest.self, from: payload)
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
                     try await StudioCLIExecution.run(request, model: model))
             }
@@ -43,7 +48,9 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
+        streams.stop()
         Task {
+            await streams.stopAndWait()
             await commands.shutdownAndWait()
             shutdown()
             if #available(macOS 15.0, *) {
@@ -91,6 +98,7 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func shutdown() {
+        streams.stop()
         commands.shutdown()
         TextEditingCommands.shutdown()
         model?.shutdown()

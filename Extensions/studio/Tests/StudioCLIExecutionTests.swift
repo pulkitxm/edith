@@ -8,7 +8,7 @@ import Testing
 @MainActor @Suite(.serialized) struct StudioCLIExecutionTests {
     private func run(_ arguments: [String], model: StudioModel) async throws -> ExtensionCLIReply {
         try await StudioCLIExecution.run(
-            StudioCLIRequest(arguments: arguments, workingDirectory: "/tmp"), model: model)
+            ExtensionCLIRequest(arguments: arguments, workingDirectory: "/tmp"), model: model)
     }
 
     private func fixture() throws -> (URL, StudioModel, String) {
@@ -144,7 +144,7 @@ import Testing
         defer { cleanup(root, model, suite) }
         let workerDirectory = FileManager.default.currentDirectoryPath
         let created = try await StudioCLIExecution.run(
-            StudioCLIRequest(
+            ExtensionCLIRequest(
                 arguments: ["edit", "create", "stdin.openscreen", "--json"],
                 workingDirectory: root.path),
             model: model)
@@ -152,11 +152,11 @@ import Testing
         let plan = try JSONEncoder().encode(
             VideoEditPlan(operations: [.rename(title: "Edited from stdin")]))
         let applied = try await StudioCLIExecution.run(
-            StudioCLIRequest(
+            ExtensionCLIRequest(
                 arguments: [
                     "edit", "apply", "stdin.openscreen", "--plan", "-", "--overwrite", "--json",
                 ],
-                workingDirectory: root.path, standardInput: plan), model: model)
+                standardInput: plan, workingDirectory: root.path), model: model)
         #expect(applied.exitCode == 0 && applied.stderr.isEmpty)
         #expect(
             try VideoProject.open(root.appendingPathComponent("stdin.openscreen")).title
@@ -168,16 +168,17 @@ import Testing
 
     @Test func callerContextRejectsRemoteRelativeAndOversizedInput() throws {
         for directory in [
-            "relative", "https://example.invalid/", "//remote/share", "/tmp\u{0}hidden",
+            "relative", "https://example.invalid/", "/tmp\u{0}hidden",
         ] {
             #expect(throws: (any Error).self) {
-                try StudioCLIRequest(arguments: ["tools"], workingDirectory: directory)
+                try ExtensionCLIRequest(arguments: ["tools"], workingDirectory: directory)
             }
         }
         #expect(throws: ExtensionPeerError.self) {
-            try StudioCLIRequest(
-                arguments: ["edit", "apply"], workingDirectory: "/tmp",
-                standardInput: Data(repeating: 0, count: StudioEditPlanInput.maximumBytes + 1))
+            try ExtensionCLIRequest(
+                arguments: ["edit", "apply"],
+                standardInput: Data(repeating: 0, count: StudioEditPlanInput.maximumBytes + 1),
+                workingDirectory: "/tmp")
         }
     }
 

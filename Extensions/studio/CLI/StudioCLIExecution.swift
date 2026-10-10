@@ -2,17 +2,27 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 
+final class StudioCLIDefaults: @unchecked Sendable {
+    let store: UserDefaults
+    init(_ store: UserDefaults) { self.store = store }
+}
+
 @MainActor enum StudioCLIEnvironment {
-    nonisolated(unsafe) static var defaults = SharedDefaults.store
-    nonisolated(unsafe) static var workingDirectory = URL(fileURLWithPath: "/", isDirectory: true)
-    nonisolated(unsafe) static var standardInput = Data()
+    @TaskLocal nonisolated static var scopedDefaults: StudioCLIDefaults?
+
+    nonisolated static var defaults: UserDefaults { scopedDefaults?.store ?? SharedDefaults.store }
+    nonisolated static var workingDirectory: URL {
+        URL(
+            fileURLWithPath: ExtensionCLIContext.request?.workingDirectory ?? "/", isDirectory: true
+        )
+    }
+    nonisolated static var standardInput: Data {
+        ExtensionCLIContext.request?.standardInput ?? Data()
+    }
 
     nonisolated static func url(_ path: String) -> URL {
         let expanded = (path as NSString).expandingTildeInPath
-        return
-            (expanded.hasPrefix("/")
-            ? URL(fileURLWithPath: expanded)
-            : workingDirectory.appendingPathComponent(expanded)).standardizedFileURL
+        return URL(fileURLWithPath: expanded, relativeTo: workingDirectory).standardizedFileURL
     }
 
     static var record:
@@ -32,33 +42,15 @@ import Foundation
 }
 
 @MainActor enum StudioCLIExecution {
-    private static var running = false
-
-    static func run(_ request: StudioCLIRequest, model: StudioModel) async throws
+    static func run(_ request: ExtensionCLIRequest, model: StudioModel) async throws
         -> ExtensionCLIReply
     {
         try request.validate()
-        guard !running else {
-            throw ExtensionPeerError.rejected("Another Studio terminal command is running.")
-        }
-        running = true
-        defer { running = false }
         guard !model.isStopped else { throw ExtensionPeerError.unavailable }
-        let previousDirectory = StudioCLIEnvironment.workingDirectory
-        let previousInput = StudioCLIEnvironment.standardInput
-        let previousColor = CLIStyle.forcedColor
-        StudioCLIEnvironment.workingDirectory = URL(
-            fileURLWithPath: request.workingDirectory, isDirectory: true)
-        StudioCLIEnvironment.standardInput = request.standardInput
-        CLIStyle.forcedColor = request.interactive
-        defer {
-            StudioCLIEnvironment.workingDirectory = previousDirectory
-            StudioCLIEnvironment.standardInput = previousInput
-            CLIStyle.forcedColor = previousColor
+        return try await StudioCLIEnvironment.$scopedDefaults.withValue(
+            StudioCLIDefaults(model.defaults)
+        ) {
+            try await ExtensionCLIExecution.run(StudioCommand.self, request: request)
         }
-        let previous = StudioCLIEnvironment.defaults
-        StudioCLIEnvironment.defaults = model.defaults
-        defer { StudioCLIEnvironment.defaults = previous }
-        return try await ExtensionCLIExecution.run(StudioCommand.self, arguments: request.arguments)
     }
 }

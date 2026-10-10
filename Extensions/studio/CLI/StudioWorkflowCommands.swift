@@ -252,7 +252,7 @@ struct StudioWorkflowRemoveCommand: AsyncParsableCommand {
         try await execute {
             var workflows = StudioWorkflowCLI.load()
             let workflow = try StudioWorkflowCLI.find(name, in: workflows)
-            let plan = StudioWorkflowPlan(
+            let plan = CLIDestructivePlan(
                 action: "delete workflow \(workflow.name)", targets: [workflow.name],
                 confirmed: yes, json: json)
             guard plan.shouldApply() else { return }
