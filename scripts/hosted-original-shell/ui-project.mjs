@@ -74,6 +74,9 @@ export async function writeUIProject(directory, environment) {
   const contract = resolve(
     "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyContract.swift",
   );
+  const interaction = resolve(
+    "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyInteraction.swift",
+  );
   const id = (value) => `0000000000000000000000${value}`;
   const settings = {
     SDKROOT: "macosx",
@@ -107,7 +110,7 @@ export async function writeUIProject(directory, environment) {
     },
     [id("02")]: {
       isa: "PBXGroup",
-      children: [id("03"), id("11"), id("12")],
+      children: [id("03"), id("11"), id("12"), id("15")],
       sourceTree: "<group>",
     },
     [id("03")]: {
@@ -130,7 +133,7 @@ export async function writeUIProject(directory, environment) {
     [id("05")]: {
       isa: "PBXSourcesBuildPhase",
       buildActionMask: 2147483647,
-      files: [id("13"), id("14")],
+      files: [id("13"), id("14"), id("16")],
       runOnlyForDeploymentPostprocessing: 0,
     },
     [id("06")]: {
@@ -167,8 +170,15 @@ export async function writeUIProject(directory, environment) {
       path: contract,
       sourceTree: "<absolute>",
     },
+    [id("15")]: {
+      isa: "PBXFileReference",
+      lastKnownFileType: "sourcecode.swift",
+      path: interaction,
+      sourceTree: "<absolute>",
+    },
     [id("13")]: { isa: "PBXBuildFile", fileRef: id("11") },
     [id("14")]: { isa: "PBXBuildFile", fileRef: id("12") },
+    [id("16")]: { isa: "PBXBuildFile", fileRef: id("15") },
   };
   const encode = (value) => {
     if (Array.isArray(value)) return `(${value.map(encode).join(",")})`;
