@@ -246,7 +246,7 @@ public struct HostCLIProviderCatalog: Codable, Sendable {
         "latex": ["latex"], "companion": ["companion"], "bifrost": ["bifrost"],
         "plugins": ["skills"], "downloads": ["download"], "seoAudit": ["seo"],
         "codeStats": ["code-stats"], "clipboard": ["clipboard"], "attention": ["attention"],
-        "notchShelf": ["shelf", "browser"], "colorPicker": ["color"],
+        "notchShelf": ["shelf", "browser"], "colorPicker": ["color", "colour"],
         "emoji": ["emoji"], "presenter": ["presenter"], "lidAwake": ["lid-awake"],
         "system": ["system", "apps", "tools"], "systemStats": ["system"],
         "homebrew": ["brew"], "cleaner": ["cleaner"], "appMaintenance": ["maintenance"],
@@ -324,7 +324,8 @@ public struct HostCLIProviderRegistry: Sendable {
     public func execute(
         _ arguments: [String], input: Data = Data(),
         workingDirectory: String = FileManager.default.currentDirectoryPath,
-        streamWrite: (@Sendable (Data, Bool) async throws -> Void)? = nil, invoke: @escaping Invoke
+        streamWrite: (@Sendable (Data, Bool) async throws -> Void)? = nil,
+        liveInput: HostCLILiveInput? = nil, invoke: @escaping Invoke
     ) async throws -> ExtensionCLIReply {
         guard let prefix = arguments.first else {
             throw HostCLIError.usage("Missing extension command.")
@@ -357,19 +358,29 @@ public struct HostCLIProviderRegistry: Sendable {
             throw HostCLIError.usage("The command provider does not accept stdin.")
         }
         if let operation = command.streamOperation {
+            guard
+                liveInput == nil
+                    || provider.catalog.acceptsInput == true && command.readsInput == true
+            else {
+                throw HostCLIError.usage("The command does not accept live stdin.")
+            }
             let context = try HostCLIInvocationContext(
                 arguments: routedArguments, standardInput: input,
-                workingDirectory: workingDirectory)
+                workingDirectory: workingDirectory, interactive: liveInput?.interactive ?? false)
             let stream = try await HostCLIStream.start(
                 owner: provider.state.id, operation: operation, request: context,
                 maximumDuration: command.streamDeadline ?? 1800, invoke: invoke)
             if let streamWrite {
-                let code = try await stream.consume(write: streamWrite)
+                let code = try await stream.consume(input: liveInput, write: streamWrite)
                 return try ExtensionCLIReply(stdout: "", stderr: "", exitCode: code)
             }
             let capture = HostCLIStreamCapture()
-            let code = try await stream.consume(write: { try await capture.append($0, stderr: $1) })
+            let code = try await stream.consume(
+                input: liveInput, write: { try await capture.append($0, stderr: $1) })
             return try await capture.reply(code: code)
+        }
+        guard liveInput == nil else {
+            throw HostCLIError.usage("The command does not support live stdin.")
         }
         let request = try Self.request(
             arguments: routedArguments, input: input, catalog: provider.catalog,

@@ -61,11 +61,39 @@ public struct HostCLIStreamFrame: Codable, Sendable {
     }
 }
 
+public enum HostCLIInputEvent: Sendable, Equatable {
+    case bytes(Data)
+    case resize(columns: Int, rows: Int)
+}
+
+public struct HostCLILiveInput: Sendable {
+    public let interactive: Bool
+    public let receive: @Sendable () async throws -> HostCLIInputEvent?
+    public let cancel: @Sendable () -> Void
+
+    public init(
+        interactive: Bool, receive: @escaping @Sendable () async throws -> HostCLIInputEvent?,
+        cancel: @escaping @Sendable () -> Void
+    ) {
+        self.interactive = interactive; self.receive = receive; self.cancel = cancel
+    }
+}
+
+public struct HostCLIStreamInputAck: Codable, Sendable {
+    public let handle: HostCLIStreamHandle
+    public let sequence: UInt64
+    public let nextSequence: UInt64
+    public let accepted: Bool
+}
+
 public actor HostCLIStream {
     private let handle: HostCLIStreamHandle
     private let operation: String
     private let invoke: HostCLIProviderRegistry.Invoke
     private var sequence: UInt64 = 0
+    private var inputSequence: UInt64 = 0
+    private var sendingInput = false
+    private var inputEnded = false
     private var ended = false
     private var reading = false
     private let deadline: ContinuousClock.Instant
@@ -138,6 +166,97 @@ public actor HostCLIStream {
             if frame.state != .running { await end(cancel: frame.state != .completed) }
             return frame
         } catch { await end(cancel: true); throw error }
+    }
+
+    public func send(_ event: HostCLIInputEvent?) async throws {
+        guard !ended, !inputEnded, !sendingInput, ContinuousClock.now < deadline else {
+            throw HostCLIError.rejected("The stream input is closed or busy.")
+        }
+        sendingInput = true
+        defer { sendingInput = false }
+        var body: [String: HostCLIJSON] = [
+            "handle": try JSONDecoder().decode(
+                HostCLIJSON.self, from: JSONEncoder().encode(handle)),
+            "sequence": .integer(Int64(inputSequence)),
+        ]
+        let action: String
+        switch event {
+        case .bytes(let data):
+            guard !data.isEmpty, data.count <= 16384 else {
+                throw HostCLIError.usage("Stream input must contain 1...16384 bytes.")
+            }
+            action = "write"; body["data"] = .string(data.base64EncodedString());
+            body["end"] = .bool(false)
+        case .resize(let columns, let rows):
+            guard (1...1000).contains(columns), (1...1000).contains(rows) else {
+                throw HostCLIError.usage("Invalid terminal dimensions.")
+            }
+            action = "resize"; body["columns"] = .integer(Int64(columns));
+            body["rows"] = .integer(Int64(rows))
+        case nil:
+            action = "write"; body["data"] = .string(""); body["end"] = .bool(true)
+        }
+        let payload = try HostCLIJSON.object(body).encoded()
+        let retryDeadline = min(deadline, ContinuousClock.now.advanced(by: .seconds(60)))
+        while true {
+            try Task.checkCancellation()
+            guard !ended, ContinuousClock.now < retryDeadline else { throw HostCLIError.timedOut }
+            let response = try await invoke(
+                HostCLIRequest(
+                    action: .invoke, id: handle.owner, operation: operation + "." + action,
+                    payload: payload, timeout: 15))
+            guard response.count <= 65536 else {
+                throw HostCLIError.rejected("Invalid stream input acknowledgement.")
+            }
+            let ack = try JSONDecoder().decode(HostCLIStreamInputAck.self, from: response)
+            guard ack.handle == handle, ack.sequence == inputSequence,
+                ack.nextSequence == inputSequence + (ack.accepted ? 1 : 0)
+            else { throw HostCLIError.rejected("Invalid or stale stream input acknowledgement.") }
+            try Task.checkCancellation()
+            guard !ended else { throw CancellationError() }
+            if ack.accepted {
+                inputSequence = ack.nextSequence
+                if event == nil { inputEnded = true }
+                return
+            }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    public func consume(
+        input: HostCLILiveInput?, write: @escaping @Sendable (Data, Bool) async throws -> Void
+    ) async throws -> Int32 {
+        guard let input else { return try await consume(write: write) }
+        do {
+            return try await withThrowingTaskGroup(of: Int32?.self) { group in
+                group.addTask { try await self.consume(write: write) }
+                group.addTask {
+                    try await withTaskCancellationHandler {
+                        do {
+                            while let event = try await input.receive() {
+                                try await self.send(event)
+                            }
+                            try await self.send(nil)
+                        } catch {
+                            if await self.ended { return }
+                            throw error
+                        }
+                    } onCancel: {
+                        input.cancel()
+                    }
+                    return nil
+                }
+                while let result = try await group.next() {
+                    if let code = result {
+                        group.cancelAll(); input.cancel()
+                        return code
+                    }
+                }
+                throw HostCLIError.rejected("The stream ended without an exit status.")
+            }
+        } catch {
+            input.cancel(); await end(cancel: true); throw error
+        }
     }
 
     public func consume(write: @Sendable (Data, Bool) async throws -> Void) async throws -> Int32 {

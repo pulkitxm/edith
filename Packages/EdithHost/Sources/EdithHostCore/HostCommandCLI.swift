@@ -72,14 +72,20 @@ public struct HostCommandCLI: Sendable {
                     } catch { io.cancel(); throw error }
                     exit(0)
                 }
-                let input = try await inputForCommand(arguments, invoke: cli.invoke)
+                let live =
+                    try await liveInputForCommand(arguments, invoke: cli.invoke)
+                    ? HostCLIInput() : nil
+                defer { live?.cancel() }
+                let input =
+                    live == nil ? try await inputForCommand(arguments, invoke: cli.invoke) : Data()
                 let stdout = try HostCLIByteOutput(descriptor: STDOUT_FILENO)
                 let stderr = try HostCLIByteOutput(descriptor: STDERR_FILENO)
                 let reply = await cli.run(
-                    arguments, input: input,
+                    arguments, input: input, liveInput: live?.source,
                     streamWrite: { data, error in
                         try await (error ? stderr : stdout).send(data)
                     })
+                live?.cancel()
                 try await stdout.send(Data(reply.stdout.utf8))
                 try await stderr.send(Data(reply.stderr.utf8))
                 exit(reply.exitCode)
@@ -98,11 +104,12 @@ public struct HostCommandCLI: Sendable {
     }
 
     public func run(
-        _ arguments: [String], input: Data = Data(),
+        _ arguments: [String], input: Data = Data(), liveInput: HostCLILiveInput? = nil,
         streamWrite: (@Sendable (Data, Bool) async throws -> Void)? = nil
     ) async -> ExtensionCLIReply {
         do {
-            let reply = try await execute(arguments, input: input, streamWrite: streamWrite);
+            let reply = try await execute(
+                arguments, input: input, liveInput: liveInput, streamWrite: streamWrite);
             try Task.checkCancellation(); return reply
         } catch {
             let failure = error as? HostCLIError
@@ -115,7 +122,7 @@ public struct HostCommandCLI: Sendable {
     }
 
     public func execute(
-        _ arguments: [String], input: Data = Data(),
+        _ arguments: [String], input: Data = Data(), liveInput: HostCLILiveInput? = nil,
         streamWrite: (@Sendable (Data, Bool) async throws -> Void)? = nil
     ) async throws
         -> ExtensionCLIReply
@@ -262,7 +269,7 @@ public struct HostCommandCLI: Sendable {
                 exitCode: 4)
         }
         return try await registry.execute(
-            arguments, input: input, streamWrite: streamWrite, invoke: invoke)
+            arguments, input: input, streamWrite: streamWrite, liveInput: liveInput, invoke: invoke)
     }
 
     private func core(_ arguments: [String], input: Data) async throws -> ExtensionCLIReply {
@@ -544,6 +551,21 @@ public struct HostCommandCLI: Sendable {
         }
         return try HostCLIOutput.text(
             Set(candidates.filter { $0.hasPrefix(prefix) }).sorted().joined(separator: "\n"))
+    }
+
+    static func liveInputForCommand(
+        _ arguments: [String], invoke: @escaping HostCLIProviderRegistry.Invoke
+    ) async throws -> Bool {
+        guard let first = arguments.first, !Self.coreCommands.contains(first) else { return false }
+        let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
+        try Task.checkCancellation()
+        let matching = registry?.providers.flatMap { provider in
+            provider.catalog.commands.filter { arguments.starts(with: $0.route) }
+                .map { (provider.catalog, $0) }
+        }.sorted { $0.1.route.count > $1.1.route.count }
+        guard let (catalog, command) = matching?.first else { return false }
+        return catalog.acceptsInput == true && command.readsInput == true
+            && command.streamOperation != nil
     }
 
     static func inputForCommand(
