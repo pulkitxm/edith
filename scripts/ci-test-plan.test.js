@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -464,6 +465,32 @@ test("a child behind its base routes the tested merge revision with the current 
     expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("standalone owners keep their runtime tests outside the utility umbrella", () => {
+  const umbrella = readFileSync("Extensions/Package.swift", "utf8");
+  const paths = [...umbrella.matchAll(/path: "([^"]+)"/g)].map(
+    (match) => match[1],
+  );
+  for (const path of paths.filter((path) => !path.startsWith("..")))
+    expect(existsSync(join("Extensions", path, "Package.swift")), path).toBe(
+      false,
+    );
+  for (const id of ["machines", "music", "usage", "notchShelf", "docs"]) {
+    const definition = definitions.find((entry) => entry.id === id);
+    expect(definition.testTargets.length).toBeGreaterThan(0);
+    expect(
+      planSwiftTests([
+        `Extensions/${id}/Tests/RuntimeTests.swift`,
+      ]).include.some(
+        (lane) =>
+          lane.extension === id &&
+          definition.testTargets.every((target) =>
+            lane.targets.split(" ").includes(target),
+          ),
+      ),
+    ).toBe(true);
   }
 });
 
