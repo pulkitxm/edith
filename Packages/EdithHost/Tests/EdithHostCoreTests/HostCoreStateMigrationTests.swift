@@ -226,7 +226,7 @@ import Testing
         }
     }
 
-    @Test func legacyImportReservesCurrentTaskCapacityAndResultBudget() async throws {
+    @Test func legacyImportReservesCurrentTaskCapacity() async throws {
         try await fixture { identity in
             _ = try task(identity)
             _ = try task(identity)
@@ -253,6 +253,59 @@ import Testing
             #expect(current.isSubset(of: identities))
             #expect(try journal.files().count == 100)
             await restored.shutdown()
+        }
+    }
+
+    @Test func legacyImportReservesCurrentResultBudget() async throws {
+        try await fixture { identity in
+            let original = try task(identity)
+            let journal = try HostAgentJournal(
+                directory: identity.root.appendingPathComponent("Core/Commands/Tasks"))
+            var current: Set<UUID> = []
+            for _ in 0..<2 {
+                let id = UUID()
+                current.insert(id)
+                let status = HostAgentTaskStatus(
+                    snapshot: .init(
+                        id: id, operation: "command.run", title: "Current fixture result",
+                        state: .succeeded, submittedAt: Date(), finishedAt: Date()),
+                    result: Data(count: 8 << 20))
+                try journal.write(
+                    HostAgentPayload.encode(
+                        PersistedHostAgentTask(fingerprint: nil, status: status)),
+                    name: "\(id.uuidString).json", maximumBytes: 17 << 20)
+            }
+            try HostCoreStateMigration.importExisting(identity: identity)
+            let restored = try HostAgentTaskService(directory: journal.directory)
+            #expect(Set(await restored.snapshots().map(\.id)) == current)
+            #expect(!current.contains(original.snapshot.id))
+            #expect(try journal.files().count == 2)
+            await restored.shutdown()
+        }
+    }
+
+    @Test func changedOrLinkedSourceIsRefusedWithoutChangingOriginalContents() async throws {
+        try await fixture { identity in
+            let status = try task(identity)
+            let directory = identity.root.appendingPathComponent("Tasks")
+            let name = "\(status.snapshot.id.uuidString).json"
+            let source = try #require(try HostCoreStateSource(directory: directory))
+            let copy = identity.root.appendingPathComponent("owned-copy.json")
+            let before = try Data(contentsOf: directory.appendingPathComponent(name))
+            let metadata = try source.copy(name, to: copy, maximumBytes: 17 << 20)
+            #expect(try Data(contentsOf: copy) == before)
+            #expect(try Data(contentsOf: directory.appendingPathComponent(name)) == before)
+            let changed = before + Data(" ".utf8)
+            try changed.write(to: directory.appendingPathComponent(name))
+            #expect(throws: HostAgentCommandError.self) {
+                try source.validate(metadata, name: name)
+            }
+            let alias = directory.appendingPathComponent("linked.json")
+            #expect(link(directory.appendingPathComponent(name).path, alias.path) == 0)
+            #expect(throws: HostAgentCommandError.self) {
+                try source.read(name, maximumBytes: 17 << 20)
+            }
+            #expect(try Data(contentsOf: directory.appendingPathComponent(name)) == changed)
         }
     }
 
