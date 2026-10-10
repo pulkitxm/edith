@@ -11,5 +11,6 @@ let package = Package(
             path: ".", exclude: ["Tests"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "SystemStatsExtensionTests", dependencies: ["SystemStatsExtension"],
-            path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
+            path: "Tests",
+            swiftSettings: [.swiftLanguageMode(.v5), .define("SYSTEM_STATS_NATIVE_RUNTIME")]),
     ])

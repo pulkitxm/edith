@@ -8,6 +8,19 @@ import Foundation
 @MainActor
 final class ExtensionRuntime: NSObject {
     private var service: SystemStatsStatusItem?
+    private let uiConfiguration: @MainActor (NSDictionary) -> ExtensionUIConfiguration?
+    private let uiDefaults: UserDefaults
+
+    init(
+        uiConfiguration: @escaping @MainActor (NSDictionary) -> ExtensionUIConfiguration? = {
+            ExtensionUIConfiguration(context: $0)
+        },
+        uiDefaults: UserDefaults = SharedDefaults.store
+    ) {
+        self.uiConfiguration = uiConfiguration
+        self.uiDefaults = uiDefaults
+        super.init()
+    }
 
     private var presentation: ControlPresentation?
     private var settingsDetail = false
@@ -88,7 +101,7 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "configureUI":
-            guard let configuration = ExtensionUIConfiguration(context: input),
+            guard let configuration = uiConfiguration(input),
                 configuration.extensionID == "systemStats",
                 configuration.defaultsSuite
                     == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -100,7 +113,8 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             presentation?.stop()
             settingsDetail = SystemStatsSettingsScene.accepts(input)
-            presentation = ControlPresentation(client: configuration.engineClient)
+            presentation = ControlPresentation(
+                client: configuration.engineClient, defaults: uiDefaults)
             return ["ok": true] as NSDictionary
         case "stopUI":
             presentation?.stop()
@@ -121,7 +135,8 @@ final class ExtensionRuntime: NSObject {
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             if settingsDetail {
-                return SystemStatsSettingsScene.controller(presentation: presentation)
+                return SystemStatsSettingsScene.controller(
+                    presentation: presentation, defaults: uiDefaults)
             }
             return NSHostingController(
                 rootView: ExtensionPageHost {

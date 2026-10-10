@@ -6,6 +6,7 @@ import SwiftUI
 import Testing
 
 @testable import SystemStatsExtension
+@testable import EdithExtensionSupport
 
 @MainActor
 private final class SettingsFixtureBridge: NSObject {
@@ -193,4 +194,59 @@ struct SystemStatsSettingsTests {
         #expect(controller.view.window == nil)
         #expect(!controller.view.subviews.isEmpty)
     }
+    #if SYSTEM_STATS_NATIVE_RUNTIME
+    @Test func checkedRuntimeConfigureAndOriginalViewFactoryRejectForeignAndStoppedRequests() throws
+    {
+        _ = NSApplication.shared
+        let host = "edith.settings.factory." + UUID().uuidString
+        let suite = host + ".extension.systemStats.worker"
+        let previous = ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+        setenv("EDITH_SHARED_DEFAULTS_SUITE", suite, 1)
+        defer {
+            if let previous {
+                setenv("EDITH_SHARED_DEFAULTS_SUITE", previous, 1)
+            } else {
+                unsetenv("EDITH_SHARED_DEFAULTS_SUITE")
+            }
+        }
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let runtime = ExtensionRuntime(
+            uiConfiguration: {
+                ExtensionUIConfiguration(
+                    context: $0, hostIdentifier: host,
+                    extensionID: "systemStats", defaultsSuite: suite)
+            }, uiDefaults: defaults)
+        #expect((runtime.execute(["operation": "view"]) as? NSDictionary)?["ok"] as? Bool == false)
+        let context: NSDictionary = [
+            "operation": "configureUI", "remoteUI": true, "hostIdentifier": host,
+            "extensionID": "systemStats", "defaultsSuite": suite, "uiOnly": true,
+            "presentationID": UUID().uuidString, "location": "settings", "section": "extension",
+        ]
+        #expect((runtime.execute(context) as? NSDictionary)?["ok"] as? Bool == true)
+        let controller = try #require(runtime.execute(["operation": "view"]) as? NSViewController)
+        controller.view.frame = CGRect(x: 0, y: 0, width: 420, height: 600)
+        controller.view.layoutSubtreeIfNeeded()
+        #expect(controller.view.window == nil && !controller.view.subviews.isEmpty)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
+        for (key, value) in [
+            ("extensionID", "foreign"), ("defaultsSuite", "foreign"), ("section", "foreign"),
+            ("location", "main"),
+        ] {
+            let rejected = context.mutableCopy() as! NSMutableDictionary
+            rejected[key] = value
+            #expect((runtime.execute(rejected) as? NSDictionary)?["ok"] as? Bool == false)
+        }
+        _ = runtime.execute(["operation": "stopUI"])
+        #expect((runtime.execute(["operation": "view"]) as? NSDictionary)?["ok"] as? Bool == false)
+        #expect(
+            (runtime.execute(["operation": "status"]) as? NSDictionary)?["running"] as? Bool
+                == false)
+        let untrusted = ExtensionRuntime(uiDefaults: defaults)
+        #expect((untrusted.execute(context) as? NSDictionary)?["ok"] as? Bool == false)
+    }
+    #endif
+
 }
