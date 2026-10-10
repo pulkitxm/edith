@@ -82,3 +82,9 @@ struct HostNotchPanelScreen {
             collapsedHeight: display.collapsedSize.height, isBuiltin: isBuiltin)
     }
 }
+
+struct HostNotchPanelSceneStop: Codable, Equatable, Sendable {
+    let identity: HostNotchPanelIdentity
+    let displayID: UInt32
+    let presentationID: UUID
+}

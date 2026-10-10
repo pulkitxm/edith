@@ -11,6 +11,7 @@ final class HostNotchPanelAssembly {
     private let create: Create
     private let present: @MainActor (HostNotchPanel) -> Void
     private let measure: @MainActor (UUID, Double) -> Void
+    private let didRelease: @MainActor (HostExtensionContentRequest) async throws -> Void
     private let reportFailure: @MainActor (UUID, String) -> Void
     private var records: [UUID: Record] = [:]
     private var creating: [UUID: Task<Void, Never>] = [:]
@@ -23,9 +24,12 @@ final class HostNotchPanelAssembly {
     init(
         create: @escaping Create,
         present: @escaping @MainActor (HostNotchPanel) -> Void = { $0.orderFrontRegardless() },
+        didRelease: @escaping @MainActor (HostExtensionContentRequest) async throws -> Void = { _ in
+        },
         measure: @escaping @MainActor (UUID, Double) -> Void = { _, _ in },
         reportFailure: @escaping @MainActor (UUID, String) -> Void = { _, _ in }
     ) {
+        self.didRelease = didRelease
         self.create = create
         self.present = present
         self.measure = measure
@@ -117,7 +121,10 @@ final class HostNotchPanelAssembly {
         for task in Array(closing.values) { await task.value }
         var failure: (any Error)?
         for (id, lease) in Array(retiring) {
-            do { try await lease.close(); retiring[id] = nil; failures[id] = nil } catch {
+            do {
+                try await release(lease)
+                retiring[id] = nil; failures[id] = nil
+            } catch {
                 failure = error
             }
         }
@@ -192,10 +199,18 @@ final class HostNotchPanelAssembly {
         closing[id] = Task { [weak self] in
             guard let self else { return }
             defer { closing[id] = nil }
-            do { try await lease.close(); retiring[id] = nil; failures[id] = nil } catch {
+            do {
+                try await release(lease)
+                retiring[id] = nil; failures[id] = nil
+            } catch {
                 failures[id] = "The extension interface is still stopping."
             }
         }
+    }
+
+    private func release(_ lease: HostNotchSceneLease) async throws {
+        try await lease.close()
+        try await didRelease(lease.request)
     }
 
     private final class Record {

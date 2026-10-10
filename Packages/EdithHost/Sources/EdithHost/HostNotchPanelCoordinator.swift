@@ -50,7 +50,7 @@ final class HostNotchPanelCoordinator {
     func start(version: String, screens: [HostNotchPanelScreen]) async throws {
         guard !retired, starting == nil, attachRequest == nil,
             environment().activeVersions["notchShelf"] == version,
-            !screens.isEmpty, screens.count <= 4, screens.allSatisfy({ $0.display.valid }),
+            !screens.isEmpty, screens.count <= 8, screens.allSatisfy({ $0.display.valid }),
             Set(screens.map { $0.display.id }).count == screens.count,
             Set(screens.map(\.presentationID)).count == screens.count,
             screens.filter(\.isBuiltin).count <= 1
@@ -154,6 +154,11 @@ final class HostNotchPanelCoordinator {
                 identity = recovered.identity
             } catch { cleanupError = error }
         }
+        guard cleanupError == nil, assemblies.values.allSatisfy({ $0.pendingCleanupCount == 0 })
+        else {
+            failure = "The Notch panel is still stopping. Try cleanup again."
+            throw cleanupError ?? HostNotchPanelError.staleState
+        }
         if let identity {
             do {
                 _ = try await request("notch.panel.detach", identity, timeout: 5)
@@ -209,6 +214,20 @@ final class HostNotchPanelCoordinator {
             } else {
                 assembly = HostNotchPanelAssembly(
                     create: create, present: present,
+                    didRelease: { [weak self] request in
+                        guard let self, request.extensionID == "notchShelf" else { return }
+                        guard let identity = self.identity,
+                            let screen = screens.values.first(where: {
+                                $0.presentationID == request.presentationID
+                                    && request.section == "panel." + String($0.display.id)
+                            })
+                        else { throw HostNotchPanelError.staleState }
+                        _ = try await self.request(
+                            "notch.panel.scene.stop",
+                            HostNotchPanelSceneStop(
+                                identity: identity, displayID: screen.display.id,
+                                presentationID: request.presentationID), timeout: 5)
+                    },
                     measure: { [weak self] slotID, height in self?.measure(slotID, height: height)
                     },
                     reportFailure: { [weak self] slotID, message in
