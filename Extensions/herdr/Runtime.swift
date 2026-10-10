@@ -134,6 +134,7 @@ final class ExtensionRuntime: NSObject {
                 let store = HerdrStore(uiClient: facade)
                 store.uiPresentationID = presentationID
                 let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
+                activity.folderPresentationID = presentationID
                 store.uiActivity = activity
                 uiStore = store
                 uiActivity = activity
@@ -173,7 +174,11 @@ final class ExtensionRuntime: NSObject {
             let navigation = (input["hostNavigation"] as? NSObject).flatMap {
                 HerdrHostWindowNavigationClient(bridge: $0)
             }
-            let created = HerdrWorker(hostWindowNavigation: navigation)
+            let folderChoice = (input["hostNavigation"] as? NSObject).flatMap {
+                HerdrHostFolderChoiceClient(bridge: $0)
+            }
+            let created = HerdrWorker(
+                hostWindowNavigation: navigation, hostFolderChoice: folderChoice)
             worker = created
             surface = HerdrSurface(worker: created)
             let recovery =
@@ -203,6 +208,7 @@ final class ExtensionRuntime: NSObject {
         let store = uiStore
         let activity = uiActivity
         store?.stopRendering()
+        activity?.cancelFolderChoice()
         uiClient?.invalidate()
         uiClient = nil
         uiStore = nil

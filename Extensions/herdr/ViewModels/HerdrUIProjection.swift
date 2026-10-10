@@ -258,6 +258,16 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.folder.choose":
+            guard Set(object.keys) == ["presentationID"],
+                let raw = object["presentationID"] as? String,
+                let presentationID = UUID(uuidString: raw), let chooser = worker.hostFolderChoice
+            else { throw ExtensionPeerError.invalidRequest }
+            let path = try await chooser.choose(presentationID: presentationID)
+            try Task.checkCancellation()
+            guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+            return try JSONSerialization.data(
+                withJSONObject: path.map { ["selectedPath": $0] } ?? ["cancelled": true])
         case "herdr.ui.presentation.open":
             guard Set(object.keys) == ["presentationID", "token"],
                 let origin = object["presentationID"] as? String,

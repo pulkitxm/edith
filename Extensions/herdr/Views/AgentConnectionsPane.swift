@@ -116,6 +116,7 @@ struct AgentConnectionsPane: View {
                 await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
             }
         }
+        .onDisappear { monitor.cancelFolderChoice() }
         .edithSheet(item: $preview) { item in
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                 Text(item.enabled ? "Configure \(item.plan.provider.title)" : "Remove Edith hooks")
@@ -245,15 +246,16 @@ struct AgentConnectionsPane: View {
     }
 
     private func chooseProject() {
-        guard monitor.uiClient == nil else {
-            error = "Project folder selection requires the owning window's folder chooser."
-            return
+        guard !working else { return }
+        working = true
+        HerdrWorkOwnership.start {
+            defer { working = false }
+            do {
+                if let selected = try await monitor.chooseProjectFolder() { project = selected }
+            } catch is CancellationError {} catch let failure {
+                error = failure.localizedDescription
+            }
         }
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK { project = panel.url }
     }
 
     private func prepare(_ provider: AgentActivityProvider, enabled: Bool) {

@@ -44,9 +44,11 @@ import Foundation
     }
 
     let hostWindowNavigation: HerdrHostWindowNavigationClient?
+    let hostFolderChoice: HerdrHostFolderChoiceClient?
 
     init(
         hostWindowNavigation: HerdrHostWindowNavigationClient? = nil,
+        hostFolderChoice: HerdrHostFolderChoiceClient? = nil,
         openGuide: @escaping @MainActor () throws -> Void = HerdrWorker.openOriginalGuide,
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
         defaults: UserDefaults = SharedDefaults.store,
@@ -65,6 +67,7 @@ import Foundation
         }
     ) {
         self.hostWindowNavigation = hostWindowNavigation
+        self.hostFolderChoice = hostFolderChoice
         let ownedStore = store ?? .shared
         self.defaults = defaults
         self.notifications =
@@ -484,6 +487,7 @@ import Foundation
 
     func cancelPendingWork() async {
         hostWindowNavigation?.invalidate()
+        hostFolderChoice?.invalidate()
         await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await catalogs.shutdown()
@@ -494,6 +498,7 @@ import Foundation
         guard !isStopped else { return }
         isStopped = true
         hostWindowNavigation?.invalidate()
+        hostFolderChoice?.invalidate()
         await terminalSessions.stopAllAndWait()
         spaces.stopAll()
         uiHookPlans.shutdown()

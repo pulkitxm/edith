@@ -8,6 +8,8 @@ private struct AgentActivityDefaults: @unchecked Sendable { let store: UserDefau
 final class AgentActivityMonitor {
     static let discoveryKey = "surfaceAgentTerminalDiscovery"
     let uiClient: HerdrUIClient?
+    var folderPresentationID: UUID?
+    private var folderChoice: Task<String?, Error>?
     var connectionsPresented = false
     private(set) var uiSettingsRevision = 0
     private(set) var now = Date()
@@ -177,7 +179,35 @@ final class AgentActivityMonitor {
         defaults.set(minutes, forKey: HerdrAttentionSettings.Keys.stuckMinutes)
     }
 
+    func chooseProjectFolder() async throws -> URL? {
+        guard !stopped, folderChoice == nil, let uiClient, let folderPresentationID else {
+            throw ExtensionPeerError.unavailable
+        }
+        let task = Task {
+            let data = try await uiClient.perform(
+                "herdr.ui.folder.choose",
+                object: ["presentationID": folderPresentationID.uuidString])
+            let reply = try JSONSerialization.jsonObject(with: data) as? NSDictionary
+            guard let reply else { throw ExtensionPeerError.invalidRequest }
+            return try HerdrHostFolderChoiceClient.path(reply)
+        }
+        folderChoice = task
+        defer { folderChoice = nil }
+        let path = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        try Task.checkCancellation()
+        guard !stopped, !task.isCancelled else { throw CancellationError() }
+        return path.map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    func cancelFolderChoice() { folderChoice?.cancel() }
+
     func shutdown() async {
+        cancelFolderChoice()
+        _ = await folderChoice?.result
         guard !stopped else { return }
         stopped = true
         surfaceUntil = .distantPast
