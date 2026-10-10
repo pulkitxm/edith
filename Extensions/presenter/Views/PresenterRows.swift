@@ -208,6 +208,7 @@ struct PresenterPrivacyQuickToggle: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.edith(.borderless))
+        .accessibilityLabel(category.title)
         .onHover { hovering = $0 }
     }
 

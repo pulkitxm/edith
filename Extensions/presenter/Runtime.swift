@@ -77,6 +77,7 @@ final class ExtensionRuntime: NSObject {
             }
             synchronize()
         case "view":
+            if let controller = PresenterSidebarScene.controller(input) { return controller }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     PageWorkspace {

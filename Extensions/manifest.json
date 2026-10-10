@@ -204,6 +204,7 @@
         "Extensions/presenter/Models/PresenterText.swift",
         "Extensions/presenter/Runtime.swift",
         "Extensions/presenter/Views/PresenterRows.swift",
+        "Extensions/presenter/Views/PresenterSidebarScene.swift",
         "Extensions/presenter/Surface.swift"
       ]
     },

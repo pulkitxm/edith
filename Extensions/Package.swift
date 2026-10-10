@@ -211,7 +211,7 @@ let package = Package(
         .target(
             name: "PresenterExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "presenter", exclude: ["Tests", "Runtime.swift"],
+            path: "presenter", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "PresenterExtensionTests", dependencies: ["PresenterExtension"],
