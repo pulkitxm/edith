@@ -28,7 +28,7 @@ struct StudioUIImageRender: Codable, Sendable {
 
 @MainActor enum StudioUIImageCommands {
     private static let fields: [String: Set<String>] = [
-        "studio.ui.image.load": ["path"],
+        "studio.ui.image.load": ["path", "size"],
         "studio.ui.image.render": ["document", "size", "geometry"],
         "studio.ui.image.thumbnails": ["document"],
         "studio.ui.image.faces": ["document"],

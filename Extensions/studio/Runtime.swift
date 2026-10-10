@@ -29,6 +29,11 @@ final class ExtensionRuntime: NSObject {
             if command.hasPrefix("studio.ui.work.") {
                 return try self.work.invoke(command, payload: payload)
             }
+            if command.hasPrefix("studio.ui.pdf.") {
+                return try await StudioUIPDFCommands.execute(
+                    command, payload: payload, model: model,
+                    resources: self.resources, work: self.work)
+            }
             if command.hasPrefix("studio.ui.image.") {
                 return try await StudioUIImageCommands.execute(
                     command, payload: payload, model: model,

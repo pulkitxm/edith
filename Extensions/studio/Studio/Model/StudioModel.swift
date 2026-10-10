@@ -566,7 +566,7 @@ final class StudioModel {
 
     func pdfEditor(for url: URL, mode: StudioPDFEditorMode) -> StudioPDFEditorModel {
         if let editor = pdfEditors[url] { return editor }
-        let editor = StudioPDFEditorModel(url: url, mode: mode)
+        let editor = StudioPDFEditorModel(url: url, mode: mode, facade: facade)
         pdfEditors[url] = editor
         return editor
     }

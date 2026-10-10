@@ -135,6 +135,8 @@ final class StudioPDFEditorModel {
         let session: PDFEditSession
     }
     let url: URL
+    let facade: StudioUIFacade?
+    var isWorking = false
     var mode: StudioPDFEditorMode
     var tool: StudioPDFTool
     var session: PDFEditSession?
@@ -165,11 +167,13 @@ final class StudioPDFEditorModel {
     private var redoStack: [PDFEditSession.Snapshot] = []
     private var saveTask: Task<Void, Never>?
     private var signaturesTask: Task<Void, Never>?
+    private var mutationTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
     let loading = ContentLoad()
 
-    init(url: URL, mode: StudioPDFEditorMode) {
+    init(url: URL, mode: StudioPDFEditorMode, facade: StudioUIFacade? = nil) {
         self.url = url
+        self.facade = facade
         self.mode = mode
         tool = StudioPDFTool.tools(for: mode).first ?? .select
     }
@@ -201,9 +205,34 @@ final class StudioPDFEditorModel {
         let password = password.isEmpty ? nil : password
         loadTask = Task { [weak self] in
             do {
-                let loaded = try await Task.detached(priority: .userInitiated) {
-                    LoadedSession(session: try PDFEditSession(url: url, password: password))
-                }.value
+                let loaded: LoadedSession
+                if let facade = self?.facade {
+                    var object: [String: Any] = ["path": url.path]
+                    if let password { object["password"] = password }
+                    let reply: StudioUIPDFLoad = try await facade.read(
+                        "studio.ui.pdf.load", object: object)
+                    guard let self, self.loading.isCurrent(generation) else { return }
+                    if let handle = reply.resource {
+                        let snapshot: PDFEditSession.Snapshot = try await facade.download(handle)
+                        guard let session = PDFEditSession(snapshot: snapshot, source: url) else {
+                            throw StudioError.unreadable(url.lastPathComponent)
+                        }
+                        loaded = LoadedSession(session: session)
+                    } else {
+                        self.needsPassword = reply.needsPassword
+                        self.loadError = reply.needsPassword ? nil : reply.failure
+                        if reply.wrongPassword { self.status = "That password did not work." }
+                        self.loading.fail(
+                            generation,
+                            error: StudioUIOperationFailure(
+                                message: reply.failure ?? "The PDF could not be opened."))
+                        return
+                    }
+                } else {
+                    loaded = try await Task.detached(priority: .userInitiated) {
+                        LoadedSession(session: try PDFEditSession(url: url, password: password))
+                    }.value
+                }
                 guard let self, self.loading.isCurrent(generation) else { return }
                 self.session = loaded.session
                 self.needsPassword = false
@@ -233,6 +262,8 @@ final class StudioPDFEditorModel {
         loadTask = nil
         signaturesTask?.cancel()
         signaturesTask = nil
+        mutationTask?.cancel()
+        saveTask?.cancel()
     }
 
     func switchMode(_ next: StudioPDFEditorMode) {
@@ -409,6 +440,15 @@ final class StudioPDFEditorModel {
     }
 
     func findRedactions() {
+        if facade != nil {
+            remoteChange(
+                "redactions",
+                parameters: [
+                    "terms": redactTerms, "emails": redactEmails, "phones": redactPhones,
+                    "cards": redactCards,
+                ]);
+            return
+        }
         var patterns: [PDFRedaction.Pattern] = []
         if redactEmails { patterns.append(.email) }
         if redactPhones { patterns.append(.phone) }
@@ -428,6 +468,7 @@ final class StudioPDFEditorModel {
     }
 
     func trimAllMargins() {
+        if facade != nil { remoteChange("trim", parameters: [:]); return }
         var trimmed = 0
         mutate { trimmed = try $0.trimMargins(pages: Array(0..<pageCount)) }
         status =
@@ -436,6 +477,7 @@ final class StudioPDFEditorModel {
     }
 
     func detectFields() {
+        if facade != nil { remoteChange("fields", parameters: [:]); return }
         var created = 0
         mutate { created = $0.detectFormFields() }
         status =
@@ -470,6 +512,9 @@ final class StudioPDFEditorModel {
         panel.allowedContentTypes = [.pdf, .image]
         panel.message = "Choose a PDF or image to insert."
         guard panel.runModal() == .OK, let file = panel.url else { return }
+        if facade != nil {
+            remoteChange("insert", parameters: ["file": file.path, "page": page + 1]); return
+        }
         mutate { _ = try $0.insertPages(from: file, at: page + 1) }
     }
 
@@ -479,6 +524,11 @@ final class StudioPDFEditorModel {
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = url.studioStem + "-pages.pdf"
         guard panel.runModal() == .OK, let target = panel.url else { return }
+        if facade != nil {
+            remoteChange(
+                "extract", parameters: ["pages": Array(pages).sorted(), "output": target.path]);
+            return
+        }
         do {
             try session.extractPages(Array(pages), to: target)
             status =
@@ -492,6 +542,20 @@ final class StudioPDFEditorModel {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
         guard panel.runModal() == .OK, let file = panel.url else { return }
+        if let facade {
+            mutationTask?.cancel()
+            mutationTask = Task { [weak self] in
+                do {
+                    let handle: StudioUIResource = try await facade.read(
+                        "studio.ui.image.load", object: ["path": file.path, "size": 2400])
+                    let value: StudioUIImageData = try await facade.download(handle)
+                    guard let self, !Task.isCancelled, let image = value.image else { return }
+                    self.pendingImage = image; self.pendingImageName = file.lastPathComponent;
+                    self.tool = .image
+                } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
+            }
+            return
+        }
         do {
             pendingImage = try StudioImageIO.load(file, maxPixelSize: 2400)
             pendingImageName = file.lastPathComponent
@@ -510,6 +574,18 @@ final class StudioPDFEditorModel {
     func loadSignatures() {
         signaturesTask?.cancel()
         signaturesTask = Task { [weak self] in
+            if let facade = self?.facade {
+                do {
+                    let handle: StudioUIResource = try await facade.read(
+                        "studio.ui.pdf.signatures.list")
+                    let values: [StudioUISignature] = try await facade.download(handle)
+                    guard let self, !Task.isCancelled else { return }
+                    self.signatures = values.compactMap { value in
+                        value.image.image.map { StudioSavedSignature(url: value.url, image: $0) }
+                    }
+                } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
+                return
+            }
             let loaded = await Task.detached(priority: .utility) { StudioSignatureStore.load() }
                 .value
             guard let self, !Task.isCancelled else { return }
@@ -518,6 +594,24 @@ final class StudioPDFEditorModel {
     }
 
     func saveSignature(_ image: CGImage) {
+        if let facade {
+            mutationTask?.cancel()
+            mutationTask = Task { [weak self] in
+                do {
+                    let handle = try await facade.upload(StudioUIImageData(image))
+                    let value: StudioUISignature = try await facade.read(
+                        "studio.ui.pdf.signatures.save",
+                        object: ["image": try facade.object(handle)])
+                    guard let self, !Task.isCancelled, let pixels = value.image.image else {
+                        return
+                    }
+                    let saved = StudioSavedSignature(url: value.url, image: pixels)
+                    self.signatures.insert(saved, at: 0); self.useSignature(saved)
+                } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
+            }
+            return
+        }
+
         do {
             let saved = try StudioSignatureStore.save(image)
             signatures.insert(saved, at: 0)
@@ -528,6 +622,18 @@ final class StudioPDFEditorModel {
     }
 
     func deleteSignature(_ signature: StudioSavedSignature) {
+        if let facade {
+            mutationTask?.cancel()
+            mutationTask = Task { [weak self] in
+                do {
+                    let _: [String: String] = try await facade.read(
+                        "studio.ui.pdf.signatures.remove", object: ["path": signature.url.path])
+                    guard !Task.isCancelled else { return }; self?.loadSignatures()
+                } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
+            }
+            return
+        }
+
         try? FileManager.default.removeItem(at: signature.url)
         signatures.removeAll { $0.url == signature.url }
         if pendingImageName == signature.name { pendingImage = nil }
@@ -538,6 +644,30 @@ final class StudioPDFEditorModel {
         saveTask?.cancel()
         guard let snapshot = session.snapshot() else {
             status = "The PDF could not be prepared for saving."
+            return
+        }
+        if let facade {
+            isSaving = true; saveProgress = 0
+            saveTask = Task { [weak self] in
+                do {
+                    let handle = try await facade.upload(snapshot)
+                    var object: [String: Any] = [
+                        "path": self?.url.path ?? session.source.path,
+                        "snapshot": try facade.object(handle),
+                        "suffix": self?.mode.suffix ?? "edited", "flatten": self?.mode == .sign,
+                    ]
+                    if let destination { object["output"] = destination.path }
+                    let target: URL = try await facade.perform(
+                        "studio.ui.pdf.export", object: object
+                    ) { [weak self] in self?.saveProgress = $0 }
+                    guard let self, !Task.isCancelled else { return }
+                    self.isSaving = false; session.markSaved(); self.lastSaved = target
+                    self.status = "Saved \(target.lastPathComponent)"; facade.refresh()
+                } catch {
+                    guard let self, !Task.isCancelled else { return }
+                    self.isSaving = false; self.status = error.localizedDescription
+                }
+            }
             return
         }
         let target =
@@ -572,6 +702,29 @@ final class StudioPDFEditorModel {
         panel.nameFieldStringValue = url.studioStem + "-\(mode.suffix).pdf"
         guard panel.runModal() == .OK, let target = panel.url else { return }
         save(to: target, studio: studio)
+    }
+
+    private func remoteChange(_ action: String, parameters: [String: Any]) {
+        guard !isWorking, let facade, let session, let snapshot = session.snapshot() else { return }
+        let version = revision
+        isWorking = true
+        mutationTask = Task { [weak self] in
+            defer { self?.isWorking = false }
+            do {
+                let uploaded = try await facade.upload(snapshot)
+                let handle: StudioUIResource = try await facade.perform(
+                    "studio.ui.pdf.change",
+                    object: [
+                        "path": session.source.path, "snapshot": try facade.object(uploaded),
+                        "action": action, "parameters": parameters,
+                    ])
+                let value: StudioUIPDFChange = try await facade.download(handle)
+                guard let self, !Task.isCancelled, self.revision == version else { return }
+                self.undoStack.append(snapshot); self.redoStack.removeAll()
+                session.restore(value.snapshot); self.revision += 1; self.selected = nil
+                if let status = value.status { self.status = status }
+            } catch { if !Task.isCancelled { self?.status = error.localizedDescription } }
+        }
     }
 
     func zoom(_ factor: CGFloat) {

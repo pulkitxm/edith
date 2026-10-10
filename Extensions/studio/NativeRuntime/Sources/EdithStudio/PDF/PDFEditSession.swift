@@ -43,13 +43,45 @@ public final class PDFEditSession {
         }
     }
 
-    public struct Placement: Identifiable {
+    public struct Placement: Identifiable, Codable {
         public let id: UUID
         public var page: Int
         public var rect: CGRect
         public var image: CGImage
         public var opacity: Double
         public var rotation = 0
+
+        private enum CodingKeys: String, CodingKey { case id, page, rect, image, opacity, rotation }
+
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(UUID.self, forKey: .id)
+            page = try values.decode(Int.self, forKey: .page)
+            rect = try values.decode(CGRect.self, forKey: .rect)
+            opacity = try values.decode(Double.self, forKey: .opacity)
+            rotation = try values.decode(Int.self, forKey: .rotation)
+            let bytes = try values.decode(Data.self, forKey: .image)
+            guard let pixels = NSBitmapImageRep(data: bytes)?.cgImage else {
+                throw StudioError.unreadable("PDF image placement")
+            }
+            image = pixels
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var values = encoder.container(keyedBy: CodingKeys.self)
+            try values.encode(id, forKey: .id)
+            try values.encode(page, forKey: .page)
+            try values.encode(rect, forKey: .rect)
+            try values.encode(opacity, forKey: .opacity)
+            try values.encode(rotation, forKey: .rotation)
+            try values.encode(StudioImageIO.encode(image, format: .png), forKey: .image)
+        }
+
+        init(id: UUID, page: Int, rect: CGRect, image: CGImage, opacity: Double, rotation: Int = 0)
+        {
+            self.id = id; self.page = page; self.rect = rect; self.image = image
+            self.opacity = opacity; self.rotation = rotation
+        }
     }
 
     public static let placementMarker = "studio.placement"
@@ -102,7 +134,7 @@ public final class PDFEditSession {
         return index == NSNotFound ? nil : index
     }
 
-    public struct Snapshot: @unchecked Sendable {
+    public struct Snapshot: Codable, @unchecked Sendable {
         let data: Data
         let placements: [Placement]
         let redactions: [Int: [CGRect]]
@@ -229,6 +261,7 @@ public final class PDFEditSession {
     func compose(pages selection: [Int]?, scratch: URL, progress: @escaping (Double) -> Void)
         throws -> (document: PDFDocument, marks: [Int: [CGRect]])
     {
+        try Task.checkCancellation()
         let selected = selection ?? Array(0..<document.pageCount)
         let position = Dictionary(
             selected.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
@@ -242,6 +275,7 @@ public final class PDFEditSession {
         working.documentAttributes = document.documentAttributes
         var chosen: [Int: [Placement]] = [:]
         for placement in placements {
+            try Task.checkCancellation()
             if let target = position[placement.page] {
                 chosen[target, default: []].append(placement)
             }
@@ -584,6 +618,7 @@ public final class PDFEditSession {
         to url: URL, flatten: Bool = false, searchableRedactions: Bool = true,
         progress: @escaping (Double) -> Void = { _ in }
     ) async throws {
+        try Task.checkCancellation()
         let scratch = FileManager.default.temporaryDirectory.appendingPathComponent(
             "studio-edit-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -598,9 +633,18 @@ public final class PDFEditSession {
                 progress: { progress(0.5 + $0 * 0.4) })
             working = try StudioPDF.open(stage)
         }
+        try Task.checkCancellation()
+        let rendered = scratch.appendingPathComponent("rendered.pdf")
         try StudioPDF.write(
-            working, to: url, options: flatten ? [.burnInAnnotationsOption: true] : [:])
-        if flatten { try StudioPDF.restoreLinks(from: working, into: url) }
+            working, to: rendered,
+            options: flatten ? [.burnInAnnotationsOption: true] : [:])
+        if flatten { try StudioPDF.restoreLinks(from: working, into: rendered) }
+        try Task.checkCancellation()
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: rendered)
+        } else {
+            try FileManager.default.moveItem(at: rendered, to: url)
+        }
         progress(1)
         isDirty = false
     }

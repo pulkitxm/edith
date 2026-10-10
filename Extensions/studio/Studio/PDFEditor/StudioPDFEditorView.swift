@@ -195,7 +195,7 @@ struct StudioPDFEditorView: View {
             }
             .buttonStyle(.edith(.primary))
             .keyboardShortcut("s", modifiers: .command)
-            .disabled(editor.isSaving)
+            .disabled(editor.isSaving || editor.isWorking)
             .help("Save a new PDF next to the original (⌘S)")
         }
     }

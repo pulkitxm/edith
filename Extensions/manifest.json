@@ -1389,7 +1389,8 @@
         "Extensions/studio/UIBridge/StudioUIResources.swift",
         "Extensions/studio/UIBridge/StudioUITransfer.swift",
         "Extensions/studio/UIBridge/StudioUILongOperations.swift",
-        "Extensions/studio/UIBridge/StudioUIImageCommands.swift"
+        "Extensions/studio/UIBridge/StudioUIImageCommands.swift",
+        "Extensions/studio/UIBridge/StudioUIPDFCommands.swift"
       ]
     },
     "nativeSources": [
