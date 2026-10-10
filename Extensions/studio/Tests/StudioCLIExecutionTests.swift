@@ -196,6 +196,28 @@ import Testing
         #expect(usage.stderr.contains("--set needs key=value"))
     }
 
+    @Test func originalRecordingStatusAndInvalidOptionsDoNotStartHardwareCapture() async throws {
+        let (root, model, suite) = try fixture()
+        defer { cleanup(root, model, suite) }
+        let reply = try await run(["record", "status", "--json"], model: model)
+        if #available(macOS 15.0, *) {
+            #expect(reply.exitCode == 0 && reply.stderr.isEmpty)
+            let value = try #require(
+                try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+            #expect(value["recording"] as? Bool == false)
+            #expect(value["changed"] as? Bool == false)
+            #expect(value["sources"] as? [String] == [])
+        } else {
+            #expect(reply.exitCode == 4 && reply.stdout.isEmpty)
+            #expect(reply.stderr.contains("Screen recording needs macOS 15 or later."))
+        }
+        let invalid = try await run(
+            ["record", "start", "--display", "1", "--window", "2"], model: model)
+        #expect(invalid.exitCode == 2 && invalid.stdout.isEmpty)
+        #expect(invalid.stderr == "error: pass either --display or --window\n")
+        if #available(macOS 15.0, *) { await StudioRecordBridge.shared.shutdown() }
+    }
+
     @Test func disabledModelRejectsExecutionWithoutWriting() async throws {
         let (root, model, suite) = try fixture()
         defer { cleanup(root, model, suite) }
