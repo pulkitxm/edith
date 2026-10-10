@@ -29,7 +29,8 @@ struct HostNotchDisplay: Equatable, Sendable {
             frame.minX, frame.minY, frame.width, frame.height, collapsedSize.width,
             collapsedSize.height,
         ].allSatisfy(\.isFinite)
-            && frame.width > 48 && frame.height > 48
+            && frame.width > 48 && frame.width <= 16384
+            && frame.height > 48 && frame.height <= 16384
             && collapsedSize.width > 0 && collapsedSize.width <= frame.width
             && collapsedSize.height > 0 && collapsedSize.height <= 128
     }
@@ -90,6 +91,8 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
     let acceptsPointer: Bool
     let acceptsKeyFocus: Bool
     let slots: [HostNotchNativeSlot]
+    var capacityWidth: Double? = nil
+    var capacityHeight: Double? = nil
 
     static let maximumBytes = 131_072
     static let maximumSlots = 32
@@ -110,13 +113,29 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
             admission.activeVersions["notchShelf"] == version,
             revision > (admission.previousRevision ?? 0)
         else { throw HostNotchPanelError.staleState }
-        let panelBounds = CGRect(x: 0, y: 0, width: panelSize.width, height: panelSize.height)
+        let size = panelSize(display: admission.display)
+        let panelBounds = CGRect(origin: .zero, size: size)
+        let maximumWidth = activeTab == "browser" ? admission.display.frame.width - 48 : 1200.0
+        let maximumHeight = activeTab == "browser" ? admission.display.frame.height - 12 : 1024.0
         guard
             ["home", "agents", "browser", "files", "clipboard", "audio", "camera"].contains(
                 activeTab),
             shapeWidth.isFinite, shapeHeight.isFinite,
-            (1...min(1200, admission.display.frame.width - 48)).contains(shapeWidth),
-            (1...min(1024, admission.display.frame.height - 48)).contains(shapeHeight),
+            (1...min(maximumWidth, admission.display.frame.width - 48)).contains(shapeWidth),
+            (1...min(
+                maximumHeight, admission.display.frame.height - (activeTab == "browser" ? 12 : 48)))
+                .contains(shapeHeight),
+            capacityWidth.map({
+                $0.isFinite && $0 >= shapeWidth
+                    && $0 <= admission.display.frame.width - 48
+            }) ?? true,
+            capacityHeight.map({
+                $0.isFinite && $0 >= shapeHeight
+                    && $0 <= admission.display.frame.height - 12
+            }) ?? true,
+            admission.reservedProviderScenes.values.allSatisfy({
+                (0...Self.providerSceneLimit).contains($0)
+            }),
             slots.count <= Self.maximumSlots, Set(slots.map(\.id)).count == slots.count,
             !slots.contains(where: { $0.id == presentationID }),
             !acceptsKeyFocus || (phase == .expanded && activeTab == "browser"),
@@ -168,12 +187,19 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
         }
     }
 
-    var panelSize: CGSize { CGSize(width: shapeWidth + 24, height: shapeHeight + 10) }
+    func panelSize(display: HostNotchDisplay) -> CGSize {
+        let baseWidth = min(1200, display.frame.width - 48)
+        let baseHeight = min(display.collapsedSize.height + 760, display.frame.height - 48)
+        return CGSize(
+            width: max(baseWidth, shapeWidth, capacityWidth ?? 0) + 24,
+            height: max(baseHeight, shapeHeight, capacityHeight ?? 0) + 10)
+    }
     func panelFrame(display: HostNotchDisplay) -> CGRect {
-        CGRect(
-            x: display.frame.midX - panelSize.width / 2,
-            y: display.frame.maxY - panelSize.height,
-            width: panelSize.width, height: panelSize.height)
+        let size = panelSize(display: display)
+        return CGRect(
+            x: display.frame.midX - size.width / 2,
+            y: display.frame.maxY - size.height,
+            width: size.width, height: size.height)
     }
 }
 

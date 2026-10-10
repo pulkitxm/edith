@@ -27,6 +27,14 @@ struct HostNotchPanelAssemblyTests {
         #expect(assembly.panel.frame == state.panelFrame(display: fixture.display))
         #expect(assembly.container.children.count == 2)
         #expect(
+            assembly.container.view.hitTest(
+                assembly.container.view.convert(
+                    CGPoint(x: 8, y: 100), to: assembly.container.view.superview)) == nil)
+        #expect(
+            assembly.container.view.hitTest(
+                assembly.container.view.convert(
+                    CGPoint(x: 250, y: 100), to: assembly.container.view.superview)) != nil)
+        #expect(
             owner.requests.contains { $0.extensionID == "notchShelf" && $0.section == "panel.1" })
         let card = try #require(owner.leases.first { $0.request.extensionID == "music" })
         #expect(card.controller.parent === assembly.container)
@@ -52,7 +60,7 @@ struct HostNotchPanelAssemblyTests {
         let moved = HostNotchNativeSlot(
             id: slot.id, providerID: slot.providerID, providerVersion: slot.providerVersion,
             kind: slot.kind, tile: slot.tile,
-            rectangle: .init(x: 300, y: 50, width: 280, height: 180))
+            rectangle: .init(x: 510, y: 80, width: 280, height: 180))
         try assembly.accept(
             try advanced(first, revision: 2, slots: [moved]),
             admission: fixture.admission(previousRevision: 1))
@@ -127,6 +135,7 @@ struct HostNotchPanelAssemblyTests {
         owner.failClose = false
         try await assembly.stop()
         #expect(assembly.pendingCleanupCount == 0)
+        #expect(assembly.failures.isEmpty)
         #expect(owner.leases.allSatisfy { $0.closed })
         #expect(throws: HostNotchPanelError.staleState) {
             try assembly.accept(fixture.state(), admission: fixture.admission())

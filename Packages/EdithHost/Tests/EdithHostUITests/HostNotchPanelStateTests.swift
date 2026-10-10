@@ -18,9 +18,61 @@ struct HostNotchPanelStateTests {
         #expect(request.surface?.target == .notch)
         #expect(
             state.panelFrame(display: fixture.display)
-                == CGRect(x: 210, y: 370, width: 604, height: 410))
+                == CGRect(x: 12, y: 38, width: 1000, height: 742))
         let decoded = try HostNotchPanelState.decode(JSONEncoder().encode(state))
         #expect(decoded == state)
+    }
+
+    @Test func originalCapacityRemainsStableAcrossCollapseAndExpandedHome() throws {
+        let fixture = HostNotchStateFixture()
+        let expanded = fixture.state()
+        let collapsed = try fixture.mutate([
+            "phase": "collapsed", "shapeWidth": 234, "shapeHeight": 28, "slots": [],
+        ])
+        try collapsed.validate(fixture.admission())
+        #expect(
+            collapsed.panelSize(display: fixture.display)
+                == expanded.panelSize(display: fixture.display))
+        #expect(
+            collapsed.panelFrame(display: fixture.display)
+                == expanded.panelFrame(display: fixture.display))
+    }
+
+    @Test func originalBrowserCapacityAndScreenMarginArePreserved() throws {
+        let fixture = HostNotchStateFixture()
+        let display = HostNotchDisplay(
+            id: 1, frame: CGRect(x: -2560, y: 240, width: 2560, height: 1600),
+            collapsedSize: CGSize(width: 150, height: 32))
+        let admission = HostNotchPanelAdmission(
+            ownershipID: fixture.ownershipID, notchVersion: "1.0.0",
+            presentationID: fixture.presentationID, display: display, previousRevision: nil,
+            activeVersions: ["notchShelf": "1.0.0"], layout: .init(tiles: []))
+        let browser = try fixture.mutate([
+            "activeTab": "browser", "shapeWidth": 1800, "shapeHeight": 1588,
+            "capacityWidth": 2200, "capacityHeight": 1588, "acceptsKeyFocus": true, "slots": [],
+        ])
+        try browser.validate(admission)
+        #expect(browser.panelSize(display: display) == CGSize(width: 2224, height: 1598))
+        #expect(
+            browser.panelFrame(display: display)
+                == CGRect(x: -2392, y: 242, width: 2224, height: 1598))
+        let collapsed = try fixture.mutate([
+            "phase": "collapsed", "shapeWidth": 150, "shapeHeight": 32,
+            "capacityWidth": 2200, "capacityHeight": 1588, "slots": [],
+        ])
+        try collapsed.validate(admission)
+        #expect(collapsed.panelSize(display: display) == browser.panelSize(display: display))
+        var nonfinite = browser
+        nonfinite.capacityWidth = .nan
+        #expect(throws: HostNotchPanelError.invalidState) { try nonfinite.validate(admission) }
+        for fields in [
+            ["capacityWidth": 2513], ["capacityHeight": 1589],
+            ["capacityWidth": 100], ["capacityHeight": -1],
+        ] {
+            #expect(throws: HostNotchPanelError.invalidState) {
+                try fixture.mutate(fields).validate(admission)
+            }
+        }
     }
 
     @Test func staleGenerationDisplayVersionAndRevisionAreRejected() throws {
@@ -64,7 +116,7 @@ struct HostNotchPanelStateTests {
         let fixture = HostNotchStateFixture()
         for rectangle in [
             HostNotchRectangle(x: -1, y: 42, width: 280, height: 160),
-            HostNotchRectangle(x: 12, y: 42, width: 900, height: 160),
+            HostNotchRectangle(x: 222, y: 42, width: 900, height: 160),
             HostNotchRectangle(x: 12, y: 42, width: 280, height: 0),
             HostNotchRectangle(x: .nan, y: 42, width: 280, height: 160),
         ] {
@@ -116,6 +168,9 @@ struct HostNotchPanelStateTests {
         #expect(throws: HostNotchPanelError.capacityExceeded) {
             try fixture.state().validate(fixture.admission(reserved: ["music": 16]))
         }
+        #expect(throws: HostNotchPanelError.invalidState) {
+            try fixture.state().validate(fixture.admission(reserved: ["music": -1]))
+        }
         #expect(fixture.state().slots.count == 1)
     }
 
@@ -155,7 +210,7 @@ struct HostNotchStateFixture {
         HostNotchNativeSlot(
             id: UUID(), providerID: provider, providerVersion: "1.0.0", kind: kind,
             tile: tile ?? self.tile,
-            rectangle: rectangle ?? .init(x: 12, y: 42, width: 280, height: 160))
+            rectangle: rectangle ?? .init(x: 222, y: 68, width: 280, height: 160))
     }
     func state(
         phase: HostNotchPanelState.Phase = .expanded, tab: String = "home",

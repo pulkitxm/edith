@@ -26,10 +26,11 @@ final class HostNotchPanel: NSPanel {
 @MainActor
 final class HostNotchContainerController: NSViewController {
     private let nativeLayer = HostNotchPassthroughView()
+    private let root = HostNotchFlippedView()
     private let mask = CAShapeLayer()
 
     override func loadView() {
-        view = HostNotchFlippedView()
+        view = root
         nativeLayer.wantsLayer = true
         nativeLayer.layer?.mask = mask
         view.addSubview(nativeLayer)
@@ -50,16 +51,18 @@ final class HostNotchContainerController: NSViewController {
         controller.view.autoresizingMask = native ? [] : [.width, .height]
     }
 
-    func apply(_ state: HostNotchPanelState) {
+    func apply(_ state: HostNotchPanelState, size: CGSize) {
         loadViewIfNeeded()
-        view.frame.size = state.panelSize
+        view.frame.size = size
         nativeLayer.frame = view.bounds
         mask.frame = nativeLayer.bounds
         let top: CGFloat = state.phase == .collapsed ? 0 : 10
         let bottom: CGFloat = state.phase == .expanded ? 22 : state.phase == .alert ? 20 : 12
         let rect = CGRect(
-            x: (state.panelSize.width - state.shapeWidth) / 2, y: 0,
+            x: (size.width - state.shapeWidth) / 2, y: 0,
             width: state.shapeWidth, height: state.shapeHeight)
+        root.interactiveRectangle = rect
+        nativeLayer.interactiveRectangle = rect
         let path = CGMutablePath()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
         path.addQuadCurve(
@@ -84,6 +87,15 @@ final class HostNotchContainerController: NSViewController {
 
 private class HostNotchFlippedView: NSView {
     override var isFlipped: Bool { true }
+    var interactiveRectangle: CGRect?
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let interactiveRectangle,
+            !interactiveRectangle.contains(convert(point, from: superview))
+        {
+            return nil
+        }
+        return super.hitTest(point)
+    }
 }
 
 private final class HostNotchPassthroughView: HostNotchFlippedView {

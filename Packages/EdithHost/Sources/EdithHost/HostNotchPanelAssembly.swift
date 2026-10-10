@@ -48,7 +48,7 @@ final class HostNotchPanelAssembly {
         panel.acceptsKeyFocus = next.acceptsKeyFocus
         panel.ignoresMouseEvents = !next.visible || !next.acceptsPointer
         panel.alphaValue = next.visible ? 1 : 0
-        container.apply(next)
+        container.apply(next, size: next.panelSize(display: admission.display))
         var wanted = Set<UUID>()
         if next.visible {
             wanted.insert(next.presentationID)
@@ -111,7 +111,9 @@ final class HostNotchPanelAssembly {
         for task in Array(closing.values) { await task.value }
         var failure: (any Error)?
         for (id, lease) in Array(retiring) {
-            do { try await lease.close(); retiring[id] = nil } catch { failure = error }
+            do { try await lease.close(); retiring[id] = nil; failures[id] = nil } catch {
+                failure = error
+            }
         }
         if let failure { throw failure }
     }
@@ -160,7 +162,7 @@ final class HostNotchPanelAssembly {
             lease.controller, rectangle: record.slot?.rectangle.frame, native: record.slot != nil)
         lease.apply(
             compact: record.slot?.tile.dense ?? true, visible: state.visible,
-            width: record.slot?.rectangle.width ?? state.panelSize.width)
+            width: record.slot?.rectangle.width ?? container.view.bounds.width)
     }
 
     private func remove(_ id: UUID) {
@@ -178,7 +180,7 @@ final class HostNotchPanelAssembly {
         closing[id] = Task { [weak self] in
             guard let self else { return }
             defer { closing[id] = nil }
-            do { try await lease.close(); retiring[id] = nil } catch {
+            do { try await lease.close(); retiring[id] = nil; failures[id] = nil } catch {
                 failures[id] = "The extension interface is still stopping."
             }
         }
