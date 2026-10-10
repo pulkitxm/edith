@@ -1,4 +1,7 @@
 import AppKit
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 import EdithExtensionSupport
 import EdithExtensionUI
 import EdithExtensionCommands
@@ -6,6 +9,7 @@ import SwiftUI
 
 @MainActor @objc(EdithMachinesExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
     private var running = false
     private var peer: MachinePeerService?
     private var surface: MachineSurface?
@@ -19,8 +23,22 @@ final class ExtensionRuntime: NSObject {
     private var uiEngine: MachineUIEngine?
     private var windowNavigation: MachineHostWindowNavigationClient?
     private var uiClient: MachineUIClient?
+    private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
+        MachineHealthLifecycle.jobID: .init(ambient: 300)
+    ])
     private var health: MachineHealthLifecycle?
     private let commands = ExtensionCommandRegistry()
+
+    init(
+        fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "machines", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        }
+    ) {
+        self.fixtureAdmission = fixtureAdmission
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -137,17 +155,27 @@ final class ExtensionRuntime: NSObject {
             PaneViewStore.shared.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            let fixture: Bool
+            do { fixture = try fixtureAdmission(input) != nil } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
                 return ["ok": false] as NSDictionary
             }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
             if !running {
+                if !fixture {
+                    do {
+                        try ambientPolicy.start { [weak self] in self?.health?.reschedule() }
+                    } catch { return ["ok": false] as NSDictionary }
+                }
                 MachinesModel.shared = MachinesModel()
                 WorkspaceModel.shared = WorkspaceModel(machines: .shared)
-                let fixture =
-                    ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
                 let transport: MachinePeerTransport
                 if fixture {
                     transport = MachinePeerTransport(
@@ -307,7 +335,10 @@ final class ExtensionRuntime: NSObject {
                 } catch { return ["ok": false] as NSDictionary }
                 MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
                 if !fixture {
-                    let health = MachineHealthLifecycle()
+                    let policy = ambientPolicy
+                    let health = MachineHealthLifecycle(interval: {
+                        policy.interval(for: MachineHealthLifecycle.jobID)
+                    })
                     self.health = health
                     health.start()
                 }
@@ -336,6 +367,11 @@ final class ExtensionRuntime: NSObject {
                     MachinesPage().environment(\.machineConnectionsEnabled, true)
                         .environment(\.terminalLaunchEnabled, true)
                 })
+        case "synchronize":
+            do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
             commands.shutdown()
@@ -348,6 +384,7 @@ final class ExtensionRuntime: NSObject {
     }
     private func shutdown() async {
         running = false
+        ambientPolicy.stop()
         windowNavigation?.invalidate(); windowNavigation = nil
         await uiEngine?.shutdown(); uiEngine = nil
         await filesEngine?.shutdownAndWait(); filesEngine = nil

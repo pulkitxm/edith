@@ -7,6 +7,7 @@ let package = Package(
     dependencies: [
         .package(path: "../../Packages/ExtensionSupport"),
         .package(path: "../terminal/Native"),
+        .package(path: "../fixtureSupport"),
     ],
     targets: [
         .target(
@@ -15,6 +16,7 @@ let package = Package(
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
                 .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
             ], path: ".", exclude: ["Runtime.swift", "Tests"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

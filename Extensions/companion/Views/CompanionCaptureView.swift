@@ -5,7 +5,7 @@ import Observation
 import Speech
 import SwiftUI
 
-private final class CompanionRecordingResources {
+final class CompanionRecordingResources {
     let engine = AVAudioEngine()
     var file: AVAudioFile?
     var speech: SFSpeechRecognizer?
@@ -53,7 +53,9 @@ final class CompanionCaptureModel {
     private(set) var waiting: [CompanionOutboxItem] = []
     private(set) var draining = false
 
-    @ObservationIgnored private lazy var recording = CompanionRecordingResources()
+    @ObservationIgnored private var recordingResources: CompanionRecordingResources?
+    @ObservationIgnored private let recordingFactory:
+        @MainActor () throws -> CompanionRecordingResources
     @ObservationIgnored private let remote: CompanionUIBridge?
     @ObservationIgnored private var remoteTask: Task<Void, Never>?
     private var remoteStopped = false
@@ -65,9 +67,15 @@ final class CompanionCaptureModel {
     private var captureActive = false
     @ObservationIgnored private nonisolated(unsafe) var outboxObserver: NSObjectProtocol?
 
-    init(remote: CompanionUIBridge? = nil) {
+    init(
+        remote: CompanionUIBridge? = nil,
+        recordingFactory: @escaping @MainActor () throws -> CompanionRecordingResources = {
+            CompanionRecordingResources()
+        }, observeOutbox: Bool = true
+    ) {
         self.remote = remote
-        guard remote == nil else { return }
+        self.recordingFactory = recordingFactory
+        guard remote == nil, observeOutbox else { return }
         outboxObserver = IPC.observe(CompanionBackgroundOperation.outboxChanged) { [weak self] in
             Task { @MainActor in await self?.refreshWaiting() }
         }
@@ -85,7 +93,8 @@ final class CompanionCaptureModel {
         setCaptureActive(false)
         if let outboxObserver { IPC.stopObserving(outboxObserver) }
         outboxObserver = nil
-        recording.stop()
+        recordingResources?.stop()
+        recordingResources = nil
     }
 
     private var client: CompanionClient {
@@ -125,6 +134,14 @@ final class CompanionCaptureModel {
         }
         guard generation == startGeneration, !Task.isCancelled else { return }
 
+        let recording: CompanionRecordingResources
+        do {
+            recording = try recordingResources ?? recordingFactory()
+            recordingResources = recording
+        } catch {
+            self.error = "Could not initialize the microphone: \(error.localizedDescription)"
+            return
+        }
         let input = recording.engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0 else {
@@ -225,7 +242,7 @@ final class CompanionCaptureModel {
 
     private func stopRecording() {
         startGeneration += 1
-        recording.stop()
+        recordingResources?.stop()
         if let startedAt { duration = Date().timeIntervalSince(startedAt) }
         startedAt = nil
         level = 0

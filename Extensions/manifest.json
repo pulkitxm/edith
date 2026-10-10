@@ -1256,7 +1256,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "roles": {
@@ -1315,7 +1316,8 @@
         "Extensions/companion/Views/CompanionOnboardingView.swift",
         "Extensions/companion/Views/CompanionPage.swift",
         "Extensions/companion/Views/CompanionSettingsView.swift",
-        "Extensions/companion/Views/CompanionUI.swift"
+        "Extensions/companion/Views/CompanionUI.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "minimumSystemVersion": 14,
@@ -2129,7 +2131,8 @@
       "Packages/ExtensionSupport",
       "Extensions/terminal/Native",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-contained-host-runtime.mjs"
+      "scripts/build-contained-host-runtime.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "minimumSystemVersion": 14,
@@ -2305,7 +2308,8 @@
         "Extensions/machines/UI/Views/SelectableChipRow.swift",
         "Extensions/machines/UI/Views/TerminalDropTransferStatus.swift",
         "Extensions/machines/UI/Views/TerminalLoadingSkeleton.swift",
-        "Extensions/machines/Services/MachineUsageProgress.swift"
+        "Extensions/machines/Services/MachineUsageProgress.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "resources": {
@@ -2643,6 +2647,7 @@
         "Extensions/codeStats/Services/CodeStatsStore.swift",
         "Extensions/codeStats/Services/CodeStatsSurface.swift",
         "Extensions/codeStats/Services/CodeStatsTaskRunner.swift",
+        "Extensions/codeStats/Services/CodeStatsScheduleLifecycle.swift",
         "Extensions/codeStats/Services/CodeStatsVolumeWatch.swift",
         "Extensions/codeStats/Services/CodeStatsWorkflow.swift",
         "Extensions/codeStats/ViewModels/CodeStatsModel.swift",
@@ -2660,7 +2665,8 @@
         "Extensions/codeStats/Views/CodeStatsProgressCard.swift",
         "Extensions/codeStats/Views/CodeStatsRows.swift",
         "Extensions/codeStats/Views/CodeStatsSetupView.swift",
-        "Extensions/codeStats/Views/CodeStatsTrendCards.swift"
+        "Extensions/codeStats/Views/CodeStatsTrendCards.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "inputs": ["Extensions/codeStats"],
@@ -2670,7 +2676,8 @@
       "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "contractVersion": 1,

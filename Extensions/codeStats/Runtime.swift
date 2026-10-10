@@ -1,4 +1,7 @@
 import AppKit
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 import EdithExtensionSupport
 import EdithExtensionCommands
 import EdithExtensionUI
@@ -7,18 +10,37 @@ import SwiftUI
 
 @MainActor @objc(EdithCodeStatsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private let fixtureAdmission: (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let settingsWake: (@MainActor () -> Void)?
+    private var fixtureMode = false
     private var workflow: CodeStatsWorkflow?
     private var uiModel: CodeStatsModel?
     private var engineClient: ExtensionEngineClient?
     private var surface: CodeStatsSurface?
     private var operations: CodeStatsCommands?
     private var startup: Task<Void, Never>?
-    private var schedule: Task<Void, Never>?
+    private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
+        CodeStatsScheduleLifecycle.jobID: .init(ambient: 600)
+    ])
+    private var schedule: CodeStatsScheduleLifecycle?
     private var wake: Task<Void, Never>?
     private var volumeWatch: CodeStatsVolumeWatch?
     private var defaultsObserver: NSObjectProtocol?
     private let commands = ExtensionCommandRegistry()
     private var cliStreams: ExtensionCLIStreams?
+
+    init(
+        settingsWake: (@MainActor () -> Void)? = nil,
+        fixtureAdmission: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "codeStats", context: $0,
+                roleBundle: Bundle(for: ExtensionRuntime.self))
+        }
+    ) {
+        self.fixtureAdmission = fixtureAdmission
+        self.settingsWake = settingsWake
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -54,6 +76,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
+        ambientPolicy.stop()
         schedule?.cancel(); wake?.cancel(); startup?.cancel()
         volumeWatch?.stop(); volumeWatch = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
@@ -62,9 +85,11 @@ final class ExtensionRuntime: NSObject {
         CodeStatsWorkerOperations.workflow = nil
         let workflow = workflow; self.workflow = nil
         let operations = operations; self.operations = nil
-        let jobs = [startup, schedule, wake]; startup = nil; schedule = nil; wake = nil
+        let schedule = schedule; self.schedule = nil
+        let jobs = [startup, wake]; startup = nil; wake = nil
         surface = nil
         Task {
+            await schedule?.shutdown()
             await workflow?.shutdown()
             await operations?.shutdown()
             for job in jobs { await job?.value }
@@ -95,10 +120,22 @@ final class ExtensionRuntime: NSObject {
             uiModel?.cancelLoading(); uiModel = nil
             engineClient?.invalidate(); engineClient = nil
         case "start":
+            let fixture: Bool
+            do { fixture = try fixtureAdmission(input) != nil } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard workflow == nil else { return ["ok": true] as NSDictionary }
+            fixtureMode = fixture
+            if !fixture {
+                do { try ambientPolicy.start { [weak self] in self?.schedule?.reschedule() } } catch
+                { return ["ok": false] as NSDictionary }
+            }
             CodeStatsPaths.prepare()
             let store = CodeStatsStore()
             let workflow = CodeStatsWorkflow(environment: .live)
@@ -107,11 +144,11 @@ final class ExtensionRuntime: NSObject {
             operations = CodeStatsCommands(workflow: workflow, store: store)
             startup = Task {
                 await workflow.recoverInterruptedRun()
-                if CodeStatsExecutionEnvironment.fixtureHome != nil, !Task.isCancelled {
+                if fixture, !Task.isCancelled {
                     await CodeStatsModel.shared.loadReport()
                 }
             }
-            if CodeStatsExecutionEnvironment.fixtureHome == nil {
+            if !fixture {
                 let watcher = CodeStatsVolumeWatch(); volumeWatch = watcher
                 watcher.start { [weak self] in Task { @MainActor in self?.wakeSchedule() } }
                 defaultsObserver = NotificationCenter.default.addObserver(
@@ -120,13 +157,13 @@ final class ExtensionRuntime: NSObject {
                 ) { [weak self] _ in
                     MainActor.assumeIsolated { self?.wakeSchedule() }
                 }
-                schedule = Task { [weak self] in
-                    await self?.startup?.value
-                    while !Task.isCancelled {
-                        _ = await workflow.scheduledCheck()
-                        do { try await Task.sleep(for: .seconds(30)) } catch { return }
-                    }
-                }
+                let policy = ambientPolicy
+                let schedule = CodeStatsScheduleLifecycle(
+                    interval: { policy.interval(for: CodeStatsScheduleLifecycle.jobID) },
+                    ready: { [weak self] in await self?.startup?.value },
+                    check: { _ = await workflow.scheduledCheck() })
+                self.schedule = schedule
+                schedule.start()
             }
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
@@ -140,7 +177,14 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": wakeSchedule()
+        case "synchronize":
+            do { _ = try fixtureAdmission(input) } catch { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
+            if input["ambientPolicyOnly"] as? Bool != true {
+                if let settingsWake { settingsWake() } else { wakeSchedule() }
+            }
         case "stop": prepareToStop(completion: {})
         case "status": return ["ok": true, "running": workflow != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
@@ -149,14 +193,18 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func wakeSchedule() {
-        guard CodeStatsExecutionEnvironment.fixtureHome == nil, let workflow else { return }
+        guard !fixtureMode, let workflow else { return }
         wake?.cancel()
         wake = Task { [weak self] in
             await self?.startup?.value
             guard !Task.isCancelled else { return }
             await workflow.settingsChanged()
             guard !Task.isCancelled else { return }
-            _ = await workflow.scheduledCheck()
+            if let schedule = self?.schedule {
+                await schedule.runExplicit()
+            } else {
+                _ = await workflow.scheduledCheck()
+            }
         }
     }
 }
