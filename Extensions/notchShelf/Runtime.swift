@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -12,6 +13,13 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let controller = self?.controller else { throw ExtensionPeerError.unavailable }
+            if command == "notch.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let reply = try await ShelfCLIExecution.run(
+                    request, root: controller.store.root, defaults: controller.context.defaults
+                ) { ids in try controller.shareCLIItems(ids) }
+                return try JSONEncoder().encode(reply)
+            }
             return try await controller.execute(command, payload: payload)
         }
     }

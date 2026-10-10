@@ -121,8 +121,8 @@ let package = Package(
             path: "usage/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "NotchShelfExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "notchShelf", exclude: ["Tests", "Runtime.swift"],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
+            path: "notchShelf", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "NotchShelfExtensionTests", dependencies: ["NotchShelfExtension"],
