@@ -58,9 +58,10 @@ import UserNotifications
                 })
         case "links":
             return .array(
-                links().map { id, url in
+                links().map { id, label, url in
                     .object([
-                        "id": .string(id), "label": .string(id), "url": .string(url.absoluteString),
+                        "id": .string(id), "label": .string(label),
+                        "url": .string(url.absoluteString),
                     ])
                 }.sorted { ($0.object?["id"]?.string ?? "") < ($1.object?["id"]?.string ?? "") })
         case "open-path":
@@ -79,14 +80,15 @@ import UserNotifications
                 "mode": .string(id == "refresh-log" ? "reveal" : "open"), "opened": .bool(true),
             ])
         case "open-link":
-            guard let id = payload["id"]?.string, let url = links()[id] else {
+            guard let id = payload["id"]?.string, let link = links().first(where: { $0.id == id })
+            else {
                 throw HostCLIError.usage("Unknown app link.")
             }
-            guard NSWorkspace.shared.open(url) else {
+            guard NSWorkspace.shared.open(link.url) else {
                 throw HostCLIError.rejected("Could not open the app link.")
             }
             return .object([
-                "id": .string(id), "url": .string(url.absoluteString), "mode": .string("open"),
+                "id": .string(id), "url": .string(link.url.absoluteString), "mode": .string("open"),
                 "opened": .bool(true),
             ])
         case "open":
@@ -217,15 +219,12 @@ import UserNotifications
                 "Library/Logs/" + identity.identifier),
         ]
     }
-    private func links() -> [String: URL] {
-        var result: [String: URL] = [
-            "repository": URL(string: "https://github.com/pulkitxm/edith")!,
-            "creator": URL(string: "https://pulkit.page")!,
-        ]
-        for person in HostContributors.cacheSnapshot(identity: identity).people {
-            result["contributor:" + person.login] = person.profileURL
-        }
-        return result
+    private func links() -> [(id: String, label: String, url: URL)] {
+        HostAppLinksCLI.entries(
+            extensions: marketplace.entries,
+            contributors: Dictionary(
+                uniqueKeysWithValues: HostContributors.cacheSnapshot(identity: identity).people.map
+                { ($0.login, $0.profileURL) }))
     }
     private func json(_ value: Any) throws -> HostCLIJSON {
         try JSONDecoder().decode(

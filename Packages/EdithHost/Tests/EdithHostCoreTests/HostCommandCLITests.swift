@@ -5,6 +5,21 @@ import Testing
 @testable import EdithHostCore
 
 @MainActor @Suite struct HostCommandCLITests {
+    @Test func originalAppDocumentationAndContributorLinksKeepTheirStableNames() {
+        let entries = HostAppLinksCLI.entries(
+            extensions: [
+                .init(id: "calendar", title: "Calendar", symbolName: "calendar", category: "Tools")
+            ],
+            contributors: ["synthetic": URL(string: "https://github.com/synthetic")!])
+        let calendar = entries.first { $0.id == "extension-doc:calendar:guide" }
+        #expect(calendar?.label == "Calendar: Calendar guide")
+        #expect(
+            calendar?.url.absoluteString
+                == "https://github.com/pulkitxm/edith/blob/main/docs/cli/calendar/README.md")
+        #expect(entries.last?.id == "contributor:synthetic")
+        #expect(entries.first?.label == "pulkitxm/edith")
+        #expect(entries.count == 4)
+    }
     @Test func localGuideVersionSchemaAndCompletionRemainAvailableWithoutRunningApp() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "cli-\(UUID().uuidString)")
