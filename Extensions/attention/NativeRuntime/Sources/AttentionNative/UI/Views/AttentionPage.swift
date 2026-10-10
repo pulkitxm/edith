@@ -78,6 +78,7 @@ struct AttentionPage: View {
                 }
             }
         }
+        .environment(\.attentionUIClient, model.uiClient)
         .navigationRoute("section", selection: $model.section)
         .pageRefresh(interval: { model.refreshInterval }, cancel: model.cancelLoading) {
             model.reload(

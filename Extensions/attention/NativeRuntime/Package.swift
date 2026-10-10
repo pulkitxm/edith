@@ -5,6 +5,9 @@ import Foundation
 let supportAliases = [
     "EdithExtensionSupport": "EdithExtensionSupport_attention_native",
     "EdithExtensionUI": "EdithExtensionUI_attention_native",
+    "EdithExtensionCommands": "EdithExtensionCommands_attention_native",
+    "ArgumentParser": "ArgumentParser_attention_native",
+    "ArgumentParserToolInfo": "ArgumentParserToolInfo_attention_native",
 ]
 
 let package = Package(
@@ -20,7 +23,7 @@ let package = Package(
             name: "AttentionNative",
             dependencies: [
                 .product(
-                    name: "EdithExtensionUI", package: "ExtensionSupport",
+                    name: "EdithExtensionCommands", package: "ExtensionSupport",
                     moduleAliases: supportAliases),
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],

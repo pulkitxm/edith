@@ -157,7 +157,7 @@ struct AttentionSettingsView: View {
                     Button("Restore before tracking") { model.restoreBackup() }
                         .buttonStyle(.edith(.secondary))
                         .disabled(
-                            model.transferringBackup || !model.cloudBackup.available
+                            model.transferringBackup || !model.cloudBackup.backupAvailable
                                 || model.hasStoredEvents)
                     Spacer()
                     if let date = model.cloudBackup.lastBackupAt {

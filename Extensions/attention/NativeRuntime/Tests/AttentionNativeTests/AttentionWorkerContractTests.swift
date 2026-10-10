@@ -28,9 +28,8 @@ struct AttentionWorkerContractTests {
         var tile = SurfaceTile(.focus)
         tile.focusMinutes = 25
         let host = NSHostingView(rootView: AnyView(EmptyView()))
-        let window = AttentionHomeTestWindow(
-            contentRect: .init(x: -10000, y: -10000, width: 360, height: 260),
-            styleMask: .borderless, backing: .buffered, defer: false)
+        let window = AttentionTestWindowHost.window(
+            contentRect: .init(x: 0, y: 0, width: 360, height: 260))
         window.contentView = host; window.orderBack(nil)
         defer { window.orderOut(nil) }
         func settle() async {
@@ -205,12 +204,6 @@ struct AttentionWorkerContractTests {
         }
         await fixture.service.stop()
         try fixture.database.close()
-    }
-}
-
-private final class AttentionHomeTestWindow: NSWindow {
-    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
-        frameRect
     }
 }
 

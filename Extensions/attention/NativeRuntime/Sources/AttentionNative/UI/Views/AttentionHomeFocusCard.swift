@@ -19,10 +19,15 @@ import SwiftUI
             layout: SurfaceHostContext.current?.layout(.home) ?? SurfaceLayout.standard(.home))
     }
     private let repository: AttentionRepository
+    private let uiClient: AttentionUIClient?
 
-    init(tile: SurfaceTile, repository: AttentionRepository, open: @escaping (String) -> Void) {
+    init(
+        tile: SurfaceTile, repository: AttentionRepository, uiClient: AttentionUIClient? = nil,
+        open: @escaping (String) -> Void
+    ) {
         self.tile = tile
         self.repository = repository
+        self.uiClient = uiClient
         self.open = open
     }
 
@@ -126,13 +131,42 @@ import SwiftUI
     private func refresh() async {
         let request = load.begin()
         defer { if Task.isCancelled { load.cancel(request) } }
-        if tile.widget == .focus { focus = repository.activeFocus() }
+        if let uiClient {
+            do {
+                let next = try AttentionPayload.decode(
+                    AttentionFocusSession?.self,
+                    from: await uiClient.invoke("attention.ui.focus.get"))
+                guard !Task.isCancelled, load.isCurrent(request) else { return }
+                focus = next
+            } catch {
+                guard !Task.isCancelled, load.isCurrent(request) else { return }
+                self.error = error.localizedDescription; loading = false;
+                load.fail(request, message: error.localizedDescription); return
+            }
+        } else if tile.widget == .focus {
+            focus = repository.activeFocus()
+        }
         error = nil
         load.complete(request)
         loading = false
     }
 
     private func startFocus() {
+        if let uiClient {
+            do {
+                let payload = try AttentionPayload.encode(
+                    AttentionFocusRequest(
+                        name: "Deep work", duration: Double(tile.focusMinutes * 60)))
+                uiClient.perform("attention.ui.focus.start", payload: payload) { result in
+                    do {
+                        focus = try AttentionPayload.decode(
+                            AttentionFocusSession.self, from: result.get());
+                        error = nil
+                    } catch { self.error = error.localizedDescription }
+                }
+            } catch { self.error = error.localizedDescription }
+            return
+        }
         do {
             focus = try AttentionFocusOperationExecution.start(
                 name: "Deep work", duration: Double(tile.focusMinutes * 60), repository: repository)
@@ -140,6 +174,14 @@ import SwiftUI
         } catch { self.error = error.localizedDescription }
     }
     private func finishFocus() {
+        if let uiClient {
+            uiClient.perform("attention.ui.focus.stop") { result in
+                do { _ = try result.get(); focus = nil; error = nil } catch {
+                    self.error = error.localizedDescription
+                }
+            }
+            return
+        }
         do {
             try AttentionFocusOperationExecution.stop(repository: repository)
             focus = nil

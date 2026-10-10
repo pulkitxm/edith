@@ -92,6 +92,13 @@ actor AttentionBackgroundService {
         continuation.yield()
     }
 
+    func runtimeStatus() throws -> AttentionRuntimeSnapshot {
+        guard !stopped else { throw CancellationError() }
+        return AttentionRuntimeSnapshot(
+            importedEvents: 0, browserListening: server?.state == .ready,
+            port: server?.boundPort, lastBackupAt: lastBackupAt)
+    }
+
     func run(now: Date = Date()) async throws -> Data? {
         guard !stopped else { throw CancellationError() }
         guard restoreTask == nil else { return nil }
