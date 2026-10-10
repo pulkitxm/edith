@@ -2036,6 +2036,10 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
+        "Extensions/downloads/CLI/CLIDestructivePlan.swift",
+        "Extensions/downloads/CLI/DownloadCommands.swift",
+        "Extensions/downloads/CLI/DownloadsCLIExecution.swift",
+        "Extensions/downloads/DownloadsUIBridge.swift",
         "Extensions/downloads/Models/DownloadQueue.swift",
         "Extensions/downloads/Models/MediaDownloadInput.swift",
         "Extensions/downloads/Runtime.swift",
@@ -2065,7 +2069,7 @@
     "dependencies": [],
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "sameExecutableWorker": true,
     "testTargets": [
       "ci-extension-downloads"

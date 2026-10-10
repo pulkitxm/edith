@@ -489,7 +489,7 @@ struct DownloadSheet: View {
                     panel.canCreateDirectories = true
                     panel.allowsMultipleSelection = false
                     panel.directoryURL =
-                        outputDirectory ?? MediaDownloadInput.defaultDirectory(for: downloadKind)
+                        outputDirectory ?? downloader.defaultDirectory(for: downloadKind)
                     panel.begin { response in
                         if response == .OK { outputDirectory = panel.url }
                     }
@@ -498,7 +498,7 @@ struct DownloadSheet: View {
                         Image(systemName: "folder")
                         Text(
                             (outputDirectory
-                                ?? MediaDownloadInput.defaultDirectory(for: downloadKind))
+                                ?? downloader.defaultDirectory(for: downloadKind))
                                 .lastPathComponent
                         )
                         .lineLimit(1)
@@ -512,7 +512,7 @@ struct DownloadSheet: View {
                 }
                 .buttonStyle(.edith(.borderless))
                 .help(
-                    (outputDirectory ?? MediaDownloadInput.defaultDirectory(for: downloadKind)).path
+                    (outputDirectory ?? downloader.defaultDirectory(for: downloadKind)).path
                 )
                 Text("Choose where completed files are saved.")
                     .font(.system(size: UIScale.pt(10.5)))

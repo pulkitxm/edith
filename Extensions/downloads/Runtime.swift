@@ -1,5 +1,6 @@
 import AppKit
 import EdithExtensionSupport
+import EdithExtensionCommands
 import EdithExtensionUI
 import Foundation
 import SwiftUI
@@ -7,6 +8,8 @@ import SwiftUI
 @MainActor @objc(EdithDownloadsExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var worker: DownloadsWorker?
+    private var uiModel: YoutubeDownloader?
+    private var engineClient: ExtensionEngineClient?
     private var surface: DownloadsSurface?
     private let commands = ExtensionCommandRegistry()
     private var stopped = false
@@ -20,6 +23,15 @@ final class ExtensionRuntime: NSObject {
             }
             self.activeCalls += 1
             defer { self.activeCalls -= 1 }
+            if command == "downloads.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await DownloadsCLIExecution.run(request, worker: worker.queue))
+            }
+            if command.hasPrefix("downloads.ui.") {
+                return try await DownloadsUIBridge.execute(
+                    command, payload: payload, worker: worker)
+            }
             if command.hasPrefix("surface.") {
                 guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
                 return try await surface.execute(command, payload: payload)
@@ -59,6 +71,21 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard engineClient == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "downloads", let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            engineClient = client
+            uiModel = YoutubeDownloader(
+                client: DownloadsClient(client: client), remote: DownloadsUIBridge(client: client))
+            TextEditingCommands.install()
+        case "stopUI":
+            engineClient?.invalidate(); engineClient = nil
+            let model = uiModel; uiModel = nil
+            Task {
+                await model?.shutdown(); await model?.tools.shutdown()
+            }
+            TextEditingCommands.shutdown()
         case "start":
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -70,10 +97,10 @@ final class ExtensionRuntime: NSObject {
                 TextEditingCommands.install()
             }
         case "view":
-            guard !stopped, let worker else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
-                    DownloadSheet(isPage: true, downloader: worker.downloader)
+                    DownloadSheet(isPage: true, downloader: model)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": worker?.downloader.checkAvailability()
