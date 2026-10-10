@@ -15,7 +15,8 @@ struct PluginsUISnapshot: Codable {
 
     @MainActor init(model: SkillsModel) {
         agents = model.agents; presentedSkillID = model.presentedSkill?.id
-        selectedAgentIDs = model.selectedAgentIDs; isInstalling = model.isInstalling
+        selectedAgentIDs = model.selectedAgentIDs;
+        isInstalling = model.isInstalling || model.remoteInstallIsPending
         installationError = model.installationError; installationLog = model.installationLog
         installedAgents = model.installedAgents; installationSucceeded = model.installationSucceeded
         installerAvailable = model.installerAvailable;
@@ -77,12 +78,13 @@ struct PluginsUIAction: Codable {
                 await model.present(skill, agentID: action.agentID)
             case "select":
                 guard let id = action.agentID, let enabled = action.enabled,
-                    model.agents.contains(where: { $0.id == id }), !model.isInstalling
+                    model.agents.contains(where: { $0.id == id }), !model.isInstalling,
+                    !model.remoteInstallIsPending
                 else { throw ExtensionPeerError.invalidRequest }
                 model.setSelected(id, enabled: enabled)
             case "install":
                 guard model.presentedSkill != nil, !model.selectedAgentIDs.isEmpty,
-                    !model.isInstalling
+                    !model.isInstalling, !model.remoteInstallIsPending
                 else { throw ExtensionPeerError.invalidRequest }
                 model.beginRemoteInstall()
                 await Task.yield()

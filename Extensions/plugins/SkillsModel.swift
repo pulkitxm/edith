@@ -178,6 +178,7 @@ import Observation
     }
 
     private var remoteInstallLaunch: Task<Void, Never>?
+    var remoteInstallIsPending: Bool { remoteInstallLaunch != nil }
     func beginRemoteInstall() {
         guard remoteInstallLaunch == nil else { return }
         remoteInstallLaunch = Task { [weak self] in
