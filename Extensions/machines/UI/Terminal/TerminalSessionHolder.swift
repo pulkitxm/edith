@@ -202,18 +202,61 @@ final class TerminalSessionHolder {
         exitMessage = message
     }
 
+    func deliverOwnedDrop(_ payload: TerminalDropPayload) async {
+        guard let client = engineClient, let request = engineRequest, request.handle != nil else {
+            payload.removeTemporaryFiles(); return
+        }
+        await deliverRemoteDrop(payload) { _ in
+            if let media = payload.media {
+                guard !media.data.isEmpty, media.data.count <= 536_870_912 else {
+                    throw MachineUIError.invalidRequest
+                }
+                var begin = request; begin.operation = .dropBegin
+                begin.dropCount = UInt64(media.data.count);
+                begin.fileExtension = media.fileExtension
+                let opened = try await client.terminal(begin)
+                guard let id = opened.dropID else { throw MachineUIError.invalidRequest }
+                var owned = request; owned.dropID = id
+                do {
+                    for offset in stride(from: 0, to: media.data.count, by: 16_384) {
+                        try Task.checkCancellation()
+                        owned.operation = .dropWrite; owned.offset = UInt64(offset)
+                        owned.bytes = media.data.subdata(
+                            in: offset..<min(offset + 16_384, media.data.count))
+                        let receipt = try await client.terminal(owned)
+                        guard receipt.dropID == id,
+                            receipt.nextOffset == UInt64(offset + owned.bytes.count)
+                        else { throw MachineUIError.stale }
+                    }
+                    owned.operation = .dropFinish; owned.bytes = Data()
+                    return try await client.terminal(owned).paths
+                } catch {
+                    owned.operation = .dropCancel; owned.bytes = Data()
+                    let cleanup = Task { _ = try? await client.terminal(owned) }
+                    await cleanup.value; throw error
+                }
+            }
+            var paths = request; paths.operation = .dropPaths
+            paths.paths = payload.files.map(\.path);
+            paths.temporaryPaths = payload.temporaryFiles.map(\.path)
+            return try await client.terminal(paths).paths
+        }
+    }
+
     func deliverRemoteDrop(
         _ payload: TerminalDropPayload, upload: @escaping ([URL]) async throws -> [String]
     ) async {
         guard !transferringDrop else { payload.removeTemporaryFiles(); return }
         transferringDrop = true
         dropTransferError = nil
+        let generation = generation
         let task = Task { [weak self] in
             defer { payload.removeTemporaryFiles() }
             do {
                 let paths = try await upload(payload.files)
                 try Task.checkCancellation()
-                self?.sendInput(paths.map(ShellQuote.quote).joined(separator: " "))
+                guard let self, generation == self.generation else { return }
+                sendInput(paths.map(ShellQuote.quote).joined(separator: " "))
             } catch {
                 if !Task.isCancelled { self?.dropTransferError = error.localizedDescription }
             }

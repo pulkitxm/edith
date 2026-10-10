@@ -19,6 +19,7 @@ import GhosttyTerminal
         var tabIDs: Set<UUID>
         var touched = ContinuousClock.now
     }
+    private let drops = MachineTerminalDropEngine()
     private var registrations: [UUID: Registration] = [:]
     private let openURL: (URL) -> Bool
     private let session: (UUID) throws -> MachineSession
@@ -159,7 +160,8 @@ import GhosttyTerminal
             ).get()
             return MachineTerminalFrame(
                 shells: [.automatic] + WindowsTerminalCommands.parseAvailableShells(text))
-        case .read, .input, .resize, .close, .resolveLink, .openLink:
+        case .read, .input, .resize, .close, .resolveLink, .openLink, .dropBegin, .dropWrite,
+            .dropFinish, .dropCancel, .dropPaths:
             guard let handle = request.handle, var terminal = terminals[handle],
                 terminal.machineID == request.machineID, terminal.tabID == request.tabID,
                 terminal.presentationID == request.presentationID
@@ -172,6 +174,8 @@ import GhosttyTerminal
                 return MachineTerminalFrame(
                     handle: handle, bytes: output.bytes, nextOffset: output.nextOffset,
                     exitCode: output.exitCode, canonical: output.canonical, echo: output.echo)
+            case .dropBegin, .dropWrite, .dropFinish, .dropCancel, .dropPaths:
+                return try await drops.execute(request, session: session(request.machineID))
             case .resolveLink:
                 let owner = try session(request.machineID)
                 let resolution = TerminalLinkResolution.resolve(
@@ -193,6 +197,7 @@ import GhosttyTerminal
             case .input: try await send(request.bytes, to: terminal.pty)
             case .resize: try terminal.pty.resize(columns: request.columns, rows: request.rows)
             case .close:
+                drops.close(handle)
                 terminals.removeValue(forKey: handle)
                 await terminal.pty.closeAndWait()
             default: throw MachineUIError.invalidRequest
@@ -331,8 +336,10 @@ import GhosttyTerminal
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
                 guard let self, !stopped else { return }
+                drops.expire()
                 for (handle, terminal) in terminals
                 where terminal.touched.duration(to: .now) > .seconds(10) {
+                    drops.close(handle)
                     terminal.pty.close(); retired.append(terminal.pty);
                     terminals.removeValue(forKey: handle)
                 }
@@ -348,6 +355,7 @@ import GhosttyTerminal
     func release(_ presentation: UUID) {
         for id in terminals.keys.filter({ terminals[$0]?.presentationID == presentation }) {
             if let terminal = terminals.removeValue(forKey: id) {
+                drops.close(id)
                 terminal.pty.close(); retired.append(terminal.pty)
             }
         }
@@ -356,6 +364,7 @@ import GhosttyTerminal
 
     func shutdown() async {
         stopped = true
+        drops.shutdown()
         reaper?.cancel(); reaper = nil
         let children = terminals.values.map(\.pty) + retired + Array(cliPTYs.values)
         terminals = [:]; retired = []; cliPTYs = [:]; registrations = [:]

@@ -67,7 +67,7 @@ struct MachineTerminalTab: View {
                 TerminalPane(
                     holder: holder, palette: .edith(dark: dark), active: active,
                     wantsFocus: wantsFocus,
-                    onDropFiles: session.isLocal ? nil : uploadDrop,
+                    onDropFiles: uploadDrop,
                     onFocus: onFocus
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -220,15 +220,8 @@ struct MachineTerminalTab: View {
     }
 
     private func uploadDrop(_ payload: TerminalDropPayload) -> Bool {
-        guard let client = session.uiClient else { return false }
-        Task {
-            await holder.deliverRemoteDrop(payload) { files in
-                try await client.terminal(
-                    MachineTerminalRequest(
-                        operation: .upload, machineID: session.id, paths: files.map(\.path))
-                ).paths
-            }
-        }
+        guard session.uiClient != nil else { return false }
+        Task { await holder.deliverOwnedDrop(payload) }
         return true
     }
 

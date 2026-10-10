@@ -199,6 +199,62 @@ import Testing
         await engine.shutdown()
     }
 
+    @Test func originalTerminalMediaAndPromisedFilesStayOwnedAndByteExact() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let old = MachinePaths.root; MachinePaths.root = root.appendingPathComponent("owner")
+        defer { MachinePaths.root = old }
+        let session = MachineSession(machine: .local, local: true, synthetic: true)
+        let engine = MachineTerminalEngine(
+            session: { _ in session }, launch: { _, _ in launch("exec cat") })
+        var request = MachineTerminalRequest(
+            operation: .open, machineID: session.id, presentationID: UUID())
+        request.handle = try await engine.execute(request).handle
+        let bytes = Data((0..<150_000).map { UInt8($0 % 251) })
+        request.operation = .dropBegin; request.dropCount = UInt64(bytes.count);
+        request.fileExtension = "png"
+        request.dropID = try await engine.execute(request).dropID
+        request.operation = .dropFinish
+        await #expect(throws: MachineUIError.self) { try await engine.execute(request) }
+        request.operation = .dropWrite
+        request.offset = 1; request.bytes = bytes.prefix(16_384)
+        await #expect(throws: MachineUIError.self) { try await engine.execute(request) }
+        var wrong = request; wrong.tabID = UUID(); wrong.offset = 0
+        await #expect(throws: MachineUIError.self) { try await engine.execute(wrong) }
+        for offset in stride(from: 0, to: bytes.count, by: 16_384) {
+            request.offset = UInt64(offset);
+            request.bytes = bytes.subdata(in: offset..<min(offset + 16_384, bytes.count))
+            let receipt = try await engine.execute(request)
+            #expect(receipt.dropID == request.dropID)
+            #expect(receipt.nextOffset == UInt64(offset + request.bytes.count))
+        }
+        request.operation = .dropFinish; request.bytes = Data()
+        let media = try #require(try await engine.execute(request).paths.first)
+        #expect(try Data(contentsOf: URL(fileURLWithPath: media)) == bytes)
+        let source = root.appendingPathComponent("promised")
+        try FileManager.default.createDirectory(
+            at: source.appendingPathComponent("empty"), withIntermediateDirectories: true)
+        try bytes.write(to: source.appendingPathComponent("binary.bin"))
+        try FileManager.default.createSymbolicLink(
+            atPath: source.appendingPathComponent("link").path, withDestinationPath: "binary.bin")
+        request.operation = .dropPaths; request.paths = [source.path];
+        request.temporaryPaths = [source.path]
+        let copied = URL(
+            fileURLWithPath: try #require(try await engine.execute(request).paths.first))
+        try FileManager.default.removeItem(at: source)
+        #expect(try Data(contentsOf: copied.appendingPathComponent("binary.bin")) == bytes)
+        #expect(FileManager.default.fileExists(atPath: copied.appendingPathComponent("empty").path))
+        #expect(
+            try FileManager.default.destinationOfSymbolicLink(
+                atPath: copied.appendingPathComponent("link").path) == "binary.bin")
+        request.operation = .close
+        _ = try await engine.execute(request)
+        #expect(!FileManager.default.fileExists(atPath: media))
+        #expect(!FileManager.default.fileExists(atPath: copied.path))
+        await engine.shutdown()
+    }
+
     @Test func originalTTYCliRunsARealPTYAndPreservesOutputAndExit() async throws {
         let machine = Machine(name: "fixture-box", host: "fixture.invalid")
         let owner = MachineSession(machine: machine, synthetic: true)

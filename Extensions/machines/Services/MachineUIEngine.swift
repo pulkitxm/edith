@@ -109,6 +109,7 @@ import Foundation
             [
                 "machines.ui.action", "machines.ui.probe", "machines.ui.files",
                 "machines.ui.preview", "machines.ui.export", "machines.ui.openWindow",
+                "machines.ui.terminal",
             ]
             .contains(value.operation),
             value.payload.count <= 2_097_152, jobs.count < 4

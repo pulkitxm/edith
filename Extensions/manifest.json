@@ -2130,6 +2130,7 @@
         "Extensions/machines/UI/Services/MachineFilesEngine.swift",
         "Extensions/machines/UI/Services/MachinePreviewEngine.swift",
         "Extensions/machines/UI/Services/MachineTerminalBroadcastBridge.swift",
+        "Extensions/machines/UI/Services/MachineTerminalDropEngine.swift",
         "Extensions/machines/UI/Services/MachineTerminalEngine.swift",
         "Extensions/machines/UI/Services/MachineViewActivity.swift",
         "Extensions/machines/UI/Services/TerminalDropTransfer.swift",

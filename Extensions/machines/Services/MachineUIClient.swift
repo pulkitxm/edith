@@ -216,7 +216,12 @@ import Foundation
         var value = value
         value.presentationID = client.presentationID
         try value.validate()
-        let frame: MachineTerminalFrame = try await request("machines.ui.terminal", value: value)
+        let frame: MachineTerminalFrame
+        if [.upload, .dropPaths, .dropFinish].contains(value.operation) {
+            frame = try await job("machines.ui.terminal", value: value)
+        } else {
+            frame = try await request("machines.ui.terminal", value: value)
+        }
         guard frame.bytes.count <= 32_768, frame.paths.count <= 128,
             frame.link.map({ $0.count <= 16_384 }) ?? true,
             frame.paths.allSatisfy({ $0.utf8.count <= 4096 && !$0.utf8.contains(0) }),
