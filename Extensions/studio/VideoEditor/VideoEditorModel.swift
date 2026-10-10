@@ -26,8 +26,7 @@ final class VideoEditorModel {
     private var remoteClient: StudioUIVideoClient?
     private var transcriptionTask: Task<Void, Never>?
     private var importTask: Task<Void, Never>?
-    private let remoteExporter = VideoExporter()
-    var exporter: VideoExporter { facade == nil ? VideoExporter.shared : remoteExporter }
+    var exporter: VideoExporter { facade?.exporter ?? VideoExporter.shared }
     var previewMetadata: VideoPreviewMetadata? {
         remoteMetadata ?? pipeline.map(VideoPreviewMetadata.init)
     }
@@ -176,7 +175,6 @@ final class VideoEditorModel {
 
     func close() {
         remoteClient?.close()
-        if facade != nil { remoteExporter.cancel() }
         transcriptionTask?.cancel()
         importTask?.cancel()
         isClosed = true
@@ -1430,6 +1428,7 @@ final class VideoEditorModel {
         isRebuildingPreview = value.preparing
         externalSyncMessage = value.externalSyncMessage
         permissionSettingsURL = value.permissionSettingsURL
+        facade?.exporter.applyRemote(value.export)
         audioStatus = value.audioStatus; isTranscribing = value.transcribing
         silenceClipID = value.silenceClipID; silentRanges = value.silentRanges
         recentProjects = value.recent.map(\.value)

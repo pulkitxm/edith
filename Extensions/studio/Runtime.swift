@@ -18,6 +18,12 @@ final class ExtensionRuntime: NSObject {
     private let work = StudioUILongOperations()
     private let streams = try! ExtensionCLIStreams(owner: "studio")
 
+    override init() {
+        super.init()
+        work.onChange = { [weak self] state in self?.videoSessions.recordExport(state) }
+        videoSessions.onExport = { [weak self] state in self?.model?.exportState = state }
+    }
+
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
@@ -156,7 +162,11 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": privacy?.refresh()
         case "stop": shutdown()
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
+        case "status":
+            return [
+                "ok": true, "running": model != nil,
+                "preventsQuit": videoSessions.export?.phase == "running",
+            ] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary

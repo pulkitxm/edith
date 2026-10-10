@@ -17,10 +17,23 @@ import Foundation
             generator = nil; focusGenerator = nil; pipeline = nil; focusDocument = nil
         }
     }
+    private(set) var export: StudioUIVideoExport?
+    var onExport: ((StudioUIVideoExport?) -> Void)?
+    func recordExport(_ state: StudioUIOperationState) {
+        guard export?.token == state.token else { return }
+        export?.apply(state); onExport?(export)
+    }
+    private func beginExport(_ state: StudioUIOperationState, output: URL, format: String) {
+        export = StudioUIVideoExport(
+            token: state.token, destination: output, startedAt: Date(), format: format,
+            progress: state.progress, phase: state.phase)
+        onExport?(export)
+    }
     private var sessions: [UUID: Session] = [:]
     private var timer: Task<Void, Never>?
     private var stopped = false
     private static let fields: [String: Set<String>] = [
+        "studio.ui.video.export.clear": ["id", "token"],
         "studio.ui.video.reject": ["id", "requestID", "message"],
         "studio.ui.video.preflight": ["id", "path"],
         "studio.ui.video.loop": ["id", "enabled"],
@@ -46,7 +59,8 @@ import Foundation
         _ operation: String, payload: Data, resources: StudioUIResources,
         work: StudioUILongOperations
     ) async throws -> Data {
-        try await StudioUILongOperations.scoped(payload: payload) { body in
+        work.onChange = { [weak self] state in self?.recordExport(state) }
+        return try await StudioUILongOperations.scoped(payload: payload) { body in
             try await self.executeBody(operation, payload: body, resources: resources, work: work)
         }
     }
@@ -63,6 +77,13 @@ import Foundation
         else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
         let encoder = JSONEncoder()
+        if operation == "studio.ui.video.export.clear" {
+            guard let text = object["token"] as? String, let token = UUID(uuidString: text),
+                export?.token == token, export?.phase != "running"
+            else { throw ExtensionPeerError.invalidRequest }
+            export = nil; onExport?(nil)
+            return Data("{}".utf8)
+        }
         if operation == "studio.ui.video.reject" {
             guard let requestID = object["requestID"] as? String,
                 let message = object["message"] as? String, message.utf8.count <= 4096
@@ -305,6 +326,7 @@ import Foundation
             default: throw ExtensionPeerError.invalidRequest
             }
         case "studio.ui.video.export":
+            guard export?.phase != "running" else { throw ExtensionPeerError.unavailable }
             guard let project = model.project, let format = object["format"] as? String,
                 ["video", "gif", "audio"].contains(format)
             else { throw ExtensionPeerError.invalidRequest }
@@ -315,13 +337,14 @@ import Foundation
             }
             if format == "audio" {
                 let settings: VideoAudioDeliverySettings = try Self.decode(object["settings"])
-                return try encoder.encode(
-                    work.start { progress in
-                        let pipeline = try await VideoRenderPipeline.make(project: project)
-                        let report = try await pipeline.exportAudio(
-                            to: output, settings: settings, overwrite: true, progress: progress)
-                        return try JSONEncoder().encode(report)
-                    })
+                let state = try work.start(retained: true) { progress in
+                    let pipeline = try await VideoRenderPipeline.make(project: project)
+                    let report = try await pipeline.exportAudio(
+                        to: output, settings: settings, overwrite: true, progress: progress)
+                    return try JSONEncoder().encode(report)
+                }
+                beginExport(state, output: output, format: format)
+                return try encoder.encode(state)
             }
             let settings: VideoDeliverySettings = try Self.decode(object["settings"])
             guard let raw = object["quality"] as? String,
@@ -330,19 +353,20 @@ import Foundation
                 let width = object["width"] as? Int, (0...16_384).contains(width),
                 let loop = object["loop"] as? Bool
             else { throw ExtensionPeerError.invalidRequest }
-            return try encoder.encode(
-                work.start { progress in
-                    let pipeline = try await VideoRenderPipeline.make(
-                        project: project, maxDimension: quality.maxDimension)
-                    if format == "gif" {
-                        try await pipeline.exportGIF(
-                            to: output, fps: fps, maxWidth: width, loop: loop, progress: progress)
-                        return Data("{}".utf8)
-                    }
-                    let report = try await pipeline.export(
-                        to: output, settings: settings, overwrite: true, progress: progress)
-                    return try JSONEncoder().encode(report)
-                })
+            let state = try work.start(retained: true) { progress in
+                let pipeline = try await VideoRenderPipeline.make(
+                    project: project, maxDimension: quality.maxDimension)
+                if format == "gif" {
+                    try await pipeline.exportGIF(
+                        to: output, fps: fps, maxWidth: width, loop: loop, progress: progress)
+                    return Data("{}".utf8)
+                }
+                let report = try await pipeline.export(
+                    to: output, settings: settings, overwrite: true, progress: progress)
+                return try JSONEncoder().encode(report)
+            }
+            beginExport(state, output: output, format: format)
+            return try encoder.encode(state)
         default: throw ExtensionPeerError.invalidRequest
         }
         return try snapshot(session, resources: resources)
@@ -363,7 +387,8 @@ import Foundation
             playhead: model.playhead,
             rate: model.player.rate, preparing: model.isPreparingPreview, error: model.errorMessage,
             externalSyncMessage: model.externalSyncMessage,
-            permissionSettingsURL: model.permissionSettingsURL, audioStatus: model.audioStatus,
+            permissionSettingsURL: model.permissionSettingsURL, export: export,
+            audioStatus: model.audioStatus,
             transcribing: model.isTranscribing,
             silenceClipID: model.silenceClipID,
             silentRanges: model.silentRanges,

@@ -12,13 +12,17 @@ final class VideoExporter {
     }
 
     struct Job: Identifiable {
-        let id = UUID()
+        let id: UUID
         let destination: URL
-        let startedAt = Date()
+        let startedAt: Date
         var progress = 0.0
         var phase = Phase.exporting
         var report: VideoDeliveryReport?
         var audioReport: VideoAudioDeliveryReport?
+
+        init(id: UUID = UUID(), destination: URL, startedAt: Date = Date()) {
+            self.id = id; self.destination = destination; self.startedAt = startedAt
+        }
 
         var secondsRemaining: Double? {
             let elapsed = Date().timeIntervalSince(startedAt)
@@ -33,6 +37,10 @@ final class VideoExporter {
 
     private(set) var job: Job?
     private var task: Task<Void, Never>?
+    private var remoteToken: UUID?
+    var remoteCancel: ((UUID) -> Void)?
+    var remoteClear: ((UUID) -> Void)?
+    func beginRemote(_ token: UUID) { remoteToken = token }
     private let onComplete: (Job?) async -> Void
 
     init(onComplete: @escaping (Job?) async -> Void = { _ in }) {
@@ -43,7 +51,7 @@ final class VideoExporter {
 
     func start(to destination: URL, work: @escaping Work) {
         guard !isExporting else { return }
-        task?.cancel()
+        task?.cancel(); remoteToken = nil
         let started = Job(destination: destination)
         job = started
         task = Task { [weak self] in
@@ -64,12 +72,13 @@ final class VideoExporter {
     }
 
     func cancel() {
-        task?.cancel()
+        if let task { task.cancel() } else if let remoteToken { remoteCancel?(remoteToken) }
     }
 
     func clear() {
         guard !isExporting else { return }
         job = nil
+        if let remoteToken { remoteClear?(remoteToken) }; remoteToken = nil
     }
 
     func setReport(_ report: VideoDeliveryReport, for destination: URL) {
@@ -144,5 +153,28 @@ enum VideoExportBackground {
         try? await center.add(
             UNNotificationRequest(
                 identifier: "video-export-\(job.id)", content: content, trigger: nil))
+    }
+}
+
+extension VideoExporter {
+    func applyRemote(_ state: StudioUIVideoExport?) {
+        guard let state else {
+            if task == nil, remoteToken != nil { job = nil; remoteToken = nil }
+            return
+        }
+        if task != nil, let remoteToken, remoteToken != state.token { return }
+        if state.phase == "cancelled" { if task == nil { job = nil }; return }
+        if task == nil, job?.id != state.token {
+            job = Job(id: state.token, destination: state.destination, startedAt: state.startedAt)
+        }
+        remoteToken = state.token
+        job?.progress = state.progress
+        job?.report = state.videoReport; job?.audioReport = state.audioReport
+        switch state.phase {
+        case "running": job?.phase = .exporting
+        case "completed": job?.phase = .finished
+        case "failed": job?.phase = .failed(state.failure ?? "Export failed")
+        default: break
+        }
     }
 }

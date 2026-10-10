@@ -121,6 +121,7 @@ struct StudioUIVideoState: Codable, Sendable {
     let error: String?
     let externalSyncMessage: String?
     let permissionSettingsURL: URL?
+    let export: StudioUIVideoExport?
     let audioStatus: String?
     let transcribing: Bool
     let silenceClipID: String?

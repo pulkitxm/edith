@@ -11,6 +11,8 @@ import Observation
     private let invalidate: @MainActor () -> Void
     private var tasks: [UUID: Task<Void, Never>] = [:]
     var activeWork: Set<UUID> = []
+    var retainedWork: Set<UUID> = []
+    let exporter = VideoExporter()
     private var activeRequests = 0
     private var waiting: [(UUID, CheckedContinuation<Void, Error>)] = []
     private var cleanupQueue: [(String, Data)] = []
@@ -28,11 +30,25 @@ import Observation
     init(client: ExtensionEngineClient) {
         invoke = { operation, payload in try await client.invoke(operation, payload: payload) }
         invalidate = { client.invalidate() }
+        configureExportControls()
     }
 
     init(invoke: @escaping Invoke, invalidate: @escaping @MainActor () -> Void = {}) {
         self.invoke = invoke
         self.invalidate = invalidate
+        configureExportControls()
+    }
+
+    private func configureExportControls() {
+        exporter.remoteCancel = { [weak self] token in
+            self?.cleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
+            self?.cleanup("studio.ui.work.end", object: ["token": token.uuidString])
+        }
+        exporter.remoteClear = { [weak self] token in
+            self?.cleanup(
+                "studio.ui.video.export.clear",
+                object: ["id": UUID().uuidString, "token": token.uuidString])
+        }
     }
 
     func refresh() {
@@ -40,7 +56,8 @@ import Observation
             guard let self else { return nil }
             let value: StudioUIState = try await self.read("studio.ui.state")
             return {
-                self.state = value; self.failure = nil; self.onState?(value)
+                self.state = value; self.failure = nil; self.exporter.applyRemote(value.export);
+                self.onState?(value)
             }
         }
     }
@@ -149,14 +166,19 @@ import Observation
     func stop() {
         guard !isStopped else { return }
         isStopped = true
+        exporter.cancel()
         for task in tasks.values { task.cancel() }
         tasks.removeAll()
         versions.removeAll()
         for (_, continuation) in waiting { continuation.resume(throwing: CancellationError()) }
         waiting.removeAll()
         for token in activeWork {
-            cleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
-            cleanup("studio.ui.work.end", object: ["token": token.uuidString])
+            if retainedWork.contains(token) {
+                cleanup("studio.ui.work.detach", object: ["token": token.uuidString])
+            } else {
+                cleanup("studio.ui.work.cancel", object: ["token": token.uuidString])
+                cleanup("studio.ui.work.end", object: ["token": token.uuidString])
+            }
         }
         if let cleanupTask {
             invalidationTask = Task { [weak self] in

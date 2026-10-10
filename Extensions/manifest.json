@@ -1393,6 +1393,7 @@
         "Extensions/studio/UIBridge/StudioUIPDFCommands.swift",
         "Extensions/studio/UIBridge/StudioUIFailure.swift",
         "Extensions/studio/UIBridge/StudioUIVideoState.swift",
+        "Extensions/studio/UIBridge/StudioUIVideoExport.swift",
         "Extensions/studio/UIBridge/StudioUIMediaCommands.swift",
         "Extensions/studio/UIBridge/StudioUIRecorder.swift",
         "Extensions/studio/UIBridge/StudioUIVideoSessions.swift",

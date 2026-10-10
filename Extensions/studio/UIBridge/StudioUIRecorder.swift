@@ -67,8 +67,8 @@ struct StudioUIRecordingState: Codable, Sendable {
         let request: StudioRecordRequest =
             operation == "studio.ui.record.sources"
             ? .sources : operation == "studio.ui.record.start" ? .start : .stop
-        return try encoder.encode(
-            work.start { _ in
+        do {
+            let state = try work.start { _ in
                 do {
                     let snapshot = try await bridge.perform(
                         request, source: source, systemAudio: systemAudio, microphone: microphone,
@@ -82,7 +82,12 @@ struct StudioUIRecordingState: Codable, Sendable {
                     if request != .sources, self.owner == id { self.owner = nil }
                     throw error
                 }
-            })
+            }
+            return try encoder.encode(state)
+        } catch {
+            if request == .start, owner == id { owner = nil }
+            throw error
+        }
     }
 }
 

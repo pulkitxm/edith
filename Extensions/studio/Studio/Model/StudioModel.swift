@@ -115,6 +115,7 @@ final class StudioModel {
     var notice: String?
     var videoProjects: [VideoProject.Listing] = []
     var commandEditor: VideoEditorOpenBridge.Presentation?
+    var exportState: StudioUIVideoExport?
     var remoteCommandRequest: VideoEditorService.OpenRequest?
     private(set) var remoteCommandEditor: VideoEditorModel?
     private var commandAttachTask: Task<Void, Never>?

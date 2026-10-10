@@ -54,6 +54,7 @@ struct StudioUIState: Codable, Sendable {
     var installing: StudioEngine?
     var installLog: String?
     var message: String?
+    var export: StudioUIVideoExport?
     var pendingOpen: VideoEditorService.OpenRequest?
 }
 
