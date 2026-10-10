@@ -15,6 +15,7 @@ struct HostWorkspace: View {
     @State private var permissions = HostPermissions()
     var presenter: (any HostExtensionContentPresenting)? = nil
     var sectionWindows: HostSectionWindows? = nil
+    var windowNavigation: HostWindowNavigation? = nil
     @AppStorage(AppStorageKeys.General.mainWindowSection, store: SharedDefaults.store) private
         var selection = "home"
     @AppStorage(AppStorageKeys.General.settingsTab, store: SharedDefaults.store) private
@@ -49,7 +50,8 @@ struct HostWorkspace: View {
         panelShortcutChanged: @escaping () -> Void = {},
         additionalSettings: ((String) -> AnyView?)? = nil,
         coreOnline: Bool = false, coreSummary: String = "Not running",
-        sectionWindows: HostSectionWindows? = nil, defaults: UserDefaults = SharedDefaults.store
+        sectionWindows: HostSectionWindows? = nil, windowNavigation: HostWindowNavigation? = nil,
+        defaults: UserDefaults = SharedDefaults.store
     ) {
         self.marketplace = marketplace
         self.updater = updater ?? HostUpdater(startingUpdater: false)
@@ -57,6 +59,7 @@ struct HostWorkspace: View {
         self.additionalSettings = additionalSettings
         self.coreOnline = coreOnline; self.coreSummary = coreSummary
         self.presenter = presenter; self.sectionWindows = sectionWindows
+        self.windowNavigation = windowNavigation
         navigationDefaults = defaults
         _selection = AppStorage(
             wrappedValue: "home", AppStorageKeys.General.mainWindowSection, store: defaults)
@@ -122,6 +125,21 @@ struct HostWorkspace: View {
                 isValid: { raw in raw.isEmpty || pages.contains { $0.id == raw } })
         }
         .background(HostWindowChrome(persist: automaticActions, fullscreen: $fullscreen))
+        .background {
+            if let windowNavigation {
+                HostWindowNavigationAnchor(
+                    navigation: windowNavigation,
+                    apply: { route in
+                        try Task.checkCancellation()
+                        if let section = route.section { maintenanceSection = section }
+                        binding.wrappedValue = route.page
+                        await Task.yield()
+                        guard binding.wrappedValue == route.page else {
+                            throw HostWindowNavigationError.routeRejected
+                        }
+                    }, selected: { binding.wrappedValue })
+            }
+        }
         .onAppear { installKeys() }
         .onDisappear { removeKeys() }
         .onExitCommand { NSApp.keyWindow?.makeFirstResponder(nil) }
