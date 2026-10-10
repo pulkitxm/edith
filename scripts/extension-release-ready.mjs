@@ -126,25 +126,30 @@ export async function waitForPackages({
   let missing = expected;
   while (true) {
     await verifySource();
-    const response = await fetchCatalog(url ?? catalogReleaseURL, {
+    let response = await fetchCatalog(url ?? catalogReleaseURL, {
       signal: AbortSignal.timeout(15_000),
       headers: { "Cache-Control": "no-cache" },
     });
+    let release;
+    if (!url && response.status === 200) {
+      const metadata = await response.text();
+      if (Buffer.byteLength(metadata) > 3 * 1024 ** 2)
+        throw new Error("Catalog release exceeds its limit");
+      release = JSON.parse(metadata);
+      if (
+        !release ||
+        release.tag_name !== catalogTag ||
+        typeof release.draft !== "boolean" ||
+        !Array.isArray(release.assets)
+      )
+        throw new Error("Invalid catalog release");
+      if (release.draft) response = { status: 404 };
+    }
     if (response.status === 200) {
       let data;
       let pointer;
       if (url) data = Buffer.from(await response.text());
       else {
-        const metadata = await response.text();
-        if (Buffer.byteLength(metadata) > 3 * 1024 ** 2)
-          throw new Error("Catalog release exceeds its limit");
-        const release = JSON.parse(metadata);
-        if (
-          release.tag_name !== catalogTag ||
-          release.draft !== false ||
-          !Array.isArray(release.assets)
-        )
-          throw new Error("Invalid catalog release");
         pointer = parseCatalogPointer(release.body);
         const assets = release.assets.filter(
           (asset) => asset.name === pointer.assetName,

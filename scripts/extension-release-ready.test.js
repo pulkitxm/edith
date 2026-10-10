@@ -392,3 +392,38 @@ test("host publication timeout covers initial catalog readiness without changing
     ),
   ).toBe(true);
 });
+
+test("authenticated first bootstrap waits for its owned draft without trusting unpublished bytes", async () => {
+  const { catalogPointer, catalogReleaseURL } = await import(
+    "./extension-catalog-pointer.mjs"
+  );
+  const data = Buffer.from(signed([record]));
+  const pointer = catalogPointer(data, 2);
+  let polls = 0;
+  let assets = 0;
+  expect(
+    await waitForPackages({
+      expected,
+      publicKey: rawKey,
+      sleep: async () => {},
+      fetchCatalog: async (url) => {
+        if (url === catalogReleaseURL)
+          return new Response(
+            JSON.stringify({
+              tag_name: "extension-catalog-v1",
+              draft: ++polls === 1,
+              body: polls === 1 ? "unpublished" : JSON.stringify(pointer),
+              assets:
+                polls === 1
+                  ? []
+                  : [{ name: pointer.assetName, size: data.length }],
+            }),
+          );
+        assets++;
+        return new Response(data);
+      },
+    }),
+  ).toBe(2);
+  expect(polls).toBe(2);
+  expect(assets).toBe(1);
+});
