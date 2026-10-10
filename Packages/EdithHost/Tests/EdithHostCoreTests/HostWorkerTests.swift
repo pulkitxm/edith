@@ -16,6 +16,7 @@ import Testing
                 "identifier": identifier, "supportDirectory": "file:///synthetic/support",
                 "extensionID": "sample", "version": "1.0.0", "theme": "accent",
                 "appearance": "system", "zoom": 1.0, "recoveryOnly": false,
+                "ambientPolicy": ["pauseAmbientOnBattery": false, "subscribers": [:]],
             ])
             let configuration = try JSONDecoder().decode(HostWorkerConfiguration.self, from: bytes)
             #expect(try configuration.identity().root == identity.root)
@@ -199,7 +200,7 @@ import Testing
         worker.didRequestNavigation = { _ in received += 1 }
         try await worker.start(recoveryOnly: true)
         try await worker.show()
-        try await worker.synchronize()
+        await #expect(throws: HostWorkerError.rejected) { try await worker.synchronize() }
         #expect(received == 0)
         try await worker.stop()
     }
@@ -309,7 +310,42 @@ import Testing
         }
     }
 
-    private func fixture(_ mode: String, timeout: Duration = .seconds(2)) throws -> HostWorker {
+    @Test(arguments: ["record-sync", "wrong-sync-version"])
+    func trustedPolicyWireRetainsOnlyAcknowledgedConfiguration(mode: String) async throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let worker = try fixture(mode, owner: "usage", record: file)
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        let policy = HostAmbientPolicy(
+            pauseAmbientOnBattery: true, subscribers: ["usage.refresh": 0, "usage.limits": 1])
+        let next = worker.configuration.replacingAmbientPolicy(policy)
+        if mode == "wrong-sync-version" {
+            await #expect(throws: HostWorkerError.invalidResponse) {
+                try await worker.synchronizeAmbientPolicy(configuration: next)
+            }
+            #expect(!worker.configuration.ambientPolicy.pauseAmbientOnBattery)
+        } else {
+            try await worker.synchronizeAmbientPolicy(configuration: next)
+            #expect(worker.configuration.ambientPolicy == policy)
+            try await worker.synchronize(configuration: worker.configuration)
+            #expect(worker.configuration.ambientPolicy == policy)
+        }
+        try await worker.stop()
+        #expect(kill(pid, 0) == -1)
+        let requests = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map {
+            try JSONDecoder().decode(HostWorkerRequest.self, from: Data($0.utf8))
+        }
+        #expect(
+            requests.map(\.operation)
+                == (mode == "record-sync" ? ["ambientPolicy", "synchronize"] : ["ambientPolicy"]))
+        #expect(requests.allSatisfy { $0.configuration?.ambientPolicy == policy })
+    }
+
+    private func fixture(
+        _ mode: String, timeout: Duration = .seconds(2), owner: String = "sample",
+        record: URL? = nil
+    ) throws -> HostWorker {
         let identity = try HostIdentity(
             identifier: "com.pulkit.edith.tests.workers",
             supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
@@ -317,8 +353,9 @@ import Testing
             Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
         return HostWorker(
             configuration: HostWorkerConfiguration(
-                identity: identity, extensionID: "sample", version: "1.0.0"),
-            executable: URL(fileURLWithPath: "/usr/bin/python3"), arguments: [script.path, mode],
+                identity: identity, extensionID: owner, version: "1.0.0"),
+            executable: URL(fileURLWithPath: "/usr/bin/python3"),
+            arguments: [script.path, mode] + (record.map { [$0.path] } ?? []),
             requestTimeout: timeout)
     }
 }

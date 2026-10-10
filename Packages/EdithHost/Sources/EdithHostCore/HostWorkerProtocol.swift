@@ -77,6 +77,10 @@ public enum HostWorkerSynchronization: String, Sendable {
             var context = try next.ambientPolicy.context(owner: next.extensionID)
                 as? [String: Any]
         else { throw HostWorkerError.invalidResponse }
+        let identity = try next.identity()
+        context["hostIdentifier"] = identity.identifier
+        context["defaultsSuite"] = identity.extensionDefaultsSuite(next.extensionID)
+        context["dataDirectory"] = identity.extensionDirectory(next.extensionID).path
         if self == .ambientPolicy {
             context["ambientPolicyOnly"] = true
         } else {

@@ -93,6 +93,15 @@ for line in sys.stdin:
             response["message"] = "Restore sleep settings and try again."
         if mode == "late-disable" and prepare_count == 1:
             time.sleep(0.3)
+    if operation in ["synchronize", "ambientPolicy"]:
+        if mode in ["record-sync", "wrong-sync-version"]:
+            with open(sys.argv[2], "a") as stream:
+                stream.write(json.dumps(request) + "\n")
+        response["version"] = configuration["version"]
+        if mode == "wrong-sync-version":
+            response["version"] = "99.0.0"
+        else:
+            configuration = request["configuration"]
     if operation == "start":
         configuration = request["configuration"]
         if mode == "navigation-early":

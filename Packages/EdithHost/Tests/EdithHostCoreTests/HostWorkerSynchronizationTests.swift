@@ -5,6 +5,7 @@ import Testing
 @testable import EdithHostCore
 
 @MainActor @Suite(.serialized) struct HostWorkerSynchronizationTests {
+    private let identifier = "com.pulkit.edith.tests.worker-" + UUID().uuidString
     @Test(arguments: HostAmbientPolicy.jobs.keys.sorted())
     func demandOnlyUsesDistinctTrustedOperationWithoutSettingsSideEffects(owner: String)
         async throws
@@ -35,6 +36,7 @@ import Testing
                     appearance: { _ in appearances += 1 },
                     synchronize: { id, context in
                         #expect(id == owner)
+                        try expectIdentityContext(context, configuration: next)
                         let flag = try #require(context["ambientPolicyOnly"])
                         #expect(CFGetTypeID(flag as CFTypeRef) == CFBooleanGetTypeID())
                         #expect(context["ambientPolicyOnly"] as? Bool == true)
@@ -96,6 +98,7 @@ import Testing
                     },
                     synchronize: { id, context in
                         #expect(id == owner && context["ambientPolicyOnly"] == nil)
+                        try expectIdentityContext(context, configuration: appearance)
                         settingsCallbacks += 1
                         let value = try #require(context["ambientPolicy"] as? NSDictionary)
                         #expect(value["subscribers"] as? [String: Int] == policy.subscribers)
@@ -166,9 +169,24 @@ import Testing
             appearance: { _ in },
             synchronize: { id, context in
                 applied = true
-                #expect(id == "downloads" && context.count == 0)
+                #expect(id == "downloads" && context["ambientPolicy"] == nil)
+                #expect(context["ambientPolicyOnly"] == nil)
+                try expectIdentityContext(context, configuration: current)
             })
         #expect(applied)
+    }
+
+    private func expectIdentityContext(
+        _ context: NSDictionary, configuration: HostWorkerConfiguration
+    ) throws {
+        let identity = try configuration.identity()
+        #expect(context["hostIdentifier"] as? String == identity.identifier)
+        #expect(
+            context["defaultsSuite"] as? String
+                == identity.extensionDefaultsSuite(configuration.extensionID))
+        #expect(
+            context["dataDirectory"] as? String
+                == identity.extensionDirectory(configuration.extensionID).path)
     }
 
     @Test(arguments: ["version", "token", "rejected", "cancelled", "error"])
@@ -228,7 +246,7 @@ import Testing
     ) throws -> HostWorkerConfiguration {
         let policy = HostAmbientPolicy.initial(owner: owner, pauseAmbientOnBattery: pause)
         let object: [String: Any] = [
-            "identifier": "com.example.synthetic", "supportDirectory": "file:///synthetic/support/",
+            "identifier": identifier, "supportDirectory": "file:///synthetic/support/",
             "extensionID": owner, "version": "1", "theme": "accent", "appearance": appearance,
             "zoom": zoom, "recoveryOnly": false,
             "ambientPolicy": ["pauseAmbientOnBattery": pause, "subscribers": policy.subscribers],
