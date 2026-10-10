@@ -64,28 +64,23 @@ final class HostNotchSceneLease {
         manager: HostRemoteSessionManager, request: HostExtensionContentRequest
     ) async throws -> HostNotchSceneLease {
         let handle = try await manager.scene(for: request)
-        do {
-            let remote = EXHostViewController()
-            remote.configuration = .init(
-                appExtension: handle.identity, sceneID: handle.sceneIdentifier)
-            let controller = HostRemoteViewController(
-                request: request, remote: remote,
-                connect: { connection, state, receive in
-                    try await handle.connect(
-                        through: connection, compact: state.compact, visible: state.visible,
-                        width: state.width, receive: receive)
-                },
-                update: { state in
-                    try await handle.update(
-                        compact: state.compact, visible: state.visible, width: state.width)
-                })
-            return HostNotchSceneLease(
-                request: request, controller: controller,
-                update: { controller.apply(compact: $0, visible: $1, width: $2) },
-                release: { try await manager.endPresentation(id: request.presentationID) })
-        } catch {
-            try await manager.endPresentation(id: request.presentationID)
-            throw error
-        }
+        let remote = EXHostViewController()
+        remote.configuration = .init(
+            appExtension: handle.identity, sceneID: handle.sceneIdentifier)
+        let controller = HostRemoteViewController(
+            request: request, remote: remote,
+            connect: { connection, state, receive in
+                try await handle.connect(
+                    through: connection, compact: state.compact, visible: state.visible,
+                    width: state.width, receive: receive)
+            },
+            update: { state in
+                try await handle.update(
+                    compact: state.compact, visible: state.visible, width: state.width)
+            })
+        return HostNotchSceneLease(
+            request: request, controller: controller,
+            update: { controller.apply(compact: $0, visible: $1, width: $2) },
+            release: { try await manager.endPresentation(id: request.presentationID) })
     }
 }
