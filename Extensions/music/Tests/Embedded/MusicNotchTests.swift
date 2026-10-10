@@ -208,6 +208,42 @@ import Testing
         runtime.stop()
     }
 
+    @Test func glanceAvoidsPlaybackServicesAndCardRetainsOriginalCapabilitiesErrorAndRetry()
+        async throws
+    {
+        var reads = 0; var details = 0; var retries = 0
+        var error: String? = "Mock playback permission denied"
+        var external = playback("external.music")
+        external.seekable = false; external.volumeAvailable = false
+        external.shuffle = nil; external.repeating = nil
+        let service = MusicSurface(
+            read: { _ in
+                reads += 1; return [external]
+            }, perform: { _ in },
+            readNotch: { _ in
+                details += 1; return [external]
+            },
+            readRetry: { _ in
+                retries += 1; error = nil; return [external]
+            }, controlError: { error })
+        let route = try #require(EmbeddedMusicNotchRoute(context: context(.leading)))
+        let wing = EmbeddedMusicNotchModel(
+            request: route.request, detailed: false, invoke: service.execute)
+        await wing.refresh()
+        #expect(reads == 1 && details == 0 && retries == 0)
+        #expect(wing.nowPlaying?.title == "Mock Garden")
+        let card = EmbeddedMusicNotchModel(request: route.request, invoke: service.execute)
+        await card.refresh()
+        #expect(reads == 1 && details == 1)
+        #expect(card.nowPlayingControlError == error)
+        #expect(!card.nowPlayingSeekable && card.nowPlayingVolume == nil)
+        #expect(card.nowPlayingShuffle == nil && card.nowPlayingRepeat == nil)
+        card.retryNowPlayingControls()
+        for _ in 0..<50 where card.nowPlayingControlError != nil { await Task.yield() }
+        #expect(retries == 1 && card.nowPlayingControlError == nil)
+        wing.shutdown(); card.shutdown()
+    }
+
     @Test func originalNativeNotchBodiesRenderUnshownAndStopAtSixteenPresentations() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let bridge = MusicNotchReadonlyBridge()

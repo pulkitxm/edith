@@ -177,7 +177,8 @@ final class ExternalMusic {
         commandTask = Task { [weak self] in await self?.refreshPlayback(app: app) }
     }
 
-    func refreshPresentationPlayback() async {
+    func refreshPresentationPlayback(force: Bool = false) async {
+        if force { presentationSample = .distantPast; lastError = nil }
         if let task = presentationTask { await task.value; return }
         guard let app = current?.app, Date().timeIntervalSince(presentationSample) >= 2 else {
             return

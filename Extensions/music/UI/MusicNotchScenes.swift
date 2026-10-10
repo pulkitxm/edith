@@ -45,8 +45,12 @@ struct EmbeddedNotchNowPlaying: Equatable {
     let request: SurfaceSnapshotRequest
     private let expectedVersion: String?
     private let presentationID: UUID?
+    private let detailed: Bool
     private(set) var state: EmbeddedMusicNotchState?
-    private(set) var nowPlayingControlError: String?
+    private var requestError: String?
+    var nowPlayingControlError: String? {
+        requestError ?? (nowPlaying?.source == .local ? nil : state?.controlError)
+    }
     private(set) var closed = false
     @ObservationIgnored private let invoke: (String, Data) async throws -> Data
     @ObservationIgnored private var reading: Task<EmbeddedMusicNotchState, Error>?
@@ -55,7 +59,8 @@ struct EmbeddedNotchNowPlaying: Equatable {
     private var selectedSource: String?
 
     init(request: SurfaceSnapshotRequest, remote: EmbeddedMusicRemote = .shared) {
-        self.presentationID = nil; self.expectedVersion = nil; self.request = request;
+        self.detailed = true; self.presentationID = nil; self.expectedVersion = nil;
+        self.request = request;
         self.invoke = { operation, payload in
             try await remote.dataRequest(operation, payload: payload)
         }
@@ -63,10 +68,11 @@ struct EmbeddedNotchNowPlaying: Equatable {
 
     init(
         request: SurfaceSnapshotRequest, expectedVersion: String? = nil,
-        presentationID: UUID? = nil,
+        presentationID: UUID? = nil, detailed: Bool = true,
         invoke: @escaping (String, Data) async throws -> Data
     ) {
-        self.presentationID = presentationID; self.expectedVersion = expectedVersion;
+        self.detailed = detailed; self.presentationID = presentationID;
+        self.expectedVersion = expectedVersion;
         self.request = request; self.invoke = invoke
     }
 
@@ -95,12 +101,16 @@ struct EmbeddedNotchNowPlaying: Equatable {
         guard let image = try? thumbnail?.decodedImage() else { return nil }
         return NSImage(cgImage: image, size: NSSize(width: image.width, height: image.height))
     }
-    func refresh() async {
+    func refresh(retry: Bool = false) async {
         guard !closed, reading == nil else { return }
         let token = revision
         let task = Task {
             let payload = try request.encoded(providerID: "music")
-            return try EmbeddedMusicNotchState.decode(await invoke("music.notch.snapshot", payload))
+            return try EmbeddedMusicNotchState.decode(
+                await invoke(
+                    retry
+                        ? "music.notch.retry"
+                        : detailed ? "music.notch.snapshot" : "music.notch.glance", payload))
         }
         reading = task
         defer { if revision == token { reading = nil } }
@@ -129,10 +139,10 @@ struct EmbeddedNotchNowPlaying: Equatable {
             } else {
                 selectedSource = local?.sourceID
             }
-            state = value; nowPlayingControlError = nil
+            state = value; requestError = nil
         } catch {
             if !closed, revision == token, !Task.isCancelled, !task.isCancelled {
-                nowPlayingControlError = error.localizedDescription
+                requestError = error.localizedDescription
             }
         }
     }
@@ -177,7 +187,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
                 await refresh()
             } catch {
                 if !Task.isCancelled, !closed, token == revision {
-                    nowPlayingControlError = error.localizedDescription
+                    requestError = error.localizedDescription
                 }
             }
         }
@@ -196,7 +206,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
         guard !closed else { return }
         let id = UUID()
         actions[id] = Task { [weak self] in
-            await self?.refresh(); self?.actions[id] = nil
+            await self?.refresh(retry: true); self?.actions[id] = nil
         }
     }
 }

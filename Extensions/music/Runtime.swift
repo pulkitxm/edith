@@ -94,6 +94,8 @@ final class ExtensionRuntime: NSObject {
             if let worker, surface == nil {
                 surface = MusicSurface(
                     read: worker.read, perform: worker.perform, readNotch: worker.readNotch,
+                    readRetry: worker.retryNotch,
+                    controlError: { [weak worker] in worker?.external.lastError },
                     version: Bundle(for: ExtensionRuntime.self).object(
                         forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
                     appIcon: worker.notchAppIcon)

@@ -17,6 +17,8 @@ struct MusicSurfacePlayback: Equatable, Sendable {
     var elapsed = 0.0
     var duration = 0.0
     var volume = 0.7
+    var seekable = true
+    var volumeAvailable = true
     var shuffle: Bool?
     var repeating: Bool?
     var thumbnail: SurfaceThumbnail?
@@ -46,6 +48,8 @@ final class MusicSurface {
     typealias Perform = @MainActor (MusicSurfaceCommand) async throws -> Void
     private let version: String
     private let appIcon: @MainActor (String) -> SurfaceThumbnail?
+    private let readRetry: Read
+    private let controlError: @MainActor () -> String?
     private let readNotch: Read
     private let read: Read
     private let perform: Perform
@@ -53,6 +57,7 @@ final class MusicSurface {
 
     init(
         read: @escaping Read, perform: @escaping Perform, readNotch: Read? = nil,
+        readRetry: Read? = nil, controlError: @escaping @MainActor () -> String? = { nil },
         version: String = "1.0.0",
         appIcon: @escaping @MainActor (String) -> SurfaceThumbnail? = { _ in nil },
         privacyValues: @escaping @MainActor () -> [String: String] = {
@@ -60,7 +65,9 @@ final class MusicSurface {
         }
     ) {
         self.read = read; self.perform = perform; self.privacyValues = privacyValues
-        self.version = version; self.appIcon = appIcon; self.readNotch = readNotch ?? read
+        self.version = version; self.appIcon = appIcon; self.readNotch = readNotch ?? read;
+        self.readRetry = readRetry ?? readNotch ?? read
+        self.controlError = controlError
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -80,7 +87,7 @@ final class MusicSurface {
         } else {
             request = try SurfaceSnapshotRequest.decode(body, providerID: "music")
         }
-        if command == "music.notch.snapshot" {
+        if ["music.notch.snapshot", "music.notch.glance", "music.notch.retry"].contains(command) {
             guard request.target == .notch, request.tile.widget == .music else {
                 throw ExtensionPeerError.invalidRequest
             }
@@ -91,7 +98,12 @@ final class MusicSurface {
                     playback: []
                 ).encoded()
             }
-            let states = try await readNotch(request.tile)
+            let states: [MusicSurfacePlayback]
+            switch command {
+            case "music.notch.glance": states = try await read(request.tile)
+            case "music.notch.retry": states = try await readRetry(request.tile)
+            default: states = try await readNotch(request.tile)
+            }
             try Task.checkCancellation()
             guard !SurfacePrivacyState.hides(.music, values: privacyValues()) else {
                 return try MusicNotchState(
@@ -118,8 +130,11 @@ final class MusicSurface {
                     repeating: request.tile.shows("repeat") ? state.repeating : nil,
                     appIcon: appIcon(state.sourceID))
             }
-            return try MusicNotchState(version: version, snapshot: snapshot, playback: playback)
-                .encoded()
+            return try MusicNotchState(
+                version: version, snapshot: snapshot, playback: playback,
+                controlError: controlError()
+            )
+            .encoded()
         }
         return try await SurfaceCommandService.execute(
             providerID: "music", command: operation, payload: body,
@@ -210,17 +225,19 @@ final class MusicSurface {
             }
             var sliders: [SurfaceSlider] = []
             if playing, target == .notch {
-                if state.duration > 0 {
+                if state.duration > 0, state.seekable {
                     sliders.append(
                         .init(
                             state.identifier("seek"), "Playback position", "clock",
                             value: UnitInterval.clamp(state.elapsed / state.duration),
                             field: "progress"))
                 }
-                sliders.append(
-                    .init(
-                        state.identifier("volume"), "Volume", "speaker.wave.2.fill",
-                        value: UnitInterval.clamp(state.volume), field: "volume"))
+                if state.volumeAvailable {
+                    sliders.append(
+                        .init(
+                            state.identifier("volume"), "Volume", "speaker.wave.2.fill",
+                            value: UnitInterval.clamp(state.volume), field: "volume"))
+                }
             }
             rows.append(
                 .init(

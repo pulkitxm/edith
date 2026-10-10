@@ -79,8 +79,10 @@ final class MusicWorker {
                     artist: track.artist,
                     playing: track.isPlaying, elapsed: playback?.elapsed() ?? 0,
                     duration: track.duration,
-                    volume: playback?.volume ?? 0.7, shuffle: playback?.shuffling,
-                    repeating: playback?.repeating))
+                    volume: playback?.volume ?? 0.7, seekable: playback != nil,
+                    volumeAvailable: playback != nil,
+                    shuffle: playback?.canShuffle == true ? playback?.shuffling : nil,
+                    repeating: playback?.canRepeat == true ? playback?.repeating : nil))
         }
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
@@ -90,6 +92,13 @@ final class MusicWorker {
     func readNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
         guard !stopped else { throw ExtensionPeerError.unavailable }
         await external.refreshPresentationPlayback()
+        try Task.checkCancellation()
+        return try await read(tile)
+    }
+
+    func retryNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        await external.refreshPresentationPlayback(force: true)
         try Task.checkCancellation()
         return try await read(tile)
     }
