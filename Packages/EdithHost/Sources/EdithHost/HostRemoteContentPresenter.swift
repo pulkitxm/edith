@@ -37,7 +37,7 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
         remote.configuration = EXHostViewController.Configuration(
             appExtension: handle.identity, sceneID: handle.sceneIdentifier)
         let terminalUI =
-            request.extensionID == "terminal"
+            HostTerminalUIRequest.accepts(request)
             ? HostTerminalInputClient(
                 update: { [manager] event in
                     try await manager.terminalUI(
@@ -153,7 +153,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
     let request: HostExtensionContentRequest
     private var remote: EXHostViewController
     private let terminalUI: HostTerminalInputClient?
-    private var terminalInput: HostTerminalInput?
+    private(set) var terminalInput: HostTerminalInput?
     private let connect:
         @MainActor (
             NSXPCConnection, HostRemoteViewState, @escaping @MainActor (HostRemoteEvent) -> Void
@@ -196,7 +196,7 @@ final class HostRemoteViewController: NSViewController, EXHostViewControllerDele
         view.moved = { [weak self] in self?.terminalInput?.stateChanged() }
         self.view = view
         mountRemote()
-        if let terminalUI, request.extensionID == "terminal" {
+        if let terminalUI, HostTerminalUIRequest.accepts(request) {
             terminalInput = HostTerminalInput(
                 presentationID: request.presentationID, client: terminalUI,
                 window: { [weak self] in self?.view.window },

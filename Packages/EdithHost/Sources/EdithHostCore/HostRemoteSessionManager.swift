@@ -44,6 +44,7 @@ public final class HostRemoteSessionManager {
     private var sessions: [String: HostRemoteSession] = [:]
     private var starting: [String: Task<HostRemoteSession, any Error>] = [:]
     private var presentations: [UUID: HostRemoteSceneHandle] = [:]
+    private var terminalClients: [UUID: HostTerminalSceneClient] = [:]
     private var admissions: [String: Set<UUID>] = [:]
     private var pendingCleanup: [UUID: String] = [:]
     private var verifiedIdentities: [String: (package: ExtensionPackage, identity: String)] = [:]
@@ -167,6 +168,9 @@ public final class HostRemoteSessionManager {
                     guard let self, let session, self.sessions[id] === session else { return }
                     self.sessions[id] = nil
                     self.detach(id)
+                    self.terminalClients = self.terminalClients.filter {
+                        self.presentations[$0.key]?.request.extensionID != id
+                    }
                     self.presentations = self.presentations.filter {
                         $0.value.request.extensionID != id
                     }
@@ -256,13 +260,18 @@ public final class HostRemoteSessionManager {
             location: "main")
         try validateNavigationOrigin(request)
         try validateWindow()
+        guard let renderer = handle.processIdentity, renderer.isRunning else {
+            throw HostWorkerError.rejected
+        }
         let engine = try HostRemoteEngineOwner(
             marketplace: marketplace, configuration: selectedConfiguration(for: handle.request))
         return HostHerdrNotificationLease(
             configuration: handle.configuration.worker, presentationID: presentationID,
             enginePID: engine.process.pid, engineGeneration: engine.process.generation,
             validateOrigin: { [weak self, weak handle] in
-                guard let self, let handle, self.presentations[presentationID] === handle else {
+                guard let self, let handle, self.presentations[presentationID] === handle,
+                    handle.processIdentity == renderer, renderer.isRunning
+                else {
                     throw HostWorkerError.rejected
                 }
                 try engine.validate()
@@ -274,7 +283,7 @@ public final class HostRemoteSessionManager {
                     .init(
                         presentationID: presentationID, operation: operation, payload: payload,
                         timeout: 5))
-            }, open: open)
+            })
     }
 
     public func herdrWindowLease(_ request: HostWorkerNavigationRequest) throws
@@ -302,30 +311,49 @@ public final class HostRemoteSessionManager {
     }
 
     public func terminalUI(presentationID: UUID, event: HostTerminalUIEvent) async throws -> Bool {
-        let handle = try terminalHandle(presentationID)
-        let result = try await handle.terminalUI(event)
-        guard try terminalHandle(presentationID) === handle else { throw HostWorkerError.rejected }
-        return result
+        try await terminalClient(presentationID).update(event)
     }
 
     public func terminalUIStatus(presentationID: UUID) async throws -> HostTerminalUIStatus {
-        let handle = try terminalHandle(presentationID)
-        let result = try await handle.terminalUIStatus()
-        guard try terminalHandle(presentationID) === handle else { throw HostWorkerError.rejected }
-        return result
+        try await terminalClient(presentationID).status()
+    }
+
+    private func terminalClient(_ id: UUID) throws -> HostTerminalSceneClient {
+        if let client = terminalClients[id] { return client }
+        let handle = try terminalHandle(id)
+        let client = try HostTerminalSceneClient(
+            current: { [weak self, weak handle] in
+                guard let self, let handle, try self.terminalHandle(id) === handle,
+                    let engine = handle.engineIdentity, let renderer = handle.processIdentity
+                else { throw HostWorkerError.rejected }
+                return HostTerminalSceneIdentity(
+                    request: handle.request, package: handle.configuration.package,
+                    session: handle.configuration.session, engine: engine, renderer: renderer)
+            },
+            update: { [weak handle] event in
+                guard let handle else { throw HostWorkerError.rejected }
+                return try await handle.terminalUI(event)
+            },
+            status: { [weak handle] in
+                guard let handle else { throw HostWorkerError.rejected }
+                return try await handle.terminalUIStatus()
+            })
+        terminalClients[id] = client
+        return client
     }
 
     private func terminalHandle(_ id: UUID) throws -> HostRemoteSceneHandle {
-        guard let handle = presentations[id], handle.request.extensionID == "terminal",
+        guard let handle = presentations[id], HostTerminalUIRequest.accepts(handle.request),
             handle.isPresented, pendingCleanup[id] == nil,
             handle.processIdentity?.isRunning == true,
-            let pid = marketplace.sessions.processIdentifiers["terminal"],
+            marketplace.sessions.enabledIDs.contains(handle.request.extensionID),
+            let pid = marketplace.sessions.processIdentifiers[handle.request.extensionID],
             handle.engineIdentity == (try HostRemoteKernelIdentity.read(pid))
         else { throw HostWorkerError.rejected }
         let current = try selectedConfiguration(for: handle.request)
-        guard !current.uiOnly, current.package == handle.configuration.package else {
-            throw HostWorkerError.rejected
-        }
+        guard !current.uiOnly, current.package == handle.configuration.package,
+            current.worker.version == handle.configuration.worker.version
+        else { throw HostWorkerError.rejected }
         return handle
     }
 
@@ -363,6 +391,7 @@ public final class HostRemoteSessionManager {
             return
         }
         presentations[id] = nil
+        terminalClients[id] = nil
         do {
             try await stopUnused(extensionID: extensionID)
         } catch {
@@ -393,6 +422,9 @@ public final class HostRemoteSessionManager {
         if let task = starting[extensionID] { _ = try? await task.value }
         starting[extensionID] = nil
         detach(extensionID)
+        terminalClients = terminalClients.filter {
+            presentations[$0.key]?.request.extensionID != extensionID
+        }
         try await HostRemoteCarrierCheckIn.stop(extensionID: extensionID)
         try await HostRemoteSession.stopAll(extensionID: extensionID)
     }
@@ -428,5 +460,66 @@ public enum HostRemoteAvailabilityError: LocalizedError {
     case approvalRequired
     public var errorDescription: String? {
         "Approve the installed extension in macOS extension settings before opening its interface."
+    }
+}
+
+struct HostTerminalSceneIdentity: Equatable {
+    let request: HostExtensionContentRequest
+    let package: ExtensionPackage
+    let session: UUID
+    let engine: HostRemoteKernelIdentity
+    let renderer: HostRemoteProcessIdentity
+
+    func validate() throws {
+        guard HostTerminalUIRequest.accepts(request), package.id == request.extensionID,
+            engine.pid > 1, renderer.pid > 1, !engine.generation.isEmpty,
+            !renderer.generation.isEmpty, !renderer.codeHash.isEmpty
+        else { throw HostWorkerError.rejected }
+    }
+}
+
+@MainActor
+final class HostTerminalSceneClient {
+    private let identity: HostTerminalSceneIdentity
+    private let current: () throws -> HostTerminalSceneIdentity
+    private let send: (HostTerminalUIEvent) async throws -> Bool
+    private let read: () async throws -> HostTerminalUIStatus
+    private var sequence: UInt64 = 0
+
+    init(
+        current: @escaping () throws -> HostTerminalSceneIdentity,
+        update: @escaping (HostTerminalUIEvent) async throws -> Bool,
+        status: @escaping () async throws -> HostTerminalUIStatus
+    ) throws {
+        identity = try current()
+        try identity.validate()
+        self.current = current; send = update; read = status
+    }
+
+    private func validate() throws {
+        try Task.checkCancellation()
+        let next = try current()
+        try next.validate()
+        guard next == identity else { throw HostWorkerError.rejected }
+    }
+
+    func update(_ event: HostTerminalUIEvent) async throws -> Bool {
+        try validate()
+        _ = try event.encoded(presentationID: identity.request.presentationID)
+        guard event.sequence > sequence else { throw HostWorkerError.rejected }
+        sequence = event.sequence
+        let result = try await send(event)
+        try validate()
+        return result
+    }
+
+    func status() async throws -> HostTerminalUIStatus {
+        try validate()
+        let result = try await read()
+        try validate()
+        guard result.ok, result.presentationID == identity.request.presentationID else {
+            throw HostWorkerError.invalidResponse
+        }
+        return result
     }
 }

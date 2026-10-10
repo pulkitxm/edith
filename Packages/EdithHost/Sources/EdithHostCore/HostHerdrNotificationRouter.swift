@@ -1,3 +1,4 @@
+import CoreFoundation
 import Foundation
 
 @MainActor
@@ -8,18 +9,16 @@ public final class HostHerdrNotificationLease {
     public let engineGeneration: String
     private let validateOrigin: @MainActor () throws -> Void
     private let invoke: @MainActor (String, Data) async throws -> Data
-    private let open: @MainActor (HostWorkerNavigationRequest) async throws -> Void
 
     public init(
         configuration: HostWorkerConfiguration, presentationID: UUID,
         enginePID: Int32, engineGeneration: String,
         validateOrigin: @escaping @MainActor () throws -> Void,
-        invoke: @escaping @MainActor (String, Data) async throws -> Data,
-        open: @escaping @MainActor (HostWorkerNavigationRequest) async throws -> Void
+        invoke: @escaping @MainActor (String, Data) async throws -> Data
     ) {
         self.configuration = configuration; self.presentationID = presentationID
         self.enginePID = enginePID; self.engineGeneration = engineGeneration
-        self.validateOrigin = validateOrigin; self.invoke = invoke; self.open = open
+        self.validateOrigin = validateOrigin; self.invoke = invoke
     }
 
     public func validate() throws { try validateOrigin() }
@@ -33,16 +32,11 @@ public final class HostHerdrNotificationLease {
         let data = try await invoke("herdr.ui.notification.open", JSONEncoder().encode(request))
         try Task.checkCancellation()
         try validateOrigin()
-        let target = try HostHerdrWindowTarget.decode(data)
-        guard target.location == "herdr.agent" else { throw HostWorkerError.rejected }
-        let retained = HostHerdrWindowLease(
-            target: target, invoke: invoke, validateOrigin: validateOrigin)
-        try await retained.validate()
-        try Task.checkCancellation()
-        try validateOrigin()
-        try await open(
-            HostWorkerNavigationRequest(
-                configuration: configuration, presentationID: presentationID, herdrWindow: target))
+        guard !data.isEmpty, data.count <= 1024,
+            let reply = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(reply.keys) == ["ok"], let ok = reply["ok"] as? NSNumber,
+            CFGetTypeID(ok) == CFBooleanGetTypeID(), ok.boolValue
+        else { throw HostWorkerError.rejected }
         try Task.checkCancellation()
         try validateOrigin()
     }

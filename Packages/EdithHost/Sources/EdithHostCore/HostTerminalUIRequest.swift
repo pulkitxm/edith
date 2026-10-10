@@ -23,7 +23,7 @@ public struct HostTerminalUIEvent: Codable, Equatable, Sendable {
     }
 
     public func encoded(presentationID: UUID) throws -> Data {
-        guard version == 1, self.presentationID == presentationID else {
+        guard version == 1, self.presentationID == presentationID, sequence > 0 else {
             throw HostWorkerError.rejected
         }
         let data = try JSONEncoder().encode(self)
@@ -43,6 +43,9 @@ public struct HostTerminalUIStatus: Codable, Equatable, Sendable {
 
     public static func decode(_ data: Data, presentationID: UUID) throws -> Self {
         guard !data.isEmpty, data.count <= 1024 else { throw HostWorkerError.invalidResponse }
+        guard let fields = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(fields.keys) == ["ok", "presentationID", "focused"]
+        else { throw HostWorkerError.invalidResponse }
         let result = try JSONDecoder().decode(Self.self, from: data)
         guard result.ok, result.presentationID == presentationID else {
             throw HostWorkerError.invalidResponse
@@ -72,8 +75,8 @@ public struct HostTerminalUIRequest: Codable, Sendable {
     public func validate(
         session: UUID, request: HostExtensionContentRequest, operation: String
     ) throws {
-        guard self.session == session, self.request == request, request.extensionID == "terminal",
-            request.location == "main", request.surface == nil,
+        try request.validate(extensionID: request.extensionID)
+        guard self.session == session, self.request == request, Self.accepts(request),
             self.operation.rawValue == operation
         else { throw HostWorkerError.rejected }
         switch self.operation {
@@ -82,6 +85,18 @@ public struct HostTerminalUIRequest: Codable, Sendable {
             _ = try event.encoded(presentationID: request.presentationID)
         case .status:
             guard event == nil else { throw HostWorkerError.rejected }
+        }
+    }
+
+    public static func accepts(_ request: HostExtensionContentRequest) -> Bool {
+        guard request.surface == nil, request.machinesWindow == nil,
+            (try? request.validate(extensionID: request.extensionID)) != nil
+        else { return false }
+        switch (request.extensionID, request.location) {
+        case ("terminal", "main"), ("herdr", "main"), ("herdr", "herdr.agent"),
+            ("herdr", "herdr.space"), ("quinjet", "main"):
+            return true
+        default: return false
         }
     }
 
@@ -96,6 +111,16 @@ public struct HostTerminalUIRequest: Codable, Sendable {
         _ data: Data, session: UUID, request: HostExtensionContentRequest, operation: String
     ) throws -> Self {
         guard !data.isEmpty, data.count <= 2048 else { throw HostWorkerError.rejected }
+        guard let fields = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(fields.keys).isSubset(of: ["session", "request", "operation", "event"])
+        else { throw HostWorkerError.rejected }
+        if let event = fields["event"] as? [String: Any] {
+            guard
+                Set(event.keys).isSubset(of: [
+                    "version", "presentationID", "sequence", "active", "key", "visible", "action",
+                ])
+            else { throw HostWorkerError.rejected }
+        }
         let value = try JSONDecoder().decode(Self.self, from: data)
         try value.validate(session: session, request: request, operation: operation)
         return value
