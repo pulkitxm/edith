@@ -3,6 +3,7 @@ import json
 import time
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -79,24 +80,45 @@ class WatchdogTests(unittest.TestCase):
             self.assertEqual(result['remainingOwnedProcesses'], 0)
             self.assertFalse(result['testsCompleted'])
 
-    def test_child_count_is_pids_and_reused_generation_is_not_signalled(self):
+    def test_lineage_pins_separate_groups_and_retains_owned_reparented_children(self):
         ownership = object.__new__(watchdog.OwnedProcesses)
         ownership.leader = 100
         ownership.known = {}
-        identities = {100: (100, 1, 1, '/owned/swift'),
-                      101: (101, 2, 2, '/owned/swiftpm-testing-helper')}
-        ownership.identity = lambda pid: identities.get(pid)
+        ownership.parents = {}
+        snapshots = {100: (100, 1, 1, '/owned/swift', 100, 50),
+                     101: (101, 2, 2, '/owned/swiftpm-testing-helper', 101, 100),
+                     102: (102, 3, 3, '/foreign/process', 777, 900)}
+        ownership.snapshot = lambda pid: snapshots.get(pid)
         class Library:
             def proc_listchildpids(self, pid, children, size):
                 if pid == 100:
-                    children[0] = 101
-                    return 1
+                    children[0], children[1] = 101, 102
+                    return 2
                 return 0
         ownership.library = Library()
         self.assertEqual(len(ownership.refresh()), 2)
-        identities[101] = (101, 3, 3, '/owned/swiftpm-testing-helper')
-        self.assertEqual(ownership.refresh(), [identities[100]])
+        self.assertNotIn(102, ownership.known)
+        self.assertEqual(ownership.known[101][4], 101)
+        self.assertEqual(ownership.parents[101], 100)
+        with patch.object(watchdog.os, 'kill') as kill:
+            ownership.terminate(watchdog.signal.SIGTERM)
+            self.assertEqual(sorted(call.args[0] for call in kill.call_args_list), [100, 101])
+        snapshots[101] = (*snapshots[101][:5], 1)
+        del snapshots[100]
+        self.assertEqual(ownership.refresh(), [snapshots[101][:5]])
+        snapshots[101] = (101, 9, 9, '/owned/swiftpm-testing-helper', 101, 1)
+        self.assertEqual(ownership.refresh(), [])
+        self.assertEqual(ownership.conflicts(), [])
+        with patch.object(watchdog.os, 'kill') as kill:
+            ownership.terminate(watchdog.signal.SIGTERM)
+            kill.assert_not_called()
         self.assertEqual(ownership.known[101][1], 2)
+        snapshots[101] = (101, 2, 2, '/owned/swiftpm-testing-helper', 999, 1)
+        self.assertEqual(ownership.refresh(), [])
+        self.assertEqual(ownership.conflicts(), [ownership.known[101]])
+        with patch.object(watchdog.os, 'kill') as kill:
+            ownership.terminate(watchdog.signal.SIGTERM)
+            kill.assert_not_called()
 
     def test_crash_retention_accepts_only_known_pid_and_exact_executable(self):
         with tempfile.TemporaryDirectory() as temporary:

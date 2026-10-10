@@ -27,8 +27,9 @@ class OwnedProcesses:
         self.leader = leader
         self.uid = uid
         self.known = {}
+        self.parents = {}
 
-    def identity(self, pid):
+    def snapshot(self, pid):
         info = ProcessInfo()
         result = self.library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
         if result != ctypes.sizeof(info) or info.uid != self.uid or info.ruid != self.uid:
@@ -36,33 +37,51 @@ class OwnedProcesses:
         path = ctypes.create_string_buffer(4096)
         if self.library.proc_pidpath(pid, path, len(path)) <= 0:
             return None
-        if info.pgid != self.leader:
+        if info.pgid <= 0:
             return None
-        return (pid, info.seconds, info.microseconds, path.value.decode())
+        return (pid, info.seconds, info.microseconds, path.value.decode(), info.pgid, info.ppid)
+
+    def identity(self, pid):
+        snapshot = self.snapshot(pid)
+        return None if snapshot is None else snapshot[:5]
 
     def refresh(self):
-        pending = [self.leader] + list(self.known)
+        pending = [(self.leader, None)] + [(pid, None) for pid in self.known]
         visited = set()
         while pending:
-            pid = pending.pop()
+            pid, parent = pending.pop()
             if pid in visited:
                 continue
             visited.add(pid)
             if len(visited) > 64:
                 raise RuntimeError('Owned descendant bound exceeded')
-            identity = self.identity(pid)
-            if identity is None:
+            snapshot = self.snapshot(pid)
+            if snapshot is None:
                 continue
+            identity = snapshot[:5]
             previous = self.known.get(pid)
+            if previous is None:
+                if pid == self.leader:
+                    if identity[4] != self.leader:
+                        continue
+                elif parent not in self.known or snapshot[5] != parent:
+                    continue
             if previous is not None and previous != identity:
                 continue
             self.known[pid] = identity
+            if pid not in self.parents:
+                self.parents[pid] = parent
             children = (ctypes.c_int * 64)()
             count = self.library.proc_listchildpids(pid, children, ctypes.sizeof(children))
             if count < 0 or count >= len(children):
                 raise RuntimeError('Invalid owned child enumeration')
-            pending.extend(children[index] for index in range(count))
+            pending.extend((children[index], pid) for index in range(count))
         return [value for value in self.known.values() if self.identity(value[0]) == value]
+
+    def conflicts(self):
+        return [previous for pid, previous in self.known.items()
+                if (current := self.identity(pid)) is not None
+                and current[:3] == previous[:3] and current != previous]
 
     def terminate(self, value):
         for identity in self.refresh():
@@ -177,12 +196,21 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
             sample.write_text('Owned process sample exceeded the diagnostic bound.\n')
     text = log_path.read_text(errors='replace')
     tests_completed = completed_tests(batch, text)
-    return {'batch': batch, 'testsCompleted': tests_completed, 'argv': arguments, 'exitCode': process.returncode,
+    known = list(getattr(ownership, 'known', {}).values())
+    conflicts = ownership.conflicts() if hasattr(ownership, 'conflicts') else []
+    return {'batch': batch, 'testsCompleted': tests_completed,
+            'observedTestingProcess': any(is_testing_process(item[3]) for item in known),
+            'knownOwnedProcesses': [{'pid': item[0], 'startedSeconds': item[1],
+                                    'startedMicroseconds': item[2], 'executable': item[3],
+                                    'processGroup': item[4],
+                                    'discoveredParent': getattr(ownership, 'parents', {}).get(item[0])}
+                                   for item in known],
+            'unverifiedOwnedProcesses': len(conflicts), 'argv': arguments, 'exitCode': process.returncode,
             'timedOut': timed_out, 'durationSeconds': round(clock() - start, 3),
             'remainingOwnedProcesses': len(ownership.refresh()),
             'ownedCrashReports': owned_crash_reports(
                 Path.home() / 'Library/Logs/DiagnosticReports', directory,
-                list(getattr(ownership, 'known', {}).values()), wall_start)}
+                known, wall_start)}
 
 
 def main():
@@ -206,7 +234,9 @@ def main():
                 break
     finally:
         receipt['passed'] = len(receipt['batches']) == 4 and all(
-            row['exitCode'] == 0 and row['testsCompleted'] and not row['timedOut'] and row['remainingOwnedProcesses'] == 0
+            row['exitCode'] == 0 and row['testsCompleted'] and not row['timedOut']
+            and row['remainingOwnedProcesses'] == 0 and row['unverifiedOwnedProcesses'] == 0
+            and (row['batch'] == 'build' or row['observedTestingProcess'])
             for row in receipt['batches'])
         (directory / 'result.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return 0 if receipt['passed'] else 1
