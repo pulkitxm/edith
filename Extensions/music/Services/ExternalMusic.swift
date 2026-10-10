@@ -72,13 +72,61 @@ enum ExternalNowPlaying {
     }
 }
 
+@MainActor struct ExternalMusicEffects {
+    var isInert: Bool
+    var observeExternal:
+        (ExternalApp, @escaping @MainActor ([AnyHashable: Any]) -> Void) -> NSObjectProtocol?
+    var removeExternal: (NSObjectProtocol) -> Void
+    var observeCommand: (@escaping @MainActor ([AnyHashable: Any]) -> Void) -> NSObjectProtocol?
+    var observeState: (@escaping @MainActor () -> Void) -> NSObjectProtocol?
+    var removeLocal: (NSObjectProtocol) -> Void
+    var isRunning: (ExternalApp) -> Bool
+    var readPlayback: (ExternalApp, String?) async throws -> ExternalPlayback?
+    var postState: ([String: Any]) -> Void
+
+    static var live: Self {
+        let runner = ExternalPlaybackRunner()
+        return Self(
+            isInert: false,
+            observeExternal: { app, receive in
+                DistributedNotificationCenter.default().addObserver(
+                    forName: Notification.Name(app.notificationName), object: nil, queue: .main
+                ) { note in MainActor.assumeIsolated { receive(note.userInfo ?? [:]) } }
+            },
+            removeExternal: { DistributedNotificationCenter.default().removeObserver($0) },
+            observeCommand: { receive in
+                MusicEvents.observe(MusicEvents.Name.nowPlayingCommand) { info in
+                    MainActor.assumeIsolated { receive(info) }
+                }
+            },
+            observeState: { receive in
+                MusicEvents.observe(MusicEvents.Name.requestNowPlayingState) {
+                    MainActor.assumeIsolated { receive() }
+                }
+            },
+            removeLocal: MusicEvents.stopObserving,
+            isRunning: {
+                !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleID).isEmpty
+            },
+            readPlayback: { app, command in try await runner.run(app: app, command: command) },
+            postState: { MusicEvents.post(MusicEvents.Name.nowPlayingState, userInfo: $0) })
+    }
+
+    static var inert: Self {
+        Self(
+            isInert: true, observeExternal: { _, _ in nil }, removeExternal: { _ in },
+            observeCommand: { _ in nil }, observeState: { _ in nil }, removeLocal: { _ in },
+            isRunning: { _ in false }, readPlayback: { _, _ in nil }, postState: { _ in })
+    }
+}
+
 @MainActor
 @Observable
 final class ExternalMusic {
     private(set) var current: ExternalTrack?
     private(set) var playback: ExternalPlayback?
     private(set) var lastError: String?
-    private let runner = ExternalPlaybackRunner()
+    @ObservationIgnored private let effects: ExternalMusicEffects
     private var pollingTask: Task<Void, Never>?
     private var commandTask: Task<Void, Never>?
     private var observingPlayback = false
@@ -91,46 +139,42 @@ final class ExternalMusic {
     private var commandObserver: NSObjectProtocol?
     private var stateObserver: NSObjectProtocol?
 
+    init(effects: ExternalMusicEffects? = nil) {
+        self.effects = effects ?? .live
+    }
+
+    var systemResourceCount: Int {
+        observers.count + (commandObserver == nil ? 0 : 1) + (stateObserver == nil ? 0 : 1)
+    }
+
     func start() {
-        guard observers.isEmpty else { return }
-        commandObserver = MusicEvents.observe(
-            MusicEvents.Name.nowPlayingCommand,
-            info: { [weak self] info in
-                MainActor.assumeIsolated { self?.handle(command: info) }
-            })
-        stateObserver = MusicEvents.observe(MusicEvents.Name.requestNowPlayingState) {
-            [weak self] in
-            MainActor.assumeIsolated { self?.broadcast() }
-        }
-        let center = DistributedNotificationCenter.default()
+        guard !effects.isInert, observers.isEmpty else { return }
+        commandObserver = effects.observeCommand { [weak self] in self?.handle(command: $0) }
+        stateObserver = effects.observeState { [weak self] in self?.broadcast() }
         for app in ExternalApp.allCases {
-            let observer = center.addObserver(
-                forName: Notification.Name(app.notificationName), object: nil, queue: .main
-            ) { [weak self] note in
-                MainActor.assumeIsolated {
-                    self?.handle(app: app, userInfo: note.userInfo ?? [:])
-                }
+            if let observer = effects.observeExternal(
+                app, { [weak self] in self?.handle(app: app, userInfo: $0) })
+            {
+                observers.append((app, observer))
             }
-            observers.append((app, observer))
         }
     }
 
     func stop() {
         generation &+= 1; presentationSample = .distantPast
         presentationTask?.cancel(); presentationTask = nil
-        let center = DistributedNotificationCenter.default()
-        for (_, observer) in observers { center.removeObserver(observer) }
+        for (_, observer) in observers { effects.removeExternal(observer) }
         observers.removeAll()
         current = nil; playback = nil
         observePlayback(false)
         commandTask?.cancel(); commandTask = nil
-        if let commandObserver { MusicEvents.stopObserving(commandObserver) }
-        if let stateObserver { MusicEvents.stopObserving(stateObserver) }
+        if let commandObserver { effects.removeLocal(commandObserver) }
+        if let stateObserver { effects.removeLocal(stateObserver) }
         commandObserver = nil; stateObserver = nil
     }
 
     func handle(command info: [AnyHashable: Any]) {
-        guard let app = current?.app,
+        guard !effects.isInert, let app = current?.app,
             let command = ExternalPlaybackScript.command(info, app: app)
         else { return }
         let previous = commandTask
@@ -142,7 +186,7 @@ final class ExternalMusic {
     }
 
     func observePlayback(_ active: Bool) {
-        guard active != observingPlayback else { return }
+        guard !effects.isInert, active != observingPlayback else { return }
         observingPlayback = active
         pollingTask?.cancel(); pollingTask = nil
         guard active else { return }
@@ -154,11 +198,7 @@ final class ExternalMusic {
                     if let track = current {
                         apps = [track.app]
                     } else {
-                        apps = ExternalApp.allCases.filter {
-                            !NSRunningApplication.runningApplications(
-                                withBundleIdentifier: $0.bundleID
-                            ).isEmpty
-                        }
+                        apps = ExternalApp.allCases.filter(effects.isRunning)
                     }
                     for app in apps {
                         await refreshPlayback(app: app)
@@ -171,6 +211,7 @@ final class ExternalMusic {
     }
 
     func retryPlayback() {
+        guard !effects.isInert else { return }
         lastError = nil
         guard let app = current?.app else { return }
         commandTask?.cancel()
@@ -178,6 +219,7 @@ final class ExternalMusic {
     }
 
     func refreshPresentationPlayback(force: Bool = false) async {
+        guard !effects.isInert else { return }
         if force { presentationSample = .distantPast; lastError = nil }
         if let task = presentationTask { await task.value; return }
         guard let app = current?.app, Date().timeIntervalSince(presentationSample) >= 2 else {
@@ -196,14 +238,15 @@ final class ExternalMusic {
     }
 
     private func refreshPlayback(app: ExternalApp, command: String? = nil) async {
+        guard !effects.isInert else { return }
         let token = generation
-        guard !NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleID).isEmpty
+        guard effects.isRunning(app)
         else {
             if current?.app == app { current = nil; playback = nil }
             return
         }
         do {
-            let next = try await runner.run(app: app, command: command)
+            let next = try await effects.readPlayback(app, command)
             guard !Task.isCancelled, generation == token,
                 ExternalNowPlaying.accepts(app: app, existing: current, incoming: next?.track)
             else { return }
@@ -217,11 +260,13 @@ final class ExternalMusic {
     }
 
     func perform(_ request: MusicTransportRequest) {
+        guard !effects.isInert else { return }
         MusicTransportExecution.perform(
             request, sendCommand: { handle(command: $0) }, requestStatus: broadcast)
     }
 
     func broadcast() {
+        guard !effects.isInert else { return }
         var payload: [String: Any] = ["present": current != nil]
         if let track = current {
             payload["app"] = track.app.rawValue
@@ -235,7 +280,7 @@ final class ExternalMusic {
                 payload["shuffling"] = playback.shuffling; payload["looping"] = playback.repeating
             }
         }
-        MusicEvents.post(MusicEvents.Name.nowPlayingState, userInfo: payload)
+        effects.postState(payload)
     }
 
     func playPause() { perform(.toggle) }
@@ -243,6 +288,7 @@ final class ExternalMusic {
     func previous() { perform(.previous) }
 
     private func handle(app: ExternalApp, userInfo: [AnyHashable: Any]) {
+        guard !effects.isInert else { return }
         guard let track = ExternalNowPlaying.parse(app: app, userInfo: userInfo) else {
             if current?.app == app { current = nil; playback = nil }
             return
