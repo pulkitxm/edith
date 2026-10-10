@@ -87,7 +87,9 @@ struct HostLifecycleHarness {
         }
         if extensionID == "usage" { try prepareUsageFixture() }
         if extensionID == "codeStats" { try CodeStatsFixture.seed() }
-        if extensionID == "herdr" { try HerdrFixture.prepare() }
+        if extensionID == "herdr" {
+            try HerdrFixture.prepare(); try AgentActivityFixture.seed(identity: identity)
+        }
         if extensionID == "quinjet" { try QuinjetFixture.prepare() }
         guard let defaults = UserDefaults(suiteName: suite) else { throw HostWorkerError.rejected }
         defer {
@@ -198,7 +200,10 @@ struct HostLifecycleHarness {
             } else if extensionID == "quinjet" {
                 terminalChildren = try await QuinjetFixture.verify(endpoint, workerPID: oldPID)
             } else if extensionID == "herdr" {
+                stage = "initial terminal fixture"
                 terminalChildren = try await HerdrFixture.verify(endpoint, workerPID: oldPID)
+                stage = "initial provider activity"
+                try await AgentActivityFixture.verify(endpoint)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: oldPID)
             } else if extensionID == "machines" {
@@ -266,7 +271,10 @@ struct HostLifecycleHarness {
             } else if extensionID == "quinjet" {
                 terminalChildren = try await QuinjetFixture.verify(endpoint, workerPID: newPID)
             } else if extensionID == "herdr" {
+                stage = "updated terminal fixture"
                 terminalChildren = try await HerdrFixture.verify(endpoint, workerPID: newPID)
+                stage = "updated provider activity"
+                try await AgentActivityFixture.verify(endpoint)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: newPID)
             } else if extensionID == "machines" {
@@ -297,6 +305,7 @@ struct HostLifecycleHarness {
                     expected: true)
             }
             await sessions.shutdown()
+            if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
             guard kill(newPID, 0) == -1, sessions.enabledIDs.contains(first.id) else {
                 throw HostWorkerError.rejected
             }
@@ -360,7 +369,10 @@ struct HostLifecycleHarness {
             } else if extensionID == "quinjet" {
                 terminalChildren = try await QuinjetFixture.verify(endpoint, workerPID: restoredPID)
             } else if extensionID == "herdr" {
+                stage = "restored terminal fixture"
                 terminalChildren = try await HerdrFixture.verify(endpoint, workerPID: restoredPID)
+                stage = "restored provider activity"
+                try await AgentActivityFixture.verify(endpoint)
             } else if extensionID == "terminal" {
                 terminalChildren = try await verifyTerminal(endpoint, workerPID: restoredPID)
             } else if extensionID == "machines" {
@@ -404,6 +416,7 @@ struct HostLifecycleHarness {
             }
             stage = "disable"
             try await sessions.disable(id: first.id)
+            if extensionID == "herdr" { try AgentActivityFixture.verifyHooks(active: false) }
             guard surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface,
                 sessions.processIdentifiers.isEmpty, sessions.enabledIDs.isEmpty
@@ -463,7 +476,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {

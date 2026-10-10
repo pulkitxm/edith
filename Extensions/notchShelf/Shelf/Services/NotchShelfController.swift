@@ -180,8 +180,21 @@ final class NotchShelfController {
         guard activeIDs.contains(snapshot.providerID),
             !privacy.hides(Self.glanceWidget(snapshot.providerID))
         else { return }
+        let previous = surfaceSnapshots[snapshot.providerID]
         surfaceSnapshots[snapshot.providerID] = snapshot
-        if surfaceLayout.notchPrioritizePermissions, !layoutEditing,
+        let pending = Int(snapshot.metrics.first { $0.id == "permissions" }?.value ?? "") ?? 0
+        let previousPending =
+            Int(previous?.metrics.first { $0.id == "permissions" }?.value ?? "") ?? 0
+        let requestIDs = Set(snapshot.rows.filter { $0.field == "approvals" }.map(\.id))
+        let previousIDs = Set(previous?.rows.filter { $0.field == "approvals" }.map(\.id) ?? [])
+        if snapshot.providerID == "herdr", surfaceLayout.notchExpandPermissions,
+            pending > 0, pending > previousPending || !requestIDs.subtracting(previousIDs).isEmpty,
+            !layoutEditing, visibleTabs.contains(.agents)
+        {
+            expand(
+                on: expandedDisplay ?? builtinDisplayID ?? CGMainDisplayID(), preferredTab: .agents)
+        }
+        if snapshot.providerID == "herdr", surfaceLayout.notchPrioritizePermissions, !layoutEditing,
             let count = snapshot.metrics.first(where: { $0.id == "permissions" })?.value,
             let pending = Int(count), pending > 0, visibleTabs.contains(.agents)
         {
@@ -209,6 +222,7 @@ final class NotchShelfController {
                     var tile = SurfaceTile(widget)
                     tile.itemLimit = 1
                     if widget == .agents {
+                        tile.hiddenFields = []
                         tile.sourceIDs = self.surfaceLayout.notchAgentSources
                         tile.includeSubagents = self.surfaceLayout.notchIncludeSubagents
                     }

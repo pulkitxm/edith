@@ -12,21 +12,23 @@ import Testing
         let worker = HerdrWorker(store: store, automaticActions: false)
         let surface = HerdrSurface(worker: worker, privacyValues: { [:] })
         var tile = SurfaceTile(.ability("herdr"))
-        tile.sourceIDs = [first.machineID]
+        tile.sourceIDs = ["synthetic tool"]
         tile.itemLimit = 1
-        tile.hiddenFields = ["blocked", "metadata"]
+        tile.hiddenFields = ["waiting", "metadata"]
         let request = SurfaceSnapshotRequest(target: .home, tile: tile)
         let snapshot = try SurfaceSnapshot.decode(
             try await surface.execute(
                 "surface.snapshot", payload: request.encoded(providerID: "herdr")),
             providerID: "herdr")
-        #expect(snapshot.rows.count == 1 && snapshot.rows.first?.sourceID == first.machineID)
-        #expect(snapshot.sources.count == 2 && snapshot.rows.first?.detail == "")
-        #expect(!snapshot.metrics.contains { $0.id == "blocked" })
+        #expect(snapshot.rows.count == 1 && snapshot.rows.first?.sourceID == "synthetic tool")
+        #expect(
+            snapshot.sources.contains { $0.id == "synthetic tool" }
+                && snapshot.rows.first?.detail == "")
+        #expect(!snapshot.metrics.contains { $0.id == "waiting" })
         let action = try #require(snapshot.rows.first?.actions.first?.id)
         #expect(UUID(uuidString: action) != nil && !action.contains(first.id))
         let actionRequest = SurfaceActionRequest(snapshot: request, actionID: action)
-        store.hosts = [host(second)]
+        store.hosts = []
         await #expect(throws: ExtensionPeerError.self) {
             try await surface.execute(
                 "surface.perform", payload: actionRequest.encoded(providerID: "herdr"))

@@ -26,7 +26,7 @@ extension NotchShelfController {
         if sources.contains(.automatic) {
             return ["herdr", "music", "attention", "usage", "calendar"]
         }
-        return Set(
+        var providers = Set(
             sources.compactMap { source in
                 switch source {
                 case .music: "music"
@@ -39,6 +39,10 @@ extension NotchShelfController {
                 default: nil
                 }
             })
+        if surfaceLayout.notchExpandPermissions || surfaceLayout.notchPrioritizePermissions {
+            providers.insert("herdr")
+        }
+        return providers
     }
 
     static func glanceWidget(_ id: String) -> SurfaceWidget {
@@ -58,7 +62,9 @@ extension NotchShelfController {
     var trailingGlance: NotchSurfaceGlance? {
         glance(surfaceLayout.notchTrailingGlance, trailing: true)
     }
-    var glanceWingWidth: CGFloat { leadingGlance == nil && trailingGlance == nil ? 0 : 64 }
+    var glanceWingWidth: CGFloat {
+        leadingGlance == nil && trailingGlance == nil ? 0 : CGFloat(surfaceLayout.notchWingWidth)
+    }
 
     func openGlance(_ value: NotchSurfaceGlance, on displayID: CGDirectDisplayID) {
         expand(on: displayID, preferredTab: value.tab)
@@ -102,13 +108,16 @@ extension NotchShelfController {
         case .waitingAgents: metricID = "waiting"
         case .stuckAgents: metricID = "stuck"
         case .quietAgents: metricID = "quiet"
-        case .failedAgents: metricID = "failed"
-        case .workingAgents: metricID = "working"
-        default: metricID = "active"
+        case .failedAgents: metricID = "errors"
+        case .workingAgents: metricID = "running"
+        default: metricID = "total"
         }
         let metric =
             snapshot.metrics.first { $0.id == metricID }
             ?? (pair.0 == "herdr" ? nil : snapshot.metrics.first)
+        if pair.0 == "herdr" {
+            guard let count = metric?.value, let number = Int(count), number > 0 else { return nil }
+        }
         let value = [metric?.value, snapshot.rows.first?.value, snapshot.rows.first?.title]
             .compactMap { $0 }.first { !$0.isEmpty }
         guard let value, value != "0" else { return nil }
