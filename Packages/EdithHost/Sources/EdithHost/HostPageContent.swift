@@ -36,7 +36,9 @@ struct HostPageContent: View {
                 marketplace: marketplace, customize: customize,
                 extensions: { select("extensions") }, openExtension: openExtension,
                 presenter: presenter, workflowSetup: additionalSettings?("home-setup"))
-        case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
+        case "extensions":
+            MarketplacePage(
+                marketplace: marketplace, presenter: presenter, openExtension: openExtension)
         case "settings":
             HostSettingsContainer(category: settingsBinding, sections: settingsSections) {
                 settingsContent
@@ -105,21 +107,9 @@ struct HostPageContent: View {
             presenter: presenter, openMarketplace: { select("extensions") })
     }
     private var landing: some View {
-        PageScaffold(width: .fluid) {
-            PageHeader(destination.title)
-        } content: {
-            ForEach(
-                marketplace.entries.filter {
-                    active.contains($0.id)
-                        && (HostNavigationCatalog.suiteProviders[destination.suite ?? ""] ?? [])
-                            .contains($0.id)
-                }
-            ) { entry in
-                HostSurfaceCard(
-                    marketplace: marketplace, target: .home, tile: .init(.ability(entry.id))
-                )
-            }
-        }
+        HostSuiteLandingPage(
+            marketplace: marketplace, destination: destination, presenter: presenter,
+            openExtension: openExtension)
     }
     private func customize() { settings = "surfaces"; select("settings") }
 }

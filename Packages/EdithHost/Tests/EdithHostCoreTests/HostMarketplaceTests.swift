@@ -420,6 +420,78 @@ import Testing
                 id: "sample", hostABI: HostContract.compatibility, architecture: "arm64") == next)
     }
 
+    @Test(arguments: ["version", "fingerprint", "hash", "abi", "architecture", "size", "id"])
+    func reviewedDownloadRejectsTheChangedSignedCandidateBeforeArchiveTransfer(field: String)
+        async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let reviewed = fixture.package("1.0.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [reviewed]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.checkForUpdates()
+        #expect(marketplace.available["sample"] == reviewed)
+        let changed = ExtensionPackage(
+            id: "sample", version: field == "version" ? "2.0.0" : reviewed.version,
+            hostABI: field == "abi" ? "different-abi" : reviewed.hostABI,
+            architecture: field == "architecture" ? "x86_64" : reviewed.architecture,
+            minimumSystemVersion: reviewed.minimumSystemVersion,
+            downloadURL: field == "fingerprint"
+                ? URL(
+                    string:
+                        "https://github.com/pulkitxm/edith/releases/download/extension-sample-1.0.0-newfingerprint/sample.zip"
+                )!
+                : reviewed.downloadURL,
+            sha256: field == "hash" ? String(repeating: "b", count: 64) : reviewed.sha256,
+            downloadBytes: field == "size" ? 2 : reviewed.downloadBytes,
+            installedBytes: reviewed.installedBytes)
+        await fixture.network.set(data: try fixture.envelope(packages: [changed], revision: 2))
+        await marketplace.download(
+            id: field == "id" ? "other" : "sample", expectedPackage: reviewed)
+        #expect(marketplace.error?.contains("package changed") == true)
+        #expect(await fixture.archives.urls.isEmpty)
+        #expect(try fixture.store.installedPackages().isEmpty)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(marketplace.operationID == nil)
+        #expect(await fixture.network.count == 2)
+    }
+
+    @Test func unchangedReviewedCandidateReachesOnlyItsPinnedArchive() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let reviewed = fixture.package("1.0.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [reviewed]))
+        let marketplace = try fixture.marketplace()
+        await marketplace.download(id: "sample", expectedPackage: reviewed)
+        #expect(await fixture.archives.urls == [reviewed.downloadURL])
+        #expect(marketplace.error?.contains("package changed") == false)
+        #expect(try fixture.store.installedPackages().isEmpty)
+        #expect(marketplace.sessions.processIdentifiers.isEmpty)
+    }
+
+    @Test func rejectedReviewPreservesSelectedAndRetainedVersions() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        let old = fixture.package("1.0.0"), reviewed = fixture.package("2.0.0")
+        try fixture.install([old, reviewed])
+        try fixture.store.select(old)
+        let changed = fixture.package("3.0.0")
+        await fixture.network.set(data: try fixture.envelope(packages: [changed], revision: 2))
+        let marketplace = try fixture.marketplace()
+        await marketplace.download(id: "sample", expectedPackage: reviewed)
+        #expect(await fixture.archives.urls.isEmpty)
+        #expect(Set(try fixture.store.installedPackages().map(\.version)) == ["1.0.0", "2.0.0"])
+        #expect(marketplace.installed["sample"] == old)
+        #expect(
+            try fixture.store.installedPackage(
+                id: "sample", hostABI: HostContract.compatibility, architecture: "arm64") == old)
+    }
+
+    private actor ArchiveRequests {
+        private(set) var urls: [URL] = []
+        func record(_ url: URL) { urls.append(url) }
+    }
+
     private actor Network {
         private(set) var count = 0
         private var data: Data?
@@ -437,6 +509,7 @@ import Testing
         let store: ExtensionPackageStore
         let key = Curve25519.Signing.PrivateKey()
         let network = Network()
+        let archives = ArchiveRequests()
         var cache: URL { identity.root.appendingPathComponent("catalog.json") }
 
         init() throws {
@@ -471,8 +544,11 @@ import Testing
                 repository: MarketplaceConfiguration.repository, cache: cache,
                 fetch: { [network] _ in try await network.fetch() })
             let installer = ExtensionPackageInstaller(
-                store: store, download: { _, _ in throw MarketplaceError.downloadFailed },
-                verify: { _ in })
+                store: store,
+                download: { [archives] url, _ in
+                    await archives.record(url)
+                    throw MarketplaceError.downloadFailed
+                }, verify: { _ in })
             return try HostMarketplace(
                 identity: identity,
                 entries: [

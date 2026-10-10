@@ -194,7 +194,7 @@ public final class HostMarketplace {
         }
     }
 
-    public func download(id: String) async {
+    public func download(id: String, expectedPackage: ExtensionPackage? = nil) async {
         guard operationID == nil else { return }
         operationID = id
         progress = 0
@@ -204,6 +204,13 @@ public final class HostMarketplace {
             let result = try await catalogClient.refresh()
             offline = result.offline
             apply(result.catalog)
+            if let expectedPackage {
+                guard expectedPackage.id == id, available[id] == expectedPackage else {
+                    error =
+                        "The extension package changed. Review its version and size before downloading."
+                    return
+                }
+            }
             let plan = try result.catalog.installationPlan(
                 for: id, hostABI: HostContract.compatibility, architecture: "arm64",
                 systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)

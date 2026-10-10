@@ -54,7 +54,7 @@ struct HostWorkflowOnboardingView: View {
             "Every extension is optional. Review the download and storage sizes before installing."
         case .installing: "Edith downloads, verifies and starts only the extensions you selected."
         case .finished:
-            "Your downloaded extensions are available in the sidebar. You can change them in Extensions."
+            "Your tools are ready. Open feature pages from the sidebar and manage helper tools in Extensions."
         }
     }
 
@@ -92,7 +92,7 @@ struct HostWorkflowOnboardingView: View {
                     LoadingIndicator().frame(width: UIScale.pt(16), height: UIScale.pt(16))
                 }
                 Spacer()
-                Button("Start without extensions") { model.skip() }.disabled(model.busy)
+                Button(model.skipTitle) { model.skip() }.disabled(model.busy)
             }
         }
     }

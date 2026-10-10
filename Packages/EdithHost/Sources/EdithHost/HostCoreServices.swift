@@ -214,14 +214,19 @@ import SwiftUI
                     try Task.checkCancellation()
                     if let error = marketplace.error { throw HostWorkflowFailure(error) }
                 },
-                install: { [weak self] id in
+                install: { [weak self] id, expectedPackage in
                     guard let self, marketplace.operationID == nil else {
                         throw HostWorkerError.rejected
                     }
                     if marketplace.installed[id] == nil {
-                        await marketplace.download(id: id)
+                        await marketplace.download(id: id, expectedPackage: expectedPackage)
                         try Task.checkCancellation()
-                        if let error = marketplace.error { throw HostWorkflowFailure(error) }
+                        if let error = marketplace.error {
+                            if let expectedPackage, marketplace.available[id] != expectedPackage {
+                                throw HostWorkflowReviewChanged()
+                            }
+                            throw HostWorkflowFailure(error)
+                        }
                     }
                     guard marketplace.installed[id] != nil else {
                         throw HostWorkflowFailure(
