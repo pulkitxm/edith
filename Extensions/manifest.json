@@ -675,7 +675,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "roles": {
       "app": [
         "Extensions/plugins/CLI/CLIDestructivePlan.swift",
@@ -978,7 +978,7 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "nativePackage": "Packages/EdithDocsWorker",
     "nativeProduct": "EdithDocsWorker",
     "nativeResources": ["EdithDocsWorker_EdithDocsWorker.bundle"],
@@ -1027,7 +1027,7 @@
     "contractVersion": 1,
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
-    "supportProduct": "EdithExtensionArchive",
+    "supportProduct": ["EdithExtensionArchive", "EdithExtensionCommands"],
     "inputs": ["Extensions/latex"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
