@@ -80,8 +80,20 @@ test("application environment omits ambient credentials and never inherits accou
     token: "do-not-copy",
     SSH_AUTH_SOCK: "do-not-copy",
   };
-  const value = managedApplicationEnvironment(fixture, environment);
+  const value = managedApplicationEnvironment(fixture, {
+    ...environment,
+    HOME: "/foreign/account",
+    CFFIXED_USER_HOME: "/foreign/preferences",
+    TMPDIR: "/foreign/tmp",
+    GITHUB_TOKEN: "synthetic-secret",
+    SSH_AUTH_SOCK: "synthetic-agent",
+  });
   expect(value.HOME).toBe(fixture.fixtureHome);
+  expect(value.CFFIXED_USER_HOME).toBe(fixture.fixtureHome);
+  expect(value.TMPDIR).toBe("/synthetic/fixture/tmp");
+  expect(value.XDG_CONFIG_HOME).toBe(`${fixture.fixtureHome}/.config`);
+  expect(value.XDG_CACHE_HOME).toBe(`${fixture.fixtureHome}/.cache`);
+  expect(value).not.toHaveProperty("GITHUB_TOKEN");
   expect(value.EDITH_SHARED_DEFAULTS_SUITE).toBe(fixture.identifier);
   expect(value).not.toHaveProperty("token");
   expect(value).not.toHaveProperty("SSH_AUTH_SOCK");

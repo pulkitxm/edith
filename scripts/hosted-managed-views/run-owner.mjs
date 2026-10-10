@@ -116,6 +116,10 @@ export function managedToolEnvironment(environment) {
   ])
     if (environment[key] !== undefined) result[key] = environment[key];
   assert(typeof result.HOME === "string" && result.HOME.startsWith("/"));
+  if (environment.CFFIXED_USER_HOME !== undefined) {
+    assert.equal(environment.CFFIXED_USER_HOME, result.HOME);
+    result.CFFIXED_USER_HOME = result.HOME;
+  }
   return result;
 }
 

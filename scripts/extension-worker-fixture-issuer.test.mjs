@@ -7,6 +7,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -175,6 +176,7 @@ test("fixture subprocesses inherit only owned homes and closed environment", asy
     await mkdtemp(join(tmpdir(), "edith-fixture-env-")),
   );
   try {
+    await mkdir(join(home, "tmp"), { mode: 0o700 });
     const identifier =
       "com.pulkit.edith.tests.worker-20000000-0000-0000-0000-000000000001";
     const old = process.env.EDITH_FIXTURE_UNRELATED_SECRET;
@@ -186,13 +188,15 @@ test("fixture subprocesses inherit only owned homes and closed environment", asy
           process.execPath,
           [
             "-e",
-            "process.stdout.write(JSON.stringify({home:process.env.HOME,path:process.env.PATH,ssh:process.env.SSH_AUTH_SOCK??null,secret:process.env.EDITH_FIXTURE_UNRELATED_SECRET??null,defaults:process.env.EDITH_SHARED_DEFAULTS_SUITE??null,fixture:process.env.EDITH_EXTENSION_FIXTURE_HOME,identifier:process.env.EDITH_EXTENSION_TEST_HOST_IDENTIFIER}))",
+            "process.stdout.write(JSON.stringify({home:process.env.HOME,fixedHome:process.env.CFFIXED_USER_HOME,tmp:process.env.TMPDIR,path:process.env.PATH,ssh:process.env.SSH_AUTH_SOCK??null,secret:process.env.EDITH_FIXTURE_UNRELATED_SECRET??null,defaults:process.env.EDITH_SHARED_DEFAULTS_SUITE??null,fixture:process.env.EDITH_EXTENSION_FIXTURE_HOME,identifier:process.env.EDITH_EXTENSION_TEST_HOST_IDENTIFIER}))",
           ],
           { encoding: "utf8", env: environment },
         ),
       );
       assert.deepEqual(output, {
         home,
+        fixedHome: home,
+        tmp: join(home, "tmp"),
         path: "/usr/bin:/bin:/usr/sbin:/sbin",
         ssh: null,
         secret: null,
@@ -200,6 +204,9 @@ test("fixture subprocesses inherit only owned homes and closed environment", asy
         fixture: home,
         identifier,
       });
+      assert((await stat(environment.TMPDIR)).isDirectory());
+      assert.equal(environment.XDG_CONFIG_HOME, join(home, ".config"));
+      assert.equal(environment.XDG_CACHE_HOME, join(home, ".cache"));
       assert.equal(
         workerFixtureEnvironment(home).EDITH_EXTENSION_TEST_HOST_IDENTIFIER,
         undefined,

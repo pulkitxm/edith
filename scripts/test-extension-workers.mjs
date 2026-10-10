@@ -123,6 +123,8 @@ export function workerFixtureEnvironment(home, hostIdentifier) {
   const environment = {
     PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
     HOME: home,
+    CFFIXED_USER_HOME: home,
+    TMPDIR: join(home, "tmp"),
     SHELL: "/bin/sh",
     LANG: "C",
     LC_ALL: "C",
@@ -381,6 +383,7 @@ async function run() {
         id === "calendar" ? fixtureRoot : join(fixtureRoot, `${id}-home`);
       if (fixtureHome !== fixtureRoot)
         await mkdir(fixtureHome, { mode: 0o700 });
+      await mkdir(join(fixtureHome, "tmp"), { mode: 0o700 });
       const result = JSON.parse(
         execFileSync(
           resolve(
