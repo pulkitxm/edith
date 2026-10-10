@@ -115,3 +115,28 @@ test("test plan construction uses original journey sources and rejects ambient S
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("runner proof admission includes every actual XCTest user interaction stage in order", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const testSource = await readFile(
+    "Tests/HostedOriginalShell/UITests/OriginalShellJourneyTests.swift",
+    "utf8",
+  );
+  const runner = await readFile(
+    "scripts/hosted-original-shell/run-journey.mjs",
+    "utf8",
+  );
+  const emitted = [
+    ...testSource.matchAll(/try (?:waitState|capture)\("([^"\n]+)"/g),
+  ].map((match) => match[1]);
+  const expected = runner
+    .split("proof.snapshots.map((item) => item.stage),")[1]
+    ?.split("],")[0];
+  expect(expected).toBeDefined();
+  const admitted = [...expected.matchAll(/"([^"\n]+)"/g)].map(
+    (match) => match[1],
+  );
+  expect(admitted).toEqual(emitted);
+  expect(emitted.length).toBe(13);
+  expect(new Set(emitted).size).toBe(emitted.length);
+});

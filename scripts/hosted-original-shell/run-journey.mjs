@@ -152,6 +152,7 @@ try {
       "empty-idle",
       "recommended-calendar-installed",
       "calendar-native-view",
+      "calendar-native-use",
       "home-customized",
       "notch-customized",
       "disabled-drained",
