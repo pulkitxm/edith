@@ -37,6 +37,12 @@ enum CodeStatsCLIEnvironment {
 
     static func failure(_ error: Error) -> Error {
         if error is CLIFailure { return error }
+        if let failure = error as? CodeStatsFailure {
+            switch failure.kind {
+            case .refused, .unavailable: return CLIFailure.unavailable(failure.message)
+            case .unknownOperation: return CLIFailure(failure.message)
+            }
+        }
         return error
     }
 

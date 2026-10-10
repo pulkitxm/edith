@@ -4,6 +4,21 @@ import Testing
 @testable import CodeStatsExtension
 
 @Suite(.serialized) @MainActor struct CodeStatsOriginalCLITests {
+    @Test func originalRunReportsAnOwnedRefusalWithTheUnavailableExitCode() async throws {
+        let harness = try CodeStatsWorkflowHarness()
+        defer { harness.fixture.remove() }
+        let workflow = await harness.workflow(enabled: false)
+        let old = CodeStatsWorkerOperations.workflow
+        CodeStatsWorkerOperations.workflow = workflow
+        defer { CodeStatsWorkerOperations.workflow = old }
+        let reply = try await CodeStatsCLIExecution.run(.init(arguments: ["run"]))
+        #expect(reply.exitCode == 4 && reply.stdout.isEmpty)
+        #expect(
+            reply.stderr
+                == "error: Code Stats is off. Turn it on with ed extensions enable codeStats.\n")
+        await workflow.shutdown()
+    }
+
     @Test func originalStatusAndScheduleUseTheOwnedWorkflowAndDefaults() async throws {
         let harness = try CodeStatsWorkflowHarness()
         defer { harness.fixture.remove() }
