@@ -32,6 +32,13 @@ final class CalendarUIFacade {
         self.invalidate = invalidate
     }
 
+    deinit {
+        refreshTask?.cancel()
+        for task in actions.values { task.cancel() }
+        let invalidate = invalidate
+        Task { @MainActor in invalidate() }
+    }
+
     func observe() async {
         await refreshAndWait()
         while !stopped && !Task.isCancelled {

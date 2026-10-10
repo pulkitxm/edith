@@ -87,6 +87,7 @@ final class ExtensionRuntime: NSObject {
                 store.start()
             }
         case "configureUI":
+            uiPresentations = uiPresentations.filter { $0.value.isRetained }
             guard store == nil, let configuration = ExtensionUIConfiguration(context: input),
                 configuration.extensionID == "calendar", let client = configuration.engineClient,
                 let scene = CalendarUIPresentation(client: client, context: input),
@@ -99,7 +100,7 @@ final class ExtensionRuntime: NSObject {
                 let id = UUID(uuidString: value), let scene = uiPresentations[id],
                 scene.matches(input)
             else { return ["ok": false] as NSDictionary }
-            return scene.controller()
+            return scene.controller() ?? (["ok": false] as NSDictionary)
         case "stopUI":
             for scene in uiPresentations.values { scene.shutdown() }
             uiPresentations.removeAll()

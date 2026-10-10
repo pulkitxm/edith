@@ -73,6 +73,30 @@ import Testing
         #expect(fixture.engine.snapshot().events.count == 1)
     }
 
+    @Test func permissionDemandIsCoalescedAndDisableRejectsItsLateResult() async throws {
+        let fixture = Fixture()
+        defer { fixture.stop() }
+        let gate = CalendarGrantGate()
+        var grants = 0
+        let engine = CalendarUIEngine(
+            store: fixture.store, presentation: fixture.presentation, authorized: { true },
+            open: { _ in false },
+            grant: {
+                grants += 1; await gate.wait()
+            })
+        let payload = Data("{\"action\":\"permission\"}".utf8)
+        let first = Task { try await engine.execute("calendar.ui.action", payload: payload) }
+        await gate.entered()
+        let second = Task { try await engine.execute("calendar.ui.action", payload: payload) }
+        await Task.yield()
+        engine.shutdown()
+        gate.release()
+        for task in [first, second] {
+            await #expect(throws: (any Error).self) { try await task.value }
+        }
+        #expect(grants == 1 && engine.snapshot().events.isEmpty)
+    }
+
     @MainActor private final class Fixture {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let channel: ExtensionSharedState
@@ -106,5 +130,29 @@ import Testing
             engine.shutdown(); store.shutdown(); presentation.shutdown()
             try? FileManager.default.removeItem(at: root)
         }
+    }
+}
+
+@MainActor
+private final class CalendarGrantGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var waiting: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation {
+            continuation = $0
+            waiting?.resume()
+            waiting = nil
+        }
+    }
+
+    func entered() async {
+        if continuation != nil { return }
+        await withCheckedContinuation { waiting = $0 }
+    }
+
+    func release() {
+        continuation?.resume()
+        continuation = nil
     }
 }

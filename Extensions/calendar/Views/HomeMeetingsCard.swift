@@ -55,6 +55,14 @@ struct HomeMeetingsCard: View {
                     }
                 }
                 openCalendar
+                if store.loaded, let error = store.error {
+                    HStack {
+                        Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                    }
+                    .padding(.top, UIScale.pt(10))
+                }
             }
         }
         .pageTask(cancel: store.suspend) { await store.observe() }

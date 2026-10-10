@@ -40,6 +40,8 @@ final class CalendarUIEngine {
     private let open: (URL) -> Bool
     private let grant: () async throws -> Void
     private var stopped = false
+    private var permissionTask: Task<Void, Error>?
+    private var permissionID: UUID?
 
     init(
         store: CalendarStore, presentation: CalendarPresentationState,
@@ -78,7 +80,9 @@ final class CalendarUIEngine {
             try Task.checkCancellation()
             switch request.action {
             case .permission:
-                try await grant()
+                try await requestPermission()
+                try Task.checkCancellation()
+                guard !stopped else { throw ExtensionPeerError.unavailable }
                 store.refreshAuthStatus()
                 if authorized() { _ = await store.refreshAndWait() }
             case .open:
@@ -116,7 +120,29 @@ final class CalendarUIEngine {
                 } : [])
     }
 
-    func shutdown() { stopped = true }
+    func shutdown() {
+        stopped = true
+        permissionTask?.cancel()
+    }
+
+    private func requestPermission() async throws {
+        if let permissionTask {
+            try await permissionTask.value
+            return
+        }
+        let id = UUID()
+        permissionID = id
+        let grant = grant
+        let task = Task { try await grant() }
+        permissionTask = task
+        defer {
+            if permissionID == id {
+                permissionTask = nil
+                permissionID = nil
+            }
+        }
+        try await task.value
+    }
 
     private func validateObject(_ payload: Data, keys: Set<String>) throws {
         guard payload.count <= 8192,
@@ -132,9 +158,15 @@ final class CalendarUIEngine {
         hidden.location = event.location == nil ? nil : "Private location"
         hidden.latitude = nil
         hidden.longitude = nil
-        hidden.meetingURL =
-            MeetingLink.url(for: event) == nil
-            ? nil : "https://meet.google.com/private"
+        if let url = MeetingLink.url(for: event) {
+            var components = URLComponents()
+            components.scheme = url.scheme
+            components.host = url.host
+            components.path = "/private"
+            hidden.meetingURL = components.url?.absoluteString
+        } else {
+            hidden.meetingURL = nil
+        }
         hidden.url = nil
         hidden.notes = event.notes == nil ? nil : "Private notes"
         hidden.organizer = event.organizer.map { privateParticipant($0) }

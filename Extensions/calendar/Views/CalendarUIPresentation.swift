@@ -5,7 +5,9 @@ import SwiftUI
 
 @MainActor
 final class CalendarUIPresentation {
-    let facade: CalendarUIFacade
+    private var pendingFacade: CalendarUIFacade?
+    private weak var presentedFacade: CalendarUIFacade?
+    var isRetained: Bool { pendingFacade != nil || presentedFacade != nil }
     private let location: String
     private let tile: SurfaceTile?
 
@@ -30,7 +32,7 @@ final class CalendarUIPresentation {
     }
 
     init(facade: CalendarUIFacade, location: String, tile: SurfaceTile? = nil) {
-        self.facade = facade
+        pendingFacade = facade
         self.location = location
         self.tile = tile
     }
@@ -48,8 +50,10 @@ final class CalendarUIPresentation {
         return context["tile"] == nil
     }
 
-    func controller() -> NSViewController {
-        let facade = self.facade
+    func controller() -> NSViewController? {
+        guard let facade = pendingFacade ?? presentedFacade else { return nil }
+        presentedFacade = facade
+        pendingFacade = nil
         if let tile {
             return NSHostingController(
                 rootView: ExtensionPageHost {
@@ -59,5 +63,9 @@ final class CalendarUIPresentation {
         return NSHostingController(rootView: ExtensionPageHost { CalendarPage(store: facade) })
     }
 
-    func shutdown() { facade.shutdown() }
+    func shutdown() {
+        (pendingFacade ?? presentedFacade)?.shutdown()
+        pendingFacade = nil
+        presentedFacade = nil
+    }
 }

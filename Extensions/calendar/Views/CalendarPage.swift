@@ -27,6 +27,14 @@ struct CalendarPage: View {
                 title: "Calendar unavailable", message: store.error ?? "Reading your schedule.",
                 layout: .list, retry: store.refresh
             ) {
+                if let error = store.error {
+                    HStack {
+                        Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Retry", action: store.refresh).buttonStyle(.edith(.toolbar))
+                    }
+                    .padding(.horizontal, UIScale.pt(24))
+                }
                 if !store.authorized {
                     CalendarPermissionPrompt(
                         style: calendarStyle, accentColor: theme,
