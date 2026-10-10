@@ -1390,7 +1390,11 @@
         "Extensions/studio/UIBridge/StudioUITransfer.swift",
         "Extensions/studio/UIBridge/StudioUILongOperations.swift",
         "Extensions/studio/UIBridge/StudioUIImageCommands.swift",
-        "Extensions/studio/UIBridge/StudioUIPDFCommands.swift"
+        "Extensions/studio/UIBridge/StudioUIPDFCommands.swift",
+        "Extensions/studio/UIBridge/StudioUIFailure.swift",
+        "Extensions/studio/UIBridge/StudioUIVideoState.swift",
+        "Extensions/studio/UIBridge/StudioUIVideoSessions.swift",
+        "Extensions/studio/UIBridge/StudioUIVideoClient.swift"
       ]
     },
     "nativeSources": [

@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: StudioModel?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
+    private let videoSessions = StudioUIVideoSessions()
     private let resources = StudioUIResources()
     private let work = StudioUILongOperations()
     private let streams = try! ExtensionCLIStreams(owner: "studio")
@@ -23,24 +24,35 @@ final class ExtensionRuntime: NSObject {
                 return try self.streams.invoke(
                     StudioCommand.self, operation: command, prefix: "studio.cli", payload: payload)
             }
-            if command.hasPrefix("studio.ui.blob.") {
-                return try self.resources.invoke(command, payload: payload)
-            }
-            if command.hasPrefix("studio.ui.work.") {
-                return try self.work.invoke(command, payload: payload)
-            }
-            if command.hasPrefix("studio.ui.pdf.") {
-                return try await StudioUIPDFCommands.execute(
-                    command, payload: payload, model: model,
-                    resources: self.resources, work: self.work)
-            }
-            if command.hasPrefix("studio.ui.image.") {
-                return try await StudioUIImageCommands.execute(
-                    command, payload: payload, model: model,
-                    resources: self.resources, work: self.work)
-            }
             if command.hasPrefix("studio.ui.") {
-                return try await StudioUICommands.execute(command, payload: payload, model: model)
+                do {
+                    if command.hasPrefix("studio.ui.video.") {
+                        return try await self.videoSessions.execute(
+                            command, payload: payload, resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.blob.") {
+                        return try self.resources.invoke(command, payload: payload)
+                    }
+                    if command.hasPrefix("studio.ui.work.") {
+                        return try self.work.invoke(command, payload: payload)
+                    }
+                    if command.hasPrefix("studio.ui.pdf.") {
+                        return try await StudioUIPDFCommands.execute(
+                            command, payload: payload, model: model,
+                            resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.image.") {
+                        return try await StudioUIImageCommands.execute(
+                            command, payload: payload, model: model,
+                            resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.") {
+                        return try await StudioUICommands.execute(
+                            command, payload: payload, model: model)
+                    }
+                } catch is CancellationError { throw CancellationError() } catch {
+                    return try JSONEncoder().encode(StudioUIFailure(error))
+                }
             }
             if command == "studio.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
@@ -71,6 +83,7 @@ final class ExtensionRuntime: NSObject {
         Task {
             await streams.stopAndWait()
             await work.stopAndWait()
+            await videoSessions.stopAndWait()
             await commands.shutdownAndWait()
             await model?.stopAndWait()
             shutdown()
@@ -142,7 +155,9 @@ final class ExtensionRuntime: NSObject {
     private func shutdown() {
         streams.stop()
         resources.shutdown()
-        Task { await work.stopAndWait() }
+        Task {
+            await work.stopAndWait(); await videoSessions.stopAndWait()
+        }
         commands.shutdown()
         TextEditingCommands.shutdown()
         uiModel?.shutdown()

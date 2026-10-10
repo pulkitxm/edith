@@ -126,6 +126,12 @@ import Observation
         guard !isStopped, data.count <= ExtensionEngineWire.maximumPayloadBytes else {
             throw ExtensionEngineError.unavailable
         }
+        if let failure = try? JSONDecoder().decode(StudioUIFailure.self, from: data) {
+            guard !failure.studioFailure.isEmpty, failure.studioFailure.utf8.count <= 16_384 else {
+                throw ExtensionEngineError.rejected
+            }
+            throw StudioUIOperationFailure(message: failure.studioFailure)
+        }
         return try JSONDecoder().decode(Value.self, from: data)
     }
 

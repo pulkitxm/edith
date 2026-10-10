@@ -164,6 +164,7 @@ enum VideoAudioProcessing {
 
 extension VideoEditorModel {
     func processAudio(assetID: String, denoise: Bool) {
+        if remoteAction("audio", object: ["assetID": assetID, "denoise": denoise]) { return }
         guard audioTask == nil else { return }
         guard let project,
             let source = project.assets.first(where: { $0.id == assetID })
@@ -189,6 +190,7 @@ extension VideoEditorModel {
     }
 
     func detectSilence() {
+        if remoteAction("silence") { return }
         guard audioTask == nil else { return }
         guard let project,
             let clip = project.clips.first(where: { $0.id == selectedClipID }),

@@ -170,7 +170,7 @@ struct VideoTimeline: View {
             HStack(spacing: 0) {
                 ForEach(
                     Array(
-                        (model.pipeline?.segments.filter { $0.clip.id == clip.id } ?? [])
+                        (model.previewMetadata?.segments.filter { $0.clip.id == clip.id } ?? [])
                             .enumerated()), id: \.offset
                 ) { _, segment in
                     VideoWaveform(
@@ -191,7 +191,8 @@ struct VideoTimeline: View {
     }
 
     private var clipItems: [Item] {
-        let grouped = Dictionary(grouping: model.pipeline?.segments ?? [], by: { $0.clip.id })
+        let grouped = Dictionary(
+            grouping: model.previewMetadata?.segments ?? [], by: { $0.clip.id })
         let labels = Dictionary(
             uniqueKeysWithValues: (model.project?.assets ?? []).map { ($0.id, $0.label) })
         return (model.project?.clips ?? []).compactMap { clip in

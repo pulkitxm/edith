@@ -137,7 +137,7 @@ struct VideoBeatPanel: View {
     }
 
     private var frameRate: VideoMarkerFrameRate {
-        guard let duration = model.pipeline?.videoComposition.frameDuration else { return .fps30 }
+        guard let duration = model.previewMetadata?.frameDuration else { return .fps30 }
         return (try? VideoBeatPanelState.frameRate(duration)) ?? .fps30
     }
 
@@ -292,7 +292,7 @@ struct VideoBeatPanel: View {
                             project.markers + additions.filter { !existing.contains($0.frame) })
                     }
                 }
-                .disabled(model.pipeline == nil)
+                .disabled(model.previewMetadata == nil)
                 .buttonStyle(.edith(.primary))
             }
             Text(
@@ -311,14 +311,14 @@ struct VideoBeatPanel: View {
     }
 
     private var canUseSelectedClip: Bool {
-        model.pipeline?.segments.contains {
+        model.previewMetadata?.segments.contains {
             $0.clip.id == model.selectedClipID && $0.clip.assetID == selectedAssetID
         } == true
     }
 
     private func useSelectedClip() {
         let segments =
-            model.pipeline?.segments.filter {
+            model.previewMetadata?.segments.filter {
                 $0.clip.id == model.selectedClipID && $0.clip.assetID == selectedAssetID
             } ?? []
         guard
@@ -369,7 +369,7 @@ struct VideoBeatPanel: View {
                     model.seek(to: frameRate.seconds(at: snapped))
                 }
             }
-            .disabled(model.pipeline == nil)
+            .disabled(model.previewMetadata == nil)
             Text(
                 "Playhead: \(frameRate.timecode(at: (try? frameRate.frame(at: model.playhead)) ?? 0))  ·  \(model.playhead.formatted(.number.precision(.fractionLength(3)))) output seconds"
             )

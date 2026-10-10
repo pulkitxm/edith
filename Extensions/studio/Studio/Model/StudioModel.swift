@@ -574,7 +574,7 @@ final class StudioModel {
     func videoEditor(media: [URL], project: URL?) -> VideoEditorModel {
         let key = StudioRoute.videoEditor(media, project: project).navigationToken
         if let editor = videoEditors[key] { return editor }
-        let editor = VideoEditorModel()
+        let editor = VideoEditorModel(facade: facade)
         videoEditors[key] = editor
         return editor
     }

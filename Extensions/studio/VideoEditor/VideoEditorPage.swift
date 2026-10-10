@@ -131,7 +131,7 @@ struct VideoEditorPage: View {
         .background(DashSkin.paper(scheme == .dark))
         .navigationTitle("Video editor")
         .edithSheet(isPresented: $showingExport) {
-            VideoExportSheet(model: model)
+            VideoExportSheet(model: model, exporter: model.exporter)
         }
         .edithSheet(isPresented: $showingBeats) {
             VideoBeatPanel(model: model)
@@ -145,7 +145,7 @@ struct VideoEditorPage: View {
             await Task.yield()
             guard !Task.isCancelled else { return }
             defer { opening = false }
-            VideoEditorOpenBridge.shared.activeEditor = model
+            if model.facade == nil { VideoEditorOpenBridge.shared.activeEditor = model }
             if let commandMounted {
                 commandMounted()
                 return
@@ -161,8 +161,7 @@ struct VideoEditorPage: View {
             if VideoEditorOpenBridge.shared.activeEditor === model {
                 VideoEditorOpenBridge.shared.activeEditor = nil
             }
-            model.player.pause()
-            model.focusPlayer.pause()
+            model.pausePlayback()
         }
         .onChange(of: model.editingZoomID) { _, id in
             if id != nil { editorTool = .zoom }
@@ -296,21 +295,21 @@ struct VideoEditorPage: View {
         } label: {
             exportLabel
         }
-        .disabled(model.pipeline == nil && VideoExporter.shared.job == nil)
+        .disabled(model.previewMetadata == nil && model.exporter.job == nil)
         .labelStyle(.iconOnly)
         .help("Export").accessibilityLabel("Export video")
     }
 
     @ViewBuilder private var exportLabel: some View {
-        switch VideoExporter.shared.job?.phase {
+        switch model.exporter.job?.phase {
         case .exporting:
             Label {
                 Text(
-                    "Exporting \((VideoExporter.shared.job?.progress ?? 0).formatted(.percent.precision(.fractionLength(0))))"
+                    "Exporting \((model.exporter.job?.progress ?? 0).formatted(.percent.precision(.fractionLength(0))))"
                 )
                 .monospacedDigit()
             } icon: {
-                LoadingProgress(value: VideoExporter.shared.job?.progress ?? 0)
+                LoadingProgress(value: model.exporter.job?.progress ?? 0)
                     .progressViewStyle(.circular)
                     .controlSize(.small)
             }
@@ -373,11 +372,11 @@ struct VideoEditorPage: View {
             let source = zoomSourceRect(in: display)
             ZStack {
                 Color.black
-                if model.pipeline != nil {
+                if model.previewMetadata != nil {
                     let placing =
                         editorTool == .zoom && model.editingZoomID != nil
-                        && model.player.rate == 0
-                    if placing && !model.focusPreviewReady {
+                        && model.playbackRate == 0
+                    if placing && !model.focusReady {
                         LoadingContainer(state: .loading) {
                             EmptyView()
                         } placeholder: {
@@ -386,7 +385,16 @@ struct VideoEditorPage: View {
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
-                        EditorPlayerView(player: placing ? model.focusPlayer : model.player)
+                        if model.facade != nil {
+                            if let image = placing ? model.remoteFocusFrame : model.remoteFrame {
+                                Image(decorative: image, scale: 1).resizable().aspectRatio(
+                                    contentMode: .fit)
+                            } else {
+                                LoadingIndicator("Preparing video preview").foregroundStyle(.white)
+                            }
+                        } else {
+                            EditorPlayerView(player: placing ? model.focusPlayer : model.player)
+                        }
                         if placing {
                             ZoomFocusRegion(
                                 display: source,
@@ -421,7 +429,7 @@ struct VideoEditorPage: View {
     }
 
     private func videoRect(in viewport: CGSize) -> CGRect {
-        guard let canvas = model.pipeline?.canvas,
+        guard let canvas = model.previewMetadata?.canvas,
             canvas.width > 0, canvas.height > 0
         else { return CGRect(origin: .zero, size: viewport) }
         let scale = min(viewport.width / canvas.width, viewport.height / canvas.height)
@@ -474,7 +482,7 @@ struct VideoEditorPage: View {
                         ForEach(Array(clips.enumerated()), id: \.element.id) { index, clip in
                             Button {
                                 model.selectedClipID = clip.id
-                                if let segment = model.pipeline?.segments.first(where: {
+                                if let segment = model.previewMetadata?.segments.first(where: {
                                     $0.clip.id == clip.id
                                 }) {
                                     model.seek(to: segment.outputStart)
@@ -587,7 +595,7 @@ struct VideoEditorPage: View {
                     systemImage: "plus.magnifyingglass", action: model.addZoom
                 )
                 .buttonStyle(.edith(.primary))
-                .disabled(model.pipeline == nil)
+                .disabled(model.previewMetadata == nil)
                 if let id = model.editingZoomID {
                     Button {
                         model.removeZoom(id)
@@ -620,7 +628,7 @@ struct VideoEditorPage: View {
                 .fixedSize(horizontal: true, vertical: false)
                 Button("Add text", systemImage: "plus", action: model.addCaption)
                     .buttonStyle(.edith(.primary))
-                    .disabled(model.pipeline == nil || model.captionText.isEmpty)
+                    .disabled(model.previewMetadata == nil || model.captionText.isEmpty)
             }
     }
 

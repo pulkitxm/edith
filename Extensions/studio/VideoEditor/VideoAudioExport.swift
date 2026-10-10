@@ -15,6 +15,7 @@ extension VideoEditorModel {
                 self.errorMessage = "Choose an audio destination different from your source media."
                 return
             }
+            if self.exportRemoteAudio(to: url, settings: settings) { return }
             VideoExporter.shared.start(to: url) { progress in
                 let pipeline = try await VideoRenderPipeline.make(project: project)
                 let report = try await pipeline.exportAudio(

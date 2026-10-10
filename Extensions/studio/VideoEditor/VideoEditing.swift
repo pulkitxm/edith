@@ -48,7 +48,9 @@ extension VideoEditorModel {
     var rulerPlayhead: Double { rulerTime(at: playhead) }
 
     func rulerTime(at output: Double) -> Double {
-        guard let segments = pipeline?.segments, let last = segments.last else { return output }
+        guard let segments = previewMetadata?.segments, let last = segments.last else {
+            return output
+        }
         let segment = segments.first { output < $0.outputEnd } ?? last
         return segment.rulerTime(at: min(segment.outputEnd, max(segment.outputStart, output)))
     }
@@ -62,7 +64,7 @@ extension VideoEditorModel {
             if let zoom = project?.zooms.first(where: { $0.id == id }) { selectZoom(zoom) }
         case .clip(let id):
             selectedClipID = id
-            if let segment = pipeline?.segments.first(where: { $0.clip.id == id }) {
+            if let segment = previewMetadata?.segments.first(where: { $0.clip.id == id }) {
                 seek(to: segment.outputStart)
             }
         case .annotation(let id):
@@ -110,12 +112,12 @@ extension VideoEditorModel {
 
     func editClip(_ id: String, range: ZoomTimelineTiming.Range, edge: String) {
         guard let clip = project?.clips.first(where: { $0.id == id }),
-            let segments = pipeline?.segments.filter({ $0.clip.id == id }),
+            let segments = previewMetadata?.segments.filter({ $0.clip.id == id }),
             let first = segments.first, let last = segments.last
         else { return }
         if edge == "move" {
             let destination = range.start + (range.end - range.start) / 2
-            let target = pipeline?.segments.first { destination < $0.outputEnd }?.clip.id
+            let target = previewMetadata?.segments.first { destination < $0.outputEnd }?.clip.id
             mutate { document in
                 var clips = document.clips
                 guard let from = clips.firstIndex(where: { $0.id == id }),
