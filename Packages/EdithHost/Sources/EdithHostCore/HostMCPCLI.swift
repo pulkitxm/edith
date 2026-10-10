@@ -142,7 +142,8 @@ public actor HostMCPCLI {
                 throw HostCLIError.usage("Tool pagination is not supported.")
             }
             let commands =
-                registry.providers.flatMap { $0.catalog.commands } + (coreCatalog?.commands ?? [])
+                registry.providers.flatMap { $0.catalog.allCommands }
+                + (coreCatalog?.commands ?? [])
             let native = registry.providers.flatMap { $0.catalog.nativeTools ?? [] }.map(\.tool)
             return .object([
                 "tools": .array(
@@ -179,7 +180,8 @@ public actor HostMCPCLI {
         guard Set(params.keys).isSubset(of: ["name", "arguments", "_meta"]),
             let name = params["name"]?.string,
             let command =
-                (registry.providers.flatMap({ $0.catalog.commands }) + (coreCatalog?.commands ?? []))
+                (registry.providers.flatMap({ $0.catalog.allCommands })
+                + (coreCatalog?.commands ?? []))
                 .first(where: {
                     $0.toolName == name
                 }),
@@ -207,7 +209,11 @@ public actor HostMCPCLI {
         }
         var routed = command.route
         if command.jsonOutput != false, !arguments.contains("--json") { routed.append("--json") }
-        if command.destructive, object["confirm"] == .bool(true) { routed.append("--yes") }
+        if command.destructive, object["confirm"] == .bool(true), command.route.first != "agent",
+            command.route != ["extensions", "setup"]
+        {
+            routed.append("--yes")
+        }
         routed += arguments
         do {
             let reply: ExtensionCLIReply

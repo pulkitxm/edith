@@ -131,6 +131,12 @@ public struct HostCommandCLI: Sendable {
             return try HostCLIOutput.text(Self.help)
         }
         let command = arguments[0]
+        if command == "agent", arguments.count > 1,
+            ["tasks", "schedule", "activity"].contains(arguments[1])
+        {
+            return try await HostCoreAgentRouteCLI.execute(
+                arguments, input: input, streamWrite: streamWrite, invoke: invoke)
+        }
         if Self.coreCommands.contains(command), arguments.last == "--help" {
             return try HostCLIOutput.text(HostCLIHelp.text(Array(arguments.dropLast())))
         }
@@ -201,6 +207,14 @@ public struct HostCommandCLI: Sendable {
             }
             return try await configuration(configArguments, input: configInput)
         }
+        if command == "agent" {
+            return try await core(arguments, input: input)
+        }
+        if command == "extensions", arguments.count > 1,
+            ["status", "setup", "verify", "doctor"].contains(arguments[1])
+        {
+            return try await core(arguments, input: input)
+        }
         if ["app", "permissions"].contains(command) {
             if arguments.starts(with: ["app", "relaunch"]) {
                 let args = try HostCLIArguments(
@@ -269,7 +283,7 @@ public struct HostCommandCLI: Sendable {
 
     private func core(_ arguments: [String], input: Data) async throws -> ExtensionCLIReply {
         let timeout: Double =
-            arguments.first == "camera"
+            arguments.first == "camera" || arguments.starts(with: ["extensions", "setup"])
             ? 120
             : arguments.starts(with: ["app", "check-updates"]) ? 65 : 30
         let data = try await invoke(
@@ -495,7 +509,7 @@ public struct HostCommandCLI: Sendable {
         let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
         let routes =
             HostCLIHelp.routes
-            + (registry?.providers.flatMap { $0.catalog.commands.map(\.route) } ?? [])
+            + (registry?.providers.flatMap { $0.catalog.allCommands.map(\.route) } ?? [])
         var candidates = routes.filter { $0.starts(with: leading) && $0.count > leading.count }.map
         { $0[leading.count] }
         if leading.count == 2, leading.first == "config",
@@ -517,10 +531,15 @@ public struct HostCommandCLI: Sendable {
         }
         if let provider = registry?.providers.first(where: { provider in
             leading.first.map { word in
-                provider.catalog.commands.contains { $0.route.first == word }
-                    || (provider.catalog.machineAliases ?? []).contains(word)
+                provider.catalog.allCommands.contains {
+                    $0.route.starts(with: leading) || leading.starts(with: $0.route)
+                } || (provider.catalog.machineAliases ?? []).contains(word)
             } ?? false
-        }), let operation = provider.catalog.completionOperation {
+        }),
+            let operation = leading.first == "agent"
+                ? provider.catalog.coreOwner?.completionOperation
+                : provider.catalog.completionOperation
+        {
             let payload = try HostCLIJSON.object([
                 "words": .strings(words), "index": .integer(Int64(index)),
             ]).encoded()
@@ -641,12 +660,12 @@ public struct HostCommandCLI: Sendable {
 
     public static let coreCommands = [
         "guide", "schema", "version", "status", "completions", "install", "uninstall", "config",
-        "app", "permissions", "extensions", "invoke", "mcp",
+        "app", "permissions", "extensions", "invoke", "mcp", "agent",
     ]
     private static let help = """
         usage: ed <command> [arguments]
 
-        core: guide schema version status completions install uninstall config app permissions
+        core: guide schema version status completions install uninstall config app permissions agent
         marketplace: extensions invoke
         tools: mcp
 

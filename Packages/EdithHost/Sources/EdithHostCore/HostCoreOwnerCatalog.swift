@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 public struct HostCoreOwnerCatalog: Codable, Sendable {
@@ -17,13 +18,11 @@ public struct HostCoreOwnerCatalog: Codable, Sendable {
     public let agent: Agent?
     public let readiness: Readiness?
     public let routes: [HostCLIProviderCommand]?
+    public let parserHelp: HostCLIJSON?
+    public let completionOperation: String?
 
     public static func decode(_ data: Data, owner: String) throws -> Self? {
-        struct Envelope: Decodable { let coreOwner: HostCoreOwnerCatalog? }
-        _ = try HostCLIProviderCatalog.decode(data, owner: owner)
-        let catalog = try JSONDecoder().decode(Envelope.self, from: data).coreOwner
-        try catalog?.validate(owner: owner)
-        return catalog
+        try HostCLIProviderCatalog.decode(data, owner: owner).coreOwner
     }
 
     public func validate(owner expected: String) throws {
@@ -43,9 +42,22 @@ public struct HostCoreOwnerCatalog: Codable, Sendable {
                 readiness.setup == nil || readiness.setup == owner + ".lifecycle.setup"
             else { throw HostCLIError.rejected("Invalid owning readiness operations.") }
         }
+        if let completionOperation, completionOperation != owner + ".agent.complete" {
+            throw HostCLIError.rejected("Invalid original agent completion operation.")
+        }
         let routes = routes ?? []
         guard routes.count <= 128, Set(routes.map(\.route)).count == routes.count else {
             throw HostCLIError.rejected("Invalid owning agent routes.")
+        }
+        if let parserHelp {
+            guard parserHelp.object?["serializationVersion"] == .integer(0),
+                let command = parserHelp.object?["command"],
+                command.object?["commandName"] == .string("agent"),
+                try parserHelp.encoded().count <= 1_048_576
+            else {
+                throw HostCLIError.rejected("Invalid original agent parser catalog.")
+            }
+            try HostCLIProviderCatalog.validateHelp(command, route: [], commands: routes)
         }
         for route in routes {
             let domains =
@@ -78,6 +90,7 @@ public struct HostCoreOwnerRegistry: Sendable {
     public struct Provider: Sendable {
         public let state: HostCLIProviderState
         public let catalog: HostCoreOwnerCatalog
+        public let identity: ExtensionProcessIdentity
     }
     public let states: [HostCLIProviderState]
     public let providers: [Provider]
@@ -108,8 +121,10 @@ public struct HostCoreOwnerRegistry: Sendable {
             }
             for _ in 0..<8 { if let state = iterator.next() { add(state) } }
             for await (state, catalog, error) in group {
-                if let catalog {
-                    providers.append(Provider(state: state, catalog: catalog))
+                if let catalog, let pid = state.processIdentifier,
+                    let identity = ExtensionProcessIdentity.read(pid), identity.isAlive
+                {
+                    providers.append(Provider(state: state, catalog: catalog, identity: identity))
                 } else {
                     issues[state.id] = error ?? "The owner has not supplied its typed core hooks."
                 }
@@ -131,7 +146,9 @@ public struct HostCoreOwnerRegistry: Sendable {
         _ type: T.Type, provider: Provider, operation: String,
         payload: Data = Data("{}".utf8), timeout: Double = 30
     ) async throws -> T {
-        guard try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state)
+        guard provider.identity.isAlive,
+            ExtensionProcessIdentity.read(provider.identity.pid) == provider.identity,
+            try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state)
         else {
             throw HostCoreCommandFailure(
                 "The owning extension changed or was disabled.",
@@ -142,7 +159,9 @@ public struct HostCoreOwnerRegistry: Sendable {
                 action: .invoke, id: provider.state.id,
                 operation: operation, payload: payload, timeout: timeout))
         try Task.checkCancellation()
-        guard try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state),
+        guard provider.identity.isAlive,
+            ExtensionProcessIdentity.read(provider.identity.pid) == provider.identity,
+            try await HostCLIProviderRegistry.states(invoke: invoke).contains(provider.state),
             data.count <= HostCLIRequest.maximumPayload
         else {
             throw HostCoreCommandFailure(

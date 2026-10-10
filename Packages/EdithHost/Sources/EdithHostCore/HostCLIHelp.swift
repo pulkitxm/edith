@@ -22,6 +22,23 @@ public enum HostCLIHelp {
         var root = coreCommand()
         var issues = registry?.issues ?? [:]
         for provider in registry?.providers ?? [] {
+            if let core = provider.catalog.coreOwner {
+                if let command = core.parserHelp?.object?["command"] {
+                    root = merge(root, command)
+                } else {
+                    for command in core.routes ?? [] {
+                        issues[provider.state.id + ".agent"] =
+                            "Original agent parser metadata is unavailable."
+                        root = insert(
+                            root, route: command.route,
+                            leaf: .object([
+                                "commandName": .string(command.route.last!),
+                                "abstract": .string(command.summary), "shouldDisplay": .bool(true),
+                                "metadataComplete": .bool(false),
+                            ]))
+                    }
+                }
+            }
             if let documents = provider.catalog.parserHelp, !documents.isEmpty {
                 for document in documents {
                     if let command = document.object?["command"] { root = merge(root, command) }
@@ -115,6 +132,7 @@ public enum HostCLIHelp {
             {
                 leaf["defaultSubcommand"] = .string("ls")
             }
+            if definition.route == ["agent"] { leaf["defaultSubcommand"] = .string("status") }
             if definition.route == ["app"] { leaf["defaultSubcommand"] = .string("actions") }
             root = insert(
                 root, route: definition.route,
@@ -239,6 +257,22 @@ public enum HostCLIHelp {
         .init("app back", "Navigate back without focusing."),
         .init("app forward", "Navigate forward without focusing."),
         .init("app snapshot", "Save app window images.", options: ["dir"]),
+        .init("agent", "Inspect and control the owned background core and optional jobs."),
+        .init("agent status", "Show the actual owned process, build, memory and store."),
+        .init("agent jobs", "List registered jobs from their actual owners."),
+        .init("agent restart", "Restart the owned same-executable core process."),
+        .init("agent logs", "Read recent owned background log lines.", options: ["last"]),
+        .init("agent events", "Read the retained background event timeline."),
+        .init("agent run", "Queue a registered job through its owner.", words: ["job"]),
+        .init("agent cancel", "Cancel a running job through its owner.", words: ["job"]),
+        .init("extensions status", "Read actual owning extension readiness.", words: ["[id]"]),
+        .init("extensions verify", "Run every owning extension readiness check.", words: ["id"]),
+        .init(
+            "extensions doctor", "Diagnose owning extension setup and runtime problems.",
+            words: ["[id]"]),
+        .init(
+            "extensions setup", "Run noninteractive owned setup or preview it.",
+            flags: ["json", "dry-run", "install-tools"], words: ["id"]),
         .init("extensions", "Manage individual optional downloads."),
         .init("extensions ls", "List all optional extensions.", flags: []),
         .init("extensions info", "Inspect an extension.", flags: [], words: ["id"]),
