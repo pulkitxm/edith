@@ -70,7 +70,7 @@ struct DocsBrowserTests {
         let snapshot = DocsSurface.snapshot(library: library, location: .init(path: "README.md"))
         let encoded = try snapshot.encoded()
         #expect(encoded.count <= 524_288)
-        #expect(snapshot.rows.count == 100)
+        #expect(snapshot.rows.count == min(100, library.pages.count))
         #expect(snapshot.rows.allSatisfy { !$0.actions.isEmpty })
         #expect(snapshot.sources.first?.id == "overview")
         var tile = SurfaceTile(.ability("docs"))
@@ -79,6 +79,20 @@ struct DocsBrowserTests {
         let hidden = SurfaceCommandService.project(snapshot, tile: tile)
         #expect(hidden.rows.count == 1)
         #expect(hidden.rows.allSatisfy { $0.actions.isEmpty })
+    }
+
+    @Test func surfaceTruncatesAnOversizedLibraryToOneHundredRows() throws {
+        let library = DocsLibrary(
+            sources: (0..<120).map {
+                .init(
+                    path: "reference/page-\($0).md",
+                    markdown: "# Page \($0)\n\nSynthetic reference.")
+            })
+        let snapshot = DocsSurface.snapshot(library: library, location: .init(path: "README.md"))
+        #expect(library.pages.count == 120)
+        #expect(snapshot.rows.count == 100)
+        #expect(Set(snapshot.rows.map(\.id)).count == 100)
+        #expect(try snapshot.encoded().count <= 524_288)
     }
 
     @Test func documentViewRetainsCompleteBrowserAndOutlineUI() throws {
