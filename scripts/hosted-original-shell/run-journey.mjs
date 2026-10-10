@@ -91,8 +91,6 @@ try {
     EDITH_APPLICATION_IDENTIFIER: identifier,
     EDITH_SHARED_DEFAULTS_SUITE: identifier,
     EDITH_EXTENSION_FIXTURE_HOME: join(directory, "synthetic-data"),
-    CFFIXED_USER_HOME: join(directory, "synthetic-data"),
-    SSH_AUTH_SOCK: "",
   };
   const auditExecutable = join(output, "JourneyProcessAudit");
   execFileSync(
@@ -118,17 +116,26 @@ try {
   execFileSync(
     "xcrun",
     [
-      "swiftc", "-parse-as-library", "-target", "arm64-apple-macos14.0",
+      "swiftc",
+      "-parse-as-library",
+      "-target",
+      "arm64-apple-macos14.0",
       "Tests/HostedOriginalShell/Sources/JourneyContract/JourneyContract.swift",
       "Tests/HostedOriginalShell/FixtureSources/JourneyRegistration.swift",
-      "-o", registrationExecutable,
+      "-o",
+      registrationExecutable,
     ],
     { stdio: "inherit", timeout: 180_000 },
   );
-  const registerApplication = (version) => registerJourneyApplication({
-    directory, fixture, environment: variables, accountHome: homedir(),
-    version, registrationExecutable,
-  });
+  const registerApplication = (version) =>
+    registerJourneyApplication({
+      directory,
+      fixture,
+      environment: variables,
+      accountHome: homedir(),
+      version,
+      registrationExecutable,
+    });
   await registerApplication("1.0.0");
   const replacement = await createJourneyReplacement({
     directory,

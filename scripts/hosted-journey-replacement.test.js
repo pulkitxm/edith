@@ -189,17 +189,26 @@ test("registration verifies the new app and registration failure restores the pr
     const value = await setup({
       registerApplication: async (version) => {
         registered.push(version);
-        if (fail && version === "2.0.0") throw Error("synthetic registration rejection");
+        if (fail && version === "2.0.0")
+          throw Error("synthetic registration rejection");
       },
     });
     try {
-      if (fail) await expect(value.replace(request(value.fixture))).rejects.toThrow();
+      if (fail)
+        await expect(value.replace(request(value.fixture))).rejects.toThrow();
       else await value.replace(request(value.fixture));
       expect(registered).toEqual(fail ? ["2.0.0", "1.0.0"] : ["2.0.0"]);
-      expect(await readFile(join(value.directory, "Host.app/Contents/MacOS/Edith"), "utf8"))
-        .toBe(fail ? "old" : "new");
-      expect(JSON.parse(await readFile(join(value.directory, "active-catalog.json"), "utf8")).payload)
-        .toBe(fail ? "old" : "new");
+      expect(
+        await readFile(
+          join(value.directory, "Host.app/Contents/MacOS/Edith"),
+          "utf8",
+        ),
+      ).toBe(fail ? "old" : "new");
+      expect(
+        JSON.parse(
+          await readFile(join(value.directory, "active-catalog.json"), "utf8"),
+        ).payload,
+      ).toBe(fail ? "old" : "new");
     } finally {
       await value.cleanup();
     }
