@@ -100,7 +100,7 @@ let package = Package(
         .target(
             name: "ClipboardExtension",
             dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
-            path: "clipboard", exclude: ["Tests", "Runtime.swift"],
+            path: "clipboard", exclude: ["Tests"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "ClipboardExtensionTests", dependencies: ["ClipboardExtension"],

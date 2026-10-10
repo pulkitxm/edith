@@ -84,19 +84,30 @@ final class ExtensionRuntime: NSObject {
             }
             let backup = self.backup
             backupRestoreTask = Task { _ = await backup?.restoreOnEnable() }
-            let worker = ClipboardWorker()
+            let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+            let worker = ClipboardWorker(
+                capturesPasteboard: !fixture,
+                copyRecord: { payload in
+                    guard !fixture else {
+                        throw ExtensionPeerError.rejected(
+                            "Pasteboard actions are unavailable in fixture mode.")
+                    }
+                    ClipboardRepository.copyToPasteboard(payload, pasteboard: .general)
+                })
             self.worker = worker
             surface = ClipboardSurface(
                 client: worker.client, isStopped: { [weak worker] in worker?.isStopped != false })
-            HotKeyRegistrar.configure(
-                .init(
-                    id: "clipboard", carbonID: 7, prefix: "clipboardHotKey",
-                    defaultCode: kVK_ANSI_C, defaultModifiers: controlKey | shiftKey))
-            registerHotKey()
-            settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
-                MainActor.assumeIsolated { self?.registerHotKey() }
+            if !fixture {
+                HotKeyRegistrar.configure(
+                    .init(
+                        id: "clipboard", carbonID: 7, prefix: "clipboardHotKey",
+                        defaultCode: kVK_ANSI_C, defaultModifiers: controlKey | shiftKey))
+                registerHotKey()
+                settingsObserver = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+                    MainActor.assumeIsolated { self?.registerHotKey() }
+                }
+                TextEditingCommands.install()
             }
-            TextEditingCommands.install()
         case "view":
             guard let presentation, !presentation.stopped else {
                 return ["ok": false] as NSDictionary

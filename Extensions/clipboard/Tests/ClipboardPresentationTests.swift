@@ -88,6 +88,55 @@ import Testing
         await service.stop()
     }
 
+    @Test func engineRecordActionsAndCLIUseInjectedCopySinkAndRejectSystemActions() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let suite = "clipboard-record-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite);
+            try? FileManager.default.removeItem(at: root)
+        }
+        let service = ClipboardService(archive: .init(root: root), defaults: defaults, changed: {})
+        var copied: [ClipboardCopyPayload] = []
+        let worker = ClipboardWorker(
+            service: service, defaults: defaults, capturesPasteboard: false,
+            allowsSystemActions: false, copyRecord: { copied.append($0) })
+        let clip = ClipboardCapture(
+            payload: .init(
+                data: Data("mock owned record".utf8), types: ["public.text"], ext: "txt",
+                preview: "mock owned record"), sourceApp: "Mock Editor",
+            sourceBundleID: "example.mock")
+        _ = try await worker.client.capture(clip)
+        _ = try await worker.execute("clipboard.ui.copy", payload: ClipboardMessage.encode(clip.id))
+        #expect(copied.first?.text == "mock owned record")
+        let reply = try ClipboardMessage.decode(
+            ExtensionCLIReply.self,
+            from: await worker.execute(
+                "cli.execute",
+                payload: ClipboardMessage.encode(ExtensionCLIRequest(arguments: ["copy", "1"]))))
+        #expect(reply.stdout == "copied entry 1\n")
+        #expect(copied.count == 2)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("clipboard.ui.palette", payload: Data("{}".utf8))
+        }
+        await #expect(throws: ExtensionPeerError.self) {
+            try await worker.execute("clipboard.ui.permission", payload: Data("{}".utf8))
+        }
+        await worker.shutdown()
+    }
+
+    @Test func runtimeRejectsUncheckedConfigurationAndUnconfiguredView() {
+        let runtime = ExtensionRuntime()
+        let result =
+            runtime.execute(["operation": "configureUI", "remoteUI": true] as NSDictionary)
+            as? NSDictionary
+        #expect(result?["ok"] as? Bool == false)
+        let view = runtime.execute(["operation": "view"] as NSDictionary) as? NSDictionary
+        #expect(view?["ok"] as? Bool == false)
+        #expect(runtime.responds(to: NSSelectorFromString("invoke:completion:")))
+        #expect(runtime.responds(to: NSSelectorFromString("prepareToStopWithCompletion:")))
+    }
+
     @Test func retentionAndPrivacyPreferencesAreValidatedBeforeWriting() throws {
         let suite = "clipboard-preferences-test-" + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
