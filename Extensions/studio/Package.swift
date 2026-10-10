@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(path: "../../Packages/ExtensionSupport"), .package(path: "NativeRuntime"),
+        .package(url: "https://github.com/nalexn/ViewInspector", exact: "0.10.5"),
     ],
     targets: [
         .target(
@@ -22,6 +23,7 @@ let package = Package(
             name: "StudioExtensionTests",
             dependencies: [
                 "StudioExtension", .product(name: "EdithStudio", package: "NativeRuntime"),
+                .product(name: "ViewInspector", package: "ViewInspector"),
             ],
             path: "Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
