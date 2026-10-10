@@ -1951,18 +1951,58 @@
   "measurementQualification": {
     "measuredShippingSourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
     "measuredCheckoutClean": true,
-    "reviewedShippingEquivalentCommit": "aa24af4fb9a521e25a98d925e8f1053ab40d9ff0",
+    "reviewedShippingEquivalentCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
     "all39CurrentShippingFingerprintsUnchanged": true,
     "sourceFingerprintsSHA256": "b163ddcb1ab28733150092943e944d5d874e0ec8036a02e9b42195ff45b1dba0",
     "staticSizeCoverage": 39,
     "lifecycle": {
-      "passed": 37,
-      "pendingRetest": 2,
-      "lastObservedFailedIDs": [
+      "passed": 39,
+      "pendingRetest": 0,
+      "lastObservedFailedIDs": [],
+      "historicalFailedIDs": [
         "herdr",
         "quinjet"
       ],
-      "qualification": "The last closed lifecycle run passed37 and failed2; the two failures await corrected retries. Static-only artifacts do not replace those outcomes."
+      "cohorts": [
+        {
+          "sourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+          "hostExecutableSHA256": "d5d3f480ca4930c55069273debbd55e500e4939b5212acd68332ffa9108f0ab1",
+          "passed": 37
+        },
+        {
+          "sourceCommit": "46f04593d9cb00eb375842ff739b8a662d25c6b8",
+          "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+          "passedIDs": [
+            "quinjet"
+          ],
+          "failedIDs": [
+            "herdr"
+          ],
+          "quinjetStatusSHA256": "965f4c393d4b7b1e28e6346c41d3c1762972608b7ac9455ee1341f172a7f00fa",
+          "quinjetZIP_SHA256": "0559c058cec866e994ce84817cfa334171590782a23123239dc0b48aee16a99a",
+          "quinjetZIPBytes": 19407524,
+          "quinjetExpandedBytes": 41555367
+        },
+        {
+          "sourceCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+          "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+          "harnessSHA256": "0d24cdaebc0cca252a680414052ba48ed59516181b09184a6b2bb5047c3d6734",
+          "passedIDs": [
+            "herdr"
+          ],
+          "herdrStatusSHA256": "5c502f41bd6d723b0d4774f6a2079bcb9859e5ed4dd240834c2175ef28431ec2",
+          "herdrDrainReceiptSHA256": "cc3f50e2991f7fda4aed0d552c08cfba0028f40343800a6c27a5f1089742a1ab",
+          "herdrZIP_SHA256": "e9c743c4e9d1b6397f757efd4fe32bb3048b8202e4785aa3b89e094aa0611fd5",
+          "herdrZIPBytes": 20974663,
+          "herdrExpandedBytes": 44625619,
+          "nativeWindowValidated": false,
+          "managedNativeViewValidated": false,
+          "disabledOwnedProcesses": 0
+        }
+      ],
+      "qualification": "39 distinct owners passed headless lifecycle assertions across three explicitly identified snapshots: 37 at measured bc66, Quinjet at 46f, and Herdr at abe20. Historical failures remain preserved. The two measured static-only package artifacts are not relabeled as runtime-tested archives by the separate-source retries. All 39 owner coverage is source-qualified, not a claim of one identical host binary or managed UI/hardware parity.",
+      "allOwnersRuntimeAtCurrentSource": false,
+      "aggregateReceiptSHA256": "3620ede541f7b04aba3b4d028e4ffec09369621b70ee7756424894d5db3734d0"
     },
     "staticOnlyArtifactIDs": [
       "herdr",
@@ -1993,6 +2033,65 @@
       "files": 79,
       "seconds": 119.26,
       "scope": "Portable scripts with synthetic HOME and native/UI/provider opt-ins disabled."
-    }
+    },
+    "localReleaseAssets": {
+      "measuredSourceCommit": "bc66feff460780b624cafc26bfed02a2b29ed9ca",
+      "archives": 39,
+      "archiveBytes": 468938701,
+      "metadataBytes": 20259,
+      "releaseChecksumAssetBytes": 3094,
+      "completeLocalReleaseAssetBytes": 468962054,
+      "checksumFormat": "SHA256, two spaces, id.zip, newline",
+      "scope": "Actual retained local development ZIP, JSON and checksum assets only; production release assets remain unverified."
+    },
+    "retryHostBuild": {
+      "sourceCommit": "46f04593d9cb00eb375842ff739b8a662d25c6b8",
+      "installedBytes": 8845416,
+      "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+      "normalizedUnsignedSHA256": "76a1c97ccee3d26457a59ee17afd6f1d030fd336ca0ef9bbbfe5c4a11e23538a",
+      "byteIdentityEqualsMeasuredHost": false,
+      "qualification": "Separately built development host, 28 more installed bytes. Its actual code/signature hashes are different; measured bc66 host and all39 size totals remain unchanged."
+    },
+    "staticOnlyArtifactQualification": "The measured bc66 Herdr and Quinjet archives have static size/provenance proof. Separate qualified retry archives demonstrate owner lifecycle behavior without changing their measured table entries.",
+    "currentEmptyHostBuild": {
+      "sourceCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+      "installedBytes": 8845416,
+      "installedBytesAboveMeasuredHost": 28,
+      "hostExecutableSHA256": "b1b5487868608b74347b41adc98f3089b7615b765fd12898451bc7ab37741ba1",
+      "byteIdentityEquals46RetryHost": true,
+      "byteIdentityEqualsMeasuredHost": false,
+      "qualification": "Fresh exact-source development build and strict signature verified. The actual signed executable matches the separate 46f retry build, not measured bc66. No current controlled comparison ZIP or production DMG size is claimed; measured totals remain unchanged."
+    },
+    "hostedDiagnostics": {
+      "status": "passed",
+      "uniqueMethods": 711,
+      "jobURL": "https://github.com/pulkitxm/edith/actions/runs/38079680276/job/114293832855",
+      "scope": "Separate hosted diagnostic tier only. Its 9 transport cases also appear in 461 Core cases, followed by 250 UI cases, yielding 711 unique methods and 720 executions. This historical snapshot is not the current-parent CI result, 13-stage original UI journey or all 39 managed original views.",
+      "sourceCommit": "423c953e06b255d540a35abf5281ed3acbae70c5",
+      "executions": 720,
+      "transportMethods": 9,
+      "coreMethods": 461,
+      "uiMethods": 250,
+      "receiptSHA256": "92b35f711a6454480923df65a5dd8e2e2094bf617bd82da2d33c90c237e9056b",
+      "resultSHA256": "ec3e477716fc880b181fbcd49cd589dff8693b1d533d8c9bc25618944227dc94",
+      "ownedSurvivors": 0
+    },
+    "currentCI": {
+      "sourceCommit": "abe20a7957309e995cd2ee2b32b6d7010c6df300",
+      "status": "failed",
+      "testMethods": 718,
+      "suites": 122,
+      "failures": 1,
+      "failureTest": "HostPrivilegedProcessTests.disablingOnePrivilegedWorkerReleasesItsProcessAndKeepsTheOtherAlive",
+      "failure": "Synthetic privileged-process fixture timed out; correction and verification are pending.",
+      "jobURL": "https://github.com/pulkitxm/edith/actions/runs/38081804854/job/114300189127"
+    },
+    "pendingVerification": [
+      "13-stage original hosted UI journey",
+      "All 39 original managed native views",
+      "Production signed catalog and release downloads",
+      "Production signing and notarization",
+      "Current CI privileged-process fixture correction"
+    ]
   }
 }
