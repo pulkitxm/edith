@@ -6,11 +6,15 @@ import time
 
 os.setpgid(0, 0)
 mode = sys.argv[1]
+if len(sys.argv) > 3:
+    time.sleep(float(sys.argv[3]))
+if mode == "silent-start":
+    os._exit(0)
 prepared = 0
 for line in sys.stdin:
     request = json.loads(line)
     operation = request["operation"]
-    if len(sys.argv) > 2:
+    if len(sys.argv) > 2 and sys.argv[2]:
         with open(sys.argv[2], "a") as stream:
             stream.write(json.dumps(request) + "\n")
     response = {"token": request["token"], "data": base64.b64encode(b"").decode()}
