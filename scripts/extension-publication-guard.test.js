@@ -54,6 +54,7 @@ function current(catalog = previous) {
   return {
     release: {
       id: 10,
+      tag_name: "extension-catalog-v1",
       draft: false,
       body: JSON.stringify(pointer),
       assets: [asset, { id: 2, name: candidate, size: nextData.length }],
@@ -227,6 +228,7 @@ test("only true initial absence or an owned draft permits bootstrap and failed s
   const draft = {
     release: {
       id: 10,
+      tag_name: "extension-catalog-v1",
       draft: true,
       assets: [
         { id: 3, name: "catalog-1.json" },
@@ -669,7 +671,7 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
   const fixtureRead = `const fs = require("node:fs"); const file = process.env.FIXTURE_STATE; const state = JSON.parse(fs.readFileSync(file));`;
   writeFileSync(
     join(binary, "gh"),
-    `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); const path = args.at(-1); if (path.endsWith("git/ref/heads/main")) process.stdout.write(JSON.stringify({ object: { sha: state.target } })); else if (path.includes("releases/tags/")) process.stdout.write(JSON.stringify(state.release)); else if (path.endsWith("releases/assets/1")) process.stdout.write(Buffer.from(state.data, "base64")); else process.exit(2);`,
+    `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); const path = args.at(-1); if (path.endsWith("git/ref/heads/main")) process.stdout.write(JSON.stringify({ object: { sha: state.target } })); else if (path.includes("releases/tags/")) { if (state.release.draft) { process.stderr.write("gh: Not Found (HTTP 404)"); process.exit(1); } process.stdout.write(JSON.stringify(state.release)); } else if (path.includes("releases?")) process.stdout.write(JSON.stringify([state.release])); else if (path.endsWith("releases/assets/1")) process.stdout.write(Buffer.from(state.data, "base64")); else process.exit(2);`,
     { mode: 0o700 },
   );
   writeFileSync(
