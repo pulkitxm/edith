@@ -65,6 +65,9 @@ struct HostPrivilegedResponse: Codable {
     private var abandoned = Set<UUID>()
     private let timeout: Duration
     private var identity: ExtensionProcessIdentity?
+    private var finished = false
+    private var completedStop = false
+    private(set) var outputClosed = false
     var processIdentifier: Int32? { process.isRunning ? process.processIdentifier : nil }
     var didExit: (@MainActor () -> Void)?
 
@@ -108,7 +111,7 @@ struct HostPrivilegedResponse: Codable {
         quitPolicy: HostApplicationQuitPolicy? = nil
     ) async throws {
         guard process.isRunning else {
-            if quitPolicy != nil { throw HostWorkerError.exited }
+            guard completedStop, quitPolicy == nil else { throw HostWorkerError.exited }
             return
         }
         guard let identity, identity.isAlive, let parent = ExtensionProcessIdentity.current else {
@@ -139,6 +142,7 @@ struct HostPrivilegedResponse: Codable {
                 throw HostWorkerError.exited
             }
         }
+        completedStop = true
         finish()
     }
 
@@ -151,6 +155,7 @@ struct HostPrivilegedResponse: Codable {
     }
 
     private func request(_ request: HostPrivilegedRequest) async throws -> Data {
+        guard !outputClosed else { throw HostWorkerError.exited }
         guard process.isRunning, pending.isEmpty, abandoned.count < 64 else {
             throw HostWorkerError.rejected
         }
@@ -181,7 +186,7 @@ struct HostPrivilegedResponse: Codable {
     }
 
     private func receive(_ data: Data) {
-        guard !data.isEmpty else { finish(); return }
+        guard !data.isEmpty else { closeOutput(); return }
         do {
             for frame in try frames.append(data) {
                 let response = try JSONDecoder().decode(HostPrivilegedResponse.self, from: frame)
@@ -205,7 +210,19 @@ struct HostPrivilegedResponse: Codable {
         }
     }
 
+    private func closeOutput() {
+        outputClosed = true
+        output.fileHandleForReading.readabilityHandler = nil
+        try? input.fileHandleForWriting.close()
+        let requests = pending.values; pending.removeAll()
+        requests.forEach { $0.resume(throwing: HostWorkerError.exited) }
+        if !process.isRunning { finish() }
+    }
+
     private func finish() {
+        guard !process.isRunning, !finished else { return }
+        finished = true
+        outputClosed = true
         output.fileHandleForReading.readabilityHandler = nil
         process.terminationHandler = nil
         let requests = pending.values; pending.removeAll()

@@ -72,10 +72,40 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
+    @Test func outputClosureCannotNotifyExitOrAcknowledgeAnUnexpectedlyDeadWorker() async throws {
+        let directory = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent("privileged-output-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let recording = directory.appendingPathComponent("requests.jsonl")
+        let worker = try fixture("start-eof-until-release", recording: recording)
+        var exits = 0
+        worker.didExit = { exits += 1 }
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        let closedDeadline = ContinuousClock.now + .seconds(4)
+        while !worker.outputClosed, ContinuousClock.now < closedDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(worker.outputClosed && kill(pid, 0) == 0 && exits == 0)
+        await #expect(throws: HostWorkerError.exited) { try await worker.stop() }
+        #expect(kill(pid, 0) == 0 && exits == 0)
+        try Data().write(to: directory.appendingPathComponent("requests.jsonl.release"))
+        let exitDeadline = ContinuousClock.now + .seconds(4)
+        while exits == 0, ContinuousClock.now < exitDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(exits == 1 && worker.processIdentifier == nil && kill(pid, 0) == -1)
+        await #expect(throws: HostWorkerError.exited) { try await worker.stop() }
+        #expect(exits == 1)
+    }
+
     @Test func confirmedQuitFreesOnlyItsExactWorkerWithoutSendingDisable() async throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: file) }
         let worker = try fixture("normal", recording: file)
+        var exits = 0
+        worker.didExit = { exits += 1 }
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
         let host = try #require(ExtensionProcessIdentity.current)
@@ -89,6 +119,9 @@ import Testing
         let stop = try #require(requests.last?.stop)
         #expect(stop.worker.pid == pid && stop.parent == host && stop.owner == "lidAwake")
         #expect(worker.processIdentifier == nil && kill(pid, 0) == -1)
+        #expect(exits == 1)
+        try await worker.stop()
+        #expect(exits == 1)
     }
 
     @Test(arguments: [

@@ -64,6 +64,32 @@ import Testing
         #expect(fixture.leases.reserve("sample"))
     }
 
+    @Test func closedOutputKeepsTheLeaseUntilConfirmedExitAndJournalRestoration() async throws {
+        let fixture = try Fixture(mode: "start-eof-until-release")
+        defer { fixture.clean() }
+        let session = fixture.session()
+        try await activate(session, fixture.bundle)
+        let first = try #require(fixture.workers.first)
+        let pid = try #require(first.processIdentifier)
+        let closedDeadline = ContinuousClock.now + .seconds(4)
+        while !first.outputClosed, ContinuousClock.now < closedDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(first.outputClosed && kill(pid, 0) == 0)
+        #expect(!fixture.ended && fixture.workers.count == 1)
+        #expect(!fixture.leases.reserve("sample"))
+        #expect(try fixture.operations() == ["start"])
+        try Data().write(to: fixture.root.appendingPathComponent("requests.jsonl.release"))
+        let restoredDeadline = ContinuousClock.now + .seconds(4)
+        while !fixture.ended, ContinuousClock.now < restoredDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(fixture.ended && fixture.workers.count == 2)
+        #expect(fixture.workers.allSatisfy { $0.processIdentifier == nil })
+        #expect(try fixture.operations() == ["start", "start", "prepareDisable", "stop"])
+        #expect(fixture.leases.reserve("sample"))
+    }
+
     @Test func authenticatedQuitReleasesLeaseAndConnectionLossCannotRestartFinishedWorker()
         async throws
     {
@@ -222,7 +248,9 @@ import Testing
                     let worker = HostPrivilegedProcess(
                         executable: URL(fileURLWithPath: "/usr/bin/python3"),
                         arguments: [
-                            script.path, mode, root.appendingPathComponent("requests.jsonl").path,
+                            script.path,
+                            mode == "start-eof-until-release" && !workers.isEmpty ? "normal" : mode,
+                            root.appendingPathComponent("requests.jsonl").path,
                         ], timeout: .seconds(3))
                     workers.append(worker); return worker
                 }, ended: { [self] in ended = true })

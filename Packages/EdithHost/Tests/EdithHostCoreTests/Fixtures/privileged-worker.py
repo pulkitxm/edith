@@ -36,6 +36,13 @@ for line in sys.stdin:
     if operation == "prepareDisable" and mode == "prepare-without-response":
         os._exit(0)
     print(json.dumps(response), flush=True)
+    if operation == "start" and mode == "start-eof-until-release":
+        os.close(sys.stdout.fileno())
+        release = sys.argv[2] + ".release"
+        deadline = time.monotonic() + 3
+        while not os.path.exists(release) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        os._exit(2)
     if operation == "stop":
         if mode == "stop-after-response-crash":
             os._exit(2)
