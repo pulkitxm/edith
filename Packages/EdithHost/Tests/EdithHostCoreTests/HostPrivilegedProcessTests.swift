@@ -52,8 +52,9 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
-    @Test func restoredWorkerMayExitCleanlyBeforeDeliveringItsStopResponse() async throws {
-        let worker = try fixture("stop-without-response")
+    @Test(arguments: ["stop-without-response", "stop-eof-before-exit"])
+    func restoredWorkerMayExitCleanlyBeforeDeliveringItsStopResponse(mode: String) async throws {
+        let worker = try fixture(mode)
         try await worker.start()
         let pid = try #require(worker.processIdentifier)
         try await worker.stop()
@@ -61,7 +62,7 @@ import Testing
         #expect(kill(pid, 0) == -1)
     }
 
-    @Test(arguments: ["prepare-without-response", "stop-failure"])
+    @Test(arguments: ["prepare-without-response", "stop-failure", "stop-eof-before-failure"])
     func incompleteOrFailedRestorationIsNotReportedAsSuccessful(mode: String) async throws {
         let worker = try fixture(mode)
         try await worker.start()
@@ -90,7 +91,9 @@ import Testing
         #expect(worker.processIdentifier == nil && kill(pid, 0) == -1)
     }
 
-    @Test(arguments: ["stop-without-response", "stop-after-response-crash"])
+    @Test(arguments: [
+        "stop-without-response", "stop-eof-before-exit", "stop-after-response-crash",
+    ])
     func unacknowledgedOrCrashedQuitCannotCountAsSuccessfulRetention(mode: String) async throws {
         let worker = try fixture(mode)
         try await worker.start()

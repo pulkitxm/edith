@@ -127,22 +127,27 @@ struct HostPrivilegedResponse: Codable {
         do {
             _ = try await request(.init("stop", stop: stop))
         } catch HostWorkerError.exited {
-            guard quitPolicy == nil, !process.isRunning, process.terminationReason == .exit,
+            try await waitForExit()
+            guard quitPolicy == nil, process.terminationReason == .exit,
                 process.terminationStatus == 0
             else { throw HostWorkerError.exited }
         }
         try? input.fileHandleForWriting.close()
-        let deadline = ContinuousClock.now + .seconds(3)
-        while process.isRunning {
-            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        try await waitForExit()
         if quitPolicy != nil {
             guard process.terminationReason == .exit, process.terminationStatus == 0 else {
                 throw HostWorkerError.exited
             }
         }
         finish()
+    }
+
+    private func waitForExit() async throws {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while process.isRunning {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(20))
+        }
     }
 
     private func request(_ request: HostPrivilegedRequest) async throws -> Data {

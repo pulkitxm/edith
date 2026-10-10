@@ -27,6 +27,10 @@ for line in sys.stdin:
             time.sleep(0.25)
         if mode == "stop-without-response":
             os._exit(0)
+        if mode in ("stop-eof-before-exit", "stop-eof-before-failure"):
+            os.close(sys.stdout.fileno())
+            time.sleep(0.1)
+            os._exit(0 if mode == "stop-eof-before-exit" else 2)
         if mode == "stop-failure":
             os._exit(2)
     if operation == "prepareDisable" and mode == "prepare-without-response":
