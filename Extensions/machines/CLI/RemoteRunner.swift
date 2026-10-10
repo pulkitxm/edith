@@ -83,13 +83,15 @@ public struct RemoteRunner {
     public func passthrough(_ command: String) async -> Int32 {
         let process = makeProcess(command)
         let outputSink = ExtensionCLIContext.outputSink
+        let rawOutputSink = ExtensionCLIContext.rawOutputSink
         let stream = SSHLineStream(
             process: process, stdinData: ExtensionCLIContext.request?.standardInput,
             onLine: { _, _ in }, onExit: { _ in },
             onData: { data, isStderr in
                 ExtensionCLIContext.$outputSink.withValue(outputSink) {
-                    let text = String(decoding: data, as: UTF8.self)
-                    if isStderr { CLIOut.rawError(text) } else { CLIOut.raw(text) }
+                    ExtensionCLIContext.$rawOutputSink.withValue(rawOutputSink) {
+                        CLIOut.raw(data, error: isStderr)
+                    }
                 }
             })
         do {
@@ -115,10 +117,15 @@ public struct RemoteRunner {
     ) throws -> SSHLineStream {
         let process = makeProcess(command)
         let outputSink = ExtensionCLIContext.outputSink
+        let rawOutputSink = ExtensionCLIContext.rawOutputSink
         let stream = SSHLineStream(
             process: process, stdinData: stdin,
             onLine: { line, error in
-                ExtensionCLIContext.$outputSink.withValue(outputSink) { onLine(line, error) }
+                ExtensionCLIContext.$outputSink.withValue(outputSink) {
+                    ExtensionCLIContext.$rawOutputSink.withValue(rawOutputSink) {
+                        onLine(line, error)
+                    }
+                }
             }, onExit: { _ in })
         try owner.start(stream)
         return stream

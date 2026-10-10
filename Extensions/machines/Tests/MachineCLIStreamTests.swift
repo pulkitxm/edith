@@ -118,6 +118,40 @@ extension MachineCLITests {
             }
         }
 
+        @Test func originalExecPreservesBinaryBytesAndSplitUTF8InStreamFrames() async throws {
+            try await isolated { machine, _ in
+                let child = process(
+                    "printf '\\377\\000\\342'; sleep 0.03; printf '\\202\\254'; printf '\\376' >&2")
+                let service = try MachineCLIService(runner: { machine, owner in
+                    RemoteRunner(
+                        machine: machine, owner: owner, makeProcess: { _ in child }, connect: {})
+                })
+                let handle = try start(service, arguments: ["exec", machine.name, "--", "fixture"])
+                var sequence: UInt64 = 0
+                var stdout = Data()
+                var stderr = Data()
+                var code: Int32?
+                let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+                while code == nil, ContinuousClock.now < deadline {
+                    let frame = try read(service, handle: handle, sequence: sequence)
+                    sequence = frame.nextSequence
+                    for chunk in frame.chunks {
+                        if chunk.channel == .stderr {
+                            stderr += chunk.data
+                        } else {
+                            stdout += chunk.data
+                        }
+                    }
+                    code = frame.exitCode
+                    try await Task.sleep(for: .milliseconds(10))
+                }
+                await service.shutdown()
+                #expect(code == 0)
+                #expect(stdout == Data([255, 0, 226, 130, 172]))
+                #expect(stderr == Data([254]))
+            }
+        }
+
         @Test func callerInputAndWorkingDirectoryRemainOwnedContext() async throws {
             try await isolated { machine, directory in
                 let connection = SSHConnection(machine: machine, controlSocketMode: .isolated)
