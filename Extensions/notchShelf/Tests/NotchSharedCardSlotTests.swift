@@ -11,7 +11,8 @@ import Testing
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
         let tiles = [
-            .codeStats, .databases, .machines, .github, .desk, .media, .ability("terminal"),
+            .agents, .focus, .codeStats, .databases, .machines, .github, .desk, .media,
+            .ability("terminal"),
         ].map(saved)
         try fixture.publish(versions(for: tiles))
         _ = try fixture.attach()
@@ -146,8 +147,8 @@ import Testing
         let slots = tiles.map { slot($0, provider: $0.widget.providerIDs.first!) }
         try fixture.geometry(slots)
         #expect(slots.map(\.section) == ["music", "calendar", "usage", "activity", "limits"])
-        #expect(NotchPanelSlot.supportsSharedCard(.focus) == false)
-        #expect(NotchPanelSlot.supportsSharedCard(.agents) == false)
+        #expect(NotchPanelSlot.supportsSharedCard(.focus))
+        #expect(NotchPanelSlot.supportsSharedCard(.agents))
         for kind in [
             NotchPanelSlot.Kind.providerTab, .header, .collapsedLeading, .collapsedTrailing,
         ] {
@@ -314,11 +315,92 @@ import Testing
         #expect(controller.ownedPanelCount == 0)
     }
 
+    @Test func customAgentsAndFocusUseOnlyCurrentOwnedVisibleProviderSlots() async throws {
+        let fixture = try NotchPanelFixture()
+        defer { fixture.clean() }
+        let tiles = [saved(.agents), saved(.focus)]
+        var active = versions(for: tiles)
+        try fixture.publish(active)
+        let identity = try fixture.attach().identity
+        let controller = fixture.bind()
+        controller.layouts.update(.notch) { $0.tiles = tiles }
+        controller.expand(on: 42)
+        let chrome = client(fixture)
+        defer { chrome.stop() }
+        await chrome.refresh()
+        let rectangle = CGRect(x: 30, y: 80, width: 220, height: 160)
+        for tile in tiles {
+            let provider = tile.widget == .agents ? "herdr" : "attention"
+            #expect(chrome.supportsNative(tile: tile, kind: .card))
+            let accepted = try #require(chrome.slot(tile: tile, kind: .card, rectangle: rectangle))
+            #expect(accepted.providerID == provider && accepted.providerVersion == "1")
+            #expect(accepted.tile == tile && accepted.section == "surface.card")
+            try fixture.geometry([accepted])
+            #expect(throws: (any Error).self) {
+                try fixture.geometry([
+                    slot(tile, provider: provider == "herdr" ? "attention" : "herdr")
+                ])
+            }
+            #expect(throws: (any Error).self) {
+                try fixture.geometry([slot(tile, provider: provider, version: "stale")])
+            }
+            #expect(throws: (any Error).self) {
+                try fixture.geometry([accepted, slot(tile, provider: provider)])
+            }
+            var changed = tile
+            changed.focusMinutes += 1
+            #expect(throws: (any Error).self) {
+                try fixture.geometry([slot(changed, provider: provider)])
+            }
+            active[provider] = "2"
+            try fixture.publish(active)
+            controller.synchronize()
+            await chrome.refresh()
+            #expect(try fixture.engine.batch().states[0].slots.isEmpty)
+            #expect(throws: (any Error).self) { try fixture.geometry([accepted]) }
+            let updated = try #require(chrome.slot(tile: tile, kind: .card, rectangle: rectangle))
+            #expect(updated.providerVersion == "2" && updated.tile == tile)
+            try fixture.geometry([updated])
+            active[provider] = nil
+            try fixture.publish(active)
+            controller.synchronize()
+            await chrome.refresh()
+            #expect(!chrome.supportsNative(tile: tile, kind: .card))
+            #expect(chrome.slot(tile: tile, kind: .card, rectangle: rectangle) == nil)
+            #expect(try fixture.engine.batch().states[0].slots.isEmpty)
+            active[provider] = "1"
+            try fixture.publish(active)
+            controller.synchronize()
+            await chrome.refresh()
+            let privacy = ExtensionSharedState(
+                root: fixture.root, namespace: fixture.id, owner: "presenter")
+            let category = tile.widget == .agents ? "blurAgents" : "blurAttention"
+            try privacy.publish(["active": "1", category: "1"])
+            controller.synchronize()
+            await chrome.refresh()
+            #expect(chrome.hides(tile.widget))
+            #expect(chrome.slot(tile: tile, kind: .card, rectangle: rectangle) == nil)
+            #expect(throws: (any Error).self) { try fixture.geometry([accepted]) }
+            try privacy.publish(["active": "0"])
+            controller.synchronize()
+            await chrome.refresh()
+        }
+        controller.collapseNow()
+        await chrome.refresh()
+        #expect(
+            tiles.allSatisfy { chrome.slot(tile: $0, kind: .card, rectangle: rectangle) == nil })
+        #expect(try fixture.engine.batch().states[0].slots.isEmpty)
+        #expect(controller.surfaceLayout.tiles == tiles)
+        try fixture.engine.detach(identity)
+        await chrome.stopAndWait()
+        #expect(controller.ownedPanelCount == 0)
+    }
+
     @Test func originalHomeMeasuresSharedAggregateCardsOffscreenAtBothLayoutsAndZooms() async throws
     {
         let fixture = try NotchPanelFixture()
         defer { fixture.clean() }
-        let tiles = [saved(.desk), saved(.media)]
+        let tiles = [saved(.agents), saved(.focus)]
         try fixture.publish(versions(for: tiles))
         _ = try fixture.attach()
         let controller = fixture.bind()

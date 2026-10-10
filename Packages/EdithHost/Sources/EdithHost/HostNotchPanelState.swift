@@ -48,6 +48,16 @@ struct HostNotchNativeSlot: Codable, Equatable, Sendable, Identifiable {
     let tile: SurfaceTile
     let rectangle: HostNotchRectangle
 
+    func anchorProvider(activeVersions: [String: String]) -> String? {
+        if kind == .card, HostNotchCompactCardModel.supports(tile.widget) {
+            return tile.widget.providerIDs.sorted().first { activeVersions[$0] != nil }
+        }
+        guard tile.widget.providerIDs == [providerID], activeVersions[providerID] != nil else {
+            return nil
+        }
+        return providerID
+    }
+
     var section: String? {
         if kind == .card, HostNotchCompactCardModel.supports(tile.widget) { return "surface.card" }
         switch (kind, providerID, tile.widget) {
@@ -161,10 +171,7 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
             else { throw HostNotchPanelError.unavailableProvider }
             if slot.section == "surface.card" {
                 guard
-                    slot.providerID
-                        == slot.tile.widget.providerIDs.sorted().first(where: {
-                            admission.activeVersions[$0] != nil
-                        })
+                    slot.providerID == slot.anchorProvider(activeVersions: admission.activeVersions)
                 else { throw HostNotchPanelError.unavailableProvider }
             }
             _ = try SurfaceSnapshotRequest(target: .notch, tile: slot.tile).encoded(
