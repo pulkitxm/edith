@@ -37,6 +37,7 @@ struct MusicSurfaceCommand: Equatable, Sendable {
     var trackKey: String
     var action: String
     var value: Double?
+    var presentationID: UUID? = nil
 }
 
 @MainActor
@@ -63,11 +64,21 @@ final class MusicSurface {
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
-        let request: SurfaceSnapshotRequest
-        if command == "surface.perform" {
-            request = try SurfaceActionRequest.decode(payload, providerID: "music").snapshot
+        let operation: String
+        let body: Data
+        let presentationID: UUID?
+        if command == "music.notch.perform" {
+            let action = try MusicNotchActionRequest.decode(payload)
+            operation = "surface.perform"; body = try action.action.encoded(providerID: "music")
+            presentationID = action.presentationID
         } else {
-            request = try SurfaceSnapshotRequest.decode(payload, providerID: "music")
+            operation = command; body = payload; presentationID = nil
+        }
+        let request: SurfaceSnapshotRequest
+        if operation == "surface.perform" {
+            request = try SurfaceActionRequest.decode(body, providerID: "music").snapshot
+        } else {
+            request = try SurfaceSnapshotRequest.decode(body, providerID: "music")
         }
         if command == "music.notch.snapshot" {
             guard request.target == .notch, request.tile.widget == .music else {
@@ -111,20 +122,24 @@ final class MusicSurface {
                 .encoded()
         }
         return try await SurfaceCommandService.execute(
-            providerID: "music", command: command, payload: payload,
+            providerID: "music", command: operation, payload: body,
             snapshot: { [self] tile in
                 Self.snapshot(try await read(tile), tile: tile, target: request.target)
             },
             perform: { [self] identifier in
-                try await dispatch(identifier, value: nil, tile: request.tile)
+                try await dispatch(
+                    identifier, value: nil, tile: request.tile, presentationID: presentationID)
             },
             adjust: { [self] identifier, value in
-                try await dispatch(identifier, value: value, tile: request.tile)
+                try await dispatch(
+                    identifier, value: value, tile: request.tile, presentationID: presentationID)
             },
             privacyValues: privacyValues)
     }
 
-    private func dispatch(_ identifier: String, value: Double?, tile: SurfaceTile) async throws {
+    private func dispatch(
+        _ identifier: String, value: Double?, tile: SurfaceTile, presentationID: UUID?
+    ) async throws {
         let states = try await read(tile)
         try Task.checkCancellation()
         for state in states {
@@ -137,7 +152,7 @@ final class MusicSurface {
                 try await perform(
                     .init(
                         sourceID: state.sourceID, trackKey: state.trackKey, action: action,
-                        value: value))
+                        value: value, presentationID: presentationID))
                 return
             }
             if let track = state.queue.first(where: { state.queuedIdentifier($0) == identifier }) {

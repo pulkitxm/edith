@@ -9,6 +9,7 @@ final class ExtensionRuntime: NSObject {
     private var worker: MusicWorker?
     private var surface: MusicSurface?
     private var uiService: MusicUIService?
+    private var navigation: MusicHostNavigationBridge?
     private let embeddedUI = MusicEmbeddedRuntime()
     private var backup: MusicBackupLifecycle?
     private let commands = ExtensionCommandRegistry()
@@ -32,6 +33,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         embeddedUI.stop()
         uiService?.stop()
+        navigation?.invalidate(); MusicHostNavigation.navigate = nil; MusicHostNavigation.reset()
         commands.shutdown()
         backup?.beginShutdown()
         Task {
@@ -40,6 +42,7 @@ final class ExtensionRuntime: NSObject {
             await uiService?.drain()
             await backup?.shutdown()
             await commands.shutdownAndWait()
+            await navigation?.stopAndWait(); navigation = nil
             await worker?.shutdown()
             backup = nil; worker = nil; surface = nil; uiService = nil
             TextEditingCommands.shutdown(); InputFocus.uninstall()
@@ -74,6 +77,13 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
             else { return ["ok": false] as NSDictionary }
+            if navigation == nil {
+                navigation = MusicHostNavigationBridge(bridge: input["hostNavigation"] as? NSObject)
+            }
+            MusicHostNavigation.navigate = { [weak navigation] request in
+                guard let navigation else { throw ExtensionPeerError.unavailable }
+                try await navigation.navigate(request)
+            }
             if worker == nil {
                 do { backup = MusicBackupLifecycle(provider: try MusicBackupProvider.live()) } catch
                 {
@@ -106,6 +116,8 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": break
         case "stop":
             embeddedUI.stop()
+            navigation?.invalidate(); navigation = nil; MusicHostNavigation.navigate = nil;
+            MusicHostNavigation.reset()
             backup?.beginShutdown()
             uiService?.stop(); commands.shutdown(); worker?.stop(); worker = nil; surface = nil;
             uiService = nil

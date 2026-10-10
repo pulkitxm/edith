@@ -127,6 +127,7 @@ import SwiftUI
         if let notch, let client {
             notchModel = EmbeddedMusicNotchModel(
                 request: notch.request, expectedVersion: version,
+                presentationID: client.presentationID,
                 invoke: { operation, payload in
                     try await client.invoke(operation, payload: payload)
                 })

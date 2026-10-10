@@ -44,3 +44,25 @@ struct MusicNotchState: Codable, Equatable {
         return state
     }
 }
+
+struct MusicNotchActionRequest: Codable {
+    var presentationID: UUID
+    var action: SurfaceActionRequest
+
+    func encoded() throws -> Data {
+        guard action.snapshot.target == .notch, action.snapshot.tile.widget == .music else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        _ = try action.encoded(providerID: "music")
+        let data = try JSONEncoder().encode(self)
+        guard data.count <= 131_072 else { throw ExtensionPeerError.invalidRequest }
+        return data
+    }
+
+    static func decode(_ data: Data) throws -> Self {
+        guard data.count <= 131_072 else { throw ExtensionPeerError.invalidRequest }
+        let request = try JSONDecoder().decode(Self.self, from: data)
+        _ = try request.encoded()
+        return request
+    }
+}

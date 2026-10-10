@@ -44,6 +44,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
 @MainActor @Observable final class EmbeddedMusicNotchModel {
     let request: SurfaceSnapshotRequest
     private let expectedVersion: String?
+    private let presentationID: UUID?
     private(set) var state: EmbeddedMusicNotchState?
     private(set) var nowPlayingControlError: String?
     private(set) var closed = false
@@ -54,7 +55,7 @@ struct EmbeddedNotchNowPlaying: Equatable {
     private var selectedSource: String?
 
     init(request: SurfaceSnapshotRequest, remote: EmbeddedMusicRemote = .shared) {
-        self.expectedVersion = nil; self.request = request;
+        self.presentationID = nil; self.expectedVersion = nil; self.request = request;
         self.invoke = { operation, payload in
             try await remote.dataRequest(operation, payload: payload)
         }
@@ -62,9 +63,11 @@ struct EmbeddedNotchNowPlaying: Equatable {
 
     init(
         request: SurfaceSnapshotRequest, expectedVersion: String? = nil,
+        presentationID: UUID? = nil,
         invoke: @escaping (String, Data) async throws -> Data
     ) {
-        self.expectedVersion = expectedVersion; self.request = request; self.invoke = invoke
+        self.presentationID = presentationID; self.expectedVersion = expectedVersion;
+        self.request = request; self.invoke = invoke
     }
 
     var row: SurfaceDataRow? {
@@ -159,10 +162,16 @@ struct EmbeddedNotchNowPlaying: Equatable {
             guard let self else { return }
             defer { self.actions[id] = nil }
             do {
-                let payload = try SurfaceActionRequest(
-                    snapshot: request, actionID: identifier, value: value
-                ).encoded(providerID: "music")
-                _ = try await invoke("surface.perform", payload)
+                let action = SurfaceActionRequest(
+                    snapshot: request, actionID: identifier, value: value)
+                if let presentationID {
+                    let payload = try EmbeddedMusicNotchActionRequest(
+                        presentationID: presentationID, action: action
+                    ).encoded()
+                    _ = try await invoke("music.notch.perform", payload)
+                } else {
+                    _ = try await invoke("surface.perform", action.encoded(providerID: "music"))
+                }
                 try Task.checkCancellation()
                 guard !closed, token == revision else { return }
                 await refresh()

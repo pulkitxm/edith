@@ -81,7 +81,9 @@ import Testing
         var commands: [MusicSurfaceCommand] = []
         let service = engine(states: { [current] }, commands: { commands.append($0) })
         let route = try #require(EmbeddedMusicNotchRoute(context: context(.card)))
-        let model = EmbeddedMusicNotchModel(request: route.request, invoke: service.execute)
+        let origin = UUID()
+        let model = EmbeddedMusicNotchModel(
+            request: route.request, presentationID: origin, invoke: service.execute)
         await model.refresh()
         #expect(model.nowPlaying?.title == "Mock Garden")
         #expect(model.nowPlaying?.source == .local)
@@ -92,6 +94,7 @@ import Testing
         #expect(model.nowPlayingRepeat == true)
         model.nowPlayingSeek(0.5)
         for _ in 0..<50 where commands.isEmpty { await Task.yield() }
+        #expect(commands.first?.presentationID == origin)
         #expect(commands.first?.action == "seek")
         #expect(commands.first?.trackKey == current.trackKey)
         #expect(commands.first?.value == 0.5)

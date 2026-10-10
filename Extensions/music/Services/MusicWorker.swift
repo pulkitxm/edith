@@ -128,7 +128,9 @@ final class MusicWorker {
                 let path =
                     command.sourceID == "local" && command.action == "open"
                     ? (command.trackKey as NSString).deletingLastPathComponent : nil
-                try await MusicHostNavigation.open(path: path)
+                try await MusicHostNavigation.open(
+                    path: path, presentationID: command.presentationID,
+                    location: command.presentationID == nil ? nil : "notch")
             }
             return
         }
