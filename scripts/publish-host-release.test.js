@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -34,6 +40,8 @@ function fixture(existing = false) {
     directory,
     calls,
     execute,
+    matchesAsset: async ({ asset, file }) =>
+      Buffer.from(asset.bytes.data ?? asset.bytes).equals(readFileSync(file)),
     get release() {
       return release;
     },
@@ -49,14 +57,15 @@ function publish(value, options = {}) {
     tag: "v1.2.3",
     target: "a".repeat(40),
     execute: value.execute,
+    matchesAsset: value.matchesAsset,
     ...options,
   });
 }
 
-test("publishes only the host DMG and signed appcast through the release client", () => {
+test("publishes only the host DMG and signed appcast through the release client", async () => {
   const value = fixture();
   try {
-    expect(publish(value).assets).toEqual(["Edith.dmg", "appcast.xml"]);
+    expect((await publish(value)).assets).toEqual(["Edith.dmg", "appcast.xml"]);
     const mutations = value.calls.filter(
       (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
     );
@@ -79,7 +88,7 @@ test("publishes only the host DMG and signed appcast through the release client"
   }
 });
 
-test("retries identical assets without uploading again", () => {
+test("retries identical assets without uploading again", async () => {
   const value = fixture(true);
   try {
     value.release.assets = ["Edith.dmg", "appcast.xml"].map((name, index) => ({
@@ -87,27 +96,27 @@ test("retries identical assets without uploading again", () => {
       name,
       bytes: readFileSync(join(value.directory, name)),
     }));
-    publish(value);
+    await publish(value);
     expect(
       value.calls
         .filter((args) => args[0] === "pukbot" && !args.includes("--dry-run"))
         .map((args) => args[2]),
     ).toEqual(["edit"]);
     value.release.assets[0].bytes = Buffer.from("different");
-    expect(() => publish(value)).toThrow("differs");
+    await expect(publish(value)).rejects.toThrow("differs");
     expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
   } finally {
     value.clean();
   }
 });
 
-test("rebuild replaces changed assets but requires an existing release", () => {
+test("rebuild replaces changed assets but requires an existing release", async () => {
   const value = fixture(true);
   try {
     value.release.assets = [
       { id: 9, name: "Edith.dmg", bytes: Buffer.from("old") },
     ];
-    publish(value, { rebuild: true });
+    await publish(value, { rebuild: true });
     expect(
       value.calls.some((args) => args[0] === "gh" && args.includes("DELETE")),
     ).toBe(true);
@@ -121,7 +130,7 @@ test("rebuild replaces changed assets but requires an existing release", () => {
   }
   const missing = fixture();
   try {
-    expect(() => publish(missing, { rebuild: true })).toThrow(
+    await expect(publish(missing, { rebuild: true })).rejects.toThrow(
       "missing release",
     );
   } finally {
@@ -129,7 +138,7 @@ test("rebuild replaces changed assets but requires an existing release", () => {
   }
 });
 
-test("invalid or unsigned appcasts fail before any remote call", () => {
+test("invalid or unsigned appcasts fail before any remote call", async () => {
   const value = fixture();
   try {
     for (const xml of [
@@ -137,7 +146,7 @@ test("invalid or unsigned appcasts fail before any remote call", () => {
       '<enclosure url="https://example.com/Edith.dmg" sparkle:edSignature="synthetic"/>',
     ]) {
       writeFileSync(join(value.directory, "appcast.xml"), xml);
-      expect(() => publish(value)).toThrow("appcast");
+      await expect(publish(value)).rejects.toThrow("appcast");
     }
     expect(value.calls).toEqual([]);
   } finally {
@@ -145,7 +154,7 @@ test("invalid or unsigned appcasts fail before any remote call", () => {
   }
 });
 
-test("failed uploads do not expose an unfinished release", () => {
+test("failed uploads do not expose an unfinished release", async () => {
   const value = fixture();
   try {
     const execute = (command, args, options) => {
@@ -157,7 +166,7 @@ test("failed uploads do not expose an unfinished release", () => {
         throw new Error("Upload failed");
       return value.execute(command, args, options);
     };
-    expect(() => publish(value, { execute })).toThrow("Upload failed");
+    await expect(publish(value, { execute })).rejects.toThrow("Upload failed");
     expect(
       value.calls.some((args) => args[0] === "pukbot" && args[2] === "edit"),
     ).toBe(false);
@@ -166,28 +175,81 @@ test("failed uploads do not expose an unfinished release", () => {
   }
 });
 
-test("unsupported asset sizes fail before release creation or any upload", () => {
+test("capacity fallback preflights every host asset without creating a release", () => {
   const value = fixture();
   try {
     const execute = (command, args) => {
       value.calls.push([command, ...args]);
-      return JSON.stringify({
-        ok: false,
-        error: { message: "release asset must be between 1 and 40000 bytes" },
-      });
+      return command === "pukbot" && statSync(args[3]).size > 40_000
+        ? JSON.stringify({
+            ok: false,
+            error: {
+              message: "release asset must be between 1 and 40000 bytes",
+            },
+          })
+        : "{}";
     };
-    expect(() =>
+    expect(
       preflightHostRelease({
         directory: value.directory,
         repository: "synthetic/fixture",
         tag: "v1.2.3",
         execute,
       }),
-    ).toThrow("40000 bytes");
-    expect(() => publish(value, { execute })).toThrow("40000 bytes");
+    ).toEqual(["Edith.dmg", "appcast.xml"]);
     expect(
       value.calls.every(
-        (args) => args[0] === "pukbot" && args.includes("--dry-run"),
+        (args) => args.includes("--dry-run") || args.includes("--help"),
+      ),
+    ).toBe(true);
+  } finally {
+    value.clean();
+  }
+});
+
+test("failed existing asset verification never deletes or replaces an asset", async () => {
+  const value = fixture(true);
+  try {
+    value.release.assets = [{ id: 9, name: "Edith.dmg" }];
+    await expect(
+      publish(value, {
+        rebuild: true,
+        matchesAsset: async () => {
+          throw new Error("Release asset download timed out");
+        },
+      }),
+    ).rejects.toThrow("timed out");
+    expect(value.calls.some((args) => args.includes("DELETE"))).toBe(false);
+    expect(
+      value.calls.some(
+        (args) => args[0] === "pukbot" && !args.includes("--dry-run"),
+      ),
+    ).toBe(false);
+  } finally {
+    value.clean();
+  }
+});
+
+test("a later asset preflight failure stops publication before release creation", async () => {
+  const value = fixture();
+  try {
+    const execute = (command, args) => {
+      value.calls.push([command, ...args]);
+      if (command === "pukbot")
+        return JSON.stringify({
+          ok: false,
+          error: {
+            message: args[3].endsWith("Edith.dmg")
+              ? "release asset must be between 1 and 40000 bytes"
+              : "Forbidden",
+          },
+        });
+      return "{}";
+    };
+    await expect(publish(value, { execute })).rejects.toThrow("Forbidden");
+    expect(
+      value.calls.every(
+        (args) => args.includes("--dry-run") || args.includes("--help"),
       ),
     ).toBe(true);
   } finally {

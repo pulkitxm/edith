@@ -2,6 +2,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { releaseAssetMatchesFile } from "./release-asset-read.mjs";
+import {
+  preflightReleaseAsset,
+  uploadReleaseAsset,
+} from "./release-asset-upload.mjs";
 
 export function preflightHostRelease({
   directory,
@@ -28,37 +33,23 @@ export function preflightHostRelease({
   )
     throw new Error("Invalid signed appcast");
   for (const name of assets) {
-    const result = JSON.parse(
-      execute(
-        "pukbot",
-        [
-          "release",
-          "upload-asset",
-          "1",
-          resolve(directory, name),
-          "--repo",
-          repository,
-          "--dry-run",
-          "--json",
-        ],
-        { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-      ),
-    );
-    if (result.ok === false)
-      throw new Error(
-        result.error?.message ?? "Release asset preflight failed",
-      );
+    preflightReleaseAsset({
+      repository,
+      file: resolve(directory, name),
+      execute,
+    });
   }
   return assets;
 }
 
-export function publishHostRelease({
+export async function publishHostRelease({
   directory,
   repository,
   tag,
   target,
   rebuild = false,
   execute = execFileSync,
+  matchesAsset = releaseAssetMatchesFile,
 }) {
   if (!/^[0-9a-f]{40}$/.test(target)) throw new Error("Invalid release target");
   const assets = preflightHostRelease({ directory, repository, tag, execute });
@@ -92,13 +83,7 @@ export function publishHostRelease({
     const file = resolve(directory, name);
     const existing = release.assets.find((asset) => asset.name === name);
     if (existing) {
-      const downloaded = execute("gh", [
-        "api",
-        "-H",
-        "Accept: application/octet-stream",
-        `repos/${repository}/releases/assets/${existing.id}`,
-      ]);
-      if (Buffer.from(downloaded).equals(readFileSync(file))) continue;
+      if (await matchesAsset({ repository, asset: existing, file })) continue;
       if (!rebuild) throw new Error(`Existing release asset differs: ${name}`);
       gh(
         "api",
@@ -107,7 +92,13 @@ export function publishHostRelease({
         `repos/${repository}/releases/assets/${existing.id}`,
       );
     }
-    mutate("release", "upload-asset", String(release.id), file);
+    await uploadReleaseAsset({
+      repository,
+      releaseID: release.id,
+      tag,
+      file,
+      execute,
+    });
   }
   mutate(
     "release",
@@ -141,7 +132,7 @@ if (
         encoding: "utf8",
       }).trim();
     process.stdout.write(
-      `${JSON.stringify(publishHostRelease({ ...configuration, target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
+      `${JSON.stringify(await publishHostRelease({ ...configuration, target, rebuild: Boolean(process.env.REBUILD) }))}\n`,
     );
   }
 }

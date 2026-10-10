@@ -234,10 +234,8 @@ public final class ExtensionBundleRuntime {
         if let instance = loaded[id] { return instance }
         guard !failedLoads.contains(id) else { throw MarketplaceError.invalidBundle }
         guard
-            let package = try store.installedPackages().filter({
-                $0.id == id && $0.hostABI == hostABI && $0.architecture == architecture
-                    && (packageVersion == nil || $0.version == packageVersion)
-            }).max(by: { $0.version.compare($1.version, options: .numeric) == .orderedAscending })
+            let package = try store.installedPackage(
+                id: id, hostABI: hostABI, architecture: architecture, version: packageVersion)
         else {
             throw MarketplaceError.packageNotInstalled
         }
