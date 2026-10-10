@@ -26,19 +26,76 @@ class WatchdogTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             watchdog.admit(environment, 'b' * 40)
 
-    def test_required_batches_are_disjoint_and_serial(self):
-        for batch in ['core', 'ui']:
-            command = watchdog.command(batch, '/Applications/Xcode.app/Contents/Developer')
+    def test_required_batches_use_official_helper_arguments_and_remain_serial(self):
+        developer = '/Applications/Xcode_26.6.app/Contents/Developer'
+        helper = developer + '/Toolchains/XcodeDefault.xctoolchain/usr/libexec/swift/pm/swiftpm-testing-helper'
+        bundle = '/owned/.build/debug/EdithHostPackageTests.xctest'
+        for batch in ['transport', 'core', 'ui']:
+            command = watchdog.command(batch, developer, helper, bundle)
+            self.assertEqual(command[:4], [helper, '--test-bundle-path', bundle, 'test'])
+            self.assertEqual(command[-3:], [bundle, '--testing-library', 'swift-testing'])
             self.assertIn('--no-parallel', command)
             self.assertIn('--skip-build', command)
             self.assertEqual(command[command.index('--jobs') + 1], '1')
-        core = watchdog.command('core', '/Xcode')[-1]
-        ui = watchdog.command('ui', '/Xcode')[-1]
-        self.assertIn('HostLifecycleHarnessTests', core)
-        self.assertNotIn('EdithHostUITests', core)
-        self.assertEqual(ui, '^EdithHostUITests\\.')
+        core = watchdog.command('core', developer, helper, bundle)
+        ui = watchdog.command('ui', developer, helper, bundle)
+        self.assertIn('HostLifecycleHarnessTests', core[core.index('--filter') + 1])
+        self.assertNotIn('EdithHostUITests', core[core.index('--filter') + 1])
+        self.assertEqual(ui[ui.index('--filter') + 1], '^EdithHostUITests\\.')
+        with self.assertRaises(ValueError):
+            watchdog.command('ui', developer)
         with self.assertRaises(KeyError):
-            watchdog.command('unknown', '/Xcode')
+            watchdog.command('unknown', developer, helper, bundle)
+
+    def test_selected_toolchain_and_native_bundle_are_canonical_and_environment_matches_swiftpm(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            developer = root / 'Xcode.app/Contents/Developer'
+            toolchain = developer / 'Toolchains/XcodeDefault.xctoolchain'
+            helper = toolchain / 'usr/libexec/swift/pm/swiftpm-testing-helper'
+            package = root / 'Packages/EdithHost'
+            binary = package / '.build/arm64-apple-macosx/debug'
+            bundle = binary / 'EdithHostPackageTests.xctest'
+            executable = bundle / 'Contents/MacOS/EdithHostPackageTests'
+            platform = developer / 'Platforms/MacOSX.platform/Developer'
+            testing = toolchain / 'usr/lib/swift/macosx/testing'
+            for directory in [helper.parent, executable.parent, platform / 'Library/Frameworks',
+                              platform / 'Library/PrivateFrameworks', platform / 'usr/lib', testing]:
+                directory.mkdir(parents=True)
+            for path in [helper, executable]:
+                path.write_bytes(b'synthetic-unexecuted')
+                path.chmod(0o700)
+            environment = {'DYLD_LIBRARY_PATH': '/existing/library',
+                           'DYLD_FRAMEWORK_PATH': '/existing/framework', 'SYNTHETIC': 'retained'}
+            selected, loaded, image, actual = watchdog.runtime_contract(developer, binary, package, environment)
+            self.assertEqual((selected, loaded, image), (helper, bundle, executable))
+            self.assertEqual(actual['DYLD_LIBRARY_PATH'],
+                             ':'.join(['/existing/library', str(testing), str(platform / 'usr/lib')]))
+            self.assertEqual(actual['DYLD_FRAMEWORK_PATH'],
+                             ':'.join(['/existing/framework', str(platform / 'Library/Frameworks'),
+                                       str(platform / 'Library/PrivateFrameworks')]))
+            self.assertEqual(actual['NO_COLOR'], '1')
+            self.assertEqual(actual['SYNTHETIC'], 'retained')
+            self.assertNotIn('NO_COLOR', environment)
+            alias = root / 'alias'
+            alias.symlink_to(binary, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                watchdog.runtime_contract(developer, alias, package, environment)
+            outside = root / 'foreign/debug'
+            outside.mkdir(parents=True)
+            with self.assertRaises(ValueError):
+                watchdog.runtime_contract(developer, outside, package, environment)
+            executable.chmod(0o777)
+            with self.assertRaises(ValueError):
+                watchdog.runtime_contract(developer, binary, package, environment)
+            executable.chmod(0o700)
+            executable.unlink()
+            executable.symlink_to(helper)
+            with self.assertRaises(ValueError):
+                watchdog.runtime_contract(developer, binary, package, environment)
+            helper.unlink()
+            with self.assertRaises(FileNotFoundError):
+                watchdog.runtime_contract(developer, binary, package, environment)
 
     def test_success_failure_and_deadline_remain_truthful(self):
         class Process:
@@ -79,6 +136,45 @@ class WatchdogTests(unittest.TestCase):
             self.assertEqual(len(owners[0].signals), 1 if deadline == 0 else 0)
             self.assertEqual(result['remainingOwnedProcesses'], 0)
             self.assertFalse(result['testsCompleted'])
+
+    def test_runtime_batch_launches_exact_helper_with_validated_environment_and_records_ownership(self):
+        environment = {'NO_COLOR': '1', 'DYLD_FRAMEWORK_PATH': '/selected/frameworks'}
+        captured = []
+        class Process:
+            pid = 321
+            returncode = None
+            polls = 0
+            def poll(self):
+                self.polls += 1
+                if self.polls > 1:
+                    self.returncode = 0
+                return self.returncode
+            def wait(self, timeout):
+                return self.returncode
+        class Ownership:
+            def __init__(self, pid, uid):
+                self.known = {pid: (pid, 4, 5, '/selected/swiftpm-testing-helper', pid)}
+                self.parents = {pid: None}
+                self.alive = True
+            def refresh(self):
+                result = list(self.known.values()) if self.alive else []
+                self.alive = False
+                return result
+            def terminate(self, value):
+                raise AssertionError('Exited synthetic helper must not be signalled')
+        def launch(arguments, **options):
+            captured.append((arguments, options['env'], options['start_new_session']))
+            options['stdout'].write(b'Test run with 9 tests in 1 suite passed after 1 second.\n')
+            return Process()
+        with tempfile.TemporaryDirectory() as temporary:
+            result = watchdog.run_batch('transport', ['/selected/swiftpm-testing-helper'], Path(temporary), 100,
+                                        process_factory=launch, ownership_factory=Ownership,
+                                        sleep=lambda _: None, environment=environment)
+        self.assertEqual(captured, [(['/selected/swiftpm-testing-helper'], environment, True)])
+        self.assertTrue(result['observedTestingProcess'])
+        self.assertTrue(result['testsCompleted'])
+        self.assertEqual(result['remainingOwnedProcesses'], 0)
+        self.assertEqual(result['knownOwnedProcesses'][0]['processGroup'], 321)
 
     def test_lineage_pins_separate_groups_and_retains_owned_reparented_children(self):
         ownership = object.__new__(watchdog.OwnedProcesses)

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -101,15 +102,65 @@ def admit(environment, source):
         raise ValueError('Reviewed source mismatch')
 
 
-def command(batch, developer):
+def command(batch, developer, helper=None, bundle=None):
     common = ['--package-path', 'Packages/EdithHost', '--build-system', 'native',
               '--jobs', '1', '-Xswiftc', '-plugin-path', '-Xswiftc',
               str(Path(developer) / 'Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins')]
     if batch == 'build':
-        return ['swift', 'build', '--build-tests', *common]
-    filters = {'transport': '^EdithHostCoreTests\\.HostCLITransportTests', 'core': '^(EdithHostCoreTests|HostLifecycleHarnessTests)\\.',
+        return [str(Path(developer) / 'Toolchains/XcodeDefault.xctoolchain/usr/bin/swift'),
+                'build', '--build-tests', *common]
+    filters = {'transport': '^EdithHostCoreTests\\.HostCLITransportTests',
+               'core': '^(EdithHostCoreTests|HostLifecycleHarnessTests)\\.',
                'ui': '^EdithHostUITests\\.'}
-    return ['swift', 'test', '--skip-build', '--no-parallel', *common, '--filter', filters[batch]]
+    selected = filters[batch]
+    if helper is None or bundle is None:
+        raise ValueError('Validated selected toolchain helper and test bundle required')
+    return [str(helper), '--test-bundle-path', str(bundle), 'test', '--skip-build',
+            '--no-parallel', *common, '--filter', selected, str(bundle),
+            '--testing-library', 'swift-testing']
+
+
+def canonical_path(path, directory=False):
+    path = Path(path)
+    if not path.is_absolute() or path.resolve(strict=True) != path:
+        raise ValueError('Noncanonical diagnostic executable or bundle path')
+    metadata = path.lstat()
+    expected = stat.S_ISDIR if directory else stat.S_ISREG
+    if not expected(metadata.st_mode) or metadata.st_uid not in {0, os.getuid()}:
+        raise ValueError('Unexpected diagnostic path ownership or type')
+    if metadata.st_mode & 0o022:
+        raise ValueError('Writable diagnostic path')
+    if not directory and not os.access(path, os.X_OK):
+        raise ValueError('Diagnostic executable is not executable')
+    return path
+
+
+def runtime_contract(developer, bin_directory, package, environment):
+    developer = canonical_path(developer, directory=True)
+    if developer.parts[-2:] != ('Contents', 'Developer'):
+        raise ValueError('Unexpected selected developer layout')
+    toolchain = canonical_path(developer / 'Toolchains/XcodeDefault.xctoolchain', directory=True)
+    helper = canonical_path(toolchain / 'usr/libexec/swift/pm/swiftpm-testing-helper')
+    package = canonical_path(package, directory=True)
+    build_root = canonical_path(package / '.build', directory=True)
+    bin_directory = canonical_path(bin_directory, directory=True)
+    if not bin_directory.is_relative_to(build_root):
+        raise ValueError('Native test bundle outside owning build directory')
+    bundle = canonical_path(bin_directory / 'EdithHostPackageTests.xctest', directory=True)
+    executable = canonical_path(bundle / 'Contents/MacOS/EdithHostPackageTests')
+    result = dict(environment)
+    result['NO_COLOR'] = '1'
+    libraries = []
+    testing = toolchain / 'usr/lib/swift/macosx/testing'
+    if testing.exists():
+        libraries.append(canonical_path(testing, directory=True))
+    platform = canonical_path(developer / 'Platforms/MacOSX.platform', directory=True)
+    frameworks = [canonical_path(platform / 'Developer/Library' / name, directory=True)
+                  for name in ['Frameworks', 'PrivateFrameworks']]
+    libraries.append(canonical_path(platform / 'Developer/usr/lib', directory=True))
+    for key, paths in [('DYLD_FRAMEWORK_PATH', frameworks), ('DYLD_LIBRARY_PATH', libraries)]:
+        result[key] = ':'.join(([result[key]] if result.get(key) else []) + [str(path) for path in paths])
+    return helper, bundle, executable, result
 
 
 def owned_crash_reports(report_directory, output, identities, started):
@@ -151,12 +202,13 @@ def completed_tests(batch, text):
 
 
 def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.Popen,
-              ownership_factory=OwnedProcesses, clock=time.monotonic, sleep=time.sleep):
+              ownership_factory=OwnedProcesses, clock=time.monotonic, sleep=time.sleep, environment=None):
     start = clock()
     wall_start = time.time()
     timed_out = False
     with (directory / f'{batch}.log').open('wb') as log:
-        process = process_factory(arguments, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        process = process_factory(arguments, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                                  env=environment)
         ownership = ownership_factory(process.pid, os.getuid())
         try:
             while process.poll() is None:
@@ -227,11 +279,23 @@ def main():
                             ('sdk', ['xcrun', '--show-sdk-version'])]:
         receipt['toolchain'][name] = subprocess.check_output(arguments, text=True, timeout=30).strip()
     try:
-        for batch in ['build', 'transport', 'core', 'ui']:
-            result = run_batch(batch, command(batch, developer), directory, 900 if batch == 'build' else 600)
-            receipt['batches'].append(result)
-            if batch == 'build' and (result['exitCode'] != 0 or result['timedOut']):
-                break
+        result = run_batch('build', command('build', developer), directory, 900)
+        receipt['batches'].append(result)
+        if result['exitCode'] == 0 and not result['timedOut']:
+            swift = str(Path(developer) / 'Toolchains/XcodeDefault.xctoolchain/usr/bin/swift')
+            binary_directory = subprocess.check_output(
+                [swift, 'build', '--show-bin-path', '--package-path', 'Packages/EdithHost',
+                 '--build-system', 'native'], text=True, timeout=30).strip()
+            helper, bundle, executable, environment = runtime_contract(
+                developer, binary_directory, Path('Packages/EdithHost').resolve(), os.environ)
+            receipt['runtime'] = {'helper': str(helper), 'bundle': str(bundle),
+                                  'executable': str(executable),
+                                  'dyldFrameworkPath': environment['DYLD_FRAMEWORK_PATH'],
+                                  'dyldLibraryPath': environment['DYLD_LIBRARY_PATH']}
+            for batch in ['transport', 'core', 'ui']:
+                result = run_batch(batch, command(batch, developer, helper, bundle), directory, 600,
+                                   environment=environment)
+                receipt['batches'].append(result)
     finally:
         receipt['passed'] = len(receipt['batches']) == 4 and all(
             row['exitCode'] == 0 and row['testsCompleted'] and not row['timedOut']
