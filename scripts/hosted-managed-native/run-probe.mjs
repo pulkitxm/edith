@@ -13,6 +13,7 @@ import { join, resolve } from "node:path";
 import { validateManagedNativeProof } from "../extension-worker-proof.mjs";
 import { prepareManagedShippingData } from "../managed-shipping-fixture-data.mjs";
 import { prepareHostRemoteFixture } from "../prepare-host-remote-fixture.mjs";
+import { collectProbeDiagnostics } from "./probe-diagnostics.mjs";
 import { configureUITestRun, writeUIProject } from "./ui-project.mjs";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true");
@@ -228,6 +229,32 @@ try {
     forcedCleanupRequired: remainingBeforeCleanup.length > 0,
   };
   await mkdir(output, { recursive: true });
+  try {
+    const diagnostics = await collectProbeDiagnostics({
+      directory,
+      identifier,
+    });
+    await writeFile(
+      join(output, "diagnostics.json"),
+      JSON.stringify(diagnostics, null, 2),
+    );
+    for (const record of diagnostics.records)
+      if (record.status === "observed")
+        await writeFile(
+          join(output, record.name),
+          JSON.stringify(record.value, null, 2),
+        );
+    result = { ...result, diagnostics };
+  } catch {
+    result = {
+      ...result,
+      diagnostics: {
+        schemaVersion: 1,
+        hostIdentifier: identifier,
+        outcome: "unavailable",
+      },
+    };
+  }
   await writeFile(join(output, "result.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
 }
