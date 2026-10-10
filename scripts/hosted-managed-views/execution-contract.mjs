@@ -106,7 +106,27 @@ export function validateManagedExecutionResults(results, review, fixtures) {
   assert.equal(new Set(ids).size, 39);
   assert.deepEqual(results.map(({ extensionID }) => extensionID).sort(), ids);
   assert.deepEqual(fixtures.map(({ extensionID }) => extensionID).sort(), ids);
-  for (const owner of review.owners) {
+  validateManagedOwnerResults(results, review.owners, fixtures);
+  return {
+    schema: 1,
+    outcome: "passed",
+    owners: 39,
+    managedNativeViewSmokeValidated: true,
+    functionalActionsValidated: false,
+    shippingHostExecutableUnchanged: false,
+    factoryOverlayOwners: ["plugins", "studio"],
+    originalViewScope:
+      "Original managed view creation, close, reopen and disable with isolated inert engines",
+    results,
+  };
+}
+
+export function validateManagedOwnerResults(results, owners, fixtures) {
+  const ids = owners.map(({ id }) => id).sort();
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(results.map(({ extensionID }) => extensionID).sort(), ids);
+  assert.deepEqual(fixtures.map(({ extensionID }) => extensionID).sort(), ids);
+  for (const owner of owners) {
     const result = results.find(({ extensionID }) => extensionID === owner.id);
     const fixture = fixtures.find(
       ({ extensionID }) => extensionID === owner.id,
@@ -122,16 +142,4 @@ export function validateManagedExecutionResults(results, review, fixtures) {
     assert.equal(result.hostCarrierTransformationVerified, true);
     validateManagedViewProof(result.proof, owner, fixture.package);
   }
-  return {
-    schema: 1,
-    outcome: "passed",
-    owners: 39,
-    managedNativeViewSmokeValidated: true,
-    functionalActionsValidated: false,
-    shippingHostExecutableUnchanged: false,
-    factoryOverlayOwners: ["plugins", "studio"],
-    originalViewScope:
-      "Original managed view creation, close, reopen and disable with isolated inert engines",
-    results,
-  };
 }
