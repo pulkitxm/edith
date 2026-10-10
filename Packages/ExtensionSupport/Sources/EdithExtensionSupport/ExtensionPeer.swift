@@ -204,14 +204,14 @@ private final class ExtensionPeerCall: @unchecked Sendable {
             connection.stateUpdateHandler = { [weak self] state in
                 if case .failed = state { self?.finish(.failure(ExtensionPeerError.unavailable)) }
             }
+            timer.activate()
             let started = lock.withLock { () -> Bool in
                 guard result == nil else { return false }
                 self.connection = connection
                 self.timer = timer
                 return true
             }
-            guard started else { connection.cancel(); return }
-            timer.activate()
+            guard started else { timer.cancel(); connection.cancel(); return }
             connection.start(queue: queue)
             connection.send(
                 content: frame,

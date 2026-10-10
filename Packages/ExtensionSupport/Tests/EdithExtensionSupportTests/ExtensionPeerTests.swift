@@ -125,6 +125,33 @@ import Testing
                 == Data("recovered".utf8))
     }
 
+    @MainActor @Test func cancellationDuringSocketAdmissionRemainsRecoverable() async throws {
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let endpoint = try ExtensionPeerEndpoint(
+            namespace: UUID().uuidString, owner: "fixture", directory: directory)
+        let server = ExtensionPeerServer(endpoint: endpoint) { _, command, payload in
+            if command == "wait" { try await Task.sleep(for: .seconds(30)) }
+            return payload
+        }
+        try server.start()
+        defer { server.shutdown() }
+        for iteration in 0..<128 {
+            let call = Task { try await endpoint.invoke("wait", timeout: 1) }
+            if iteration.isMultiple(of: 2) {
+                await Task.yield()
+            } else {
+                try await Task.sleep(for: .microseconds(100))
+            }
+            call.cancel()
+            await #expect(throws: CancellationError.self) { try await call.value }
+        }
+        server.shutdown()
+        try server.start()
+        #expect(
+            try await endpoint.invoke("echo", payload: Data("recovered".utf8))
+                == Data("recovered".utf8))
+    }
+
     @MainActor @Test func shutdownDisconnectsAllPendingSocketCommands() async throws {
         defer { try? FileManager.default.removeItem(at: directory) }
         let endpoint = try ExtensionPeerEndpoint(
