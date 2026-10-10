@@ -1,3 +1,7 @@
+import AppKit
+import EdithExtensionUI
+import EdithHostCore
+import SwiftUI
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -7,6 +11,101 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostNotchCompactCardTests {
+    @Test func originalCompactCardRendersAndItsActualButtonsUseIssuedActionsAndOneOpenCallback()
+        async throws
+    {
+        _ = TestWindowHost.application
+        let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
+            NSAccessibility.Attribute(rawValue: $0)
+        }
+        let oldAccessibility = attributes.map { NSApp.accessibilityAttributeValue($0) }
+        for attribute in attributes { NSApp.accessibilitySetValue(true, forAttribute: attribute) }
+        defer {
+            for (attribute, old) in zip(attributes, oldAccessibility) {
+                NSApp.accessibilitySetValue(old ?? false, forAttribute: attribute)
+            }
+        }
+        let previous = UIScale.current
+        defer { UIScale.apply(previous) }
+        for (width, zoom, scheme, dense) in [
+            (280.0, 1.0, ColorScheme.light, true), (560.0, 1.0, ColorScheme.dark, false),
+            (420.0, 1.5, ColorScheme.light, true), (700.0, 1.5, ColorScheme.dark, false),
+        ] {
+            UIScale.apply(zoom)
+            let fixture = CompactCardFixture(
+                widget: .desk, versions: ["clipboard": "1", "emoji": "2"], dense: dense)
+            try await fixture.model.refresh()
+            let host = NSHostingView(
+                rootView: HostNotchCompactCard(
+                    model: fixture.model,
+                    layout: .init(tiles: [fixture.origin.tile]), measured: { _ in }
+                )
+                .environment(\.colorScheme, scheme).environment(
+                    \.automaticViewActionsEnabled, false
+                )
+                .transaction { $0.animation = nil })
+            host.frame = .init(x: 0, y: 0, width: width, height: 800)
+            let panel = HostNotchPanel()
+            panel.contentView = host
+            for _ in 0..<6 {
+                host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(!panel.isVisible && !panel.isKeyWindow)
+            #expect(host.fittingSize.height.isFinite && host.fittingSize.height > 30)
+            let open = try #require(compactControls(host, label: "Open Desk tools").first)
+            #expect(compactControls(host, label: "Open Desk tools").count == 1)
+            #expect((open as AnyObject).accessibilityPerformPress?() == true)
+            await fixture.wait { fixture.navigation.count == 1 }
+            #expect(fixture.navigation.first?.0 == fixture.origin)
+            #expect(fixture.navigation.first?.0.tile.widget.destination == "desk")
+            let action = try #require(compactControls(host, label: "Change").first)
+            #expect((action as AnyObject).accessibilityPerformPress?() == true)
+            for _ in 0..<100 {
+                if await fixture.gate.performed().count == 1 { break }
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(await fixture.gate.performed().count == 1)
+            let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+            await fixture.model.stop()
+            panel.close()
+        }
+        #expect(TestWindowHost.exposedWindows.isEmpty)
+    }
+
+    @Test func compactLeaseStopsOwnedRequestsWhenItsOriginalPanelDetaches() async throws {
+        _ = TestWindowHost.application
+        let fixture = CompactCardFixture(widget: .github, versions: ["quinjet": "1"])
+        let request = HostExtensionContentRequest(
+            extensionID: "quinjet", location: "notch",
+            section: "surface.card", presentationID: fixture.origin.cardPresentationID,
+            surface: .init(target: .notch, tile: fixture.origin.tile))
+        let lease = HostNotchCompactController.lease(
+            request: request, model: fixture.model,
+            layout: .init(tiles: [fixture.origin.tile]), automatic: false)
+        let panel = HostNotchPanel()
+        panel.contentViewController = lease.controller
+        lease.apply(compact: true, visible: true, width: 400)
+        try await fixture.model.refresh()
+        #expect(lease.controller.children.count == 1 && !panel.isVisible)
+        lease.apply(compact: true, visible: false, width: 400)
+        #expect(fixture.model.providers.isEmpty)
+        await fixture.gate.hold()
+        let reading = Task { try await fixture.model.refresh() }
+        for _ in 0..<100 {
+            if await fixture.gate.started() { break }; try await Task.sleep(for: .milliseconds(5))
+        }
+        let closing = Task { try await lease.close() }
+        await Task.yield()
+        await fixture.gate.release()
+        _ = try? await reading.value
+        try await closing.value
+        #expect(lease.closed && fixture.model.pendingCount == 0 && fixture.model.providers.isEmpty)
+        #expect(lease.controller.parent == nil && lease.controller.view.superview == nil)
+        panel.close()
+    }
+
     @Test func sharedOriginalCardsUseRealProviderSnapshotsAndPreserveTileSourceAndActionControls()
         async throws
     {
@@ -145,9 +244,11 @@ private final class CompactCardFixture {
             navigation.append((origin, id, version))
             if replaceOnNavigation { versions[id] = "new" }
         })
-    init(widget: SurfaceWidget, versions: [String: String]) {
+    init(widget: SurfaceWidget, versions: [String: String], dense: Bool = false) {
         self.versions = versions
         var tile = SurfaceTile(widget)
+        tile.dense = dense
+        tile.accentHex = "336699"
         tile.sourceIDs = ["synthetic-source"]
         tile.metricColumns = 2
         tile.itemLimit = 3
@@ -171,4 +272,24 @@ private func compactFixtureSnapshot(providerID: String, value: String) throws ->
                 actions: [.init("change", "Change", "checkmark")])
         ]
     ).encoded()
+}
+
+@MainActor
+private func compactControls(_ node: NSObject, label: String, depth: Int = 0) -> [NSObject] {
+    guard depth < 64 else { return [] }
+    var result: [NSObject] = []
+    if (node as AnyObject).accessibilityRole?() == .button,
+        (node as AnyObject).accessibilityLabel?() == label
+    {
+        result.append(node)
+    }
+    for child in (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? [] {
+        result += compactControls(child, label: label, depth: depth + 1)
+    }
+    if let view = node as? NSView {
+        for child in view.subviews {
+            result += compactControls(child, label: label, depth: depth + 1)
+        }
+    }
+    return Array(Dictionary(grouping: result, by: ObjectIdentifier.init).values.compactMap(\.first))
 }

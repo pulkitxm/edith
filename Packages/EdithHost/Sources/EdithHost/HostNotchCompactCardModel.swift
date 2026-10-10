@@ -41,10 +41,35 @@ final class HostNotchCompactCardModel {
         self.admission = admission; self.navigate = navigate
     }
 
-    static func supports(_ widget: SurfaceWidget) -> Bool {
+    nonisolated static func supports(_ widget: SurfaceWidget) -> Bool {
         switch widget {
         case .codeStats, .databases, .machines, .github, .desk, .media, .ability: true
         default: false
+        }
+    }
+
+    var admittedVersions: [String: String]? { try? admitted() }
+
+    func requestRefresh() { enqueue { [self] in try await refresh() } }
+    func requestAction(providerID: String, actionID: String, value: Double? = nil) {
+        enqueue { [self] in
+            try await perform(providerID: providerID, actionID: actionID, value: value)
+        }
+    }
+    func requestOpen(providerID: String) {
+        enqueue { [self] in try await open(providerID: providerID) }
+    }
+
+    private func enqueue(_ operation: @escaping @MainActor () async throws -> Void) {
+        guard !stopped, jobs.count < 4 else { return }
+        let token = UUID()
+        jobs[token] = Task { [self] in
+            defer { jobs[token] = nil }
+            do { try await operation() } catch {
+                if !(error is CancellationError), !stopped {
+                    self.error = "The widget operation did not complete."
+                }
+            }
         }
     }
 

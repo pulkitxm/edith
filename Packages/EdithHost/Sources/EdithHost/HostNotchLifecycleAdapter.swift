@@ -71,7 +71,8 @@ final class HostNotchLifecycleAdapter {
 
     convenience init(
         marketplace: HostMarketplace, manager: HostRemoteSessionManager,
-        association: HostNotchWindowAssociation
+        association: HostNotchWindowAssociation,
+        compactNavigate: @escaping HostNotchCompactCardModel.Navigate
     ) {
         weak var adapter: HostNotchLifecycleAdapter?
         let environment: HostNotchPanelCoordinator.Environment = {
@@ -94,7 +95,21 @@ final class HostNotchLifecycleAdapter {
             let peer = try HostNotchEnginePeer(marketplace: marketplace, version: version)
             return HostNotchPanelCoordinator(
                 invoke: peer.invoke, environment: environment, association: association,
-                create: { try await HostNotchSceneLease.remote(manager: manager, request: $0) })
+                create: { request in
+                    if request.section == "surface.card" {
+                        guard let coordinator = adapter?.coordinator,
+                            let origin = coordinator.compactOrigin(for: request)
+                        else { throw HostNotchPanelError.staleState }
+                        let model = HostNotchCompactCardModel(
+                            origin: origin,
+                            requests: marketplace.surfaces.requests,
+                            admission: { [weak coordinator] in coordinator?.compactVersions($0) },
+                            navigate: compactNavigate)
+                        return HostNotchCompactController.lease(
+                            request: request, model: model, layout: environment().layout)
+                    }
+                    return try await HostNotchSceneLease.remote(manager: manager, request: request)
+                })
         }
         adapter = self
         let previous = marketplace.sessions.willDisable

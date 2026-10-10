@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import EdithHostCore
 import Foundation
 
@@ -79,6 +80,41 @@ final class HostNotchPanelCoordinator {
         }
         return assemblies.values.first(where: { $0.containsLivePresentation(presentationID) })?
             .panel
+    }
+
+    func compactOrigin(for request: HostExtensionContentRequest) -> HostNotchCompactOrigin? {
+        guard request.location == "notch", request.section == "surface.card", !retired,
+            let identity,
+            let assembly = assemblies.values.first(where: { $0.slot(for: request) != nil }),
+            let state = assembly.state, let slot = assembly.slot(for: request)
+        else { return nil }
+        let origin = HostNotchCompactOrigin(
+            identity: identity, displayID: state.displayID,
+            panelPresentationID: state.presentationID, cardPresentationID: request.presentationID,
+            tile: slot.tile)
+        return compactVersions(origin) == nil ? nil : origin
+    }
+
+    func compactVersions(_ origin: HostNotchCompactOrigin) -> [String: String]? {
+        let current = environment()
+        guard !retired, identity == origin.identity,
+            current.activeVersions["notchShelf"] == attachRequest?.version,
+            let assembly = assemblies[origin.displayID], let state = assembly.state,
+            state.presentationID == origin.panelPresentationID, state.visible,
+            current.layout.visible.contains(origin.tile),
+            !current.hiddenWidgets.contains(origin.tile.widget),
+            let slot = state.slots.first(where: { slot in
+                slot.tile == origin.tile && slot.section == "surface.card"
+                    && (try? slot.request(presentationID: origin.cardPresentationID)).flatMap {
+                        assembly.slot(for: $0)
+                    } == slot
+            }), current.activeVersions[slot.providerID] == slot.providerVersion,
+            slot.providerID
+                == origin.tile.widget.providerIDs.sorted().first(where: {
+                    current.activeVersions[$0] != nil
+                })
+        else { return nil }
+        return current.activeVersions.filter { origin.tile.widget.providerIDs.contains($0.key) }
     }
 
     func start(version: String, screens: [HostNotchPanelScreen]) async throws {

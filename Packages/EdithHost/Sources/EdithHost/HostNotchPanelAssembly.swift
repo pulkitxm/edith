@@ -34,6 +34,11 @@ final class HostNotchPanelAssembly {
         !stopped && records.values.contains { $0.request.presentationID == id && $0.lease != nil }
     }
 
+    func slot(for request: HostExtensionContentRequest) -> HostNotchNativeSlot? {
+        guard ownsVisiblePanel else { return nil }
+        return records.values.first { $0.request == request }?.slot
+    }
+
     init(
         create: @escaping Create,
         present: @escaping @MainActor (HostNotchPanel) -> Void = { $0.orderFrontRegardless() },
