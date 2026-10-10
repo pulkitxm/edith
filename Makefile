@@ -176,21 +176,56 @@ ci-extension-support:
 	swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --skip HerdrCollectorFixtureTests $(if $(FILTER),--filter '$(FILTER)')
 	fixture=$$(mktemp -d /tmp/edith-extension-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.extensions.tests.$$(basename "$$fixture")" swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrCollectorFixtureTests
 
-.PHONY: ci-extension-audio-mixer
-ci-extension-audio-mixer:
-	swift format lint --strict --recursive Extensions/audioMixer
-	swift test --package-path Extensions/audioMixer --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+define UTILITY_EXTENSION_NATIVE_TEST
+	swift format lint --strict --recursive Extensions/$(1)
+	fixture=$$(mktemp -d /tmp/edith-$(1)-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.$(1).tests.$$(basename "$$fixture")" swift test --package-path Extensions/$(1) --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)') $(if $(SKIP),--skip '$(SKIP)')
+endef
+
+.PHONY: ci-extension-homebrew
+ci-extension-homebrew:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,homebrew)
+
+.PHONY: ci-extension-jev
+ci-extension-jev:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,jev)
 
 .PHONY: ci-extension-system
 ci-extension-system:
-	swift format lint --strict --parallel --recursive Extensions/system
-	swift test --package-path Extensions/system --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	$(call UTILITY_EXTENSION_NATIVE_TEST,system)
+
+.PHONY: ci-extension-time-lapse
+ci-extension-time-lapse:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,timeLapse)
+
+.PHONY: ci-extension-cleaner
+ci-extension-cleaner:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,cleaner)
+
+.PHONY: ci-extension-app-maintenance
+ci-extension-app-maintenance:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,appMaintenance)
+
+.PHONY: ci-extension-blitztree
+ci-extension-blitztree:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,blitztree)
+
+.PHONY: ci-extension-lid-awake
+ci-extension-lid-awake:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,lidAwake)
+	swiftc -typecheck -swift-version 5 -module-name LidAwakePrivilegedRole -target arm64-apple-macos14.0 Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift Extensions/lidAwake/Privileged/LidAwakePrivilegedRuntime.swift Extensions/lidAwake/Services/LidAwakeCommand.swift Extensions/lidAwake/Services/LidAwakeCommandProcess.swift
+
+.PHONY: ci-extension-audio-mixer
+ci-extension-audio-mixer:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,audioMixer)
 
 .PHONY: ci-extension-camera
 ci-extension-camera:
 	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
-	swift format lint --strict --recursive Extensions/virtualCamera
-	swift test --package-path Extensions/virtualCamera --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --no-parallel
+	$(call UTILITY_EXTENSION_NATIVE_TEST,virtualCamera)
+	swiftc -typecheck -swift-version 5 -module-name CameraCarrierRole -target arm64-apple-macos14.0 -I Extensions/virtualCamera/.build/arm64-apple-macosx/debug/Modules Extensions/virtualCamera/CameraCarrierRuntime.swift Extensions/virtualCamera/CameraCarrierLease.swift Extensions/virtualCamera/CameraCarrierProtocol.swift Extensions/virtualCamera/CameraCarrierSession.swift Extensions/virtualCamera/CameraSystemExtensionController.swift Extensions/virtualCamera/Carrier/Factory.swift
+
+.PHONY: ci-extension-camera-roles
+ci-extension-camera-roles: ci-extension-camera
 
 .PHONY: ci-extension-camera-carrier
 ci-extension-camera-carrier: host
@@ -219,10 +254,6 @@ ci-privileged-worker:
 ci-extension-bifrost:
 	swift format lint --strict --recursive Extensions/bifrost
 	swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter BifrostExtensionTests
-
-ci-extension-lid-awake:
-	swift format lint --strict --recursive Extensions/lidAwake
-	swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter LidAwakeExtensionTests
 
 .PHONY: ci-music-native
 ci-music-native:

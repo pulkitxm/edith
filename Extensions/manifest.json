@@ -415,7 +415,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-homebrew"
+    ]
   },
   {
     "id": "calendar",
@@ -502,7 +505,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-jev"
+    ]
   },
   {
     "id": "system",
@@ -581,7 +587,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-time-lapse"
+    ]
   },
   {
     "id": "cleaner",
@@ -620,7 +629,10 @@
     ],
     "dependencies": [],
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-cleaner"
+    ]
   },
   {
     "id": "appMaintenance",
@@ -660,7 +672,10 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-app-maintenance"
+    ]
   },
   {
     "id": "blitztree",
@@ -696,7 +711,10 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionUI",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-blitztree"
+    ]
   },
   {
     "id": "plugins",
