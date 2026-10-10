@@ -47,12 +47,18 @@ export function selectJourneyAttachments(manifest) {
   const files = new Set();
   const result = [];
   for (const attachment of test.attachments) {
-    const name = attachment.suggestedHumanReadableName;
+    const exportedName = attachment.suggestedHumanReadableName;
     const file = attachment.exportedFileName;
-    assert(typeof name === "string" && name.length <= 128);
+    assert(typeof exportedName === "string" && exportedName.length <= 128);
     assert(typeof file === "string" && /^[A-Za-z0-9._-]{1,255}$/.test(file));
     assert.equal(basename(file), file);
-    if (!name.startsWith("edith-journey-")) continue;
+    if (!exportedName.startsWith("edith-journey-")) continue;
+    const owned =
+      /^(edith-journey-[A-Za-z0-9-]+)_0_[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\.(json|png)$/.exec(
+        exportedName,
+      );
+    assert(owned);
+    const name = `${owned[1]}.${owned[2]}`;
     assert(!names.has(name) && !files.has(file));
     names.add(name);
     files.add(file);
@@ -138,7 +144,7 @@ export async function exportJourneyAttachments({
     toolVersion: "unobserved",
     toolSchemaVersion: "unobserved",
     schemaDigest: "unobserved",
-    manifestContract: "owned-human-names-v1",
+    manifestContract: "owned-human-names-v2",
     phase: "attachment-directory",
     category: "invalid-directory",
   };
