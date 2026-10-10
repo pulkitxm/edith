@@ -136,7 +136,7 @@ private struct HerdrTerminalList: View {
                 settingsOpen.toggle()
             }
             .popover(isPresented: $settingsOpen, arrowEdge: .top) {
-                HerdrTerminalSettingsView()
+                HerdrTerminalSettingsView(store: store)
             }
             iconButton(
                 panels.maximized
@@ -266,26 +266,32 @@ private struct HerdrTerminalList: View {
 }
 
 struct HerdrTerminalSettingsView: View {
-    @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
-    private var mouse = HerdrTerminalMouse.buttons
-    @AppStorage(AppStorageKeys.Herdr.terminalFontSize, store: SharedDefaults.store)
-    private var fontSize = HerdrTerminalSettings.fontSizeDefault
-    @AppStorage(AppStorageKeys.Herdr.terminalStartFolder, store: SharedDefaults.store)
-    private var startFolder = HerdrTerminalSettings.StartFolder.agent
-    @AppStorage(AppStorageKeys.Herdr.terminalStartupCommand, store: SharedDefaults.store)
-    private var startupCommand = ""
-    @AppStorage(AppStorageKeys.Herdr.terminalConfirmClose, store: SharedDefaults.store)
-    private var confirmClose = true
+    let store: HerdrStore
+    private var mouse: HerdrTerminalMouse { store.terminalSettings.mouse }
+    private var fontSize: Double { store.terminalSettings.fontSize }
+    private func binding<Value>(_ path: WritableKeyPath<HerdrTerminalSettings, Value>) -> Binding<
+        Value
+    > {
+        Binding(
+            get: { store.terminalSettings[keyPath: path] },
+            set: { value in
+                var settings = store.terminalSettings
+                settings[keyPath: path] = value
+                store.saveTerminalSettings(settings)
+            })
+    }
 
     var body: some View {
         Form {
             Section {
-                Picker("Mouse", selection: $mouse) {
+                Picker("Mouse", selection: binding(\.mouse)) {
                     ForEach(HerdrTerminalMouse.allCases, id: \.self) { mode in
                         Text(mode.title).tag(mode)
                     }
                 }
-                Stepper(value: $fontSize, in: HerdrTerminalSettings.fontSizeRange, step: 1) {
+                Stepper(
+                    value: binding(\.fontSize), in: HerdrTerminalSettings.fontSizeRange, step: 1
+                ) {
                     LabeledContent(
                         "Text size",
                         value: "\(Int(HerdrTerminalSettings.clampedFontSize(fontSize))) pt")
@@ -299,13 +305,13 @@ struct HerdrTerminalSettingsView: View {
                 .settingsCaption()
             }
             Section {
-                Picker("Start in", selection: $startFolder) {
+                Picker("Start in", selection: binding(\.startFolder)) {
                     ForEach(HerdrTerminalSettings.StartFolder.allCases, id: \.self) { folder in
                         Text(folder.title).tag(folder)
                     }
                 }
-                TextField("Startup command", text: $startupCommand, prompt: Text("None"))
-                Toggle("Ask before closing a running terminal", isOn: $confirmClose)
+                TextField("Startup command", text: binding(\.startupCommand), prompt: Text("None"))
+                Toggle("Ask before closing a running terminal", isOn: binding(\.confirmClose))
             }
         }
         .edithForm()
@@ -322,8 +328,7 @@ struct HerdrPanelTerminalView: View {
     let launchEnabled: Bool
     let onFocus: () -> Void
     @Environment(\.colorScheme) private var scheme
-    @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
-    private var mouse = HerdrTerminalMouse.buttons
+    private var mouse: HerdrTerminalMouse { store.terminalSettings.mouse }
     @State private var starting = false
     @State private var startedMouse: HerdrTerminalMouse?
 
@@ -334,8 +339,7 @@ struct HerdrPanelTerminalView: View {
         ZStack {
             TerminalPane(
                 holder: terminal.holder, palette: palette, active: selected,
-                wantsFocus: wantsFocus,
-                onDropFiles: terminal.host.isLocal ? nil : handleRemoteDrop,
+                wantsFocus: wantsFocus, fontSize: store.terminalSettings.fontSize,
                 onFocus: onFocus
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -354,7 +358,7 @@ struct HerdrPanelTerminalView: View {
         .background(Color(nsColor: palette.background))
         .task(id: "\(terminal.pane ?? "")|\(mouse.rawValue)") { await start() }
         .task(id: terminal.pane) {
-            guard let pane = terminal.pane else { return }
+            guard store.uiClient == nil, let pane = terminal.pane else { return }
             await terminal.scroll.watch(
                 session: terminal.session, pane: pane, machine: terminal.host.machine)
         }
@@ -392,16 +396,6 @@ struct HerdrPanelTerminalView: View {
         .frame(maxWidth: UIScale.pt(420))
     }
 
-    private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
-        let machine = terminal.host.machine
-        HerdrWorkOwnership.start {
-            await terminal.holder.deliverRemoteDrop(payload) { files in
-                try await store.uploadDroppedFiles(files, to: machine)
-            }
-        }
-        return true
-    }
-
     private func start() async {
         guard launchEnabled, terminal.pane != nil else { return }
         if terminal.holder.started {
@@ -411,14 +405,7 @@ struct HerdrPanelTerminalView: View {
         starting = true
         defer { starting = false }
         do {
-            let request = try await store.attachRequest(
-                for: terminal,
-                environment: QuinjetOperationExecution.terminalEnvironment())
-            guard !terminal.holder.started else { return }
-            terminal.holder.start(
-                executable: request.executable, arguments: request.arguments,
-                environment: request.environment,
-                allowsLocalFileLinks: terminal.host.isLocal)
+            try await store.connectTerminal(for: terminal)
             startedMouse = mouse
         } catch {
             store.terminalPanels.fail(terminal.id, error.localizedDescription)

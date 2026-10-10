@@ -391,7 +391,7 @@ public struct HerdrSnapshotBoard: Equatable, Sendable {
     }
 }
 
-public struct HerdrWorkspaceSummary: Identifiable, Equatable, Sendable {
+public struct HerdrWorkspaceSummary: Identifiable, Equatable, Codable, Sendable {
     public var id: String
     public var label: String
     public var tabCount: Int

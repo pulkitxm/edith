@@ -1,12 +1,17 @@
 import Darwin
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
-import GhosttyTerminal
 import SwiftUI
 
 @MainActor @objc(EdithQuinjetExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var uiClient: ExtensionEngineClient?
+    private var settingsModel: QuinjetSettingsModel?
+    private var uiLocation: String?
+    private var uiModel: QuinjetPageModel?
+    private var uiController: NSViewController?
     private var worker: QuinjetWorker?
     private var surface: QuinjetSurface?
     private var startup: Task<Void, Never>?
@@ -16,6 +21,11 @@ final class ExtensionRuntime: NSObject {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
+            if command == "quinjet.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    await QuinjetCLIExecution.run(request, worker: worker))
+            }
             if command.hasPrefix("surface.") {
                 guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
                 return try await surface.execute(command, payload: payload)
@@ -29,13 +39,13 @@ final class ExtensionRuntime: NSObject {
         startup?.cancel()
         commands.shutdown()
         Task {
+            await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await startup?.value
             await worker?.shutdown()
             worker = nil
             surface = nil
             startup = nil
-            GhosttyRuntime.shared.shutdown()
             completion()
         }
     }
@@ -50,8 +60,57 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard worker == nil, let location = input["location"] as? String,
+                ["main", "settings"].contains(location),
+                location != "settings" || input["section"] as? String == "extension",
+                let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "quinjet",
+                location == "settings" || configuration.engineClient != nil
+            else { return ["ok": false] as NSDictionary }
+            settingsModel?.shutdown(); settingsModel = nil
+            if let previous = uiModel {
+                previous.stopRendering(); Task { await previous.shutdown() }
+            }
+            uiClient?.invalidate()
+            uiClient = configuration.engineClient
+            uiLocation = location
+            if location == "settings" {
+                let model: QuinjetSettingsModel
+                if let client = configuration.engineClient {
+                    model = QuinjetSettingsModel(client: client)
+                } else {
+                    model = QuinjetSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
+                }
+                settingsModel = model
+                uiModel = nil
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost {
+                        QuinjetSettingsPage(model: model)
+                    })
+                return ["ok": true] as NSDictionary
+            }
+            guard let client = configuration.engineClient else {
+                return ["ok": false] as NSDictionary
+            }
+            let model = QuinjetPageModel(uiClient: .init(client: client))
+            uiModel = model
+            uiController = NSHostingController(
+                rootView: ExtensionPageHost {
+                    QuinjetPage(model: model)
+                        .environment(\.terminalLaunchEnabled, true)
+                })
+        case "stopUI":
+            settingsModel?.shutdown(); settingsModel = nil
+            uiLocation = nil
+            if let model = uiModel { model.stopRendering(); Task { await model.shutdown() } }
+            uiClient?.invalidate()
+            uiClient = nil
+            uiModel = nil
+            uiController = nil
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard worker == nil else { return ["ok": true] as NSDictionary }
@@ -60,13 +119,8 @@ final class ExtensionRuntime: NSObject {
             surface = QuinjetSurface(worker: created)
             startup = Task { await created.start() }
         case "view":
-            guard let worker else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    QuinjetPage(model: worker.model)
-                        .environment(\.automaticViewActionsEnabled, worker.automaticActions)
-                        .environment(\.terminalLaunchEnabled, worker.automaticActions)
-                })
+            if input["location"] as? String == uiLocation, let uiController { return uiController }
+            return ["ok": false] as NSDictionary
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary

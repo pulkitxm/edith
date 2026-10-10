@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public struct HerdrScrollInfo: Equatable, Sendable {
+public struct HerdrScrollInfo: Codable, Equatable, Sendable {
     public var offset: Int
     public var maximum: Int
     public var viewportRows: Int

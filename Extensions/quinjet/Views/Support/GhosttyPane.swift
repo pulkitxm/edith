@@ -20,11 +20,9 @@ extension GhosttyTheme {
 
 struct GhosttyPane: NSViewRepresentable {
     let holder: TerminalSessionHolder
-    let launch: GhosttyLaunch
     let theme: GhosttyTheme
     var active = true
     var wantsFocus = true
-    var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
 
     final class Coordinator {
@@ -40,8 +38,9 @@ struct GhosttyPane: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> GhosttyTerminalView {
-        let view = holder.retainedGhosttyView(launch: launch, theme: theme)
-        view.onDropFiles = onDropFiles
+        let view = holder.retainedGhosttyView(theme: theme)
+        let generation = holder.generation
+        view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
         view.onFocus = onFocus
         view.setRenderingActive(active)
         return view
@@ -49,7 +48,8 @@ struct GhosttyPane: NSViewRepresentable {
 
     func updateNSView(_ view: GhosttyTerminalView, context: Context) {
         view.apply(theme: theme)
-        view.onDropFiles = onDropFiles
+        let generation = holder.generation
+        view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
         view.onFocus = onFocus
         view.setRenderingActive(active)
         if context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) {

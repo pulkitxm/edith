@@ -465,15 +465,14 @@ import Testing
     @Test func resettingTerminalReleasesTheNativeViewAndQueuedState() {
         let holder = TerminalSessionHolder()
         holder.start(executable: "/bin/cat", arguments: [], environment: [])
-        let launch = holder.ghosttyLaunch!
         let original = holder.retainedGhosttyView(
-            launch: launch, theme: .init(palette: .edith(dark: true)))
+            theme: .init(palette: .edith(dark: true)))
         holder.sendInput("synthetic input")
         holder.reset()
         #expect(holder.ghosttyView == nil && !holder.started && !holder.hasQueuedInput)
         holder.start(executable: "/bin/cat", arguments: [], environment: [])
         let replacement = holder.retainedGhosttyView(
-            launch: holder.ghosttyLaunch!, theme: .init(palette: .edith(dark: true)))
+            theme: .init(palette: .edith(dark: true)))
         #expect(replacement !== original && holder.generation == 1)
         holder.stop()
     }

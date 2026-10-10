@@ -135,8 +135,7 @@ struct HerdrSessionView: View {
     private var quinjetThemeName = QuinjetThemePreference.app
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store)
     private var appThemeName = AppTheme.accent.rawValue
-    @AppStorage(AppStorageKeys.Herdr.terminalMouse, store: SharedDefaults.store)
-    private var mouse = HerdrTerminalMouse.buttons
+    private var mouse: HerdrTerminalMouse { store.terminalSettings.mouse }
     @State private var startedMouse: HerdrTerminalMouse?
     @State private var connectError: String?
     @State private var starting = false
@@ -169,7 +168,9 @@ struct HerdrSessionView: View {
         }
         .task(id: "\(tab.id)|\(mouse.rawValue)") { await startIfNeeded() }
         .task(id: diffRequest) { await prepareDiffIfNeeded() }
-        .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: showsDetails) {
+        .agentTopic(
+            .hooks, as: HerdrHooksSnapshot.self, active: showsDetails && store.uiClient == nil
+        ) {
             store.messaging.adopt($0)
         }
         .edithSheet(item: messageDraft, dismissible: false) { draft in
@@ -291,7 +292,7 @@ struct HerdrSessionView: View {
                 holder: tab.holder, palette: .edith(dark: dark),
                 active: presented && tab.view.showsAgent,
                 wantsFocus: wantsFocus && terminalFocus == .agent,
-                onDropFiles: agent.machineIsLocal ? nil : handleRemoteDrop,
+                fontSize: store.terminalSettings.fontSize,
                 onFocus: {
                     splitTerminalFocus = .agent
                     onFocus?()
@@ -350,15 +351,6 @@ struct HerdrSessionView: View {
         }
     }
 
-    private func handleRemoteDrop(_ payload: TerminalDropPayload) -> Bool {
-        HerdrWorkOwnership.start {
-            await tab.holder.deliverRemoteDrop(payload) { files in
-                try await store.uploadDroppedFiles(files, for: tab)
-            }
-        }
-        return true
-    }
-
     private var diffPane: some View {
         let palette = TerminalPalette.quinjet(configuration: diffConfiguration)
         return ZStack {
@@ -367,6 +359,7 @@ struct HerdrSessionView: View {
                 holder: tab.quinjet.holder, palette: palette,
                 active: presented && tab.view.showsDiff && tab.quinjet.live,
                 wantsFocus: wantsFocus && terminalFocus == .diff,
+                fontSize: store.terminalSettings.fontSize,
                 onFocus: {
                     splitTerminalFocus = .diff
                     onFocus?()
@@ -426,23 +419,9 @@ struct HerdrSessionView: View {
     }
 
     private func prepareDiff(restarting: Bool) async {
-        let configuration = diffConfiguration
-        let remote: QuinjetRemote?
-        do {
-            remote = try await store.quinjetRemote(for: tab)
-        } catch {
-            tab.quinjet.errorMessage = error.localizedDescription
-            return
-        }
-        if restarting {
-            await tab.quinjet.restart(
-                directory: agent.cwd, remote: remote, configuration: configuration,
-                launchEnabled: launchEnabled)
-        } else {
-            await tab.quinjet.prepare(
-                directory: agent.cwd, remote: remote, configuration: configuration,
-                launchEnabled: launchEnabled)
-        }
+        await store.prepareDiff(
+            for: tab, appearance: dark ? .dark : .light,
+            restarting: restarting, launchEnabled: launchEnabled)
     }
 
     private func startIfNeeded() async {
@@ -455,13 +434,7 @@ struct HerdrSessionView: View {
         starting = true
         defer { starting = false }
         do {
-            let request = try await store.attachRequest(
-                for: tab,
-                environment: QuinjetOperationExecution.terminalEnvironment())
-            tab.holder.start(
-                executable: request.executable, arguments: request.arguments,
-                environment: request.environment,
-                allowsLocalFileLinks: tab.agent.machineIsLocal)
+            try await store.connectTerminal(for: tab)
             startedMouse = mouse
         } catch {
             connectError = error.localizedDescription

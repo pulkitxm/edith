@@ -36,6 +36,8 @@ enum HerdrAgentWindow {
     }
 
     static func open(agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
+        if store.uiClient != nil { store.requestPresentation(kind: "agent", id: agent.id); return }
+        guard Bundle.main.bundleURL.pathExtension != "appex" else { return }
         store.usage.record(agent)
         if raise(agent.id) { return }
         let tab = store.detachedTab(for: agent)
@@ -101,7 +103,7 @@ final class HerdrAgentWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
-private struct HerdrDetachedView: View {
+struct HerdrDetachedView: View {
     let store: HerdrStore
     let agentID: String
     let launchEnabled: Bool
@@ -114,7 +116,9 @@ private struct HerdrDetachedView: View {
                     .herdrAgentContextMenu(tab.agent, store: store)
             }
         }
-        .agentTopic(.sessions, as: SessionsSnapshot.self) { store.adopt($0) }
+        .agentTopic(.sessions, as: SessionsSnapshot.self, active: store.uiClient == nil) {
+            store.adopt($0)
+        }
     }
 }
 

@@ -8,10 +8,11 @@ private struct AgentHookPreview: Identifiable {
     var plan: AgentActivityHookPlan
     var enabled: Bool
     var scope: AgentActivityHookScope
+    var token: UUID?
 }
 
 struct AgentConnectionsPane: View {
-    @State private var settings = AgentActivitySettings.load()
+    @State private var settings = AgentActivitySettings()
     let monitor: AgentActivityMonitor
     @State private var project: URL?
     @State private var projectScope = false
@@ -19,16 +20,15 @@ struct AgentConnectionsPane: View {
     @State private var working = false
     @State private var error: String?
     @State private var result: String?
-    @AppStorage("surfaceAgentTerminalDiscovery", store: SharedDefaults.store) private
-        var discovery = true
-    @AppStorage("surfaceAgentStuckMinutes", store: SharedDefaults.store) private
-        var stuckMinutes = 10
-    private var files: AgentActivityHookFiles { monitor.hookFiles }
+    @State private var discovery = true
+    @State private var stuckMinutes = 10
     private let installer: AgentActivityHookInstaller
 
     init(monitor: AgentActivityMonitor, installer: AgentActivityHookInstaller? = nil) {
         self.monitor = monitor
         _settings = State(initialValue: monitor.settings)
+        _discovery = State(initialValue: monitor.discoversTerminals)
+        _stuckMinutes = State(initialValue: monitor.stuckMinutes)
         self.installer =
             installer
             ?? AgentActivityHookInstaller(
@@ -70,7 +70,7 @@ struct AgentConnectionsPane: View {
                 )
                 .disabled(!discovery)
                 Text(
-                    "Terminal monitoring distinguishes approval prompts, questions, errors, and confirmed lack of progress. Quiet provider hooks are shown separately. Notification choices remain in Background agent settings."
+                    "Terminal monitoring distinguishes approval prompts, questions, errors, and confirmed lack of progress. Quiet provider hooks are shown separately. Notification choices are in Herdr settings."
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
                 Stepper(
@@ -99,6 +99,23 @@ struct AgentConnectionsPane: View {
         .edithForm()
         .disabled(working)
         .pageTask { await monitor.observe() }
+        .onChange(of: monitor.uiSettingsRevision) {
+            settings = monitor.settings
+            discovery = monitor.discoversTerminals
+            stuckMinutes = monitor.stuckMinutes
+        }
+        .onChange(of: discovery) {
+            guard discovery != monitor.discoversTerminals else { return }
+            HerdrWorkOwnership.start {
+                await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
+            }
+        }
+        .onChange(of: stuckMinutes) {
+            guard stuckMinutes != monitor.stuckMinutes else { return }
+            HerdrWorkOwnership.start {
+                await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
+            }
+        }
         .edithSheet(item: $preview) { item in
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                 Text(item.enabled ? "Configure \(item.plan.provider.title)" : "Remove Edith hooks")
@@ -228,6 +245,10 @@ struct AgentConnectionsPane: View {
     }
 
     private func chooseProject() {
+        guard monitor.uiClient == nil else {
+            error = "Project folder selection requires the owning window's folder chooser."
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -248,10 +269,10 @@ struct AgentConnectionsPane: View {
             defer { working = false }
             do {
                 let installer = installer
-                let plan = try await files.plan(
+                let (plan, token) = try await monitor.prepareHook(
                     installer, provider: provider, scope: scope, enabled: enabled)
                 try Task.checkCancellation()
-                preview = AgentHookPreview(plan: plan, enabled: enabled, scope: scope)
+                preview = AgentHookPreview(plan: plan, enabled: enabled, scope: scope, token: token)
                 error = nil
             } catch { self.error = error.localizedDescription }
         }
@@ -263,8 +284,9 @@ struct AgentConnectionsPane: View {
             defer { working = false }
             do {
                 let installer = installer
-                let installation = try await files.apply(
-                    installer, plan: item.plan, scope: item.scope, enabled: item.enabled)
+                let installation = try await monitor.applyHook(
+                    installer, plan: item.plan, scope: item.scope, enabled: item.enabled,
+                    token: item.token)
                 try Task.checkCancellation()
                 if item.enabled {
                     var next = settings

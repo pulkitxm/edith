@@ -15,7 +15,7 @@ public struct AgentActivityHookPlan: Equatable, Sendable {
     public var changed: Bool { original != replacement }
 }
 
-public struct AgentActivityHookInstallation: Equatable, Sendable {
+public struct AgentActivityHookInstallation: Equatable, Codable, Sendable {
     public let url: URL
     public let backupURL: URL?
     public let changed: Bool

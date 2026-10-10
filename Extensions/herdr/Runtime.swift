@@ -1,12 +1,19 @@
 import Darwin
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
-import GhosttyTerminal
 import SwiftUI
 
 @MainActor @objc(EdithHerdrExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var uiClient: ExtensionEngineClient?
+    private var sessionSettingsModel: HerdrSessionSettingsModel?
+    private var settingsModel: HerdrSettingsModel?
+    private var uiStore: HerdrStore?
+    private var uiActivity: AgentActivityMonitor?
+    private var uiController: NSViewController?
+    private var uiLocation: String?
     private var worker: HerdrWorker?
     private var surface: HerdrSurface?
     private var startup: Task<Void, Never>?
@@ -16,6 +23,11 @@ final class ExtensionRuntime: NSObject {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
+            if command == "herdr.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    await HerdrCLIExecution.run(request, worker: worker))
+            }
             if command.hasPrefix("surface.") {
                 guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
                 return try await surface.execute(command, payload: payload)
@@ -29,12 +41,12 @@ final class ExtensionRuntime: NSObject {
         startup?.cancel()
         commands.shutdown()
         Task {
+            await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await startup?.value
             do { try await worker?.prepareDisable(); completion(nil) } catch {
                 completion(error as NSError)
             }
-            GhosttyRuntime.shared.shutdown()
         }
     }
 
@@ -43,13 +55,13 @@ final class ExtensionRuntime: NSObject {
         startup?.cancel()
         commands.shutdown()
         Task {
+            await worker?.cancelPendingWork()
             await commands.shutdownAndWait()
             await startup?.value
             await worker?.shutdown()
             worker = nil
             surface = nil
             startup = nil
-            GhosttyRuntime.shared.shutdown()
             completion()
         }
     }
@@ -64,8 +76,89 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard worker == nil, let location = input["location"] as? String,
+                ["main", "settings", "herdr.agent", "herdr.agent.controls", "herdr.space"].contains(
+                    location),
+                let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "herdr",
+                location == "settings" || configuration.engineClient != nil
+            else { return ["ok": false] as NSDictionary }
+            let settingsSection = (input["section"] as? String).flatMap(HerdrSettingsSection.init)
+            guard location != "settings" || settingsSection != nil else {
+                return ["ok": false] as NSDictionary
+            }
+            if location.hasPrefix("herdr.") {
+                guard let target = input["target"] as? String, !target.isEmpty,
+                    target.utf8.count <= 4096, !target.utf8.contains(0)
+                else { return ["ok": false] as NSDictionary }
+            }
+            stopUI()
+            uiLocation = location
+            uiClient = configuration.engineClient
+            if location != "settings", let client = configuration.engineClient {
+                let facade = HerdrUIClient(client: client)
+                let store = HerdrStore(uiClient: facade)
+                let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
+                store.uiActivity = activity
+                uiStore = store
+                uiActivity = activity
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost {
+                        if location == "main" {
+                            HerdrPage(store: store, activity: activity)
+                                .environment(\.terminalLaunchEnabled, true)
+                        } else {
+                            HerdrRemoteScene(
+                                store: store, location: location,
+                                target: input["target"] as? String ?? ""
+                            )
+                            .environment(\.terminalLaunchEnabled, true)
+                        }
+                    })
+                PresenterState.shared.start()
+            } else if settingsSection == .agentActivity {
+                let facade: HerdrUIClient
+                if let client = configuration.engineClient {
+                    facade = HerdrUIClient(client: client)
+                } else {
+                    facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
+                }
+                let store = HerdrStore(uiClient: facade)
+                let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
+                store.uiActivity = activity
+                uiStore = store
+                uiActivity = activity
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost {
+                        HerdrActivitySettingsPage(store: store, monitor: activity)
+                    })
+            } else if settingsSection == .extensionSettings {
+                let facade: HerdrUIClient
+                if let client = configuration.engineClient {
+                    facade = HerdrUIClient(client: client)
+                } else {
+                    facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
+                }
+                let model = HerdrSessionSettingsModel(client: facade)
+                sessionSettingsModel = model
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost { HerdrExtensionSettingsPage(model: model) })
+            } else {
+                let model: HerdrSettingsModel
+                if let client = configuration.engineClient {
+                    model = HerdrSettingsModel(client: client)
+                } else {
+                    model = HerdrSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
+                }
+                settingsModel = model
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost { HerdrSettingsPage(model: model) })
+            }
+        case "stopUI": stopUI()
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard worker == nil else { return ["ok": true] as NSDictionary }
@@ -77,13 +170,10 @@ final class ExtensionRuntime: NSObject {
                 || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
             if !recovery { startup = Task { await created.start() } }
         case "view":
-            guard let worker else { return ["ok": false] as NSDictionary }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    HerdrPage(store: worker.store, activity: worker.activity)
-                        .environment(\.automaticViewActionsEnabled, worker.automaticActions)
-                        .environment(\.terminalLaunchEnabled, worker.automaticActions)
-                })
+            guard input["location"] as? String == uiLocation, let uiController else {
+                return ["ok": false] as NSDictionary
+            }
+            return uiController
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
@@ -94,6 +184,27 @@ final class ExtensionRuntime: NSObject {
         }
         return ["ok": true] as NSDictionary
     }
+    private func stopUI() {
+        sessionSettingsModel?.shutdown()
+        sessionSettingsModel = nil
+        settingsModel?.shutdown()
+        settingsModel = nil
+        let store = uiStore
+        let activity = uiActivity
+        store?.stopRendering()
+        uiClient?.invalidate()
+        uiClient = nil
+        uiStore = nil
+        uiActivity = nil
+        uiController = nil
+        uiLocation = nil
+        if store != nil || activity != nil {
+            Task {
+                await store?.shutdown(); await activity?.shutdown()
+            }
+        }
+    }
+
 }
 
 @_cdecl("edith_extension_create")

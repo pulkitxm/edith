@@ -12,6 +12,8 @@ import SwiftUI
 }
 
 struct HerdrShellTerminal: View {
+    let store: HerdrStore
+    let paneID: UUID
     let target: PaneTarget
     let holder: TerminalSessionHolder
     let active: Bool
@@ -24,7 +26,7 @@ struct HerdrShellTerminal: View {
         ZStack {
             TerminalPane(
                 holder: holder, palette: .edith(dark: scheme == .dark), active: active,
-                wantsFocus: wantsFocus, onFocus: onFocus)
+                wantsFocus: wantsFocus, fontSize: store.terminalSettings.fontSize, onFocus: onFocus)
             if let error {
                 VStack(spacing: UIScale.pt(10)) {
                     Text(error).font(.edithText(.body)).textSelection(.enabled)
@@ -38,38 +40,7 @@ struct HerdrShellTerminal: View {
         .task(id: active && launchEnabled && error == nil) {
             guard active, launchEnabled, error == nil, !holder.started else { return }
             do {
-                let request: TerminalLaunchRequest
-                if target.machineID == Machine.localID {
-                    request = TerminalLaunchRequest(
-                        executable: "/bin/zsh", arguments: ["-l"],
-                        environment: CLIToolEnvironment.sanitized().map { "\($0.key)=\($0.value)" })
-                } else {
-                    guard
-                        let machine = MachineRegistry.machines().first(where: {
-                            $0.id == target.machineID
-                        })
-                    else { throw ExtensionPeerError.unavailable }
-                    let connection = SSHConnection(machine: machine)
-                    try await connection.connect()
-                    let command = target.argument.map {
-                        "cd -- " + POSIXQuote.quote($0) + " && exec \"$SHELL\" -l"
-                    }
-                    request = TerminalLaunchRequest(
-                        executable: SSHConnection.executable.path,
-                        arguments: try connection.terminalArguments(remoteCommand: command),
-                        environment: connection.terminalEnvironment())
-                }
-                try Task.checkCancellation()
-                guard let host = HerdrTerminalBridge.executable() else {
-                    throw HerdrTerminalBridgeError.executableUnavailable
-                }
-                let native = try HerdrTerminalBridge.launchRequest(
-                    bridgeExecutable: host, controller: request, transport: .terminal)
-                holder.start(
-                    executable: native.executable, arguments: native.arguments,
-                    environment: native.environment,
-                    currentDirectory: target.machineID == Machine.localID ? target.argument : nil,
-                    allowsLocalFileLinks: target.machineID == Machine.localID)
+                try await store.connectShell(holder, paneID: paneID, target: target)
             } catch is CancellationError {} catch { self.error = error.localizedDescription }
         }
     }

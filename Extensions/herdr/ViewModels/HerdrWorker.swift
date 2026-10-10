@@ -1,3 +1,5 @@
+import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -5,43 +7,149 @@ import Foundation
 @MainActor final class HerdrWorker {
     let activity: AgentActivityMonitor
     let store: HerdrStore
+    let catalogs: AgentLaunchCatalogs
+    let searchDecider: @MainActor () -> JevDeciding?
     let hooks: AgentHookService
+    let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
+    private let openGuide: @MainActor () throws -> Void
     private let activityInstaller: AgentActivityHookInstaller
+    private let notifications: HerdrNotificationService
+    private let defaults: UserDefaults
     private let attention: HerdrAttentionBridge
     private let inventory: HerdrInventoryCommands
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
     private(set) var isStopped = false
     private var started = false
+    private var cliStreams: ExtensionCLIStreams?
+    private struct ShellSelection {
+        let target: PaneTarget
+        let holder: TerminalSessionHolder
+    }
+    private var shells: [UUID: ShellSelection] = [:]
+    private let prepareShell:
+        @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest
+    private lazy var uiHookPlans = HerdrUIHookPlans(
+        files: activity.hookFiles, installer: activityInstaller)
+    lazy var spaces = HerdrSpaceSessions(store: store)
+    private lazy var uiEngine = HerdrUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
 
+    private static func openOriginalGuide() throws {
+        let url = URL(
+            string: "https://github.com/pulkitxm/edith/blob/main/docs/cli/herdr/README.md")!
+        guard NSWorkspace.shared.open(url) else {
+            throw ExtensionPeerError.rejected("The Herdr setup guide could not be opened.")
+        }
+    }
+
     init(
+        openGuide: @escaping @MainActor () throws -> Void = HerdrWorker.openOriginalGuide,
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
+        defaults: UserDefaults = SharedDefaults.store,
+        notifications: HerdrNotificationService? = nil,
         activityInstaller: AgentActivityHookInstaller? = nil,
-        hooks: AgentHookService = .shared,
+        hooks: AgentHookService = .shared, catalogs: AgentLaunchCatalogs = AgentLaunchCatalogs(),
+        searchDecider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() },
         attention: HerdrAttentionBridge? = nil,
         automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
+        prepareShell:
+            @escaping @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest =
+            HerdrShellLaunch.prepare,
         send: @escaping @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome = {
             await HerdrAgentPrompt.send($0, to: $1)
         }
     ) {
-        self.activity = activity ?? AgentActivityMonitor()
+        let ownedStore = store ?? .shared
+        self.defaults = defaults
+        self.notifications =
+            notifications
+            ?? HerdrNotificationService(
+                defaults: defaults,
+                attention: .init(
+                    inspect: { await HerdrPaneReader.inspect($0) },
+                    decider: { await MainActor.run { AgentJevDecider.configured() } },
+                    appIsRunning: { true }), currentHosts: { ownedStore.hosts },
+                open: { request in
+                    HerdrWorkOwnership.start {
+                        await ownedStore.open(request)
+                        guard !Task.isCancelled else { return }
+                        ExtensionPresentation.showWindow()
+                    }
+                })
+        self.activity = activity ?? AgentActivityMonitor(defaults: defaults)
         self.activityInstaller =
             activityInstaller
             ?? AgentActivityHookInstaller(
                 executable: Bundle.main.executableURL
                     ?? URL(fileURLWithPath: CommandLine.arguments[0]))
-        self.store = store ?? .shared
+        self.openGuide = openGuide
+        self.store = ownedStore
         self.hooks = hooks
+        self.catalogs = catalogs
+        self.searchDecider = searchDecider
         self.attention = attention ?? HerdrAttentionBridge()
         self.automaticActions = automaticActions
         self.inventory = inventory
         self.send = send
+        self.prepareShell = prepareShell
         HerdrWorkOwnership.enable()
+        ownedStore.ownsSpaceAgent = { [weak self] in self?.spaces.holds($0) ?? false }
+        ownedStore.prepareNotificationAgent = { [weak self] id in
+            guard let self else { return }
+            self.spaces.removeAgent(id)
+            await self.spaces.drainPendingRetirements()
+        }
+        spaces.retirePanes = { [weak self] panes in
+            guard let self else { return [] }
+            var handles: [OwnedTerminalHandle] = []
+            for pane in panes {
+                if let shell = self.shells.removeValue(forKey: pane) {
+                    if let handle = shell.holder.descriptor?.handle { handles.append(handle) }
+                    shell.holder.stop()
+                }
+            }
+            return handles
+        }
+        spaces.drain = { [weak self] handles in await self?.terminalSessions.files.drain(handles) }
+        terminalSessions.files.upload = { [weak self] handle, urls in
+            guard let self, !self.isStopped, self.terminalSessions.find(handle) != nil else {
+                throw ExtensionPeerError.unavailable
+            }
+            let tabs =
+                self.store.sessions
+                + self.store.detachedIDs.compactMap { self.store.detachedTab(id: $0) }
+                + self.spaces.openedAgents.compactMap { self.spaces.agentTab($0.id) }
+            if let tab = tabs.first(where: {
+                $0.holder.descriptor?.handle == handle
+                    || $0.quinjet.holder.descriptor?.handle == handle
+            }) {
+                return try await self.store.uploadDroppedFiles(urls, for: tab)
+            }
+            if let panel = self.store.terminalPanels.terminals.values.first(where: {
+                $0.holder.descriptor?.handle == handle
+            }) {
+                return try await self.store.uploadDroppedFiles(urls, to: panel.host.machine)
+            }
+            if let shell = self.shells.values.first(where: {
+                $0.holder.descriptor?.handle == handle
+            }),
+                let machine = MachineRegistry.machines().first(where: {
+                    $0.id == shell.target.machineID
+                })
+            {
+                return try await self.store.uploadDroppedFiles(urls, to: machine)
+            }
+            throw ExtensionPeerError.unavailable
+        }
     }
 
     func start() async {
+        await OwnedTerminalContext.$registry.withValue(terminalSessions) { await startOwned() }
+    }
+
+    private func startOwned() async {
         guard !started, !isStopped else { return }
         started = true
         do { try await activity.hookFiles.resume(activityInstaller) } catch {
@@ -50,10 +158,6 @@ import Foundation
         guard !Task.isCancelled else { return }
         await activity.start()
         PresenterState.shared.start()
-        TextEditingCommands.install()
-        HerdrOpenBridge.install()
-        HerdrLayoutBridge.install()
-        HerdrSpaceBridge.install()
         guard automaticActions else { return }
         _ = try? await MachineRegistry.refresh()
         await store.watch()
@@ -62,6 +166,8 @@ import Foundation
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { return }
                 await self.recordAttention()
+                await self.notifications.evaluate(
+                    self.store.hosts, hidden: PresenterState.shared.hidesAgents)
                 await self.activity.terminals.refresh(
                     hosts: self.store.hosts,
                     enabled: self.activity.discoversTerminals
@@ -80,8 +186,105 @@ import Foundation
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
+        try await OwnedTerminalContext.$registry.withValue(terminalSessions) {
+            try await HerdrLaunchCatalogContext.$catalog.withValue(catalogs) {
+                try await executeOwned(command, payload: payload)
+            }
+        }
+    }
+
+    private func executeOwned(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command.hasPrefix("herdr.ui.launchSettings.") {
+            return try await HerdrUILaunchSettingsEngine.execute(
+                command, payload: payload, worker: self)
+        }
+        if command.hasPrefix("herdr.ui.hook.") {
+            return try await uiHookPlans.execute(command, payload: payload)
+        }
+        if command.hasPrefix("herdr.ui.") {
+            return try await uiEngine.execute(command, payload: payload)
+        }
+        if command == "herdr.cli.catalog" {
+            guard payload.count <= 16384,
+                let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                value.isEmpty
+            else { throw ExtensionPeerError.invalidRequest }
+            return try HerdrCLICatalog.data()
+        }
+        if ["herdr.cli.start", "herdr.cli.read", "herdr.cli.cancel", "herdr.cli.end"].contains(
+            command)
+        {
+            if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "herdr") }
+            guard let cliStreams else { throw ExtensionPeerError.unavailable }
+            return try HerdrCLIExecution.invokeStream(
+                command, payload: payload,
+                worker: self, streams: cliStreams)
+        }
+        if [
+            "herdr.terminal.read", "herdr.terminal.input", "herdr.terminal.resize",
+            "herdr.terminal.close",
+        ].contains(command) || OwnedTerminalFiles.admits(command) {
+            guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
+            let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
+            guard let session = terminalSessions.find(request.session) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let result = try await session.execute(command, payload: payload)
+            if command == "herdr.terminal.close" {
+                let ids = shells.filter { $0.value.holder.descriptor?.handle == request.session }
+                    .map(\.key)
+                for id in ids { shells.removeValue(forKey: id)?.holder.reset() }
+                for holder in store.terminalHolders
+                where holder.descriptor?.handle == request.session { holder.reset() }
+            }
+            return result
+        }
+        if command == "herdr.settings.sessions" || command == "herdr.settings.guide" {
+            guard payload.count <= 4096,
+                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                object.isEmpty
+            else { throw ExtensionPeerError.invalidRequest }
+            if command == "herdr.settings.sessions" {
+                let result = try await inventory.checkSessions()
+                guard !isStopped else { throw ExtensionPeerError.unavailable }
+                return try JSONEncoder().encode(result)
+            }
+            try openGuide()
+            return Data("{}".utf8)
+        }
+        if command == "herdr.settings.read" || command == "herdr.settings.save" {
+            guard payload.count <= 4096,
+                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+            else { throw ExtensionPeerError.invalidRequest }
+            if command == "herdr.settings.save" {
+                guard
+                    Set(object.keys) == [
+                        "blocked", "finished", "errors", "stuck", "openDiff", "monitoring",
+                        "stuckMinutes",
+                    ],
+                    ["blocked", "finished", "errors", "stuck", "openDiff", "monitoring"].allSatisfy(
+                        {
+                            (object[$0] as? NSNumber).map {
+                                CFGetTypeID($0) == CFBooleanGetTypeID()
+                            } == true
+                        }), let minutes = object["stuckMinutes"] as? NSNumber,
+                    CFGetTypeID(minutes) != CFBooleanGetTypeID(),
+                    minutes.doubleValue == Double(minutes.intValue),
+                    (2...120).contains(minutes.intValue)
+                else { throw ExtensionPeerError.invalidRequest }
+                let settings = try AgentPayload.decode(HerdrAttentionSettings.self, from: payload)
+                settings.save(in: defaults)
+                var providers = AgentActivitySettings.load(in: defaults)
+                providers.monitorTerminalAttention = settings.monitoring
+                defaults.set(providers.encoded, forKey: AgentActivitySettings.defaultsKey)
+                notifications.reconcile(settings)
+            } else if !object.isEmpty {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try AgentPayload.encode(HerdrAttentionSettings(defaults: defaults))
+        }
         if command.hasPrefix("activity.") {
             return try await activity.execute(command, payload: payload)
         }
@@ -109,19 +312,98 @@ import Foundation
             ])
         case "herdr.terminal.open":
             guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
-                let agent = currentAgent(id)
+                !id.isEmpty, id.utf8.count <= 512
             else { throw ExtensionPeerError.invalidRequest }
-            store.open(agent)
-            guard let tab = store.session(id) else { throw ExtensionPeerError.unavailable }
-            let request = try await store.attachRequest(
-                for: tab, environment: QuinjetOperationExecution.terminalEnvironment())
+            let retained = spaces.agentTab(id) ?? store.detachedTab(id: id) ?? store.session(id)
+            if let descriptor = retained?.holder.descriptor,
+                terminalSessions.find(descriptor.handle) != nil
+            {
+                return try JSONEncoder().encode(descriptor)
+            }
+            guard let agent = currentAgent(id) else { throw ExtensionPeerError.invalidRequest }
+            if retained == nil { store.open(agent) }
+            guard let tab = retained ?? store.session(id) else {
+                throw ExtensionPeerError.unavailable
+            }
+            try await store.connectTerminal(for: tab)
             try Task.checkCancellation()
             guard !isStopped else { throw ExtensionPeerError.unavailable }
-            tab.holder.start(
-                executable: request.executable, arguments: request.arguments,
-                environment: request.environment, allowsLocalFileLinks: agent.machineIsLocal)
-            ExtensionPresentation.showWindow()
-            return Data("{\"opened\":true}".utf8)
+            guard let descriptor = tab.holder.descriptor else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try JSONEncoder().encode(descriptor)
+        case "herdr.panel.open":
+            guard Set(object.keys) == ["terminalID"], let id = object["terminalID"] as? String,
+                let terminal = store.terminalPanels.terminals[id]
+            else { throw ExtensionPeerError.invalidRequest }
+            try await store.connectTerminal(for: terminal)
+            if let pane = terminal.pane {
+                terminal.scroll.startWatch(
+                    session: terminal.session, pane: pane, machine: terminal.host.machine)
+            }
+            try Task.checkCancellation()
+            guard !isStopped, let descriptor = terminal.holder.descriptor else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try JSONEncoder().encode(descriptor)
+        case "herdr.diff.open":
+            guard Set(object.keys) == ["agentID", "appearance", "restart"],
+                let id = object["agentID"] as? String, let agent = currentAgent(id),
+                let text = object["appearance"] as? String,
+                let appearance = QuinjetAppearance(rawValue: text),
+                let number = object["restart"] as? NSNumber,
+                CFGetTypeID(number) == CFBooleanGetTypeID()
+            else { throw ExtensionPeerError.invalidRequest }
+            let retained = spaces.agentTab(id) ?? store.detachedTab(id: id) ?? store.session(id)
+            if retained == nil { store.open(agent) }
+            guard let tab = retained ?? store.session(id) else {
+                throw ExtensionPeerError.unavailable
+            }
+            await store.prepareDiff(
+                for: tab, appearance: appearance,
+                restarting: number.boolValue, launchEnabled: true)
+            try Task.checkCancellation()
+            guard !isStopped, let terminal = tab.quinjet.holder.descriptor else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try JSONEncoder().encode(
+                HerdrDiffSessionState(
+                    worktree: tab.quinjet.worktree,
+                    projectName: tab.quinjet.projectName, terminal: terminal))
+        case "herdr.shell.open":
+            guard Set(object.keys).isSubset(of: ["paneID", "machineID", "directory"]),
+                let pane = object["paneID"] as? String, let paneID = UUID(uuidString: pane),
+                let machine = object["machineID"] as? String,
+                let machineID = UUID(uuidString: machine),
+                machineID == Machine.localID
+                    || MachineRegistry.machines().contains(where: { $0.id == machineID })
+            else { throw ExtensionPeerError.invalidRequest }
+            var directory: String?
+            if let supplied = object["directory"] {
+                guard let value = supplied as? String, QuinjetPath.isAbsolute(value),
+                    value.utf8.count <= 4096, !value.utf8.contains(0)
+                else { throw ExtensionPeerError.invalidRequest }
+                directory = value
+            }
+            guard shells[paneID] != nil || shells.count < 64 else {
+                throw ExtensionPeerError.unavailable
+            }
+            let target = PaneTarget(machineID: machineID, screen: .terminal, argument: directory)
+            if let existing = shells[paneID], existing.target != target {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let holder = shells[paneID]?.holder ?? TerminalSessionHolder()
+            shells[paneID] = .init(target: target, holder: holder)
+            if !holder.started {
+                try await store.connectShell(
+                    holder, paneID: paneID,
+                    target: target, prepare: prepareShell)
+            }
+            try Task.checkCancellation()
+            guard !isStopped, let descriptor = holder.descriptor else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try JSONEncoder().encode(descriptor)
         case "herdr.open":
             guard Set(object.keys).isSubset(of: ["agentID", "view"]),
                 let id = object["agentID"] as? String, let agent = currentAgent(id)
@@ -133,7 +415,7 @@ import Foundation
             guard let chosen = HerdrAgentView(rawValue: view) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            store.open(agent, showing: chosen)
+            await store.open(.init(agentID: agent.id, hostID: agent.machineID, view: chosen))
             ExtensionPresentation.showWindow()
             return Data("{\"opened\":true}".utf8)
         case "herdr.message":
@@ -179,7 +461,13 @@ import Foundation
 
     func currentAgent(_ id: String) -> HerdrAgent? {
         guard !isStopped, !id.isEmpty, id.utf8.count <= 512 else { return nil }
-        return store.agents.first { $0.id == id }
+        if let agent = store.agents.first(where: { $0.id == id }) { return agent }
+        guard
+            let terminal = store.hosts.map({ HerdrMachineTerminal.agent(for: $0) }).first(where: {
+                $0.id == id
+            })
+        else { return nil }
+        return store.session(id)?.agent ?? store.detachedTab(id: id)?.agent ?? terminal
     }
 
     func prepareDisable() async throws {
@@ -187,20 +475,31 @@ import Foundation
         try await activity.hookFiles.suspend(activityInstaller)
     }
 
+    func cancelPendingWork() async {
+        await terminalSessions.stopAllAndWait()
+        maintenance?.cancel()
+        await catalogs.shutdown()
+        await cliStreams?.stopAndWait()
+    }
+
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        await terminalSessions.stopAllAndWait()
+        spaces.stopAll()
+        uiHookPlans.shutdown()
+        await catalogs.shutdown()
+        for selection in shells.values { selection.holder.stop() }
+        shells.removeAll()
+        await cliStreams?.stopAndWait()
+        cliStreams = nil
         do { try await activity.hookFiles.suspend(activityInstaller) } catch {
             activity.hookError = error.localizedDescription
         }
         await activity.shutdown()
         attention.shutdown()
+        notifications.shutdown()
         maintenance?.cancel()
-        HerdrOpenBridge.shutdown()
-        HerdrLayoutBridge.shutdown()
-        HerdrSpaceBridge.shutdown()
-        HerdrAgentWindow.shutdown()
-        HerdrSpaceWindow.shutdown()
         await hooks.stop()
         await store.shutdown()
         await AgentSearchService.shared.shutdown()
@@ -208,7 +507,6 @@ import Foundation
         maintenance = nil
         HerdrTopicFeed.shutdown()
         PresenterState.shared.shutdown()
-        TextEditingCommands.shutdown()
         MachineRegistry.shutdown()
     }
 

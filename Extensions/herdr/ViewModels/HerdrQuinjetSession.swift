@@ -20,7 +20,7 @@ final class HerdrQuinjetSession {
         self.client = client
     }
 
-    var live: Bool { holder.started }
+    var live: Bool { holder.started && holder.exitMessage == nil }
 
     var branch: String? {
         guard let worktree else { return nil }
@@ -53,10 +53,25 @@ final class HerdrQuinjetSession {
         holder.stop()
     }
 
+    func adopt(_ state: HerdrDiffSessionState, invoke: @escaping OwnedTerminalClient.Invoke) throws
+    {
+        if holder.descriptor != state.terminal {
+            holder.reset()
+            holder.bind(try OwnedTerminalClient(descriptor: state.terminal, invoke: invoke))
+        }
+        worktree = state.worktree
+        projectName = state.projectName
+        errorMessage = nil
+    }
+
     private func launch(
         directory: String, remote: QuinjetRemote?,
         configuration: QuinjetLaunchConfiguration, launchEnabled: Bool
     ) async {
+        guard Bundle.main.bundleURL.pathExtension != "appex" else {
+            errorMessage = "Only the owning engine can prepare a diff."
+            return
+        }
         generation += 1
         let attempt = generation
         errorMessage = nil
@@ -93,21 +108,13 @@ final class HerdrQuinjetSession {
                     localHomeDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
             }
             guard attempt == generation else { return }
-            guard let host = HerdrTerminalBridge.executable() else {
-                throw HerdrTerminalBridgeError.executableUnavailable
-            }
-            let native = try HerdrTerminalBridge.launchRequest(
-                bridgeExecutable: host,
-                controller: TerminalLaunchRequest(
-                    executable: request.executableURL.path, arguments: request.arguments,
-                    environment: QuinjetOperationExecution.terminalEnvironment(
-                        overrides: request.environment)), transport: .terminal)
             holder.reset()
             holder.start(
-                executable: native.executable, arguments: native.arguments,
-                environment: native.environment,
-                currentDirectory: request.currentDirectory,
-                allowsLocalFileLinks: remote == nil)
+                executable: request.executableURL.path, arguments: request.arguments,
+                environment: QuinjetOperationExecution.terminalEnvironment(
+                    overrides: request.environment),
+                currentDirectory: request.currentDirectory, allowsLocalFileLinks: remote == nil)
+            guard holder.descriptor != nil else { throw ExtensionPeerError.unavailable }
             launched = configuration
         } catch {
             guard attempt == generation else { return }

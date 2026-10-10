@@ -6,7 +6,8 @@ import Observation
 @MainActor
 @Observable
 final class QuinjetTab: Identifiable {
-    let id = UUID()
+    let id: UUID
+    init(id: UUID = UUID()) { self.id = id }
     let holder = TerminalSessionHolder()
     var projectName: String?
     var worktree: QuinjetWorktree?
@@ -36,6 +37,13 @@ final class QuinjetPageModel {
     typealias ExternalWorkspaceAction = @Sendable (String) async throws -> Void
 
     private let client: QuinjetClient
+    let machines: QuinjetMachines
+    private var uiClient: QuinjetUIClient?
+    private var uiActions: [UUID: Task<Void, Never>] = [:]
+    private var projectedPrivacy = false
+    private(set) var cmuxAvailable = false
+    var isRemote: Bool { uiClient != nil }
+    var hidesReview: Bool { isRemote ? projectedPrivacy : QuinjetPrivacy.shared.hidesReview }
     let usage: LauncherUsage
     private let focusExternalWorkspace: ExternalWorkspaceAction
     private let closeExternalWorkspace: ExternalWorkspaceAction
@@ -65,12 +73,157 @@ final class QuinjetPageModel {
         }
     ) {
         self.client = client
+        machines = .shared
         self.usage = usage ?? .shared
         self.focusExternalWorkspace = focusExternalWorkspace
         self.closeExternalWorkspace = closeExternalWorkspace
         let tab = QuinjetTab()
         tabs = [tab]
         selected = tab.id
+    }
+
+    init(uiClient: QuinjetUIClient) {
+        self.uiClient = uiClient
+        client = .init(execute: { _ in throw ExtensionPeerError.unavailable })
+        usage = LauncherUsage(defaults: nil)
+        machines = QuinjetMachines(renderingOnly: true)
+        focusExternalWorkspace = { _ in throw ExtensionPeerError.unavailable }
+        closeExternalWorkspace = { _ in throw ExtensionPeerError.unavailable }
+        let tab = QuinjetTab()
+        tabs = [tab]
+        selected = tab.id
+    }
+
+    var uiRemoteProjects: [QuinjetUIState.RemoteProjects] {
+        remoteProjects.map {
+            .init(
+                machineID: $0.key, projects: $0.value,
+                error: remoteProjectErrors[$0.key])
+        }
+    }
+
+    func terminalAvailable(_ terminal: QuinjetTerminal) -> Bool {
+        if isRemote { return terminal == .embedded || cmuxAvailable }
+        return terminal.isAvailable
+    }
+
+    func refreshUI() async {
+        guard let uiClient, !stopped else { return }
+        do {
+            if let state = try await uiClient.state("quinjet.ui.read") { try adoptUI(state) }
+        } catch is CancellationError {} catch { projectError = error.localizedDescription }
+    }
+
+    func selectMachine(_ machine: Machine, in tab: QuinjetTab) {
+        guard isRemote else { return }
+        enqueueUI(
+            "quinjet.ui.machine",
+            object: [
+                "tabID": tab.id.uuidString,
+                "machineID": machine.id.uuidString,
+            ])
+    }
+
+    func makeFolderPicker(for tab: QuinjetTab) -> QuinjetFolderPickerModel {
+        if let uiClient {
+            return .init(
+                resolveHome: {
+                    let data = try await uiClient.request(
+                        "quinjet.ui.folder.home",
+                        object: ["tabID": tab.id.uuidString])
+                    guard data.count <= 8192 else { throw ExtensionPeerError.invalidRequest }
+                    let path = try JSONDecoder().decode(String.self, from: data)
+                    guard QuinjetPath.isAbsolute(path), path.utf8.count <= 4096,
+                        !path.utf8.contains(0)
+                    else { throw ExtensionPeerError.invalidRequest }
+                    return path
+                },
+                listDirectory: { path in
+                    let data = try await uiClient.request(
+                        "quinjet.ui.folder.list",
+                        object: ["tabID": tab.id.uuidString, "path": path])
+                    guard data.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
+                    let entries = try JSONDecoder().decode([RemoteFileEntry].self, from: data)
+                    guard entries.count <= 10000,
+                        entries.allSatisfy({
+                            $0.path.utf8.count <= 4096 && $0.name.utf8.count <= 1024
+                        })
+                    else { throw ExtensionPeerError.invalidRequest }
+                    return entries
+                })
+        }
+        return .init(session: machines.session(for: tab.machineID))
+    }
+
+    private func adoptUI(_ state: QuinjetUIState) throws {
+        guard !stopped, let uiClient else { throw ExtensionPeerError.unavailable }
+        try state.validate()
+        let existing = Dictionary(uniqueKeysWithValues: tabs.map { ($0.id, $0) })
+        let retained = Set(state.tabs.map(\.id))
+        for tab in tabs where !retained.contains(tab.id) { tab.holder.stopRendering() }
+        tabs = try state.tabs.map { projection in
+            let tab = existing[projection.id] ?? QuinjetTab(id: projection.id)
+            tab.projectName = projection.projectName
+            tab.worktree = projection.worktree
+            tab.worktrees = projection.worktrees
+            tab.remote = projection.remote?.renderingValue
+            if tab.machineID != projection.machineID { tab.folderPicker = nil }
+            tab.machineID = projection.machineID
+            tab.errorMessage = projection.errorMessage
+            tab.launchConfiguration = projection.configuration
+            tab.externalLaunchMessage = projection.externalLaunchMessage
+            if let terminal = projection.terminal {
+                if tab.holder.descriptor != terminal {
+                    tab.holder.reset()
+                    tab.holder.bind(try uiClient.terminal(terminal))
+                }
+            } else if tab.holder.descriptor != nil {
+                tab.holder.reset()
+            }
+            if tab.remote != nil, tab.folderPicker == nil {
+                tab.folderPicker = makeFolderPicker(for: tab)
+            }
+            return tab
+        }
+        selected = state.selected
+        projects = state.projects
+        remoteProjects = Dictionary(
+            uniqueKeysWithValues:
+                state.remoteProjects.map { ($0.machineID, $0.projects) })
+        remoteProjectErrors = Dictionary(
+            uniqueKeysWithValues:
+                state.remoteProjects.compactMap { value in value.error.map { (value.machineID, $0) }
+                })
+        themes = state.themes.compactMap(QuinjetTheme.init(rawValue:))
+        usage.adopt(state.usage)
+        machines.adopt(state.machines, states: state.machineStates)
+        projectedPrivacy = state.hidesReview
+        cmuxAvailable = state.cmuxAvailable
+        projectError = state.projectError
+    }
+
+    private func enqueueUI(_ operation: String, object: [String: Any]) {
+        guard !stopped, uiActions.count < 8 else { return }
+        let id = UUID()
+        uiActions[id] = Task { [weak self] in
+            guard let self else { return }
+            defer { self.uiActions[id] = nil }
+            await self.performUI(operation, object: object)
+        }
+    }
+
+    private func performUI(_ operation: String, object: [String: Any]) async {
+        guard !stopped, let uiClient else { return }
+        do {
+            if let state = try await uiClient.state(operation, object: object) {
+                try adoptUI(state)
+            }
+        } catch is CancellationError {} catch { projectError = error.localizedDescription }
+    }
+
+    private func configurationObject(_ configuration: QuinjetLaunchConfiguration) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(configuration)))
+            as? [String: Any] ?? [:]
     }
 
     var selectedTab: QuinjetTab? {
@@ -80,6 +233,11 @@ final class QuinjetPageModel {
     @discardableResult
     func selectSession(_ id: UUID) -> Bool {
         guard tabs.contains(where: { $0.id == id }) else { return false }
+        if isRemote {
+            enqueueUI(
+                "quinjet.ui.session", object: ["operation": "focus", "session": id.uuidString])
+            return true
+        }
         selected = id
         return true
     }
@@ -133,6 +291,7 @@ final class QuinjetPageModel {
     }
 
     func refreshProjects() async {
+        if isRemote { await performUI("quinjet.ui.projects", object: [:]); return }
         projectError = nil
         let client = client
         await projectLoad.perform(operation: {
@@ -142,6 +301,7 @@ final class QuinjetPageModel {
     }
 
     func refreshThemes() async {
+        if isRemote { await performUI("quinjet.ui.themes", object: [:]); return }
         do {
             let refreshed = try await client.themes()
             try Task.checkCancellation()
@@ -153,6 +313,11 @@ final class QuinjetPageModel {
     }
 
     func refreshProjects(for remote: QuinjetRemote) async {
+        if isRemote {
+            await performUI(
+                "quinjet.ui.projects", object: ["machineID": remote.machineID.uuidString])
+            return
+        }
         let machineID = remote.machineID
         let loading = remoteProjectLoads[machineID] ?? ContentLoad()
         remoteProjectLoads[machineID] = loading
@@ -178,6 +343,15 @@ final class QuinjetPageModel {
         remote: QuinjetRemote? = nil, in tab: QuinjetTab, launchEnabled: Bool,
         configuration: QuinjetLaunchConfiguration = .default, select: Bool = true
     ) {
+        if isRemote {
+            enqueueUI(
+                "quinjet.ui.open",
+                object: [
+                    "tabID": tab.id.uuidString, "path": worktree.path,
+                    "configuration": configurationObject(configuration),
+                ])
+            return
+        }
         tab.projectName = projectName
         tab.worktree = worktree
         tab.remote = remote
@@ -249,21 +423,11 @@ final class QuinjetPageModel {
         let environment = QuinjetOperationExecution.terminalEnvironment(
             overrides: request.environment)
         tab.holder.reset()
-        do {
-            guard let host = QuinjetPTYTerminalBridge.executable() else {
-                throw QuinjetPTYTerminalBridgeError.executableUnavailable
-            }
-            let native = try QuinjetPTYTerminalBridge.launchRequest(
-                bridgeExecutable: host,
-                controller: TerminalLaunchRequest(
-                    executable: request.executableURL.path, arguments: request.arguments,
-                    environment: environment + ["EDITH_QUINJET_TAB_ID=" + tab.id.uuidString]),
-                transport: .terminal)
-            tab.holder.start(
-                executable: native.executable, arguments: native.arguments,
-                environment: native.environment, currentDirectory: request.currentDirectory,
-                allowsLocalFileLinks: remote == nil)
-        } catch { tab.errorMessage = error.localizedDescription }
+        tab.holder.start(
+            executable: request.executableURL.path, arguments: request.arguments,
+            environment: environment + ["EDITH_QUINJET_TAB_ID=" + tab.id.uuidString],
+            currentDirectory: request.currentDirectory, allowsLocalFileLinks: remote == nil)
+        if !tab.holder.started { tab.errorMessage = tab.holder.exitMessage }
         if select { recordUse(of: tab) }
     }
 
@@ -271,6 +435,15 @@ final class QuinjetPageModel {
         _ path: String, remote: QuinjetRemote? = nil, in tab: QuinjetTab,
         launchEnabled: Bool, configuration: QuinjetLaunchConfiguration = .default
     ) async {
+        if isRemote {
+            await performUI(
+                "quinjet.ui.open",
+                object: [
+                    "tabID": tab.id.uuidString, "path": path,
+                    "configuration": configurationObject(configuration),
+                ])
+            return
+        }
         if remote == nil {
             projectError = nil
         } else {
@@ -294,6 +467,11 @@ final class QuinjetPageModel {
     }
 
     func presentWorktrees(for tab: QuinjetTab) async {
+        if isRemote {
+            tab.showsWorktrees = true
+            await performUI("quinjet.ui.worktrees", object: ["tabID": tab.id.uuidString])
+            return
+        }
         guard let path = tab.worktree?.path else { return }
         tab.showsWorktrees = true
         tab.errorMessage = nil
@@ -325,6 +503,12 @@ final class QuinjetPageModel {
     func apply(
         _ configuration: QuinjetLaunchConfiguration, launchEnabled: Bool
     ) {
+        if isRemote {
+            enqueueUI(
+                "quinjet.ui.configuration",
+                object: ["configuration": configurationObject(configuration)])
+            return
+        }
         for tab in tabs {
             guard let worktree = tab.worktree, tab.launchConfiguration != configuration else {
                 continue
@@ -344,6 +528,14 @@ final class QuinjetPageModel {
         _ request: QuinjetSessionRequest
     ) async throws -> QuinjetSessionResult {
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        if let uiClient {
+            let data = try JSONEncoder().encode(request)
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+            if let state = try await uiClient.state("quinjet.ui.session", object: object) {
+                try adoptUI(state)
+            }
+            return sessionResult(for: request.operation, affected: selected)
+        }
         if request.operation == .create, tabs.count >= 32 {
             throw ExtensionPeerError.invalidRequest
         }
@@ -389,8 +581,25 @@ final class QuinjetPageModel {
         }
     }
 
+    func stopRendering() {
+        guard let uiClient else { return }
+        stopped = true
+        uiClient.stop()
+        for task in uiActions.values { task.cancel() }
+        for tab in tabs { tab.holder.stopRendering() }
+    }
+
     func shutdown() async {
         stopped = true
+        if let uiClient {
+            stopRendering()
+            let actions = Array(uiActions.values)
+            for task in actions { task.cancel() }
+            uiActions.removeAll()
+            for tab in tabs { tab.holder.stopRendering(); await tab.folderPicker?.shutdown() }
+            for task in actions { await task.value }
+            return
+        }
         cancelDiscovery()
         stopAll()
         for tab in tabs {
@@ -408,6 +617,8 @@ final class QuinjetPageModel {
     }
 
     func cancelDiscovery() {
+        uiClient?.cancel()
+        for task in uiActions.values { task.cancel() }
         projectLoad.cancel()
         for loading in remoteProjectLoads.values { loading.cancel() }
         for tab in tabs {
@@ -450,7 +661,9 @@ final class QuinjetPageModel {
                 throw QuinjetSessionError.operationFailed(error.localizedDescription)
             }
         }
+        let retired = tab.holder.descriptor?.handle
         tab.holder.stop()
+        if let retired { await OwnedTerminalContext.registry?.files.drain([retired]) }
         tab.worktreeLoad.cancel()
         tabs.remove(at: index)
         if selected == tab.id { selected = tabs[min(index, tabs.count - 1)].id }
@@ -500,10 +713,10 @@ final class QuinjetPageModel {
             state = "picker"
         } else if tab.launchConfiguration.terminal == .cmux {
             state = tab.externalWorkspaceID == nil ? "ready" : "running"
-        } else if tab.holder.started {
-            state = "running"
         } else if tab.holder.exitMessage != nil {
             state = "ended"
+        } else if tab.holder.started {
+            state = "running"
         } else {
             state = "ready"
         }

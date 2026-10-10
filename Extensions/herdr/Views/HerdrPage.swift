@@ -132,15 +132,17 @@ struct HerdrPage: View {
         .background(HerdrWindowReader { store.movePage(from: $0, to: $1) })
         .navigationTitle("Herdr")
         .onAppear {
-            HerdrAgentWindowDelegate.shared.onClose = { id in
-                store.reattach(id)
+            if store.uiClient == nil {
+                HerdrAgentWindowDelegate.shared.onClose = { id in store.reattach(id) }
             }
             drag.store = store
             drag.unit = UIScale.current
             drag.gap = UIScale.pt(6)
             drag.onTearOff = { agent in
-                if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
-                store.close(agent.id, rememberingPlacement: false)
+                if store.uiClient == nil {
+                    if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
+                    store.close(agent.id, rememberingPlacement: false)
+                }
                 HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             }
         }
@@ -151,11 +153,15 @@ struct HerdrPage: View {
                 store.stopWatching()
             }
         }
-        .agentTopic(.sessions, as: SessionsSnapshot.self, active: automaticActions) { snapshot in
+        .agentTopic(
+            .sessions, as: SessionsSnapshot.self, active: automaticActions && store.uiClient == nil
+        ) { snapshot in
             store.adopt(snapshot)
 
         }
-        .agentTopic(.hooks, as: HerdrHooksSnapshot.self, active: automaticActions) { snapshot in
+        .agentTopic(
+            .hooks, as: HerdrHooksSnapshot.self, active: automaticActions && store.uiClient == nil
+        ) { snapshot in
             store.messaging.adopt(snapshot)
         }
         .edithSheet(item: messageDraft, dismissible: false) { draft in
@@ -174,7 +180,7 @@ struct HerdrPage: View {
             }
         }
         .edithSheet(isPresented: $launchSettingsPresented) {
-            HerdrLaunchSettingsSheet()
+            HerdrLaunchSettingsSheet(store: store)
         }
         .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)
@@ -1113,7 +1119,7 @@ struct HerdrPage: View {
         if HerdrSpaceWindow.raise(containingAgent: agent.id) { return }
         let detaching = NSEvent.modifierFlags.contains(.command)
         if detaching {
-            store.close(agent.id, rememberingPlacement: false)
+            if store.uiClient == nil { store.close(agent.id, rememberingPlacement: false) }
             HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
             return
         }

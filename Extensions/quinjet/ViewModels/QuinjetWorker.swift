@@ -1,24 +1,29 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 
 @MainActor final class QuinjetWorker {
     let model: QuinjetPageModel
+    let defaults: UserDefaults
     let client: QuinjetClient
+    let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
     private(set) var isStopped = false
     private var started = false
+    private var cliStreams: ExtensionCLIStreams?
+    private lazy var uiEngine = QuinjetUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
-    private let attachment = UUID()
     private struct ProjectSelection: Equatable {
         let project: QuinjetProject; let remote: QuinjetRemote?
     }
     private var projects: [UUID: ProjectSelection] = [:]
     private let previewExecutable: @MainActor () -> URL?
-    private let resolveRemote: @MainActor (UUID) async throws -> QuinjetRemote
+    let resolveRemote: @MainActor (UUID) async throws -> QuinjetRemote
     private var worktrees: [UUID: (UUID, QuinjetWorktree, [QuinjetWorktree])] = [:]
 
     init(
+        defaults: UserDefaults = SharedDefaults.store,
         client: QuinjetClient = .live,
         previewExecutable: @escaping @MainActor () -> URL? = QuinjetExecutable.local,
         resolveRemote: @escaping @MainActor (UUID) async throws -> QuinjetRemote = QuinjetWorker
@@ -26,20 +31,31 @@ import Foundation
         automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil
     ) {
+        self.defaults = defaults
         self.client = client
         self.previewExecutable = previewExecutable
         self.resolveRemote = resolveRemote
         self.automaticActions = automaticActions
         model = QuinjetPageModel(client: client)
+        terminalSessions.files.upload = { [weak self] handle, urls in
+            guard let self, !self.isStopped, self.terminalSessions.find(handle) != nil,
+                let tab = self.model.tabs.first(where: { $0.holder.descriptor?.handle == handle }),
+                let remote = tab.remote,
+                let connection = self.model.machines.session(for: remote.machineID).connectionRef,
+                connection.machine.id == remote.machineID
+            else { throw ExtensionPeerError.unavailable }
+            return try await TerminalDropTransfer.upload(urls, over: connection)
+        }
         QuinjetWorkOwnership.enable()
     }
     func start() async {
+        await OwnedTerminalContext.$registry.withValue(terminalSessions) { await startOwned() }
+    }
+
+    private func startOwned() async {
         guard !started, !isStopped else { return }
         started = true
         QuinjetPrivacy.shared.start()
-        TextEditingCommands.install()
-        QuinjetSessionBridge.shared.install()
-        QuinjetSessionBridge.shared.attach(model, token: attachment)
         model.setSessionLaunchEnabled(automaticActions)
         guard automaticActions else { return }
         _ = try? await refresh()
@@ -127,11 +143,50 @@ import Foundation
             connection: connection)
     }
     func execute(_ command: String, payload: Data) async throws -> Data {
+        try await OwnedTerminalContext.$registry.withValue(terminalSessions) {
+            try await executeOwned(command, payload: payload)
+        }
+    }
+
+    private func executeOwned(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command == "quinjet.cli.catalog" {
+            guard payload.count <= 16384,
+                let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                value.isEmpty
+            else { throw ExtensionPeerError.invalidRequest }
+            return try QuinjetCLICatalog.data()
+        }
+        if ["quinjet.cli.start", "quinjet.cli.read", "quinjet.cli.cancel", "quinjet.cli.end"]
+            .contains(command)
+        {
+            if cliStreams == nil { cliStreams = try ExtensionCLIStreams(owner: "quinjet") }
+            guard let cliStreams else { throw ExtensionPeerError.unavailable }
+            return try QuinjetCLIExecution.invokeStream(
+                command, payload: payload,
+                worker: self, streams: cliStreams)
+        }
+        if [
+            "quinjet.terminal.read", "quinjet.terminal.input", "quinjet.terminal.resize",
+            "quinjet.terminal.close",
+        ].contains(command) || OwnedTerminalFiles.admits(command) {
+            guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
+            let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
+            guard let session = terminalSessions.find(request.session) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try await session.execute(command, payload: payload)
+        }
         guard payload.count <= 16_384,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
         else { throw ExtensionPeerError.invalidRequest }
+        if command == "quinjet.settings.read" || command == "quinjet.settings.save" {
+            return try await QuinjetSettingsEngine.execute(command, object: object, worker: self)
+        }
+        if command.hasPrefix("quinjet.ui.") {
+            return try await uiEngine.execute(command, object: object)
+        }
         if command == "quinjet.native.action" {
             guard Set(object.keys) == ["tabID", "action"], let id = object["tabID"] as? String,
                 let uuid = UUID(uuidString: id),
@@ -240,14 +295,22 @@ import Foundation
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         return try JSONEncoder().encode(result)
     }
+    func cancelPendingWork() async {
+        await terminalSessions.stopAllAndWait()
+        maintenance?.cancel()
+        model.cancelDiscovery()
+        await cliStreams?.stopAndWait()
+    }
+
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        await terminalSessions.stopAllAndWait()
+        await cliStreams?.stopAndWait()
+        cliStreams = nil
         maintenance?.cancel()
         model.cancelDiscovery()
         model.stopAll()
-        QuinjetSessionBridge.shared.detach(token: attachment)
-        QuinjetSessionBridge.shared.shutdown()
         await model.shutdown()
         await QuinjetWorkOwnership.shutdown()
         await QuinjetMachines.shared.shutdown()
@@ -256,6 +319,5 @@ import Foundation
         projects.removeAll()
         worktrees.removeAll()
         QuinjetPrivacy.shared.shutdown()
-        TextEditingCommands.shutdown()
     }
 }

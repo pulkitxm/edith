@@ -380,8 +380,7 @@ struct HerdrNewAgentPopup: View {
         model.errorMessage = nil
         HerdrWorkOwnership.start {
             do {
-                model.workspaces = try await HerdrLaunchOperations.listWorkspaces(
-                    on: store.machine(for: host))
+                model.workspaces = try await store.listWorkspaces(for: host)
             } catch {
                 model.errorMessage = error.localizedDescription
             }

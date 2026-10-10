@@ -10,8 +10,9 @@ let package = Package(
             name: "QuinjetUI",
             dependencies: [
                 .product(name: "EdithExtensionDocuments", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "GhosttyTerminal", package: "Native"),
-            ], path: ".", exclude: ["Tests", "Runtime.swift"], resources: [.process("Resources")],
+            ], path: ".", exclude: ["Tests"], resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "QuinjetUITests", dependencies: ["QuinjetUI"], path: "Tests/UI",

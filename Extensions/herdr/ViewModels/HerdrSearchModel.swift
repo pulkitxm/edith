@@ -5,6 +5,8 @@ import Observation
 
 typealias HerdrSessionSearcher = @Sendable (AgentSearchRequest) async throws -> AgentSearchReply
 
+typealias HerdrSessionRanker = @Sendable (String, [AgentSearchCandidate]) async throws -> [String]?
+
 struct HerdrSearchRow: Identifiable, Equatable {
     let agent: HerdrAgent
     let hit: AgentSearchHit?
@@ -65,6 +67,7 @@ final class HerdrSearchModel {
     private(set) var searchedQuery: String?
 
     @ObservationIgnored private let searcher: HerdrSessionSearcher
+    @ObservationIgnored private let ranker: HerdrSessionRanker?
     @ObservationIgnored private let decider: @MainActor () -> JevDeciding?
     private let usage: LauncherUsage
     @ObservationIgnored private var serial = 0
@@ -75,9 +78,10 @@ final class HerdrSearchModel {
     init(
         searcher: @escaping HerdrSessionSearcher = { try await AgentSearchClient().search($0) },
         decider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() },
-        usage: LauncherUsage? = nil
+        usage: LauncherUsage? = nil, ranker: HerdrSessionRanker? = nil
     ) {
         self.searcher = searcher
+        self.ranker = ranker
         self.decider = decider
         self.usage = usage ?? .shared
     }
@@ -238,7 +242,8 @@ final class HerdrSearchModel {
     private func scheduleJev() {
         jevTask?.cancel()
         let query = searchedQuery ?? ""
-        guard !query.isEmpty, let decider = decider() else {
+        let decider = ranker == nil ? decider() : nil
+        guard !query.isEmpty, ranker != nil || decider != nil else {
             best = .hidden
             return
         }
@@ -249,11 +254,19 @@ final class HerdrSearchModel {
         }
         if case .ready = best {} else { best = .ranking }
         let serial = serial
+        let ranker = ranker
         let options = HerdrSearchPlan.jevOptions(candidates)
         jevTask = HerdrWorkOwnership.start { [weak self] in
             try? await Task.sleep(for: Self.jevDelay)
             guard !Task.isCancelled else { return }
-            let picks = try? await AgentSearchJev.rank(query, candidates: options, using: decider)
+            let picks: [String]?
+            if let ranker {
+                picks = try? await ranker(query, options)
+            } else if let decider {
+                picks = try? await AgentSearchJev.rank(query, candidates: options, using: decider)
+            } else {
+                picks = nil
+            }
             guard !Task.isCancelled, let self, serial == self.serial else { return }
             self.best = HerdrSearchPlan.best(picks, from: candidates)
             self.keepSelection()

@@ -1,7 +1,7 @@
 import EdithExtensionSupport
 import Foundation
 
-public struct HerdrPaneProcess: Equatable, Sendable {
+public struct HerdrPaneProcess: Equatable, Codable, Sendable {
     public var name: String
     public var command: String
     public var running: Bool

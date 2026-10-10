@@ -12,6 +12,18 @@ public struct HerdrInventoryCommands: Sendable {
         self.collect = collect
         self.machines = machines
     }
+    public func checkSessions() async throws -> HerdrSessionCheck {
+        try Task.checkCancellation()
+        let hosts = await collect(.all)
+        try Task.checkCancellation()
+        guard hosts.count <= 64, hosts.reduce(0, { $0 + $1.agents.count }) <= 512 else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        let installed = hosts.filter(\.herdrPresent)
+        return HerdrSessionCheck(
+            installed: installed.count, sessions: installed.flatMap(\.agents).count)
+    }
+
     public func execute(_ command: String, payload: Data) async throws -> Data {
         guard payload.count <= 8_192,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
@@ -72,5 +84,28 @@ public struct HerdrInventoryCommands: Sendable {
         let result = try JSONSerialization.data(withJSONObject: output, options: [.sortedKeys])
         guard result.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
         return result
+    }
+}
+
+public struct HerdrSessionCheck: Codable, Equatable, Sendable {
+    public let installed: Int
+    public let sessions: Int
+
+    public init(installed: Int, sessions: Int) {
+        self.installed = installed
+        self.sessions = sessions
+    }
+
+    public var failed: Bool { installed == 0 }
+    public var message: String {
+        if installed == 0 { return "Herdr was not found on this Mac or a configured machine." }
+        if sessions == 0 { return "Herdr is installed, but no live sessions were found." }
+        return "Found \(sessions) live Herdr sessions."
+    }
+
+    public func validate() throws {
+        guard (0...64).contains(installed), (0...512).contains(sessions),
+            installed > 0 || sessions == 0
+        else { throw ExtensionPeerError.invalidRequest }
     }
 }

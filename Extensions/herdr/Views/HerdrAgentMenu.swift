@@ -27,8 +27,10 @@ final class HerdrAgentActions {
     }
 
     func openInNewWindow(_ agent: HerdrAgent, store: HerdrStore, launchEnabled: Bool) {
-        HerdrSpaceWindow.removeAgent(agent.id)
-        store.close(agent.id, rememberingPlacement: false)
+        if store.uiClient == nil {
+            HerdrSpaceWindow.removeAgent(agent.id)
+            store.close(agent.id, rememberingPlacement: false)
+        }
         HerdrAgentWindow.open(agent: agent, store: store, launchEnabled: launchEnabled)
     }
 

@@ -11,7 +11,6 @@ struct TerminalPane: View {
     var active = true
     var wantsFocus = true
     var fontSize: Double?
-    var onDropFiles: ((TerminalDropPayload) -> Bool)?
     var onFocus: (() -> Void)?
 
     @AppStorage(AppStorageKeys.Herdr.terminalFontSize, store: SharedDefaults.store)
@@ -22,11 +21,11 @@ struct TerminalPane: View {
     }
 
     var body: some View {
-        if let launch = holder.ghosttyLaunch {
+        if holder.descriptor != nil {
             GhosttyPane(
-                holder: holder, launch: launch,
+                holder: holder,
                 theme: GhosttyTheme(palette: palette, fontSize: resolvedFontSize),
-                active: active, wantsFocus: wantsFocus, onDropFiles: onDropFiles,
+                active: active, wantsFocus: wantsFocus,
                 onFocus: onFocus
             )
             .id(holder.generation)

@@ -30,7 +30,7 @@ struct QuinjetPage: View {
                 }
             }
         }
-        .presenterCover(QuinjetPrivacy.shared.hidesReview, dark: scheme == .dark)
+        .presenterCover(model.hidesReview, dark: scheme == .dark)
         .navigationRoute("session", selection: sessionBinding, isValid: sessionIsValid)
         .environment(\.quinjetLaunchConfiguration, configuration)
         .onAppear {
@@ -41,6 +41,13 @@ struct QuinjetPage: View {
             await model.refreshThemes()
             guard !Task.isCancelled else { return }
             await model.refreshProjects()
+            if model.isRemote {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(1))
+                    guard !Task.isCancelled else { return }
+                    await model.refreshUI()
+                }
+            }
         }
         .onChange(of: configuration) { _, configuration in
             model.apply(configuration, launchEnabled: launchEnabled)
@@ -115,7 +122,7 @@ struct QuinjetPage: View {
         let storedTerminal = QuinjetTerminal(rawValue: terminalName) ?? .embedded
         let appTheme = AppTheme(storedName: appThemeName)
         return QuinjetLaunchConfiguration(
-            terminal: storedTerminal.isAvailable ? storedTerminal : .embedded,
+            terminal: model.terminalAvailable(storedTerminal) ? storedTerminal : .embedded,
             theme: QuinjetThemePreference.resolve(themeName, appTheme: appTheme),
             appearance: scheme == .dark ? .dark : .light,
             hostTheme: themeName == QuinjetThemePreference.app
@@ -134,7 +141,7 @@ struct QuinjetPage: View {
                         Label(terminal.label, systemImage: terminal.icon)
                     }
                 }
-                .disabled(!terminal.isAvailable)
+                .disabled(!model.terminalAvailable(terminal))
             }
         } label: {
             QuinjetMenuLabel(

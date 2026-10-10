@@ -51,7 +51,7 @@ import Testing
                     host.frame = CGRect(x: 0, y: 0, width: width, height: 360)
                     let window = TestWindowHost.window(contentRect: host.frame)
                     window.contentView = host
-                    window.orderBack(nil)
+
                     for _ in 0..<4 {
                         window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
                         try await Task.sleep(for: .milliseconds(20))
@@ -63,7 +63,7 @@ import Testing
                         #expect(frame.width > 0 && frame.maxX <= window.frame.maxX)
                         #expect(frame.minX >= window.frame.minX)
                     }
-                    window.orderOut(nil)
+
                 }
             }
         }
@@ -73,14 +73,14 @@ import Testing
                 .environment(\.automaticViewActionsEnabled, false))
         settings.frame = CGRect(x: 0, y: 0, width: 780, height: 680)
         let window = TestWindowHost.window(contentRect: settings.frame)
-        window.contentView = settings; window.orderBack(nil)
+        window.contentView = settings;
         for _ in 0..<4 {
             window.layoutIfNeeded(); settings.layoutSubtreeIfNeeded();
             try await Task.sleep(for: .milliseconds(20))
         }
         #expect(find(settings, label: "Review hook setup") != nil)
         #expect(find(settings, label: "Remove hooks") != nil)
-        window.orderOut(nil)
+
         #expect(monitor.activity.approvals.count == 1)
         await monitor.shutdown()
     }

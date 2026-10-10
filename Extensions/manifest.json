@@ -2668,21 +2668,17 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": [
-      "TerminalNative_GhosttyTerminal.bundle"
-    ],
+    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": [
-      "Extensions/herdr"
-    ],
+    "inputs": ["Extensions/herdr"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -2693,12 +2689,8 @@
       "scripts/build-contained-host-runtime.mjs"
     ],
     "dependencies": [],
-    "nativeTaskRoles": [
-      "app"
-    ],
-    "testTargets": [
-      "ci-extension-herdr"
-    ],
+    "nativeTaskRoles": ["app"],
+    "testTargets": ["ci-extension-herdr"],
     "roles": {
       "app": [
         "Extensions/herdr/Activity/AgentActivityHookFiles.swift",
@@ -2845,7 +2837,34 @@
         "Extensions/herdr/Views/Support/WorkspaceFocusRoute.swift",
         "Extensions/herdr/Views/Support/WorkspaceKeyCommand.swift",
         "Extensions/herdr/Views/Support/WorkspaceLayout.swift",
-        "Extensions/herdr/Views/Support/ZoomableRoot.swift"
+        "Extensions/herdr/Views/Support/ZoomableRoot.swift",
+        "Extensions/herdr/Activity/HerdrAttentionSettings.swift",
+        "Extensions/herdr/Activity/HerdrNotification.swift",
+        "Extensions/herdr/Activity/HerdrNotificationAttention.swift",
+        "Extensions/herdr/Activity/HerdrNotificationService.swift",
+        "Extensions/herdr/CLI/CLIEnvironment.swift",
+        "Extensions/herdr/CLI/HerdrCLIExecution.swift",
+        "Extensions/herdr/CLI/HerdrCLICatalog.swift",
+        "Extensions/herdr/CLI/HerdrCommands.swift",
+        "Extensions/herdr/CLI/HerdrLaunchCommands.swift",
+        "Extensions/herdr/CLI/HerdrLayoutCommands.swift",
+        "Extensions/herdr/CLI/HerdrMessageCommands.swift",
+        "Extensions/herdr/CLI/HerdrSpaceCommands.swift",
+        "Extensions/herdr/ViewModels/HerdrSettingsModel.swift",
+        "Extensions/herdr/ViewModels/HerdrTerminalConnections.swift",
+        "Extensions/herdr/Views/HerdrSettingsPage.swift",
+        "Extensions/herdr/Transport/OwnedTerminalPTY.swift",
+        "Extensions/herdr/Transport/OwnedTerminalSession.swift",
+        "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
+        "Extensions/herdr/ViewModels/HerdrUIPanelProjection.swift",
+        "Extensions/herdr/ViewModels/HerdrUIHookProjection.swift",
+        "Extensions/herdr/ViewModels/HerdrUILaunchSettings.swift",
+        "Extensions/herdr/ViewModels/HerdrSpaceSessions.swift",
+        "Extensions/herdr/ViewModels/HerdrUISpaceProjection.swift",
+        "Extensions/herdr/Views/HerdrRemoteScene.swift",
+        "Extensions/herdr/Transport/OwnedTerminalFiles.swift",
+        "Extensions/herdr/ViewModels/HerdrSessionSettingsModel.swift",
+        "Extensions/herdr/Views/HerdrExtensionSettingsPage.swift"
       ]
     },
     "resources": {
@@ -2882,21 +2901,17 @@
     "surfaceContractVersion": 1,
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
-    "supportProduct": "EdithExtensionDocuments",
+    "supportProduct": ["EdithExtensionDocuments", "EdithExtensionCommands"],
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": [
-      "TerminalNative_GhosttyTerminal.bundle"
-    ],
+    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": [
-      "Extensions/quinjet"
-    ],
+    "inputs": ["Extensions/quinjet"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -2907,12 +2922,8 @@
       "scripts/build-contained-host-runtime.mjs"
     ],
     "dependencies": [],
-    "nativeTaskRoles": [
-      "app"
-    ],
-    "testTargets": [
-      "ci-extension-quinjet"
-    ],
+    "nativeTaskRoles": ["app"],
+    "testTargets": ["ci-extension-quinjet"],
     "roles": {
       "app": [
         "Extensions/quinjet/Models/QuinjetLaunchModels.swift",
@@ -2960,7 +2971,18 @@
         "Extensions/quinjet/Views/Support/TerminalDropTransferStatus.swift",
         "Extensions/quinjet/Views/Support/TerminalLoadingSkeleton.swift",
         "Extensions/quinjet/Views/Support/TerminalPane.swift",
-        "Extensions/quinjet/Views/Support/TerminalSessionHolder.swift"
+        "Extensions/quinjet/Views/Support/TerminalSessionHolder.swift",
+        "Extensions/quinjet/CLI/CLIEnvironment.swift",
+        "Extensions/quinjet/CLI/QuinjetCLIExecution.swift",
+        "Extensions/quinjet/CLI/QuinjetCLICatalog.swift",
+        "Extensions/quinjet/CLI/QuinjetCommands.swift",
+        "Extensions/quinjet/Transport/OwnedTerminalPTY.swift",
+        "Extensions/quinjet/Transport/OwnedTerminalSession.swift",
+        "Extensions/quinjet/ViewModels/QuinjetUIProjection.swift",
+        "Extensions/quinjet/Transport/OwnedTerminalFiles.swift",
+        "Extensions/quinjet/ViewModels/QuinjetSettingsModel.swift",
+        "Extensions/quinjet/ViewModels/QuinjetSettingsEngine.swift",
+        "Extensions/quinjet/Views/QuinjetSettingsPage.swift"
       ]
     },
     "resources": {
