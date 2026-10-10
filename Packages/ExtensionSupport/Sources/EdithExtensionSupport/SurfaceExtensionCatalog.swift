@@ -9,7 +9,8 @@ extension SurfaceWidget {
     }
     public var supportsSourceFilters: Bool {
         switch self {
-        case .calendar, .github, .ability("quinjet"), .databases, .machines, .desk, .media, .limits,
+        case .agents, .calendar, .github, .ability("quinjet"), .databases, .machines, .desk, .media,
+            .limits,
             .codeStats,
             .ability("downloads"), .ability("docs"),
             .ability("clipboard"),

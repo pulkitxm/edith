@@ -4,6 +4,16 @@ import Testing
 @testable import EdithExtensionSupport
 
 @Suite struct SurfaceSnapshotTests {
+    @Test func agentProviderSelectionSurvivesTheWorkerBoundary() throws {
+        #expect(SurfaceWidget.agents.supportsSourceFilters)
+        var tile = SurfaceTile(.agents)
+        tile.sourceIDs = ["synthetic-provider"]
+        let request = SurfaceSnapshotRequest(target: .notch, tile: tile)
+        let decoded = try SurfaceSnapshotRequest.decode(
+            request.encoded(providerID: "herdr"), providerID: "herdr")
+        #expect(decoded.tile.sourceIDs == ["synthetic-provider"])
+    }
+
     @Test func dataAndOpaqueActionsRoundTripWithoutFeatureTypes() throws {
         let snapshot = SurfaceSnapshot(
             providerID: "calendar", metrics: [.init("meetings", "Upcoming", "2")],
