@@ -50,6 +50,7 @@ final class ExtensionRuntime: NSObject {
     }
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopUI()
         if let stoppingTask {
             Task {
                 await stoppingTask.value; completion()
@@ -91,13 +92,7 @@ final class ExtensionRuntime: NSObject {
             uiModel = YoutubeDownloader(
                 client: DownloadsClient(client: client), remote: DownloadsUIBridge(client: client))
             TextEditingCommands.install()
-        case "stopUI":
-            engineClient?.invalidate(); engineClient = nil
-            let model = uiModel; uiModel = nil
-            Task {
-                await model?.shutdown(); await model?.tools.shutdown()
-            }
-            TextEditingCommands.shutdown()
+        case "stopUI": stopUI()
         case "start":
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
@@ -106,7 +101,6 @@ final class ExtensionRuntime: NSObject {
                 let value = DownloadsWorker()
                 worker = value
                 surface = DownloadsSurface(worker: value)
-                TextEditingCommands.install()
             }
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
@@ -126,12 +120,20 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             worker = nil
             surface = nil
-            TextEditingCommands.shutdown()
+            stopUI()
             InputFocus.uninstall()
         case "status": return ["ok": true, "running": !stopped && worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+    private func stopUI() {
+        engineClient?.invalidate(); engineClient = nil
+        let model = uiModel; uiModel = nil
+        Task {
+            await model?.shutdown(); await model?.tools.shutdown()
+        }
+        TextEditingCommands.shutdown()
     }
 }
 

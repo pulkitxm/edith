@@ -98,6 +98,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopUI()
         worker?.markDraining()
         Task { [weak self] in
             await self?.commands.shutdownAndWait()
@@ -124,7 +125,6 @@ final class ExtensionRuntime: NSObject {
                 SurfaceHostContext.current != nil, let defaults = UserDefaults(suiteName: suite)
             else { return ["ok": false] as NSDictionary }
             worker = CameraAppWorker(defaults: defaults, host: host)
-            TextEditingCommands.install()
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let defaults = UserDefaults(suiteName: configuration.defaultsSuite),
@@ -132,6 +132,7 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             stopUI(); uiClient = client;
             uiModel = VirtualCameraPageModel(engineClient: client, defaults: defaults)
+            TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
@@ -144,7 +145,7 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown(); cliStreams?.stop()
             worker?.engine.shutdown()
             worker = nil
-            TextEditingCommands.shutdown(); InputFocus.uninstall()
+            InputFocus.uninstall()
         case "status":
             return [
                 "ok": true, "running": worker != nil,
@@ -155,6 +156,7 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
+        TextEditingCommands.shutdown()
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
         if let model { Task { await model.shutdown() } }

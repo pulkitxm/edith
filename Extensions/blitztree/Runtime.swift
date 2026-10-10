@@ -37,6 +37,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        stopUI()
         Task {
             await commands.shutdownAndWait()
             await model?.shutdown()
@@ -59,12 +60,12 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = BlitzTreeModel() }
-            TextEditingCommands.install()
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
             else { return ["ok": false] as NSDictionary }
             stopUI(); uiClient = client; uiModel = BlitzTreeModel(engineClient: client)
+            TextEditingCommands.install()
         case "stopUI": stopUI()
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
@@ -75,7 +76,7 @@ final class ExtensionRuntime: NSObject {
         case "stop":
             commands.shutdown()
             model = nil
-            TextEditingCommands.shutdown()
+            stopUI()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -83,6 +84,7 @@ final class ExtensionRuntime: NSObject {
     }
 
     private func stopUI() {
+        TextEditingCommands.shutdown()
         let model = uiModel; uiModel = nil
         uiClient?.invalidate(); uiClient = nil
         Task { await model?.shutdown() }
