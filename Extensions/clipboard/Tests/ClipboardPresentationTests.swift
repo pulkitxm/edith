@@ -177,6 +177,9 @@ import Testing
         preferences.ignoredApps = "example.passwords"
         preferences.saveImages = false
         preferences.popupAt = "lastPosition"
+        preferences.hotKeyLabel = "⌥⇧V"
+        preferences.hotKeyCode = 9
+        preferences.hotKeyMods = 2560
         try preferences.save(defaults)
         #expect(ClipboardPreferences.read(defaults) == preferences)
         preferences.checkInterval = .nan

@@ -2,6 +2,8 @@ import EdithExtensionSupport
 import Foundation
 
 struct ClipboardPreferences: Codable, Equatable, Sendable {
+    static let hotKeyLabelKey = "clipboardHotKeyLabel"
+
     var enabled: Bool = false
     var maxItems: Int = ClipboardIndex.defaultMaxItems
     var maxItemBytes: Int = ClipboardIndex.defaultMaxItemBytes
@@ -57,7 +59,7 @@ struct ClipboardPreferences: Codable, Equatable, Sendable {
             forKey: AppStorageKeys.Permissions.accessibilityGranted)
         value.hotKeyCode = defaults.object(forKey: "clipboardHotKeyCode") as? Int ?? 8
         value.hotKeyMods = defaults.object(forKey: "clipboardHotKeyMods") as? Int ?? 4608
-        value.hotKeyLabel = defaults.string(forKey: "clipboardHotKeyLabel") ?? "⌃⇧C"
+        value.hotKeyLabel = defaults.string(forKey: Self.hotKeyLabelKey) ?? "⌃⇧C"
         return value
     }
 
@@ -88,7 +90,7 @@ struct ClipboardPreferences: Codable, Equatable, Sendable {
         defaults.set(saveText, forKey: AppStorageKeys.Clipboard.saveText)
         defaults.set(hotKeyCode, forKey: "clipboardHotKeyCode")
         defaults.set(hotKeyMods, forKey: "clipboardHotKeyMods")
-        defaults.set(hotKeyLabel, forKey: "clipboardHotKeyLabel")
+        defaults.set(hotKeyLabel, forKey: Self.hotKeyLabelKey)
         IPC.post(IPC.Name.settingsChanged)
     }
 }
