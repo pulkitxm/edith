@@ -401,5 +401,22 @@ test("lifecycle tool packaging does not alter any shipping package fingerprint i
 });
 
 test("package build job names bind the closed artifact intake to one owner", () => {
-  expect(workflow.jobs.build.name).toBe("build (${{ matrix.id }})");
+  expect(workflow.jobs.build.name).toBe(
+    ["build ($", "{{ matrix.id }})"].join(""),
+  );
+});
+
+test("every package checkout binds artifacts to the API run head instead of a merge ref", () => {
+  const expected = [
+    "$",
+    "{{ github.event.pull_request.head.sha || github.sha }}",
+  ].join("");
+  for (const job of Object.values(workflow.jobs)) {
+    const checkout = job.steps.filter((step) =>
+      step.uses?.startsWith("actions/checkout@"),
+    );
+    expect(checkout).toHaveLength(1);
+    expect(checkout[0].with.ref).toBe(expected);
+    expect(checkout[0].with["persist-credentials"]).toBe(false);
+  }
 });
