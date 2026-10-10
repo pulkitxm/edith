@@ -9,13 +9,15 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let engine = DatabaseEngine(
             metadataFile: root.appendingPathComponent("metadata.sqlite"),
-            secretStore: { try InMemoryDatabaseSecretStore() }, adapters: { [SQLiteDatabaseAdapter()] })
+            secretStore: { try InMemoryDatabaseSecretStore() },
+            adapters: { [SQLiteDatabaseAdapter()] })
         let definition = try DatabaseConnectionDraft(
             displayName: "Synthetic SQLite", product: .sqlite,
             path: root.appendingPathComponent("synthetic.sqlite").path,
             environmentKind: .testing, environmentLabel: "Synthetic",
             environmentProtection: .standard, readOnlyPolicy: .disabled,
-            productionPolicy: .standard).definition()
+            productionPolicy: .standard
+        ).definition()
         _ = try await engine.send(.connectionSave(.init(connection: definition)))
         let connected = try await engine.send(.connect(.init(connectionID: definition.id)))
         guard case .connect(let result) = connected else {
@@ -24,11 +26,14 @@ import Testing
             return
         }
         #expect(result.payload != nil)
-        let queried = try await engine.send(.query(.init(
-            target: .init(connectionID: definition.id), language: .sql,
-            command: "SELECT 'synthetic-value' AS result")))
-        #expect(String(decoding: try JSONEncoder().encode(queried), as: UTF8.self)
-            .contains("synthetic-value"))
+        let queried = try await engine.send(
+            .query(
+                .init(
+                    target: .init(connectionID: definition.id), language: .sql,
+                    command: "SELECT 'synthetic-value' AS result")))
+        #expect(
+            String(decoding: try JSONEncoder().encode(queried), as: UTF8.self)
+                .contains("synthetic-value"))
         let disconnected = try await engine.send(.disconnect(.init(connectionID: definition.id)))
         guard case .disconnect(let result) = disconnected else {
             Issue.record("Disconnect returned an unexpected result")
@@ -44,7 +49,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: root) }
         let engine = DatabaseEngine(
             metadataFile: root.appendingPathComponent("metadata.sqlite"),
-            secretStore: { try InMemoryDatabaseSecretStore() }, adapters: { [SQLiteDatabaseAdapter()] })
+            secretStore: { try InMemoryDatabaseSecretStore() },
+            adapters: { [SQLiteDatabaseAdapter()] })
         #expect(await engine.isRunning == false)
         let response = try await engine.send(.connectionList(.init()))
         guard case .connectionList(let result) = response else {
@@ -60,7 +66,8 @@ import Testing
         }
         let fresh = DatabaseEngine(
             metadataFile: root.appendingPathComponent("metadata.sqlite"),
-            secretStore: { try InMemoryDatabaseSecretStore() }, adapters: { [SQLiteDatabaseAdapter()] })
+            secretStore: { try InMemoryDatabaseSecretStore() },
+            adapters: { [SQLiteDatabaseAdapter()] })
         _ = try await fresh.send(.connectionList(.init()))
         #expect(await fresh.isRunning)
         await fresh.shutdown()

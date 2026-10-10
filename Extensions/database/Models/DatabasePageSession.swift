@@ -1,7 +1,11 @@
+import DatabaseCore
 import Foundation
+import Observation
 
 @MainActor
+@Observable
 final class DatabasePageSession {
+    var focusedConnectionID: DatabaseConnectionID?
     let page = DatabasePageModel()
     let connections = DatabaseConnectionWorkspaceModel()
     let management = DatabaseConnectionManagementModel()
@@ -16,4 +20,3 @@ final class DatabasePageSession {
         page.loading.cancel()
     }
 }
-

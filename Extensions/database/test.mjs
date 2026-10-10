@@ -1,11 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 
-const developer = process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer";
 const shared = [
-  "--package-path", ".", "--build-system", "native", "--jobs",
+  "--package-path", ".", "--jobs",
   process.env.EXTENSION_SWIFT_JOBS ?? "1",
-  "-Xswiftc", "-plugin-path", "-Xswiftc",
-  `${developer}/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins`,
 ];
 const selection = process.argv[2] ? new RegExp(process.argv[2]) : undefined;
 const listed = execFileSync("swift", ["test", "list", ...shared], {

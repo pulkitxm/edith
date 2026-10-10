@@ -657,6 +657,7 @@ private func renderWorkbench(
     let host = NSHostingView(
         rootView:
             view
+            .tint(themeColor(AppTheme.accent.rawValue))
             .environment(\.automaticViewActionsEnabled, false)
             .environment(\.compactLayout, width < 680)
             .preferredColorScheme(scheme))

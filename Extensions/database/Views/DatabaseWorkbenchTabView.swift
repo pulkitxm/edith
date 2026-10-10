@@ -68,8 +68,9 @@ struct DatabaseWorkbenchTabView: View {
             } else {
                 EdithSegmentedPicker(
                     "Workspace mode", selection: modeSelection,
-                    options: DatabaseWorkbenchMode.allCases, label: { $0.title })
-                    .labelsHidden()
+                    options: DatabaseWorkbenchMode.allCases, label: { $0.title }
+                )
+                .labelsHidden()
             }
         }
         .frame(maxWidth: UIScale.pt(208))

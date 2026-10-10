@@ -41,7 +41,8 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
         _ = try await replacement.send(.connectionList(.init()))
     }
 
-    func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse {
+    func send(_ request: DatabaseBrokerCommandRequest) async throws -> DatabaseBrokerCommandResponse
+    {
         guard let current = Self.lock.withLock({ Self.engine }) else {
             throw DatabaseEngineError.stopped
         }
@@ -53,7 +54,9 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
     private static var state: SurfacePrivacyState?
 
     static func start() {
-        if let channel = ExtensionSharedState.current { state = SurfacePrivacyState(channel: channel) }
+        if let channel = ExtensionSharedState.current {
+            state = SurfacePrivacyState(channel: channel)
+        }
     }
 
     static func refresh() { state?.refresh() }
@@ -63,5 +66,9 @@ struct DatabaseWorkerClient: DatabaseBrokerCommandSending {
         state = nil
     }
 
-    static var hidden: Bool { state?.hides(.databases) ?? false }
+    static var hidden: Bool {
+        state?.hides(.databases)
+            ?? SurfacePrivacyState.hides(
+                .databases, values: ExtensionSharedState.current?.values(for: "presenter") ?? [:])
+    }
 }

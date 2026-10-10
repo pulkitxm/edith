@@ -38,12 +38,15 @@ import Foundation
             let id = connection.id.rawValue.uuidString
             return SurfaceDataRow(
                 id, sourceID: id, title: String(connection.displayName.prefix(256)),
-                detail: connection.productHint.displayName, value: connection.isFavorite ? "Favorite" : "Saved",
+                detail: connection.productHint.displayName,
+                value: connection.isFavorite ? "Favorite" : "Saved",
                 icon: "externaldrive", actions: [.init("open/" + id, "Open", "macwindow")])
         }
         return SurfaceSnapshot(
-            providerID: "database", metrics: [.init("connections", "Connections", "\(selected.count)")],
-            rows: Array(rows), sources: all.map {
+            providerID: "database",
+            metrics: [.init("connections", "Connections", "\(selected.count)")],
+            rows: Array(rows),
+            sources: all.map {
                 .init($0.id.rawValue.uuidString, String($0.displayName.prefix(256)))
             }, message: selected.isEmpty ? "No saved connections" : nil, updatedAt: Date())
     }
@@ -52,7 +55,8 @@ import Foundation
         guard !stopped else { throw ExtensionPeerError.unavailable }
         let response = try await sender.send(.connectionList(.init()))
         try Task.checkCancellation()
-        guard !stopped, case .connectionList(let result) = response, let payload = result.payload else {
+        guard !stopped, case .connectionList(let result) = response, let payload = result.payload
+        else {
             throw ExtensionPeerError.unavailable
         }
         return Array(payload.connections.prefix(1_024))
@@ -67,6 +71,7 @@ import Foundation
         try Task.checkCancellation()
         guard !stopped else { throw ExtensionPeerError.unavailable }
         session.connections.selectConnection(.init(rawValue: id))
+        session.focusedConnectionID = .init(rawValue: id)
         ExtensionPresentation.showWindow()
     }
 }

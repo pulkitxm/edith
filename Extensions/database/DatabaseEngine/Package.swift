@@ -22,7 +22,8 @@ let package = Package(
     name: "DatabaseEngine",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "DatabaseEngine", type: .dynamic, targets: ["DatabaseCore", "DatabaseEngine"])
+        .library(
+            name: "DatabaseEngine", type: .dynamic, targets: ["DatabaseCore", "DatabaseEngine"])
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-crypto.git", exact: "4.5.1"),

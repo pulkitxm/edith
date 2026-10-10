@@ -6,6 +6,7 @@ import SwiftUI
 
 @MainActor
 struct DatabasePage: View {
+    private let pageSession: DatabasePageSession?
     @State private var model: DatabasePageModel
     @State private var connectionWorkspace: DatabaseConnectionWorkspaceModel
     @State private var connectionManagement: DatabaseConnectionManagementModel
@@ -32,6 +33,8 @@ struct DatabasePage: View {
         connectionWorkspace: DatabaseConnectionWorkspaceModel? = nil,
         session: DatabasePageSession? = nil
     ) {
+        pageSession = session
+        _focusedConnectionID = State(initialValue: session?.focusedConnectionID)
         _model = State(initialValue: model ?? session?.page ?? DatabasePageModel())
         _connectionWorkspace = State(
             initialValue: connectionWorkspace ?? session?.connections
@@ -96,6 +99,9 @@ struct DatabasePage: View {
                 guard !Task.isCancelled else { return }
             }
             await connectionWorkspace.loadConnections()
+        }
+        .onChange(of: pageSession?.focusedConnectionID) { _, connectionID in
+            focusedConnectionID = connectionID
         }
         .onChange(of: workspace.safetyPhase) { _, phase in
             guard case .succeeded = phase,

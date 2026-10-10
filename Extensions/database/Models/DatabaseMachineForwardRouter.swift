@@ -23,9 +23,12 @@ enum DatabaseMachineForwardRoutingError: LocalizedError, Equatable {
 
 enum DatabaseMachineForwardRouteResolver {
     static func ports(_ endpoints: [DatabaseNetworkEndpoint]) -> [Int] {
-        Array(Set(endpoints.filter {
-            ["localhost", "127.0.0.1", "::1"].contains($0.host.lowercased())
-        }.map(\.port.value))).sorted()
+        Array(
+            Set(
+                endpoints.filter {
+                    ["localhost", "127.0.0.1", "::1"].contains($0.host.lowercased())
+                }.map(\.port.value))
+        ).sorted()
     }
 }
 

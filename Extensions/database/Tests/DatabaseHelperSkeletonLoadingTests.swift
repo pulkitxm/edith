@@ -7,7 +7,7 @@ import EdithExtensionUI
 @Suite struct DatabaseHelperSkeletonLoadingTests {
     @Test func databaseAndHelperHaveNoIndeterminateProgressViews() throws {
         for root in [
-            packageRoot.appendingPathComponent("Views"),
+            packageRoot.appendingPathComponent("Views")
         ] {
             for file in try swiftFiles(in: root) {
                 let source = try String(contentsOf: file, encoding: .utf8)
