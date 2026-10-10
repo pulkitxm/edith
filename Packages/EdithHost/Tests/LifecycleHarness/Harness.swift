@@ -173,14 +173,7 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.invalidResponse
             }
             let savedSurface = surfaces.layouts.home
-            if !headlessCLI {
-                stage = "window"
-                try await sessions.show(id: first.id)
-                let opened = try await endpoint.invoke("extension.open")
-                guard String(decoding: opened, as: UTF8.self) == "{\"opened\":true}" else {
-                    throw HostWorkerError.invalidResponse
-                }
-            }
+            stage = "engine data"
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
@@ -500,7 +493,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":\(!headlessCLI),\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":\(headlessCLI),\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -555,7 +548,6 @@ struct HostLifecycleHarness {
     @MainActor private static func verifyLaTeX(
         _ endpoint: ExtensionPeerEndpoint, fixture: URL, seed: Bool
     ) async throws {
-        _ = try await endpoint.invoke("extension.open")
         let projectID = "20000000-0000-0000-0000-000000000001"
         let source = fixture.appendingPathComponent("synthetic-paper.tex")
         let original =

@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { buildExtensionPackage } from "./build-extension-package.mjs";
+import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
 
 await mkdir(resolve("local"), { recursive: true });
 const root = await realpath(
@@ -148,9 +149,9 @@ try {
       "surfaceLayoutRestored",
     ])
       assert.equal(result[key], true);
-    assert.equal(result.nativeWindow, !headlessCLI);
+    validateWorkerLifecycleScope(result);
     assert.equal(result.headlessCLI, headlessCLI);
-    assert.equal(result.headlessLifecycle, headlessCLI);
+    assert.equal(result.headlessLifecycle, true);
     assert.equal(result.disabledProcesses, 0);
     assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
     assert.equal(result.clipboardDataValidated, id === "clipboard");
