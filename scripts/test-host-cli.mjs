@@ -1031,6 +1031,8 @@ try {
       (value) => value.exactBytes && value.resize && value.termiosRestored,
     ),
   );
+  assert.equal(host.exitCode, null, hostError);
+  assert.equal(host.signalCode, null, hostError);
   const streamCancelled = spawn(ed, ["calendar", "stream-wait"], {
     stdio: ["ignore", "pipe", "pipe"],
     env: environment,
@@ -1041,7 +1043,11 @@ try {
     streamCancellationErrors += data;
   });
   await until(() => {
-    assert.equal(streamCancelled.exitCode, null, streamCancellationErrors);
+    assert.equal(
+      streamCancelled.exitCode,
+      null,
+      `${streamCancellationErrors}; host pid=${host.pid} exit=${host.exitCode} signal=${host.signalCode}; ${hostError}`,
+    );
     return existsSync(cliMarker);
   });
   streamCancelled.kill("SIGTERM");
