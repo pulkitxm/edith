@@ -15,9 +15,8 @@ struct UsageMachinesCommand: AsyncParsableCommand {
             split its history. `ed usage summary` counts the fleet and `--source`
             still narrows to one agent on one machine.
 
-            Anything the collector needs and cannot find there (jq, bun, ccusage) is
-            installed under ~/.cache/edith on that machine, which is why collecting
-            waits to be asked rather than happening for every machine you have.
+            The Machines extension collects the remote journals and the owning Usage
+            engine interprets them. Collection happens only for machines you select.
             """,
         subcommands: [
             UsageMachinesListCommand.self, UsageMachinesCollectCommand.self,
@@ -246,7 +245,7 @@ struct UsageMachinesEnableCommand: AsyncParsableCommand {
         discussion: """
             Count this machine on every usage refresh.
 
-            Reads the current state. Does not change it.
+            Changes whether this machine participates in future refreshes.
 
             ed usage machines enable box
             ed usage machines enable box --json
@@ -312,7 +311,7 @@ struct UsageMachinesForgetCommand: AsyncParsableCommand {
         discussion: """
             Drop what a machine gave and stop collecting from it.
 
-            Changes companion memory by deleting one conversation and its messages.
+            Deletes this machine's cached usage and excludes it from future refreshes.
 
             ed usage machines forget box
             ed usage machines forget box --json

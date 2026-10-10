@@ -739,9 +739,9 @@ struct UsageRefreshCommand: AsyncParsableCommand {
         commandName: "refresh",
         abstract: "Re-collect usage data from every agent, here and on the machines.",
         discussion: """
-            Runs the collection pipeline in this process, so it works whether or not the
-            Edith app is open. If a refresh is already running somewhere else, this
-            attaches to it and reports its progress instead of starting a second one.
+            Runs the owning Usage engine collection pipeline. If a refresh is already
+            running, this attaches to it and reports its progress instead of starting
+            a second one.
 
             Machines counted towards usage are collected at the same time as this Mac's
             own agents, if nothing has collected from them in the last half hour.

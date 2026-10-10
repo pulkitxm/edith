@@ -12,7 +12,7 @@ struct UsageExportCommand: AsyncParsableCommand {
         discussion: """
             Render Edith's local agent usage as branded, high resolution PNG cards.
 
-            Reads everything the companion remembers and writes a restorable bundle.
+            Reads the owning Usage engine history and writes the selected PNG cards.
 
             ed usage export
             ed usage export --json

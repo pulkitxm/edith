@@ -75,6 +75,11 @@ struct DashboardView: View {
             {
                 PageNotice(notice, tone: .information)
             }
+            if let failure = UsageUIClient.current?.failure {
+                PageNotice(
+                    failure, tone: .error,
+                    actions: { Button("Retry", action: refresh.requestRefresh) })
+            }
             if model.loaded, let error = model.contentLoad.errorMessage {
                 PageNotice(
                     error, tone: .error,

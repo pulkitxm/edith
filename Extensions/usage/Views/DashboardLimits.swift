@@ -139,7 +139,9 @@ struct RateLimitsDialsView: View {
                 named: UsageEvents.limitsUpdated)
             {
                 guard !Task.isCancelled else { return }
-                latestLimits = UsageWorkerOperations.controller?.latestLimits
+                latestLimits =
+                    UsageUIClient.current?.latestLimits
+                    ?? UsageWorkerOperations.controller?.latestLimits
                 reload()
             }
         }

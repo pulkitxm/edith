@@ -138,6 +138,65 @@ import Testing
         client.stop(); try await commands.shutdown()
     }
 
+    @Test func completedBetweenPollsRefreshStillNotifiesOriginalPage() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let defaults = try #require(UserDefaults(suiteName: "usage-ui-test-" + UUID().uuidString))
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let ui = UsageUICommands(controller: controller, directory: directory, defaults: defaults)
+        let reports = UsageReportCommands(
+            controller: controller,
+            store: SurfaceUsageStore(url: directory.appendingPathComponent("usage.json")),
+            directory: directory)
+        let client = UsageUIClient(invoke: { command, payload in
+            if command.hasPrefix("usage.ui.") {
+                return try await ui.execute(command, payload: payload)
+            }
+            return try await reports.execute(command, payload: payload)
+        })
+        var updates = 0
+        let observer = UsageEvents.observe(UsageEvents.usageUpdated) { updates += 1 }
+        defer { UsageEvents.stopObserving(observer); client.stop(); ui.shutdown() }
+        try await client.refreshState()
+        #expect(updates == 0)
+        try data.write(to: directory.appendingPathComponent("usage.json"))
+        try await client.refreshState()
+        #expect(!client.refreshing && updates == 1)
+        try await client.refreshState()
+        #expect(updates == 1)
+        await reports.shutdown(); await controller.shutdown()
+    }
+
+    @Test func nativeHomeCardKeepsSourceAndDayConfiguration() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let today = CalendarDay.stamp(Date())
+        let document = Data(
+            ("{\"daily\":[{\"period\":\"" + today
+                + "\",\"bySource\":{\"one\":[{\"modelName\":\"sample\",\"inputTokens\":12,\"cost\":1}],\"two\":[{\"modelName\":\"sample\",\"inputTokens\":8,\"cost\":2}]}}]}")
+                .utf8)
+        try document.write(to: directory.appendingPathComponent("usage.json"))
+        let defaults = try #require(UserDefaults(suiteName: "usage-ui-test-" + UUID().uuidString))
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let ui = UsageUICommands(controller: controller, directory: directory, defaults: defaults)
+        var tile = SurfaceTile(.usage); tile.days = 1; tile.sourceIDs = ["two"]
+        let reply = try await ui.execute("usage.ui.card", payload: JSONEncoder().encode(tile))
+        let snapshot = try JSONDecoder().decode(SurfaceUsageSnapshot.self, from: reply)
+        #expect(snapshot.today.tokens == 8 && snapshot.today.cost == 2)
+        #expect(snapshot.days.count == 1 && snapshot.providers.map(\.id) == ["two"])
+        tile.days = 0
+        await #expect(throws: ExtensionPeerError.self) {
+            _ = try await ui.execute("usage.ui.card", payload: JSONEncoder().encode(tile))
+        }
+        ui.shutdown(); await controller.shutdown()
+    }
+
     @Test func rejectsCorruptEngineSnapshot() async throws {
         let data = data
         let id = UUID()

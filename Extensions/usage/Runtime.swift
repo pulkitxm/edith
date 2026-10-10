@@ -238,12 +238,13 @@ final class ExtensionRuntime: NSObject {
                         }
                     })
             }
-            if let tile = uiTile, tile.widget == .activity {
+            if let tile = uiTile {
+                guard [.activity, .usage, .limits].contains(tile.widget) else {
+                    return ["ok": false] as NSDictionary
+                }
                 return NSHostingController(
                     rootView: ExtensionPageHost {
-                        UsageEmbeddedScene(client: self.uiClient) {
-                            UsageHomeActivityCard(tile: tile)
-                        }
+                        UsageEmbeddedScene(client: self.uiClient) { UsageHomeScene(tile: tile) }
                     })
             }
             return NSHostingController(

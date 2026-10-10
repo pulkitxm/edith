@@ -1681,6 +1681,8 @@
         "Extensions/usage/Services/UsageUICommands.swift",
         "Extensions/usage/ViewModels/UsageUIClient.swift",
         "Extensions/usage/Views/UsageHomeActivityCard.swift",
+        "Extensions/usage/Views/UsageHomeScene.swift",
+        "Extensions/usage/Views/UsageHomeUsageCard.swift",
         "Extensions/usage/CLI/CLIProgress.swift",
         "Extensions/usage/CLI/ExportPlan.swift",
         "Extensions/usage/CLI/UsageAttributionCommands.swift",

@@ -30,9 +30,19 @@ actor UsageReportCommands {
         switch command {
         case "usage.status":
             try empty(object)
+            let usageUpdatedAt = try? directory.appendingPathComponent("usage.json").resourceValues(
+                forKeys: [.contentModificationDateKey]).contentModificationDate?
+                .timeIntervalSince1970
+            let limitsUpdatedAt = try? directory.appendingPathComponent("limits-history.jsonl")
+                .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate?
+                .timeIntervalSince1970
             let state = await MainActor.run {
                 [
                     "refreshing": controller.refreshing,
+                    "usageUpdatedAt": usageUpdatedAt as Any? ?? NSNull(),
+                    "limitsUpdatedAt": limitsUpdatedAt as Any? ?? NSNull(),
+                    "limitsRefreshedAt": controller.latestLimits?.refreshedAt.timeIntervalSince1970
+                        as Any? ?? NSNull(),
                     "failure": controller.failure as Any? ?? NSNull(),
                     "notice": controller.notice as Any? ?? NSNull(),
                 ] as [String: Any]

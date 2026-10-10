@@ -1,4 +1,5 @@
 import EdithExtensionSupport
+import EdithExtensionUI
 import Foundation
 import UserNotifications
 
@@ -6,6 +7,7 @@ struct UsageUILimits: Codable, Sendable {
     let providers: [LimitProvider: LimitsHistory.Latest]
     let points: [LimitPoint]
     let provider: LimitProvider
+    let current: LimitsTopicSnapshot?
 }
 
 @MainActor final class UsageUICommands {
@@ -73,6 +75,24 @@ struct UsageUILimits: Codable, Sendable {
             else { throw ExtensionPeerError.invalidRequest }
             documents[id] = nil
             return Data("{}".utf8)
+        case "usage.ui.open":
+            try empty(object)
+            ExtensionPresentation.showWindow()
+            return Data("{}".utf8)
+        case "usage.ui.card":
+            let tile = try JSONDecoder().decode(SurfaceTile.self, from: payload)
+            guard tile.widget == .usage, (1...365).contains(tile.days),
+                (1...100).contains(tile.itemLimit),
+                (tile.sourceIDs?.count ?? 0) <= 100,
+                tile.sourceIDs?.allSatisfy({
+                    !$0.isEmpty && $0.utf8.count <= 2_048 && !$0.utf8.contains(0)
+                }) ?? true
+            else { throw ExtensionPeerError.invalidRequest }
+            let store = SurfaceUsageStore(url: directory.appendingPathComponent("usage.json"))
+            let snapshot = try await store.snapshot(tile: tile)
+            try Task.checkCancellation()
+            guard !stopped else { throw ExtensionPeerError.unavailable }
+            return try encoder.encode(snapshot)
         case "usage.ui.presentation":
             try empty(object)
             return try encoder.encode(ExtensionSharedState.current?.values(for: "presenter") ?? [:])
@@ -96,7 +116,8 @@ struct UsageUILimits: Codable, Sendable {
             guard !stopped else { throw ExtensionPeerError.unavailable }
             return try encoder.encode(
                 UsageUILimits(
-                    providers: snapshot.latest, points: snapshot.points, provider: snapshot.provider
+                    providers: snapshot.latest, points: snapshot.points,
+                    provider: snapshot.provider, current: controller.latestLimits
                 ))
         case "usage.ui.log":
             try empty(object)

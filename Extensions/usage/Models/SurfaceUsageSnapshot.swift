@@ -33,15 +33,15 @@ public struct SurfaceUsageDocument: Decodable, Sendable {
     }
 }
 
-public struct SurfaceUsageSnapshot: Sendable {
-    public struct Total: Sendable {
+public struct SurfaceUsageSnapshot: Codable, Sendable {
+    public struct Total: Codable, Sendable {
         public var cost = 0.0
         public var tokens = 0.0
         mutating func add(cost: Double, tokens: Double) {
             self.cost = min(1e15, self.cost + cost); self.tokens = min(1e15, self.tokens + tokens)
         }
     }
-    public struct Breakdown: Identifiable, Sendable {
+    public struct Breakdown: Identifiable, Codable, Sendable {
         public let id: String
         public let title: String
         public let total: Total

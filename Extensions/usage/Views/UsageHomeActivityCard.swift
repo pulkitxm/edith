@@ -4,7 +4,12 @@ import SwiftUI
 
 struct UsageHomeActivityCard: View {
     let tile: SurfaceTile
-    @State private var model = DashboardModel.shared
+    @State private var model: DashboardModel
+
+    @MainActor init(tile: SurfaceTile, model: DashboardModel? = nil) {
+        self.tile = tile
+        _model = State(initialValue: model ?? DashboardModel.shared)
+    }
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {

@@ -63,6 +63,7 @@ struct UsageUIPreferences: Codable, Equatable, Sendable {
     static let displayKeys: Set<String> = [
         AppStorageKeys.General.theme, AppStorageKeys.General.appearance,
         AppStorageKeys.Presenter.blurMoney, AppStorageKeys.Presenter.blurUsage,
+        UsageMachinesPeer.selectedDefaultsKey,
     ]
 
     static func read(_ defaults: UserDefaults) -> Self {

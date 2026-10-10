@@ -14,6 +14,10 @@ import Observation
     private var preferencesTask: Task<Void, Never>?
     private var observer: NSObjectProtocol?
     private(set) var presentationValues: [String: String]?
+    private var usageUpdatedAt: Double?
+    private var limitsUpdatedAt: Double?
+    private var limitsRefreshedAt: Double?
+    private(set) var latestLimits: LimitsTopicSnapshot?
     private(set) var refreshing = false
     private(set) var notice: String?
     private(set) var failure: String?
@@ -100,23 +104,40 @@ import Observation
             } catch { if !Task.isCancelled { failure = error.localizedDescription } }
             while !Task.isCancelled, !stopped {
                 do {
-                    presentationValues = try await value(
-                        "usage.ui.presentation", as: [String: String].self)
-                    let data = try await invoke("usage.status")
-                    let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                    let previous = refreshing
-                    refreshing = object?["refreshing"] as? Bool ?? false
-                    notice = object?["notice"] as? String
-                    failure = object?["failure"] as? String
-                    if previous != refreshing {
-                        UsageEvents.post(
-                            refreshing ? UsageEvents.refreshStarted : UsageEvents.refreshFinished)
-                        if !refreshing { UsageEvents.post(UsageEvents.usageUpdated) }
-                    }
-                    UsageEvents.post(UsageEvents.limitsUpdated)
+                    try await refreshState()
                 } catch { if !Task.isCancelled { failure = error.localizedDescription } }
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
             }
+        }
+    }
+
+    func refreshState() async throws {
+        presentationValues = try await value("usage.ui.presentation", as: [String: String].self)
+        let data = try await invoke("usage.status")
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let nextRefreshing = object["refreshing"] as? Bool
+        else { throw ExtensionPeerError.invalidRequest }
+        let previous = refreshing
+        refreshing = nextRefreshing
+        notice = object["notice"] as? String
+        failure = object["failure"] as? String
+        if previous != refreshing {
+            UsageEvents.post(refreshing ? UsageEvents.refreshStarted : UsageEvents.refreshFinished)
+        }
+        let usageDate = object["usageUpdatedAt"] as? Double
+        if usageUpdatedAt != usageDate || (previous && !refreshing) {
+            usageUpdatedAt = usageDate
+            UsageEvents.post(UsageEvents.usageUpdated)
+        }
+        let limitsDate = object["limitsUpdatedAt"] as? Double
+        let refreshedAt = object["limitsRefreshedAt"] as? Double
+        if limitsUpdatedAt != limitsDate || limitsRefreshedAt != refreshedAt {
+            let snapshot: UsageUILimits = try await value(
+                "usage.ui.limits", object: ["provider": "claude"])
+            latestLimits = snapshot.current
+            limitsUpdatedAt = limitsDate
+            limitsRefreshedAt = refreshedAt
+            UsageEvents.post(UsageEvents.limitsUpdated)
         }
     }
 
