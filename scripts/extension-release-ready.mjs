@@ -65,15 +65,22 @@ export async function expectedPackages(root) {
   );
 }
 
-export async function verifyCurrentMain({ target, releaseTag, fetchMetadata }) {
+export async function verifyCurrentMain({
+  target,
+  releaseTag,
+  fetchMetadata,
+  repository = catalogRepository,
+}) {
   if (
+    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository) ||
+    repository.split("/").some((part) => part === "." || part === "..") ||
     !/^[a-f0-9]{40}$/.test(target) ||
     !/^v[0-9]+\.[0-9]+\.[0-9]+$/.test(releaseTag)
   )
     throw new Error("Invalid release source identity");
   const read = async (path) => {
     const response = await fetchMetadata(
-      `https://api.github.com/repos/${catalogRepository}/${path}`,
+      `https://api.github.com/repos/${repository}/${path}`,
     );
     if (response.status !== 200)
       throw new Error(`Cannot verify current main: HTTP ${response.status}`);
@@ -89,7 +96,7 @@ export async function verifyCurrentMain({ target, releaseTag, fetchMetadata }) {
     !/^[a-f0-9]{40}$/.test(reference.object.sha)
   )
     throw new Error("Invalid current main reference");
-  if (reference.object.sha === target) return;
+  if (reference.object.sha === target) return reference.object.sha;
   const commit = await read(`commits/${reference.object.sha}`);
   if (
     commit.sha !== reference.object.sha ||
@@ -100,6 +107,7 @@ export async function verifyCurrentMain({ target, releaseTag, fetchMetadata }) {
     throw new Error(
       "App publication superseded: main moved after the release build",
     );
+  return reference.object.sha;
 }
 
 export async function waitForPackages({

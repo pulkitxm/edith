@@ -655,6 +655,10 @@ jobs:
           fi
           exit "$PUBLISH_STATUS"
 
+      - name: Publish the release
+        if: steps.release_state.outputs.superseded != 'true'
+        run: node scripts/publish-host-release.mjs release-assets
+
       - name: Update the rebuilt release checksum
         if: env.REBUILD != ''
         working-directory: release-source
@@ -662,10 +666,6 @@ jobs:
           RELEASE_SHA256="$(sha256sum ../release-assets/Edith.dmg | cut -d' ' -f1)"
           export RELEASE_SHA256
           bash ../scripts/publish-release-state.sh rebuild
-
-      - name: Publish the release
-        if: steps.release_state.outputs.superseded != 'true'
-        run: node scripts/publish-host-release.mjs release-assets
 
       - name: Mirror the cask to the tap repository
         if: steps.release_state.outputs.superseded != 'true'
