@@ -1,4 +1,4 @@
-# Disable
+# `ed extensions disable`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 

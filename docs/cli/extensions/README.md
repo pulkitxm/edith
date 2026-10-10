@@ -1,4 +1,4 @@
-# Extensions
+# `ed extensions`
 
 [CLI reference](../README.md)
 

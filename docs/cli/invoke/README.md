@@ -1,4 +1,4 @@
-# Invoke
+# `ed invoke`
 
 [CLI reference](../README.md)
 

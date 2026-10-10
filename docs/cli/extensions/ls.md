@@ -1,4 +1,4 @@
-# Ls
+# `ed extensions ls`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 

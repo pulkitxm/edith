@@ -1,4 +1,4 @@
-# Remove
+# `ed extensions remove`
 
 [CLI reference](../README.md) | [Extensions](./README.md)
 
