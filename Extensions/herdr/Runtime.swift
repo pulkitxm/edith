@@ -8,6 +8,9 @@ import SwiftUI
 
 @MainActor @objc(EdithHerdrExtensionRuntime)
 final class ExtensionRuntime: NSObject {
+    private var uiClient: ExtensionEngineClient?
+    private var settingsModel: HerdrSettingsModel?
+    private var uiConfigured = false
     private var worker: HerdrWorker?
     private var surface: HerdrSurface?
     private var startup: Task<Void, Never>?
@@ -70,8 +73,27 @@ final class ExtensionRuntime: NSObject {
                     as? String ?? "",
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
+        case "configureUI":
+            guard worker == nil, input["location"] as? String == "settings",
+                let configuration = ExtensionUIConfiguration(context: input)
+            else { return ["ok": false] as NSDictionary }
+            settingsModel?.shutdown()
+            uiClient?.invalidate()
+            uiClient = configuration.engineClient
+            if let client = configuration.engineClient {
+                settingsModel = HerdrSettingsModel(client: client)
+            } else {
+                settingsModel = HerdrSettingsModel { _, _ in throw ExtensionPeerError.unavailable }
+            }
+            uiConfigured = true
+        case "stopUI":
+            settingsModel?.shutdown()
+            settingsModel = nil
+            uiClient?.invalidate()
+            uiClient = nil
+            uiConfigured = false
         case "start":
-            guard Bundle.main.bundleURL.pathExtension != "appex",
+            guard !uiConfigured, Bundle.main.bundleURL.pathExtension != "appex",
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -84,6 +106,13 @@ final class ExtensionRuntime: NSObject {
                 || ProcessInfo.processInfo.environment["EDITH_EXTENSION_RECOVERY_ONLY"] == "1"
             if !recovery { startup = Task { await created.start() } }
         case "view":
+            if uiConfigured {
+                guard input["location"] as? String == "settings", let settingsModel else {
+                    return ["ok": false] as NSDictionary
+                }
+                return NSHostingController(
+                    rootView: ExtensionPageHost { HerdrSettingsPage(model: settingsModel) })
+            }
             guard let worker else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {

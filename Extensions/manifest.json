@@ -2841,6 +2841,8 @@
         "Extensions/herdr/CLI/HerdrLayoutCommands.swift",
         "Extensions/herdr/CLI/HerdrMessageCommands.swift",
         "Extensions/herdr/CLI/HerdrSpaceCommands.swift",
+        "Extensions/herdr/ViewModels/HerdrSettingsModel.swift",
+        "Extensions/herdr/Views/HerdrSettingsPage.swift",
         "Extensions/herdr/CLI/CLIDestructivePlan.swift"
       ]
     },

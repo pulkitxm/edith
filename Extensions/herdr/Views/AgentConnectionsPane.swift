@@ -21,7 +21,7 @@ struct AgentConnectionsPane: View {
     @State private var result: String?
     @AppStorage("surfaceAgentTerminalDiscovery", store: SharedDefaults.store) private
         var discovery = true
-    @AppStorage("surfaceAgentStuckMinutes", store: SharedDefaults.store) private
+    @AppStorage(HerdrAttentionSettings.Keys.stuckMinutes, store: SharedDefaults.store) private
         var stuckMinutes = 10
     private var files: AgentActivityHookFiles { monitor.hookFiles }
     private let installer: AgentActivityHookInstaller
@@ -70,7 +70,7 @@ struct AgentConnectionsPane: View {
                 )
                 .disabled(!discovery)
                 Text(
-                    "Terminal monitoring distinguishes approval prompts, questions, errors, and confirmed lack of progress. Quiet provider hooks are shown separately. Notification choices remain in Background agent settings."
+                    "Terminal monitoring distinguishes approval prompts, questions, errors, and confirmed lack of progress. Quiet provider hooks are shown separately. Notification choices are in Herdr settings."
                 )
                 .font(.edithText(.caption)).foregroundStyle(.secondary)
                 Stepper(
