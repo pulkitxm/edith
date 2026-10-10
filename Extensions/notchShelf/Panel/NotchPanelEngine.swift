@@ -4,6 +4,7 @@ import Foundation
 
 @MainActor final class NotchPanelEngine {
     static let maximumBytes = 131_072
+    static let maximumCleanupReceipts = 64
     private(set) var identity: NotchPanelIdentity?
     private(set) var displays: [UInt32: NotchPanelDisplay] = [:]
     private(set) var revision: UInt64 = 1
@@ -14,7 +15,10 @@ import Foundation
     private var transfer: (NotchPanelTransfer, ShelfStagedFiles)?
     private var shareAcknowledgement: (UUID, CheckedContinuation<Void, Error>)?
     private var transferTimer: Task<Void, Never>?
-    private var promises: Set<UUID> = []
+    private var promises: [UUID: NotchPanelPromise] = [:]
+    private var pendingPromiseFinishes: [UUID: NotchPanelPromise] = [:]
+    private var transferCompletions: [NotchPanelTransferFinish] = []
+    private var promiseCompletions: [NotchPanelPromise] = []
     private var pointers: [UInt32: NotchPanelPointer] = [:]
     private var waiter: (UUID, CheckedContinuation<NotchPanelBatch, Error>)?
     private var waitTimer: Task<Void, Never>?
@@ -63,6 +67,7 @@ import Foundation
                 abs(size.width - display.width) < 1, abs(size.height - display.height) < 1
             else { throw ExtensionPeerError.invalidRequest }
         }
+        transferCompletions = []; promiseCompletions = []; pendingPromiseFinishes = [:]
         identity = .init(ownershipID: request.ownershipID, generation: UUID())
         version = request.version
         displays = Dictionary(uniqueKeysWithValues: request.displays.map { ($0.displayID, $0) })
@@ -215,8 +220,9 @@ import Foundation
         transfer = nil
         shareAcknowledgement?.1.resume(throwing: CancellationError()); shareAcknowledgement = nil
         controller?.store.cancelActionSelection()
-        for id in promises { controller?.store.discardPromiseDestination(id: id) }
-        promises = []
+        for id in promises.keys { controller?.store.discardPromiseDestination(id: id) }
+        promises = [:]; pendingPromiseFinishes = [:]
+        transferCompletions = []; promiseCompletions = []
         controller?.onPanelStateChanged = nil
         for display in displays.values { invalidate(display.presentationID) }
     }
@@ -426,6 +432,18 @@ import Foundation
 
     func finishTransfer(_ request: NotchPanelTransferFinish) throws {
         try validateOwnership(request.identity)
+        if let completed = transferCompletions.first(where: { $0.id == request.id }) {
+            guard completed == request else { throw ExtensionPeerError.invalidRequest }
+            return
+        }
+        try finishActiveTransfer(request)
+        transferCompletions.append(request)
+        if transferCompletions.count > Self.maximumCleanupReceipts {
+            transferCompletions.removeFirst()
+        }
+    }
+
+    private func finishActiveTransfer(_ request: NotchPanelTransferFinish) throws {
         guard let transfer, transfer.0.id == request.id, let controller,
             request.error.map({ $0.utf8.count <= 512 && !$0.utf8.contains(0) }) ?? true
         else { throw ExtensionPeerError.invalidRequest }
@@ -467,36 +485,64 @@ import Foundation
     func preparePromise(_ request: NotchPanelPromise) throws -> URL {
         try validate(
             request.identity, display: request.displayID, presentation: request.presentationID)
-        guard promises.count < 32, !promises.contains(request.id), request.fileURL == nil,
+        _ = try dropPoint(x: request.x, y: request.y)
+        guard promises.count + pendingPromiseFinishes.count < 32, promises[request.id] == nil,
+            pendingPromiseFinishes[request.id] == nil,
+            !promiseCompletions.contains(where: { $0.id == request.id }), request.fileURL == nil,
             let destination = controller?.store.promiseDestination(id: request.id)
         else { throw ExtensionPeerError.invalidRequest }
-        _ = try dropPoint(x: request.x, y: request.y)
-        promises.insert(request.id)
+        promises[request.id] = request
         return destination
     }
 
     func finishPromise(_ request: NotchPanelPromise) throws {
         try validateOwnership(
             request.identity, display: request.displayID, presentation: request.presentationID)
-        guard promises.contains(request.id), let controller else {
-            throw ExtensionPeerError.invalidRequest
+        if let completed = promiseCompletions.first(where: { $0.id == request.id }) {
+            guard completed == request else { throw ExtensionPeerError.invalidRequest }
+            return
         }
+        if let pending = pendingPromiseFinishes[request.id] {
+            guard pending == request else { throw ExtensionPeerError.invalidRequest }
+            throw ExtensionPeerError.unavailable
+        }
+        guard let issued = promises[request.id], issued.displayID == request.displayID,
+            issued.presentationID == request.presentationID, let controller
+        else { throw ExtensionPeerError.invalidRequest }
         let point = try dropPoint(x: request.x, y: request.y)
         if let url = request.fileURL, context.activeVersions["notchShelf"] == version {
-            guard url.isFileURL, url.path.utf8.count <= 4096 else {
+            guard url.isFileURL, url.path.utf8.count <= 4096, !url.path.utf8.contains(0) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            promises.remove(request.id)
+            promises[request.id] = nil
+            pendingPromiseFinishes[request.id] = request
             controller.store.adoptWhenAvailable(fileAt: url, id: request.id) {
-                [weak controller] item in
+                [weak self, weak controller] item in
+                guard let self, self.attached, self.identity == request.identity,
+                    self.pendingPromiseFinishes[request.id] == request
+                else { return }
                 if let item, let point { controller?.store.setPosition(point, for: item) }
                 controller?.synchronizeShelfItems()
+                self.pendingPromiseFinishes[request.id] = nil
+                self.rememberPromiseCompletion(request)
+                self.changed()
+            }
+            guard promiseCompletions.contains(request) else {
+                throw ExtensionPeerError.unavailable
             }
         } else {
-            promises.remove(request.id)
+            promises[request.id] = nil
             controller.store.discardPromiseDestination(id: request.id)
+            rememberPromiseCompletion(request)
+            changed()
         }
-        changed()
+    }
+
+    private func rememberPromiseCompletion(_ request: NotchPanelPromise) {
+        promiseCompletions.append(request)
+        if promiseCompletions.count > Self.maximumCleanupReceipts {
+            promiseCompletions.removeFirst()
+        }
     }
 
     private func dropPoint(x: Double?, y: Double?) throws -> CGPoint? {
