@@ -169,7 +169,10 @@ public enum HerdrLive {
         admission: HerdrDiscoveryAdmission, key: String,
         operation: @escaping @Sendable () async -> Void
     ) async {
-        while await admission.admit(key) { await operation() }
+        while await admission.admit(key) {
+            await operation()
+            await admission.complete(key)
+        }
     }
 
     static func snapshot(

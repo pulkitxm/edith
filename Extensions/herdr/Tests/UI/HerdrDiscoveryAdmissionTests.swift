@@ -30,6 +30,10 @@ import Testing
         #expect(!second)
         interval = 2
         admission.refresh()
+        #expect(await waitUntil { admission.pendingCount == 1 })
+        #expect(!second)
+        instant += .seconds(2)
+        admission.refresh()
         await pending.value
         #expect(second)
         interval = nil
@@ -40,6 +44,9 @@ import Testing
         admission.refresh()
         #expect(await waitUntil { admission.pendingCount == 1 })
         interval = 30
+        admission.refresh()
+        #expect(await waitUntil { admission.pendingCount == 1 })
+        instant += .seconds(30)
         admission.refresh()
         #expect(await paused.value)
         admission.stop()
@@ -70,6 +77,24 @@ import Testing
         admission.retire("one")
         #expect(await admission.admit("one"))
         admission.stop()
+    }
+
+    @Test func completedPollingWaitsTheOriginalFullCadence() async {
+        var instant = ContinuousClock.now
+        let admission = HerdrDiscoveryAdmission(interval: { 30 }, now: { instant })
+        #expect(await admission.admit("snapshot"))
+        instant += .seconds(25)
+        admission.complete("snapshot")
+        instant += .seconds(25)
+        var next = false
+        let waiting = Task { next = await admission.admit("snapshot") }
+        #expect(await waitUntil { admission.pendingCount == 1 })
+        #expect(!next)
+        instant += .seconds(5)
+        admission.refresh()
+        await waiting.value
+        #expect(next)
+        await admission.stopAndWait()
     }
 
     @Test func shutdownAwaitsCancelledTimerCompletion() async {

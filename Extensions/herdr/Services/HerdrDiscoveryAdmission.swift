@@ -10,6 +10,7 @@ import Foundation
     private let now: @MainActor () -> ContinuousClock.Instant
     private let sleep: Sleep
     private var lastAdmissions: [String: ContinuousClock.Instant] = [:]
+    private var intervals: [String: TimeInterval] = [:]
     private var waiters: [UUID: Waiter] = [:]
     private var timers: [UUID: Task<Void, Never>] = [:]
     private(set) var stopped = false
@@ -29,6 +30,10 @@ import Foundation
     func admit(_ key: String) async -> Bool {
         while !stopped, !Task.isCancelled {
             let cadence = interval()
+            if cadence != intervals[key] {
+                if lastAdmissions[key] != nil { lastAdmissions[key] = now() }
+                intervals[key] = cadence
+            }
             if let cadence {
                 guard cadence.isFinite, cadence > 0 else { return false }
                 if let last = lastAdmissions[key] {
@@ -47,7 +52,15 @@ import Foundation
         return false
     }
 
-    func retire(_ key: String) { lastAdmissions[key] = nil }
+    func complete(_ key: String) {
+        guard !stopped else { return }
+        lastAdmissions[key] = now()
+    }
+
+    func retire(_ key: String) {
+        lastAdmissions[key] = nil
+        intervals[key] = nil
+    }
 
     func refresh() {
         let current = waiters
@@ -61,6 +74,7 @@ import Foundation
     func stop() {
         stopped = true
         lastAdmissions.removeAll()
+        intervals.removeAll()
         refresh()
     }
 

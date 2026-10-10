@@ -595,9 +595,9 @@ import Foundation
     func cancelPendingWork() async {
         hostWindowNavigation?.invalidate()
         hostFolderChoice?.invalidate()
-        await terminalSessions.stopAllAndWait()
         ambientPolicy.stop()
         await discoveryAdmission.stopAndWait()
+        await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await catalogs.shutdown()
         await cliStreams?.stopAndWait()
