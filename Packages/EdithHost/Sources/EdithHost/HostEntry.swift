@@ -43,6 +43,18 @@ struct HostEntry: AppExtension {
             exit(HostCLI.run(arguments))
         }
         #if EDITH_CLI_FIXTURE
+        if arguments.count == 2, arguments[0] == "--extension-remote-fixture" {
+            do { try HostRemoteFixture.run(directory: URL(fileURLWithPath: arguments[1])) } catch {
+                exit(1)
+            }
+            return
+        }
+        if arguments == ["--extension-remote-fixture-engine"],
+            Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.remote-") == true
+        {
+            do { try HostRemoteFixtureEngine().run() } catch { exit(1) }
+            return
+        }
         if arguments.count == 3, arguments[0] == "--extension-core-fixture",
             ["normal", "owner-exit"].contains(arguments[2])
         {

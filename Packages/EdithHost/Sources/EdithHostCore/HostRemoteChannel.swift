@@ -48,7 +48,8 @@ public final class HostRemoteChannel {
     ) async throws -> HostRemoteChannel {
         let endpoint = try await endpoint(through: bootstrap)
         return try await connect(
-            to: endpoint.value, executable: executable, receive: receive,
+            to: endpoint.value, executable: executable, expectedPeer: expectedPeer,
+            receive: receive,
             executeEngine: executeEngine)
     }
 
