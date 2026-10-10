@@ -8,6 +8,8 @@ import Observation
 @MainActor @Observable final class StudioUIFacade {
     typealias Invoke = @MainActor (String, Data) async throws -> Data
     private let invoke: Invoke
+    private let settingsOnly: Bool
+    private let presentationID: UUID?
     private let invalidate: @MainActor () -> Void
     private var tasks: [UUID: Task<Void, Never>] = [:]
     var activeWork: Set<UUID> = []
@@ -27,13 +29,20 @@ import Observation
     private(set) var state: StudioUIState?
     private(set) var failure: String?
 
-    init(client: ExtensionEngineClient) {
+    init(client: ExtensionEngineClient, settingsOnly: Bool = false) {
+        self.settingsOnly = settingsOnly
+        presentationID = client.presentationID
         invoke = { operation, payload in try await client.invoke(operation, payload: payload) }
         invalidate = { client.invalidate() }
         configureExportControls()
     }
 
-    init(invoke: @escaping Invoke, invalidate: @escaping @MainActor () -> Void = {}) {
+    init(
+        settingsOnly: Bool = false, invoke: @escaping Invoke,
+        invalidate: @escaping @MainActor () -> Void = {}
+    ) {
+        self.settingsOnly = settingsOnly
+        presentationID = nil
         self.invoke = invoke
         self.invalidate = invalidate
         configureExportControls()
@@ -52,9 +61,11 @@ import Observation
     }
 
     func refresh() {
+        guard !settingsOnly || versions["destination"] == nil else { return }
         submit("state") { [weak self] in
             guard let self else { return nil }
-            let value: StudioUIState = try await self.read("studio.ui.state")
+            let value: StudioUIState = try await self.read(
+                self.settingsOnly ? "studio.ui.settings" : "studio.ui.state")
             return {
                 self.state = value; self.failure = nil; self.exporter.applyRemote(value.export);
                 self.onState?(value)
@@ -82,6 +93,34 @@ import Observation
             return {
                 then(); self.refresh()
             }
+        }
+    }
+
+    func setDestination(mode: String, folder: String) {
+        guard settingsOnly else {
+            action("studio.ui.preferences", object: ["mode": mode, "folder": folder])
+            return
+        }
+        if let previous = versions.removeValue(forKey: "state") {
+            tasks.removeValue(forKey: previous)?.cancel()
+        }
+        submit("destination") { [weak self] in
+            guard let self else { return nil }
+            let value: StudioUIState = try await self.read(
+                "studio.ui.settings.preferences", object: ["mode": mode, "folder": folder])
+            return {
+                self.state = value; self.failure = nil; self.onState?(value)
+            }
+        }
+    }
+
+    func openSettingsStudio() {
+        submit("openStudio") { [weak self] in
+            guard let self else { return nil }
+            let _: [String: String] = try await self.read(
+                "studio.ui.settings.open",
+                object: ["presentationID": self.presentationID?.uuidString ?? ""])
+            return nil
         }
     }
 

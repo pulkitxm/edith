@@ -777,8 +777,9 @@ final class StudioModel {
     }
 
     func setDestination(mode: String, folder: String) {
+        guard !isStopped else { return }
         if let facade {
-            facade.action("studio.ui.preferences", object: ["mode": mode, "folder": folder])
+            facade.setDestination(mode: mode, folder: folder)
         } else {
             defaults.set(mode, forKey: AppStorageKeys.Studio.destination)
             defaults.set(folder, forKey: AppStorageKeys.Studio.folder)

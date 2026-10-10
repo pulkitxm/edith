@@ -1548,7 +1548,10 @@
         "Extensions/studio/UIBridge/StudioUIMediaCommands.swift",
         "Extensions/studio/UIBridge/StudioUIRecorder.swift",
         "Extensions/studio/UIBridge/StudioUIVideoSessions.swift",
-        "Extensions/studio/UIBridge/StudioUIVideoClient.swift"
+        "Extensions/studio/UIBridge/StudioUIVideoClient.swift",
+        "Extensions/studio/UIBridge/StudioUIScene.swift",
+        "Extensions/studio/UIBridge/StudioSettingsNavigation.swift",
+        "Extensions/studio/Studio/Views/StudioSettingsRows.swift"
       ]
     },
     "nativeSources": [
