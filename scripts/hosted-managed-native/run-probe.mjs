@@ -6,6 +6,7 @@ import {
   readdir,
   readFile,
   realpath,
+  rm,
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -244,6 +245,7 @@ try {
           join(output, record.name),
           JSON.stringify(record.value, null, 2),
         );
+      else await rm(join(output, record.name), { force: true });
     result = { ...result, diagnostics };
   } catch {
     result = {

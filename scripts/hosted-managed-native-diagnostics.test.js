@@ -57,6 +57,7 @@ test("failure diagnostics retain bounded synthetic stage receipts even when read
       "observed",
       "missing",
       "missing",
+      "missing",
     ]);
     expect(result.records[1].value.stage).toBe("carrier-check-in");
   }));
@@ -124,3 +125,73 @@ test("diagnostics accept only the exact owned UUID root, never a production or a
       }),
     ).rejects.toThrow();
   }));
+
+test("UI failure receipts expose only bounded state and argument categories", async () =>
+  fixture(async (options) => {
+    const path = join(options.directory, "ui-test-outcome.json");
+    const value = {
+      hostIdentifier: identifier,
+      outcome: "failed",
+      stage: "approval-window-wait",
+      applicationState: 1,
+      windowCount: 0,
+      launchArgumentCount: 2,
+      expectedWindowMatched: false,
+      argumentKinds: ["approval-mode", "fixture-directory", "other"],
+    };
+    await writeFile(path, JSON.stringify(value));
+    expect((await collectProbeDiagnostics(options)).records[4]).toEqual({
+      name: "ui-test-outcome.json",
+      status: "observed",
+      value,
+    });
+    for (const change of [
+      { applicationState: 5 },
+      { windowCount: -1 },
+      { launchArgumentCount: 129 },
+      { expectedWindowMatched: "false" },
+      { argumentKinds: ["private-value"] },
+      { argumentKinds: Array(129).fill("other") },
+    ]) {
+      await writeFile(path, JSON.stringify({ ...value, ...change }));
+      expect((await collectProbeDiagnostics(options)).records[4]).toEqual({
+        name: "ui-test-outcome.json",
+        status: "invalid",
+      });
+    }
+  }));
+
+test("the generated fixture entry compiles and handles probe arguments before ordinary CLI dispatch", async () => {
+  const { hostedProbeEntry } = await import(
+    "./hosted-managed-native/entry-overlay.mjs"
+  );
+  const { execFileSync } = await import("node:child_process");
+  const entry = `import Foundation
+import Darwin
+struct ProbeLaunch { static func requested(_ value: [String]) -> Bool { false } }
+struct HostedManagedApprovalProbe { static func dispatch(arguments: [String]) throws {} }
+func runHost(arguments: [String]) {
+        if ProcessInfo.processInfo.environment["EDITH_CLI"] == "1" { return }
+}
+`;
+  const result = hostedProbeEntry(entry);
+  expect(result.indexOf("ProbeLaunch.requested")).toBeLessThan(
+    result.indexOf('environment["EDITH_CLI"]'),
+  );
+  expect(result).toContain("#if EDITH_CLI_FIXTURE");
+  expect(() => hostedProbeEntry("missing anchor")).toThrow("Ambiguous");
+  expect(() => hostedProbeEntry(entry + entry)).toThrow("Ambiguous");
+  const directory = await mkdtemp(join(tmpdir(), "hosted-entry-compile-"));
+  try {
+    const file = join(directory, "Entry.swift");
+    await writeFile(file, result);
+    for (const arguments_ of [[], ["-D", "EDITH_CLI_FIXTURE"]])
+      execFileSync(
+        "xcrun",
+        ["swiftc", "-typecheck", "-parse-as-library", ...arguments_, file],
+        { stdio: "pipe", timeout: 30000 },
+      );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

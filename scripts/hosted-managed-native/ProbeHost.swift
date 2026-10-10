@@ -11,6 +11,8 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var browser: EXAppExtensionBrowserViewController?
     private var observation: Task<Void, Never>?
+    private var checkInDeadline: Task<Void, Never>?
+    private var checkInFinished = false
 
     private static func validatedFixture(directory: URL) throws -> ProbeFixture {
         let data = try Data(contentsOf: directory.appendingPathComponent("fixture.json"))
@@ -39,6 +41,46 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
         return fixture
     }
 
+    static func dispatch(arguments: [String]) throws {
+        let directory = try ProbeLaunch.candidateDirectory(arguments)
+        let fixture = try validatedFixture(directory: directory)
+        try writeReceipt(
+            fixture: fixture, name: "probe-startup.json",
+            value: [
+                "outcome": "started", "stage": "argv-received", "argumentCount": arguments.count,
+                "extraArgumentCount": max(0, arguments.count - 2),
+                "argumentKinds": ProbeLaunch.diagnosticKinds(arguments, directory: directory),
+            ])
+        let request: ProbeLaunch.Request
+        do { request = try ProbeLaunch.parse(arguments) } catch {
+            try writeReceipt(
+                fixture: fixture, name: "approval-failure.json",
+                value: [
+                    "outcome": "failed", "stage": "argv-admission",
+                    "argumentCount": arguments.count,
+                    "extraArgumentCount": max(0, arguments.count - 2),
+                    "argumentKinds": ProbeLaunch.diagnosticKinds(arguments, directory: directory),
+                    "contractFailure": "launchArguments",
+                ])
+            throw error
+        }
+        switch request.mode {
+        case .registration: try register(directory: request.directory)
+        case .approval: try run(directory: request.directory)
+        }
+    }
+
+    private static func writeReceipt(fixture: ProbeFixture, name: String, value: [String: Any])
+        throws
+    {
+        let bound = value.merging(["hostIdentifier": fixture.identifier]) { _, next in next }
+        let data = try JSONSerialization.data(withJSONObject: bound, options: [.sortedKeys])
+        guard data.count <= 16_384 else { throw ProbeContractError.invalidFixture }
+        try data.write(
+            to: URL(fileURLWithPath: fixture.directory).appendingPathComponent(name),
+            options: .atomic)
+    }
+
     static func register(directory: URL) throws {
         let fixture = try validatedFixture(directory: directory)
         guard LSRegisterURL(URL(fileURLWithPath: fixture.app) as CFURL, true) == noErr else {
@@ -56,6 +98,12 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
 
     static func run(directory: URL) throws {
         let fixture = try validatedFixture(directory: directory)
+        try writeReceipt(
+            fixture: fixture, name: "probe-startup.json",
+            value: [
+                "outcome": "started", "stage": "approval-loop",
+                "argumentCount": CommandLine.arguments.count - 1,
+            ])
         let delegate = HostedManagedApprovalProbe(fixture: fixture)
         let application = NSApplication.shared
         application.setActivationPolicy(.regular)
@@ -66,6 +114,14 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
     private init(fixture: ProbeFixture) { self.fixture = fixture }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        write("probe-startup.json", ["outcome": "started", "stage": "carrier-requested"])
+        checkInDeadline = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(10)) } catch { return }
+            guard let self, !checkInFinished else { return }
+            checkInFinished = true
+            write("approval-failure.json", ["outcome": "failed", "stage": "carrier-timeout"])
+            NSApp.terminate(nil)
+        }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.arguments = ["--extension-ui-carrier"]
         configuration.activates = false
@@ -76,13 +132,29 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
             at: URL(fileURLWithPath: fixture.carrier), configuration: configuration
         ) { [weak self] application, error in
             Task { @MainActor in
-                guard let self else { return }
-                guard application != nil, error == nil else {
-                    self.write(
-                        "approval-failure.json", ["outcome": "failed", "stage": "carrier-check-in"])
+                guard let self, !self.checkInFinished else { return }
+                self.checkInFinished = true
+                self.checkInDeadline?.cancel()
+                let matches = application?.bundleURL?.path == self.fixture.carrier
+                var receipt: [String: Any] = [
+                    "outcome": "started", "stage": "carrier-check-in",
+                    "applicationReturned": application != nil, "carrierPathMatched": matches,
+                ]
+                if let error {
+                    let native = error as NSError
+                    let domain = native.domain
+                    receipt["errorDomain"] =
+                        domain.range(of: #"^[A-Za-z0-9.-]{1,128}$"#, options: .regularExpression)
+                            != nil ? domain : "other"
+                    receipt["errorCode"] = native.code
+                }
+                guard application != nil, matches, error == nil else {
+                    receipt["outcome"] = "failed"
+                    self.write("approval-failure.json", receipt)
                     NSApp.terminate(nil)
                     return
                 }
+                self.write("probe-startup.json", receipt)
                 self.presentBrowser()
             }
         }
@@ -104,6 +176,7 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
         window.isReleasedWhenClosed = false
         self.window = window
         self.browser = browser
+        write("probe-startup.json", ["outcome": "started", "stage": "browser-created"])
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         write(
@@ -158,11 +231,13 @@ final class HostedManagedApprovalProbe: NSObject, NSApplicationDelegate {
 
     private func write(_ name: String, _ value: [String: Any]) {
         do {
-            try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]).write(
-                to: URL(fileURLWithPath: fixture.directory).appendingPathComponent(name),
-                options: .atomic)
+            try Self.writeReceipt(fixture: fixture, name: name, value: value)
         } catch { NSApp.terminate(nil) }
     }
 
-    func applicationWillTerminate(_ notification: Notification) { observation?.cancel() }
+    func applicationWillTerminate(_ notification: Notification) {
+        checkInFinished = true
+        checkInDeadline?.cancel()
+        observation?.cancel()
+    }
 }

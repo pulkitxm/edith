@@ -99,6 +99,7 @@ ci-hosted-managed-probe-check:
 	swift format lint --strict --recursive Tests/HostedManagedNativeProbe/Package.swift Tests/HostedManagedNativeProbe/Sources Tests/HostedManagedNativeProbe/Tests Tests/HostedManagedNativeProbe/UITests scripts/hosted-managed-native/ProbeHost.swift
 	swift test --package-path Tests/HostedManagedNativeProbe --jobs $(EXTENSION_SWIFT_JOBS) --disable-build-manifest-caching
 	bun scripts/hosted-managed-native/build-probe.mjs --check
+	bun test scripts/hosted-managed-native-diagnostics.test.js
 
 ci-hosted-managed-native:
 	bun scripts/hosted-managed-native/run-probe.mjs

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hostedProbeEntry } from "./entry-overlay.mjs";
 
 const output = resolve("local/hosted-managed-native");
 const contract = resolve(
@@ -74,10 +75,8 @@ for (const dependency of ["ExtensionMarketplace", "ExtensionSupport"])
 await writeFile(join(packageDirectory, "Package.swift"), manifest);
 const entryPath = join(packageDirectory, "Sources/EdithHost/HostEntry.swift");
 const entry = await readFile(entryPath, "utf8");
-const anchor = "        #if EDITH_CLI_FIXTURE\n";
-assert.equal(entry.split(anchor).length, 2);
-const overlay = `${anchor}        if arguments.count == 2, ["--extension-hosted-approval-probe", "--extension-hosted-register-probe"].contains(arguments[0]) {\n            do {\n                let directory = URL(fileURLWithPath: arguments[1])\n                if arguments[0] == "--extension-hosted-register-probe" {\n                    try HostedManagedApprovalProbe.register(directory: directory)\n                } else {\n                    try HostedManagedApprovalProbe.run(directory: directory)\n                }\n            } catch {\n                FileHandle.standardError.write(Data("Hosted probe admission failed: \\(error)\\n".utf8))\n                exit(1)\n            }\n            return\n        }\n`;
-await writeFile(entryPath, entry.replace(anchor, overlay));
+const probeEntry = hostedProbeEntry(entry);
+await writeFile(entryPath, probeEntry);
 await cp(
   hostSource,
   join(packageDirectory, "Sources/EdithHost/HostedManagedApprovalProbe.swift"),
@@ -130,9 +129,7 @@ const receipt = {
   frozenHost: join(output, "frozen/Edith.app"),
   productionExecutableUnchangedProof: false,
   originalHostEntrySHA256: createHash("sha256").update(entry).digest("hex"),
-  probeHostEntrySHA256: createHash("sha256")
-    .update(entry.replace(anchor, overlay))
-    .digest("hex"),
+  probeHostEntrySHA256: createHash("sha256").update(probeEntry).digest("hex"),
   overlayPurpose:
     "Standalone hosted public approval browser entry; original role dispatch and admission unchanged",
 };

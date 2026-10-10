@@ -210,3 +210,50 @@ private func control(_ label: String, value: String? = "0", hittable: Bool = tru
         }
     }
 }
+
+@Test func onlyExactProbeArgumentsDispatchAndExtraArgumentsRemainDiagnosticOnly() throws {
+    let path = try fixture().directory
+    for flag in ["--extension-hosted-approval-probe", "--extension-hosted-register-probe"] {
+        #expect(ProbeLaunch.requested([flag, path]))
+        #expect(try ProbeLaunch.parse([flag, path]).directory.path == path)
+        for arguments in [
+            [flag, path, "-ApplePersistenceIgnoreState", "YES"],
+            ["-psn_0_123", flag, path], [flag, path, "foreign"],
+        ] {
+            #expect(ProbeLaunch.requested(arguments))
+            #expect(try ProbeLaunch.candidateDirectory(arguments).path == path)
+            #expect(throws: ProbeContractError.invalidFixtureField("launchArguments")) {
+                try ProbeLaunch.parse(arguments)
+            }
+        }
+    }
+    #expect(!ProbeLaunch.requested(["--extension-worker"]))
+    #expect(!ProbeLaunch.requested(["--extension-ui-carrier"]))
+    for arguments in [
+        ["--extension-hosted-approval-probe"],
+        ["--extension-hosted-approval-probe", "relative"],
+        ["--extension-hosted-approval-probe", path + "/../foreign"],
+        ["--extension-hosted-approval-probe", path, "--extension-hosted-register-probe", path],
+        Array(repeating: "extra", count: 128) + ["--extension-hosted-approval-probe", path],
+    ] {
+        #expect(throws: (any Error).self) { try ProbeLaunch.parse(arguments) }
+    }
+}
+
+@Test func diagnosticArgumentKindsNeverExposePathsOrUnrecognizedValues() throws {
+    let path = try fixture().directory
+    let kinds = ProbeLaunch.diagnosticKinds(
+        [
+            "--extension-hosted-approval-probe", path, "-ApplePersistenceIgnoreState", "YES",
+            "sensitive-value", "/foreign/path", "-psn_0_123",
+        ], directory: URL(fileURLWithPath: path))
+    #expect(
+        kinds == [
+            "approval-mode", "fixture-directory", "cocoa-persistence", "boolean-yes", "other",
+            "other", "launch-serial",
+        ])
+    #expect(
+        ProbeLaunch.diagnosticKinds(
+            Array(repeating: "unknown", count: 129), directory: URL(fileURLWithPath: path)
+        ).count == 128)
+}

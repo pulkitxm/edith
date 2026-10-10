@@ -31,7 +31,19 @@ final class ManagedNativeUITests: XCTestCase {
         let title = "Managed Calendar Approval \(fixture.identifier)"
         let window = application.windows.matching(
             NSPredicate(format: "label == %@ OR identifier == %@", title, title))
-        XCTAssertTrue(window.firstMatch.waitForExistence(timeout: 30))
+        let windowExists = window.firstMatch.waitForExistence(timeout: 30)
+        try JSONSerialization.data(
+            withJSONObject: [
+                "hostIdentifier": fixture.identifier,
+                "outcome": windowExists ? "started" : "failed",
+                "stage": "approval-window-wait",
+                "applicationState": Int(application.state.rawValue),
+                "windowCount": window.count,
+                "launchArgumentCount": application.launchArguments.count,
+                "expectedWindowMatched": windowExists,
+            ], options: [.sortedKeys]
+        ).write(to: root.appendingPathComponent("ui-test-outcome.json"), options: .atomic)
+        XCTAssertTrue(windowExists, "Inspect the bounded hosted startup and approval receipts")
         XCTAssertEqual(window.count, 1)
         let ready = try readJSON(root.appendingPathComponent("approval-ready.json"))
         XCTAssertEqual(ready["hostIdentifier"] as? String, fixture.identifier)

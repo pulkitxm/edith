@@ -18,6 +18,7 @@ const stages = new Set([
   "public-identity",
   "approval-timeout",
   "terminated",
+  "approval-window-wait",
   "diagnostic-write",
 ]);
 const names = [
@@ -25,6 +26,7 @@ const names = [
   "approval-failure.json",
   "approval-ready.json",
   "public-identity.json",
+  "ui-test-outcome.json",
 ];
 
 export async function collectProbeDiagnostics({
@@ -59,6 +61,11 @@ export async function collectProbeDiagnostics({
         "stage",
         "argumentCount",
         "extraArgumentCount",
+        "argumentKinds",
+        "applicationState",
+        "windowCount",
+        "launchArgumentCount",
+        "expectedWindowMatched",
         "publicBrowser",
         "expectedLabel",
         "workerIdentifier",
@@ -75,7 +82,12 @@ export async function collectProbeDiagnostics({
       if (value.stage !== undefined) assert(stages.has(value.stage));
       if (value.outcome !== undefined)
         assert(["started", "failed", "terminated"].includes(value.outcome));
-      for (const key of ["argumentCount", "extraArgumentCount"])
+      for (const key of [
+        "argumentCount",
+        "extraArgumentCount",
+        "windowCount",
+        "launchArgumentCount",
+      ])
         if (value[key] !== undefined)
           assert(
             Number.isInteger(value[key]) &&
@@ -87,9 +99,35 @@ export async function collectProbeDiagnostics({
         "publicDiscovery",
         "applicationReturned",
         "carrierPathMatched",
+        "expectedWindowMatched",
       ])
         if (value[key] !== undefined)
           assert.equal(typeof value[key], "boolean");
+      if (value.applicationState !== undefined)
+        assert(
+          Number.isInteger(value.applicationState) &&
+            value.applicationState >= 0 &&
+            value.applicationState <= 4,
+        );
+      if (value.argumentKinds !== undefined) {
+        assert(
+          Array.isArray(value.argumentKinds) &&
+            value.argumentKinds.length <= 128,
+        );
+        const allowedKinds = new Set([
+          "approval-mode",
+          "registration-mode",
+          "fixture-directory",
+          "cocoa-persistence",
+          "cocoa-open",
+          "cocoa-revisions",
+          "boolean-yes",
+          "boolean-no",
+          "launch-serial",
+          "other",
+        ]);
+        assert(value.argumentKinds.every((kind) => allowedKinds.has(kind)));
+      }
       if (value.expectedLabel !== undefined)
         assert.equal(value.expectedLabel, "Edith calendar");
       if (value.workerIdentifier !== undefined)

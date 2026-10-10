@@ -147,3 +147,57 @@ public enum ProbeApproval {
         }
     }
 }
+
+public enum ProbeLaunch {
+    public enum Mode: Sendable { case approval, registration }
+    public struct Request: Sendable {
+        public let mode: Mode
+        public let directory: URL
+    }
+
+    private static let modes = [
+        "--extension-hosted-approval-probe", "--extension-hosted-register-probe",
+    ]
+
+    public static func diagnosticKinds(_ arguments: [String], directory: URL) -> [String] {
+        Array(arguments.prefix(128)).map { value in
+            switch value {
+            case modes[0]: "approval-mode"
+            case modes[1]: "registration-mode"
+            case directory.path: "fixture-directory"
+            case "-ApplePersistenceIgnoreState": "cocoa-persistence"
+            case "-NSTreatUnknownArgumentsAsOpen": "cocoa-open"
+            case "-NSDocumentRevisionsDebugMode": "cocoa-revisions"
+            case "YES": "boolean-yes"
+            case "NO": "boolean-no"
+            default: value.hasPrefix("-psn_") ? "launch-serial" : "other"
+            }
+        }
+    }
+
+    public static func requested(_ arguments: [String]) -> Bool {
+        arguments.contains { modes.contains($0) }
+    }
+
+    public static func candidateDirectory(_ arguments: [String]) throws -> URL {
+        let indices = arguments.indices.filter { modes.contains(arguments[$0]) }
+        guard arguments.count <= 128, indices.count == 1, let index = indices.first,
+            arguments.indices.contains(index + 1)
+        else { throw ProbeContractError.invalidFixtureField("launchArguments") }
+        let path = arguments[index + 1]
+        guard path.hasPrefix("/"), !path.utf8.contains(0), !path.contains("\n"),
+            !path.contains("\r"), path.utf8.count <= 4096,
+            URL(fileURLWithPath: path).standardizedFileURL.path == path
+        else { throw ProbeContractError.invalidFixtureField("launchDirectory") }
+        return URL(fileURLWithPath: path)
+    }
+
+    public static func parse(_ arguments: [String]) throws -> Request {
+        let directory = try candidateDirectory(arguments)
+        guard arguments.count == 2, modes.contains(arguments[0]) else {
+            throw ProbeContractError.invalidFixtureField("launchArguments")
+        }
+        return Request(
+            mode: arguments[0] == modes[0] ? .approval : .registration, directory: directory)
+    }
+}
