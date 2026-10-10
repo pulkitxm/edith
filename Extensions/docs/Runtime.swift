@@ -10,10 +10,16 @@ final class ExtensionRuntime: NSObject {
     private var uiBrowser: DocsBrowser?
     private var engineClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private var stopped = false
+    private var activeCalls = 0
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let browser = self?.browser else { throw ExtensionPeerError.unavailable }
+            guard let self, !self.stopped, let browser = self.browser else {
+                throw ExtensionPeerError.unavailable
+            }
+            self.activeCalls += 1
+            defer { self.activeCalls -= 1 }
             if command == "docs.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -23,6 +29,17 @@ final class ExtensionRuntime: NSObject {
                 return try await DocsUIBridge.execute(command, payload: payload, browser: browser)
             }
             return try await DocsSurface.execute(command, payload: payload, browser: browser)
+        }
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        stopped = true
+        commands.shutdown()
+        browser?.shutdown()
+        Task {
+            while activeCalls > 0 { await Task.yield() }
+            completion()
         }
     }
 
@@ -46,7 +63,7 @@ final class ExtensionRuntime: NSObject {
             uiBrowser?.shutdown(); uiBrowser = nil
             engineClient?.invalidate(); engineClient = nil
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if browser == nil { browser = DocsBrowser() }
@@ -56,10 +73,9 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": _ = DocsPeerDecider.configured()
         case "stop":
-            commands.shutdown()
-            browser?.shutdown()
+            prepareToStop(completion: {})
             browser = nil
-        case "status": return ["ok": true, "running": browser != nil] as NSDictionary
+        case "status": return ["ok": true, "running": !stopped && browser != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
