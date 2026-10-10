@@ -39,7 +39,7 @@ public struct AgentLaunchModel: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-public enum AgentLaunchSource: Equatable, Sendable {
+public enum AgentLaunchSource: Equatable, Codable, Sendable {
     case cli(String)
     case builtIn
 
@@ -69,7 +69,7 @@ public struct AgentLaunchOptions: Codable, Equatable, Sendable {
     public var isEmpty: Bool { self == .none }
 }
 
-public struct AgentLaunchCatalog: Equatable, Sendable {
+public struct AgentLaunchCatalog: Equatable, Codable, Sendable {
     public var kind: AgentLaunchKind
     public var models: [AgentLaunchModel]
     public var standard: AgentLaunchModel
@@ -98,7 +98,7 @@ public struct AgentLaunchCatalog: Equatable, Sendable {
     }
 }
 
-public enum AgentLaunchKind: String, CaseIterable, Sendable {
+public enum AgentLaunchKind: String, CaseIterable, Codable, Sendable {
     case claude = "Claude Code"
     case codex = "Codex"
     case opencode = "OpenCode"

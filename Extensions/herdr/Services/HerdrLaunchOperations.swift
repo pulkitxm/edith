@@ -84,7 +84,7 @@ public enum HerdrLaunchOperations {
     ) async throws {
         var catalog: AgentLaunchCatalog?
         if let launchKind = AgentLaunchKind(kind: kind) {
-            catalog = await AgentLaunchCatalogs.shared.cached(for: launchKind, on: machine)
+            catalog = await HerdrLaunchCatalogContext.current.cached(for: launchKind, on: machine)
         }
         let launch = agentLaunch(
             kind: kind, name: name, pane: pane, options: options, catalog: catalog, session: session

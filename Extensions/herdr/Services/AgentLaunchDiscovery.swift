@@ -82,6 +82,7 @@ public actor AgentLaunchCatalogs {
     private let fetch: AgentLaunchDiscovery.Fetch
     private let lifetime: TimeInterval
     private let clock: @Sendable () -> Date
+    private var stopped = false
     private var entries: [String: (catalog: AgentLaunchCatalog, stored: Date)] = [:]
     private var inFlight: [String: Task<String?, Never>] = [:]
 
@@ -97,7 +98,7 @@ public actor AgentLaunchCatalogs {
     public func catalog(
         for kind: AgentLaunchKind, on machine: Machine? = nil, refresh: Bool = false
     ) async -> AgentLaunchCatalog {
-        guard kind.discoveryCommand != nil else { return kind.builtIn }
+        guard !stopped, kind.discoveryCommand != nil else { return kind.builtIn }
         let key = Self.key(kind, machine)
         if !refresh, let entry = entries[key], clock().timeIntervalSince(entry.stored) < lifetime {
             return entry.catalog
@@ -107,6 +108,7 @@ public actor AgentLaunchCatalogs {
         let task = inFlight[flight] ?? Task { await fetch(kind, refresh, machine) }
         inFlight[flight] = task
         let output = await task.value
+        guard !stopped else { return kind.builtIn }
         if inFlight[flight] == task { inFlight[flight] = nil }
         let catalog = output.flatMap { AgentLaunchCatalogParser.catalog(kind, from: $0) }
         let resolved = catalog ?? kind.builtIn
@@ -119,7 +121,21 @@ public actor AgentLaunchCatalogs {
         entries[Self.key(kind, machine)]?.catalog ?? kind.builtIn
     }
 
+    public func shutdown() async {
+        stopped = true
+        let tasks = Array(inFlight.values)
+        for task in tasks { task.cancel() }
+        for task in tasks { _ = await task.value }
+        inFlight.removeAll()
+        entries.removeAll()
+    }
+
     private static func key(_ kind: AgentLaunchKind, _ machine: Machine?) -> String {
         "\(machine?.id.uuidString ?? "local")|\(kind.rawValue)"
     }
+}
+
+public enum HerdrLaunchCatalogContext {
+    @TaskLocal public static var catalog: AgentLaunchCatalogs?
+    public static var current: AgentLaunchCatalogs { catalog ?? .shared }
 }

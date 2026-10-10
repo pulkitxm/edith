@@ -3,6 +3,7 @@ import EdithExtensionUI
 import SwiftUI
 
 struct HerdrLaunchSettingsSheet: View {
+    var store: HerdrStore?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -12,7 +13,7 @@ struct HerdrLaunchSettingsSheet: View {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(HerdrLaunchSettings.kinds, id: \.self) { kind in
-                        HerdrLaunchKindRow(kind: kind)
+                        HerdrLaunchKindRow(kind: kind, store: store)
                         if kind != HerdrLaunchSettings.kinds.last { Divider() }
                     }
                 }
@@ -47,18 +48,43 @@ struct HerdrLaunchSettingsSheet: View {
 
 private struct HerdrLaunchKindRow: View {
     let kind: String
-    @State private var command = ""
-    @State private var options = AgentLaunchOptions.none
-    @State private var catalog: AgentLaunchCatalog?
+    @State private var localCommand = ""
+    @State private var localOptions = AgentLaunchOptions.none
+    @State private var localCatalog: AgentLaunchCatalog?
+    @State private var remote: HerdrUILaunchSettingsModel?
+
+    init(kind: String, store: HerdrStore?) {
+        self.kind = kind
+        _remote = State(
+            initialValue: store?.uiClient.map { HerdrUILaunchSettingsModel(kind: kind, client: $0) }
+        )
+    }
+
+    private var command: String {
+        get { remote?.command ?? localCommand }
+        nonmutating set {
+            if let remote { remote.update(command: newValue) } else { localCommand = newValue }
+        }
+    }
+    private var options: AgentLaunchOptions {
+        get { remote?.options ?? localOptions }
+        nonmutating set {
+            if let remote { remote.update(options: newValue) } else { localOptions = newValue }
+        }
+    }
+    private var catalog: AgentLaunchCatalog? { remote?.catalog ?? localCatalog }
     @State private var refreshes = 0
     @State private var catalogLoad = ContentLoad()
-    private var loading: Bool { catalogLoad.isRunning }
+    private var loading: Bool { catalogLoad.isRunning || remote?.loading == true }
 
     private var launchKind: AgentLaunchKind? { AgentLaunchKind(kind: kind) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: UIScale.pt(6)) {
-            commandLine
+            commandLine.disabled(remote.map { !$0.ready } ?? false)
+            if let error = remote?.error {
+                Text(error).font(.edithText(.caption)).foregroundStyle(.red)
+            }
             if let catalog {
                 if catalog.kind.selectsAtLaunch {
                     choices(catalog)
@@ -91,17 +117,22 @@ private struct HerdrLaunchKindRow: View {
                     get: { command },
                     set: { newValue in
                         command = newValue
-                        HerdrLaunchSettings.setCommand(newValue, for: kind)
+                        if remote == nil { HerdrLaunchSettings.setCommand(newValue, for: kind) }
                     })
             )
             .textFieldStyle(.roundedBorder)
             Button("Reset") {
-                HerdrLaunchSettings.resetToDefault(for: kind)
-                command = HerdrLaunchSettings.command(for: kind)
+                if let remote {
+                    remote.reset()
+                } else {
+                    HerdrLaunchSettings.resetToDefault(for: kind);
+                    command = HerdrLaunchSettings.command(for: kind)
+                }
             }
             .buttonStyle(.edith(.borderless))
             .font(.system(size: UIScale.pt(11)))
-            .disabled(HerdrLaunchSettings.usesHerdrAgentStart(for: kind))
+            .disabled(
+                HerdrLaunchSettings.defaultHerdrSlug(for: kind).map { command == $0 } ?? false)
         }
     }
 
@@ -197,21 +228,22 @@ private struct HerdrLaunchKindRow: View {
                 next[keyPath: keyPath] = value
                 if let catalog { next = AgentLaunchArguments.sanitized(next, in: catalog) }
                 options = next
-                HerdrLaunchSettings.setOptions(next, for: kind)
+                if remote == nil { HerdrLaunchSettings.setOptions(next, for: kind) }
             })
     }
 
     private func reload() {
+        guard remote == nil else { return }
         command = HerdrLaunchSettings.command(for: kind)
         options = HerdrLaunchSettings.options(for: kind)
-        if catalog == nil { catalog = launchKind?.builtIn }
+        if localCatalog == nil { localCatalog = launchKind?.builtIn }
     }
 
     private func loadCatalog() async {
         guard let launchKind, launchKind.discoveryCommand != nil else { return }
         let refresh = refreshes > 0
         await catalogLoad.perform(operation: {
-            await AgentLaunchCatalogs.shared.catalog(for: launchKind, refresh: refresh)
-        }) { catalog = $0 }
+            await HerdrLaunchCatalogContext.current.catalog(for: launchKind, refresh: refresh)
+        }) { localCatalog = $0 }
     }
 }

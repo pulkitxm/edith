@@ -12,7 +12,9 @@ import Foundation
         try Task.checkCancellation()
         let context = makeContext(worker: worker)
         let reply = try await HerdrCLIEnvironment.$context.withValue(context) {
-            try await ExtensionCLIExecution.run(HerdrCLICommand.self, request: request)
+            try await HerdrLaunchCatalogContext.$catalog.withValue(worker.catalogs) {
+                try await ExtensionCLIExecution.run(HerdrCLICommand.self, request: request)
+            }
         }
         try Task.checkCancellation()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
@@ -25,9 +27,11 @@ import Foundation
     ) throws -> Data {
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
         return try HerdrCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
-            try streams.invoke(
-                HerdrCLICommand.self, operation: operation,
-                prefix: "herdr.cli", payload: payload)
+            try HerdrLaunchCatalogContext.$catalog.withValue(worker.catalogs) {
+                try streams.invoke(
+                    HerdrCLICommand.self, operation: operation,
+                    prefix: "herdr.cli", payload: payload)
+            }
         }
     }
 

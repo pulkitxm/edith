@@ -6,6 +6,8 @@ import Foundation
 @MainActor final class HerdrWorker {
     let activity: AgentActivityMonitor
     let store: HerdrStore
+    let catalogs: AgentLaunchCatalogs
+    let searchDecider: @MainActor () -> JevDeciding?
     let hooks: AgentHookService
     let automaticActions: Bool
     private let activityInstaller: AgentActivityHookInstaller
@@ -34,7 +36,8 @@ import Foundation
         defaults: UserDefaults = SharedDefaults.store,
         notifications: HerdrNotificationService? = nil,
         activityInstaller: AgentActivityHookInstaller? = nil,
-        hooks: AgentHookService = .shared,
+        hooks: AgentHookService = .shared, catalogs: AgentLaunchCatalogs = AgentLaunchCatalogs(),
+        searchDecider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() },
         attention: HerdrAttentionBridge? = nil,
         automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
@@ -63,6 +66,8 @@ import Foundation
                     ?? URL(fileURLWithPath: CommandLine.arguments[0]))
         self.store = ownedStore
         self.hooks = hooks
+        self.catalogs = catalogs
+        self.searchDecider = searchDecider
         self.attention = attention ?? HerdrAttentionBridge()
         self.automaticActions = automaticActions
         self.inventory = inventory
@@ -112,8 +117,18 @@ import Foundation
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
+        try await HerdrLaunchCatalogContext.$catalog.withValue(catalogs) {
+            try await executeOwned(command, payload: payload)
+        }
+    }
+
+    private func executeOwned(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command.hasPrefix("herdr.ui.launchSettings.") {
+            return try await HerdrUILaunchSettingsEngine.execute(
+                command, payload: payload, worker: self)
+        }
         if command.hasPrefix("herdr.ui.hook.") {
             return try await uiHookPlans.execute(command, payload: payload)
         }
@@ -359,6 +374,7 @@ import Foundation
         guard !isStopped else { return }
         isStopped = true
         uiHookPlans.shutdown()
+        await catalogs.shutdown()
         for selection in shells.values { selection.holder.stop() }
         shells.removeAll()
         await cliStreams?.stopAndWait()

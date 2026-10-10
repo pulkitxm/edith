@@ -174,7 +174,7 @@ struct HerdrPage: View {
             }
         }
         .edithSheet(isPresented: $launchSettingsPresented) {
-            HerdrLaunchSettingsSheet()
+            HerdrLaunchSettingsSheet(store: store)
         }
         .edithSheet(isPresented: $newAgentPopupPresented, dismissible: nil) {
             HerdrNewAgentPopup(store: store)

@@ -105,7 +105,7 @@ struct HerdrModelsCommand: AsyncParsableCommand {
             var catalogs: [AgentLaunchCatalog] = []
             for kind in kinds {
                 catalogs.append(
-                    await AgentLaunchCatalogs.shared.catalog(
+                    await HerdrLaunchCatalogContext.current.catalog(
                         for: kind, on: target, refresh: refresh))
             }
             guard !json else {
@@ -229,7 +229,7 @@ struct HerdrDefaultsSetCommand: AsyncParsableCommand {
             } catch let error as ConfigurationError {
                 throw CLIFailure.usage(error.message, hint: "use --fast on or --fast off")
             }
-            let catalog = await AgentLaunchCatalogs.shared.catalog(for: launchKind)
+            let catalog = await HerdrLaunchCatalogContext.current.catalog(for: launchKind)
             let options: AgentLaunchOptions
             do {
                 options = try HerdrLaunchDefaults.set(

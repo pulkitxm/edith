@@ -283,6 +283,66 @@ import Testing
         await ui.shutdown()
     }
 
+    @Test func originalLaunchSettingsUseOwnedCatalogAndPersistOptionsWithoutUIProcesses()
+        async throws
+    {
+        defer { HerdrWorkOwnership.enable() }
+        let defaults = HerdrUIDefaults()
+        let store = HerdrStore(defaults: defaults, machinesProvider: { [] })
+        let catalogs = AgentLaunchCatalogs(fetch: { _, _, _ in nil })
+        let worker = HerdrWorker(
+            store: store, defaults: defaults, catalogs: catalogs, automaticActions: false)
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let model = HerdrUILaunchSettingsModel(kind: "Claude Code", client: client)
+        await model.read()
+        #expect(model.ready && model.command == "claude")
+        let catalog = try #require(model.catalog)
+        let chosen = try #require(catalog.models.first)
+        let options = AgentLaunchOptions(
+            model: chosen.id, effort: chosen.efforts.first?.id, fast: chosen.supportsFast)
+        model.update(command: "fixture-agent --profile synthetic", options: options)
+        for _ in 0..<200 {
+            if HerdrLaunchSettings.command(for: "Claude Code", in: defaults)
+                == "fixture-agent --profile synthetic",
+                HerdrLaunchSettings.options(for: "Claude Code", in: defaults) == options
+            {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(HerdrLaunchSettings.options(for: "Claude Code", in: defaults) == options)
+        #expect(
+            HerdrLaunchSettings.command(for: "Claude Code", in: defaults)
+                == "fixture-agent --profile synthetic")
+        model.reset()
+        for _ in 0..<200 {
+            if HerdrLaunchSettings.command(for: "Claude Code", in: defaults) == "claude" { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(HerdrLaunchSettings.command(for: "Claude Code", in: defaults) == "claude")
+        #expect(HerdrLaunchSettings.options(for: "Claude Code", in: defaults) == options)
+        let stale = HerdrUILaunchSettingsModel(kind: "Claude Code", client: client)
+        await stale.read()
+        HerdrLaunchSettings.setCommand("fixture-changed-command", for: "Claude Code", in: defaults)
+        stale.update(command: "stale-command")
+        for _ in 0..<200 {
+            if stale.error != nil { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(
+            stale.error != nil
+                && HerdrLaunchSettings.command(for: "Claude Code", in: defaults)
+                    == "fixture-changed-command"
+        )
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.launchSettings.read",
+                object: ["kind": "Claude Code", "refresh": false, "executable": "/bin/sh"])
+        }
+        model.shutdown(); stale.shutdown(); client.stop()
+        await worker.shutdown()
+    }
+
     @Test func staleLayoutCannotOverwriteOriginalChangesFromAnotherClient() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()
