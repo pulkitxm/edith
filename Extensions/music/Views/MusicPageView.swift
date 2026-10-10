@@ -130,7 +130,7 @@ final class MusicRemote {
     private(set) var shuffling = false
     private(set) var duration: TimeInterval = 0
     private(set) var restorePending = SharedDefaults.store.integer(
-        forKey: "restorePending.music")
+        forKey: MusicBackupProvider.restorePendingKey)
     private(set) var libraryError: String?
 
     private var elapsedBase: TimeInterval = 0
@@ -328,7 +328,7 @@ final class MusicRemote {
             folderPath = ""
             entriesLoaded = false
         }
-        restorePending = SharedDefaults.store.integer(forKey: "restorePending.music")
+        restorePending = SharedDefaults.store.integer(forKey: MusicBackupProvider.restorePendingKey)
         refreshEntries()
         refreshCatalog()
         if refreshSearch { loadSearchScope() }

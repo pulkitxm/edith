@@ -9,6 +9,8 @@ final class ExtensionRuntime: NSObject {
     private var worker: ClipboardWorker?
     private var surface: ClipboardSurface?
     private var settingsObserver: NSObjectProtocol?
+    private var backup: ClipboardBackupProvider?
+    private var backupRestoreTask: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -17,6 +19,11 @@ final class ExtensionRuntime: NSObject {
             if command.hasPrefix("surface.") {
                 guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
                 return try await surface.execute(command, payload: payload)
+            }
+            if command.hasPrefix("backup."), let backup = self.backup {
+                if command == "backup.synchronize" { await self.backupRestoreTask?.value }
+                try Task.checkCancellation()
+                return try await backup.execute(command, payload: payload)
             }
             return try await worker.execute(command, payload: payload)
         }
@@ -27,7 +34,11 @@ final class ExtensionRuntime: NSObject {
         commands.shutdown()
         HotKeyRegistrar.shutdown()
         IPC.stopObserving(settingsObserver); settingsObserver = nil
+        backupRestoreTask?.cancel()
         Task {
+            await backup?.shutdown()
+            await backupRestoreTask?.value
+            await commands.shutdownAndWait()
             await worker?.shutdown(); completion()
         }
     }
@@ -47,6 +58,11 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard worker == nil else { return ["ok": true] as NSDictionary }
+            do { backup = try ClipboardBackupProvider.live() } catch {
+                return ["ok": false, "error": error.localizedDescription] as NSDictionary
+            }
+            let backup = self.backup
+            backupRestoreTask = Task { _ = await backup?.restoreOnEnable() }
             let worker = ClipboardWorker()
             self.worker = worker
             surface = ClipboardSurface(
@@ -76,6 +92,7 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             worker?.panel.shutdown(); worker?.store.shutdown(); worker?.history.stop()
             worker = nil; surface = nil
+            backup = nil; backupRestoreTask = nil
             IPC.stopObserving(settingsObserver); settingsObserver = nil
             HotKeyRegistrar.shutdown(); TextEditingCommands.shutdown(); ClipboardThumbnail.clear()
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary

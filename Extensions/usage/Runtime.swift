@@ -31,7 +31,7 @@ final class ExtensionRuntime: NSObject {
                 return try await statusLine.execute(command, payload: payload)
             }
             if command.hasPrefix("backup."), let backup = self.backup {
-                await self.backupRestoreTask?.value
+                if command == "backup.synchronize" { await self.backupRestoreTask?.value }
                 try Task.checkCancellation()
                 return try await backup.execute(command, payload: payload)
             }

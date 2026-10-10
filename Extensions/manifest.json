@@ -728,6 +728,7 @@
       "helper": [
         "Extensions/clipboard/ClipboardActions.swift",
         "Extensions/clipboard/ClipboardArchive.swift",
+        "Extensions/clipboard/ClipboardBackupProvider.swift",
         "Extensions/clipboard/ClipboardCapturePolicy.swift",
         "Extensions/clipboard/ClipboardCategory.swift",
         "Extensions/clipboard/ClipboardClient.swift",
