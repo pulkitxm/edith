@@ -12,8 +12,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runOwnedJourneyCommand } from "./hosted-original-shell/owned-command.mjs";
 import {
   createJourneyReplacement,
+  startJourneyReplacementOperator,
   validateReplacementAuthorization,
   validateReplacementProcesses,
   validateReplacementRequest,
@@ -310,4 +312,45 @@ test("loopback authorization rejects token replay from another source and malfor
     ).toThrow();
   }
   expect(() => validateReplacementAuthorization(request, "short")).toThrow();
+});
+
+test("actual loopback operator serves authenticated requests while its owned inert command is running", async () => {
+  const value = await setup();
+  const server = await startJourneyReplacementOperator(value.replace);
+  let childExited = false;
+  const child = runOwnedJourneyCommand(
+    process.execPath,
+    ["-e", "setTimeout(()=>process.exit(0),1000)"],
+    { timeoutMs: 5000, stdio: "ignore" },
+  ).then(() => {
+    childExited = true;
+  });
+  const post = (body, token = server.token) =>
+    fetch(server.endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    });
+  try {
+    expect((await post(request(value.fixture), "b".repeat(64))).status).toBe(
+      409,
+    );
+    expect((await post("x".repeat(1025))).status).toBe(409);
+    expect(
+      (await post({ ...request(value.fixture), hostIdentifier: "other" }))
+        .status,
+    ).toBe(409);
+    const response = await post(request(value.fixture));
+    expect(response.status).toBe(200);
+    expect((await response.json()).priorOwnedGenerationsExited).toBe(true);
+    expect(childExited).toBe(false);
+    expect((await post(request(value.fixture))).status).toBe(409);
+  } finally {
+    await child;
+    await server.close();
+    await value.cleanup();
+  }
 });
