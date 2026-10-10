@@ -883,6 +883,26 @@ async function pullRequestRepository(run, { legacy = false } = {}) {
 }
 
 describe("pull request candidate planning", () => {
+  test("the CLI refuses PR planning outside a pull request event before reading source", async () => {
+    await pullRequestRepository(async ({ root, baseSHA }) => {
+      const command = execFileSync;
+      expect(() =>
+        command(
+          process.execPath,
+          [
+            join(process.cwd(), "scripts/extension-release-plan.mjs"),
+            "--pull-request-base",
+            baseSHA,
+          ],
+          {
+            cwd: root,
+            env: { ...process.env, GITHUB_EVENT_NAME: "push" },
+            stdio: "pipe",
+          },
+        ),
+      ).toThrow("exact pull request event base");
+    });
+  });
   test("a single owner change includes only its transitive consumers", () => {
     expect(
       planPullRequestBuilds(

@@ -177,6 +177,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -189,18 +190,27 @@ jobs:
       - name: Require production publication from main
         if: "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)"
         run: 'test "$GITHUB_REF" = refs/heads/main || { echo "Extension publication requires main" >&2; exit 1; }'
-      - name: Compare with the last trusted catalog
+      - name: Plan against the exact PR base or last trusted catalog
         id: plan
         env:
           GH_TOKEN: "${{ github.token }}"
+          PR_BASE_SHA: "${{ github.event.pull_request.base.sha }}"
         run: |
           mkdir -p dist/extensions
-          node scripts/extension-publish.mjs --read-catalog dist/extensions/previous.json
-          bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            [[ "$PR_BASE_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo "Invalid pull request base commit" >&2; exit 1; }
+            git fetch --no-tags origin "$PR_BASE_SHA"
+            bun scripts/extension-release-plan.mjs --pull-request-base "$PR_BASE_SHA" > dist/extensions/plan.json
+            draft=false
+          else
+            node scripts/extension-publish.mjs --read-catalog dist/extensions/previous.json
+            bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
+            draft="$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/previous-state.json").text()).draft)')"
+          fi
           {
             echo "matrix=$(cat dist/extensions/plan.json)"
             echo "changed=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/plan.json").text()).include.length > 0)')"
-            echo "draft=$(bun -e 'console.log(JSON.parse(await Bun.file("dist/extensions/previous-state.json").text()).draft)')"
+            echo "draft=$draft"
           } >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

@@ -354,18 +354,37 @@ export function extensionReleaseTag({ id, version, fingerprint }) {
 }
 
 if (import.meta.main) {
+  const pullRequest = process.argv[2] === "--pull-request-base";
+  if (
+    pullRequest &&
+    (process.env.GITHUB_EVENT_NAME !== "pull_request" ||
+      process.argv.length !== 4)
+  )
+    throw new Error(
+      "Pull request planning requires the exact pull request event base",
+    );
   await writeHostABI();
   const root = process.cwd();
   const definitions = JSON.parse(
     await readFile("Extensions/manifest.json", "utf8"),
   );
-  const publishedFile = process.argv[2];
-  if (!publishedFile) throw new Error("Supply the verified published catalog");
-  const published = JSON.parse(await readFile(publishedFile, "utf8"));
-  const include = await planUnpublishedExtensions(
-    root,
-    definitions,
-    published.packages,
-  );
+  let include;
+  if (pullRequest) {
+    include = await planPullRequestExtensions(
+      root,
+      definitions,
+      process.argv[3],
+    );
+  } else {
+    const publishedFile = process.argv[2];
+    if (!publishedFile)
+      throw new Error("Supply the verified published catalog");
+    const published = JSON.parse(await readFile(publishedFile, "utf8"));
+    include = await planUnpublishedExtensions(
+      root,
+      definitions,
+      published.packages,
+    );
+  }
   process.stdout.write(`${JSON.stringify({ include })}\n`);
 }
