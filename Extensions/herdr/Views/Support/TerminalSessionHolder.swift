@@ -26,6 +26,9 @@ final class TerminalSessionHolder {
     private var engineSession: OwnedTerminalSession?
     private var client: OwnedTerminalClient?
     private var dropTask: Task<Void, Never>?
+    private var linkResolveTask: Task<Void, Never>?
+    private var linkOpenTask: Task<Void, Never>?
+    private var linkRequest: UUID?
     private var readTask: Task<Void, Never>?
     private var deliveryTask: Task<Void, Never>?
     private var offset: UInt64 = 0
@@ -138,6 +141,17 @@ final class TerminalSessionHolder {
                 } else {
                     paths = try await client.uploadFiles(payload.files)
                 }
+                if let media = payload.media {
+                    guard !media.data.isEmpty, !media.fileExtension.isEmpty,
+                        media.fileExtension.utf8.count <= 16,
+                        media.fileExtension.utf8.allSatisfy({
+                            (48...57).contains($0) || (65...90).contains($0)
+                                || (97...122).contains($0)
+                        })
+                    else { throw ExtensionPeerError.invalidRequest }
+                    paths += try await client.uploadBytes(
+                        media.data, name: "drop." + media.fileExtension)
+                }
                 try Task.checkCancellation()
                 guard let self, self.generation == current else { return }
                 self.insertText(paths.map(ShellQuote.quote).joined(separator: " "))
@@ -152,6 +166,8 @@ final class TerminalSessionHolder {
 
     func reset() {
         dropTask?.cancel(); dropTask = nil
+        linkResolveTask?.cancel(); linkResolveTask = nil; linkOpenTask?.cancel();
+        linkOpenTask = nil; linkRequest = nil
         transferringDrop = false
         readTask?.cancel()
         readTask = nil
@@ -237,6 +253,10 @@ final class TerminalSessionHolder {
             allowsLocalFileLinks: descriptor?.allowsLocalFileLinks ?? false,
             resetTerminalAfterInterrupt: descriptor?.resetTerminalAfterInterrupt ?? false,
             theme: theme)
+        view.onOpenTarget = { [weak self, weak view] value, untrusted in
+            guard let self, let view, self.generation == viewGeneration else { return false }
+            return self.openTarget(value, untrusted: untrusted, view: view)
+        }
         view.onClose = { [weak self, weak view] exitCode in
             HerdrWorkOwnership.start { @MainActor in
                 guard let self, let view, self.generation == viewGeneration,
@@ -265,6 +285,42 @@ final class TerminalSessionHolder {
         return view
     }
 
+    private func openTarget(_ value: String, untrusted: Bool, view: GhosttyTerminalView) -> Bool {
+        guard let client, linkResolveTask == nil, linkOpenTask == nil else { return false }
+        let current = generation
+        let request = UUID()
+        linkRequest = request
+        linkResolveTask = Task { [weak self, weak view] in
+            defer { if self?.linkRequest == request { self?.linkResolveTask = nil } }
+            do {
+                let reply = try await client.resolveLink(value, untrusted: untrusted)
+                try Task.checkCancellation()
+                guard let self, let view, self.generation == current, self.linkRequest == request,
+                    self.ghosttyView === view
+                else { return }
+                view.presentLink(reply.resolution) { [weak self, weak view] in
+                    guard let self, let view, let token = reply.token,
+                        self.generation == current, self.linkRequest == request,
+                        self.ghosttyView === view
+                    else { return }
+                    self.linkOpenTask = Task { [weak self] in
+                        defer { if self?.linkRequest == request { self?.linkOpenTask = nil } }
+                        do { try await client.openLink(token) } catch {
+                            if self?.generation == current {
+                                self?.dropTransferError = error.localizedDescription
+                            }
+                        }
+                    }
+                }
+            } catch {
+                if self?.generation == current, !Task.isCancelled {
+                    self?.dropTransferError = error.localizedDescription
+                }
+            }
+        }
+        return true
+    }
+
     func finishSession(_ view: GhosttyTerminalView, exitCode: Int32?) {
         guard ghosttyView === view else { return }
         let completion = takeUserCloseCompletion(for: view)
@@ -290,6 +346,8 @@ final class TerminalSessionHolder {
 
     func stopRendering() {
         dropTask?.cancel(); dropTask = nil
+        linkResolveTask?.cancel(); linkResolveTask = nil; linkOpenTask?.cancel();
+        linkOpenTask = nil; linkRequest = nil
         transferringDrop = false
         generation += 1
         readTask?.cancel()

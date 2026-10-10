@@ -254,7 +254,7 @@ import Foundation
         }
         if [
             "herdr.terminal.read", "herdr.terminal.input", "herdr.terminal.resize",
-            "herdr.terminal.close",
+            "herdr.terminal.close", "herdr.terminal.link.resolve", "herdr.terminal.link.open",
         ].contains(command) || OwnedTerminalFiles.admits(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)

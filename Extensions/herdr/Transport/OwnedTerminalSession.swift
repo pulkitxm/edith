@@ -40,6 +40,7 @@ enum OwnedTerminalContext {
 
 @MainActor final class OwnedTerminalSessionRegistry {
     let files = OwnedTerminalFiles()
+    let links = OwnedTerminalLinks()
     private var sessions: [UUID: OwnedTerminalSession] = [:]
     private var stopped = false
     var acceptsSession: Bool { !stopped && sessions.count < 512 }
@@ -64,6 +65,7 @@ enum OwnedTerminalContext {
     func stopAll() {
         stopped = true
         files.stop()
+        links.stop()
         let owned = Array(sessions.values)
         sessions.removeAll()
         for session in owned { session.stop() }
@@ -74,6 +76,7 @@ enum OwnedTerminalContext {
     static let owner = "herdr"
     let descriptor: OwnedTerminalDescriptor
     private let files: OwnedTerminalFiles
+    private let links: OwnedTerminalLinks
     private let terminal: OwnedTerminalPTY
     private weak var registry: OwnedTerminalSessionRegistry?
     private var stopped = false
@@ -86,6 +89,7 @@ enum OwnedTerminalContext {
         let registry = OwnedTerminalContext.registry
         guard registry?.acceptsSession != false else { throw ExtensionPeerError.unavailable }
         files = registry?.files ?? OwnedTerminalFiles()
+        links = registry?.links ?? OwnedTerminalLinks()
         terminal = try OwnedTerminalPTY(launch: launch)
         descriptor = .init(
             handle: .init(owner: Self.owner, id: UUID(), generation: UUID()),
@@ -105,6 +109,11 @@ enum OwnedTerminalContext {
         let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
         guard request.session == descriptor.handle else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
+        if [Self.owner + ".terminal.link.resolve", Self.owner + ".terminal.link.open"].contains(
+            operation)
+        {
+            return try links.execute(operation, payload: payload, descriptor: descriptor)
+        }
         if OwnedTerminalFiles.admits(operation) {
             return try await files.execute(
                 operation, payload: payload, session: descriptor.handle,
@@ -170,6 +179,7 @@ enum OwnedTerminalContext {
         guard !stopped else { return }
         stopped = true
         files.close(descriptor.handle)
+        links.close(descriptor.handle)
         terminal.close()
         registry?.remove(descriptor.handle)
     }

@@ -171,7 +171,7 @@ import Foundation
         }
         if [
             "quinjet.terminal.read", "quinjet.terminal.input", "quinjet.terminal.resize",
-            "quinjet.terminal.close",
+            "quinjet.terminal.close", "quinjet.terminal.link.resolve", "quinjet.terminal.link.open",
         ].contains(command) || OwnedTerminalFiles.admits(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
