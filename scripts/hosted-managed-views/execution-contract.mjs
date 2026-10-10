@@ -22,7 +22,7 @@ export function managedAuthenticatedFetch(environment, fetch_) {
   };
 }
 
-export function parseManagedExecutionArguments(args) {
+export function parseManagedArtifactArguments(args) {
   assert.equal(args.length, 4);
   assert.equal(args[0], "--artifact-run");
   assert.equal(args[2], "--artifact-source");
@@ -31,6 +31,16 @@ export function parseManagedExecutionArguments(args) {
   assert(Number.isSafeInteger(runID));
   assert.match(args[3], sha);
   return { runID, artifactSource: args[3] };
+}
+
+export function parseManagedExecutionArguments(args) {
+  assert.equal(args.length, 6);
+  assert.equal(args[4], "--chunk");
+  assert.match(args[5], /^[012]$/);
+  return {
+    ...parseManagedArtifactArguments(args.slice(0, 4)),
+    chunk: Number(args[5]),
+  };
 }
 
 export function admitManagedExecution(environment, sourceCommit) {
@@ -106,7 +116,27 @@ export function validateManagedExecutionResults(results, review, fixtures) {
   assert.equal(new Set(ids).size, 39);
   assert.deepEqual(results.map(({ extensionID }) => extensionID).sort(), ids);
   assert.deepEqual(fixtures.map(({ extensionID }) => extensionID).sort(), ids);
-  for (const owner of review.owners) {
+  validateManagedOwnerResults(results, review.owners, fixtures);
+  return {
+    schema: 1,
+    outcome: "passed",
+    owners: 39,
+    managedNativeViewSmokeValidated: true,
+    functionalActionsValidated: false,
+    shippingHostExecutableUnchanged: false,
+    factoryOverlayOwners: ["plugins", "studio"],
+    originalViewScope:
+      "Original managed view creation, close, reopen and disable with isolated inert engines",
+    results,
+  };
+}
+
+export function validateManagedOwnerResults(results, owners, fixtures) {
+  const ids = owners.map(({ id }) => id).sort();
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(results.map(({ extensionID }) => extensionID).sort(), ids);
+  assert.deepEqual(fixtures.map(({ extensionID }) => extensionID).sort(), ids);
+  for (const owner of owners) {
     const result = results.find(({ extensionID }) => extensionID === owner.id);
     const fixture = fixtures.find(
       ({ extensionID }) => extensionID === owner.id,
@@ -122,16 +152,4 @@ export function validateManagedExecutionResults(results, review, fixtures) {
     assert.equal(result.hostCarrierTransformationVerified, true);
     validateManagedViewProof(result.proof, owner, fixture.package);
   }
-  return {
-    schema: 1,
-    outcome: "passed",
-    owners: 39,
-    managedNativeViewSmokeValidated: true,
-    functionalActionsValidated: false,
-    shippingHostExecutableUnchanged: false,
-    factoryOverlayOwners: ["plugins", "studio"],
-    originalViewScope:
-      "Original managed view creation, close, reopen and disable with isolated inert engines",
-    results,
-  };
 }

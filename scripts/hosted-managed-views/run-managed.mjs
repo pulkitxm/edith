@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   cp,
   lstat,
@@ -13,12 +13,12 @@ import {
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { extensionFingerprint } from "../extension-release-plan.mjs";
+import { managedChunkOwners, validateManagedChunkResults } from "./chunks.mjs";
 import { loadManagedViewReview } from "./contract.mjs";
 import {
   admitManagedExecution,
   managedAuthenticatedFetch,
   parseManagedExecutionArguments,
-  validateManagedExecutionResults,
 } from "./execution-contract.mjs";
 import { prepareFrozenHost } from "./frozen-host.mjs";
 import { prepareCIArtifacts } from "./package-preparation.mjs";
@@ -38,6 +38,8 @@ admitManagedExecution(process.env, sourceCommit);
 assert.equal(process.platform, "darwin");
 assert.equal(process.arch, "arm64");
 const options = parseManagedExecutionArguments(process.argv.slice(2));
+assert.equal(process.env.MANAGED_CHUNK, String(options.chunk));
+assert.match(process.env.GITHUB_RUN_ID, /^[1-9][0-9]{0,15}$/);
 const { runOwnedJourneyCommand } = await import(
   "../hosted-original-shell/owned-command.mjs"
 );
@@ -111,6 +113,10 @@ assert.equal(
   "Expected one disposable hosted signing identity",
 );
 const authenticatedFetch = managedAuthenticatedFetch(process.env, fetch);
+const owners = managedChunkOwners(review.owners, options.chunk);
+const digest = (value) =>
+  createHash("sha256").update(JSON.stringify(value)).digest("hex");
+let bindings;
 const fixtures = [],
   results = [];
 let failure;
@@ -133,9 +139,21 @@ try {
     hostBuildMetadata: frozen.hostBuildMetadata,
     output: join(output, "original-packages"),
     fetch: authenticatedFetch,
+    chunk: options.chunk,
   });
+  bindings = {
+    fixtureSourceCommit: sourceCommit,
+    originalSourceCommit: options.artifactSource,
+    originalCIRun: options.runID,
+    managedWorkflowRun: Number(process.env.GITHUB_RUN_ID),
+    reviewSHA256: digest(review),
+    fingerprintMapSHA256: digest(Object.entries(fingerprints).sort()),
+    frozenHostArtifactSHA256: frozen.artifactSHA256,
+    frozenHostExecutableSHA256: frozen.hostSHA256,
+    originalArtifactSetSHA256: digest(originals.allOriginalArtifacts),
+  };
   stage = "fixture-transform";
-  for (const owner of review.owners) {
+  for (const owner of owners) {
     const uuid = randomUUID();
     const directory = join(applications, `Edith Managed Views ${uuid}`);
     const identifier = `com.pulkit.edith.tests.${owner.id === "calendar" ? "remote" : "worker"}-${uuid}`;
@@ -204,7 +222,7 @@ try {
     ],
     { stdio: "inherit", timeout: 180000 },
   );
-  for (const owner of review.owners) {
+  for (const owner of owners) {
     stage = `managed-view-${owner.id}`;
     const fixture = fixtures.find(
       ({ extensionID }) => extensionID === owner.id,
@@ -235,7 +253,13 @@ try {
       { mode: 0o600, flag: "wx" },
     );
   }
-  const aggregate = validateManagedExecutionResults(results, review, fixtures);
+  const aggregate = validateManagedChunkResults({
+    results,
+    review,
+    fixtures,
+    chunk: options.chunk,
+    bindings,
+  });
   await writeFile(
     join(output, "result.json"),
     JSON.stringify(
@@ -253,8 +277,10 @@ try {
   console.log(
     JSON.stringify({
       outcome: "passed",
-      owners: 39,
-      managedNativeViewSmokeValidated: true,
+      owners: 13,
+      chunk: options.chunk,
+      all39Validated: false,
+      chunkManagedNativeViewSmokeValidated: true,
       functionalActionsValidated: false,
       fixtureSourceCommit: sourceCommit,
       originalSourceCommit: options.artifactSource,
@@ -271,6 +297,9 @@ try {
         stage,
         category: error.name,
         cleanup: error.cleanup ?? null,
+        chunk: options.chunk,
+        all39Validated: false,
+        bindings: bindings ?? null,
         completedOwners: results.map(({ extensionID }) => extensionID),
         fixtureSourceCommit: sourceCommit,
         originalSourceCommit: options.artifactSource,
