@@ -11,6 +11,15 @@ if arguments.count == 3 && arguments[1] == "generate-key" {
     try FileManager.default.setAttributes(
         [.posixPermissions: 0o600], ofItemAtPath: destination.path)
     print(key.publicKey.rawRepresentation.base64EncodedString())
+} else if arguments.count == 3 && arguments[1] == "check-key" {
+    guard let encodedKey = ProcessInfo.processInfo.environment["EXTENSION_CATALOG_PRIVATE_KEY"],
+        let rawKey = Data(base64Encoded: encodedKey), rawKey.count == 32,
+        rawKey.base64EncodedString() == encodedKey,
+        let publicKey = Data(base64Encoded: arguments[2]), publicKey.count == 32,
+        publicKey.base64EncodedString() == arguments[2],
+        try Curve25519.Signing.PrivateKey(rawRepresentation: rawKey).publicKey.rawRepresentation
+            == publicKey
+    else { throw CocoaError(.fileReadCorruptFile) }
 } else if arguments.count == 5 && arguments[1] == "verify" {
     guard let publicKey = Data(base64Encoded: arguments[4]) else {
         throw CocoaError(.fileReadCorruptFile)
@@ -46,6 +55,6 @@ if arguments.count == 3 && arguments[1] == "generate-key" {
         domain: "ExtensionCatalog", code: 2,
         userInfo: [
             NSLocalizedDescriptionKey:
-                "Use generate-key <private-key-path> or sign <payload-path> <envelope-path> or verify <envelope-path> <payload-path> <public-key>."
+                "Use check-key <public-key> or generate-key <private-key-path> or sign <payload-path> <envelope-path> or verify <envelope-path> <payload-path> <public-key>."
         ])
 }

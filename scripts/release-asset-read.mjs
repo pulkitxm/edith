@@ -27,6 +27,7 @@ export async function downloadReleaseAsset({
   collect = !destination,
   maximumBytes = collect ? 1024 ** 2 : 1024 ** 3,
   timeoutMs = 60_000,
+  totalTimeoutMs = 30 * 60_000,
   spawnProcess = spawn,
 }) {
   if (
@@ -41,6 +42,9 @@ export async function downloadReleaseAsset({
     !Number.isSafeInteger(timeoutMs) ||
     timeoutMs <= 0 ||
     timeoutMs > 60_000 ||
+    !Number.isSafeInteger(totalTimeoutMs) ||
+    totalTimeoutMs < timeoutMs ||
+    totalTimeoutMs > 30 * 60_000 ||
     (expectedSHA256 !== undefined && !/^[a-f0-9]{64}$/.test(expectedSHA256))
   )
     throw new Error("Invalid release asset size or identity");
@@ -58,11 +62,18 @@ export async function downloadReleaseAsset({
     child.once("error", (error) => resolve({ error }));
     child.once("close", (code) => resolve({ code }));
   });
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
+  let timeoutReason;
+  const expire = (reason) => {
+    timeoutReason ??= reason;
     child.kill("SIGKILL");
-  }, timeoutMs);
+  };
+  let timer;
+  const progress = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => expire("inactivity"), timeoutMs);
+  };
+  progress();
+  const totalTimer = setTimeout(() => expire("total deadline"), totalTimeoutMs);
   let file;
   let success = false;
   try {
@@ -71,6 +82,7 @@ export async function downloadReleaseAsset({
     const chunks = [];
     let size = 0;
     for await (const chunk of child.stdout) {
+      if (chunk.length > 0) progress();
       size += chunk.length;
       if (size > expectedBytes)
         throw new Error("Release asset exceeds its expected size");
@@ -79,7 +91,8 @@ export async function downloadReleaseAsset({
       else if (collect) chunks.push(chunk);
     }
     const result = await completed;
-    if (timedOut) throw new Error("Release asset download timed out");
+    if (timeoutReason)
+      throw new Error(`Release asset download timed out: ${timeoutReason}`);
     if (result.error || result.code !== 0)
       throw new Error("Release asset download failed");
     if (size !== expectedBytes)
@@ -93,8 +106,13 @@ export async function downloadReleaseAsset({
       sha256,
       data: collect && !file ? Buffer.concat(chunks, size) : undefined,
     };
+  } catch (error) {
+    if (timeoutReason)
+      throw new Error(`Release asset download timed out: ${timeoutReason}`);
+    throw error;
   } finally {
     clearTimeout(timer);
+    clearTimeout(totalTimer);
     child.kill("SIGKILL");
     await completed;
     await file?.close();

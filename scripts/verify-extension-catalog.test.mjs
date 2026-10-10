@@ -357,6 +357,23 @@ test("Swift CryptoKit signatures interoperate with Node verification in both dir
       { encoding: "utf8", timeout: 30000 },
     ).trim();
     const syntheticSeed = (await readFile(keyPath, "utf8")).trim();
+    execFileSync("swift", [signer, "check-key", swiftPublic], {
+      env: { ...process.env, EXTENSION_CATALOG_PRIVATE_KEY: syntheticSeed },
+      timeout: 30000,
+    });
+    for (const seed of [
+      "malformed",
+      `${syntheticSeed}=`,
+      Buffer.alloc(31).toString("base64"),
+      Buffer.alloc(32, 42).toString("base64"),
+    ])
+      assert.throws(() =>
+        execFileSync("swift", [signer, "check-key", swiftPublic], {
+          env: { ...process.env, EXTENSION_CATALOG_PRIVATE_KEY: seed },
+          timeout: 30000,
+          stdio: "pipe",
+        }),
+      );
     const payloadPath = join(directory, "payload.json");
     const signedPath = join(directory, "envelope.json");
     const payload = Buffer.from(`${JSON.stringify(catalog(), null, 2)}\n`);

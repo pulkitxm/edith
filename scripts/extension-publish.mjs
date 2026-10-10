@@ -310,6 +310,14 @@ export async function publishExtensions({
     throw new Error(
       "Catalog signing credentials are required before publication",
     );
+  execFileSync(
+    "swift",
+    ["scripts/extension-catalog-sign.swift", "check-key", publicKey],
+    {
+      stdio: "inherit",
+      timeout: 60_000,
+    },
+  );
   const old = JSON.parse(
     await readFile(resolve(directory, "previous.json"), "utf8"),
   );

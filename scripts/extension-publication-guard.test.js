@@ -679,6 +679,11 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
     `#!/usr/bin/env node\n${fixtureRead} const args = process.argv.slice(2); if (args[0] !== "release" || args[1] !== "edit" || !args.includes("--draft")) process.exit(2); state.release.draft = false; state.mutations++; fs.writeFileSync(file, JSON.stringify(state)); process.stdout.write(JSON.stringify({ ok: true }));`,
     { mode: 0o700 },
   );
+  writeFileSync(
+    join(binary, "swift"),
+    `#!/usr/bin/env node\nconst fs = require("node:fs"); const state = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATE)); if (process.argv[3] !== "check-key" || state.invalidKey) process.exit(1);`,
+    { mode: 0o700 },
+  );
   writeFileSync(join(directory, "previous.json"), JSON.stringify(previous));
   writeFileSync(join(directory, "plan.json"), JSON.stringify({ include: [] }));
   const environment = {
@@ -714,6 +719,10 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
       JSON.parse(readFileSync(join(directory, "previous-state.json"))),
     ).toEqual({ draft: true });
     expect(planned.stdout).toBe("Verified catalog revision: 1\n");
+    writeFileSync(stateFile, JSON.stringify({ ...state, invalidKey: true }));
+    expect(run().status).not.toBe(0);
+    expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(0);
+    writeFileSync(stateFile, JSON.stringify(state));
     for (let index = 0; index < 2; index++) {
       const result = run();
       expect(result.status).toBe(0);
