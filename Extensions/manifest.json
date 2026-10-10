@@ -2673,7 +2673,7 @@
     "hostABI": "edith-host-2",
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "nativePackage": "Extensions/database/DatabaseEngine",
     "nativeProduct": "DatabaseEngine",
     "nativeResources": [
@@ -2685,9 +2685,7 @@
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
-      "Packages/ExtensionSupport/Package.swift",
-      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
-      "Packages/ExtensionSupport/Sources/EdithExtensionUI",
+      "Packages/ExtensionSupport",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-camera-carrier.mjs"
     ],
@@ -2695,8 +2693,16 @@
     "roles": {
       "app": [
         "Extensions/database/AccessibilityAnnouncement.swift",
-        "Extensions/database/DatabaseUICommands.swift",
+        "Extensions/database/CLI/DatabaseCLIExecution.swift",
+        "Extensions/database/CLI/DatabaseCommands.swift",
+        "Extensions/database/CLI/DatabaseExecutionCommands.swift",
+        "Extensions/database/CLI/DatabaseMCPCommand.swift",
+        "Extensions/database/CLI/DatabaseManagementCommands.swift",
+        "Extensions/database/CLI/DatabaseMutationCommands.swift",
+        "Extensions/database/CLI/DatabaseOperationCommands.swift",
+        "Extensions/database/CLI/DatabasePackCommands.swift",
         "Extensions/database/DatabaseUIClient.swift",
+        "Extensions/database/DatabaseUICommands.swift",
         "Extensions/database/DatabaseWorkerClient.swift",
         "Extensions/database/Models/DatabaseColumnsModel.swift",
         "Extensions/database/Models/DatabaseConnectionCreationModel.swift",
