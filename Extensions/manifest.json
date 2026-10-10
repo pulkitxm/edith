@@ -296,6 +296,7 @@
   },
   {
     "id": "systemStats",
+    "testTargets": ["ci-extension-system-stats"],
     "version": "1.0.0",
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
@@ -313,12 +314,11 @@
         "Extensions/systemStats/Models/VolumeCapacity.swift",
         "Extensions/systemStats/Presentation.swift",
         "Extensions/systemStats/Runtime.swift",
-        "Extensions/systemStats/Surface.swift"
+        "Extensions/systemStats/Surface.swift",
+        "Extensions/systemStats/Settings.swift"
       ]
     },
-    "inputs": [
-      "Extensions/systemStats"
-    ],
+    "inputs": ["Extensions/systemStats"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",

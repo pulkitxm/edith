@@ -27,8 +27,23 @@ struct ControlPresentationState: Codable {
 }
 
 enum ControlPresentationContract {
-    static let writable: Set<String> = []
+    static let writable: Set<String> = [
+        AppStorageKeys.MenuBar.statsColorMode, AppStorageKeys.MenuBar.statsColorHex,
+    ]
     static let readable: Set<String> = writable.union([])
+
+    @MainActor static func execute(
+        _ operation: String, payload: Data, defaults: UserDefaults,
+        state: ControlPresentationState
+    ) throws -> Data {
+        switch operation {
+        case "systemStats.ui.read":
+            guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+        case "systemStats.ui.update": try update(payload, defaults: defaults)
+        default: throw ExtensionPeerError.invalidRequest
+        }
+        return try snapshot(defaults: defaults, state: state)
+    }
 
     static func values(from defaults: UserDefaults, keys: Set<String>) -> [String: Any] {
         Dictionary(
@@ -71,6 +86,16 @@ enum ControlPresentationContract {
     }
 
     static func valid(_ value: Any, for key: String) -> Bool {
+        if key == AppStorageKeys.MenuBar.statsColorMode {
+            return value as? String == "auto" || value as? String == "custom"
+        }
+        if key == AppStorageKeys.MenuBar.statsColorHex {
+            guard let hex = value as? String else { return false }
+            return hex.utf8.count == 6
+                && hex.utf8.allSatisfy {
+                    (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0)
+                }
+        }
         if stringKeys.contains(key) { return value is String }
         guard let number = value as? NSNumber else { return false }
         if boolKeys.contains(key) { return CFGetTypeID(number) == CFBooleanGetTypeID() }
@@ -80,7 +105,7 @@ enum ControlPresentationContract {
             && number.doubleValue <= Double(UInt32.max)
     }
 
-    static let stringKeys: Set<String> = []
+    static let stringKeys = writable
     static let boolKeys: Set<String> = []
     static let ranges: [String: ClosedRange<Double>] = [:]
 
@@ -142,6 +167,14 @@ final class ControlPresentation {
         defaultsObserver = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: defaults, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.changed() } }
+    }
+
+    func setPreference(_ value: String, for key: String) {
+        guard active, ready, !stopped, ControlPresentationContract.writable.contains(key),
+            ControlPresentationContract.valid(value, for: key)
+        else { return }
+        defaults.set(value, forKey: key)
+        changed()
     }
 
     func changed() {

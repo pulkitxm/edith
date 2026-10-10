@@ -75,7 +75,10 @@ import Foundation
                 .init(
                     "state", sourceID: "sleep", title: state.session.title,
                     detail: state.batterySuspended
-                        ? "Paused for battery safety" : "Sleep restoration is required before exit",
+                        ? "Paused for battery safety"
+                        : state.restoreOnQuit
+                            ? "Sleep is restored when Edith quits"
+                            : "Sleep restoration on quit is off",
                     icon: "laptopcomputer", field: field)
             ],
             actions: [

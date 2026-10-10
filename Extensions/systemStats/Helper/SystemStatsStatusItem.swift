@@ -130,13 +130,10 @@ final class SystemStatsStatusItem: NSObject, FeatureModule {
 
     private func ensureStyleCache() {
         let defaults = SharedDefaults.store
-        let mode = MenuBarTintMode(
-            preference: defaults.string(forKey: AppStorageKeys.MenuBar.statsColorMode))
-        let hex = defaults.string(forKey: AppStorageKeys.MenuBar.statsColorHex)
-        let key = "\(mode):\(hex ?? "")"
-        guard cachedTintKey != key || cachedGlyphs.isEmpty else { return }
-        cachedTintKey = key
-        let color = mode.color(custom: menuBarColor(hex: hex))
+        let preference = SystemStatsColorPreference(defaults: defaults)
+        guard cachedTintKey != preference.cacheKey || cachedGlyphs.isEmpty else { return }
+        cachedTintKey = preference.cacheKey
+        let color = preference.tint
         let config = NSImage.SymbolConfiguration(pointSize: 10, weight: .semibold)
         var glyphs: [String: NSAttributedString] = [:]
         for symbol in ["cpu", "memorychip"] {
@@ -207,14 +204,4 @@ struct SystemMenuReadings: View {
             StatusProgressRow(title: "Memory", percent: snapshot?.memory ?? memory)
         }
     }
-}
-
-private func menuBarColor(hex: String?) -> NSColor? {
-    guard var value = hex else { return nil }
-    if value.hasPrefix("#") { value.removeFirst() }
-    guard value.count == 6, let number = UInt64(value, radix: 16) else { return nil }
-    return NSColor(
-        srgbRed: CGFloat((number >> 16) & 0xff) / 255,
-        green: CGFloat((number >> 8) & 0xff) / 255,
-        blue: CGFloat(number & 0xff) / 255, alpha: 1)
 }

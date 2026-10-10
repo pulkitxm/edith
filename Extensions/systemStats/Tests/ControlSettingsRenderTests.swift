@@ -8,8 +8,7 @@ import Testing
 
 @MainActor @Suite(.serialized) struct ControlSettingsRenderTests {
     @Test func originalRowsRenderAtCompactRegularZoomAndBothColorSchemes() throws {
-        let application = NSApplication.shared
-        application.setActivationPolicy(.prohibited)
+        _ = NSApplication.shared
         let defaults = SharedDefaults.store
         let oldZoom = defaults.object(forKey: WindowZoom.defaultsKey)
         let oldScale = UIScale.current
@@ -22,6 +21,8 @@ import Testing
             UIScale.apply(oldScale)
         }
         let model = ControlPresentation(client: nil, defaults: defaults)
+        defaults.set("custom", forKey: AppStorageKeys.MenuBar.statsColorMode)
+        defaults.set("12AB34", forKey: AppStorageKeys.MenuBar.statsColorHex)
         defer { model.stop() }
         for width in [420.0, 900.0] {
             for zoom in [1.0, 1.5] {
@@ -34,7 +35,8 @@ import Testing
                     let content = state.withContext {
                         ExtensionPageHost {
                             ControlSettingsHost(presentation: model) {
-                                Form { SystemMenuReadings(cpu: 32, memory: 48) }.formStyle(.grouped)
+                                Form { SystemStatsRows(presentation: model, defaults: defaults) }
+                                    .formStyle(.grouped)
                             }
                         }
                     }
@@ -63,6 +65,7 @@ import Testing
                     }
                     #expect(colors.count > 20)
                     #expect(!hosting.subviews.isEmpty)
+                    #expect(hosting.window == nil)
                     #expect(!model.active)
                     #expect(model.error == nil)
                 }
