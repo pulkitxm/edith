@@ -79,7 +79,10 @@ struct HostRemoteChannelTests {
         async throws
     {
         let identity = try HostRemoteProcessIdentity.read(getpid())
-        let server = try endpoint(identity: identity) { _ in Data() }
+        let state = RequestState()
+        let server = try endpoint(
+            identity: identity, didDisconnect: { state.disconnected += 1 }
+        ) { _ in Data() }
         let bootstrap = BootstrapListener(server: server)
         defer { bootstrap.listener.invalidate(); server.invalidate() }
         let replaced = HostRemoteProcessIdentity(
@@ -89,16 +92,31 @@ struct HostRemoteChannelTests {
         defer { rejected.invalidate() }
         await #expect(throws: HostWorkerError.rejected) {
             try await HostRemoteChannel.connect(
-                through: rejected, executable: identity.executable, expectedPeer: replaced)
+                through: rejected, executable: identity.executable, expectedPeer: replaced,
+                executeEngine: { _ in
+                    state.completed += 1
+                    return Data()
+                })
         }
+        try await wait { state.disconnected == 1 }
+        #expect(state.completed == 0)
         let request = ExtensionEngineRequest(presentationID: UUID(), operation: "sample.read")
         await #expect(throws: HostWorkerError.rejected) { try await server.invokeEngine(request) }
+        #expect(state.completed == 0)
         let accepted = NSXPCConnection(listenerEndpoint: bootstrap.listener.endpoint)
         defer { accepted.invalidate() }
+        let payload = try JSONEncoder().encode(["message": "Synthetic reconnected response"])
         let channel = try await HostRemoteChannel.connect(
-            through: accepted, executable: identity.executable, expectedPeer: identity)
+            through: accepted, executable: identity.executable, expectedPeer: identity,
+            executeEngine: { _ in
+                state.completed += 1
+                return payload
+            })
         defer { channel.invalidate() }
         #expect(channel.peer == identity)
+        let response = try await server.invokeEngine(request)
+        #expect(response == payload)
+        #expect(state.completed == 1)
     }
 
     @Test func timeoutAndCancellationStopOwnedRequestsAndLeaveChannelUsable() async throws {
@@ -136,10 +154,13 @@ struct HostRemoteChannelTests {
     }
 
     private func endpoint(
-        identity: HostRemoteProcessIdentity, execute: @escaping HostRemoteEndpoint.Execute
+        identity: HostRemoteProcessIdentity,
+        didDisconnect: @escaping @MainActor @Sendable () -> Void = {},
+        execute: @escaping HostRemoteEndpoint.Execute
     ) throws -> HostRemoteEndpoint {
         try HostRemoteEndpoint(
-            executable: identity.executable, requirement: requirement(identity), execute: execute)
+            executable: identity.executable, requirement: requirement(identity), execute: execute,
+            didDisconnect: didDisconnect)
     }
 
     private func requirement(_ identity: HostRemoteProcessIdentity) -> String {
@@ -163,6 +184,7 @@ struct HostRemoteChannelTests {
     @MainActor private final class RequestState {
         var active = 0
         var completed = 0
+        var disconnected = 0
     }
 
     private final class BootstrapListener: NSObject, NSXPCListenerDelegate {
