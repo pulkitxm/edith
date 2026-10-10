@@ -6,13 +6,19 @@ import SwiftUI
 
 @MainActor
 final class ExtensionRuntime: NSObject {
-    private var model: HomebrewPageModel?
     private var surface: HomebrewSurface?
+    private var uiModel: HomebrewPageModel?
+    private var uiClient: ExtensionEngineClient?
+    private var operations: HomebrewEngineCommands?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
-            guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            guard let self, let surface = self.surface else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("homebrew.") {
+                guard let operations = self.operations else { throw ExtensionPeerError.unavailable }
+                return try await operations.execute(command, payload: payload)
+            }
             return try await SurfaceCommandService.execute(
                 providerID: "homebrew", command: command, payload: payload,
                 snapshot: { try await surface.snapshot($0) },
@@ -36,11 +42,19 @@ final class ExtensionRuntime: NSObject {
                 let path = input["dataDirectory"] as? String,
                 URL(fileURLWithPath: path).standardizedFileURL.path == ExtensionData.root.path
             else { return ["ok": false] as NSDictionary }
-            if model == nil { model = HomebrewPageModel() }
+            if operations == nil { operations = HomebrewEngineCommands() }
             if surface == nil { surface = HomebrewSurface() }
             TextEditingCommands.install()
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI()
+            uiClient = client
+            uiModel = HomebrewPageModel(engineClient: client)
+        case "stopUI": stopUI()
         case "view":
-            guard let model else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     PageWorkspace {
@@ -53,15 +67,30 @@ final class ExtensionRuntime: NSObject {
         case "stop":
             commands.shutdown()
             surface?.shutdown(); surface = nil
-            model?.cancel()
-            model = nil
+            operations?.shutdown(); operations = nil
             TextEditingCommands.shutdown()
-        case "cancel": return ["ok": true, "cancelled": model?.cancel() ?? false] as NSDictionary
+        case "cancel":
+            return ["ok": true, "cancelled": operations?.cancel() ?? false] as NSDictionary
         case "synchronize": break
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
+        case "status": return ["ok": true, "running": operations != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+    private func stopUI() {
+        uiModel?.cancel()
+        uiModel = nil
+        uiClient?.invalidate()
+        uiClient = nil
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait()
+            await operations?.shutdownAndWait()
+            completion()
+        }
     }
 }
 

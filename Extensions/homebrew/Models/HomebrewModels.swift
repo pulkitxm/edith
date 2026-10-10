@@ -77,7 +77,7 @@ public enum HomebrewMutation: String, CaseIterable, Codable, Sendable {
     case uninstall
 }
 
-public struct HomebrewMutationResult: Equatable, Sendable {
+public struct HomebrewMutationResult: Codable, Equatable, Sendable {
     public let action: HomebrewMutation
     public let kind: HomebrewPackageKind
     public let name: String

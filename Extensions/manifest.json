@@ -382,7 +382,7 @@
     "hostABI": "edith-host-2",
     "minimumSystemVersion": 14,
     "contractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/homebrew/Models/HomebrewModels.swift",
@@ -390,7 +390,12 @@
         "Extensions/homebrew/Services/HomebrewOperations.swift",
         "Extensions/homebrew/ViewModels/HomebrewPageModel.swift",
         "Extensions/homebrew/Views/HomebrewPage.swift",
-        "Extensions/homebrew/Surface.swift"
+        "Extensions/homebrew/Surface.swift",
+        "Extensions/homebrew/HomebrewPageClient.swift",
+        "Extensions/homebrew/HomebrewEngineCommands.swift",
+        "Extensions/homebrew/CLI/HomebrewCommands.swift",
+        "Extensions/homebrew/CLI/HomebrewDestructivePlan.swift",
+        "Extensions/homebrew/CLI/HomebrewCLIExecution.swift"
       ]
     },
     "inputs": [
