@@ -3,32 +3,39 @@ import Testing
 @testable import ExtensionMarketplace
 
 @Suite(.serialized) @MainActor struct ExtensionBundleRuntimeTests {
-    @Test func aRealBundleStartsStopsAndWaitsForRestartToApplyItsUpdate() async throws {
+    @Test func aSignedBundleRecoveryLoadsReadOnlyAndPinsItsVersionUntilReload() async throws {
         let fixture = try PackageFixture()
         defer { fixture.clean() }
         let repositoryRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         let output = fixture.directory.appendingPathComponent("release")
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [
-            "bun", "scripts/build-extension-package.mjs", "keepAwake", "--development",
-        ]
-        process.currentDirectoryURL = repositoryRoot
-        var environment = ProcessInfo.processInfo.environment
-        environment["EXTENSION_OUTPUT"] = output.path
-        environment["DEVELOPER_DIR"] = "/Applications/Xcode.app/Contents/Developer"
-        process.environment = environment
-        let log = fixture.directory.appendingPathComponent("build.log")
-        FileManager.default.createFile(atPath: log.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: log)
-        process.standardOutput = handle
-        process.standardError = handle
-        try process.run()
-        process.waitUntilExit()
-        try handle.close()
-        #expect(process.terminationStatus == 0, "Native extension fixture must build successfully")
+        let environment = ProcessInfo.processInfo.environment
+        let host = MarketplaceRuntimeBuildFixture.containingHost(
+            repositoryRoot: repositoryRoot, environment: environment)
+        if environment["EXTENSION_CONTAINING_HOST_APP"] == nil {
+            do {
+                try MarketplaceRuntimeBuildFixture.run(
+                    ["/usr/bin/codesign", "--verify", "--deep", "--strict", host.path],
+                    repositoryRoot: repositoryRoot, directory: fixture.directory,
+                    environment: environment, stage: "host-signature")
+            } catch {
+                try MarketplaceRuntimeBuildFixture.run(
+                    ["/usr/bin/env", "bun", "scripts/build-minimal-host.mjs"],
+                    repositoryRoot: repositoryRoot, directory: fixture.directory,
+                    environment: environment, stage: "host-build")
+            }
+        }
+        var buildEnvironment = environment
+        buildEnvironment["EXTENSION_OUTPUT"] = output.path
+        buildEnvironment["EXTENSION_CONTAINING_HOST_APP"] = host.path
+        try MarketplaceRuntimeBuildFixture.run(
+            [
+                "/usr/bin/env", "bun", "scripts/build-extension-package.mjs", "keepAwake",
+                "--development",
+            ],
+            repositoryRoot: repositoryRoot, directory: fixture.directory,
+            environment: buildEnvironment, stage: "package-build")
         let package = try JSONDecoder().decode(
             ExtensionPackage.self,
             from: Data(contentsOf: output.appendingPathComponent("keepAwake.json")))
@@ -78,13 +85,13 @@ import Testing
             !FileManager.default.fileExists(
                 atPath: selectedDirectory.appendingPathComponent(".leases").path))
         #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
-        defaults.set(true, forKey: "keepAwakeEnabled")
-        defaults.set(false, forKey: "preventSleep")
-        try runtime.start(id: package.id, context: ["defaultsSuite": suite])
-        #expect(try runtime.snapshot(id: package.id)?.active == true)
+        try runtime.start(id: package.id, context: ["defaultsSuite": suite, "recoveryOnly": true])
+        #expect(try runtime.snapshot(id: package.id)?.active == false)
         #expect(
-            try runtime.response(id: package.id, operation: "status")["running"] as? Bool == true)
+            try runtime.response(id: package.id, operation: "status")["running"] as? Bool == false)
         try runtime.synchronize(id: package.id, context: [:])
+        #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
+        #expect(defaults.bool(forKey: "preventSleep"))
         try runtime.stop(id: package.id)
         #expect(try runtime.snapshot(id: package.id)?.active == false)
         #expect(
@@ -96,8 +103,11 @@ import Testing
             downloadBytes: package.downloadBytes, installedBytes: package.installedBytes)
         try fixture.store.commit([package, next])
         #expect(try runtime.snapshot(id: package.id)?.restartRequired == true)
-        try runtime.start(id: package.id, context: ["defaultsSuite": suite])
+        try runtime.start(id: package.id, context: ["defaultsSuite": suite, "recoveryOnly": true])
         #expect(try runtime.snapshot(id: package.id)?.version == package.version)
+        #expect(try runtime.snapshot(id: package.id)?.active == false)
+        #expect(!defaults.bool(forKey: "keepAwakeEnabled"))
+        #expect(defaults.bool(forKey: "preventSleep"))
         try runtime.stopAll()
         let privileged = fixture.store.roleBundle(for: package, role: .privileged)
         try FileManager.default.createDirectory(at: privileged, withIntermediateDirectories: true)
@@ -106,7 +116,8 @@ import Testing
             packageVersion: package.version,
             verify: ExtensionCodeSignature.verifyDevelopment)
         #expect(throws: MarketplaceError.invalidBundle) {
-            try privilegedRuntime.start(id: package.id, context: ["defaultsSuite": suite])
+            try privilegedRuntime.start(
+                id: package.id, context: ["defaultsSuite": suite, "recoveryOnly": true])
         }
         #expect(try privilegedRuntime.snapshot(id: package.id) == nil)
     }
@@ -141,5 +152,110 @@ import Testing
             try runtime.start(id: package.id, context: [:])
         }
         #expect(!verified)
+    }
+}
+
+struct MarketplaceRuntimeBuildFixture {
+    struct Failure: Error, CustomStringConvertible {
+        let arguments: [String]
+        let status: Int32
+        let log: URL
+        let output: String
+
+        var description: String {
+            "Fixture command failed (\(status)): \(arguments.joined(separator: " "))\nLog: \(log.path)\n\(output)"
+        }
+    }
+
+    static func containingHost(repositoryRoot: URL, environment: [String: String]) -> URL {
+        if let path = environment["EXTENSION_CONTAINING_HOST_APP"] {
+            return URL(fileURLWithPath: path)
+        }
+        return repositoryRoot.appendingPathComponent("local/minimal-host/Edith.app")
+    }
+
+    static func run(
+        _ arguments: [String], repositoryRoot: URL, directory: URL,
+        environment: [String: String], stage: String
+    ) throws {
+        let log = directory.appendingPathComponent(stage + ".log")
+        FileManager.default.createFile(atPath: log.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: log)
+        defer { try? handle.close() }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: arguments[0])
+        process.arguments = Array(arguments.dropFirst())
+        process.currentDirectoryURL = repositoryRoot
+        var environment = environment
+        environment["DEVELOPER_DIR"] = "/Applications/Xcode.app/Contents/Developer"
+        environment["EXTENSION_SWIFT_JOBS"] = "1"
+        process.environment = environment
+        process.standardOutput = handle
+        process.standardError = handle
+        try process.run()
+        process.waitUntilExit()
+        try handle.synchronize()
+        guard process.terminationStatus == 0 else {
+            throw Failure(
+                arguments: arguments, status: process.terminationStatus, log: log,
+                output: String(decoding: try Data(contentsOf: log), as: UTF8.self))
+        }
+    }
+}
+
+@Suite struct MarketplaceRuntimeBuildFixtureTests {
+    @Test func anExplicitFrozenHostIsNeverReplacedByTheLocalDefault() {
+        let root = URL(fileURLWithPath: "/synthetic/repository")
+        #expect(
+            MarketplaceRuntimeBuildFixture.containingHost(
+                repositoryRoot: root,
+                environment: ["EXTENSION_CONTAINING_HOST_APP": "/synthetic/frozen/Edith.app"])
+                == URL(fileURLWithPath: "/synthetic/frozen/Edith.app"))
+        #expect(
+            MarketplaceRuntimeBuildFixture.containingHost(repositoryRoot: root, environment: [:])
+                == root.appendingPathComponent("local/minimal-host/Edith.app"))
+    }
+
+    @Test func aFailedCommandThrowsItsCapturedDiagnosticBeforeReadingPackageMetadata() throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        do {
+            try MarketplaceRuntimeBuildFixture.run(
+                ["/usr/bin/env", "--invalid-fixture-option"], repositoryRoot: fixture.directory,
+                directory: fixture.directory, environment: [:], stage: "failed-build")
+            Issue.record("A failed command must throw")
+        } catch let failure as MarketplaceRuntimeBuildFixture.Failure {
+            #expect(failure.status != 0)
+            #expect(!failure.output.isEmpty)
+            #expect(failure.description.contains("--invalid-fixture-option"))
+            #expect(failure.description.hasSuffix(failure.output))
+        }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: fixture.directory.appendingPathComponent("keepAwake.json").path))
+    }
+
+    @Test func theHostMarketplaceGateRetainsAuthoritativeWorkerLifecycleCoverage() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let makefile = try String(
+            contentsOf: root.appendingPathComponent("Makefile"), encoding: .utf8)
+        let target = try #require(
+            makefile.components(separatedBy: "ci-marketplace-host: ci-host host\n").last)
+        let commands = try #require(target.components(separatedBy: "\n\n").first)
+        #expect(commands.contains("$(MAKE) ci-marketplace-runtime"))
+        #expect(commands.contains("$(MAKE) ci-extension-workers"))
+    }
+
+    @Test func aBuildFailureRetainsTheCompleteCommandAndDiagnostic() {
+        let output = "synthetic compile failed\nmissing scoped module\n"
+        let failure = MarketplaceRuntimeBuildFixture.Failure(
+            arguments: ["bun", "scripts/build-extension-package.mjs", "keepAwake"], status: 3,
+            log: URL(fileURLWithPath: "/synthetic/package-build.log"), output: output)
+        #expect(failure.description.contains("Fixture command failed (3)"))
+        #expect(failure.description.contains("bun scripts/build-extension-package.mjs keepAwake"))
+        #expect(failure.description.contains("/synthetic/package-build.log"))
+        #expect(failure.description.hasSuffix(output))
     }
 }
