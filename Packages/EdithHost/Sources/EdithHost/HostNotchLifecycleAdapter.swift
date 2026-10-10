@@ -20,6 +20,7 @@ final class HostNotchLifecycleAdapter {
     private var coordinator: HostNotchPanelCoordinator?
     private var version: String?
     private var attachedScreens: [HostNotchPanelScreen] = []
+    private var transition: Task<Void, any Error>?
     private var updating: Task<Void, Never>?
     private var pending = false
     private var installed = false
@@ -67,7 +68,9 @@ final class HostNotchLifecycleAdapter {
         marketplace.sessions.willDisable = { [weak self] id in
             if id == "notchShelf" {
                 guard let self else { throw HostNotchPanelError.staleState }
-                try await self.retireCurrent()
+                try await self.performTransition(cancelWithCaller: false) {
+                    try await self.retireCurrent()
+                }
             } else {
                 self?.coordinator?.synchronize()
             }
@@ -119,6 +122,11 @@ final class HostNotchLifecycleAdapter {
     }
 
     func refresh() async throws {
+        try await performTransition { [self] in try await refreshOwned() }
+    }
+
+    private func refreshOwned() async throws {
+        try Task.checkCancellation()
         guard !stopped else { return }
         let current = environment()
         let nextScreens = screens()
@@ -143,6 +151,33 @@ final class HostNotchLifecycleAdapter {
         }
     }
 
+    func owningWorkspaceChanged() async throws {
+        guard !stopped else { return }
+        try await performTransition { [self] in
+            guard !stopped else { return }
+            try await retireCurrent()
+            try await refreshOwned()
+        }
+    }
+
+    private func performTransition(
+        cancelWithCaller: Bool = true,
+        _ operation: @escaping @MainActor () async throws -> Void
+    ) async throws {
+        while let transition { _ = try? await transition.value }
+        if cancelWithCaller { try Task.checkCancellation() }
+        let task = Task { [self] in
+            defer { transition = nil }
+            try await operation()
+        }
+        transition = task
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            if cancelWithCaller { task.cancel() }
+        }
+    }
+
     func stop() async throws {
         stopped = true
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
@@ -152,7 +187,7 @@ final class HostNotchLifecycleAdapter {
         updating?.cancel()
         if let updating { await updating.value }
         updating = nil
-        try await retireCurrent()
+        try await performTransition(cancelWithCaller: false) { [self] in try await retireCurrent() }
     }
 
     private func retireCurrent() async throws {

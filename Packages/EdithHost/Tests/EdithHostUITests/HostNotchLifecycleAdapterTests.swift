@@ -68,6 +68,53 @@ struct HostNotchLifecycleAdapterTests {
         #expect(TestWindowHost.exposedWindows.isEmpty)
     }
 
+    @Test func explicitOwningWorkspaceChangeDrainsOldAssociationBeforeBindingReplacement()
+        async throws
+    {
+        let fixture = NotchLifecycleFixture()
+        let adapter = fixture.adapter()
+        try await adapter.refresh()
+        await fixture.settle()
+        let oldToken = try #require(fixture.associations.keys.first)
+        fixture.rejectAssociation = true
+        await #expect(throws: HostWorkerError.rejected) {
+            try await adapter.owningWorkspaceChanged()
+        }
+        #expect(fixture.removed == [oldToken] && fixture.associations.isEmpty)
+        #expect(
+            fixture.sceneCreated == 1
+                && adapter.window(for: fixture.screens[0].presentationID) == nil)
+        fixture.rejectAssociation = false
+        try await adapter.owningWorkspaceChanged()
+        for _ in 0..<100 {
+            if fixture.sceneCreated == 2 { break }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(fixture.sceneCreated == 2 && fixture.associations.count == 1)
+        #expect(fixture.associations[oldToken] == nil)
+        #expect(
+            adapter.window(for: fixture.screens[0].presentationID)
+                === fixture.associations.values.first)
+        try await adapter.stop()
+        try await adapter.owningWorkspaceChanged()
+        #expect(fixture.removed.count == 2 && fixture.sceneCreated == 2)
+        #expect(TestWindowHost.exposedWindows.isEmpty)
+    }
+
+    @Test func overlappingRefreshAndWorkspaceChangeKeepOnlyOnePanelAssociation() async throws {
+        let fixture = NotchLifecycleFixture()
+        let adapter = fixture.adapter()
+        try await adapter.refresh()
+        async let first: Void = adapter.refresh()
+        async let second: Void = adapter.refresh()
+        async let changed: Void = adapter.owningWorkspaceChanged()
+        _ = try await (first, second, changed)
+        #expect(fixture.associations.count == 1 && adapter.panelCount == 1)
+        #expect(fixture.created == 2 && fixture.removed.count == 1)
+        try await adapter.stop()
+        #expect(fixture.associations.isEmpty && fixture.removed.count == 2)
+    }
+
     @Test func unavailableOwningWorkspaceNeverCreatesOrPresentsAnUnassociatedScene() async throws {
         let fixture = NotchLifecycleFixture()
         fixture.rejectAssociation = true
