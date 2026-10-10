@@ -390,6 +390,7 @@ final class ExportCardAction {
         task = Task { @MainActor [weak self] in
             let result: ExportCardDeliveryResult?
             do {
+                try Task.checkCancellation()
                 result = try await operation()
             } catch is CancellationError {
                 result = nil
@@ -397,10 +398,10 @@ final class ExportCardAction {
                 result = ExportCardDeliveryResult(
                     status: ExportCardStatus(message: error.localizedDescription, failed: true))
             }
-            guard let self, self.generation == current, !Task.isCancelled else { return }
+            guard let self, self.generation == current else { return }
             self.task = nil
             self.generation = nil
-            completion(result)
+            completion(Task.isCancelled ? nil : result)
         }
     }
 

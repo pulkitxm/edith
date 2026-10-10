@@ -185,6 +185,30 @@ struct OwnedExportDeliveryTests {
         #expect(status?.message == "Synthetic delivery unavailable")
     }
 
+    @Test func selfCancelledOwnerFinishesActionWithoutPublishingLateFailure() async throws {
+        _ = NSApplication.shared
+        let deck = Deck { _, _, _ in
+            withUnsafeCurrentTask { $0?.cancel() }
+            throw Failure.unavailable
+        }
+        let action = ExportCardAction()
+        var completed = false
+        var result: ExportCardDeliveryResult?
+        action.start {
+            try await ExportCardDelivery.perform(
+                deck: deck, card: deck.cards[0], save: false,
+                chooseSaveURL: { _ in
+                    Issue.record("Cancelled owner chose local path"); return nil
+                },
+                copy: { _ in Issue.record("Cancelled owner copied locally") })
+        } completion: {
+            result = $0
+            completed = true
+        }
+        try await until { completed }
+        #expect(result == nil)
+    }
+
     @Test(arguments: [false, true])
     func cancelledCallbackLateSuccessOrFailureCannotPublishStatusOrFinishNewAction(
         lateFailure: Bool
