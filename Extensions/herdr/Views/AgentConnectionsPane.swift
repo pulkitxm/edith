@@ -8,10 +8,11 @@ private struct AgentHookPreview: Identifiable {
     var plan: AgentActivityHookPlan
     var enabled: Bool
     var scope: AgentActivityHookScope
+    var token: UUID?
 }
 
 struct AgentConnectionsPane: View {
-    @State private var settings = AgentActivitySettings.load()
+    @State private var settings = AgentActivitySettings()
     let monitor: AgentActivityMonitor
     @State private var project: URL?
     @State private var projectScope = false
@@ -19,16 +20,15 @@ struct AgentConnectionsPane: View {
     @State private var working = false
     @State private var error: String?
     @State private var result: String?
-    @AppStorage("surfaceAgentTerminalDiscovery", store: SharedDefaults.store) private
-        var discovery = true
-    @AppStorage(HerdrAttentionSettings.Keys.stuckMinutes, store: SharedDefaults.store) private
-        var stuckMinutes = 10
-    private var files: AgentActivityHookFiles { monitor.hookFiles }
+    @State private var discovery = true
+    @State private var stuckMinutes = 10
     private let installer: AgentActivityHookInstaller
 
     init(monitor: AgentActivityMonitor, installer: AgentActivityHookInstaller? = nil) {
         self.monitor = monitor
         _settings = State(initialValue: monitor.settings)
+        _discovery = State(initialValue: monitor.discoversTerminals)
+        _stuckMinutes = State(initialValue: monitor.stuckMinutes)
         self.installer =
             installer
             ?? AgentActivityHookInstaller(
@@ -99,6 +99,16 @@ struct AgentConnectionsPane: View {
         .edithForm()
         .disabled(working)
         .pageTask { await monitor.observe() }
+        .onChange(of: discovery) {
+            HerdrWorkOwnership.start {
+                await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
+            }
+        }
+        .onChange(of: stuckMinutes) {
+            HerdrWorkOwnership.start {
+                await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
+            }
+        }
         .edithSheet(item: $preview) { item in
             VStack(alignment: .leading, spacing: UIScale.pt(14)) {
                 Text(item.enabled ? "Configure \(item.plan.provider.title)" : "Remove Edith hooks")
@@ -248,10 +258,10 @@ struct AgentConnectionsPane: View {
             defer { working = false }
             do {
                 let installer = installer
-                let plan = try await files.plan(
+                let (plan, token) = try await monitor.prepareHook(
                     installer, provider: provider, scope: scope, enabled: enabled)
                 try Task.checkCancellation()
-                preview = AgentHookPreview(plan: plan, enabled: enabled, scope: scope)
+                preview = AgentHookPreview(plan: plan, enabled: enabled, scope: scope, token: token)
                 error = nil
             } catch { self.error = error.localizedDescription }
         }
@@ -263,8 +273,9 @@ struct AgentConnectionsPane: View {
             defer { working = false }
             do {
                 let installer = installer
-                let installation = try await files.apply(
-                    installer, plan: item.plan, scope: item.scope, enabled: item.enabled)
+                let installation = try await monitor.applyHook(
+                    installer, plan: item.plan, scope: item.scope, enabled: item.enabled,
+                    token: item.token)
                 try Task.checkCancellation()
                 if item.enabled {
                     var next = settings

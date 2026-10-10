@@ -2840,7 +2840,8 @@
         "Extensions/herdr/Transport/OwnedTerminalPTY.swift",
         "Extensions/herdr/Transport/OwnedTerminalSession.swift",
         "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
-        "Extensions/herdr/ViewModels/HerdrUIPanelProjection.swift"
+        "Extensions/herdr/ViewModels/HerdrUIPanelProjection.swift",
+        "Extensions/herdr/ViewModels/HerdrUIHookProjection.swift"
       ]
     },
     "resources": {

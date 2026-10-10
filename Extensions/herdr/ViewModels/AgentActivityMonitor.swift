@@ -6,6 +6,8 @@ private struct AgentActivityDefaults: @unchecked Sendable { let store: UserDefau
 
 @MainActor @Observable
 final class AgentActivityMonitor {
+    static let discoveryKey = "surfaceAgentTerminalDiscovery"
+    let uiClient: HerdrUIClient?
     var connectionsPresented = false
     private(set) var now = Date()
     private(set) var activity = AgentActivitySnapshot()
@@ -22,16 +24,17 @@ final class AgentActivityMonitor {
     private var serviceValue: AgentActivityService?
 
     init(
-        defaults: UserDefaults = SharedDefaults.store,
+        defaults: UserDefaults = SharedDefaults.store, uiClient: HerdrUIClient? = nil,
         hookFiles: AgentActivityHookFiles = AgentActivityHookFiles()
     ) {
         self.defaults = defaults
+        self.uiClient = uiClient
         self.hookFiles = hookFiles
     }
 
     var settings: AgentActivitySettings { AgentActivitySettings.load(in: defaults) }
     var discoversTerminals: Bool {
-        defaults.object(forKey: "surfaceAgentTerminalDiscovery") as? Bool ?? true
+        defaults.object(forKey: Self.discoveryKey) as? Bool ?? true
     }
     var stuckMinutes: Int {
         HerdrAttentionSettings(defaults: defaults).stuckMinutes
@@ -40,6 +43,7 @@ final class AgentActivityMonitor {
         !stopped && !PresenterState.shared.hidesAgents && (observers > 0 || surfaceUntil > Date())
     }
     var service: AgentActivityService {
+        precondition(uiClient == nil && Bundle.main.bundleURL.pathExtension != "appex")
         if let serviceValue { return serviceValue }
         let defaults = AgentActivityDefaults(store: self.defaults)
         let created = AgentActivityService(
@@ -51,6 +55,7 @@ final class AgentActivityMonitor {
 
     func start() async {
         guard !started, !stopped else { return }
+        if uiClient != nil { await refresh(); return }
         started = true
         await service.start { [weak self] data in
             guard let value = try? AgentPayload.decode(AgentActivitySnapshot.self, from: data)
@@ -61,7 +66,7 @@ final class AgentActivityMonitor {
         }
     }
 
-    private func receive(_ value: AgentActivitySnapshot) {
+    func receive(_ value: AgentActivitySnapshot) {
         guard !stopped else { return }
         now = Date()
         activity = value
@@ -75,7 +80,7 @@ final class AgentActivityMonitor {
         await refresh()
         defer {
             observers = max(0, observers - 1)
-            HerdrWorkOwnership.start { await self.service.tick() }
+            if uiClient == nil { HerdrWorkOwnership.start { await self.service.tick() } }
         }
         while !Task.isCancelled, !stopped {
             do { try await Task.sleep(for: .seconds(1)) } catch { break }
@@ -91,12 +96,30 @@ final class AgentActivityMonitor {
 
     func refresh() async {
         guard !stopped else { return }
+        if let uiClient {
+            do {
+                receive(
+                    try JSONDecoder().decode(
+                        AgentActivitySnapshot.self, from: await uiClient.perform("activity.status"))
+                )
+            } catch { hookError = error.localizedDescription }
+            return
+        }
         await service.tick()
         receive(await service.snapshot())
     }
 
     func save(_ settings: AgentActivitySettings) async {
         guard !stopped else { return }
+        if let uiClient {
+            do {
+                let data = try await uiClient.perform(
+                    "herdr.ui.activity.settings",
+                    payload: JSONEncoder().encode(settings.normalized()))
+                if let state = try uiClient.state(data) { adoptUI(state) }
+            } catch { hookError = error.localizedDescription }
+            return
+        }
         defaults.set(settings.normalized().encoded, forKey: AgentActivitySettings.defaultsKey)
         await refresh()
     }
@@ -108,10 +131,48 @@ final class AgentActivityMonitor {
             deciding.insert(request.id).inserted
         else { return }
         defer { deciding.remove(request.id) }
+        if let uiClient {
+            do {
+                let payload = try JSONEncoder().encode(
+                    AgentApprovalDecision(token: .init(request), choice: choice))
+                let result = try JSONDecoder().decode(
+                    Bool.self,
+                    from: await uiClient.perform(AgentActivityOperation.decide, payload: payload))
+                if !result {
+                    decisionErrors[request.id] = "This request expired or was already answered."
+                }
+            } catch { decisionErrors[request.id] = error.localizedDescription }
+            await refresh()
+            return
+        }
         if !(await service.decide(.init(token: .init(request), choice: choice))) {
             decisionErrors[request.id] = "This request expired or was already answered."
         }
         await refresh()
+    }
+
+    func adoptUI(_ state: HerdrUIState) {
+        guard !stopped else { return }
+        defaults.set(state.activitySettings.encoded, forKey: AgentActivitySettings.defaultsKey)
+        state.attention.save(in: defaults)
+        defaults.set(state.discovery, forKey: Self.discoveryKey)
+        receive(state.activity)
+    }
+
+    func saveMonitoring(discovery: Bool, stuckMinutes: Int) async {
+        guard !stopped else { return }
+        let minutes = min(120, max(2, stuckMinutes))
+        if let uiClient {
+            do {
+                let data = try await uiClient.perform(
+                    "herdr.ui.activity.monitoring",
+                    object: ["discovery": discovery, "stuckMinutes": minutes])
+                if let state = try uiClient.state(data) { adoptUI(state) }
+            } catch { hookError = error.localizedDescription }
+            return
+        }
+        defaults.set(discovery, forKey: Self.discoveryKey)
+        defaults.set(minutes, forKey: HerdrAttentionSettings.Keys.stuckMinutes)
     }
 
     func shutdown() async {

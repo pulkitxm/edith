@@ -193,6 +193,96 @@ import Testing
         await worker.shutdown()
     }
 
+    @Test func originalProviderPreviewApplyAndBackupAreOwnedByEngine() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let installer = AgentActivityHookInstaller(
+            home: root, executable: root.appendingPathComponent("Edith"))
+        let files = AgentActivityHookFiles(root: root.appendingPathComponent("owner"))
+        let defaults = HerdrUIDefaults()
+        let monitor = AgentActivityMonitor(defaults: defaults, hookFiles: files)
+        let store = HerdrStore(defaults: defaults, machinesProvider: { [] })
+        let worker = HerdrWorker(
+            store: store, activity: monitor, defaults: defaults,
+            activityInstaller: installer, automaticActions: false)
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let ui = AgentActivityMonitor(defaults: HerdrUIDefaults(), uiClient: client)
+        let url = installer.configurationURL(provider: .claude, scope: .global)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let original = Data(
+            #"{"permissions":{"allow":["Read(/synthetic)"]},"theme":"synthetic"}"#.utf8)
+        try original.write(to: url)
+        let (preview, token) = try await ui.prepareHook(
+            installer, provider: .claude, scope: .global, enabled: true)
+        #expect(preview.original == nil && preview.replacement != nil && token != nil)
+        #expect(try Data(contentsOf: url) == original)
+        let installation = try await ui.applyHook(
+            installer, plan: preview, scope: .global, enabled: true, token: token)
+        #expect(installation.changed && installation.url == url)
+        let backup = try #require(installation.backupURL)
+        #expect(try Data(contentsOf: backup) == original)
+        let written =
+            try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        #expect(written?["theme"] as? String == "synthetic")
+        #expect((written?["permissions"] as? [String: [String]])?["allow"] == ["Read(/synthetic)"])
+        await #expect(throws: ExtensionPeerError.self) {
+            try await ui.applyHook(
+                installer, plan: preview, scope: .global, enabled: true, token: token)
+        }
+        await ui.save(
+            .init(
+                providers: ["claude": .init(observing: true, approvals: true)], quietMinutes: 17,
+                monitorTerminalAttention: true))
+        #expect(
+            monitor.settings.configuration(.claude).approvals && monitor.settings.quietMinutes == 17
+        )
+        await ui.saveMonitoring(discovery: false, stuckMinutes: 120)
+        #expect(!monitor.discoversTerminals && monitor.stuckMinutes == 120)
+        await ui.shutdown()
+        await worker.shutdown()
+    }
+
+    @Test func engineHookApplyRejectsChangedFileAndUntrustedReplacement() async throws {
+        defer { HerdrWorkOwnership.enable() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let installer = AgentActivityHookInstaller(
+            home: root, executable: root.appendingPathComponent("Edith"))
+        let monitor = AgentActivityMonitor(
+            defaults: HerdrUIDefaults(),
+            hookFiles: AgentActivityHookFiles(root: root.appendingPathComponent("owner")))
+        let worker = HerdrWorker(
+            store: HerdrStore(defaults: HerdrUIDefaults(), machinesProvider: { [] }),
+            activity: monitor,
+            activityInstaller: installer, automaticActions: false)
+        let client = HerdrUIClient { try await worker.execute($0, payload: $1) }
+        let ui = AgentActivityMonitor(defaults: HerdrUIDefaults(), uiClient: client)
+        let (plan, token) = try await ui.prepareHook(
+            installer, provider: .claude, scope: .global, enabled: true)
+        let id = try #require(token)
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.hook.apply", object: ["id": id.uuidString, "replacement": "untrusted"])
+        }
+        try FileManager.default.createDirectory(
+            at: plan.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let changed = Data(#"{"theme":"changed-synthetic-policy"}"#.utf8)
+        try changed.write(to: plan.url)
+        await #expect(throws: AgentActivityHookInstallerError.self) {
+            try await ui.applyHook(
+                installer, plan: plan, scope: .global, enabled: true, token: token)
+        }
+        #expect(try Data(contentsOf: plan.url) == changed)
+        await worker.shutdown()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await client.perform(
+                "herdr.ui.hook.read", object: ["id": id.uuidString, "offset": 0])
+        }
+        await ui.shutdown()
+    }
+
     @Test func staleLayoutCannotOverwriteOriginalChangesFromAnotherClient() async throws {
         defer { HerdrWorkOwnership.enable() }
         let worker = worker()

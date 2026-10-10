@@ -24,6 +24,8 @@ import Foundation
     private var shells: [UUID: ShellSelection] = [:]
     private let prepareShell:
         @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest
+    private lazy var uiHookPlans = HerdrUIHookPlans(
+        files: activity.hookFiles, installer: activityInstaller)
     private lazy var uiEngine = HerdrUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
 
@@ -112,6 +114,9 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command.hasPrefix("herdr.ui.hook.") {
+            return try await uiHookPlans.execute(command, payload: payload)
+        }
         if command.hasPrefix("herdr.ui.") {
             return try await uiEngine.execute(command, payload: payload)
         }
@@ -353,6 +358,7 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        uiHookPlans.shutdown()
         for selection in shells.values { selection.holder.stop() }
         shells.removeAll()
         await cliStreams?.stopAndWait()

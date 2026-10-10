@@ -227,6 +227,23 @@ final class HerdrUIDefaults: UserDefaults {
         else { throw ExtensionPeerError.invalidRequest }
         let store = worker.store
         switch operation {
+        case "herdr.ui.activity.settings":
+            guard Set(object.keys) == ["providers", "quietMinutes", "monitorTerminalAttention"]
+            else { throw ExtensionPeerError.invalidRequest }
+            let settings = try JSONDecoder().decode(AgentActivitySettings.self, from: payload)
+            guard settings == settings.normalized() else { throw ExtensionPeerError.invalidRequest }
+            await worker.activity.save(settings)
+        case "herdr.ui.activity.monitoring":
+            guard Set(object.keys) == ["discovery", "stuckMinutes"],
+                let discovery = object["discovery"] as? NSNumber,
+                CFGetTypeID(discovery) == CFBooleanGetTypeID(),
+                let minutes = object["stuckMinutes"] as? NSNumber,
+                CFGetTypeID(minutes) != CFBooleanGetTypeID(),
+                minutes.doubleValue == Double(minutes.intValue),
+                (2...120).contains(minutes.intValue)
+            else { throw ExtensionPeerError.invalidRequest }
+            await worker.activity.saveMonitoring(
+                discovery: discovery.boolValue, stuckMinutes: minutes.intValue)
         case "herdr.ui.panel":
             try await HerdrUIPanelActions.execute(object, store: store)
         case "herdr.ui.read":
