@@ -313,8 +313,10 @@ public final class ExtensionBundleRuntime {
             directory = store.directory(for: package)
             lease = try store.lease(package)
         }
-        let url = directory.appendingPathComponent(id).appendingPathComponent(
-            "\(role.rawValue).bundle")
+        let url =
+            readOnlyPackage == nil
+            ? store.roleBundle(for: package, role: role)
+            : directory.appendingPathComponent(id).appendingPathComponent("\(role.rawValue).bundle")
         try verify(url)
         guard let bundle = Bundle(url: url), let executable = bundle.executableURL else {
             throw MarketplaceError.invalidBundle
@@ -342,10 +344,12 @@ public final class ExtensionBundleRuntime {
         guard object.responds(to: NSSelectorFromString("execute:")) else {
             throw MarketplaceError.invalidBundle
         }
-        let privileged = directory.appendingPathComponent(id)
-            .appendingPathComponent("privileged.bundle")
+        let privileged =
+            readOnlyPackage == nil
+            ? store.roleBundle(for: package, role: .privileged)
+            : directory.appendingPathComponent(id).appendingPathComponent("privileged.bundle")
         guard
-            !FileManager.default.fileExists(atPath: privileged.path)
+            readOnlyPackage != nil || !FileManager.default.fileExists(atPath: privileged.path)
                 || object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
         else { throw MarketplaceError.invalidBundle }
         let instance = Loaded(
