@@ -1,7 +1,12 @@
 import AppKit
+import EdithHostCore
+import UserNotifications
 
 @MainActor
-final class HostApplicationDelegate: NSObject, NSApplicationDelegate {
+final class HostApplicationDelegate: NSObject, NSApplicationDelegate,
+    UNUserNotificationCenterDelegate
+{
+    var notificationClick: (@MainActor (HostHerdrNotificationRequest) async throws -> Void)?
     var shutdown: (@MainActor () async -> Bool)?
     var openMainWindow: (@MainActor () -> Void)?
     var activate: @MainActor () -> Void = { NSApp.activate(ignoringOtherApps: true) }
@@ -9,6 +14,28 @@ final class HostApplicationDelegate: NSObject, NSApplicationDelegate {
         NSApp.windows.first { $0.identifier?.rawValue == "EdithMainWindow" }
     }
     private var terminating = false
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completion: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completion([.banner, .list, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+            let request = try? HostHerdrNotificationRequest(
+                userInfo: response.notification.request.content.userInfo)
+        else { return }
+        try? await receiveNotification(request)
+    }
+
+    func receiveNotification(_ request: HostHerdrNotificationRequest) async throws {
+        guard let notificationClick else { throw HostWorkerError.rejected }
+        try await notificationClick(request)
+    }
 
     func showMainWindow() {
         if let window = mainWindow() {
