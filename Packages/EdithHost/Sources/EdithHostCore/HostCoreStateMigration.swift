@@ -143,6 +143,8 @@ import Foundation
 final class HostCoreStateSource {
     private let descriptor: Int32
     private let directory: URL
+    private let device: dev_t
+    private let inode: ino_t
 
     init?(directory: URL) throws {
         self.directory = directory.standardizedFileURL
@@ -161,11 +163,14 @@ final class HostCoreStateSource {
             close(descriptor)
             throw HostCoreStateMigration.invalid("source validation")
         }
+        device = status.st_dev
+        inode = status.st_ino
     }
 
     deinit { close(descriptor) }
 
     func contains(_ name: String) throws -> Bool {
+        try validateDirectory()
         var status = stat()
         if fstatat(descriptor, name, &status, AT_SYMLINK_NOFOLLOW) == 0 { return true }
         guard errno == ENOENT else { throw HostCoreStateMigration.invalid("source validation") }
@@ -173,6 +178,7 @@ final class HostCoreStateSource {
     }
 
     func names() throws -> [String] {
+        try validateDirectory()
         let duplicate = dup(descriptor)
         guard duplicate >= 0, let stream = fdopendir(duplicate) else {
             if duplicate >= 0 { close(duplicate) }
@@ -192,6 +198,7 @@ final class HostCoreStateSource {
             }
             names.append(name)
         }
+        try validateDirectory()
         return names
     }
 
@@ -232,6 +239,7 @@ final class HostCoreStateSource {
     }
 
     func validate(_ metadata: stat, name: String) throws {
+        try validateDirectory()
         var current = stat()
         guard fstatat(descriptor, name, &current, AT_SYMLINK_NOFOLLOW) == 0,
             Self.same(metadata, current)
@@ -249,6 +257,7 @@ final class HostCoreStateSource {
     private func openFile(_ name: String, maximumBytes: Int) throws -> (
         descriptor: Int32, metadata: stat
     ) {
+        try validateDirectory()
         guard !name.isEmpty, name != ".", name != "..", !name.contains("/"), !name.utf8.contains(0)
         else {
             throw HostCoreStateMigration.invalid("source validation")
@@ -264,6 +273,16 @@ final class HostCoreStateSource {
             throw HostCoreStateMigration.invalid("source validation")
         }
         return (file, status)
+    }
+
+    private func validateDirectory() throws {
+        var status = stat()
+        guard lstat(directory.path, &status) == 0, status.st_mode & S_IFMT == S_IFDIR,
+            status.st_dev == device, status.st_ino == inode, status.st_uid == geteuid(),
+            status.st_mode & 0o022 == 0
+        else {
+            throw HostCoreStateMigration.invalid("source directory changed")
+        }
     }
 
     private static func same(_ lhs: stat, _ rhs: stat) -> Bool {

@@ -324,4 +324,24 @@ import Testing
                     atPath: development.root.appendingPathComponent("Core").path))
         }
     }
+
+    @Test func replacedSourceDirectoryCannotContinueAnAdmittedImport() async throws {
+        try await fixture { identity in
+            let status = try task(identity)
+            let directory = identity.root.appendingPathComponent("Tasks")
+            let source = try #require(try HostCoreStateSource(directory: directory))
+            let name = "\(status.snapshot.id.uuidString).json"
+            let original = try source.read(name, maximumBytes: 17 << 20)
+            let moved = identity.root.appendingPathComponent("Tasks-original")
+            try FileManager.default.moveItem(at: directory, to: moved)
+            try FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700])
+            #expect(throws: HostAgentCommandError.self) {
+                try source.read(name, maximumBytes: 17 << 20)
+            }
+            #expect(throws: HostAgentCommandError.self) { try source.names() }
+            #expect(try Data(contentsOf: moved.appendingPathComponent(name)) == original)
+        }
+    }
 }
