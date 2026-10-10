@@ -50,7 +50,9 @@ enum HerdrFixture {
                 "surface.snapshot", payload: request.encoded(providerID: "herdr")),
             providerID: "herdr")
         guard snapshot.rows.count == 1, snapshot.rows.first?.title == "Synthetic agent",
-            snapshot.sources.count == 1, let action = snapshot.rows.first?.actions.first?.id,
+            snapshot.sources.contains(where: { $0.id == "opencode" }),
+            snapshot.rows.first?.sourceID == "opencode",
+            let action = snapshot.rows.first?.actions.first?.id,
             UUID(uuidString: action) != nil
         else { throw HostWorkerError.invalidResponse }
         _ = try await endpoint.invoke(
