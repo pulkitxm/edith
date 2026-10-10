@@ -77,10 +77,13 @@ import Testing
         let worker = QuinjetWorker(
             client: .init(execute: { _ in Data("[]".utf8) }), automaticActions: false)
         let engineHolder = try #require(worker.model.selectedTab?.holder)
-        engineHolder.start(
-            executable: "/bin/sh", arguments: ["-c", "printf '%s' $$; exec cat"],
-            environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
-            currentDirectory: "/private/tmp")
+        OwnedTerminalContext.$registry.withValue(worker.terminalSessions) {
+            engineHolder.start(
+                executable: "/bin/sh", arguments: ["-c", "printf '%s' $$; exec cat"],
+                environment: ["PATH=/usr/bin:/bin", "TERM=xterm-256color"],
+                currentDirectory: "/private/tmp")
+        }
+        defer { engineHolder.stop() }
         let descriptor = try #require(engineHolder.descriptor)
         let transport = try OwnedTerminalClient(descriptor: descriptor) {
             try await worker.execute($0, payload: $1)

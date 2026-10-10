@@ -11,9 +11,11 @@ import Foundation
         if worker.automaticActions, worker.store.hosts.isEmpty { await worker.store.refresh() }
         try Task.checkCancellation()
         let context = makeContext(worker: worker)
-        let reply = try await HerdrCLIEnvironment.$context.withValue(context) {
-            try await HerdrLaunchCatalogContext.$catalog.withValue(worker.catalogs) {
-                try await ExtensionCLIExecution.run(HerdrCLICommand.self, request: request)
+        let reply = try await OwnedTerminalContext.$registry.withValue(worker.terminalSessions) {
+            try await HerdrCLIEnvironment.$context.withValue(context) {
+                try await HerdrLaunchCatalogContext.$catalog.withValue(worker.catalogs) {
+                    try await ExtensionCLIExecution.run(HerdrCLICommand.self, request: request)
+                }
             }
         }
         try Task.checkCancellation()
@@ -26,11 +28,13 @@ import Foundation
         streams: ExtensionCLIStreams
     ) throws -> Data {
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
-        return try HerdrCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
-            try HerdrLaunchCatalogContext.$catalog.withValue(worker.catalogs) {
-                try streams.invoke(
-                    HerdrCLICommand.self, operation: operation,
-                    prefix: "herdr.cli", payload: payload)
+        return try OwnedTerminalContext.$registry.withValue(worker.terminalSessions) {
+            return try HerdrCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
+                try HerdrLaunchCatalogContext.$catalog.withValue(worker.catalogs) {
+                    try streams.invoke(
+                        HerdrCLICommand.self, operation: operation,
+                        prefix: "herdr.cli", payload: payload)
+                }
             }
         }
     }

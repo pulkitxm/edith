@@ -34,10 +34,40 @@ struct OwnedTerminalRequest: Codable {
     var pixelHeight: UInt16? = nil
 }
 
+enum OwnedTerminalContext {
+    @TaskLocal static var registry: OwnedTerminalSessionRegistry?
+}
+
+@MainActor final class OwnedTerminalSessionRegistry {
+    private var sessions: [UUID: OwnedTerminalSession] = [:]
+    private var stopped = false
+    var acceptsSession: Bool { !stopped && sessions.count < 512 }
+
+    func register(_ session: OwnedTerminalSession) {
+        sessions[session.descriptor.handle.id] = session
+    }
+
+    func find(_ handle: OwnedTerminalHandle) -> OwnedTerminalSession? {
+        guard !stopped, let session = sessions[handle.id], session.descriptor.handle == handle
+        else { return nil }
+        return session
+    }
+
+    func remove(_ handle: OwnedTerminalHandle) { sessions[handle.id] = nil }
+
+    func stopAll() {
+        stopped = true
+        let owned = Array(sessions.values)
+        sessions.removeAll()
+        for session in owned { session.stop() }
+    }
+}
+
 @MainActor final class OwnedTerminalSession {
     static let owner = "quinjet"
     let descriptor: OwnedTerminalDescriptor
     private let terminal: OwnedTerminalPTY
+    private weak var registry: OwnedTerminalSessionRegistry?
     private var stopped = false
     private var writing = false
 
@@ -45,11 +75,15 @@ struct OwnedTerminalRequest: Codable {
         guard Bundle.main.bundleURL.pathExtension != "appex" else {
             throw ExtensionPeerError.rejected("Only the owning engine can launch a terminal.")
         }
+        let registry = OwnedTerminalContext.registry
+        guard registry?.acceptsSession != false else { throw ExtensionPeerError.unavailable }
         terminal = try OwnedTerminalPTY(launch: launch)
         descriptor = .init(
             handle: .init(owner: Self.owner, id: UUID(), generation: UUID()),
             directory: launch.currentDirectory, allowsLocalFileLinks: launch.allowsLocalFileLinks,
             resetTerminalAfterInterrupt: launch.resetTerminalAfterInterrupt)
+        self.registry = registry
+        registry?.register(self)
     }
 
     func execute(_ operation: String, payload: Data) async throws -> Data {
@@ -121,6 +155,7 @@ struct OwnedTerminalRequest: Codable {
         guard !stopped else { return }
         stopped = true
         terminal.close()
+        registry?.remove(descriptor.handle)
     }
 }
 

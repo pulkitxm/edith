@@ -6,6 +6,7 @@ import Foundation
 @MainActor final class QuinjetWorker {
     let model: QuinjetPageModel
     let client: QuinjetClient
+    let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
     private(set) var isStopped = false
     private var started = false
@@ -36,6 +37,10 @@ import Foundation
         QuinjetWorkOwnership.enable()
     }
     func start() async {
+        await OwnedTerminalContext.$registry.withValue(terminalSessions) { await startOwned() }
+    }
+
+    private func startOwned() async {
         guard !started, !isStopped else { return }
         started = true
         QuinjetPrivacy.shared.start()
@@ -126,6 +131,12 @@ import Foundation
             connection: connection)
     }
     func execute(_ command: String, payload: Data) async throws -> Data {
+        try await OwnedTerminalContext.$registry.withValue(terminalSessions) {
+            try await executeOwned(command, payload: payload)
+        }
+    }
+
+    private func executeOwned(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
         if command == "quinjet.cli.catalog" {
@@ -150,14 +161,10 @@ import Foundation
         ].contains(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
-            guard
-                let holder = model.tabs.map(\.holder).first(where: {
-                    $0.descriptor?.handle == request.session
-                })
-            else {
+            guard let session = terminalSessions.find(request.session) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            return try await holder.executeTerminal(command, payload: payload)
+            return try await session.execute(command, payload: payload)
         }
         guard payload.count <= 16_384,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
@@ -274,6 +281,7 @@ import Foundation
         return try JSONEncoder().encode(result)
     }
     func cancelPendingWork() async {
+        terminalSessions.stopAll()
         maintenance?.cancel()
         model.cancelDiscovery()
         await cliStreams?.stopAndWait()
@@ -282,6 +290,7 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        terminalSessions.stopAll()
         await cliStreams?.stopAndWait()
         cliStreams = nil
         maintenance?.cancel()

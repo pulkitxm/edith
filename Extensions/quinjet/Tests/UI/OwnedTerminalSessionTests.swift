@@ -21,6 +21,31 @@ import Testing
         }
     }
 
+    @Test func exactEngineRegistryRetainsAllSessionsAndCannotCloseAnotherOwnerScope() async throws {
+        let first = OwnedTerminalSessionRegistry()
+        let second = OwnedTerminalSessionRegistry()
+        let a = try OwnedTerminalContext.$registry.withValue(first) {
+            try OwnedTerminalSession(launch: launch("sleep 30"))
+        }
+        let b = try OwnedTerminalContext.$registry.withValue(second) {
+            try OwnedTerminalSession(launch: launch("printf alive; sleep 30"))
+        }
+        defer { first.stopAll(); second.stopAll() }
+        #expect(first.find(a.descriptor.handle) === a)
+        #expect(first.find(b.descriptor.handle) == nil)
+        first.stopAll()
+        #expect(first.find(a.descriptor.handle) == nil)
+        #expect(second.find(b.descriptor.handle) === b)
+        let surviving = try client(b)
+        let output = try await surviving.read(after: 0)
+        #expect(String(decoding: output.bytes, as: UTF8.self).contains("alive"))
+        #expect(throws: ExtensionPeerError.self) {
+            try OwnedTerminalContext.$registry.withValue(first) {
+                try OwnedTerminalSession(launch: launch("sleep 30"))
+            }
+        }
+    }
+
     @Test func actualOwnedPTYPreservesInputResizeUTF8TermiosAndExit() async throws {
         let session = try OwnedTerminalSession(
             launch: launch(

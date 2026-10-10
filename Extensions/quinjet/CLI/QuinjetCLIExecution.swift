@@ -8,9 +8,10 @@ import Foundation
     {
         try request.validate()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
-        let reply = try await QuinjetCLIEnvironment.$context.withValue(makeContext(worker: worker))
-        {
-            try await ExtensionCLIExecution.run(QuinjetCommand.self, request: request)
+        let reply = try await OwnedTerminalContext.$registry.withValue(worker.terminalSessions) {
+            try await QuinjetCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
+                try await ExtensionCLIExecution.run(QuinjetCommand.self, request: request)
+            }
         }
         try Task.checkCancellation()
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
@@ -22,10 +23,12 @@ import Foundation
         streams: ExtensionCLIStreams
     ) throws -> Data {
         guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
-        return try QuinjetCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
-            try streams.invoke(
-                QuinjetCommand.self, operation: operation,
-                prefix: "quinjet.cli", payload: payload)
+        return try OwnedTerminalContext.$registry.withValue(worker.terminalSessions) {
+            return try QuinjetCLIEnvironment.$context.withValue(makeContext(worker: worker)) {
+                try streams.invoke(
+                    QuinjetCommand.self, operation: operation,
+                    prefix: "quinjet.cli", payload: payload)
+            }
         }
     }
 

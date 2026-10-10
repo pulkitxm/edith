@@ -9,6 +9,7 @@ import Foundation
     let catalogs: AgentLaunchCatalogs
     let searchDecider: @MainActor () -> JevDeciding?
     let hooks: AgentHookService
+    let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
     private let activityInstaller: AgentActivityHookInstaller
     private let notifications: HerdrNotificationService
@@ -84,6 +85,10 @@ import Foundation
     }
 
     func start() async {
+        await OwnedTerminalContext.$registry.withValue(terminalSessions) { await startOwned() }
+    }
+
+    private func startOwned() async {
         guard !started, !isStopped else { return }
         started = true
         do { try await activity.hookFiles.resume(activityInstaller) } catch {
@@ -120,8 +125,10 @@ import Foundation
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
-        try await HerdrLaunchCatalogContext.$catalog.withValue(catalogs) {
-            try await executeOwned(command, payload: payload)
+        try await OwnedTerminalContext.$registry.withValue(terminalSessions) {
+            try await HerdrLaunchCatalogContext.$catalog.withValue(catalogs) {
+                try await executeOwned(command, payload: payload)
+            }
         }
     }
 
@@ -160,17 +167,16 @@ import Foundation
         ].contains(command) {
             guard payload.count <= 32768 else { throw ExtensionPeerError.invalidRequest }
             let request = try JSONDecoder().decode(OwnedTerminalRequest.self, from: payload)
-            guard
-                let holder = (store.terminalHolders + shells.values.map(\.holder)).first(where: {
-                    $0.descriptor?.handle == request.session
-                })
-            else {
+            guard let session = terminalSessions.find(request.session) else {
                 throw ExtensionPeerError.invalidRequest
             }
-            let result = try await holder.executeTerminal(command, payload: payload)
+            let result = try await session.execute(command, payload: payload)
             if command == "herdr.terminal.close" {
-                holder.reset()
-                shells = shells.filter { $0.value.holder !== holder }
+                let ids = shells.filter { $0.value.holder.descriptor?.handle == request.session }
+                    .map(\.key)
+                for id in ids { shells.removeValue(forKey: id)?.holder.reset() }
+                for holder in store.terminalHolders
+                where holder.descriptor?.handle == request.session { holder.reset() }
             }
             return result
         }
@@ -378,6 +384,7 @@ import Foundation
     }
 
     func cancelPendingWork() async {
+        terminalSessions.stopAll()
         maintenance?.cancel()
         await catalogs.shutdown()
         await cliStreams?.stopAndWait()
@@ -386,6 +393,7 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        terminalSessions.stopAll()
         uiHookPlans.shutdown()
         await catalogs.shutdown()
         for selection in shells.values { selection.holder.stop() }
