@@ -10,6 +10,15 @@ final class HostNotchPanelCoordinator {
     let ownershipID = UUID()
     private let invoke: Invoke
     private let environment: Environment
+    private lazy var drops = HostNotchDropProxy(invoke: invoke) {
+        [weak self] identity, displayID, presentationID in
+        guard let self, !retired, self.identity == identity,
+            environment().activeVersions["notchShelf"] == attachRequest?.version,
+            let state = batch?.states.first(where: { $0.displayID == displayID }),
+            state.presentationID == presentationID, state.visible, state.acceptsPointer
+        else { return false }
+        return true
+    }
     private let transfers: HostNotchTransferProxy
     private let association: HostNotchWindowAssociation?
     private let create: HostNotchPanelAssembly.Create
@@ -53,7 +62,8 @@ final class HostNotchPanelCoordinator {
     var attachedSceneCount: Int { assemblies.values.reduce(0) { $0 + $1.attachedCount } }
     var pendingCleanupCount: Int {
         assemblies.values.reduce(0) { $0 + $1.pendingCleanupCount }
-            + transfers.pendingCount + (retired && attachRequest != nil ? 1 : 0)
+            + transfers.pendingCount + drops.pendingCount
+            + (retired && attachRequest != nil ? 1 : 0)
     }
 
     func window(for presentationID: UUID) -> NSWindow? {
@@ -107,7 +117,7 @@ final class HostNotchPanelCoordinator {
         let current = environment()
         if current.activeVersions["notchShelf"] != attachRequest?.version {
             waiting?.cancel(); writing?.cancel(); pointers = [:]; measurements = [:]
-            transfers.cancelPending()
+            transfers.cancelPending(); drops.cancelPending()
         }
         measurements = measurements.filter { slotID, _ in
             guard let slot = batch?.states.flatMap(\.slots).first(where: { $0.id == slotID }) else {
@@ -160,7 +170,8 @@ final class HostNotchPanelCoordinator {
         waiting = nil; writing = nil; pointers = [:]; measurements = [:]
         var cleanupError: (any Error)?
         do { try await transfers.stop() } catch { cleanupError = error }
-        guard transfers.pendingCount == 0 else {
+        do { try await drops.stop() } catch { cleanupError = error }
+        guard transfers.pendingCount == 0, drops.pendingCount == 0 else {
             throw cleanupError ?? HostNotchPanelError.staleState
         }
         for assembly in assemblies.values {
@@ -266,6 +277,26 @@ final class HostNotchPanelCoordinator {
                     }
                 )
                 if let association { try assembly.associate(association) }
+                assembly.container.drop = { [weak self] input, point in
+                    guard let self else { return false }
+                    do {
+                        try drops.accept(
+                            input, identity: identity, displayID: state.displayID,
+                            presentationID: state.presentationID, point: point)
+                        return true
+                    } catch {
+                        failure = "The shelf drop could not be accepted."
+                        return false
+                    }
+                }
+                assembly.container.dragging = { [weak self, weak assembly] point, dragging in
+                    guard let self, let assembly else { return }
+                    pointer(
+                        displayID: state.displayID,
+                        globalPoint: assembly.panel.convertPoint(toScreen: point),
+                        buttons: UInt32(NSEvent.pressedMouseButtons & 31),
+                        option: NSEvent.modifierFlags.contains(.option), draggingFiles: dragging)
+                }
                 assemblies[state.displayID] = assembly
             }
             try assembly.accept(state, admission: admissions[state.displayID]!)
@@ -296,7 +327,7 @@ final class HostNotchPanelCoordinator {
                 } catch {
                     guard !Task.isCancelled, !retired else { return }
                     failure = "The Notch panel connection stopped."
-                    transfers.cancelPending()
+                    transfers.cancelPending(); drops.cancelPending()
                     for assembly in assemblies.values { assembly.hide() }
                     return
                 }

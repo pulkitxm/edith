@@ -36,9 +36,19 @@ final class HostNotchContainerController: NSViewController {
     private let nativeLayer = HostNotchPassthroughView()
     private let root = HostNotchFlippedView()
     private let mask = CAShapeLayer()
+    var drop: (@MainActor (HostNotchDropInput, CGPoint) -> Bool)? {
+        didSet { root.drop = drop }
+    }
+    var dragging: (@MainActor (CGPoint, Bool) -> Void)? {
+        didSet { root.dragging = dragging }
+    }
 
     override func loadView() {
         view = root
+        root.registerForDraggedTypes(
+            [.fileURL, .string]
+                + NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) }
+        )
         nativeLayer.wantsLayer = true
         nativeLayer.layer?.mask = mask
         view.addSubview(nativeLayer)
@@ -96,6 +106,37 @@ final class HostNotchContainerController: NSViewController {
 private class HostNotchFlippedView: NSView {
     override var isFlipped: Bool { true }
     var interactiveRectangle: CGRect?
+    var drop: (@MainActor (HostNotchDropInput, CGPoint) -> Bool)?
+    var dragging: (@MainActor (CGPoint, Bool) -> Void)?
+
+    override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        updateDrag(sender)
+    }
+    override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        updateDrag(sender)
+    }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        if let sender { dragging?(sender.draggingLocation, false) }
+    }
+    override func draggingEnded(_ sender: any NSDraggingInfo) {
+        dragging?(sender.draggingLocation, false)
+    }
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let point = convert(sender.draggingLocation, from: nil)
+        guard let rect = interactiveRectangle, rect.insetBy(dx: -24, dy: -24).contains(point) else {
+            return false
+        }
+        return drop?(
+            HostNotchDropInput.read(sender.draggingPasteboard),
+            CGPoint(x: point.x - rect.minX, y: point.y)) ?? false
+    }
+    private func updateDrag(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        guard drop != nil, let rect = interactiveRectangle,
+            rect.insetBy(dx: -24, dy: -24).contains(convert(sender.draggingLocation, from: nil))
+        else { return [] }
+        dragging?(sender.draggingLocation, true)
+        return .copy
+    }
     override func hitTest(_ point: NSPoint) -> NSView? {
         if let interactiveRectangle,
             !interactiveRectangle.contains(convert(point, from: superview))

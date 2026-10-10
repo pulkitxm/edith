@@ -237,8 +237,8 @@ final class HostNotchIssuedFiles {
     private let root: URL
     private let rootDevice: dev_t
     private let rootInode: ino_t
-    init(urls: [URL]) throws {
-        guard let root = urls.first?.deletingLastPathComponent(),
+    init(urls: [URL], root issuedRoot: URL? = nil) throws {
+        guard urls.count <= 32, let root = issuedRoot ?? urls.first?.deletingLastPathComponent(),
             HostNotchPanelTransfer.issuedDirectory(root)
         else { throw HostNotchPanelError.invalidState }
         let rootDescriptor = open(root.path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
@@ -250,6 +250,9 @@ final class HostNotchIssuedFiles {
         else { throw HostNotchPanelError.invalidState }
         self.root = root; rootDevice = info.st_dev; rootInode = info.st_ino
         for url in urls {
+            guard url.isFileURL, url.standardizedFileURL == url,
+                url.deletingLastPathComponent() == root
+            else { throw HostNotchPanelError.invalidState }
             let fd = openat(
                 rootDescriptor, url.lastPathComponent,
                 O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
