@@ -3,10 +3,10 @@ import JourneyContract
 import Testing
 
 @Test func checkboxSelectionAcceptsOnlyExactStringOrNumericBinaryValues() throws {
-    for value: Any in ["0", NSNumber(value: 0), NSNumber(value: false)] {
+    for value: Any in ["0", NSNumber(value: 0), NSNumber(value: false), NSNumber(value: 0.0)] {
         #expect(try JourneyInteraction.checkboxState(value) == 0)
     }
-    for value: Any in ["1", NSNumber(value: 1), NSNumber(value: true)] {
+    for value: Any in ["1", NSNumber(value: 1), NSNumber(value: true), NSNumber(value: 1.0)] {
         #expect(try JourneyInteraction.checkboxState(value) == 1)
     }
 }

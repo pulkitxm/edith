@@ -13,6 +13,28 @@ final class OriginalShellJourneyTests: XCTestCase {
     private var outcomeSequence = 0
     private var lastState: [String: Any] = [:]
     private var windowImages: [String: Data] = [:]
+    private var failureContext: (application: XCUIApplication, fixture: JourneyFixture)?
+    private var retainingFailureDiagnostics = false
+    private var retainedFailureDiagnostics = false
+    private var journeyFinished = false
+    private var selectionObservation: [String: Any] = [:]
+
+    override func record(_ issue: XCTIssue) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { retainFailureDiagnostics() }
+        }
+        super.record(issue)
+    }
+
+    override func tearDown() async throws {
+        if !journeyFinished, let context = failureContext {
+            retainFailureDiagnostics()
+            if context.application.state != .notRunning { context.application.terminate() }
+            try? saveOutcome()
+        }
+        failureContext = nil
+        try await super.tearDown()
+    }
 
     func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() async throws {
         continueAfterFailure = false
@@ -25,9 +47,9 @@ final class OriginalShellJourneyTests: XCTestCase {
         try fixture.validate(accountHome: accountHome, environment: environment)
         let application = XCUIApplication(bundleIdentifier: fixture.identifier)
         application.launchEnvironment = try fixture.applicationEnvironment(from: environment)
-        var journeyFinished = false
+        failureContext = (application, fixture)
         defer {
-            if !journeyFinished { try? captureFailureDiagnostics(application, fixture: fixture) }
+            if !journeyFinished { retainFailureDiagnostics() }
             if application.state != .notRunning { application.terminate() }
             try? saveOutcome()
         }
@@ -62,9 +84,9 @@ final class OriginalShellJourneyTests: XCTestCase {
                 .allElementsBoundByIndex.min {
                     $0.frame.height * $0.frame.width < $1.frame.height * $1.frame.width
                 }
-            XCTAssertEqual(checkbox.value as? String, "1")
+            try requireCheckboxState(checkbox, identifier: id, expected: 1)
             checkbox.click()
-            XCTAssertEqual(checkbox.value as? String, "0")
+            try requireCheckboxState(checkbox, identifier: id, expected: 0)
         }
         let install = application.buttons["workflow.install-selection"]
         let scroll = try XCTUnwrap(reviewScroll)
@@ -186,6 +208,40 @@ final class OriginalShellJourneyTests: XCTestCase {
         journeyFinished = true
     }
 
+    private func requireCheckboxState(
+        _ checkbox: XCUIElement, identifier: String, expected: Int
+    ) throws {
+        let value = checkbox.value
+        selectionObservation = [
+            "identifier": identifier, "expected": expected,
+            "valueCategory": JourneyInteraction.checkboxValueCategory(value),
+        ]
+        let actual = try JourneyInteraction.checkboxState(value)
+        selectionObservation["actual"] = actual
+        XCTAssertEqual(actual, expected)
+        guard actual == expected else { throw JourneyContractError.invalidMetadata }
+    }
+
+    private func retainFailureDiagnostics() {
+        guard !journeyFinished, !retainedFailureDiagnostics, !retainingFailureDiagnostics,
+            let context = failureContext
+        else { return }
+        retainingFailureDiagnostics = true
+        defer { retainingFailureDiagnostics = false }
+        if context.application.state == .notRunning {
+            startup["privateFailureDiagnosticStatus"] = "application-not-running"
+        } else {
+            do {
+                try captureFailureDiagnostics(context.application, fixture: context.fixture)
+                startup["privateFailureDiagnosticStatus"] = "captured"
+            } catch {
+                startup["privateFailureDiagnosticStatus"] = "capture-rejected"
+            }
+        }
+        retainedFailureDiagnostics = true
+        try? saveOutcome()
+    }
+
     private func captureFailureDiagnostics(
         _ application: XCUIApplication, fixture: JourneyFixture
     ) throws {
@@ -204,6 +260,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             "schema": 1, "lastStage": snapshots.last?["stage"] as? String ?? "startup",
             "hierarchy": hierarchy, "hierarchyTruncated": description.utf8.count > 65_536,
             "applicationState": application.state.rawValue,
+            "selectionObservation": selectionObservation,
             "buttons": application.buttons.allElementsBoundByIndex.prefix(128).map { element in
                 [
                     "identifier": String(element.identifier.prefix(256)),
@@ -308,8 +365,8 @@ final class OriginalShellJourneyTests: XCTestCase {
             control = matching.count == 1 ? matching.element : switches.element
         }
         XCTAssertTrue(control.isHittable)
-        if control.value as? String == "0" { control.click() }
-        XCTAssertEqual(control.value as? String, "1")
+        if try JourneyInteraction.checkboxState(control.value) == 0 { control.click() }
+        try requireCheckboxState(control, identifier: "calendar-permission", expected: 1)
         application.typeKey(.escape, modifierFlags: [])
         if application.buttons["Try again"].exists {
             try click(application.buttons["Try again"], in: application)

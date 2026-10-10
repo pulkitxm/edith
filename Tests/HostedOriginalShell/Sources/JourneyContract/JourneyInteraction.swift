@@ -2,18 +2,14 @@ import Foundation
 
 public enum JourneyInteraction {
     public static func checkboxState(_ value: Any?) throws -> Int {
-        let text: String
-        if let value = value as? String {
-            text = value
-        } else if let value = value as? NSNumber {
-            text = value.stringValue
-        } else {
-            throw JourneyContractError.invalidMetadata
+        if let value = value as? String, value == "0" || value == "1", let state = Int(value) {
+            return state
         }
-        guard text == "0" || text == "1", let state = Int(text) else {
-            throw JourneyContractError.invalidMetadata
+        if let value = value as? NSNumber, value.doubleValue.isFinite {
+            if value == NSNumber(value: 0) { return 0 }
+            if value == NSNumber(value: 1) { return 1 }
         }
-        return state
+        throw JourneyContractError.invalidMetadata
     }
 
     public static func checkboxValueCategory(_ value: Any?) -> String {
