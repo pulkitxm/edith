@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 @MainActor final class HostCoreAgentStore {
-    static let descriptors: [HostCoreJobDescriptor] = [
+    nonisolated static let descriptors: [HostCoreJobDescriptor] = [
         .init(
             id: "backup.sync", title: "iCloud backup", trigger: .fileSystem,
             topic: "backup", cadence: .every(ambient: 86400), power: .pauseOnBattery),
