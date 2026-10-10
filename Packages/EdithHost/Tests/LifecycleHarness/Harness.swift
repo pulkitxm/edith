@@ -571,7 +571,17 @@ struct HostLifecycleHarness {
             guard sessions.processIdentifiers.isEmpty, sessions.pendingDisableIDs.isEmpty,
                 sessions.enabledIDs.isEmpty, surfaces.context.activeIDs.isEmpty
             else { throw HostWorkerError.invalidResponse }
-            guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
+            let removedDirectories = Set([first, second].map { store.directory(for: $0) })
+                .union(
+                    try store.installedPackages().filter {
+                        $0.id == first.id
+                    }.map { store.directory(for: $0) })
+            guard !removedDirectories.isEmpty,
+                try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty,
+                removedDirectories.allSatisfy({
+                    var metadata = stat()
+                    return lstat($0.path, &metadata) == -1 && errno == ENOENT
+                })
             else { throw HostWorkerError.rejected }
             guard surfaces.layouts.home == savedSurface,
                 surfaces.context.visibleLayout(.home).tiles.isEmpty
