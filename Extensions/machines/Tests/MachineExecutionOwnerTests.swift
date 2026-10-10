@@ -31,18 +31,26 @@ import Testing
         let owner = MachineExecutionOwner()
         let retained = process("exec sleep 30")
         let unrelated = process("exec sleep 30")
-        try unrelated.run()
-        defer { if unrelated.isRunning { unrelated.terminate(); unrelated.waitUntilExit() } }
-        let stream = SSHLineStream(process: retained, onLine: { _, _ in }, onExit: { _ in })
-        try owner.start(stream)
-        await owner.shutdown()
-        #expect(await stream.waitForExit() == 130)
-        retained.waitUntilExit()
-        #expect(!retained.isRunning)
-        #expect(unrelated.isRunning)
-        let rejected = SSHLineStream(
-            process: process("exit 0"), onLine: { _, _ in }, onExit: { _ in })
-        #expect(throws: CancellationError.self) { try owner.start(rejected) }
+        let unrelatedOwner = MachineExecutionOwner()
+        let unrelatedStream = SSHLineStream(
+            process: unrelated, onLine: { _, _ in }, onExit: { _ in })
+        try unrelatedOwner.start(unrelatedStream)
+        do {
+            let stream = SSHLineStream(process: retained, onLine: { _, _ in }, onExit: { _ in })
+            try owner.start(stream)
+            await owner.shutdown()
+            #expect(await stream.waitForExit() == 130)
+            #expect(!retained.isRunning)
+            #expect(unrelated.isRunning)
+            let rejected = SSHLineStream(
+                process: process("exit 0"), onLine: { _, _ in }, onExit: { _ in })
+            #expect(throws: CancellationError.self) { try owner.start(rejected) }
+        } catch {
+            await unrelatedOwner.shutdown()
+            throw error
+        }
+        await unrelatedOwner.shutdown()
+        #expect(!unrelated.isRunning)
     }
 }
 
