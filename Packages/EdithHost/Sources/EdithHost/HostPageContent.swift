@@ -60,6 +60,7 @@ struct HostPageContent: View {
     }
     @ViewBuilder private var settingsContent: some View {
         switch settingsDestination {
+        case "terminal": HostToolingSettingsPage(defaults: defaults)
         case "surfaces": HostSurfaceEditor(marketplace: marketplace)
         case "general":
             HostSettingsPage(
