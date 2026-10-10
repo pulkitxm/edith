@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
@@ -13,6 +16,7 @@ final class ExtensionRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -29,7 +33,7 @@ final class ExtensionRuntime: NSObject {
                 guard let service = self.service else { throw ExtensionPeerError.unavailable }
                 let reply = try await EmojiCLIExecution.run(
                     request, defaults: SharedDefaults.store,
-                    catalog: service.catalog, pick: { EmojiPanel.shared.show() },
+                    catalog: service.catalog, pick: { self.showPanel() },
                     insert: { try await service.insertAndWait(character: $0) },
                     changed: { service.adoptSettings() })
                 return try JSONEncoder().encode(reply)
@@ -53,7 +57,7 @@ final class ExtensionRuntime: NSObject {
                         throw ExtensionPeerError.invalidRequest
                     }
                     switch action.action {
-                    case "pick": EmojiPanel.shared.show()
+                    case "pick": self.showPanel()
                     case "clear": service.clearFrequent()
                     default: throw ExtensionPeerError.invalidRequest
                     }
@@ -64,7 +68,7 @@ final class ExtensionRuntime: NSObject {
             }
             guard let self, let service = self.service else { throw ExtensionPeerError.unavailable }
             return try await EmojiSurface.execute(
-                command, payload: payload, store: service, pick: { EmojiPanel.shared.show() })
+                command, payload: payload, store: service, pick: { self.showPanel() })
         }
     }
 
@@ -104,49 +108,59 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            do {
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "emoji", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            } catch { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             guard service == nil else { return ["ok": true] as NSDictionary }
-            let store = EmojiStore()
+            let store = EmojiStore(fixture: fixture)
             guard !store.catalog.emoji.isEmpty else { return ["ok": false] as NSDictionary }
             service = store
-            EmojiPanel.shared.store = store
-            HotKeyRegistrar.configure(
-                ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.emoji, carbonID: 8, prefix: "emojiHotKey",
-                    defaultCode: kVK_ANSI_E, defaultModifiers: controlKey | shiftKey))
+            if fixture == nil { EmojiPanel.shared.store = store }
+            if fixture == nil {
+                HotKeyRegistrar.configure(
+                    ExtensionHotKeyBinding(
+                        id: HotKeyCatalog.emoji, carbonID: 8, prefix: "emojiHotKey",
+                        defaultCode: kVK_ANSI_E, defaultModifiers: controlKey | shiftKey))
+            }
             registerHotKey()
             observers.append(
                 IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                     MainActor.assumeIsolated { self?.registerHotKey() }
                 })
-            observers.append(
-                IPC.observe(IPC.Name.requestEmojiPanel) {
-                    MainActor.assumeIsolated { EmojiPanel.shared.show() }
-                })
-            observers.append(
-                NotificationCenter.default.addObserver(
-                    forName: Notification.Name(IPC.Name.requestEmojiInsert), object: nil,
-                    queue: .main
-                ) { [weak self] notification in
-                    guard
-                        let character = notification.userInfo?[EmojiInsertIPC.characterKey]
-                            as? String
-                    else { return }
-                    let requestID = notification.userInfo?[EmojiInsertIPC.requestIDKey] as? String
-                    MainActor.assumeIsolated {
-                        self?.service?.insert(character: character) { inserted in
-                            guard let requestID else { return }
-                            IPC.post(
-                                IPC.Name.emojiInsertResult,
-                                userInfo: EmojiInsertIPC.resultPayload(
-                                    requestID: requestID, inserted: inserted))
+            if fixture == nil {
+                observers.append(
+                    IPC.observe(IPC.Name.requestEmojiPanel) { [weak self] in
+                        MainActor.assumeIsolated { self?.showPanel() }
+                    })
+                observers.append(
+                    NotificationCenter.default.addObserver(
+                        forName: Notification.Name(IPC.Name.requestEmojiInsert), object: nil,
+                        queue: .main
+                    ) { [weak self] notification in
+                        guard
+                            let character = notification.userInfo?[EmojiInsertIPC.characterKey]
+                                as? String
+                        else { return }
+                        let requestID =
+                            notification.userInfo?[EmojiInsertIPC.requestIDKey] as? String
+                        MainActor.assumeIsolated {
+                            self?.service?.insert(character: character) { inserted in
+                                guard let requestID else { return }
+                                IPC.post(
+                                    IPC.Name.emojiInsertResult,
+                                    userInfo: EmojiInsertIPC.resultPayload(
+                                        requestID: requestID, inserted: inserted))
+                            }
                         }
-                    }
-                })
+                    })
+            }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -160,7 +174,7 @@ final class ExtensionRuntime: NSObject {
                         }
                     }
                 })
-        case "pick": EmojiPanel.shared.show()
+        case "pick": self.showPanel()
         case "synchronize":
             registerHotKey()
             IPC.post(IPC.Name.settingsChanged)
@@ -169,8 +183,7 @@ final class ExtensionRuntime: NSObject {
             presentation?.stop()
             presentation = nil
             commands.shutdown()
-            EmojiPanel.shared.hide()
-            EmojiPanel.shared.store = nil
+            if fixture == nil { EmojiPanel.shared.hide(); EmojiPanel.shared.store = nil }
             service?.shutdown()
             service = nil
             observers.forEach(IPC.stopObserving)
@@ -183,7 +196,13 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    private func showPanel() {
+        guard fixture == nil else { return }
+        EmojiPanel.shared.show()
+    }
+
     private func registerHotKey() {
+        guard fixture == nil else { return }
         HotKeyRegistrar.install(HotKeyCatalog.emoji) { EmojiPanel.shared.toggle() }
     }
 }

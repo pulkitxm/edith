@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import CoreAudio
 import EdithExtensionSupport
@@ -12,16 +15,40 @@ final class MicMuteEngine: NSObject, FeatureModule {
 
     private var stopped = false
     private let panel = StatusItemPanel()
-    private let muting = MicrophoneMuteSession(access: CoreAudioMicrophones.access)
+    private let muting: MicrophoneMuteSession
+    private let fixture: WorkerFixtureAdmission?
+    var systemResourceCount: Int {
+        (deviceListListener == nil ? 0 : 1) + (statusItem == nil ? 0 : 1)
+    }
+    private let fixtureControl: MicMuteFixtureControl?
+    var fixtureMicrophoneValue: Float? { fixtureControl?.value }
     private(set) var error: String?
     private var deviceListListener: AudioObjectPropertyListenerBlock?
     private var statusItem: NSStatusItem?
 
-    override init() {
+    override convenience init() { self.init(fixture: nil) }
+
+    init(fixture: WorkerFixtureAdmission?) {
+        precondition(fixture == nil || fixture?.extensionID == "micMute")
+        self.fixture = fixture
+        if fixture != nil {
+            let control = MicrophoneControl(device: 900, element: 0, kind: .mute)
+            let state = MicMuteFixtureControl()
+            fixtureControl = state
+            muting = MicrophoneMuteSession(
+                access: MicrophoneAccess(
+                    controls: { [control] }, read: { _ in state.value },
+                    write: { _, next in
+                        state.value = next; return true
+                    }))
+        } else {
+            fixtureControl = nil
+            muting = MicrophoneMuteSession(access: CoreAudioMicrophones.access)
+        }
         super.init()
         muted = SharedDefaults.store.bool(forKey: AppStorageKeys.Mic.muted)
         if muted { apply(true) }
-        observeDeviceList()
+        if fixture == nil { observeDeviceList() }
         syncSettings()
     }
 
@@ -46,6 +73,7 @@ final class MicMuteEngine: NSObject, FeatureModule {
     func retry() { if !stopped { apply(muted) } }
 
     func syncSettings() {
+        guard fixture == nil else { return }
         HotKeyRegistrar.install(HotKeyCatalog.micMute) { [weak self] in self?.toggle() }
         updateStatusItemPresence()
     }
@@ -56,10 +84,13 @@ final class MicMuteEngine: NSObject, FeatureModule {
         SharedDefaults.store.set(on, forKey: AppStorageKeys.Mic.muted)
         apply(on)
         updateIcon()
-        NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        if fixture == nil {
+            NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
+        }
     }
 
     func updateStatusItemPresence() {
+        guard fixture == nil else { return }
         let wanted =
             SharedDefaults.store.object(forKey: AppStorageKeys.Mic.muteInMenuBar) as? Bool ?? true
         if wanted, statusItem == nil {
@@ -124,3 +155,5 @@ final class MicMuteEngine: NSObject, FeatureModule {
     }
 
 }
+
+@MainActor private final class MicMuteFixtureControl { var value: Float = 0 }

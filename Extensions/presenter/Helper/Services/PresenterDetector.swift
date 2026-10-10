@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import CoreGraphics
 import EdithExtensionSupport
@@ -51,6 +54,27 @@ final class PresenterDetector: FeatureModule {
     private var signals: PresenterSignals
     private(set) var publishedActive: Bool
     private(set) var publishedReason: String?
+
+    var systemResourceCount: Int {
+        (launchObserver == nil ? 0 : 1) + (terminateObserver == nil ? 0 : 1)
+            + (screenParamsObserver == nil ? 0 : 1) + (windowScanTimer == nil ? 0 : 1)
+            + (sessionTimer == nil ? 0 : 1)
+    }
+
+    convenience init(fixture: WorkerFixtureAdmission?) {
+        guard let fixture else { self.init(); return }
+        precondition(fixture.extensionID == "presenter")
+        self.init(
+            scanner: PresenterScanner(
+                source: PresenterWindowSource(
+                    windows: { [] }, titlesAvailable: { false }, recording: { false }),
+                jev: PresenterJevCheck(enabled: { false }, decider: { nil })),
+            system: PresenterSystem(
+                runningBundleIDs: { [] }, remoteSessionActive: { false },
+                displayMirrored: { false },
+                announce: { IPC.post(IPC.Name.presenterAutoActiveChanged) }),
+            defaults: SharedDefaults.store, monitoring: false)
+    }
 
     convenience init() {
         self.init(

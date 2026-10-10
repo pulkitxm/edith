@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -29,6 +32,30 @@ final class EmojiStore: FeatureModule {
     private var isShutDown = false
     private let insertionDelay: Duration
     private let typeCharacter: @MainActor (String) -> Bool
+
+    private(set) var fixtureOutput: EmojiFixtureOutput?
+
+    convenience init(fixture: WorkerFixtureAdmission?) {
+        guard let fixture else { self.init(); return }
+        precondition(fixture.extensionID == "emoji")
+        let output = EmojiFixtureOutput()
+        self.init(
+            writePasteboard: {
+                output.copied.append($0)
+                if output.copied.count > 128 {
+                    output.copied.removeFirst(output.copied.count - 128)
+                }
+                return true
+            }, catalog: .shared, insertionDelay: .zero,
+            typeCharacter: {
+                output.inserted.append($0)
+                if output.inserted.count > 128 {
+                    output.inserted.removeFirst(output.inserted.count - 128)
+                }
+                return true
+            })
+        fixtureOutput = output
+    }
 
     required convenience init() {
         self.init(catalog: .shared, typeCharacter: { EmojiTypeSynth.type($0) })
@@ -180,4 +207,9 @@ final class EmojiStore: FeatureModule {
         ledger = EmojiUsageLedger.load(from: defaults, key: AppStorageKeys.Emoji.usage)
         refreshFrequent()
     }
+}
+
+@MainActor final class EmojiFixtureOutput {
+    var copied: [String] = []
+    var inserted: [String] = []
 }

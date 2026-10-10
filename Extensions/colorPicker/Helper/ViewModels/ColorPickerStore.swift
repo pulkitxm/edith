@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
@@ -12,8 +15,17 @@ final class ColorPickerStore: FeatureModule {
     private var stopped = false
     @ObservationIgnored private var requestObserver: NSObjectProtocol?
 
-    init() {
+    private let fixture: WorkerFixtureAdmission?
+    private(set) var fixtureCopies: [String] = []
+    var systemResourceCount: Int { requestObserver == nil ? 0 : 1 }
+
+    convenience init() { self.init(fixture: nil) }
+
+    init(fixture: WorkerFixtureAdmission?) {
+        precondition(fixture == nil || fixture?.extensionID == "colorPicker")
+        self.fixture = fixture
         history = ColorHistoryStore.load()
+        guard fixture == nil else { return }
         requestObserver = IPC.observe(IPC.Name.requestColorPick) { [weak self] in
             self?.pick()
         }
@@ -32,6 +44,7 @@ final class ColorPickerStore: FeatureModule {
     }
 
     func registerHotKey() {
+        guard fixture == nil, !stopped else { return }
         HotKeyRegistrar.install(HotKeyCatalog.colorPicker) { [weak self] in
             self?.pick()
         }
@@ -39,6 +52,9 @@ final class ColorPickerStore: FeatureModule {
 
     func pick() {
         guard !stopped else { return }
+        if fixture != nil {
+            commit(NSColor(srgbRed: 0.25, green: 0.5, blue: 0.75, alpha: 1)); return
+        }
         ColorPickerOperationExecution.perform(.pick) { [weak self] color in
             guard let color else { return }
             Task { @MainActor in
@@ -65,18 +81,27 @@ final class ColorPickerStore: FeatureModule {
         IPC.post(IPC.Name.settingsChanged)
     }
 
+    func writeFixtureCopy(_ value: String) -> Bool {
+        guard fixture != nil, !stopped else { return false }
+        fixtureCopies.append(value)
+        if fixtureCopies.count > 128 { fixtureCopies.removeFirst(fixtureCopies.count - 128) }
+        return true
+    }
+
     func copy(_ swatch: ColorSwatch, as format: ColorCopyFormat) {
+        guard !stopped else { return }
         do {
             try ColorSwatchOperationExecution.perform(
                 .copy, swatch: swatch, format: format,
                 write: { value in
+                    if self.fixture != nil { return self.writeFixtureCopy(value) }
                     NSPasteboard.general.clearContents()
                     return NSPasteboard.general.setString(value, forType: .string)
                 })
             copyError = nil
         } catch {
             copyError = error.localizedDescription
-            NSSound.beep()
+            if fixture == nil { NSSound.beep() }
         }
     }
 

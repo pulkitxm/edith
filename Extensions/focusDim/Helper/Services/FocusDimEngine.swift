@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import CoreGraphics
 import EdithExtensionSupport
@@ -40,7 +43,19 @@ final class FocusDimEngine: FeatureModule {
     private var repositionTask: Task<Void, Never>?
     private var repositionGeneration = 0
 
-    init() {
+    private let fixture: WorkerFixtureAdmission?
+    var systemResourceCount: Int {
+        overlays.count + (activationObserver == nil ? 0 : 1) + (spaceObserver == nil ? 0 : 1)
+            + (screenObserver == nil ? 0 : 1)
+    }
+
+    convenience init() { self.init(fixture: nil) }
+
+    init(fixture: WorkerFixtureAdmission?) {
+        precondition(fixture == nil || fixture?.extensionID == "focusDim")
+        self.fixture = fixture
+        loadSettings()
+        guard fixture == nil else { return }
         HotKeyRegistrar.install(HotKeyCatalog.focusDim) {
             FocusDimState.setActive(!FocusDimState.isActive())
             IPC.post(IPC.Name.settingsChanged)
@@ -70,6 +85,7 @@ final class FocusDimEngine: FeatureModule {
     }
 
     func shutdown() {
+        guard fixture == nil else { return }
         HotKeyRegistrar.clear(HotKeyCatalog.focusDim)
         repositionGeneration += 1
         repositionTask?.cancel()
@@ -95,6 +111,7 @@ final class FocusDimEngine: FeatureModule {
     }
 
     func applySettings() {
+        if fixture != nil { loadSettings(); return }
         HotKeyRegistrar.install(HotKeyCatalog.focusDim) {
             FocusDimState.setActive(!FocusDimState.isActive())
             IPC.post(IPC.Name.settingsChanged)

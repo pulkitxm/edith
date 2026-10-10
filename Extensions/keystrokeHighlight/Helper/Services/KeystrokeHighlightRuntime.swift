@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
@@ -16,13 +19,24 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     private var panel: KeystrokeHighlightPanel?
     private var expiryTasks: [UUID: Task<Void, Never>] = [:]
 
-    init() {
+    private let fixture: WorkerFixtureAdmission?
+    var systemResourceCount: Int {
+        (eventTap == nil ? 0 : 1) + (runLoopSource == nil ? 0 : 1) + (healthTimer == nil ? 0 : 1)
+            + (panel == nil ? 0 : 1)
+    }
+
+    convenience init() { self.init(fixture: nil) }
+
+    init(fixture: WorkerFixtureAdmission?) {
+        precondition(fixture == nil || fixture?.extensionID == "keystrokeHighlight")
+        self.fixture = fixture
         start()
     }
 
     var entries: [KeystrokeHighlightEntry] { queue.entries }
 
     func syncSettings() {
+        guard fixture == nil else { return }
         if eventTap == nil { start() }
         guard !entries.isEmpty else { return }
         movePanelToPointerScreen()
@@ -42,6 +56,7 @@ final class KeystrokeHighlightRuntime: FeatureModule {
     }
 
     private func start() {
+        if fixture != nil { setRuntimeState(active: true, error: ""); return }
         guard CGPreflightListenEventAccess() else {
             setRuntimeState(
                 active: false,

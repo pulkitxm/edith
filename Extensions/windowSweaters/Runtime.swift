@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -11,6 +14,7 @@ final class ExtensionRuntime: NSObject {
 
     private var presentation: ControlPresentation?
 
+    private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -87,13 +91,18 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            do {
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "windowSweaters", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            } catch { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             SharedDefaults.store.set(true, forKey: SweaterState.enabledKey)
-            if service == nil { service = SweaterEngine() }
+            if service == nil { service = SweaterEngine(fixture: fixture) }
             if observer == nil {
                 observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                     MainActor.assumeIsolated { self?.service?.applySettings() }

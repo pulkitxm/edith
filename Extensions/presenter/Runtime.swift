@@ -1,3 +1,6 @@
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 import AppKit
 import Carbon.HIToolbox
 import EdithExtensionSupport
@@ -15,6 +18,7 @@ final class ExtensionRuntime: NSObject {
     private var pauseObserver: NSObjectProtocol?
     private var presentation: ControlPresentation?
 
+    private var fixture: WorkerFixtureAdmission?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -60,6 +64,7 @@ final class ExtensionRuntime: NSObject {
                     guard action.value.isEmpty else { throw ExtensionPeerError.invalidRequest }
                     switch action.action {
                     case "screenRecording":
+                        guard self.fixture == nil else { throw ExtensionPeerError.unavailable }
                         guard
                             let url = URL(
                                 string:
@@ -147,6 +152,11 @@ final class ExtensionRuntime: NSObject {
             commands.shutdown()
             return ["ok": true] as NSDictionary
         case "start":
+            do {
+                fixture = try WorkerFixtureAdmission.current(
+                    extensionID: "presenter", context: input,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            } catch { return ["ok": false] as NSDictionary }
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
             else { return ["ok": false] as NSDictionary }
             guard let suite = input["defaultsSuite"] as? String,
@@ -155,10 +165,12 @@ final class ExtensionRuntime: NSObject {
             SharedDefaults.store.set(true, forKey: AppStorageKeys.Presenter.enabled)
             SharedDefaults.store.set(false, forKey: AppStorageKeys.Presenter.autoActive)
             if state == nil { state = PresenterState() }
-            HotKeyRegistrar.configure(
-                ExtensionHotKeyBinding(
-                    id: HotKeyCatalog.presenter, carbonID: 5, prefix: "presenterHotKey",
-                    defaultCode: kVK_ANSI_P, defaultModifiers: shiftKey | optionKey | cmdKey))
+            if fixture == nil {
+                HotKeyRegistrar.configure(
+                    ExtensionHotKeyBinding(
+                        id: HotKeyCatalog.presenter, carbonID: 5, prefix: "presenterHotKey",
+                        defaultCode: kVK_ANSI_P, defaultModifiers: shiftKey | optionKey | cmdKey))
+            }
             if observer == nil {
                 observer = IPC.observe(IPC.Name.settingsChanged) { [weak self] in
                     MainActor.assumeIsolated { self?.synchronize() }
@@ -208,14 +220,17 @@ final class ExtensionRuntime: NSObject {
 
     private func synchronize() {
         guard state != nil else { return }
-        HotKeyRegistrar.install(HotKeyCatalog.presenter) { [weak self] in
-            let operation: PresenterRuntimeOperation =
-                SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.mode) ? .stop : .start
-            _ = PresenterRuntimeOperationExecution.perform(operation)
-            self?.synchronize()
+        if fixture == nil {
+            HotKeyRegistrar.install(HotKeyCatalog.presenter) { [weak self] in
+                let operation: PresenterRuntimeOperation =
+                    SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.mode)
+                    ? .stop : .start
+                _ = PresenterRuntimeOperationExecution.perform(operation)
+                self?.synchronize()
+            }
         }
         if SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.autoEnabled) {
-            if service == nil { service = PresenterDetector() }
+            if service == nil { service = PresenterDetector(fixture: fixture) }
             service?.applySettings()
         } else {
             service?.shutdown()
