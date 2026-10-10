@@ -178,6 +178,8 @@ import Testing
             process.standardError = FileHandle.nullDevice
             try process.run()
             selectedPID = process.processIdentifier
+            try JSONEncoder().encode(ExtensionProcessIdentity.read(process.processIdentifier))
+                .write(to: directory.appendingPathComponent("owned-process.json"), options: .atomic)
         }
 
         func controller(refresh: (@MainActor () async throws -> Int32)? = nil)

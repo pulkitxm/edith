@@ -14,11 +14,11 @@ import Foundation
 
 @MainActor private final class HostCoreRoleApplication {
     private let parent: ExtensionProcessIdentity
-    private let control: HostWorkerControl
-    private var frames = HostWorkerFrames()
+    private let control: HostCorePipeWriter
+    private var frames = HostCoreFrames()
     private var runtime: HostCoreRuntime?
     private var watcher: DispatchSourceProcess?
-    private var request: Task<Void, Never>?
+    private var requests: [UUID: Task<Void, Never>] = [:]
     private var stopping = false
 
     init(parent: ExtensionProcessIdentity) throws {
@@ -27,7 +27,8 @@ import Foundation
         guard descriptor >= 0, dup2(STDERR_FILENO, STDOUT_FILENO) >= 0 else {
             throw CocoaError(.fileWriteUnknown)
         }
-        control = HostWorkerControl(descriptor: descriptor)
+        defer { Darwin.close(descriptor) }
+        control = try HostCorePipeWriter(descriptor: descriptor)
     }
 
     func run() {
@@ -52,28 +53,51 @@ import Foundation
         do {
             for frame in try frames.append(data) {
                 let next = try JSONDecoder().decode(HostCoreRequest.self, from: frame)
-                if [.cancel, .status].contains(next.operation) {
-                    guard next.configuration == nil, let runtime else {
-                        throw HostWorkerError.rejected
+                guard next.operation == .start || next.configuration == nil,
+                    next.operation == .command || next.command == nil,
+                    next.operation == .cancel || next.cancelling == nil,
+                    requests[next.token] == nil, requests.count < 8
+                else { throw HostWorkerError.rejected }
+                if next.operation == .cancel {
+                    guard let runtime else { throw HostWorkerError.rejected }
+                    if let token = next.cancelling {
+                        requests[token]?.cancel()
+                    } else {
+                        for (token, task) in requests where token != next.token { task.cancel() }
+                        runtime.cancel()
                     }
-                    if next.operation == .cancel { request?.cancel(); runtime.cancel() }
-                    try control.send(
-                        HostCoreResponse(token: next.token, snapshot: runtime.snapshot()))
-                    continue
                 }
-                guard request == nil else { throw HostWorkerError.rejected }
-                request = Task { [self] in
-                    defer { request = nil }
+                if next.operation == .stop {
+                    for task in requests.values { task.cancel() }
+                    runtime?.cancel()
+                }
+                requests[next.token] = Task { [self] in
+                    defer { requests.removeValue(forKey: next.token) }
                     do {
-                        let snapshot = try await execute(next)
-                        try control.send(HostCoreResponse(token: next.token, snapshot: snapshot))
+                        try Task.checkCancellation()
+                        guard parent.isAlive, !stopping else { throw HostWorkerError.rejected }
+                        if next.operation == .command {
+                            guard let runtime, let command = next.command else {
+                                throw HostWorkerError.rejected
+                            }
+                            let result = try await runtime.command(command)
+                            try await control.send(
+                                HostCoreResponse(token: next.token, commandResult: result))
+                        } else {
+                            let snapshot = try await execute(next)
+                            try await control.send(
+                                HostCoreResponse(token: next.token, snapshot: snapshot))
+                        }
                         if next.operation == .stop { terminate() }
                     } catch {
-                        try? control.send(
+                        try? await control.send(
                             HostCoreResponse(
                                 token: next.token,
-                                failure: "The background service could not complete this action.",
-                                cancelled: error is CancellationError))
+                                failure: error is HostAgentCommandError
+                                    ? nil
+                                    : "The background service could not complete this action.",
+                                cancelled: error is CancellationError,
+                                commandFailure: error as? HostAgentCommandError))
                         if next.operation == .start { terminate() }
                     }
                 }
@@ -90,7 +114,12 @@ import Foundation
                 configuration.extensionID == "core", configuration.version == "1",
                 !configuration.recoveryOnly
             else { throw HostWorkerError.rejected }
+            #if EDITH_CLI_FIXTURE
+            runtime = try HostCoreRuntime(identity: configuration.identity(), environment: { [:] })
+            #else
             runtime = try HostCoreRuntime(identity: configuration.identity())
+            #endif
+            try await runtime?.startCommands()
             return runtime?.snapshot()
         }
         guard request.configuration == nil, let runtime else { throw HostWorkerError.rejected }
@@ -100,18 +129,23 @@ import Foundation
         case .synchronize: return try await runtime.synchronizeSettings()
         case .restore: return try await runtime.synchronizeSettings(restoreOnly: true)
         case .stop: await runtime.shutdown(); return runtime.snapshot()
-        case .start, .cancel: throw HostWorkerError.rejected
+        case .cancel: return runtime.snapshot()
+        case .start, .command: throw HostWorkerError.rejected
         }
     }
 
     private func terminate() {
         guard !stopping else { return }
         stopping = true
-        request?.cancel()
+        for task in requests.values { task.cancel() }
         runtime?.cancel()
         FileHandle.standardInput.readabilityHandler = nil
         watcher?.cancel()
-        kill(-getpid(), SIGKILL)
-        exit(1)
+        Task { [self] in
+            await runtime?.shutdown()
+            await control.shutdown()
+            kill(-getpid(), SIGKILL)
+            exit(1)
+        }
     }
 }

@@ -112,6 +112,16 @@ import Foundation
         }
     }
 
+    func recordCommand(_ event: HostAgentCommandEvent) throws {
+        record(
+            .init(
+                id: event.id, date: event.date,
+                level: HostCoreAgentEvent.Level(rawValue: event.level.rawValue) ?? .info,
+                category: event.category, name: event.name, message: event.message,
+                duration: event.duration, taskID: event.taskID))
+        try save()
+    }
+
     func stopped() throws {
         record(
             .init(
