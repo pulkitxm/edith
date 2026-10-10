@@ -69,8 +69,14 @@ public actor DatabaseMCPSerialTransport: Transport {
     }
 
     public func send(_ data: Data) async throws {
-        guard connected, !stopping, writes.count < 32, data.count <= 1_048_576 else {
+        guard connected, !stopping else {
             throw MCPError.internalError("The output queue is unavailable.")
+        }
+        guard writes.count < 32, data.count <= 1_048_576 else {
+            let error = MCPError.internalError("The output queue limit was exceeded.")
+            terminalError = error
+            await disconnect()
+            throw error
         }
         try Task.checkCancellation()
         let previous = sendTail
@@ -86,10 +92,18 @@ public actor DatabaseMCPSerialTransport: Transport {
         writes[id] = next
         defer { writes.removeValue(forKey: id) }
         sendTail = next
-        try await withTaskCancellationHandler {
-            try await next.value
-        } onCancel: {
-            next.cancel()
+        do {
+            try await withTaskCancellationHandler {
+                try await next.value
+            } onCancel: {
+                next.cancel()
+            }
+        } catch {
+            if !(error is CancellationError), !stopping {
+                terminalError = error
+                await disconnect()
+            }
+            throw error
         }
     }
 

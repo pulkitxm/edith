@@ -32,6 +32,18 @@ private actor FragmentingDatabaseMCPTransport: Transport {
 }
 
 @Suite struct DatabaseMCPSerialTransportTests {
+    @Test func oversizedReplyClosesTransportAndReportsFailure() async throws {
+        let base = DatabaseMCPByteTransport(read: { nil }, write: { _ in })
+        let transport = DatabaseMCPSerialTransport(base: base, logger: base.logger)
+        try await transport.connect()
+        await #expect(throws: (any Error).self) {
+            try await transport.send(Data(repeating: 65, count: 1_048_577))
+        }
+        await #expect(throws: (any Error).self) { try await transport.checkCompletion() }
+        await #expect(throws: (any Error).self) { try await transport.send(Data("{}".utf8)) }
+        await transport.disconnect()
+    }
+
     @Test func serializesConcurrentWritesWithoutByteInterleaving() async throws {
         let base = FragmentingDatabaseMCPTransport()
         let transport = DatabaseMCPSerialTransport(base: base, logger: base.logger)
