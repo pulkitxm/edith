@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { openSync, closeSync } from "node:fs";
 import { execFileSync, spawn } from "node:child_process";
+import { closeSync, openSync } from "node:fs";
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
