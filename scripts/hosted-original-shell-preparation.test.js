@@ -3,6 +3,7 @@ import { createPublicKey, verify } from "node:crypto";
 import {
   admitHostedJourney,
   journeyEnvelope,
+  prepareJourneyParent,
 } from "./hosted-original-shell/prepare-journey.mjs";
 
 const identifier =
@@ -139,4 +140,55 @@ test("runner proof admission includes every actual XCTest user interaction stage
   expect(admitted).toEqual(emitted);
   expect(emitted.length).toBe(13);
   expect(new Set(emitted).size).toBe(emitted.length);
+});
+
+test("fresh hosted accounts get only a validated single Applications directory", async () => {
+  const { mkdtemp, realpath, lstat, mkdir, chmod, symlink, rm } = await import(
+    "node:fs/promises"
+  );
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const temporary = await mkdtemp(join(tmpdir(), "edith-journey-parent-"));
+  const home = await realpath(temporary);
+  const uuid = identifier.slice("com.pulkit.edith.tests.remote-".length);
+  const applications = join(home, "Applications");
+  const fixture = join(applications, `Edith Remote Fixture Journey ${uuid}`);
+  const options = {
+    environment,
+    accountHome: home,
+    identifier,
+    directory: fixture,
+  };
+  try {
+    expect(await prepareJourneyParent(options)).toBe(applications);
+    expect((await lstat(applications)).mode & 0o777).toBe(0o700);
+    await expect(lstat(fixture)).rejects.toThrow();
+    await chmod(applications, 0o755);
+    expect(await prepareJourneyParent(options)).toBe(applications);
+    await chmod(applications, 0o777);
+    await expect(prepareJourneyParent(options)).rejects.toThrow();
+    await chmod(applications, 0o700);
+    await expect(
+      prepareJourneyParent({ ...options, uid: process.getuid() + 1 }),
+    ).rejects.toThrow();
+    await rm(applications, { recursive: true });
+    const target = join(home, "unrelated");
+    await mkdir(target, { mode: 0o700 });
+    await symlink(target, applications);
+    await expect(prepareJourneyParent(options)).rejects.toThrow();
+    await expect(
+      lstat(join(target, `Edith Remote Fixture Journey ${uuid}`)),
+    ).rejects.toThrow();
+    await rm(applications);
+    await chmod(home, 0o777);
+    await expect(prepareJourneyParent(options)).rejects.toThrow();
+    await expect(lstat(applications)).rejects.toThrow();
+    await chmod(home, 0o700);
+    await expect(
+      prepareJourneyParent({ ...options, environment: {} }),
+    ).rejects.toThrow();
+    await expect(lstat(applications)).rejects.toThrow();
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 });
