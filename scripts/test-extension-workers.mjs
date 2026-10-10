@@ -165,6 +165,7 @@ try {
     assert.equal(result.usageHookLifecycleValidated, id === "usage");
     assert.equal(result.cameraDataValidated, id === "virtualCamera");
     assert.equal(result.databaseDataValidated, id === "database");
+    assert.equal(result.calendarFixtureLifecycleValidated, id === "calendar");
     assert.equal(result.agentActivityValidated, id === "herdr");
     if (id === "lidAwake") {
       const privileged = JSON.parse(
