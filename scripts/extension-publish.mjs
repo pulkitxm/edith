@@ -23,6 +23,7 @@ import {
   releaseFileDigest,
 } from "./release-asset-read.mjs";
 import {
+  executeReleaseMutation,
   preflightReleaseAsset,
   uploadReleaseAsset,
 } from "./release-asset-upload.mjs";
@@ -85,22 +86,7 @@ function gh(...args) {
 }
 
 function mutate(...args) {
-  const result = JSON.parse(
-    execFileSync("pukbot", [...args, "--json"], { encoding: "utf8" }),
-  );
-  if (result.workflowUrl) {
-    const url = new URL(result.workflowUrl);
-    const parts = url.pathname.split("/").filter(Boolean);
-    gh(
-      "run",
-      "watch",
-      parts.at(-1),
-      "--repo",
-      `${parts[0]}/${parts[1]}`,
-      "--exit-status",
-    );
-  }
-  return result;
+  return executeReleaseMutation(args);
 }
 
 function release(repository, tag) {
