@@ -10,6 +10,7 @@ struct HostedManagedViewRoute: Codable, Equatable {
     let version: String
     let hostABI: String
     let sourceFingerprint: String
+    let packageSHA256: String
     let sourceCommit: String
     let hostIdentifier: String
     let directory: String
@@ -30,14 +31,16 @@ struct HostedManagedViewRoute: Codable, Equatable {
 
     func validate(
         extensionID id: String, version selectedVersion: String, hostABI abi: String,
-        sourceFingerprint fingerprint: String
+        packageSHA256 selectedSHA: String
     ) throws {
         guard schema == 1, Self.owners.contains(extensionID), id == extensionID,
-            version == selectedVersion, hostABI == abi, sourceFingerprint == fingerprint,
+            version == selectedVersion, hostABI == abi, packageSHA256 == selectedSHA,
             location == (Self.settingsOwners.contains(id) ? "settings" : "main"),
             section == (id == "notchShelf" ? "extension" : id),
             factoryOverlay == ["plugins", "studio"].contains(id),
             !version.isEmpty, version.utf8.count <= 80, !hostABI.isEmpty, hostABI.utf8.count <= 100,
+            packageSHA256.count == 64,
+            packageSHA256.allSatisfy({ $0.isASCII && "0123456789abcdef".contains($0) }),
             sourceFingerprint.count == 64,
             sourceFingerprint.allSatisfy({ $0.isASCII && "0123456789abcdef".contains($0) }),
             sourceCommit.count == 40,
@@ -75,7 +78,8 @@ struct HostedManagedViewRoute: Codable, Equatable {
             Set(values.keys)
                 == Set([
                     "schema", "extensionID", "location", "section", "version", "hostABI",
-                    "sourceFingerprint", "sourceCommit", "hostIdentifier", "directory",
+                    "sourceFingerprint", "packageSHA256", "sourceCommit", "hostIdentifier",
+                    "directory",
                     "factoryOverlay",
                 ]),
             let schema = values["schema"] as? NSNumber,
@@ -93,7 +97,7 @@ struct HostedManagedViewRoute: Codable, Equatable {
         let route = try JSONDecoder().decode(Self.self, from: bytes)
         try route.validate(
             extensionID: route.extensionID, version: route.version,
-            hostABI: route.hostABI, sourceFingerprint: route.sourceFingerprint)
+            hostABI: route.hostABI, packageSHA256: route.packageSHA256)
         guard route.directory == directory.path else { throw CocoaError(.fileReadCorruptFile) }
         return route
     }

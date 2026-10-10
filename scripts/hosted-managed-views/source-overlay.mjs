@@ -34,7 +34,7 @@ export function managedFixtureOverlay(source) {
             if let route, route.extensionID != "calendar" {
                 try WorkerLifecycleFixture.requireSupported(package.id)
                 guard route.extensionID == package.id, route.version == package.version,
-                    route.hostABI == package.hostABI, route.sourceFingerprint == package.sourceFingerprint,
+                    route.hostABI == package.hostABI, route.packageSHA256 == package.sha256,
                     executable == directory.appendingPathComponent("Fixture.app/Contents/MacOS/Edith")
                 else { throw HostWorkerError.rejected }
                 let fixture = try WorkerLifecycleFixture(root: directory, hostIdentifier: fixtureIdentity.identifier)
@@ -75,8 +75,11 @@ export function managedFixtureOverlay(source) {
   return result;
 }
 
-export function managedContextOverlay(source, sourceCommit) {
+export function managedContextOverlay(source, sourceCommit, fingerprints) {
   assert.match(sourceCommit, /^[a-f0-9]{40}$/);
+  assert.deepEqual(Object.keys(fingerprints).sort(), ["plugins", "studio"]);
+  for (const value of Object.values(fingerprints))
+    assert.match(value, /^[a-f0-9]{64}$/);
   return replaceExact(
     source,
     '        input["section"] = presentation.request.section',
@@ -90,7 +93,8 @@ export function managedContextOverlay(source, sourceCommit) {
                 "schema": 1, "sourceCommit": "${sourceCommit}",
                 "selectedVersion": configuration.package.version,
                 "hostABI": configuration.package.hostABI,
-                "sourceFingerprint": configuration.package.sourceFingerprint,
+                "sourceFingerprint": ["plugins": "${fingerprints.plugins}", "studio": "${fingerprints.studio}"][extensionID] ?? "",
+                "packageSHA256": configuration.package.sha256,
                 "roleDirectory": payload.appendingPathComponent(extensionID + "/app.bundle").path,
             ] as NSDictionary
         }`,

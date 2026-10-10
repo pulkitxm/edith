@@ -41,8 +41,11 @@ test("context overlay takes only selected authenticated configuration and never 
     "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
     "utf8",
   );
-  const result = managedContextOverlay(source, "a".repeat(40));
-  expect(result).toContain("configuration.package.sourceFingerprint");
+  const result = managedContextOverlay(source, "a".repeat(40), {
+    plugins: "b".repeat(64),
+    studio: "c".repeat(64),
+  });
+  expect(result).toContain("configuration.package.sha256");
   expect(result).toContain("configuration.package.version");
   expect(result).toContain(
     'payload.appendingPathComponent(extensionID + "/app.bundle")',
@@ -55,7 +58,7 @@ test("context overlay takes only selected authenticated configuration and never 
       .split('input["hostedManagedFixture"]')[1]
       .split("for runtime in runtimes")[0],
   ).not.toContain("Data(contentsOf:");
-  expect(() => managedContextOverlay(source, "stale")).toThrow();
+  expect(() => managedContextOverlay(source, "stale", {})).toThrow();
 });
 
 test("only two factory overlays change admission while actual model/view/control transport remains intact", async () => {

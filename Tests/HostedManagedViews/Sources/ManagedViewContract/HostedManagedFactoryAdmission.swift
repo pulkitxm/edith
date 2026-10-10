@@ -34,14 +34,16 @@ struct HostedManagedFactoryAdmission {
             Set(fixture.allKeys.compactMap { $0 as? String })
                 == Set([
                     "schema", "sourceCommit", "selectedVersion", "hostABI", "sourceFingerprint",
-                    "roleDirectory",
-                ]), fixture.count == 6,
+                    "packageSHA256", "roleDirectory",
+                ]), fixture.count == 7,
             let schema = fixture["schema"] as? NSNumber,
             CFGetTypeID(schema) != CFBooleanGetTypeID(), schema.doubleValue == 1,
             let source = fixture["sourceCommit"] as? String, source.count == 40,
             source.allSatisfy({ $0.isASCII && ("0123456789abcdef".contains($0)) }),
             let fingerprint = fixture["sourceFingerprint"] as? String, fingerprint.count == 64,
             fingerprint.allSatisfy({ $0.isASCII && ("0123456789abcdef".contains($0)) }),
+            let packageHash = fixture["packageSHA256"] as? String, packageHash.count == 64,
+            packageHash.allSatisfy({ $0.isASCII && "0123456789abcdef".contains($0) }),
             let version = roleVersion, let abi = roleABI,
             fixture["selectedVersion"] as? String == version,
             input["version"] as? String == version,

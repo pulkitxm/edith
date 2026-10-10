@@ -12,7 +12,8 @@ private func input(owner: String = "plugins") -> NSMutableDictionary {
         "version": "1.0.0", "hostABI": "worker-2",
         "hostedManagedFixture": [
             "schema": 1, "sourceCommit": String(repeating: "a", count: 40),
-            "selectedVersion": "1.0.0", "hostABI": "worker-2",
+            "selectedVersion": "1.0.0", "packageSHA256": String(repeating: "c", count: 64),
+            "hostABI": "worker-2",
             "sourceFingerprint": String(repeating: "b", count: 64),
             "roleDirectory": "/owned/ExtensionWorker.appex/Contents/Resources/Payload/" + owner
                 + "/app.bundle",
@@ -61,6 +62,7 @@ private func route(id: String, directory: String = "/synthetic") -> HostedManage
         location: HostedManagedViewRoute.settingsOwners.contains(id) ? "settings" : "main",
         section: id == "notchShelf" ? "extension" : id, version: "1.0.0", hostABI: "worker-2",
         sourceFingerprint: String(repeating: "a", count: 64),
+        packageSHA256: String(repeating: "a", count: 64),
         sourceCommit: String(repeating: "b", count: 40),
         hostIdentifier: "com.pulkit.edith.tests." + (id == "calendar" ? "remote-" : "worker-")
             + uuid,
@@ -73,21 +75,21 @@ private func route(id: String, directory: String = "/synthetic") -> HostedManage
         let route = route(id: id)
         try route.validate(
             extensionID: id, version: "1.0.0", hostABI: "worker-2",
-            sourceFingerprint: String(repeating: "a", count: 64))
+            packageSHA256: String(repeating: "a", count: 64))
         #expect(throws: (any Error).self) {
             try route.validate(
                 extensionID: "unknown", version: "1.0.0", hostABI: "worker-2",
-                sourceFingerprint: route.sourceFingerprint)
+                packageSHA256: route.packageSHA256)
         }
         #expect(throws: (any Error).self) {
             try route.validate(
                 extensionID: id, version: "2.0.0", hostABI: "worker-2",
-                sourceFingerprint: route.sourceFingerprint)
+                packageSHA256: route.packageSHA256)
         }
         #expect(throws: (any Error).self) {
             try route.validate(
                 extensionID: id, version: "1.0.0", hostABI: "worker-2",
-                sourceFingerprint: String(repeating: "c", count: 64))
+                packageSHA256: String(repeating: "c", count: 64))
         }
     }
 }
