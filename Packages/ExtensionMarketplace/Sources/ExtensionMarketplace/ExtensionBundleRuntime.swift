@@ -260,6 +260,34 @@ public final class ExtensionBundleRuntime {
             .takeUnretainedValue() as? NSViewController
     }
 
+    public func presentation(
+        id: String, context: NSDictionary, compact: Bool, visible: Bool, width: Double,
+        intrinsic: Bool
+    ) throws -> ExtensionBundlePresentation? {
+        let instance = try load(id: id)
+        guard let symbol = dlsym(instance.handle, "edith_extension_presentation_create") else {
+            throw MarketplaceError.invalidBundle
+        }
+        typealias Create = @convention(c) () -> UnsafeMutableRawPointer?
+        let create = unsafeBitCast(symbol, to: Create.self)
+        guard let pointer = create() else { throw MarketplaceError.invalidBundle }
+        let presentation = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        var failure: Error?
+        let factory: @convention(block) () -> NSViewController? = {
+            do { return try self.viewController(id: id, context: context) } catch {
+                failure = error; return nil
+            }
+        }
+        let result = try ExtensionBundlePresentation.make(
+            context: presentation,
+            input: [
+                "compact": compact, "visible": visible, "width": width,
+                "intrinsic": intrinsic,
+            ], factory: factory)
+        if let failure { throw failure }
+        return result
+    }
+
     private func load(id: String) throws -> Loaded {
         if readOnlyPackage == nil {
             guard try !store.pendingRemovals().contains(id) else {
