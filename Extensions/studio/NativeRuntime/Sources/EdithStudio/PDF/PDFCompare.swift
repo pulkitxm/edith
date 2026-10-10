@@ -3,12 +3,12 @@ import Foundation
 import PDFKit
 
 public enum PDFComparison {
-    public enum Side: String, Sendable {
+    public enum Side: String, Codable, Sendable {
         case original
         case revised
     }
 
-    public struct Change: Identifiable, Equatable, Sendable {
+    public struct Change: Identifiable, Codable, Equatable, Sendable {
         public let id: Int
         public let side: Side
         public let text: String
@@ -16,7 +16,7 @@ public enum PDFComparison {
         public let rect: CGRect
     }
 
-    public struct Report: Sendable {
+    public struct Report: Codable, Sendable {
         public let changes: [Change]
         public let originalPages: Int
         public let revisedPages: Int

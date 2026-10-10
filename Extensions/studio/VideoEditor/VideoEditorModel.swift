@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import EdithExtensionSupport
 import Observation
 import UniformTypeIdentifiers
 
@@ -16,6 +17,23 @@ final class VideoEditorModel {
         let microphonePath: String?
         let microphoneOffset: Int
     }
+    let facade: StudioUIFacade?
+    var remoteMetadata: VideoPreviewMetadata?
+    var remoteFrame: CGImage?
+    var remoteFocusFrame: CGImage?
+    var remoteFocusReady = false
+    var remotePlaybackRate: Float = 0
+    private var remoteClient: StudioUIVideoClient?
+    private var transcriptionTask: Task<Void, Never>?
+    private var importTask: Task<Void, Never>?
+    var exporter: VideoExporter { facade?.exporter ?? VideoExporter.shared }
+    var previewMetadata: VideoPreviewMetadata? {
+        remoteMetadata ?? pipeline.map(VideoPreviewMetadata.init)
+    }
+    var remoteSessionID: UUID? { remoteClient?.id }
+    var playbackRate: Float { facade == nil ? player.rate : remotePlaybackRate }
+    var focusReady: Bool { facade == nil ? focusPreviewReady : remoteFocusReady }
+
     var project: VideoProject? {
         didSet {
             reconcileCaptionDrafts()
@@ -47,7 +65,9 @@ final class VideoEditorModel {
     var gifFPS = 15
     var gifWidth = 0
     var gifLoop = true
-    var loopPlayback = false
+    var loopPlayback = false {
+        didSet { remoteClient?.send("studio.ui.video.loop", object: ["enabled": loopPlayback]) }
+    }
     var errorMessage: String?
     var permissionSettingsURL: URL?
     var recentProjects: [VideoProject.Listing] = []
@@ -98,7 +118,7 @@ final class VideoEditorModel {
     private var redoHistory: [VideoProject] = []
     static let maximumUndoSteps = 128
 
-    var duration: Double { pipeline?.duration ?? 0 }
+    var duration: Double { previewMetadata?.duration ?? 0 }
     var canUndo: Bool { !undoHistory.isEmpty }
     var canRedo: Bool { !redoHistory.isEmpty }
     var maximumZoomDuration: Double {
@@ -119,14 +139,19 @@ final class VideoEditorModel {
     init(
         previewBuilder: @escaping (VideoProject) async throws -> VideoRenderPipeline = {
             try await VideoRenderPipeline.make(project: $0, previewOnly: true)
-        }
+        }, facade: StudioUIFacade? = nil
     ) {
+        self.facade = facade
         self.previewBuilder = previewBuilder
         playerSeeker = VideoPreviewSeeker(player: player)
         focusSeeker = VideoPreviewSeeker(player: focusPlayer)
-        liveSync = VideoEditorLiveSync(model: self)
-        refreshRecentProjects()
-        observePlaybackTime()
+        if let facade {
+            remoteClient = StudioUIVideoClient(model: self, facade: facade)
+        } else {
+            liveSync = VideoEditorLiveSync(model: self)
+            refreshRecentProjects()
+            observePlaybackTime()
+        }
     }
 
     private func observePlaybackTime() {
@@ -138,11 +163,20 @@ final class VideoEditorModel {
                     return
                 }
                 self.playhead = time.seconds
+                if self.loopPlayback, self.duration > 0,
+                    time.seconds >= self.duration
+                        - (self.previewMetadata?.frameDuration.seconds ?? 0.03)
+                {
+                    self.seek(to: 0); self.player.play()
+                }
             }
         }
     }
 
     func close() {
+        remoteClient?.close()
+        transcriptionTask?.cancel()
+        importTask?.cancel()
         isClosed = true
         isRebuildingPreview = false
         generation += 1
@@ -163,6 +197,7 @@ final class VideoEditorModel {
     }
 
     func newProject() {
+        if let remoteClient { remoteClient.create(); return }
         openTask?.cancel()
         relinkPanel?.cancel(nil)
         isClosed = false
@@ -180,8 +215,10 @@ final class VideoEditorModel {
     }
 
     func startProject(with urls: [URL]) {
+        if let remoteClient { remoteClient.startProject(urls); return }
         newProject()
-        Task { await addMedia(urls) }
+        importTask?.cancel()
+        importTask = Task { await addMedia(urls) }
     }
 
     func openProject() {
@@ -198,6 +235,7 @@ final class VideoEditorModel {
     }
 
     func openProject(at url: URL) {
+        if let remoteClient { remoteClient.open(url); return }
         openTask?.cancel()
         relinkPanel?.cancel(nil)
         rebuildTask?.cancel()
@@ -274,7 +312,35 @@ final class VideoEditorModel {
         }
     }
 
+    func loadUIProject(_ document: VideoProject) async throws {
+        isClosed = false
+        generation += 1
+        rebuildTask?.cancel(); focusPreviewTask?.cancel(); resetPreviewSeeks()
+        let version = generation
+        let prepared = await document.probingMissingMedia()
+        try Task.checkCancellation()
+        guard !isClosed, version == generation else { throw CancellationError() }
+        replaceProject(prepared); hasUnsavedEdits = false
+        selectedClipID = prepared.clips.first?.id; editingZoomID = nil
+        undoHistory.removeAll(); redoHistory.removeAll()
+        if prepared.fileURL == nil { saveInLibrary() }
+        guard let project else { throw ExtensionPeerError.unavailable }
+        let pipeline = project.clips.isEmpty ? nil : try await previewBuilder(project)
+        try Task.checkCancellation()
+        guard !isClosed, version == generation else { throw CancellationError() }
+        var player: AVPlayer?
+        if let pipeline {
+            let item = AVPlayerItem(asset: pipeline.composition)
+            item.videoComposition = pipeline.videoComposition; item.audioMix = pipeline.audioMix
+            player = AVPlayer(playerItem: item)
+        }
+        acceptExternalProject(project, prepared: pipeline, playbackPlayer: player)
+    }
+
     func refreshRecentProjects() {
+        if facade != nil {
+            recentProjects = facade?.state?.projects.map(\.value) ?? recentProjects; return
+        }
         recentProjects = VideoProject.listProjects()
     }
 
@@ -314,6 +380,7 @@ final class VideoEditorModel {
     }
 
     func discardLocalEditsAndRefresh() {
+        if let remoteClient { remoteClient.refresh(discard: true); return }
         guard !isTranscribing, audioStatus == nil, pendingLoads == 0 else { return }
         titleDraft = nil
         pendingViewEditIDs.removeAll()
@@ -408,12 +475,14 @@ final class VideoEditorModel {
             MainActor.assumeIsolated {
                 guard let self, response == .OK else { return }
                 let urls = panel.urls
-                Task { await self.addMedia(urls) }
+                self.importTask?.cancel()
+                self.importTask = Task { await self.addMedia(urls) }
             }
         }
     }
 
-    private func addMedia(_ urls: [URL]) async {
+    func addMedia(_ urls: [URL]) async {
+        if let remoteClient { await remoteClient.importMedia(urls); return }
         pendingLoads += 1
         defer { pendingLoads -= 1 }
         do {
@@ -579,6 +648,7 @@ final class VideoEditorModel {
     }
 
     private func saveProject(to url: URL) {
+        if let remoteClient, let project { remoteClient.save(project, to: url); return }
         guard var project else { return }
         hasUnsavedEdits = true
         do {
@@ -590,6 +660,7 @@ final class VideoEditorModel {
     }
 
     private func saveInLibrary() {
+        if let remoteClient, let project { remoteClient.persist(project); return }
         guard var project else { return }
         hasUnsavedEdits = true
         do {
@@ -607,7 +678,7 @@ final class VideoEditorModel {
         gif: Bool, quality: VideoExportQuality = .source,
         delivery: VideoDeliverySettings = .init()
     ) {
-        guard pipeline != nil, let project else { return }
+        guard previewMetadata != nil, let project else { return }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [
             gif ? .gif : delivery.codec.isMaster ? .quickTimeMovie : .mpeg4Movie
@@ -622,6 +693,17 @@ final class VideoEditorModel {
             guard !project.protectsMedia(at: url) else {
                 self.errorMessage =
                     "Choose an export destination different from your project and source media."
+                return
+            }
+            if let remoteClient = self.remoteClient {
+                let exporter = self.exporter
+                exporter.start(to: url) { progress in
+                    let report = try await remoteClient.export(
+                        to: url, gif: gif, quality: quality, settings: delivery,
+                        fps: fps, width: width, loop: loop
+                    ) { value in progress(value) }
+                    if let report { exporter.setReport(report, for: url) }
+                }
                 return
             }
             VideoExporter.shared.start(to: url) { progress in
@@ -646,6 +728,7 @@ final class VideoEditorModel {
     }
 
     func togglePlayback() {
+        if let remoteClient { remoteClient.send("studio.ui.video.play"); return }
         if player.rate == 0 {
             if playhead >= duration - 0.1 { seek(to: 0) }
             player.play()
@@ -658,6 +741,10 @@ final class VideoEditorModel {
     }
 
     func seek(to seconds: Double) {
+        if let remoteClient {
+            playhead = min(max(0, seconds), duration);
+            remoteClient.send("studio.ui.video.seek", object: ["time": playhead]); return
+        }
         guard seconds.isFinite else { return }
         let clamped = max(0, min(duration, seconds))
         playhead = clamped
@@ -681,7 +768,7 @@ final class VideoEditorModel {
             return
         }
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             })
         else { return }
@@ -692,7 +779,7 @@ final class VideoEditorModel {
 
     func skipAtPlayhead() {
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             })
         else { return }
@@ -775,7 +862,7 @@ final class VideoEditorModel {
 
     func addZoom() {
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             })
         else { return }
@@ -799,7 +886,7 @@ final class VideoEditorModel {
         focusX = zoom.focusX
         focusY = zoom.focusY
         let midpoint = (zoom.startMs + zoom.endMs) / 2000
-        if let segment = pipeline?.segments.first(where: {
+        if let segment = previewMetadata?.segments.first(where: {
             let ruler = midpoint
             let start = $0.clip.timelineStart + $0.sourceStart - $0.clip.start
             let end = $0.clip.timelineStart + $0.sourceEnd - $0.clip.start
@@ -812,7 +899,7 @@ final class VideoEditorModel {
     }
 
     func outputTime(forRulerTime ruler: Double) -> Double {
-        guard let pipeline else { return 0 }
+        guard let pipeline = previewMetadata else { return 0 }
         if let segment = pipeline.segments.first(where: {
             let start = $0.clip.timelineStart + $0.sourceStart - $0.clip.start
             let end = $0.clip.timelineStart + $0.sourceEnd - $0.clip.start
@@ -833,7 +920,7 @@ final class VideoEditorModel {
                     zoom.startMs >= $0.timelineStart * 1000
                         && zoom.startMs < ($0.timelineStart + $0.duration) * 1000
                 })?.id,
-            let segments = pipeline?.segments.filter({ $0.clip.id == clipID }),
+            let segments = previewMetadata?.segments.filter({ $0.clip.id == clipID }),
             let first = segments.first, let last = segments.last,
             start.isFinite, end.isFinite, end - start >= 0.1
         else { return }
@@ -892,7 +979,7 @@ final class VideoEditorModel {
 
     func addSpeedAtPlayhead() {
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             })
         else { return }
@@ -939,7 +1026,7 @@ final class VideoEditorModel {
     func addCaption() {
         let text = captionText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty,
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             })
         else { return }
@@ -953,11 +1040,13 @@ final class VideoEditorModel {
     }
 
     func generateCaptions() {
+        if remoteAction("captions") { return }
         guard let clip = project?.clips.first(where: { $0.id == selectedClipID }),
             let asset = project?.assets.first(where: { $0.id == clip.assetID })
         else { return }
         isTranscribing = true
-        Task {
+        transcriptionTask?.cancel()
+        transcriptionTask = Task {
             do {
                 let words = try await VideoTranscription.transcribe(asset.url)
                 mutate { $0.addTranscription(assetID: asset.id, words: words) }
@@ -977,7 +1066,7 @@ final class VideoEditorModel {
 
     func seekToWord(_ word: VideoProject.TranscriptWord) {
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 $0.clip.assetID == word.assetID
                     && word.start >= $0.sourceStart && word.start < $0.sourceEnd
             })
@@ -1042,7 +1131,7 @@ final class VideoEditorModel {
 
     func addOverlay(_ type: String) {
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             })
         else { return }
@@ -1053,9 +1142,13 @@ final class VideoEditorModel {
             guard panel.runModal() == .OK, let url = panel.url
             else { return }
             Task {
-                let data = await Task.detached(priority: .utility) {
-                    try? Data(contentsOf: url)
-                }.value
+                let data: Data?
+                if let facade {
+                    data = try? await facade.readFile(url)
+                } else {
+                    data = await Task.detached(priority: .utility) { try? Data(contentsOf: url) }
+                        .value
+                }
                 guard let data else { return }
                 let mime =
                     UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "image/png"
@@ -1179,7 +1272,7 @@ final class VideoEditorModel {
 
     func addFullCamera() {
         guard
-            let segment = pipeline?.segments.first(where: {
+            let segment = previewMetadata?.segments.first(where: {
                 playhead >= $0.outputStart && playhead < $0.outputEnd
             }), project?.assets.first(where: { $0.id == segment.clip.assetID })?.cameraTrack != nil
         else { return }
@@ -1226,6 +1319,7 @@ final class VideoEditorModel {
 
     private func persistCurrentProject() {
         hasUnsavedEdits = true
+        if let remoteClient, let project { remoteClient.persist(project); return }
         guard var project, let url = project.fileURL else { return }
         do {
             try project.save(to: url)
@@ -1235,6 +1329,7 @@ final class VideoEditorModel {
     }
 
     private func updateFocusPreview() {
+        if let remoteClient { remoteFocusReady = false; remoteClient.refresh(); return }
         focusPreviewTask?.cancel()
         focusSeeker?.reset()
         focusPlayer.currentItem?.cancelPendingSeeks()
@@ -1275,6 +1370,7 @@ final class VideoEditorModel {
     }
 
     func rebuild(refreshFocusPreview: Bool = true) {
+        if let remoteClient, let project { remoteClient.persist(project); return }
         rebuildTask?.cancel()
         isRebuildingPreview = false
         generation += 1
@@ -1317,4 +1413,96 @@ final class VideoEditorModel {
             }
         }
     }
+    func applyRemote(_ value: StudioUIVideoState, preserveProject: Bool) throws {
+        guard !isClosed else { return }
+        if let state = value.project {
+            let next = try state.value
+            if !preserveProject { project = next; hasUnsavedEdits = false }
+            remoteMetadata = try value.preview.map { try VideoPreviewMetadata($0, project: next) }
+            if selectedClipID == nil { selectedClipID = project?.clips.first?.id }
+        } else if !preserveProject {
+            project = nil; remoteMetadata = nil
+        }
+        remotePlaybackRate = value.rate
+        if value.rate != 0 || !preserveProject { playhead = value.playhead }
+        isRebuildingPreview = value.preparing
+        externalSyncMessage = value.externalSyncMessage
+        permissionSettingsURL = value.permissionSettingsURL
+        facade?.exporter.applyRemote(value.export)
+        audioStatus = value.audioStatus; isTranscribing = value.transcribing
+        silenceClipID = value.silenceClipID; silentRanges = value.silentRanges
+        recentProjects = value.recent.map(\.value)
+        if let error = value.error { errorMessage = error }
+    }
+
+    func remoteAction(_ name: String, object: [String: Any] = [:]) -> Bool {
+        guard let remoteClient else { return false }
+        var fields = object; fields["action"] = name
+        if let selectedClipID { fields["clipID"] = selectedClipID }
+        remoteClient.send("studio.ui.video.action", object: fields)
+        return true
+    }
+
+    func pausePlayback() {
+        if let remoteClient {
+            remoteClient.send("studio.ui.video.pause")
+        } else {
+            player.pause(); focusPlayer.pause()
+        }
+    }
+
+    func attachRemoteCommand(_ request: VideoEditorService.OpenRequest) async throws {
+        guard let remoteClient else { throw ExtensionPeerError.unavailable }
+        try await remoteClient.attach(request)
+    }
+
+    func mountRemoteCommand(_ request: VideoEditorService.OpenRequest) async throws {
+        guard let remoteClient else { throw ExtensionPeerError.unavailable }
+        try await remoteClient.mounted(request)
+    }
+
+    func exportRemoteAudio(to url: URL, settings: VideoAudioDeliverySettings) -> Bool {
+        guard let remoteClient else { return false }
+        let exporter = self.exporter
+        exporter.start(to: url) { progress in
+            let report = try await remoteClient.exportAudio(to: url, settings: settings) { value in
+                progress(value)
+            }
+            exporter.setAudioReport(report, for: url)
+        }
+        return true
+    }
+
+    func openPermissionSettings() {
+        guard let url = permissionSettingsURL else { return }
+        if let facade {
+            runRemoteFile {
+                let _: [String: String] = try await facade.read(
+                    "studio.ui.media.settings", object: ["kind": "speech"])
+            }
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+        permissionSettingsURL = nil; errorMessage = nil
+    }
+
+    func runRemoteFile(_ operation: @escaping @MainActor () async throws -> Void) {
+        importTask?.cancel()
+        importTask = Task { [weak self] in
+            do { try await operation() } catch {
+                if !Task.isCancelled { self?.errorMessage = error.localizedDescription }
+            }
+        }
+    }
+
+    func stopAndWait() async {
+        let owned = [
+            rebuildTask, openTask, focusPreviewTask, audioTask, transcriptionTask, importTask,
+        ].compactMap { $0 }
+        let synchronization = liveSync?.stop()
+        close()
+        for task in synchronization ?? [] { await task.value }
+        for task in owned { await task.value }
+    }
+
 }

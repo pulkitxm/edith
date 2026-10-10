@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
+import EdithExtensionCommands
 import Foundation
 import SwiftUI
 
@@ -8,12 +9,71 @@ import SwiftUI
 @objc(EdithStudioExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: StudioModel?
+    private var uiModel: StudioModel?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
+    private let recorderCommands = StudioUIRecorderCommands()
+    private let videoSessions = StudioUIVideoSessions()
+    private let resources = StudioUIResources()
+    private let work = StudioUILongOperations()
+    private let streams = try! ExtensionCLIStreams(owner: "studio")
+
+    override init() {
+        super.init()
+        work.onChange = { [weak self] state in self?.videoSessions.recordExport(state) }
+        videoSessions.onExport = { [weak self] state in self?.model?.exportState = state }
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let model = self.model else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("studio.cli.") {
+                return try self.streams.invoke(
+                    StudioCommand.self, operation: command, prefix: "studio.cli", payload: payload)
+            }
+            if command.hasPrefix("studio.ui.") {
+                do {
+                    if command.hasPrefix("studio.ui.record.") {
+                        return try await self.recorderCommands.execute(
+                            command, payload: payload, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.media.") {
+                        return try await StudioUIMediaCommands.execute(
+                            command, payload: payload, resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.video.") {
+                        return try await self.videoSessions.execute(
+                            command, payload: payload, resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.blob.") {
+                        return try self.resources.invoke(command, payload: payload)
+                    }
+                    if command.hasPrefix("studio.ui.work.") {
+                        return try self.work.invoke(command, payload: payload)
+                    }
+                    if command.hasPrefix("studio.ui.pdf.") {
+                        return try await StudioUIPDFCommands.execute(
+                            command, payload: payload, model: model,
+                            resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.image.") {
+                        return try await StudioUIImageCommands.execute(
+                            command, payload: payload, model: model,
+                            resources: self.resources, work: self.work)
+                    }
+                    if command.hasPrefix("studio.ui.") {
+                        return try await StudioUICommands.execute(
+                            command, payload: payload, model: model)
+                    }
+                } catch is CancellationError { throw CancellationError() } catch {
+                    return try JSONEncoder().encode(StudioUIFailure(error))
+                }
+            }
+            if command == "studio.cli" {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await StudioCLIExecution.run(request, model: model))
+            }
             if command == "surface.snapshot" || command == "surface.perform" {
                 return try await SurfaceCommandService.execute(
                     providerID: "studio", command: command, payload: payload,
@@ -33,9 +93,18 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        shutdown()
+        let hadEngine = model != nil
+        commands.shutdown()
+        streams.stop()
         Task {
-            if #available(macOS 15.0, *) {
+            await streams.stopAndWait()
+            await work.stopAndWait()
+            await videoSessions.stopAndWait()
+            await commands.shutdownAndWait()
+            if hadEngine { await VideoEditorOpenBridge.shared.stopAndWait() }
+            await model?.stopAndWait()
+            shutdown()
+            if hadEngine, #available(macOS 15.0, *) {
                 await StudioRecordBridge.shared.shutdown(); await VideoRecorder.shutdownAll()
             }
             completion()
@@ -53,7 +122,9 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard Bundle.main.bundleURL.pathExtension != "appex",
+                input["remoteUI"] as? Bool != true,
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if model == nil {
@@ -62,30 +133,62 @@ final class ExtensionRuntime: NSObject {
                     privacy = SurfacePrivacyState(channel: channel)
                 }
             }
+            model?.start()
             TextEditingCommands.install()
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "studio", let client = configuration.engineClient,
+                model == nil
+            else { return ["ok": false] as NSDictionary }
+            uiModel?.shutdown()
+            let facade = StudioUIFacade(client: client)
+            uiModel = StudioModel(loadsState: false, facade: facade)
+            TextEditingCommands.install()
+            if let channel = ExtensionSharedState.current {
+                privacy = SurfacePrivacyState(channel: channel)
+            }
+        case "stopUI":
+            TextEditingCommands.shutdown()
+            uiModel?.shutdown()
+            uiModel = nil
+            privacy?.shutdown()
+            privacy = nil
         case "view":
-            guard let model else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     StudioPage(model: model).environment(\.studioPrivacy, self.privacy)
+                        .environment(\.studioFacade, model.facade)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": privacy?.refresh()
         case "stop": shutdown()
-        case "status": return ["ok": true, "running": model != nil] as NSDictionary
+        case "status":
+            return [
+                "ok": true, "running": model != nil,
+                "preventsQuit": videoSessions.export?.phase == "running",
+            ] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
     }
 
     private func shutdown() {
+        let hadEngine = model != nil
+        streams.stop()
+        resources.shutdown()
+        Task {
+            await work.stopAndWait(); await videoSessions.stopAndWait()
+        }
         commands.shutdown()
         TextEditingCommands.shutdown()
+        uiModel?.shutdown()
+        uiModel = nil
         model?.shutdown()
         model = nil
         privacy?.shutdown()
         privacy = nil
-        VideoEditorOpenBridge.shared.shutdown()
+        if hadEngine { VideoEditorOpenBridge.shared.shutdown() }
     }
 }
 

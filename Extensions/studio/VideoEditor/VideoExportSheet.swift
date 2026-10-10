@@ -47,6 +47,7 @@ struct VideoExportSheet: View {
     let model: VideoEditorModel
     var exporter = VideoExporter.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.studioFacade) private var facade
     @State private var format = "mp4"
     @State private var quality: VideoExportQuality = .source
     @State private var delivery = VideoDeliverySettings()
@@ -79,12 +80,14 @@ struct VideoExportSheet: View {
                 })
             if format == "mp4" {
                 Picker("Resolution", selection: $quality) {
-                    ForEach(VideoExportQuality.available(for: model.pipeline?.canvas ?? .zero)) {
+                    ForEach(
+                        VideoExportQuality.available(for: model.previewMetadata?.canvas ?? .zero)
+                    ) {
                         option in
                         Text(option.title).tag(option)
                     }
                 }
-                if let size = model.pipeline?.canvas {
+                if let size = model.previewMetadata?.canvas {
                     Text(
                         "Project: \(Int(size.width)) × \(Int(size.height)) at \(sourceFPS.formatted(.number.precision(.fractionLength(2)))) fps."
                     )
@@ -113,13 +116,13 @@ struct VideoExportSheet: View {
                     )
                 ) {
                     Text("Match source").tag(0)
-                    if (model.pipeline?.canvas.width ?? 0) >= 480 {
+                    if (model.previewMetadata?.canvas.width ?? 0) >= 480 {
                         Text("480 px").tag(480)
                     }
-                    if (model.pipeline?.canvas.width ?? 0) >= 720 {
+                    if (model.previewMetadata?.canvas.width ?? 0) >= 720 {
                         Text("720 px").tag(720)
                     }
-                    if (model.pipeline?.canvas.width ?? 0) >= 960 {
+                    if (model.previewMetadata?.canvas.width ?? 0) >= 960 {
                         Text("960 px").tag(960)
                     }
                 }
@@ -140,12 +143,12 @@ struct VideoExportSheet: View {
                     }
                 }
                 .buttonStyle(.edith(.primary))
-                .disabled(model.pipeline == nil)
+                .disabled(model.previewMetadata == nil)
             }
         }
         .onAppear {
             if model.gifFPS > Int(sourceFPS) { model.gifFPS = 10 }
-            if model.gifWidth > Int(model.pipeline?.canvas.width ?? 0) {
+            if model.gifWidth > Int(model.previewMetadata?.canvas.width ?? 0) {
                 model.gifWidth = 0
             }
         }
@@ -323,7 +326,7 @@ struct VideoExportSheet: View {
                 HStack {
                     Spacer()
                     Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([job.destination])
+                        StudioFileActions.reveal([job.destination], facade: facade)
                     }
                     Button("Done") { close() }
                         .buttonStyle(.edith(.primary))
@@ -366,7 +369,7 @@ struct VideoExportSheet: View {
     }
 
     private var sourceFPS: Double {
-        guard let duration = model.pipeline?.videoComposition.frameDuration.seconds,
+        guard let duration = model.previewMetadata?.frameDuration.seconds,
             duration > 0
         else { return 30 }
         return 1 / duration

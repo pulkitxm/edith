@@ -11,7 +11,16 @@ extension VideoEditorModel {
         defer { setPendingViewEdit(pendingID, hasChanges: false) }
         var candidate = snapshot
         try candidate.setFrameSampling(mode, clipID: clipID)
-        if mode == .nearest { try await candidate.validateFrameSampling() }
+        if mode == .nearest {
+            if let facade {
+                let resource = try await facade.upload(StudioUIVideoProject(candidate))
+                let _: [String: String] = try await facade.perform(
+                    "studio.ui.media.frameSampling",
+                    object: ["project": try facade.object(resource)])
+            } else {
+                try await candidate.validateFrameSampling()
+            }
+        }
         try Task.checkCancellation()
         guard let current = project, current.id == snapshot.id,
             current.fileURL == snapshot.fileURL, selectedClipID == clipID,

@@ -17,8 +17,10 @@ public enum ImageEditRenderer {
     }
 
     public static func render(
-        document: ImageEditDocument, source: CGImage, maxPixelSize: Int? = nil
+        document: ImageEditDocument, source: CGImage, maxPixelSize: Int? = nil,
+        cancelled: @Sendable () -> Bool = { Task.isCancelled }
     ) throws -> CGImage {
+        if cancelled() { throw StudioError.cancelled }
         let scaled = previewSource(document: document, source: source, maxPixelSize: maxPixelSize)
         let geometry = try geometryImage(document: document, source: scaled)
         guard let cropped = StudioImageOps.cropped(geometry, to: document.crop.clamped) else {
@@ -30,6 +32,7 @@ public enum ImageEditRenderer {
             intensity: document.filterIntensity)
         let size = CGSize(width: cropped.width, height: cropped.height)
         for layer in document.layers where layer.isRedaction && !layer.isHidden {
+            if cancelled() { throw StudioError.cancelled }
             if case let .redaction(style) = layer.content {
                 working = redact(working, rect: layer.frame, style: style, canvas: size)
             }
@@ -38,7 +41,8 @@ public enum ImageEditRenderer {
             let adjusted = StudioImageOps.render(working, extent: CGRect(origin: .zero, size: size))
         else { throw StudioError.failed("The image could not be rendered.") }
         var composed = try drawLayers(
-            document.layers.filter { !$0.isRedaction && !$0.isHidden }, over: adjusted)
+            document.layers.filter { !$0.isRedaction && !$0.isHidden }, over: adjusted,
+            cancelled: cancelled)
         if let frame = document.frame {
             composed = applyFrame(frame, to: composed) ?? composed
         }
@@ -48,12 +52,15 @@ public enum ImageEditRenderer {
         if let maxPixelSize, maxPixelSize > 0 {
             composed = StudioImageOps.fitted(composed, maxDimension: maxPixelSize)
         }
+        if cancelled() { throw StudioError.cancelled }
         return composed
     }
 
     public static func geometryPreview(
-        document: ImageEditDocument, source: CGImage, maxPixelSize: Int? = nil
+        document: ImageEditDocument, source: CGImage, maxPixelSize: Int? = nil,
+        cancelled: @Sendable () -> Bool = { Task.isCancelled }
     ) throws -> CGImage {
+        if cancelled() { throw StudioError.cancelled }
         var full = document
         full.crop = .full
         let scaled = previewSource(document: full, source: source, maxPixelSize: maxPixelSize)
@@ -66,11 +73,27 @@ public enum ImageEditRenderer {
             ?? geometry
     }
 
-    public static func export(document: ImageEditDocument, to url: URL) throws {
-        let image = try render(document: document)
+    public static func export(
+        document: ImageEditDocument, to url: URL,
+        cancelled: @Sendable () -> Bool = { Task.isCancelled }
+    ) throws {
+        if cancelled() { throw StudioError.cancelled }
+        let source = try loadSource(document)
+        let image = try render(document: document, source: source, cancelled: cancelled)
         let format = StudioImageFormat.of(url) ?? document.outputFormat
+        let temporary = url.deletingLastPathComponent().appendingPathComponent(
+            ".studio-image-\(UUID().uuidString).\(format.fileExtension)")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        if cancelled() { throw StudioError.cancelled }
         try StudioImageIO.write(
-            image, to: url, format: format, options: .init(quality: document.export.quality))
+            image, to: temporary, format: format,
+            options: .init(quality: document.export.quality))
+        if cancelled() { throw StudioError.cancelled }
+        if FileManager.default.fileExists(atPath: url.path) {
+            _ = try FileManager.default.replaceItemAt(url, withItemAt: temporary)
+        } else {
+            try FileManager.default.moveItem(at: temporary, to: url)
+        }
     }
 
     static func previewSource(
@@ -351,7 +374,10 @@ public enum ImageEditRenderer {
         return patch.composited(over: image)
     }
 
-    public static func drawLayers(_ layers: [ImageLayer], over image: CGImage) throws -> CGImage {
+    public static func drawLayers(
+        _ layers: [ImageLayer], over image: CGImage,
+        cancelled: @Sendable () -> Bool = { Task.isCancelled }
+    ) throws -> CGImage {
         guard !layers.isEmpty else { return image }
         let width = image.width
         let height = image.height
@@ -361,6 +387,7 @@ public enum ImageEditRenderer {
         let canvas = CGSize(width: width, height: height)
         context.draw(image, in: CGRect(origin: .zero, size: canvas))
         for layer in layers {
+            if cancelled() { throw StudioError.cancelled }
             draw(layer, in: context, canvas: canvas)
         }
         guard let output = context.makeImage() else {

@@ -36,15 +36,16 @@ final class VideoEditorOpenBridge {
     weak var activeEditor: VideoEditorModel?
     private var request: VideoEditorService.OpenRequest?
     private var deadline: Date?
-    private var observer: NSObjectProtocol?
+    private var openWait: CheckedContinuation<Void, Error>?
     private var timeoutTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
+    private var ownedTasks: [UUID: Task<Void, Never>] = [:]
     private let reply: @MainActor ([String: Any]) -> Void
     private let present: @MainActor () -> Void
 
     init(
         reply: @escaping @MainActor ([String: Any]) -> Void = {
-            IPC.post(IPC.Name.videoEditorOpenResult, userInfo: $0)
+            _ = $0
         },
         present: @escaping @MainActor () -> Void = {}
     ) {
@@ -52,14 +53,24 @@ final class VideoEditorOpenBridge {
         self.present = present
     }
 
-    func install() {
-        guard observer == nil else { return }
-        observer = IPC.observe(IPC.Name.requestVideoEditorOpen) { [weak self] info in
-            MainActor.assumeIsolated {
-                guard let request = VideoEditorService.OpenRequest(payload: info),
-                    let deadline = info["deadline"] as? Double
-                else { return }
-                self?.receive(request, deadline: Date(timeIntervalSince1970: deadline))
+    func open(_ next: VideoEditorService.OpenRequest, timeout: Double) async throws {
+        guard request == nil, openWait == nil else {
+            throw VideoEditorService.Failure("editor_busy", "Another project is opening.")
+        }
+        try Task.checkCancellation()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                openWait = continuation
+                receive(next, deadline: Date().addingTimeInterval(timeout))
+            }
+        } onCancel: {
+            Task { @MainActor in
+                guard self.request == next else { return }
+                self.pending?.model.close()
+                let continuation = self.openWait
+                self.openWait = nil
+                self.clear()
+                continuation?.resume(throwing: CancellationError())
             }
         }
     }
@@ -75,6 +86,10 @@ final class VideoEditorOpenBridge {
             fail(next, code: "open_timeout", message: "The project-open request expired.")
             return
         }
+        guard ownedTasks.count <= 6 else {
+            fail(next, code: "editor_busy", message: "Previous editor tasks are still stopping.")
+            return
+        }
         guard activeEditor?.blocksCommandOpen != true else {
             fail(
                 next, code: "editor_busy",
@@ -83,20 +98,20 @@ final class VideoEditorOpenBridge {
         }
         request = next
         self.deadline = deadline
-        timeoutTask = Task { [weak self] in
+        timeoutTask = ownTask { [weak self] in
             try? await Task.sleep(for: .seconds(max(0, deadline.timeIntervalSinceNow)))
             guard !Task.isCancelled, let self, self.request == next else { return }
             self.finishFailure(
                 next, code: "open_timeout",
                 message: "The native editor did not mount this project in time.")
         }
-        loadTask = Task { [weak self] in
+        loadTask = ownTask { [weak self] in
             guard let self else { return }
             let model = VideoEditorModel()
             do {
                 try await model.loadCommandProject(next)
                 try Task.checkCancellation()
-                guard self.request == next else { model.close(); return }
+                guard self.request == next else { await model.stopAndWait(); return }
                 guard activeEditor?.blocksCommandOpen != true else {
                     throw VideoEditorService.Failure(
                         "editor_busy", "The editor has unsaved changes or an active task.")
@@ -104,7 +119,7 @@ final class VideoEditorOpenBridge {
                 pending = Presentation(request: next, model: model)
                 present()
             } catch {
-                model.close()
+                await model.stopAndWait()
                 guard self.request == next else { return }
                 finishFailure(
                     next, code: (error as? VideoEditorService.Failure)?.code ?? "open_failed",
@@ -131,6 +146,8 @@ final class VideoEditorOpenBridge {
             payload["version"] = 1
             clear()
             reply(payload)
+            openWait?.resume()
+            openWait = nil
         } catch {
             finishFailure(
                 next, code: (error as? VideoEditorService.Failure)?.code ?? "open_failed",
@@ -138,13 +155,37 @@ final class VideoEditorOpenBridge {
         }
     }
 
+    func reject(_ requestID: String, message: String) {
+        guard let request, request.requestID == requestID else { return }
+        finishFailure(request, code: "editor_busy", message: message)
+    }
+
     func shutdown() {
-        if let observer { NotificationCenter.default.removeObserver(observer) }
-        observer = nil
+        openWait?.resume(throwing: CancellationError())
+        openWait = nil
         pending?.model.close()
         activeEditor?.close()
         activeEditor = nil
         clear()
+    }
+
+    func stopAndWait() async {
+        let tasks = Array(ownedTasks.values)
+        let models = [pending?.model, activeEditor].compactMap { $0 }
+        for task in tasks { task.cancel() }
+        for model in models { await model.stopAndWait() }
+        shutdown()
+        for task in tasks { await task.value }
+    }
+
+    private func ownTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let token = UUID()
+        let task = Task { [weak self] in
+            defer { self?.ownedTasks[token] = nil }
+            await operation()
+        }
+        ownedTasks[token] = task
+        return task
     }
 
     private func clear() {
@@ -171,5 +212,7 @@ final class VideoEditorOpenBridge {
         payload["code"] = code
         payload["error"] = message
         reply(payload)
+        openWait?.resume(throwing: VideoEditorService.Failure(code, message))
+        openWait = nil
     }
 }

@@ -14,7 +14,8 @@ final class StudioJob: Identifiable {
         case failed(String)
     }
 
-    let id = UUID()
+    let id: UUID
+    let facade: StudioUIFacade?
     let tool: StudioTool
     var inputs: [URL]
     var settings: StudioSettings
@@ -28,7 +29,13 @@ final class StudioJob: Identifiable {
     let preview = StudioPreviewModel()
     private var task: Task<Void, Never>?
 
-    init(tool: StudioTool, inputs: [URL], settings: StudioSettings? = nil) {
+    init(
+        tool: StudioTool, inputs: [URL], settings: StudioSettings? = nil,
+        id: UUID = UUID(), facade: StudioUIFacade? = nil
+    ) {
+        self.id = id
+        self.facade = facade
+        preview.facade = facade
         self.tool = tool
         self.inputs = StudioJobInputs.accepted(inputs, by: tool)
         self.settings = settings ?? tool.defaultSettings
@@ -74,7 +81,15 @@ final class StudioJob: Identifiable {
         destination: StudioDestination, environment: StudioEnvironment,
         onFinish: @escaping @MainActor (StudioJob) -> Void
     ) {
-        guard task == nil else { return }
+        guard task == nil, !isRunning else { return }
+        if let facade {
+            phase = .running
+            progress = 0
+            result = nil
+            startedAt = Date()
+            facade.run(self, onFinish: onFinish)
+            return
+        }
         task?.cancel()
         let tool = self.tool
         let inputs = self.inputs
@@ -95,6 +110,7 @@ final class StudioJob: Identifiable {
         }
         StudioRunRegistry.track(self)
         task = Task { [weak self] in
+            defer { if let self { self.task = nil; StudioRunRegistry.release(self) } }
             let outcome: Result<StudioRunResult, Error>
             do {
                 let value = try await StudioRunner.run(
@@ -120,10 +136,31 @@ final class StudioJob: Identifiable {
     }
 
     func cancel() {
+        facade?.cancel(self)
         task?.cancel()
-        task = nil
         if phase == .running { phase = .failed(StudioError.cancelled.localizedDescription) }
         StudioRunRegistry.release(self)
+    }
+
+    func stopAndWait() async {
+        let pending = task
+        cancel()
+        await pending?.value
+    }
+
+    func apply(_ state: StudioUIJobState) {
+        guard state.id == id else { return }
+        progress = state.progress
+        unit = state.unit
+        units = state.units
+        status = state.status
+        result = state.result?.value
+        switch state.phase {
+        case "running": phase = .running
+        case "finished": phase = .finished
+        case "failed": phase = .failed(state.failure ?? "The operation failed.")
+        default: phase = .editing
+        }
     }
 
     func reset() {

@@ -30,13 +30,16 @@ struct StudioThumbnail: View {
     var side: CGFloat = 160
     var corner: CGFloat = 10
     @State private var image: NSImage?
+    @Environment(\.studioFacade) private var facade
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: UIScale.pt(corner))
                 .fill(DashSkin.grid(scheme == .dark))
-            if let image = image ?? StudioThumbnails.shared.cached(url, side: side) {
+            if let image = image
+                ?? (facade == nil ? StudioThumbnails.shared.cached(url, side: side) : nil)
+            {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -50,6 +53,10 @@ struct StudioThumbnail: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: UIScale.pt(corner)))
         .pageTask(id: url) {
+            if let facade {
+                image = try? await facade.thumbnail(url, side: side)
+                return
+            }
             image = StudioThumbnails.shared.cached(url, side: side)
             if image == nil {
                 image = await StudioThumbnails.shared.thumbnail(for: url, side: side)
@@ -271,32 +278,51 @@ enum StudioEngineText {
 }
 
 struct StudioDestinationPicker: View {
-    @AppStorage(AppStorageKeys.Studio.destination, store: SharedDefaults.store) private var mode =
-        StudioDestinationMode.original.rawValue
-    @AppStorage(AppStorageKeys.Studio.folder, store: SharedDefaults.store) private var folder = ""
+    let model: StudioModel
+    private var mode: Binding<String> {
+        Binding(
+            get: {
+                model.facade == nil
+                    ? model.defaults.string(forKey: AppStorageKeys.Studio.destination)
+                        ?? StudioDestinationMode.original.rawValue : model.destinationMode
+            },
+            set: { model.setDestination(mode: $0, folder: folder.wrappedValue) })
+    }
+    private var folder: Binding<String> {
+        Binding(
+            get: {
+                model.facade == nil
+                    ? model.defaults.string(forKey: AppStorageKeys.Studio.folder)
+                        ?? "" : model.destinationFolder
+            },
+            set: { model.setDestination(mode: mode.wrappedValue, folder: $0) })
+    }
 
     var body: some View {
         HStack(spacing: UIScale.pt(8)) {
-            Picker("Save results", selection: $mode) {
+            Picker("Save results", selection: mode) {
                 ForEach(StudioDestinationMode.allCases, id: \.rawValue) { mode in
                     Text(mode.title).tag(mode.rawValue)
                 }
             }
             .fixedSize()
-            if mode == StudioDestinationMode.folder.rawValue {
+            if mode.wrappedValue == StudioDestinationMode.folder.rawValue {
                 Button(
-                    folder.isEmpty
-                        ? "Choose folder…" : URL(fileURLWithPath: folder).lastPathComponent
+                    folder.wrappedValue.isEmpty
+                        ? "Choose folder…"
+                        : URL(fileURLWithPath: folder.wrappedValue).lastPathComponent
                 ) {
                     let panel = NSOpenPanel()
                     panel.canChooseDirectories = true
                     panel.canChooseFiles = false
                     panel.canCreateDirectories = true
                     panel.prompt = "Use folder"
-                    if panel.runModal() == .OK, let url = panel.url { folder = url.path }
+                    if panel.runModal() == .OK, let url = panel.url {
+                        folder.wrappedValue = url.path
+                    }
                 }
                 .buttonStyle(.edith(.secondary))
-                .help(folder.isEmpty ? "Pick where results go" : folder)
+                .help(folder.wrappedValue.isEmpty ? "Pick where results go" : folder.wrappedValue)
             }
         }
     }
@@ -318,13 +344,21 @@ struct StudioToast: View {
 }
 
 enum StudioFileActions {
-    static func reveal(_ urls: [URL]) {
+    @MainActor static func reveal(_ urls: [URL], facade: StudioUIFacade? = nil) {
         guard !urls.isEmpty else { return }
-        Task { await StudioFinderReveal.reveal(urls) }
+        if let facade {
+            facade.action("studio.ui.reveal", object: ["paths": urls.map(\.path)])
+        } else {
+            Task { await StudioFinderReveal.reveal(urls) }
+        }
     }
 
-    static func open(_ url: URL) {
-        StudioFinderReveal.open(url)
+    @MainActor static func open(_ url: URL, facade: StudioUIFacade? = nil) {
+        if let facade {
+            facade.action("studio.ui.open", object: ["path": url.path])
+        } else {
+            StudioFinderReveal.open(url)
+        }
     }
 
     static func describe(_ facts: StudioFileFacts?, kind: StudioKind) -> String {

@@ -146,7 +146,7 @@ struct StudioRecentRow: View {
             Spacer(minLength: UIScale.pt(8))
             Button("Add to Files") { model.add(run.outputs) }
                 .buttonStyle(.edith(.toolbar))
-            Button("Show in Finder") { StudioFileActions.reveal(run.outputs) }
+            Button("Show in Finder") { StudioFileActions.reveal(run.outputs, facade: model.facade) }
                 .buttonStyle(.edith(.toolbar))
         }
         .padding(.horizontal, UIScale.pt(12))

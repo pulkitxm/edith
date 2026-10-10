@@ -75,7 +75,6 @@ enum StudioSurface {
                 "open:" + identifier($0.url) == action
             })
         {
-            ExtensionPresentation.showWindow()
             model.add([file.url])
             let toolID: String?
             switch file.url.studioKind {
@@ -89,13 +88,14 @@ enum StudioSurface {
             } else {
                 model.tab = .files; model.route = .home; model.selection = [file.url]
             }
+            model.requestEmbeddedPresentation()
         } else if action.hasPrefix("project:"),
             let project = VideoProject.listProjects().first(where: {
                 "project:" + identifier($0.url) == action
             })
         {
-            ExtensionPresentation.showWindow()
             model.openVideoProject(project.url)
+            model.requestEmbeddedPresentation()
         } else if action.hasPrefix("cancel:"),
             let job = model.jobs.first(where: {
                 "cancel:" + $0.id.uuidString == action && $0.isRunning

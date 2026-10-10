@@ -174,6 +174,7 @@ extension VideoProject {
 
 extension VideoEditorModel {
     func detachAudio(clipID: String) {
+        if remoteAction("detach", object: ["clipID": clipID]) { return }
         guard audioTask == nil else { return }
         guard let project,
             let clip = project.clips.first(where: { $0.id == clipID }),

@@ -360,7 +360,12 @@ struct StudioSpanField: View {
                 duration = nil
                 return
             }
-            duration = await StudioMediaDuration.seconds(url)
+            if let facade = job.facade {
+                duration = try? await facade.read(
+                    "studio.ui.media.duration", object: ["path": url.path])
+            } else {
+                duration = await StudioMediaDuration.seconds(url)
+            }
         }
     }
 
@@ -476,7 +481,11 @@ struct StudioRectField: View {
                 image = nil
                 return
             }
-            image = await StudioThumbnails.shared.thumbnail(for: url, side: 320)
+            if let facade = job.facade {
+                image = try? await facade.thumbnail(url, side: 320)
+            } else {
+                image = await StudioThumbnails.shared.thumbnail(for: url, side: 320)
+            }
         }
     }
 }

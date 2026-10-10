@@ -146,21 +146,33 @@ extension VideoEditorModel {
             UTType(filenameExtension: "vtt") ?? .plainText,
         ]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do {
-            let cues = VideoSubtitle.parse(try String(contentsOf: url, encoding: .utf8))
-            guard !cues.isEmpty else {
-                throw VideoRenderPipeline.RenderError.exportFailed(
-                    "No valid subtitle cues were found.")
-            }
-            mutate { document in
-                for cue in cues where cue.start < duration {
-                    document.addText(
-                        cue.text, startMs: rulerTime(at: cue.start) * 1000,
-                        endMs: rulerTime(at: min(duration, cue.end)) * 1000)
+        if facade != nil {
+            readRemoteFile(url) { [weak self] data in
+                guard let text = String(data: data, encoding: .utf8) else {
+                    throw ExtensionPeerError.invalidRequest
                 }
+                try self?.applyImportedCaptions(text)
             }
-            rebuild()
-        } catch { errorMessage = error.localizedDescription }
+        } else {
+            do { try applyImportedCaptions(String(contentsOf: url, encoding: .utf8)) } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func applyImportedCaptions(_ text: String) throws {
+        let cues = VideoSubtitle.parse(text)
+        guard !cues.isEmpty else {
+            throw VideoRenderPipeline.RenderError.exportFailed("No valid subtitle cues were found.")
+        }
+        mutate { document in
+            for cue in cues where cue.start < duration {
+                document.addText(
+                    cue.text, startMs: rulerTime(at: cue.start) * 1000,
+                    endMs: rulerTime(at: min(duration, cue.end)) * 1000)
+            }
+        }
+        rebuild()
     }
 
     func exportCaptions(vtt: Bool) {
@@ -174,6 +186,9 @@ extension VideoEditorModel {
             let end = captionOutputRange(caption).end
             return end > start ? VideoSubtitle(start: start, end: end, text: caption.text) : nil
         }.sorted { $0.start < $1.start }
+        if facade != nil {
+            writeRemoteFile(Data(VideoSubtitle.encode(cues, vtt: vtt).utf8), to: url); return
+        }
         do {
             try VideoSubtitle.encode(cues, vtt: vtt).write(
                 to: url, atomically: true, encoding: .utf8)

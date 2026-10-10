@@ -4,7 +4,7 @@ import EdithExtensionUI
 import Foundation
 import SwiftUI
 
-struct VideoAudioEnvelope: Sendable {
+struct VideoAudioEnvelope: Codable, Sendable {
     let peaks: [Float]
     let interval: Double
     let duration: Double
@@ -35,6 +35,16 @@ struct VideoAudioEnvelope: Sendable {
                 throw VideoRenderPipeline.RenderError.exportFailed(
                     "This source has no audio track.")
             }
+            let descriptions = try await track.load(.formatDescriptions)
+            let channels = max(
+                1,
+                min(
+                    32,
+                    Int(
+                        descriptions.first.flatMap {
+                            CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee
+                                .mChannelsPerFrame
+                        } ?? 1)))
             let interval = max(0.02, duration / 200_000)
             let bucketSize = max(1, Int(interval * 8000))
             let reader = try AVAssetReader(asset: asset)
@@ -42,7 +52,7 @@ struct VideoAudioEnvelope: Sendable {
                 track: track,
                 outputSettings: [
                     AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 8000,
-                    AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 32,
+                    AVNumberOfChannelsKey: channels, AVLinearPCMBitDepthKey: 32,
                     AVLinearPCMIsFloatKey: true, AVLinearPCMIsNonInterleaved: false,
                 ])
             reader.add(output)
@@ -61,8 +71,10 @@ struct VideoAudioEnvelope: Sendable {
                         block, atOffset: 0, dataLength: length, destination: $0.baseAddress!)
                 }
                 guard status == kCMBlockBufferNoErr else { continue }
-                for value in samples {
-                    peak = max(peak, abs(value))
+                for offset in stride(from: 0, to: samples.count, by: channels) {
+                    for channel in offset..<min(offset + channels, samples.count) {
+                        peak = max(peak, abs(samples[channel]))
+                    }
                     count += 1
                     if count == bucketSize { peaks.append(peak); peak = 0; count = 0 }
                 }
@@ -99,6 +111,7 @@ struct VideoWaveform: View {
     let end: Double
     var loop = false
     @State private var envelope: VideoAudioEnvelope?
+    @Environment(\.studioFacade) private var facade
 
     var body: some View {
         Canvas { context, size in
@@ -122,7 +135,13 @@ struct VideoWaveform: View {
         }
         .allowsHitTesting(false)
         .pageTask(id: url) {
-            let result = try? await VideoWaveformCache.shared.envelope(url)
+            let result: VideoAudioEnvelope?
+            if let facade {
+                result = try? await facade.perform(
+                    "studio.ui.media.waveform", object: ["path": url.path])
+            } else {
+                result = try? await VideoWaveformCache.shared.envelope(url)
+            }
             guard !Task.isCancelled else { return }
             envelope = result
         }
@@ -164,6 +183,7 @@ enum VideoAudioProcessing {
 
 extension VideoEditorModel {
     func processAudio(assetID: String, denoise: Bool) {
+        if remoteAction("audio", object: ["assetID": assetID, "denoise": denoise]) { return }
         guard audioTask == nil else { return }
         guard let project,
             let source = project.assets.first(where: { $0.id == assetID })
@@ -189,6 +209,7 @@ extension VideoEditorModel {
     }
 
     func detectSilence() {
+        if remoteAction("silence") { return }
         guard audioTask == nil else { return }
         guard let project,
             let clip = project.clips.first(where: { $0.id == selectedClipID }),

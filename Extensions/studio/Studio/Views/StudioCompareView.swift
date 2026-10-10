@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class StudioCompareModel {
+    let facade: StudioUIFacade?
     let originalURL: URL
     let revisedURL: URL
     var original: PDFDocument?
@@ -24,7 +25,8 @@ final class StudioCompareModel {
     let loading = ContentLoad()
     let visualLoad = ContentLoad()
 
-    init(original: URL, revised: URL) {
+    init(original: URL, revised: URL, facade: StudioUIFacade? = nil) {
+        self.facade = facade
         originalURL = original
         revisedURL = revised
     }
@@ -37,12 +39,26 @@ final class StudioCompareModel {
         loadTask = Task { [weak self] in
             guard let self else { return }
             await self.loading.perform(operation: {
-                try StudioCompareLoader.load(left, right).get()
+                if let facade = self.facade {
+                    let handle: StudioUIResource = try await facade.read(
+                        "studio.ui.pdf.compare",
+                        object: ["original": left.path, "revised": right.path])
+                    let value: StudioUIComparison = try await facade.download(handle)
+                    guard let original = PDFDocument(data: value.original),
+                        let revised = PDFDocument(data: value.revised)
+                    else { throw StudioError.unreadable("PDF comparison") }
+                    return StudioCompareLoader.Loaded(
+                        original: original, revised: revised, report: value.report)
+                }
+                return try StudioCompareLoader.load(left, right).get()
             }) { loaded in
                 self.original = loaded.original
                 self.revised = loaded.revised
                 self.report = loaded.report
-                StudioCompareLoader.highlight(loaded.report, in: loaded.original, loaded.revised)
+                if self.facade == nil {
+                    StudioCompareLoader.highlight(
+                        loaded.report, in: loaded.original, loaded.revised)
+                }
             }
             guard !Task.isCancelled else { return }
             self.failure = self.loading.errorMessage
@@ -56,6 +72,22 @@ final class StudioCompareModel {
         let right = revisedURL
         let page = visualPage
         visualTask = Task { [weak self] in
+            if let facade = self?.facade {
+                do {
+                    let handle: StudioUIResource = try await facade.read(
+                        "studio.ui.pdf.visual",
+                        object: ["original": left.path, "revised": right.path, "page": page])
+                    let value: StudioUIVisualDifference? = try await facade.download(handle)
+                    guard let self, self.visualLoad.isCurrent(request) else { return }
+                    self.visual = value?.image.image.map { NSImage(cgImage: $0, size: .zero) }
+                    self.visualFraction = value?.fraction ?? 0
+                    self.visualLoad.complete(request, empty: value == nil)
+                } catch {
+                    guard let self, self.visualLoad.isCurrent(request) else { return }
+                    self.visualLoad.fail(request, error: error)
+                }
+                return
+            }
             let rendered = await Task.detached(priority: .userInitiated) {
                 StudioCompareLoader.visual(left, right, page: page)
             }.value
@@ -121,7 +153,9 @@ struct StudioCompareView: View {
     @Environment(\.compactLayout) private var compact
 
     @MainActor init(model: StudioModel, original: URL, revised: URL) {
-        self.init(model: model, compare: StudioCompareModel(original: original, revised: revised))
+        self.init(
+            model: model,
+            compare: StudioCompareModel(original: original, revised: revised, facade: model.facade))
     }
 
     init(model: StudioModel, compare: StudioCompareModel) {

@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 
 public enum VideoBeatAnalysis {
-    struct Settings: Sendable {
+    struct Settings: Codable, Sendable {
         var sensitivity: Double = 0.5
         var refractorySeconds: Double = 0.08
         var minimumSpacingSeconds: Double = 0.15

@@ -173,11 +173,15 @@ import Testing
         #expect(pixel.greenComponent < 0.3)
     }
 
-    @Test func opensRealOpenScreenProjectWhenProvided() async throws {
-        guard let path = ProcessInfo.processInfo.environment["OPENSCREEN_SAMPLE_PROJECT"] else {
-            return
-        }
-        let project = try VideoProject.open(URL(fileURLWithPath: path))
+    @Test func opensSyntheticOpenScreenProjectThroughNativeRenderer() async throws {
+        let root = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try await VideoEditorServiceTests.movie(in: root)
+        var document = VideoProject.create()
+        document.addAsset(source, duration: 1, width: 64, height: 64)
+        let path = root.appendingPathComponent("synthetic.openscreen")
+        try document.save(to: path)
+        let project = try VideoProject.open(path)
         let pipeline = try await VideoRenderPipeline.make(project: project)
         #expect(pipeline.duration > 0)
         let generator = AVAssetImageGenerator(asset: pipeline.composition)

@@ -10,7 +10,9 @@ struct VideoCanvas: View {
 
     private var cameraPath: String? {
         guard
-            let segment = model.pipeline?.segments.first(where: { model.playhead < $0.outputEnd }),
+            let segment = model.previewMetadata?.segments.first(where: {
+                model.playhead < $0.outputEnd
+            }),
             let track = model.project?.assets.first(where: { $0.id == segment.clip.assetID })?
                 .cameraTrack,
             track["visible"] as? Bool != false
@@ -27,11 +29,11 @@ struct VideoCanvas: View {
                 .frame(width: display.width * 0.8, height: display.height * 0.8)
                 .position(x: display.midX, y: display.midY).allowsHitTesting(false)
             }
-            if model.canvasEditing, model.player.rate == 0, model.editingZoomID == nil {
+            if model.canvasEditing, model.playbackRate == 0, model.editingZoomID == nil {
                 ForEach(
                     model.project?.annotations.filter {
                         $0.visible(
-                            at: model.player.currentTime(),
+                            at: CMTime(seconds: model.playhead, preferredTimescale: 60_000),
                             rulerMilliseconds: model.rulerPlayhead * 1000)
                     } ?? []
                 ) { annotation in
@@ -63,7 +65,7 @@ struct VideoCanvas: View {
             }
         }
         .overlay(alignment: .bottom) {
-            if model.canvasEditing, model.player.rate == 0, model.editingZoomID == nil,
+            if model.canvasEditing, model.playbackRate == 0, model.editingZoomID == nil,
                 case let .annotation(id) = model.selection,
                 let annotation = model.project?.annotations.first(where: { $0.id == id })
             {
@@ -73,6 +75,14 @@ struct VideoCanvas: View {
         }
         .pageTask(id: cameraPath) {
             guard let cameraPath else { return }
+            if let facade = model.facade {
+                if let aspect: Double = try? await facade.read(
+                    "studio.ui.media.aspect", object: ["path": cameraPath]), !Task.isCancelled
+                {
+                    cameraAspect = aspect
+                }
+                return
+            }
             let asset = AVURLAsset(url: URL(fileURLWithPath: cameraPath))
             if let track = try? await asset.loadTracks(withMediaType: .video).first,
                 let size = try? await track.load(.naturalSize),

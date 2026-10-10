@@ -48,6 +48,18 @@ public struct StudioRunResult: Sendable {
     public let failures: [StudioFailure]
     public let folders: [URL]
 
+    public init(
+        toolID: String, outputs: [StudioOutputFile], inputBytes: Int64,
+        notes: [String], failures: [StudioFailure], folders: [URL]
+    ) {
+        self.toolID = toolID
+        self.outputs = outputs
+        self.inputBytes = inputBytes
+        self.notes = notes
+        self.failures = failures
+        self.folders = folders
+    }
+
     public var outputBytes: Int64 { outputs.reduce(0) { $0 + $1.bytes } }
 
     public var savings: Double? {

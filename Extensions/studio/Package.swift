@@ -12,10 +12,11 @@ let package = Package(
             name: "StudioExtension",
             dependencies: [
                 .product(name: "EdithExtensionUI", package: "ExtensionSupport"),
+                .product(name: "EdithExtensionCommands", package: "ExtensionSupport"),
                 .product(name: "EdithStudio", package: "NativeRuntime"),
             ],
             path: ".",
-            exclude: ["Tests", "Runtime.swift", "NativeRuntime", "Makefile", "test.mjs"],
+            exclude: ["Tests", "NativeRuntime", "Makefile", "test.mjs"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "StudioExtensionTests",
