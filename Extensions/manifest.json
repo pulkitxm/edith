@@ -2838,7 +2838,8 @@
         "Extensions/herdr/ViewModels/HerdrTerminalConnections.swift",
         "Extensions/herdr/Views/HerdrSettingsPage.swift",
         "Extensions/herdr/Transport/OwnedTerminalPTY.swift",
-        "Extensions/herdr/Transport/OwnedTerminalSession.swift"
+        "Extensions/herdr/Transport/OwnedTerminalSession.swift",
+        "Extensions/herdr/ViewModels/HerdrUIProjection.swift"
       ]
     },
     "resources": {

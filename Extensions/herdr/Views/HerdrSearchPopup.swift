@@ -18,7 +18,7 @@ struct HerdrSearchPopup: View {
     ) {
         self.store = store
         self.open = open
-        _model = State(initialValue: model ?? HerdrSearchModel(usage: store.usage))
+        _model = State(initialValue: model ?? store.searchModel())
     }
 
     private var dark: Bool { scheme == .dark }

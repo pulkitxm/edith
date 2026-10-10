@@ -1,0 +1,376 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import Foundation
+
+struct HerdrUILayoutState: Codable {
+    var tabs: [HerdrTab]
+    var selected: String
+    var views: [String: HerdrAgentView]
+    var arrangements: [HerdrSavedArrangement]
+
+    func validate(allowed: Set<String>) throws {
+        guard tabs.count <= 64, Set(tabs.map(\.id)).count == tabs.count,
+            selected == HerdrStore.boardID || tabs.contains(where: { $0.id == selected }),
+            arrangements.count <= 256, Set(arrangements.map(\.id)).count == arrangements.count
+        else { throw ExtensionPeerError.invalidRequest }
+        var used = Set<String>()
+        for tab in tabs {
+            guard UUID(uuidString: tab.id) != nil, try tab.layout.checked(depth: 0),
+                tab.agentIDs.count <= 32, tab.agentIDs.contains(tab.focused),
+                tab.zoomed == nil || tab.agentIDs.contains(tab.zoomed!),
+                Set(tab.agentIDs).isSubset(of: allowed), used.isDisjoint(with: tab.agentIDs)
+            else { throw ExtensionPeerError.invalidRequest }
+            used.formUnion(tab.agentIDs)
+        }
+        guard Set(views.keys) == used else { throw ExtensionPeerError.invalidRequest }
+        for arrangement in arrangements {
+            guard !arrangement.name.isEmpty, arrangement.name.utf8.count <= 256,
+                try arrangement.shape.checked(depth: 0)
+            else { throw ExtensionPeerError.invalidRequest }
+        }
+    }
+}
+
+extension HerdrLayout {
+    fileprivate func checked(depth: Int) throws -> Bool {
+        guard depth <= 16 else { throw ExtensionPeerError.invalidRequest }
+        switch self {
+        case .pane(let id): return !id.isEmpty && id.utf8.count <= 512
+        case .split(let split):
+            guard (2...32).contains(split.children.count),
+                split.children.count == split.ratios.count,
+                split.ratios.allSatisfy({ $0.isFinite && $0 > 0 && $0 < 1 }),
+                abs(split.ratios.reduce(0, +) - 1) < 0.000001
+            else { return false }
+            for child in split.children where try !child.checked(depth: depth + 1) { return false }
+            return true
+        }
+    }
+}
+
+struct HerdrUIState: Codable {
+    let owner: String
+    let generation: UUID
+    let sequence: UInt64
+    let hosts: [HerdrHostSnapshot]
+    let openedAgents: [HerdrAgent]
+    let layout: HerdrUILayoutState
+    let hooks: HerdrHooksSnapshot
+    let startupMessages: [String: String]
+    let preferences: [String: HerdrUIPreference]
+    let activity: AgentActivitySnapshot
+    let activitySettings: AgentActivitySettings
+    let attention: HerdrAttentionSettings
+    let discovery: Bool
+
+    func validate() throws {
+        guard owner == "herdr", sequence > 0, hosts.count <= 1025,
+            Set(hosts.map(\.id)).count == hosts.count,
+            hosts.reduce(0, { $0 + $1.agents.count }) <= 4096,
+            startupMessages.count <= 4096,
+            Set(preferences.keys).isSubset(of: HerdrUIEngine.preferenceKeys)
+        else { throw ExtensionPeerError.invalidRequest }
+        let agents = hosts.flatMap(\.agents)
+        guard Set(agents.map(\.id)).count == agents.count else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        try layout.validate(
+            allowed: Set(
+                agents.map(\.id) + openedAgents.map(\.id)
+                    + hosts.map { HerdrMachineTerminal.agent(for: $0).id }))
+    }
+}
+
+enum HerdrUIPreference: Codable {
+    case flag(Bool)
+    case number(Double)
+    case text(String)
+    case strings([String])
+    case data(Data)
+
+    var value: Any {
+        switch self {
+        case .flag(let value): return value
+        case .number(let value): return value
+        case .text(let value): return value
+        case .strings(let value): return value
+        case .data(let value): return value
+        }
+    }
+
+    init?(_ value: Any) {
+        if let number = value as? NSNumber {
+            self =
+                CFGetTypeID(number) == CFBooleanGetTypeID()
+                ? .flag(number.boolValue) : .number(number.doubleValue)
+        } else if let value = value as? String {
+            self = .text(value)
+        } else if let value = value as? [String] {
+            self = .strings(value)
+        } else if let value = value as? Data {
+            self = .data(value)
+        } else {
+            return nil
+        }
+    }
+}
+
+final class HerdrUIDefaults: UserDefaults {
+    private var values: [String: Any] = [:]
+    override func object(forKey key: String) -> Any? { values[key] }
+    override func set(_ value: Any?, forKey key: String) { values[key] = value }
+    override func removeObject(forKey key: String) { values[key] = nil }
+    override func string(forKey key: String) -> String? { values[key] as? String }
+    override func data(forKey key: String) -> Data? { values[key] as? Data }
+    override func array(forKey key: String) -> [Any]? { values[key] as? [Any] }
+    override func stringArray(forKey key: String) -> [String]? { values[key] as? [String] }
+    override func dictionary(forKey key: String) -> [String: Any]? { values[key] as? [String: Any] }
+    override func bool(forKey key: String) -> Bool {
+        (values[key] as? NSNumber)?.boolValue ?? false
+    }
+    override func integer(forKey key: String) -> Int { (values[key] as? NSNumber)?.intValue ?? 0 }
+    override func double(forKey key: String) -> Double {
+        (values[key] as? NSNumber)?.doubleValue ?? 0
+    }
+    override func dictionaryRepresentation() -> [String: Any] { values }
+}
+
+@MainActor final class HerdrUIClient {
+    typealias Invoke = @MainActor (String, Data) async throws -> Data
+    private let invoke: Invoke
+    private var pending: [UUID: Task<Data, Error>] = [:]
+    private var generation: UUID?
+    private var sequence: UInt64 = 0
+    private var stopped = false
+
+    init(invoke: @escaping Invoke) { self.invoke = invoke }
+
+    convenience init(client: ExtensionEngineClient) {
+        self.init { operation, payload in try await client.invoke(operation, payload: payload) }
+    }
+
+    func perform(_ operation: String, object: [String: Any] = [:]) async throws -> Data {
+        guard !stopped, pending.count < 16 else { throw ExtensionPeerError.unavailable }
+        let payload = try JSONSerialization.data(withJSONObject: object)
+        return try await perform(operation, payload: payload)
+    }
+
+    func perform(_ operation: String, payload: Data) async throws -> Data {
+        guard !stopped, pending.count < 16, payload.count <= 131072,
+            operation.hasPrefix("herdr.") || operation.hasPrefix("activity.")
+        else { throw ExtensionPeerError.unavailable }
+        try Task.checkCancellation()
+        let id = UUID()
+        let task = Task { try await invoke(operation, payload) }
+        pending[id] = task
+        defer { pending[id] = nil }
+        let result = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        try Task.checkCancellation()
+        guard !stopped, !task.isCancelled else { throw CancellationError() }
+        guard result.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
+        return result
+    }
+
+    func state(_ data: Data) throws -> HerdrUIState? {
+        guard !stopped else { throw CancellationError() }
+        let value = try JSONDecoder().decode(HerdrUIState.self, from: data)
+        try value.validate()
+        if let generation, generation != value.generation { throw ExtensionPeerError.unavailable }
+        guard value.sequence > sequence else { return nil }
+        generation = value.generation
+        sequence = value.sequence
+        return value
+    }
+
+    func stop() {
+        stopped = true
+        for task in pending.values { task.cancel() }
+        pending.removeAll()
+    }
+}
+
+@MainActor final class HerdrUIEngine {
+    static let preferenceKeys: Set<String> = [
+        AppStorageKeys.Herdr.railOpen, AppStorageKeys.Herdr.detailOpen,
+        AppStorageKeys.Herdr.animatesLayout, AppStorageKeys.Herdr.railWidth,
+        AppStorageKeys.Herdr.detailWidth, AppStorageKeys.Herdr.agentsCollapsed,
+        AppStorageKeys.Herdr.terminalsCollapsed, AppStorageKeys.Herdr.spaceGroupingEnabled,
+        AppStorageKeys.Herdr.sidebarAgentOrder, AppStorageKeys.Herdr.sidebarSpaceOrder,
+        AppStorageKeys.Herdr.collapsedSpaces, AppStorageKeys.Herdr.terminalPanelHeight,
+        AppStorageKeys.Herdr.terminalMouse,
+    ]
+    private unowned let worker: HerdrWorker
+    private let generation = UUID()
+    private var sequence: UInt64 = 0
+
+    init(worker: HerdrWorker) { self.worker = worker }
+
+    func execute(_ operation: String, payload: Data) async throws -> Data {
+        guard !worker.isStopped, payload.count <= 131072,
+            let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+        else { throw ExtensionPeerError.invalidRequest }
+        let store = worker.store
+        switch operation {
+        case "herdr.ui.read":
+            guard object.isEmpty else { throw ExtensionPeerError.invalidRequest }
+        case "herdr.ui.layout":
+            guard Set(object.keys) == ["tabs", "selected", "views", "arrangements"] else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            let layout = try JSONDecoder().decode(HerdrUILayoutState.self, from: payload)
+            let agents = store.agents + store.hosts.map { HerdrMachineTerminal.agent(for: $0) }
+            try layout.validate(allowed: Set((agents + store.sessions.map(\.agent)).map(\.id)))
+            store.applyUILayout(layout)
+        case "herdr.ui.preferences":
+            let preferences = try JSONDecoder().decode(
+                [String: HerdrUIPreference].self, from: payload)
+            guard Set(preferences.keys).isSubset(of: Self.preferenceKeys) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            for (key, value) in preferences {
+                switch value {
+                case .flag: break
+                case .number(let number):
+                    guard number.isFinite, (0...2048).contains(number) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                case .strings(let strings):
+                    guard strings.count <= 4096, strings.allSatisfy({ $0.utf8.count <= 512 }) else {
+                        throw ExtensionPeerError.invalidRequest
+                    }
+                default: throw ExtensionPeerError.invalidRequest
+                }
+                store.uiDefaults.set(value.value, forKey: key)
+            }
+            store.applyUIPreferences(preferences)
+        case "herdr.ui.closeAgent":
+            guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
+                let agent = worker.currentAgent(id)
+            else { throw ExtensionPeerError.invalidRequest }
+            try await store.closeAgent(agent)
+        case "herdr.ui.focusAgent":
+            guard Set(object.keys) == ["agentID"], let id = object["agentID"] as? String,
+                let agent = worker.currentAgent(id)
+            else { throw ExtensionPeerError.invalidRequest }
+            try await store.openInHerdrTerminal(agent)
+        case "herdr.ui.workspaces":
+            guard Set(object.keys) == ["machineID"], let id = object["machineID"] as? String,
+                let host = store.hosts.first(where: { $0.id == id })
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(try await store.listWorkspaces(for: host))
+        case "herdr.ui.launch":
+            guard
+                Set(object.keys).isSubset(of: [
+                    "kind", "machineID", "workspaceID", "label", "beside",
+                ]),
+                let kind = object["kind"] as? String, HerdrKind.filterLabels.contains(kind),
+                let id = object["machineID"] as? String,
+                let host = store.hosts.first(where: {
+                    $0.id == id && $0.reachable && $0.herdrPresent
+                }),
+                let beside = object["beside"] as? NSNumber,
+                CFGetTypeID(beside) == CFBooleanGetTypeID()
+            else { throw ExtensionPeerError.invalidRequest }
+            var workspace: HerdrWorkspaceSummary?
+            if let value = object["workspaceID"] {
+                guard let id = value as? String else { throw ExtensionPeerError.invalidRequest }
+                workspace = try await store.listWorkspaces(for: host).first(where: { $0.id == id })
+                guard workspace != nil else { throw ExtensionPeerError.invalidRequest }
+            }
+            let label = object["label"] as? String
+            guard
+                object["label"] == nil
+                    || label.map({ !$0.isEmpty && $0.utf8.count <= 256 && !$0.utf8.contains(0) })
+                        == true
+            else { throw ExtensionPeerError.invalidRequest }
+            try await store.launchNewAgent(
+                kind: kind, host: host, existingSpace: workspace, newSpaceLabel: label,
+                openBeside: beside.boolValue)
+        case "herdr.ui.search":
+            guard Set(object.keys) == ["query", "machineID", "agentIDs"],
+                let query = object["query"] as? String, query.utf8.count <= 4096,
+                let machineID = object["machineID"] as? String,
+                let ids = object["agentIDs"] as? [String], ids.count <= 4096,
+                Set(ids).count == ids.count
+            else { throw ExtensionPeerError.invalidRequest }
+            let agents = ids.compactMap(worker.currentAgent)
+            guard agents.count == ids.count,
+                agents.allSatisfy({ $0.machineID == machineID && !$0.isTerminal })
+            else { throw ExtensionPeerError.invalidRequest }
+            return try JSONEncoder().encode(
+                await AgentSearchService.shared.search(
+                    .init(
+                        query: query, machineID: machineID,
+                        targets: agents.map(AgentSearchTarget.init(agent:)))))
+        default: throw ExtensionPeerError.invalidRequest
+        }
+        try Task.checkCancellation()
+        guard !worker.isStopped else { throw ExtensionPeerError.unavailable }
+        return try await snapshot()
+    }
+
+    private func snapshot() async throws -> Data {
+        sequence += 1
+        let store = worker.store
+        let value = HerdrUIState(
+            owner: "herdr", generation: generation, sequence: sequence,
+            hosts: store.hosts, openedAgents: store.sessions.map(\.agent), layout: store.uiLayout,
+            hooks: await worker.hooks.list(), startupMessages: store.agentStartupMessages,
+            preferences: store.uiPreferences, activity: worker.activity.activity,
+            activitySettings: worker.activity.settings,
+            attention: HerdrAttentionSettings(defaults: store.uiDefaults),
+            discovery: worker.activity.discoversTerminals)
+        try value.validate()
+        let data = try JSONEncoder().encode(value)
+        guard data.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
+        return data
+    }
+}
+
+@MainActor extension HerdrStore {
+    convenience init(uiClient: HerdrUIClient) {
+        let defaults = HerdrUIDefaults()
+        let messaging = HerdrMessaging(
+            broadcaster: { text, agents in
+                var result: [String: HerdrPromptOutcome] = [:]
+                for agent in agents {
+                    do {
+                        let data = try await uiClient.perform(
+                            "herdr.message", object: ["agentID": agent.id, "text": text])
+                        result[agent.id] = try JSONDecoder().decode(
+                            HerdrPromptOutcome.self, from: data)
+                    } catch { result[agent.id] = .failed(error.localizedDescription) }
+                }
+                return result
+            },
+            arm: { text, agent, schedule in
+                let payload = try JSONEncoder().encode(
+                    HerdrHookArmRequest(agent: agent, message: text, schedule: schedule))
+                return try JSONDecoder().decode(
+                    HerdrHooksSnapshot.self,
+                    from: await uiClient.perform("herdr.hooks.arm", payload: payload))
+            },
+            remove: { id in
+                return try JSONDecoder().decode(
+                    HerdrHooksSnapshot.self,
+                    from: await uiClient.perform(
+                        "herdr.hooks.remove", object: ["id": id.uuidString]))
+            })
+        self.init(
+            defaults: defaults, liveWatcher: { _ in },
+            agentCloser: { _ in throw ExtensionPeerError.unavailable },
+            newAgentPaneCreator: { _, _, _, _ in throw ExtensionPeerError.unavailable },
+            agentStarter: { _, _, _ in throw ExtensionPeerError.unavailable },
+            terminalIDResolver: { _, _, _ in throw ExtensionPeerError.unavailable },
+            agentFocuser: { _, _, _ in throw ExtensionPeerError.unavailable },
+            machinesProvider: { [] }, messaging: messaging)
+        self.uiClient = uiClient
+        terminalClient = { operation, payload in
+            try await uiClient.perform(operation, payload: payload)
+        }
+    }
+}

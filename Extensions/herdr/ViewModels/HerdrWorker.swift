@@ -24,6 +24,7 @@ import Foundation
     private var shells: [UUID: ShellSelection] = [:]
     private let prepareShell:
         @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest
+    private lazy var uiEngine = HerdrUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
 
     init(
@@ -111,6 +112,9 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command.hasPrefix("herdr.ui.") {
+            return try await uiEngine.execute(command, payload: payload)
+        }
         if command == "herdr.cli.catalog" {
             guard payload.count <= 16384,
                 let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],

@@ -93,18 +93,28 @@ final class HerdrStore {
     static let shared = HerdrStore(workspacePresenter: { ExtensionPresentation.showWindow() })
     static let boardID = "board"
     var terminalClient: OwnedTerminalClient.Invoke?
+    var uiClient: HerdrUIClient?
+    private var uiOpenedAgents: [HerdrAgent] = []
+    private var adoptingUI = false
+    private var uiMutation: Task<Void, Never>?
+    private var uiPoll: Task<Void, Never>?
+    private var uiDirty = false
+    private(set) var uiError: String?
+    var uiDefaults: UserDefaults { defaults }
 
     var hosts: [HerdrHostSnapshot] = [] {
         didSet { rememberSidebarOrder() }
     }
     private var sidebarAgentOrder: HerdrSidebarOrder {
         didSet {
+            scheduleUIChange()
             guard sidebarAgentOrder.ids != oldValue.ids else { return }
             defaults.set(sidebarAgentOrder.ids, forKey: AppStorageKeys.Herdr.sidebarAgentOrder)
         }
     }
     private var sidebarSpaceOrder: HerdrSidebarOrder {
         didSet {
+            scheduleUIChange()
             guard sidebarSpaceOrder.ids != oldValue.ids else { return }
             defaults.set(sidebarSpaceOrder.ids, forKey: AppStorageKeys.Herdr.sidebarSpaceOrder)
         }
@@ -135,6 +145,7 @@ final class HerdrStore {
     }
     var selectedTab = boardID {
         didSet {
+            scheduleUIChange()
             guard selectedTab != oldValue else { return }
             guard let agent = focusedSession?.agent else { return }
             usage.record(agent)
@@ -142,9 +153,9 @@ final class HerdrStore {
         }
     }
     var tabs: [HerdrTab] = [] {
-        didSet { scheduleTerminalRetarget(from: oldValue) }
+        didSet { scheduleTerminalRetarget(from: oldValue); scheduleUIChange() }
     }
-    private(set) var sessions: [HerdrOpenTab] = []
+    private(set) var sessions: [HerdrOpenTab] = [] { didSet { scheduleUIChange() } }
     private var closedHistory: [HerdrClosedRecord] = []
     private let closedHistoryLimit = 10
     var refreshing = false
@@ -162,31 +173,36 @@ final class HerdrStore {
     var copiedID: String?
     var detailOpen = true {
         didSet {
+            scheduleUIChange()
             guard detailOpen != oldValue else { return }
             defaults.set(detailOpen, forKey: AppStorageKeys.Herdr.detailOpen)
         }
     }
-    var railOpen = true
+    var railOpen = true { didSet { scheduleUIChange() } }
     var animatesLayout = false {
         didSet {
+            scheduleUIChange()
             guard animatesLayout != oldValue else { return }
             defaults.set(animatesLayout, forKey: AppStorageKeys.Herdr.animatesLayout)
         }
     }
     var railWidth = HerdrPaneSizing.railDefault {
         didSet {
+            scheduleUIChange()
             guard railWidth != oldValue else { return }
             defaults.set(railWidth, forKey: AppStorageKeys.Herdr.railWidth)
         }
     }
     var detailWidth = HerdrPaneSizing.detailDefault {
         didSet {
+            scheduleUIChange()
             guard detailWidth != oldValue else { return }
             defaults.set(detailWidth, forKey: AppStorageKeys.Herdr.detailWidth)
         }
     }
     var agentsCollapsed = false {
         didSet {
+            scheduleUIChange()
             guard agentsCollapsed != oldValue else { return }
             guard !restoringDefaults else { return }
             defaults.set(agentsCollapsed, forKey: AppStorageKeys.Herdr.agentsCollapsed)
@@ -202,6 +218,7 @@ final class HerdrStore {
     }
     var terminalsCollapsed = false {
         didSet {
+            scheduleUIChange()
             guard terminalsCollapsed != oldValue else { return }
             guard !restoringDefaults else { return }
             defaults.set(terminalsCollapsed, forKey: AppStorageKeys.Herdr.terminalsCollapsed)
@@ -217,6 +234,7 @@ final class HerdrStore {
     }
     var spaceGroupingEnabled = false {
         didSet {
+            scheduleUIChange()
             guard spaceGroupingEnabled != oldValue else { return }
             defaults.set(
                 spaceGroupingEnabled, forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
@@ -224,6 +242,7 @@ final class HerdrStore {
     }
     private(set) var savedArrangements: [HerdrSavedArrangement] = [] {
         didSet {
+            scheduleUIChange()
             guard savedArrangements != oldValue else { return }
             defaults.set(
                 try? JSONEncoder().encode(savedArrangements),
@@ -232,6 +251,7 @@ final class HerdrStore {
     }
     private(set) var collapsedSpaces: Set<String> = [] {
         didSet {
+            scheduleUIChange()
             guard collapsedSpaces != oldValue else { return }
             defaults.set(
                 Array(collapsedSpaces), forKey: AppStorageKeys.Herdr.collapsedSpaces)
@@ -527,6 +547,27 @@ final class HerdrStore {
     var openIDs: Set<String> { Set(sessions.map(\.id)) }
 
     func watch() async {
+        if let uiClient {
+            guard uiPoll == nil else { return }
+            uiPoll = Task { [weak self] in
+                while !Task.isCancelled {
+                    guard let self else { return }
+                    do {
+                        let data = try await uiClient.perform("herdr.ui.read")
+                        if !self.uiDirty, self.uiMutation == nil,
+                            let state = try uiClient.state(data)
+                        {
+                            self.adoptUI(state)
+                        }
+                        try await Task.sleep(for: .seconds(1))
+                    } catch is CancellationError { return } catch {
+                        self.uiError = error.localizedDescription
+                        try? await Task.sleep(for: .seconds(2))
+                    }
+                }
+            }
+            return
+        }
         guard watchTask == nil else { return }
         expectedHostCount = machinesProvider().count + 1
         if hosts.isEmpty { settling = true }
@@ -553,6 +594,17 @@ final class HerdrStore {
     }
 
     func shutdown() async {
+        if let uiClient {
+            uiClient.stop()
+            uiPoll?.cancel()
+            uiMutation?.cancel()
+            for holder in terminalHolders { holder.stopRendering() }
+            await uiPoll?.value
+            await uiMutation?.value
+            uiPoll = nil
+            uiMutation = nil
+            return
+        }
         let watcher = watchTask
         let settlingTask = settleTask
         stopWatching()
@@ -582,6 +634,8 @@ final class HerdrStore {
     }
 
     func stopWatching() {
+        uiPoll?.cancel()
+        uiPoll = nil
         watchGeneration += 1
         watchTask?.cancel()
         watchTask = nil
@@ -598,6 +652,10 @@ final class HerdrStore {
     }
 
     func refresh() async {
+        if uiClient != nil {
+            try? await performUI("herdr.ui.read")
+            return
+        }
         guard !refreshing else { return }
         refreshing = true
         apply(await HerdrSessionOperationExecution.list())
@@ -777,6 +835,10 @@ final class HerdrStore {
     }
 
     func openInHerdrTerminal(_ agent: HerdrAgent) async throws {
+        if uiClient != nil {
+            try await performUI("herdr.ui.focusAgent", object: ["agentID": agent.id])
+            return
+        }
         guard !agent.isTerminal, let host = hosts.first(where: { $0.id == agent.machineID }) else {
             throw HerdrQuinjetError.machineUnavailable
         }
@@ -1200,6 +1262,10 @@ final class HerdrStore {
     }
 
     func closeAgent(_ agent: HerdrAgent) async throws {
+        if uiClient != nil {
+            try await performUI("herdr.ui.closeAgent", object: ["agentID": agent.id])
+            return
+        }
         try await agentCloser(agent)
         close(agent.id)
     }
@@ -1911,6 +1977,9 @@ final class HerdrStore {
     }
 
     func connection(for machine: Machine) async throws -> SSHConnection {
+        guard uiClient == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+            throw ExtensionPeerError.unavailable
+        }
         if let existing = connections[machine.id] {
             try await existing.connect()
             return existing
@@ -1961,6 +2030,13 @@ final class HerdrStore {
         kind: String, host: HerdrHostSnapshot, existingSpace: HerdrWorkspaceSummary?,
         newSpaceLabel: String?, openBeside: Bool = false
     ) async throws {
+        if uiClient != nil {
+            var object: [String: Any] = ["kind": kind, "machineID": host.id, "beside": openBeside]
+            object["workspaceID"] = existingSpace?.id
+            object["label"] = newSpaceLabel
+            try await performUI("herdr.ui.launch", object: object)
+            return
+        }
         let machine = machine(for: host)
         guard host.isLocal || machine != nil else { throw HerdrQuinjetError.machineUnavailable }
         let created = try await newAgentPaneCreator(
@@ -2156,6 +2232,134 @@ final class HerdrStore {
             if copiedID == id { copiedID = nil }
         }
     }
+    var uiLayout: HerdrUILayoutState {
+        .init(
+            tabs: tabs, selected: selectedTab,
+            views: Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.view) }),
+            arrangements: savedArrangements)
+    }
+
+    var uiPreferences: [String: HerdrUIPreference] {
+        var result: [String: HerdrUIPreference] = [:]
+        for key in HerdrUIEngine.preferenceKeys {
+            if let value = defaults.object(forKey: key), let preference = HerdrUIPreference(value) {
+                result[key] = preference
+            }
+        }
+        result[AppStorageKeys.Herdr.railOpen] = .flag(railOpen)
+        return result
+    }
+
+    func applyUILayout(_ layout: HerdrUILayoutState) {
+        let allowed = agents + uiOpenedAgents + hosts.map { HerdrMachineTerminal.agent(for: $0) }
+        let existing = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+        let ordered = layout.tabs.flatMap(\.agentIDs)
+        for session in sessions where !ordered.contains(session.id) {
+            session.holder.stop()
+            session.quinjet.stop()
+        }
+        sessions = ordered.compactMap { id in
+            var session = existing[id] ?? allowed.first(where: { $0.id == id }).map(makeTab)
+            session?.view = layout.views[id] ?? .agent
+            return session
+        }
+        tabs = layout.tabs
+        selectedTab = layout.selected
+        savedArrangements = layout.arrangements
+        for (id, view) in layout.views { HerdrAgentViews.set(view, for: id, defaults) }
+    }
+
+    func applyUIPreferences(_ values: [String: HerdrUIPreference]) {
+        for (key, value) in values { defaults.set(value.value, forKey: key) }
+        railOpen = defaults.object(forKey: AppStorageKeys.Herdr.railOpen) as? Bool ?? true
+        detailOpen = defaults.object(forKey: AppStorageKeys.Herdr.detailOpen) as? Bool ?? true
+        animatesLayout =
+            defaults.object(forKey: AppStorageKeys.Herdr.animatesLayout) as? Bool ?? false
+        railWidth = HerdrPaneSizing.rail(
+            (defaults.object(forKey: AppStorageKeys.Herdr.railWidth) as? Double
+                ?? HerdrPaneSizing.railDefault))
+        detailWidth = HerdrPaneSizing.detail(
+            (defaults.object(forKey: AppStorageKeys.Herdr.detailWidth) as? Double
+                ?? HerdrPaneSizing.detailDefault))
+        agentsCollapsed = defaults.bool(forKey: AppStorageKeys.Herdr.agentsCollapsed)
+        terminalsCollapsed = defaults.bool(forKey: AppStorageKeys.Herdr.terminalsCollapsed)
+        spaceGroupingEnabled = defaults.bool(forKey: AppStorageKeys.Herdr.spaceGroupingEnabled)
+        collapsedSpaces = Set(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.collapsedSpaces) ?? [])
+        sidebarAgentOrder = HerdrSidebarOrder(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarAgentOrder) ?? [])
+        sidebarSpaceOrder = HerdrSidebarOrder(
+            defaults.stringArray(forKey: AppStorageKeys.Herdr.sidebarSpaceOrder) ?? [])
+    }
+
+    func adoptUI(_ state: HerdrUIState) {
+        adoptingUI = true
+        defer { adoptingUI = false }
+        uiOpenedAgents = state.openedAgents
+        hosts = state.hosts
+        inventoryReceived = true
+        settling = false
+        refreshing = false
+        applyUIPreferences(state.preferences)
+        applyUILayout(state.layout)
+        agentStartupMessages = state.startupMessages
+        messaging.adopt(state.hooks)
+        uiError = nil
+    }
+
+    func performUI(_ operation: String, object: [String: Any] = [:]) async throws {
+        guard let uiClient else { throw ExtensionPeerError.unavailable }
+        let data = try await uiClient.perform(operation, object: object)
+        if let state = try uiClient.state(data) { adoptUI(state) }
+    }
+
+    private func scheduleUIChange() {
+        guard uiClient != nil, !adoptingUI else { return }
+        uiDirty = true
+        guard uiMutation == nil else { return }
+        uiMutation = Task { [weak self] in
+            await Task.yield()
+            guard let self, let client = self.uiClient else { return }
+            defer { self.uiMutation = nil }
+            while self.uiDirty, !Task.isCancelled {
+                self.uiDirty = false
+                do {
+                    let layout = try JSONEncoder().encode(self.uiLayout)
+                    let preferences = try JSONEncoder().encode(self.uiPreferences)
+                    _ = try await client.perform("herdr.ui.layout", payload: layout)
+                    let data = try await client.perform(
+                        "herdr.ui.preferences", payload: preferences)
+                    if !self.uiDirty, let state = try client.state(data) { self.adoptUI(state) }
+                } catch is CancellationError { return } catch {
+                    self.uiError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func listWorkspaces(for host: HerdrHostSnapshot) async throws -> [HerdrWorkspaceSummary] {
+        if let uiClient {
+            return try JSONDecoder().decode(
+                [HerdrWorkspaceSummary].self,
+                from: await uiClient.perform("herdr.ui.workspaces", object: ["machineID": host.id]))
+        }
+        return try await HerdrLaunchOperations.listWorkspaces(on: machine(for: host))
+    }
+
+    func searchModel() -> HerdrSearchModel {
+        guard let uiClient else { return HerdrSearchModel(usage: usage) }
+        return HerdrSearchModel(
+            searcher: { request in
+                let data = try await uiClient.perform(
+                    "herdr.ui.search",
+                    object: [
+                        "query": request.query, "machineID": request.machineID,
+                        "agentIDs": request.targets.map(\.id),
+                    ])
+                return try JSONDecoder().decode(AgentSearchReply.self, from: data)
+            }, decider: { nil }, usage: usage)
+    }
+
 }
 
 enum HerdrQuinjetError: LocalizedError {
@@ -2182,7 +2386,7 @@ enum HerdrRailHighlight: Equatable {
     case grouped
 }
 
-struct HerdrTab: Identifiable, Equatable {
+struct HerdrTab: Identifiable, Equatable, Codable {
     let id: String
     var layout: HerdrLayout
     var focused: String
