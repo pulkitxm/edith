@@ -67,14 +67,14 @@ import Testing
         async throws
     {
         let gate = Gate()
-        var identity: String? = "core:41|herdr:2:77"
+        let identity = FixtureState<String?>("core:41|herdr:2:77")
         let model = HostBackgroundModel(
             environment: .init(
-                identity: { identity }, read: { await gate.read() },
+                identity: { identity.value }, read: { await gate.read() },
                 control: { _, _ in Issue.record("Stale control reached owner") }))
         let flight = Task { await model.refresh() }
         await gate.started(1)
-        identity = replacement.isEmpty ? nil : replacement
+        identity.value = replacement.isEmpty ? nil : replacement
         gate.finish(0, try fixture())
         await flight.value
         #expect(model.jobs.isEmpty)
@@ -85,16 +85,16 @@ import Testing
 
     @Test func runAndCancelUseExactAdvertisedJobAndNeverPublishCancelledAction() async throws {
         var commands: [(String, Bool)] = []
-        var projection = try fixture()
+        let projection = FixtureState(try fixture())
         let model = HostBackgroundModel(
             environment: .init(
-                identity: { "core:41" }, read: { projection },
+                identity: { "core:41" }, read: { projection.value },
                 control: { id, cancel in commands.append((id, cancel)) }))
         await model.refresh()
         await model.control(model.jobs[0])
         #expect(commands.count == 1)
         #expect(commands[0].0 == "sessions.discover" && !commands[0].1)
-        projection = try fixture(phase: "running")
+        projection.value = try fixture(phase: "running")
         await model.refresh()
         await model.control(model.jobs[0])
         #expect(commands.count == 2)
@@ -229,10 +229,10 @@ import Testing
         let projection = try fixture()
         var continuation: CheckedContinuation<Void, any Error>?
         var signal: CheckedContinuation<Void, Never>?
-        var identity = "core:41"
+        let identity = FixtureState("core:41")
         let model = HostBackgroundModel(
             environment: .init(
-                identity: { identity }, read: { projection },
+                identity: { identity.value }, read: { projection },
                 control: { _, _ in
                     try await withCheckedThrowingContinuation { pending in
                         continuation = pending
@@ -244,7 +244,7 @@ import Testing
         let flight = Task { await model.control(model.jobs[0]) }
         if continuation == nil { await withCheckedContinuation { signal = $0 } }
         #expect(model.action == "sessions.discover")
-        identity = "core:42"
+        identity.value = "core:42"
         model.cancel()
         flight.cancel()
         continuation?.resume(throwing: CocoaError(.fileReadUnknown))
@@ -318,19 +318,19 @@ import Testing
 
     @Test func originalNotificationFactoryPinsExactRouteAndRejectsLateReplacedOwner() async throws {
         let presenter = NotificationPresenter()
-        var states = [try notificationState()]
-        let model = HostBackgroundNotifications(presenter: presenter, states: { states })
+        let states = FixtureState([try notificationState()])
+        let model = HostBackgroundNotifications(presenter: presenter, states: { states.value })
         let first = Task { await model.refresh() }
         await presenter.started(1)
         let request = try #require(presenter.requests.first)
         #expect(request.extensionID == "herdr")
         #expect(request.location == "settings" && request.section == "backgroundAgent")
-        states = [try notificationState(version: "3")]
+        states.value = [try notificationState(version: "3")]
         presenter.finish(0)
         await first.value
         #expect(model.controller == nil && model.failure == nil)
         #expect(presenter.ended.contains(request.presentationID))
-        states = [try notificationState()]
+        states.value = [try notificationState()]
         let second = Task { await model.refresh() }
         await presenter.started(2)
         let third = Task { await model.refresh() }
@@ -446,6 +446,14 @@ import Testing
         }
         func finish(_ index: Int, _ projection: HostBackgroundProjection) {
             reads[index].resume(returning: projection)
+        }
+    }
+
+    @MainActor private final class FixtureState<Value> {
+        var value: Value
+
+        init(_ value: Value) {
+            self.value = value
         }
     }
 }

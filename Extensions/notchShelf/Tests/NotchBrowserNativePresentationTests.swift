@@ -107,7 +107,8 @@ import WebKit
         await store.shutdownAndWait()
         #expect(store.tabs.isEmpty && remote.lease == nil)
         var replay = fixture.request(.leaseRenew)
-        replay.lease = try #require(issued)
+        let issuedLease: NotchBrowserLease = try #require(issued)
+        replay.lease = issuedLease
         await #expect(throws: (any Error).self) { try await fixture.engine.execute(replay) }
     }
 

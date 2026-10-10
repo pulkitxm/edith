@@ -99,21 +99,21 @@ import Testing
 
     @Test func disableCancellationLeavesTheClientUsableAfterRecovery() throws {
         let configuration = try configuration()
-        var available = true
+        let owner = OwnerState()
         var request: HostWorkerNavigationRequest?
         var failures = 0
         let client = HostWorkerNavigationClient(
-            configuration: configuration, available: { available }, send: { request = $0 },
+            configuration: configuration, available: { owner.available }, send: { request = $0 },
             cancel: { _ in })
         #expect(
             client.navigate([:] as NSDictionary) { error in
                 if error == nil { Issue.record("A rejected request reported success") }
                 failures += 1
             } != nil)
-        available = false
+        owner.available = false
         client.cancelPending()
         #expect(failures == 1)
-        available = true
+        owner.available = true
         var succeeded = false
         #expect(client.navigate([:] as NSDictionary) { error in succeeded = error == nil } != nil)
         try client.receive(HostWorkerNavigationReply(request: try #require(request), ok: true))
@@ -221,5 +221,9 @@ import Testing
             guard ContinuousClock.now < deadline else { throw HostWorkerError.timedOut }
             try await Task.sleep(for: .milliseconds(5))
         }
+    }
+
+    @MainActor private final class OwnerState {
+        var available = true
     }
 }

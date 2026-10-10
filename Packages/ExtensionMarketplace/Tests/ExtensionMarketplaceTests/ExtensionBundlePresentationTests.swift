@@ -87,9 +87,10 @@ import Testing
             ], factory: factory)
         let second = try #require(secondValue)
         func snapshot(_ presentation: ExtensionBundlePresentation) throws -> NSDictionary {
-            try #require(
+            let value =
                 presentation.controller.perform(NSSelectorFromString("snapshot"))?
-                    .takeUnretainedValue() as? NSDictionary)
+                .takeUnretainedValue() as? NSDictionary
+            return try #require(value)
         }
         #expect(try snapshot(first)["compact"] as? Bool == true)
         #expect(try snapshot(second)["visible"] as? Bool == false)
