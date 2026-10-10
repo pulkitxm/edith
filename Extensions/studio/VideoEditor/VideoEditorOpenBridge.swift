@@ -150,6 +150,11 @@ final class VideoEditorOpenBridge {
         }
     }
 
+    func reject(_ requestID: String, message: String) {
+        guard let request, request.requestID == requestID else { return }
+        finishFailure(request, code: "editor_busy", message: message)
+    }
+
     func shutdown() {
         openWait?.resume(throwing: CancellationError())
         openWait = nil

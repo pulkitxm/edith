@@ -181,6 +181,7 @@ import Foundation
         value.installing = model.installing
         value.installLog = model.installLog
         value.message = model.message
+        value.pendingOpen = VideoEditorOpenBridge.shared.pending?.request
         return try JSONEncoder().encode(value)
     }
 

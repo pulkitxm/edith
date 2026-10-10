@@ -115,6 +115,10 @@ final class StudioModel {
     var notice: String?
     var videoProjects: [VideoProject.Listing] = []
     var commandEditor: VideoEditorOpenBridge.Presentation?
+    var remoteCommandRequest: VideoEditorService.OpenRequest?
+    private(set) var remoteCommandEditor: VideoEditorModel?
+    private var commandAttachTask: Task<Void, Never>?
+    private var commandAttachID: String?
     var workflows: [StudioWorkflow] = []
     var editingWorkflow: StudioWorkflowDraft?
     private(set) var isStopped = false
@@ -588,6 +592,8 @@ final class StudioModel {
         pdfEditors.removeAll()
         videoEditors.removeAll()
         commandEditor = nil
+        commandAttachTask?.cancel(); commandAttachTask = nil
+        remoteCommandEditor?.close(); remoteCommandEditor = nil; remoteCommandRequest = nil
     }
 
     func openVideoProject(_ url: URL) {
@@ -718,6 +724,40 @@ final class StudioModel {
         installLog = state.installLog
         if let failure = state.message { message = failure }
         selection.formIntersection(StudioLibraryQuery.urls(files))
+        if let pending = state.pendingOpen, pending.requestID != commandAttachID, let facade {
+            commandAttachID = pending.requestID
+            commandAttachTask?.cancel()
+            commandAttachTask = Task { [weak self] in
+                guard let self, !isStopped else { return }
+                do {
+                    guard !videoEditors.values.contains(where: { $0.blocksCommandOpen }),
+                        remoteCommandEditor?.blocksCommandOpen != true
+                    else {
+                        throw VideoEditorService.Failure(
+                            "editor_busy", "The editor has unsaved changes or an active task.")
+                    }
+                    let editor = VideoEditorModel(facade: facade)
+                    do { try await editor.attachRemoteCommand(pending) } catch {
+                        editor.close(); throw error
+                    }
+                    try Task.checkCancellation()
+                    guard !isStopped else { editor.close(); return }
+                    remoteCommandEditor?.close(); remoteCommandEditor = editor;
+                    remoteCommandRequest = pending
+                    route = .commandVideoEditor(pending.requestID)
+                } catch {
+                    if !Task.isCancelled, !isStopped {
+                        message = error.localizedDescription
+                        let _: [String: String]? = try? await facade.read(
+                            "studio.ui.video.reject",
+                            object: [
+                                "id": UUID().uuidString, "requestID": pending.requestID,
+                                "message": error.localizedDescription,
+                            ])
+                    }
+                }
+            }
+        }
     }
 
     func setDestination(mode: String, folder: String) {

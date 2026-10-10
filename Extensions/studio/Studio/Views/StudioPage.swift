@@ -121,7 +121,18 @@ struct StudioPage: View {
 
     private func editorIsValid(_ token: String) -> Bool {
         guard let route = StudioRoute(navigationToken: token) else { return false }
-        if model.facade != nil { return true }
+        if model.facade != nil {
+            switch route {
+            case .home: return true
+            case let .tool(id): return model.job(id) != nil
+            case let .commandVideoEditor(id): return model.remoteCommandRequest?.requestID == id
+            case let .imageEditor(url), let .pdfEditor(url, _):
+                return url.isFileURL && url.path.hasPrefix("/")
+            case let .videoEditor(media, project):
+                return project?.isFileURL == true || !media.isEmpty
+            case let .compare(original, revised): return original.isFileURL && revised.isFileURL
+            }
+        }
         switch route {
         case .home:
             return true
@@ -160,7 +171,14 @@ struct StudioPage: View {
             StudioVideoHost(model: model, media: media, project: project).studioPrivacyCover()
                 .id(model.route.navigationToken)
         case let .commandVideoEditor(requestID):
-            if let presentation = model.commandEditor, presentation.request.requestID == requestID {
+            if let request = model.remoteCommandRequest, request.requestID == requestID {
+                StudioVideoHost(
+                    model: model, media: [], project: URL(fileURLWithPath: request.path),
+                    remoteCommand: request
+                ).studioPrivacyCover().id(requestID)
+            } else if let presentation = model.commandEditor,
+                presentation.request.requestID == requestID
+            {
                 StudioVideoHost(
                     model: model, media: [],
                     project: URL(fileURLWithPath: presentation.request.path), command: presentation

@@ -8,6 +8,7 @@ struct StudioVideoHost: View {
     let media: [URL]
     let project: URL?
     var command: VideoEditorOpenBridge.Presentation?
+    var remoteCommand: VideoEditorService.OpenRequest?
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -32,7 +33,15 @@ struct StudioVideoHost: View {
                 }
             }
             Divider()
-            if let command {
+            if let remoteCommand, let editor = model.remoteCommandEditor {
+                VideoEditorPage(model: editor, retained: true) {
+                    Task {
+                        do { try await editor.mountRemoteCommand(remoteCommand) } catch {
+                            model.message = error.localizedDescription
+                        }
+                    }
+                }
+            } else if let command {
                 VideoEditorPage(model: command.model, retained: true) {
                     VideoEditorOpenBridge.shared.mounted(command)
                 }

@@ -14,6 +14,7 @@ import Foundation
     private var synchronizing: Task<Void, Never>?
     private var observing: Task<Void, Never>?
     private var action: Task<Void, Never>?
+    private var relinkPanel: NSOpenPanel?
     private var dirty = false
     private var conflicted = false
     private var frameGeneration = 0
@@ -68,8 +69,34 @@ import Foundation
                         ;
                     created = false
                 }
+                let info: StudioUIVideoOpenInfo = try await facade.read(
+                    "studio.ui.video.preflight", object: ["id": id.uuidString, "path": url.path])
+                let document = try info.project.value
+                var replacements: [String: String] = [:]
+                for asset in document.assets where info.missingAssetIDs.contains(asset.id) {
+                    let panel = NSOpenPanel()
+                    panel.message = "Locate \(asset.label) to open this project"
+                    panel.allowedContentTypes = [.movie, .mpeg4Movie, .quickTimeMovie]
+                    relinkPanel = panel
+                    let replacement: URL? = await withTaskCancellationHandler {
+                        await withCheckedContinuation { continuation in
+                            panel.begin { response in
+                                continuation.resume(returning: response == .OK ? panel.url : nil)
+                            }
+                        }
+                    } onCancel: {
+                        Task { @MainActor in panel.cancel(nil) }
+                    }
+                    relinkPanel = nil
+                    try Task.checkCancellation()
+                    if let replacement { replacements[asset.id] = replacement.path }
+                }
                 let handle: StudioUIResource = try await facade.perform(
-                    "studio.ui.video.open", object: ["id": id.uuidString, "path": url.path])
+                    "studio.ui.video.open",
+                    object: [
+                        "id": id.uuidString, "path": url.path, "revision": info.revision,
+                        "replacements": replacements,
+                    ])
                 created = true
                 try await receive(handle, preserveProject: false)
                 observe()
@@ -87,7 +114,9 @@ import Foundation
     }
 
     func mounted(_ request: VideoEditorService.OpenRequest) async throws {
-        guard created, !closed, revision == request.revision, model?.remoteFrame != nil else {
+        guard created, !closed, revision == request.revision,
+            (model?.remoteFrame != nil || model?.project?.clips.isEmpty == true)
+        else {
             throw StudioUIOperationFailure(
                 message: "The requested editor has not rendered its project.")
         }
@@ -204,7 +233,7 @@ import Foundation
 
     func close() {
         guard !closed else { return }; closed = true
-        synchronizing?.cancel(); observing?.cancel(); action?.cancel()
+        synchronizing?.cancel(); observing?.cancel(); action?.cancel(); relinkPanel?.cancel(nil)
         synchronizing = nil; observing = nil; action = nil
         if created {
             Task {

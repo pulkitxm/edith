@@ -21,9 +21,12 @@ import Foundation
     private var timer: Task<Void, Never>?
     private var stopped = false
     private static let fields: [String: Set<String>] = [
+        "studio.ui.video.reject": ["id", "requestID", "message"],
+        "studio.ui.video.preflight": ["id", "path"],
         "studio.ui.video.loop": ["id", "enabled"],
         "studio.ui.video.reset": ["id"],
-        "studio.ui.video.create": ["id"], "studio.ui.video.open": ["id", "path"],
+        "studio.ui.video.create": ["id"],
+        "studio.ui.video.open": ["id", "path", "replacements", "revision"],
         "studio.ui.video.snapshot": ["id"], "studio.ui.video.close": ["id"],
         "studio.ui.video.update": ["id", "project", "revision", "output"],
         "studio.ui.video.frame": ["id", "time", "focus"],
@@ -51,6 +54,22 @@ import Foundation
         else { throw ExtensionPeerError.invalidRequest }
         try Task.checkCancellation()
         let encoder = JSONEncoder()
+        if operation == "studio.ui.video.reject" {
+            guard let requestID = object["requestID"] as? String,
+                let message = object["message"] as? String, message.utf8.count <= 4096
+            else { throw ExtensionPeerError.invalidRequest }
+            VideoEditorOpenBridge.shared.reject(requestID, message: message)
+            return Data("{}".utf8)
+        }
+        if operation == "studio.ui.video.preflight" {
+            let url = try Self.path(object, "path")
+            let prepared = try await Self.prepareUIOpen(url)
+            return try encoder.encode(
+                StudioUIVideoOpenInfo(
+                    project: try StudioUIVideoProject(prepared.document),
+                    missingAssetIDs: Array(prepared.missingAssetIDs).sorted(),
+                    revision: prepared.revision))
+        }
         if operation == "studio.ui.video.create" || operation == "studio.ui.video.open" {
             guard sessions[id] == nil, sessions.count < 8 else {
                 throw ExtensionPeerError.unavailable
@@ -60,13 +79,36 @@ import Foundation
             startTimer()
             if operation == "studio.ui.video.create" {
                 session.model.newProject()
+                VideoEditorOpenBridge.shared.activeEditor = session.model
                 return try snapshot(session, resources: resources)
             }
             let url = try Self.path(object, "path")
             return try encoder.encode(
                 work.start { _ in
-                    let request = try VideoEditorService.prepareOpen(url)
-                    try await session.model.loadCommandProject(request)
+                    do {
+                        var prepared = try await Self.prepareUIOpen(url)
+                        if let revision = object["revision"] as? String,
+                            revision != prepared.revision
+                        {
+                            throw VideoEditorService.Failure(
+                                "project_changed",
+                                "The project changed while locating its media. Open it again.")
+                        }
+                        if let replacements = object["replacements"] {
+                            guard let paths = replacements as? [String: String],
+                                paths.count <= 1000,
+                                Set(paths.keys).isSubset(of: prepared.missingAssetIDs)
+                            else { throw ExtensionPeerError.invalidRequest }
+                            for (assetID, path) in paths {
+                                prepared.document.relinkMedia(
+                                    assetID: assetID, to: try StudioCommands.localPath(path))
+                            }
+                        }
+                        try await session.model.loadUIProject(prepared.document)
+                        VideoEditorOpenBridge.shared.activeEditor = session.model
+                    } catch {
+                        self.sessions[id] = nil; await session.model.stopAndWait(); throw error
+                    }
                     return try self.snapshot(session, resources: resources)
                 })
         }
@@ -90,9 +132,15 @@ import Foundation
             guard let enabled = object["enabled"] as? Bool else {
                 throw ExtensionPeerError.invalidRequest
             }; model.loopPlayback = enabled
-        case "studio.ui.video.reset": model.newProject(); session.cancelFrames()
+        case "studio.ui.video.reset":
+            model.newProject(); session.cancelFrames();
+            VideoEditorOpenBridge.shared.activeEditor = model
         case "studio.ui.video.close":
-            sessions[id] = nil; session.cancelFrames(); await model.stopAndWait()
+            sessions[id] = nil; session.cancelFrames()
+            if VideoEditorOpenBridge.shared.activeEditor === model {
+                VideoEditorOpenBridge.shared.activeEditor = nil
+            }
+            await model.stopAndWait()
             return Data("{}".utf8)
         case "studio.ui.video.mounted":
             guard let requestID = object["requestID"] as? String,
@@ -299,15 +347,14 @@ import Foundation
 
     private func snapshot(_ session: Session, resources: StudioUIResources) throws -> Data {
         let model = session.model
-        let revision = try model.project?.fileURL.map {
-            try VideoEditorService.prepareOpen($0).revision
-        }
+        let revision = model.project?.fileRevision?.value.hexDigest
         let state = try StudioUIVideoState(
             project: model.project.map(StudioUIVideoProject.init),
             preview: model.pipeline.map(StudioUIVideoPreview.init), revision: revision,
             playhead: model.playhead,
             rate: model.player.rate, preparing: model.isPreparingPreview, error: model.errorMessage,
-            audioStatus: model.audioStatus, transcribing: model.isTranscribing,
+            externalSyncMessage: model.externalSyncMessage, audioStatus: model.audioStatus,
+            transcribing: model.isTranscribing,
             silenceClipID: model.silenceClipID,
             silentRanges: model.silentRanges,
             recent: model.recentProjects.map(StudioUIState.Project.init))
@@ -327,6 +374,34 @@ import Foundation
                     await session.model.stopAndWait()
                 }
             }
+        }
+    }
+
+    private struct PreparedOpen {
+        var document: VideoProject
+        let missingAssetIDs: Set<String>
+        let revision: String
+    }
+    private static func prepareUIOpen(_ url: URL) async throws -> PreparedOpen {
+        try await BlockingWork.perform {
+            let snapshot = try VideoEditorService.readProject(url)
+            var document = snapshot.project
+            document.relinkMediaNextToProject()
+            let missing = Set(
+                document.assets.filter { !FileManager.default.fileExists(atPath: $0.url.path) }.map(
+                    \.id))
+            let registered = try VideoProjectRegistry().records().contains {
+                $0.projectID == document.id
+                    && VideoProjectFileAccess.identity(URL(fileURLWithPath: $0.path))
+                        == VideoProjectFileAccess.identity(url)
+            }
+            if !registered, url.path.hasPrefix(VideoProject.openScreenLibraryURL.path + "/") {
+                document.fileURL = nil
+            }
+            return PreparedOpen(
+                document: document, missingAssetIDs: missing,
+                revision: snapshot.revision.fingerprint.digest.map { String(format: "%02x", $0) }
+                    .joined())
         }
     }
 

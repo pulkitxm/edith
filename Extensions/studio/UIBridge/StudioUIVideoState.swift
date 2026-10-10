@@ -105,6 +105,12 @@ struct StudioUIVideoProject: Codable, Sendable {
     }
 }
 
+struct StudioUIVideoOpenInfo: Codable, Sendable {
+    let project: StudioUIVideoProject
+    let missingAssetIDs: [String]
+    let revision: String
+}
+
 struct StudioUIVideoState: Codable, Sendable {
     let project: StudioUIVideoProject?
     let preview: StudioUIVideoPreview?
@@ -113,6 +119,7 @@ struct StudioUIVideoState: Codable, Sendable {
     let rate: Float
     let preparing: Bool
     let error: String?
+    let externalSyncMessage: String?
     let audioStatus: String?
     let transcribing: Bool
     let silenceClipID: String?

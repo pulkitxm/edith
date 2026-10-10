@@ -313,6 +313,31 @@ final class VideoEditorModel {
         }
     }
 
+    func loadUIProject(_ document: VideoProject) async throws {
+        isClosed = false
+        generation += 1
+        rebuildTask?.cancel(); focusPreviewTask?.cancel(); resetPreviewSeeks()
+        let version = generation
+        let prepared = await document.probingMissingMedia()
+        try Task.checkCancellation()
+        guard !isClosed, version == generation else { throw CancellationError() }
+        replaceProject(prepared); hasUnsavedEdits = false
+        selectedClipID = prepared.clips.first?.id; editingZoomID = nil
+        undoHistory.removeAll(); redoHistory.removeAll()
+        if prepared.fileURL == nil { saveInLibrary() }
+        guard let project else { throw ExtensionPeerError.unavailable }
+        let pipeline = project.clips.isEmpty ? nil : try await previewBuilder(project)
+        try Task.checkCancellation()
+        guard !isClosed, version == generation else { throw CancellationError() }
+        var player: AVPlayer?
+        if let pipeline {
+            let item = AVPlayerItem(asset: pipeline.composition)
+            item.videoComposition = pipeline.videoComposition; item.audioMix = pipeline.audioMix
+            player = AVPlayer(playerItem: item)
+        }
+        acceptExternalProject(project, prepared: pipeline, playbackPlayer: player)
+    }
+
     func refreshRecentProjects() {
         if facade != nil {
             recentProjects = facade?.state?.projects.map(\.value) ?? recentProjects; return
@@ -1402,6 +1427,7 @@ final class VideoEditorModel {
         remotePlaybackRate = value.rate
         if value.rate != 0 || !preserveProject { playhead = value.playhead }
         isRebuildingPreview = value.preparing
+        externalSyncMessage = value.externalSyncMessage
         audioStatus = value.audioStatus; isTranscribing = value.transcribing
         silenceClipID = value.silenceClipID; silentRanges = value.silentRanges
         recentProjects = value.recent.map(\.value)
