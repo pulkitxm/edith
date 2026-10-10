@@ -181,9 +181,13 @@ public actor ExtensionPackageInstaller {
         guard Set(plan.map(\.id)).count == plan.count else { throw MarketplaceError.invalidCatalog }
         let original = try store.installedPackages()
         var resulting = original
-        var added: [URL] = []
-        let temporary = store.root.appendingPathComponent(".staging-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        let authority = try PackageDirectory(store.root, create: true)
+        var added: [ExtensionPackage] = []
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(
+            ".staging-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: temporary, withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: temporary) }
         do {
             for (index, package) in plan.enumerated() {
@@ -193,10 +197,16 @@ public actor ExtensionPackageInstaller {
                         && $0.architecture == package.architecture && $0.version == package.version
                 }
                 let directory = store.directory(for: package)
-                if existing == package, FileManager.default.fileExists(atPath: directory.path) {
+                let present = try authority.contains(package)
+                if existing == package, present {
                     try verify(directory.appendingPathComponent(package.id))
                 } else {
-                    if FileManager.default.fileExists(atPath: directory.path) {
+                    let replacementLease =
+                        present
+                        ? try PackageFileLock(url: store.leaseURL(for: package), exclusive: true)
+                        : nil
+                    defer { replacementLease?.close() }
+                    if present {
                         let stale = directory.appendingPathComponent(package.id)
                             .appendingPathComponent("package.json")
                         guard
@@ -204,10 +214,6 @@ public actor ExtensionPackageInstaller {
                                 ExtensionPayloadManifest.self, from: Data(contentsOf: stale)))
                                 == ExtensionPayloadManifest(package: package)
                         else { throw MarketplaceError.invalidArchive }
-                        let lease = try PackageFileLock(
-                            url: store.leaseURL(for: package), exclusive: true)
-                        defer { lease.close() }
-                        try FileManager.default.removeItem(at: directory)
                     }
                     let archive = try await download(package.downloadURL, package.downloadBytes)
                     defer { try? FileManager.default.removeItem(at: archive) }
@@ -222,11 +228,8 @@ public actor ExtensionPackageInstaller {
                     let staging = temporary.appendingPathComponent(package.id)
                     try ExtensionArchive.extract(archive, package: package, to: staging)
                     try verify(staging.appendingPathComponent(package.id))
-                    try FileManager.default.createDirectory(
-                        at: directory.deletingLastPathComponent(), withIntermediateDirectories: true
-                    )
-                    try FileManager.default.moveItem(at: staging, to: directory)
-                    added.append(directory)
+                    try authority.install(package, from: staging)
+                    added.append(package)
                 }
                 resulting.removeAll {
                     $0.id == package.id && $0.hostABI == package.hostABI
@@ -239,7 +242,7 @@ public actor ExtensionPackageInstaller {
             try store.commit(resulting)
             return resulting
         } catch {
-            for directory in added { try? FileManager.default.removeItem(at: directory) }
+            for package in added { try? authority.remove(package) }
             throw error
         }
     }
