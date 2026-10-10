@@ -22,13 +22,13 @@ const root = resolve(
 const native = process.env.EXTENSION_SUPPORT_NATIVE_TESTS === "1";
 const architecture = process.arch === "arm64" ? "arm64" : "x86_64";
 
-function inspectArchive(archive, directory) {
+function inspectArchive(archive, directory, execute = execFileSync) {
   const bytes = readFileSync(archive);
   const digest = createHash("sha256").update(bytes).digest("hex");
   const magic = bytes.readUInt32BE(0);
   const fat = [0xcafebabe, 0xcafebabf, 0xbebafeca, 0xbfbafeca].includes(magic);
   if (!fat) expect(bytes.subarray(0, 8).toString()).toBe("!<arch>\n");
-  const architectures = execFileSync("xcrun", ["lipo", "-archs", archive], {
+  const architectures = execute("xcrun", ["lipo", "-archs", archive], {
     encoding: "utf8",
   })
     .trim()
@@ -43,27 +43,20 @@ function inspectArchive(archive, directory) {
       ? resolve(directory, `ArchiveInspection-${value}.a`)
       : archive;
     if (fat)
-      execFileSync("xcrun", [
-        "lipo",
-        archive,
-        "-thin",
-        value,
-        "-output",
-        inspected,
-      ]);
+      execute("xcrun", ["lipo", archive, "-thin", value, "-output", inspected]);
     expect(
-      execFileSync("xcrun", ["lipo", "-archs", inspected], {
+      execute("xcrun", ["lipo", "-archs", inspected], {
         encoding: "utf8",
       }).trim(),
     ).toBe(value);
-    const members = execFileSync("xcrun", ["ar", "-t", inspected], {
+    const members = execute("xcrun", ["ar", "-t", inspected], {
       encoding: "utf8",
     })
       .trim()
       .split("\n");
     expect(members.length).toBeGreaterThan(0);
     expect(new Set(members).size).toBe(members.length);
-    const symbols = execFileSync("xcrun", ["nm", "-gUj", inspected], {
+    const symbols = execute("xcrun", ["nm", "-gUj", inspected], {
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
     });
@@ -78,6 +71,12 @@ function inspectArchive(archive, directory) {
 test.skipIf(!native)(
   "private SDK archive inspection verifies every universal slice without changing the archive",
   () => {
+    const execute = (command, arguments_, options = {}) =>
+      execFileSync(command, arguments_, {
+        ...options,
+        timeout: 30_000,
+        killSignal: "SIGKILL",
+      });
     const directory = mkdtempSync(resolve(tmpdir(), "private-sdk-archive-"));
     try {
       const source = resolve(directory, "Fixture.c");
@@ -85,7 +84,7 @@ test.skipIf(!native)(
       const archives = ["arm64", "x86_64"].map((value) => {
         const object = resolve(directory, `Fixture-${value}.o`);
         const archive = resolve(directory, `Fixture-${value}.a`);
-        execFileSync("xcrun", [
+        execute("xcrun", [
           "clang",
           "-target",
           `${value}-apple-macos14.0`,
@@ -94,21 +93,15 @@ test.skipIf(!native)(
           "-o",
           object,
         ]);
-        execFileSync("xcrun", ["ar", "rcs", archive, object]);
+        execute("xcrun", ["ar", "rcs", archive, object]);
         return archive;
       });
       const universal = resolve(directory, "Fixture-universal.a");
-      execFileSync("xcrun", [
-        "lipo",
-        "-create",
-        ...archives,
-        "-output",
-        universal,
-      ]);
+      execute("xcrun", ["lipo", "-create", ...archives, "-output", universal]);
       expect(() =>
-        execFileSync("xcrun", ["ar", "-t", universal], { stdio: "pipe" }),
+        execute("xcrun", ["ar", "-t", universal], { stdio: "pipe" }),
       ).toThrow();
-      const inspected = inspectArchive(universal, directory);
+      const inspected = inspectArchive(universal, directory, execute);
       expect(inspected.map((item) => item.architecture).sort()).toEqual([
         "arm64",
         "x86_64",
@@ -119,6 +112,7 @@ test.skipIf(!native)(
       rmSync(directory, { recursive: true, force: true });
     }
   },
+  90_000,
 );
 
 for (const [scope, selection] of [
