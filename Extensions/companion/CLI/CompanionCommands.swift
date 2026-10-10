@@ -966,14 +966,24 @@ import Foundation
 
 @MainActor struct CompanionStopCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "stop", abstract: "Stop companion generation that is in progress.")
+        commandName: "stop", abstract: "Stop companion generation that is in progress.",
+        discussion: """
+            Stops the reply the chat window is writing, and a chat this terminal already started.
+            Reads whether a reply is streaming. Changes that reply by stopping it.
+
+            ed companion stop
+            ed companion stop --json
+            """)
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
-    func run() async throws {
-        try await execute {
+    static func reply(_ arguments: [String]) throws -> ExtensionCLIReply {
+        do {
+            guard let parsed = try CompanionCommand.parseAsRoot(arguments) as? CompanionStopCommand
+            else { throw ExtensionPeerError.invalidRequest }
             let window = CompanionCLIEnvironment.stopGenerations()
             let commands = CompanionCLIExecution.stopChats()
-            if json {
-                CLIOut.json(
+            let output: String
+            if parsed.json {
+                output = JSONSerializer.string(
                     .object([
                         "action": .string("stop"),
                         "commands": .array(
@@ -984,14 +994,25 @@ import Foundation
                                     "target": .string($0),
                                 ])
                             }), "window": .int(window),
-                    ]));
-                return
-            }
-            if window == 0, commands.isEmpty {
-                CLIOut.out("no companion reply is being written")
+                    ]))
+            } else if window == 0, commands.isEmpty {
+                output = "no companion reply is being written"
             } else {
-                CLIOut.out("stopped \(window) window reply and \(commands.count) command")
+                output = "stopped \(window) window reply and \(commands.count) command"
             }
+            return try ExtensionCLIReply(stdout: output + "\n", stderr: "", exitCode: 0)
+        } catch {
+            let code = CompanionCommand.exitCode(for: error)
+            let message =
+                code == .success
+                ? CompanionCommand.message(for: error) : CompanionCommand.fullMessage(for: error)
+            return try ExtensionCLIReply(
+                stdout: code == .success ? message + "\n" : "",
+                stderr: code == .success ? "" : message + "\n",
+                exitCode: code == .validationFailure ? 2 : code.rawValue)
         }
+    }
+    func run() async throws {
+        CLIOut.raw(try Self.reply(["stop"] + (json ? ["--json"] : [])).stdout)
     }
 }

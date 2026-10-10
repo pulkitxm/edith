@@ -71,6 +71,19 @@ import Testing
         await engine.shutdown(); await worker.shutdown()
     }
 
+    @Test func stopBypassesTerminalOutputCaptureAndCancelsOwnedGeneration() async throws {
+        var stopped = false
+        let id = CompanionGeneration.track { stopped = true }
+        defer { CompanionGeneration.forget(id) }
+        let reply = try await CompanionCLIExecution.run(.init(arguments: ["stop", "--json"]))
+        let object = try #require(
+            JSONSerialization.jsonObject(with: Data(reply.stdout.utf8)) as? [String: Any])
+        #expect(stopped && reply.exitCode == 0 && reply.stderr.isEmpty)
+        #expect(object["window"] as? Int == 1 && (object["commands"] as? [Any])?.isEmpty == true)
+        let invalid = try await CompanionCLIExecution.run(.init(arguments: ["stop", "--unknown"]))
+        #expect(invalid.exitCode == 2 && invalid.stdout.isEmpty)
+    }
+
     @Test func originalCommandHierarchyAndConfigurationValidationArePreserved() async throws {
         let help = try await CompanionCLIExecution.run(.init(arguments: ["--help"]))
         #expect(

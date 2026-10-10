@@ -352,8 +352,14 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                     self.replies[job.id] = CompanionHTTPResult(
                         status: http.statusCode,
                         contentType: response.mimeType ?? "application/octet-stream", data: data)
-                } catch { self?.errors[job.id] = error.localizedDescription }
-                self?.finished.insert(job.id); self?.jobs[job.id] = nil
+                } catch {
+                    if let self, !self.stopped, self.uploads[job.id] != nil {
+                        self.errors[job.id] = error.localizedDescription
+                    }
+                }
+                if let self, !self.stopped, self.uploads[job.id] != nil {
+                    self.finished.insert(job.id); self.jobs[job.id] = nil
+                }
             }
         case "companion.ui.result":
             let job = try JSONDecoder().decode(CompanionJob.self, from: payload)
@@ -389,8 +395,15 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
                         else { throw ExtensionPeerError.unavailable }
                         self.events[id]?.append(event)
                     }
-                } catch { self?.errors[id] = error.localizedDescription }
-                self?.finished.insert(id); self?.jobs[id] = nil
+                } catch {
+                    if let self, !self.stopped, self.events[id] != nil, !self.finished.contains(id)
+                    {
+                        self.errors[id] = error.localizedDescription
+                    }
+                }
+                if let self, !self.stopped, self.events[id] != nil {
+                    self.finished.insert(id); self.jobs[id] = nil
+                }
             }
             return try encode(CompanionJob(id: id, offset: 0))
         case "companion.ui.chatEvents":
@@ -534,7 +547,12 @@ struct CompanionUploadChunk: Codable { let id: UUID; let offset: Int; let data: 
         errors[id] = nil; events[id] = nil; finished.remove(id)
     }
     func stopGenerations() -> Int {
-        let ids = Array(events.keys); for id in ids { cancel(id) }; return ids.count
+        let ids = events.keys.filter { !finished.contains($0) }
+        for id in ids {
+            jobs.removeValue(forKey: id)?.cancel(); events[id] = []; errors[id] = nil;
+            finished.insert(id)
+        }
+        return ids.count
     }
     func shutdown() async {
         let active = Array(jobs.values) + [backendTask, setupTask].compactMap { $0 }

@@ -18,6 +18,9 @@ struct CompanionCLIInput: Decodable { var input: Data? }
     {
         try request.validate()
         guard input.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
+        if request.arguments.first == "stop" {
+            return try CompanionStopCommand.reply(request.arguments)
+        }
         let old = CompanionCLIEnvironment.input
         CompanionCLIEnvironment.input = input
         defer { CompanionCLIEnvironment.input = old }
@@ -26,7 +29,9 @@ struct CompanionCLIInput: Decodable { var input: Data? }
         }
         let id = UUID()
         if request.arguments.first == "chat" {
-            chats[id] = (request.arguments.joined(separator: " "), task)
+            let parsed =
+                try? CompanionCommand.parseAsRoot(request.arguments) as? CompanionChatCommand
+            chats[id] = (parsed?.conversation ?? "new", task)
         }
         defer { chats[id] = nil }
         return try await withTaskCancellationHandler {
