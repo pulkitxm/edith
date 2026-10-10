@@ -79,6 +79,11 @@ import Foundation
 
     func prepareDisable() async throws { try await engine.prepareDisable() }
     func requestApproval() throws { try engine.requestApproval() }
+    func prepareApplicationQuit(_ context: LidAwakeApplicationQuitContext) async throws {
+        guard !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        try await engine.prepareForApplicationQuit(context)
+        await prepareToStop()
+    }
     func prepareToStop() async {
         if !stopped {
             stopped = true

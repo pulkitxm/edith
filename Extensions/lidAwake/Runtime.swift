@@ -12,6 +12,11 @@ final class ExtensionRuntime: NSObject {
     private var uiClient: ExtensionEngineClient?
     private var surface: LidAwakeSurface?
     private let commands = ExtensionCommandRegistry()
+    private var applicationQuit: LidAwakeApplicationQuitContext?
+    private var stopPrepared = false
+
+    override init() { super.init() }
+    init(worker: LidAwakeWorker) { self.worker = worker; super.init() }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -55,6 +60,11 @@ final class ExtensionRuntime: NSObject {
                 let created = LidAwakeWorker(); worker = created
                 surface = LidAwakeSurface(worker: created)
             }
+        case "prepareApplicationQuit":
+            guard worker != nil, !stopPrepared, applicationQuit == nil,
+                let context = LidAwakeApplicationQuitContext(input: input)
+            else { return ["ok": false] as NSDictionary }
+            applicationQuit = context
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient
@@ -81,8 +91,26 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        guard !stopPrepared else { completion(); return }
         Task {
-            await commands.shutdownAndWait(); await worker?.prepareToStop(); completion()
+            await commands.shutdownAndWait()
+            var quitPrepared = false
+            if let applicationQuit {
+                do {
+                    try await worker?.prepareApplicationQuit(applicationQuit); quitPrepared = true
+                } catch { quitPrepared = false }
+            }
+            if !quitPrepared {
+                while true {
+                    do { try await worker?.prepareDisable(); break } catch {
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
+                }
+                await worker?.prepareToStop()
+            }
+            applicationQuit = nil
+            stopPrepared = true
+            completion()
         }
     }
 }

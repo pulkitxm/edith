@@ -12,8 +12,12 @@ import Testing
             let identity = try HostIdentity(
                 identifier: identifier, supportDirectory: URL(fileURLWithPath: "/synthetic/support")
             )
-            let configuration = HostWorkerConfiguration(
-                identity: identity, extensionID: "sample", version: "1.0.0")
+            let bytes = try JSONSerialization.data(withJSONObject: [
+                "identifier": identifier, "supportDirectory": "file:///synthetic/support",
+                "extensionID": "sample", "version": "1.0.0", "theme": "accent",
+                "appearance": "system", "zoom": 1.0, "recoveryOnly": false,
+            ])
+            let configuration = try JSONDecoder().decode(HostWorkerConfiguration.self, from: bytes)
             #expect(try configuration.identity().root == identity.root)
         }
     }
