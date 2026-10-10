@@ -466,6 +466,22 @@ final class LaTeXModel {
         }
     }
 
+    func openBuildURL() {
+        if remote != nil {
+            launch {
+                await self.remoteAction(.init(action: "buildURL", projectID: self.selectedID))
+            }
+        } else {
+            do { try deliverBuildURL() } catch { message = error.localizedDescription }
+        }
+    }
+    func deliverBuildURL() throws {
+        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil,
+            let url = buildURL, ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+        else { throw ExtensionPeerError.invalidRequest }
+        NSWorkspace.shared.open(url)
+    }
+
     func openPDF(save: Bool) {
         if remote != nil {
             launch {

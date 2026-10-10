@@ -379,7 +379,9 @@ struct LaTeXPage: View {
                         Button("Refresh PDF") { model.refreshPDF() }.disabled(
                             model.busy || model.dirty)
                     }
-                    if let url = model.buildURL { Link("View PDF build", destination: url) }
+                    if model.buildURL != nil {
+                        Button("View PDF build") { model.openBuildURL() }.buttonStyle(.link)
+                    }
                     if let data = model.pdfPreview {
                         LaTeXPDFPane(
                             data: data, generation: model.buildGeneration,

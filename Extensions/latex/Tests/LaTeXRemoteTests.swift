@@ -38,6 +38,27 @@ import Testing
         #expect(try store.loadDraft()?.text == "edited document")
     }
 
+    @Test func buildDeliveryStaysEngineOwnedAndFixtureCannotOpenURLs() async throws {
+        let store = LaTeXProjectStore(
+            url: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString))
+        let engine = LaTeXModel(store: store)
+        engine.buildURL = URL(string: "https://fixture.invalid/build")
+        #expect(throws: ExtensionPeerError.self) { try engine.deliverBuildURL() }
+        var actions: [LaTeXUIAction] = []
+        let bridge = LaTeXUIBridge(invoke: { command, payload in
+            #expect(command == "latex.ui.action")
+            actions.append(try JSONDecoder().decode(LaTeXUIAction.self, from: payload))
+            return try JSONEncoder().encode(LaTeXUISnapshot(model: engine))
+        })
+        let ui = LaTeXModel(remote: bridge)
+        ui.selectedID = UUID()
+        ui.openBuildURL()
+        while actions.isEmpty { await Task.yield() }
+        #expect(actions.count == 1 && actions[0].action == "buildURL")
+        await ui.shutdown(); await engine.shutdown()
+    }
+
     @Test func largeValidPDFIsTransferredInCheckedChunksAndRemainsRenderable() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

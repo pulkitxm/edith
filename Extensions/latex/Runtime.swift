@@ -74,8 +74,10 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
-            commands.shutdown(); worker?.model.editorControls.shutdown()
-            worker = nil; TextEditingCommands.shutdown()
+            commands.shutdown()
+            let stopping = worker; worker = nil
+            Task { await stopping?.shutdown() }
+            TextEditingCommands.shutdown()
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }

@@ -188,7 +188,7 @@ struct LaTeXPDFChunkRequest: Codable { let projectID: UUID; let generation: UUID
                     case "reveal": model.revealSource()
                     case "openPDF": try model.deliverPDF(save: false)
                     case "savePDF": try model.deliverPDF(save: true)
-                    case "buildURL": if let url = model.buildURL { NSWorkspace.shared.open(url) }
+                    case "buildURL": try model.deliverBuildURL()
                     default: throw ExtensionPeerError.invalidRequest
                     }
                 }
