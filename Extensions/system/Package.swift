@@ -1,10 +1,16 @@
 // swift-tools-version:6.0
 import PackageDescription
+import Foundation
 
 let package = Package(
     name: "SystemExtension",
     platforms: [.macOS(.v14)],
-    dependencies: [.package(path: "../../Packages/ExtensionSupport")],
+    dependencies: [
+        .package(
+            name: "ExtensionSupport",
+            path: ProcessInfo.processInfo.environment["EDITH_EXTENSION_TEST_SDK"]
+                ?? "../../Packages/ExtensionSupport")
+    ],
     targets: [
         .target(
             name: "SystemExtension",

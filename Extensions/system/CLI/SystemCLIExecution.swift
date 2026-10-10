@@ -19,6 +19,6 @@ import Foundation
         let previous = SystemCLIEnvironment.operations
         SystemCLIEnvironment.operations = operations
         defer { SystemCLIEnvironment.operations = previous }
-        return try await ExtensionCLIExecution.run(AppsCommand.self, arguments: request.arguments)
+        return try await ExtensionCLIExecution.run(AppsCommand.self, request: request)
     }
 }

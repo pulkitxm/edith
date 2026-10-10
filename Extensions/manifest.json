@@ -523,7 +523,8 @@
         "Extensions/system/Views/CleaningOverlay.swift",
         "Extensions/system/SystemAppsSnapshot.swift",
         "Extensions/system/CLI/AppsCommands.swift",
-        "Extensions/system/CLI/SystemCLIExecution.swift"
+        "Extensions/system/CLI/SystemCLIExecution.swift",
+        "Extensions/system/CLI/SystemCLICatalog.swift"
       ]
     },
     "inputs": [

@@ -60,6 +60,7 @@ final class ExtensionRuntime: NSObject {
                         }
                     })
             }
+            if command == "system.cli.catalog" { return try SystemCLICatalog.data() }
             switch command {
             case "system.cli":
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
