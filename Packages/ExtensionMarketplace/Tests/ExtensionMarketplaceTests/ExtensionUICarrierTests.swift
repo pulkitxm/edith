@@ -27,7 +27,7 @@ private struct UICarrierFixture {
             "EdithHostExecutablePath": "/tmp/fixture/Host.app/Contents/MacOS/Edith",
             "EdithHostCodeRequirement": "identifier \"com.pulkit.edith.tests.ui\"",
             "EdithExecutableProvenance": String(repeating: "a", count: 64),
-            "EdithPayloadRelativePath": "../../../..",
+            "EdithPayloadRelativePath": "Contents/Resources/Payload",
         ]
         var applicationInfo = shared
         applicationInfo["CFBundleIdentifier"] = "\(host).extension.calendar"
@@ -50,6 +50,11 @@ private struct UICarrierFixture {
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o755], ofItemAtPath: executable.path)
         }
+        let selectedPayload = worker.appendingPathComponent("Contents/Resources/Payload/calendar")
+        try FileManager.default.createDirectory(
+            at: selectedPayload, withIntermediateDirectories: true)
+        try JSONEncoder().encode(ExtensionPayloadManifest(package: package))
+            .write(to: selectedPayload.appendingPathComponent("package.json"))
     }
 
     func mutate(_ bundle: URL, key: String, value: Any) throws {
@@ -142,42 +147,60 @@ func changedWorkerSealedMetadataIsRejected(key: String) throws {
     }
 }
 
-@Test func archiveValidatesCarrierMetadataBeforeItCanBeCommitted() throws {
+@Test(arguments: [false, true])
+func archiveValidatesCarrierMetadataBeforeItCanBeCommitted(forged: Bool) throws {
     let fixture = try UICarrierFixture()
     defer { fixture.clean() }
     try FileManager.default.createDirectory(
-        at: fixture.root.appendingPathComponent("app.bundle/Contents/MacOS"),
+        at: fixture.worker.appendingPathComponent(
+            "Contents/Resources/Payload/calendar/app.bundle/Contents/MacOS"),
         withIntermediateDirectories: true)
     try Data("synthetic feature".utf8).write(
-        to: fixture.root.appendingPathComponent("app.bundle/Contents/MacOS/Runtime"))
+        to: fixture.worker.appendingPathComponent(
+            "Contents/Resources/Payload/calendar/app.bundle/Contents/MacOS/Runtime"))
     try JSONEncoder().encode(ExtensionPayloadManifest(package: fixture.package))
         .write(to: fixture.root.appendingPathComponent("package.json"))
-    try fixture.mutate(fixture.worker, key: "EdithExtensionID", value: "music")
+    if forged { try fixture.mutate(fixture.worker, key: "EdithExtensionID", value: "music") }
     let archiveURL = fixture.root.appendingPathComponent("test.zip")
     let zip = try Archive(url: archiveURL, accessMode: .create)
     let enumerator = try #require(
         FileManager.default.enumerator(
             at: fixture.root, includingPropertiesForKeys: [.isRegularFileKey]))
     var expandedBytes = 0
-    for case let url as URL in enumerator where url != archiveURL {
+    for case let url as URL in enumerator where url.lastPathComponent != "test.zip" {
         guard try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
             continue
         }
         let bytes = try Data(contentsOf: url)
         let path =
-            "\(fixture.package.id)/" + String(url.path.dropFirst(fixture.root.path.count + 1))
-        try zip.addEntry(with: path, type: .file, uncompressedSize: Int64(bytes.count)) {
-            offset, count in
-            bytes.subdata(in: Int(offset)..<min(Int(offset) + count, bytes.count))
-        }
+            "\(fixture.package.id)/"
+            + String(
+                url.standardizedFileURL.path.dropFirst(
+                    fixture.root.standardizedFileURL.path.count + 1))
+        try zip.addEntry(with: path, fileURL: url)
         expandedBytes += bytes.count
     }
     let package = ExtensionPackage(
         id: fixture.package.id, version: fixture.package.version, hostABI: fixture.package.hostABI,
         downloadURL: fixture.package.downloadURL, sha256: fixture.package.sha256,
         downloadBytes: fixture.package.downloadBytes, installedBytes: Int64(expandedBytes))
-    #expect(throws: MarketplaceError.invalidArchive) {
+    if forged {
+        #expect(throws: MarketplaceError.invalidArchive) {
+            try ExtensionArchive.extract(
+                archiveURL, package: package, to: fixture.root.appendingPathComponent("extracted"))
+        }
+    } else {
         try ExtensionArchive.extract(
             archiveURL, package: package, to: fixture.root.appendingPathComponent("extracted"))
+        let installed = fixture.root.appendingPathComponent("extracted/calendar")
+        let carrier = try ExtensionUICarrier(payload: installed, package: package)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: carrier.payloadDirectory.appendingPathComponent(
+                    "app.bundle/Contents/MacOS/Runtime"
+                ).path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: installed.appendingPathComponent("app.bundle").path))
     }
 }

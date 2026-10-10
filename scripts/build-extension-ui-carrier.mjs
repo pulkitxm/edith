@@ -4,8 +4,10 @@ import {
   copyFile,
   lstat,
   mkdir,
+  readdir,
   readFile,
   realpath,
+  rename,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -78,7 +80,7 @@ export function extensionUICarrierMetadata({
       EdithExecutableProvenance: executableSHA256,
       EdithHostCodeRequirement: hostCodeRequirement,
       EdithHostExecutablePath: hostExecutablePath,
-      EdithPayloadRelativePath: "../../../..",
+      EdithPayloadRelativePath: "Contents/Resources/Payload",
     },
   };
 }
@@ -159,6 +161,7 @@ export async function buildExtensionUICarrier({
   id,
   version,
   hostABI,
+  dependencies = [],
   development = false,
   identity = process.env.EXTENSION_SIGN_IDENTITY,
 }) {
@@ -204,6 +207,38 @@ export async function buildExtensionUICarrier({
   });
   const paths = await extensionUICarrierPaths(payloadDirectory);
   await mkdir(paths.workerContents, { recursive: true });
+  const selectedPayload = resolve(
+    paths.workerContents,
+    "Resources/Payload",
+    id,
+  );
+  await mkdir(selectedPayload, { recursive: true });
+  for (const entry of await readdir(payloadDirectory, {
+    withFileTypes: true,
+  })) {
+    if (!entry.name.endsWith(".bundle")) continue;
+    if (
+      !entry.isDirectory() ||
+      !["app", "helper", "agent", "cli", "privileged"].some(
+        (role) => entry.name === `${role}.bundle`,
+      )
+    )
+      throw new Error("Invalid extension UI role payload");
+    await rename(
+      resolve(payloadDirectory, entry.name),
+      resolve(selectedPayload, entry.name),
+    );
+  }
+  await writeFile(
+    resolve(selectedPayload, "package.json"),
+    JSON.stringify({
+      id,
+      version,
+      hostABI,
+      architecture: "arm64",
+      dependencies,
+    }),
+  );
   const provenance = await copyContainedHostRuntime(hostApp, paths.contents, {
     identity: signingIdentity,
     development,

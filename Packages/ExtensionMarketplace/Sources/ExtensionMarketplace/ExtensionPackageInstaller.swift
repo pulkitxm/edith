@@ -68,13 +68,21 @@ public enum ExtensionArchive {
         else {
             throw MarketplaceError.invalidArchive
         }
+        let uiCarrier: ExtensionUICarrier?
         if FileManager.default.fileExists(
             atPath: payload.appendingPathComponent("ExtensionCarrier.app").path)
         {
-            _ = try ExtensionUICarrier(payload: payload, package: package)
+            uiCarrier = try ExtensionUICarrier(payload: payload, package: package)
+            guard
+                try FileManager.default.contentsOfDirectory(
+                    at: payload, includingPropertiesForKeys: nil
+                ).allSatisfy({ $0.pathExtension != "bundle" })
+            else { throw MarketplaceError.invalidArchive }
+        } else {
+            uiCarrier = nil
         }
         let bundles = try FileManager.default.contentsOfDirectory(
-            at: payload, includingPropertiesForKeys: nil
+            at: uiCarrier?.payloadDirectory ?? payload, includingPropertiesForKeys: nil
         )
         .filter { $0.pathExtension == "bundle" }
         guard !bundles.isEmpty,
@@ -125,13 +133,23 @@ public actor ExtensionPackageInstaller {
                 let manifest = try JSONDecoder().decode(
                     ExtensionPayloadManifest.self,
                     from: Data(contentsOf: directory.appendingPathComponent("package.json")))
+                let rolePayload: URL
                 if FileManager.default.fileExists(
                     atPath: directory.appendingPathComponent("ExtensionCarrier.app").path)
                 {
-                    try ExtensionUICarrier(
+                    let carrier = try ExtensionUICarrier(
                         payload: directory, manifest: manifest,
                         expectedHostIdentifier: Bundle.main.bundleIdentifier ?? "com.pulkit.edith"
-                    ).verify(teamIdentifier: teamIdentifier)
+                    )
+                    try carrier.verify(teamIdentifier: teamIdentifier)
+                    rolePayload = carrier.payloadDirectory
+                } else {
+                    rolePayload = directory
+                }
+                for bundle in try FileManager.default.contentsOfDirectory(
+                    at: rolePayload, includingPropertiesForKeys: nil)
+                where bundle.pathExtension == "bundle" {
+                    try ExtensionCodeSignature.verify(bundle, teamIdentifier: teamIdentifier)
                 }
                 for bundle in try FileManager.default.contentsOfDirectory(
                     at: directory, includingPropertiesForKeys: nil)

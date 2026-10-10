@@ -35,8 +35,7 @@ public final class ExtensionNativeLibrary: @unchecked Sendable {
                 id: id, hostABI: hostABI, architecture: architecture)
         else { throw MarketplaceError.packageNotInstalled }
         let lease = try store.lease(package)
-        let url = store.directory(for: package).appendingPathComponent(id)
-            .appendingPathComponent("\(role.rawValue).bundle")
+        let url = store.roleBundle(for: package, role: role)
         try verify(url)
         guard let bundle = Bundle(url: url),
             bundle.bundleIdentifier == "com.pulkit.edith.extensions.\(id).\(role.rawValue)",

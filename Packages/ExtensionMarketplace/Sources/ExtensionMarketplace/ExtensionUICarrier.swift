@@ -10,6 +10,7 @@ public struct ExtensionUICarrier: Sendable {
     public let hostExecutablePath: String
     public let hostCodeRequirement: String
     public let executableProvenance: String
+    public let payloadDirectory: URL
 
     public init(payload: URL, package: ExtensionPackage, expectedHostIdentifier: String? = nil)
         throws
@@ -22,8 +23,16 @@ public struct ExtensionUICarrier: Sendable {
     public init(
         payload: URL, manifest: ExtensionPayloadManifest, expectedHostIdentifier: String? = nil
     ) throws {
+        guard ExtensionPackage.validComponent(manifest.id),
+            ExtensionPackage.validComponent(manifest.version),
+            ExtensionPackage.validComponent(manifest.hostABI),
+            ["arm64", "x86_64"].contains(manifest.architecture),
+            manifest.dependencies.allSatisfy(ExtensionPackage.validComponent)
+        else { throw MarketplaceError.invalidArchive }
         application = payload.appendingPathComponent("ExtensionCarrier.app")
         worker = application.appendingPathComponent("Contents/Extensions/ExtensionWorker.appex")
+        payloadDirectory = worker.appendingPathComponent("Contents/Resources/Payload")
+            .appendingPathComponent(manifest.id)
         try Self.requireRegularTree(application)
         let carrier = try Self.readInfo(application)
         let extensionInfo = try Self.readInfo(worker)
@@ -67,7 +76,7 @@ public struct ExtensionUICarrier: Sendable {
             "EdithHostCodeRequirement": requirement,
             "EdithHostExecutablePath": executablePath,
             "EdithExecutableProvenance": provenance,
-            "EdithPayloadRelativePath": "../../../..",
+            "EdithPayloadRelativePath": "Contents/Resources/Payload",
         ]
         guard shared.allSatisfy({ carrier[$0.key] as? String == $0.value }),
             shared.allSatisfy({ extensionInfo[$0.key] as? String == $0.value }),
@@ -82,6 +91,14 @@ public struct ExtensionUICarrier: Sendable {
                 at: application.appendingPathComponent("Contents/Extensions"),
                 includingPropertiesForKeys: nil
             ).map(\.lastPathComponent) == ["ExtensionWorker.appex"]
+        else { throw MarketplaceError.invalidArchive }
+        let sealedManifestURL = payloadDirectory.appendingPathComponent("package.json")
+        guard
+            try sealedManifestURL.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 65537
+                <= 65536,
+            try JSONDecoder().decode(
+                ExtensionPayloadManifest.self, from: Data(contentsOf: sealedManifestURL))
+                == manifest
         else { throw MarketplaceError.invalidArchive }
         try Self.requireExecutable(application.appendingPathComponent("Contents/MacOS/Edith"))
         try Self.requireExecutable(worker.appendingPathComponent("Contents/MacOS/Edith"))

@@ -69,7 +69,9 @@ describe("extension UI carriers", () => {
     expect(first.attributes.EdithExecutableProvenance).toBe(
       fixture.executableSHA256,
     );
-    expect(first.attributes.EdithPayloadRelativePath).toBe("../../../..");
+    expect(first.attributes.EdithPayloadRelativePath).toBe(
+      "Contents/Resources/Payload",
+    );
     expect(first.extensionPointIdentifier).toBe(
       "com.pulkit.edith.tests.ui.ExtensionUI",
     );
@@ -232,6 +234,21 @@ describe("extension UI carriers", () => {
           .digest("hex");
         const payload = join(root, "calendar");
         await mkdir(payload);
+        const role = join(payload, "app.bundle");
+        await mkdir(join(role, "Contents/MacOS"), { recursive: true });
+        await copyFile("/usr/bin/true", join(role, "Contents/MacOS/Runtime"));
+        writePlist(join(role, "Contents/Info.plist"), {
+          CFBundleIdentifier: "com.pulkit.edith.extensions.calendar.app",
+          CFBundleExecutable: "Runtime",
+          CFBundlePackageType: "BNDL",
+          CFBundleShortVersionString: "1.0.0",
+          CFBundleVersion: "1",
+          EdithHostABI: "edith-host-1",
+        });
+        execFileSync("codesign", ["--force", "--sign", "-", role], {
+          stdio: "pipe",
+        });
+        const roleBytes = await readFile(join(role, "Contents/MacOS/Runtime"));
         const built = await buildExtensionUICarrier({
           hostApp: host,
           payloadDirectory: payload,
@@ -253,6 +270,32 @@ describe("extension UI carriers", () => {
         );
         const carrierInfo = readPlist(join(carrier, "Contents/Info.plist"));
         const workerInfo = readPlist(join(worker, "Contents/Info.plist"));
+        const selectedPayload = join(
+          worker,
+          "Contents/Resources/Payload/calendar",
+        );
+        expect(
+          await readFile(
+            join(selectedPayload, "app.bundle/Contents/MacOS/Runtime"),
+          ),
+        ).toEqual(roleBytes);
+        await expect(
+          readFile(join(role, "Contents/MacOS/Runtime")),
+        ).rejects.toThrow();
+        expect(workerInfo.EdithPayloadRelativePath).toBe(
+          "Contents/Resources/Payload",
+        );
+        expect(
+          JSON.parse(
+            await readFile(join(selectedPayload, "package.json"), "utf8"),
+          ),
+        ).toEqual({
+          id: "calendar",
+          version: "1.0.0",
+          hostABI: "edith-host-1",
+          architecture: "arm64",
+          dependencies: [],
+        });
         expect(carrierInfo.CFBundleIdentifier).toBe(
           `${fixture.hostIdentifier}.extension.calendar`,
         );
