@@ -3,29 +3,54 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor enum CompanionCLIEnvironment {
-    static var input = Data()
+    static var input: Data { ExtensionCLIContext.request?.standardInput ?? Data() }
     static var stopGenerations: () -> Int = { CompanionGeneration.stopAll() }
 }
-struct CompanionCLIInput: Decodable { var input: Data? }
 @MainActor enum CompanionCLIExecution {
+    private static var streamingChats:
+        [UUID: (String, ExtensionCLIStreamHandle, ExtensionCLIStreams)] = [:]
     private static var chats: [UUID: (String, Task<ExtensionCLIReply, Error>)] = [:]
     static func stopChats() -> [String] {
         let active = chats; for (_, task) in active.values { task.cancel() };
-        return active.values.map { $0.0 }
+        let streamed = streamingChats; streamingChats.removeAll()
+        for (_, handle, streams) in streamed.values { try? streams.cancel(handle) }
+        return active.values.map { $0.0 } + streamed.values.map { $0.0 }
     }
-    static func run(_ request: ExtensionCLIRequest, input: Data = Data()) async throws
+    static func stream(_ streams: ExtensionCLIStreams, operation: String, payload: Data) throws
+        -> Data
+    {
+        let result = try streams.invoke(
+            CompanionCommand.self, operation: operation, prefix: "companion.cli", payload: payload)
+        if operation == "companion.cli.start" {
+            let request = try JSONDecoder().decode(ExtensionCLIStreamStart.self, from: payload)
+            if request.request.arguments.first == "chat" {
+                let handle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: result)
+                let parsed =
+                    try? CompanionCommand.parseAsRoot(request.request.arguments)
+                    as? CompanionChatCommand
+                streamingChats[handle.token] = (parsed?.conversation ?? "new", handle, streams)
+            }
+        } else if operation == "companion.cli.read" {
+            let frame = try JSONDecoder().decode(ExtensionCLIStreamFrame.self, from: result)
+            if frame.state != .running { streamingChats[frame.handle.token] = nil }
+        } else if ["companion.cli.end", "companion.cli.cancel"].contains(operation) {
+            let handle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: payload)
+            streamingChats[handle.token] = nil
+        }
+        return result
+    }
+
+    static func run(_ request: ExtensionCLIRequest) async throws
         -> ExtensionCLIReply
     {
         try request.validate()
-        guard input.count <= 1_048_576 else { throw ExtensionPeerError.invalidRequest }
         if request.arguments.first == "stop" {
-            return try CompanionStopCommand.reply(request.arguments)
+            return try ExtensionCLIContext.$request.withValue(request) {
+                try CompanionStopCommand.reply(request.arguments)
+            }
         }
-        let old = CompanionCLIEnvironment.input
-        CompanionCLIEnvironment.input = input
-        defer { CompanionCLIEnvironment.input = old }
         let task = Task {
-            try await ExtensionCLIExecution.run(CompanionCommand.self, arguments: request.arguments)
+            try await ExtensionCLIExecution.run(CompanionCommand.self, request: request)
         }
         let id = UUID()
         if request.arguments.first == "chat" {
@@ -101,4 +126,8 @@ struct CompanionCLIInput: Decodable { var input: Data? }
         CLIOut.out("\(verb) on \(deployment.machineName), \(running) of \(services.count) up")
     }
 }
-extension String { func expandingTilde() -> String { (self as NSString).expandingTildeInPath } }
+extension String {
+    func companionCLIPath() throws -> URL {
+        try ExtensionCLIContext.resolvePath((self as NSString).expandingTildeInPath)
+    }
+}

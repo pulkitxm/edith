@@ -830,7 +830,7 @@ import Foundation
 
     func run() async throws {
         try await execute {
-            let url = URL(fileURLWithPath: path.expandingTilde())
+            let url = try path.companionCLIPath()
             let scan: CompanionScanResult
             let audioScan: CompanionAudioScanResult
             let pdfScan: CompanionAudioScanResult

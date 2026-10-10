@@ -1362,7 +1362,7 @@ enum CompanionBrainOutput {
                 let data = CompanionCLIEnvironment.input
                 text = String(decoding: data, as: UTF8.self)
             } else {
-                let url = URL(fileURLWithPath: path.expandingTilde())
+                let url = try path.companionCLIPath()
                 do {
                     text = try String(contentsOf: url, encoding: .utf8)
                 } catch {
@@ -1919,7 +1919,7 @@ extension CompanionBrainOutput {
 
     func run() async throws {
         try await execute {
-            let url = URL(fileURLWithPath: path.expandingTilde())
+            let url = try path.companionCLIPath()
             let outcome = try await CompanionSettingsOperationBridge.request(
                 endpoint: endpoint
             ) { operations in

@@ -12,16 +12,23 @@ final class ExtensionRuntime: NSObject {
     private var engineClient: ExtensionEngineClient?
     private var surface: CompanionSurface?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, let worker = self.worker else { throw ExtensionPeerError.unavailable }
+            if command.hasPrefix("companion.cli.") {
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "companion")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try CompanionCLIExecution.stream(
+                    streams, operation: command, payload: payload)
+            }
             if command == "companion.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                let input =
-                    try JSONDecoder().decode(CompanionCLIInput.self, from: payload).input ?? Data()
                 return try JSONEncoder().encode(
-                    try await CompanionCLIExecution.run(request, input: input))
+                    try await CompanionCLIExecution.run(request))
             }
             if command.hasPrefix("companion.ui."), let engine = self.uiEngine {
                 return try await engine.execute(command, payload: payload)
@@ -36,12 +43,16 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
+        _ = CompanionCLIExecution.stopChats()
         commands.shutdown()
         let engine = uiEngine; uiEngine = nil
         let worker = worker
         Task {
             await engine?.shutdown()
             await worker?.shutdown()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }
@@ -107,6 +118,9 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": IPC.post(IPC.Name.settingsChanged)
         case "stop":
+            _ = CompanionCLIExecution.stopChats()
+            let streams = cliStreams; cliStreams = nil; streams?.stop()
+            Task { await streams?.stopAndWait() }
             commands.shutdown()
             let engine = uiEngine; uiEngine = nil
             let worker = worker

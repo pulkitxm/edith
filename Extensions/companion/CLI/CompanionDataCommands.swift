@@ -34,8 +34,7 @@ import Foundation
 
     func run() async throws {
         try await execute {
-            let target = URL(
-                fileURLWithPath: (directory as NSString).expandingTildeInPath, isDirectory: true)
+            let target = try directory.companionCLIPath()
             let include = includeMedia
             let result = try await CompanionSettingsOperationBridge.request(
                 endpoint: endpoint
@@ -103,7 +102,7 @@ import Foundation
 
     func run() async throws {
         try await execute {
-            let expanded = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            let expanded = try path.companionCLIPath()
             let result = try await CompanionSettingsOperationBridge.request(
                 endpoint: endpoint
             ) { operations in
