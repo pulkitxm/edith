@@ -11,6 +11,8 @@ final class OriginalShellJourneyTests: XCTestCase {
     private var root = URL(fileURLWithPath: "/")
     private var snapshots: [[String: Any]] = []
     private var startup: [String: Any] = [:]
+    private var outcomeSequence = 0
+    private var windowImages: [String: Data] = [:]
 
     func testOriginalCalendarInstallCustomizeReplaceUpdateDisableAndRemove() throws {
         continueAfterFailure = false
@@ -158,6 +160,15 @@ final class OriginalShellJourneyTests: XCTestCase {
         try captureWindow(application, fixture: fixture, name: "storage-distribution.png")
         application.terminate()
         try verifyProtected(fixture)
+        XCTAssertEqual(snapshots.count, 13)
+        XCTAssertEqual(windowImages.count, 2)
+        for name in ["marketplace-installed-calendar.png", "storage-distribution.png"] {
+            let bytes = try XCTUnwrap(windowImages[name])
+            let attachment = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.png")
+            attachment.name = "edith-journey-" + name
+            attachment.lifetime = .keepAlways
+            add(attachment)
+        }
     }
 
     private func captureWindow(
@@ -176,11 +187,8 @@ final class OriginalShellJourneyTests: XCTestCase {
         let bytes = window.screenshot().pngRepresentation
         XCTAssertGreaterThan(bytes.count, 0)
         XCTAssertLessThanOrEqual(bytes.count, 8_388_608)
-        let destination = root.appendingPathComponent(name)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
-        try bytes.write(to: destination, options: .withoutOverwriting)
-        try FileManager.default.setAttributes(
-            [.posixPermissions: 0o600], ofItemAtPath: destination.path)
+        XCTAssertNil(windowImages[name])
+        windowImages[name] = bytes
     }
 
     private func findCalendar(_ application: XCUIApplication) throws {
@@ -270,11 +278,18 @@ final class OriginalShellJourneyTests: XCTestCase {
     }
 
     private func saveOutcome() throws {
-        try JSONSerialization.data(
-            withJSONObject: ["schema": 1, "startup": startup, "snapshots": snapshots],
-            options: .sortedKeys
-        )
-        .write(to: root.appendingPathComponent("journey-outcome.json"), options: .atomic)
+        outcomeSequence += 1
+        XCTAssertLessThanOrEqual(outcomeSequence, 64)
+        let bytes = try JSONSerialization.data(
+            withJSONObject: [
+                "schema": 1, "sequence": outcomeSequence, "startup": startup,
+                "snapshots": snapshots,
+            ], options: .sortedKeys)
+        XCTAssertLessThanOrEqual(bytes.count, 2_097_152)
+        let attachment = XCTAttachment(data: bytes, uniformTypeIdentifier: "public.json")
+        attachment.name = String(format: "edith-journey-outcome-%04d.json", outcomeSequence)
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func canonical(_ value: Any?) throws -> Data {
