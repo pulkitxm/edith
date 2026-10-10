@@ -205,8 +205,9 @@ import Observation
 
     private func complete() {
         saveSelection()
-        for category in Set(entries.filter { selected.contains($0.id) }.map(\.category)) {
-            defaults.set(true, forKey: "suite" + category.capitalized + "Enabled")
+        let categories = Set(entries.filter { selected.contains($0.id) }.map(\.category))
+        for suite in HostMarketplaceCatalog.suites where categories.contains(suite.id) {
+            defaults.set(true, forKey: suite.defaultsKey)
         }
         defaults.set(true, forKey: HostSettingsCatalog.onboardingCompletedKey)
         defaults.set(false, forKey: Self.reviewPendingKey)
