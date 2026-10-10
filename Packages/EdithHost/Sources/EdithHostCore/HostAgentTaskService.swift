@@ -64,7 +64,7 @@ private final class HostAgentTaskOutputBuffer: @unchecked Sendable {
     var values: [HostAgentTaskOutput] { lock.withLock { lines } }
 }
 
-private struct PersistedHostAgentTask: Codable {
+struct PersistedHostAgentTask: Codable {
     var fingerprint: String?
     var status: HostAgentTaskStatus
 }
