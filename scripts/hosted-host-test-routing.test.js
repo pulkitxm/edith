@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 const ci = await readFile(".github/workflows/ci.yml", "utf8");
@@ -47,4 +48,22 @@ test("dedicated reviewed routes do not start normal CI or both fixture jobs", ()
   expect(journey).toContain("inputs.hosted_host_tests_sha == ''");
   expect(diagnostic).not.toContain("secrets:");
   expect(diagnostic).toContain("permissions:\n  contents: read");
+});
+
+test("normal script CI executes pure watchdog ownership and deadline tests without native launches", () => {
+  const output = execFileSync(
+    "python3",
+    [
+      "-B",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "scripts/hosted-host-tests",
+      "-p",
+      "test_*.py",
+    ],
+    { encoding: "utf8", timeout: 10000, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  expect(output).toBe("");
 });
