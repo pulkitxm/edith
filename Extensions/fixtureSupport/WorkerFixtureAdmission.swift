@@ -39,6 +39,10 @@ public struct WorkerFixtureAdmission: Sendable {
     ) throws -> Self? {
         guard
             environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+                || environment["EDITH_APPLICATION_IDENTIFIER"]?.hasPrefix("com.pulkit.edith.tests.")
+                    == true
+                || environment["EDITH_SHARED_DEFAULTS_SUITE"]?.hasPrefix("com.pulkit.edith.tests.")
+                    == true
                 || hostIdentifier?.hasPrefix("com.pulkit.edith.tests.") == true
                 || (context["hostIdentifier"] as? String)?.hasPrefix("com.pulkit.edith.tests.")
                     == true
@@ -81,7 +85,9 @@ public struct WorkerFixtureAdmission: Sendable {
         for directory in [root, home, data, hostBundle, roleDirectory] {
             try validate(directory, directory: true)
         }
-        guard try mode(home) == 0o700 else { throw WorkerFixtureError.invalid }
+        guard try mode(root) == 0o700, try mode(home) == 0o700 else {
+            throw WorkerFixtureError.invalid
+        }
         let marker = home.appendingPathComponent("worker-fixture.json")
         try validate(marker, directory: false)
         guard try mode(marker) == 0o600 else { throw WorkerFixtureError.invalid }
