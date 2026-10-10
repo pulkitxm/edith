@@ -284,7 +284,7 @@ import GhosttyTerminal
                 }
                 let output = try pty.read(after: cursor)
                 cursor = output.nextOffset
-                if !output.bytes.isEmpty { CLIOut.raw(output.bytes) }
+                if !output.bytes.isEmpty { try CLIOut.raw(output.bytes) }
                 if let code = output.exitCode {
                     cliPTYs.removeValue(forKey: caller)
                     await pty.closeAndWait()

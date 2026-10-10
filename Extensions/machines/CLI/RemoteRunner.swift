@@ -84,13 +84,26 @@ public struct RemoteRunner {
         let process = makeProcess(command)
         let outputSink = ExtensionCLIContext.outputSink
         let rawOutputSink = ExtensionCLIContext.rawOutputSink
+        guard
+            rawOutputSink != nil
+                || (ExtensionCLIContext.request == nil && outputSink == nil)
+        else {
+            CLIOut.note("error: raw remote output requires an owning data sink")
+            return 1
+        }
+        let owner = owner
         let stream = SSHLineStream(
             process: process, stdinData: ExtensionCLIContext.request?.standardInput,
             onLine: { _, _ in }, onExit: { _ in },
             onData: { data, isStderr in
                 ExtensionCLIContext.$outputSink.withValue(outputSink) {
                     ExtensionCLIContext.$rawOutputSink.withValue(rawOutputSink) {
-                        CLIOut.raw(data, error: isStderr)
+                        do {
+                            try CLIOut.raw(data, error: isStderr)
+                        } catch {
+                            CLIOut.note("error: \(error.localizedDescription)")
+                            owner.cancel()
+                        }
                     }
                 }
             })
