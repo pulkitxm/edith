@@ -138,6 +138,36 @@ import Testing
         #expect(!fixture.controller.isExpanded)
     }
 
+    @Test func savedMusicPreferenceClearsGlancesAndRejectsLateProviderData() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        try fixture.state.publish([
+            "surface.activeIDs": "[\"notchShelf\",\"music\"]",
+            "surface.activeVersions": "{\"notchShelf\":\"1\",\"music\":\"1\"}",
+        ])
+        fixture.controller.synchronize()
+        fixture.controller.layouts.update(.notch) {
+            $0.notchLeadingGlance = .music
+            $0.notchTrailingGlance = .none
+            $0.notchExpandPermissions = false
+            $0.notchPrioritizePermissions = false
+        }
+        let snapshot = SurfaceSnapshot(
+            providerID: "music", rows: [.init("track", title: "Synthetic track")])
+        fixture.controller.recordSurfaceSnapshot(snapshot)
+        #expect(fixture.controller.leadingGlance?.source == .music)
+        let request = NotchPreferenceRequest(key: AppStorageKeys.Notch.shelfShowMusic, value: "0")
+        _ = try await fixture.controller.execute(
+            "notch.settings.write", payload: JSONEncoder().encode(request))
+        #expect(fixture.controller.glanceProviderIDs.isEmpty)
+        #expect(fixture.controller.leadingGlance == nil)
+        #expect(fixture.controller.surfaceSnapshots["music"] == nil)
+        fixture.controller.recordSurfaceSnapshot(snapshot)
+        #expect(fixture.controller.surfaceSnapshots["music"] == nil)
+        fixture.controller.layouts.update(.notch) { $0.notchLeadingGlance = .automatic }
+        #expect(!fixture.controller.glanceProviderIDs.contains("music"))
+    }
+
     @MainActor private struct Fixture {
         let id = "notch-glance-tests-" + UUID().uuidString
         let root: URL

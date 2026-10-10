@@ -106,6 +106,14 @@ struct NotchSettingsPage: View {
                 preference("Power plugged / unplugged", AppStorageKeys.Notch.alertPower)
                 preference("Battery low", AppStorageKeys.Notch.alertBattery)
                 preference("Bluetooth connect / disconnect", AppStorageKeys.Notch.alertBluetooth)
+                if boolValue(AppStorageKeys.Notch.alertBluetooth),
+                    model.snapshot.bluetoothPrivacyRequired == true
+                {
+                    Button("Open Bluetooth Privacy Settings...") {
+                        model.perform("notch.bluetooth.settings")
+                    }
+                    .buttonStyle(.edith(.secondary))
+                }
             }
             preference("Show on external displays", AppStorageKeys.Notch.shelfShowOnExternal)
             caption("Draws a small pill at the top of screens without a notch.")

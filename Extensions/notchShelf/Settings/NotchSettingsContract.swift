@@ -5,6 +5,7 @@ struct NotchSettingsSnapshot: Codable, Equatable, Sendable {
     var preferences: [String: String]
     var activeIDs: Set<String>
     var browserProfile: String?
+    var bluetoothPrivacyRequired: Bool? = nil
 
     func validate() throws {
         guard Set(preferences.keys) == Set(NotchSettingsSchema.defaults.keys),

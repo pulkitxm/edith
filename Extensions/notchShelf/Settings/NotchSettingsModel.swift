@@ -50,7 +50,10 @@ import Observation
 
     func perform(_ operation: String, payload: Data = Data("{}".utf8)) {
         guard available, !busy, let invoke,
-            ["notch.settings.write", "notch.customize", "notch.browser.detach"].contains(operation)
+            [
+                "notch.settings.write", "notch.customize", "notch.browser.detach",
+                "notch.bluetooth.settings",
+            ].contains(operation)
         else { return }
         generation = UUID()
         let token = generation

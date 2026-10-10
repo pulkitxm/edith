@@ -21,10 +21,16 @@ struct NotchSurfaceGlance: Equatable {
 }
 
 extension NotchShelfController {
+    var musicGlancesEnabled: Bool {
+        context.defaults.object(forKey: AppStorageKeys.Notch.shelfShowMusic) as? Bool ?? true
+    }
+
     var glanceProviderIDs: Set<String> {
         let sources = [surfaceLayout.notchLeadingGlance, surfaceLayout.notchTrailingGlance]
         if sources.contains(.automatic) {
-            return ["herdr", "music", "attention", "usage", "calendar"]
+            var providers: Set<String> = ["herdr", "attention", "usage", "calendar"]
+            if musicGlancesEnabled { providers.insert("music") }
+            return providers
         }
         var providers = Set(
             sources.compactMap { source in
@@ -42,6 +48,7 @@ extension NotchShelfController {
         if surfaceLayout.notchExpandPermissions || surfaceLayout.notchPrioritizePermissions {
             providers.insert("herdr")
         }
+        if !musicGlancesEnabled { providers.remove("music") }
         return providers
     }
 
@@ -78,7 +85,7 @@ extension NotchShelfController {
                 : [.permissions, .waitingAgents, .music, .workingAgents, .focus, .files]
             return choices.lazy.compactMap { self.glance($0, trailing: trailing) }.first
         }
-        if source == .none { return nil }
+        if source == .none || (source == .music && !musicGlancesEnabled) { return nil }
         if source == .clock {
             return NotchSurfaceGlance(
                 source: source, title: "Local time",

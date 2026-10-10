@@ -170,6 +170,7 @@ final class NotchShelfController {
         activeTab = NotchTab.validSelection(activeTab, visible: visibleTabs)
         surfaceSnapshots = surfaceSnapshots.filter {
             activeIDs.contains($0.key) && !privacy.hides(Self.glanceWidget($0.key))
+                && ($0.key != "music" || musicGlancesEnabled)
         }
         let browserEnabled = context.defaults.bool(forKey: AppStorageKeys.Notch.browserEnabled)
         if browserEnabled, browser == nil {
@@ -182,6 +183,7 @@ final class NotchShelfController {
 
     func recordSurfaceSnapshot(_ snapshot: SurfaceSnapshot) {
         guard activeIDs.contains(snapshot.providerID),
+            snapshot.providerID != "music" || musicGlancesEnabled,
             !privacy.hides(Self.glanceWidget(snapshot.providerID))
         else { return }
         let previous = surfaceSnapshots[snapshot.providerID]
