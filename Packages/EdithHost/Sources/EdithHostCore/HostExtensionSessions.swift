@@ -209,13 +209,27 @@ public final class HostExtensionSessions {
     }
 
     public func synchronizeAppearance(identity: HostIdentity) async {
-        for (id, worker) in workers where worker.ready && HostAmbientPolicy.jobs[id] == nil {
-            try? await worker.synchronize(
-                configuration: HostWorkerConfiguration(
-                    identity: identity, extensionID: id, version: worker.configuration.version))
+        let pause = defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey)
+        for (id, worker) in workers where worker.ready {
+            do {
+                let owner = ambientPolicyOwners().first { $0.id == id }
+                let policy: HostAmbientPolicy
+                if let owner {
+                    try validateAmbientOwner(owner, worker: worker)
+                    policy = ambientPolicyCoordinator.policy(
+                        owner: owner, pauseAmbientOnBattery: pause)
+                } else {
+                    guard HostAmbientPolicy.jobs[id] == nil else { continue }
+                    policy = .initial(owner: id, pauseAmbientOnBattery: pause)
+                }
+                try await worker.synchronize(
+                    configuration: HostWorkerConfiguration(
+                        identity: identity, extensionID: id, version: worker.configuration.version,
+                        publicLauncher: worker.configuration.publicLauncher, ambientPolicy: policy))
+                if let owner { try validateAmbientOwner(owner, worker: worker) }
+            } catch {}
         }
-        _ = try? await synchronizeAmbientPolicy(
-            pauseAmbientOnBattery: defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey))
+        _ = try? await synchronizeAmbientPolicy(pauseAmbientOnBattery: pause)
     }
 
     public func ambientPolicyOwners() -> [HostAmbientPolicyOwner] {
@@ -238,11 +252,8 @@ public final class HostExtensionSessions {
             apply: { owner, policy in
                 guard let worker = self.workers[owner.id] else { throw HostWorkerError.rejected }
                 try self.validateAmbientOwner(owner, worker: worker)
-                let configuration = HostWorkerConfiguration(
-                    identity: try worker.configuration.identity(), extensionID: owner.id,
-                    version: owner.version, publicLauncher: worker.configuration.publicLauncher,
-                    ambientPolicy: policy)
-                try await worker.synchronize(configuration: configuration)
+                try await worker.synchronizeAmbientPolicy(
+                    configuration: worker.configuration.replacingAmbientPolicy(policy))
                 try Task.checkCancellation()
                 try self.validateAmbientOwner(owner, worker: worker)
             })

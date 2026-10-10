@@ -245,7 +245,7 @@ public struct HostAmbientPolicyReceipt: Equatable, Sendable {
 
     private static func jobsFor(_ owner: String) -> [String] { HostAmbientPolicy.jobs[owner] ?? [] }
 
-    private func policy(owner: HostAmbientPolicyOwner, pauseAmbientOnBattery: Bool)
+    func policy(owner: HostAmbientPolicyOwner, pauseAmbientOnBattery: Bool)
         -> HostAmbientPolicy
     {
         var counts = HostAmbientPolicy.initial(

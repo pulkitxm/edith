@@ -11,7 +11,7 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     public let zoom: Double
     public var recoveryOnly: Bool = false
     public let publicLauncher: HostPublicLauncher?
-    public let ambientPolicy: HostAmbientPolicy
+    public private(set) var ambientPolicy: HostAmbientPolicy
 
     public init(
         identity: HostIdentity, extensionID: String, version: String,
@@ -38,8 +38,68 @@ public struct HostWorkerConfiguration: Codable, Sendable {
         zoom = storedZoom.isFinite && storedZoom > 0 ? min(1.6, max(0.8, storedZoom)) : 1
     }
 
+    public func replacingAmbientPolicy(_ policy: HostAmbientPolicy) -> Self {
+        var next = self
+        next.ambientPolicy = policy
+        return next
+    }
+
     public func identity() throws -> HostIdentity {
         try HostIdentity(identifier: identifier, supportDirectory: supportDirectory)
+    }
+}
+
+public enum HostWorkerSynchronization: String, Sendable {
+    case settings = "synchronize"
+    case ambientPolicy
+
+    private func admitted(
+        _ request: HostWorkerRequest, current: HostWorkerConfiguration
+    ) throws -> HostWorkerConfiguration {
+        guard request.operation == rawValue, let next = request.configuration,
+            !current.recoveryOnly, !next.recoveryOnly,
+            next.identifier == current.identifier,
+            next.supportDirectory == current.supportDirectory,
+            next.extensionID == current.extensionID, next.version == current.version,
+            self != .ambientPolicy || HostAmbientPolicy.jobs[current.extensionID] != nil
+        else { throw HostWorkerError.rejected }
+        try next.ambientPolicy.validate(owner: next.extensionID)
+        return next
+    }
+
+    @MainActor public func apply(
+        _ request: HostWorkerRequest, current: HostWorkerConfiguration,
+        appearance: (HostWorkerConfiguration) throws -> Void,
+        synchronize: (String, NSDictionary) throws -> Void
+    ) throws -> HostWorkerConfiguration {
+        let next = try admitted(request, current: current)
+        guard
+            var context = try next.ambientPolicy.context(owner: next.extensionID)
+                as? [String: Any]
+        else { throw HostWorkerError.invalidResponse }
+        if self == .ambientPolicy {
+            context["ambientPolicyOnly"] = true
+        } else {
+            try appearance(next)
+        }
+        try synchronize(next.extensionID, NSDictionary(dictionary: context))
+        return self == .ambientPolicy ? current.replacingAmbientPolicy(next.ambientPolicy) : next
+    }
+
+    @MainActor func acknowledged(
+        current: HostWorkerConfiguration, next: HostWorkerConfiguration,
+        send: (HostWorkerRequest) async throws -> HostWorkerResponse
+    ) async throws -> HostWorkerConfiguration {
+        let request = HostWorkerRequest(operation: rawValue, configuration: next)
+        _ = try admitted(request, current: current)
+        try Task.checkCancellation()
+        let response = try await send(request)
+        try Task.checkCancellation()
+        guard response.token == request.token, response.ok, response.version == current.version
+        else {
+            throw HostWorkerError.invalidResponse
+        }
+        return self == .ambientPolicy ? current.replacingAmbientPolicy(next.ambientPolicy) : next
     }
 }
 

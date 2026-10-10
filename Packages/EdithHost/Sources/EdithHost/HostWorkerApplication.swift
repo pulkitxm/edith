@@ -343,23 +343,18 @@ final class HostWorkerApplication {
         }
         guard let configuration else { throw HostWorkerError.rejected }
         switch request.operation {
-        case "synchronize":
-            guard !configuration.recoveryOnly else { return }
-            guard let next = request.configuration else { throw HostWorkerError.rejected }
-            do {
-                guard next.identifier == configuration.identifier,
-                    next.extensionID == configuration.extensionID,
-                    next.version == configuration.version
-                else { throw HostWorkerError.rejected }
-                try next.ambientPolicy.validate(owner: next.extensionID)
-                try applyAppearance(next)
+        case "synchronize", "ambientPolicy":
+            guard let route = HostWorkerSynchronization(rawValue: request.operation) else {
+                throw HostWorkerError.rejected
             }
-            for runtime in runtimes {
-                try runtime.synchronize(
-                    id: configuration.extensionID,
-                    context: next.ambientPolicy.context(owner: next.extensionID))
-            }
-            self.configuration = next
+            self.configuration = try route.apply(
+                request, current: configuration,
+                appearance: { try self.applyAppearance($0) },
+                synchronize: { id, context in
+                    for runtime in self.runtimes {
+                        try runtime.synchronize(id: id, context: context)
+                    }
+                })
         case "status":
             for runtime in runtimes {
                 guard try runtime.snapshot(id: configuration.extensionID)?.active == true else {

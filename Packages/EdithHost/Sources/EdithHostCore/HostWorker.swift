@@ -128,9 +128,26 @@ public final class HostWorker {
     }
 
     public func synchronize(configuration: HostWorkerConfiguration? = nil) async throws {
+        try await synchronize(.settings, configuration: configuration ?? self.configuration)
+    }
+
+    func synchronizeAmbientPolicy(configuration: HostWorkerConfiguration) async throws {
+        try await synchronize(.ambientPolicy, configuration: configuration)
+    }
+
+    private func synchronize(
+        _ route: HostWorkerSynchronization, configuration next: HostWorkerConfiguration
+    ) async throws {
         guard ready else { throw HostWorkerError.rejected }
-        _ = try await request(
-            HostWorkerRequest(operation: "synchronize", configuration: configuration))
+        let current = configuration
+        let acknowledged = try await route.acknowledged(current: current, next: next) {
+            try await self.request($0)
+        }
+        guard ready, configuration.identifier == current.identifier,
+            configuration.extensionID == current.extensionID,
+            configuration.version == current.version
+        else { throw HostWorkerError.rejected }
+        configuration = acknowledged
     }
 
     public func status() async throws -> HostWorkerResponse {
