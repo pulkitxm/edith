@@ -11,6 +11,7 @@ public struct AgentActivityProviderSettings: Codable, Equatable, Sendable {
 }
 
 public struct AgentActivitySettings: Codable, Equatable, Sendable {
+    public static let defaultsKey = "agentActivityProviders"
     public var providers: [String: AgentActivityProviderSettings]
     public var quietMinutes: Int
     public var monitorTerminalAttention: Bool
@@ -45,7 +46,7 @@ public struct AgentActivitySettings: Codable, Equatable, Sendable {
     }
 
     public static func load(in defaults: UserDefaults = SharedDefaults.store) -> Self {
-        guard let raw = defaults.string(forKey: "agentActivityProviders"),
+        guard let raw = defaults.string(forKey: defaultsKey),
             let data = raw.data(using: .utf8),
             let settings = try? JSONDecoder().decode(Self.self, from: data)
         else { return Self() }
@@ -57,7 +58,7 @@ public struct AgentActivitySettings: Codable, Equatable, Sendable {
     }
 
     public func save() throws {
-        SharedDefaults.store.set(encoded, forKey: "agentActivityProviders")
+        SharedDefaults.store.set(encoded, forKey: defaultsKey)
     }
 }
 
