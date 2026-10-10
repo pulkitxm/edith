@@ -50,6 +50,26 @@ import Testing
         #expect(throws: (any Error).self) { try engine.state() }
     }
 
+    @Test func explicitSelectionValidatesInjectedDevicesBeforeStartingOwnedHardware() async throws {
+        let hardware = CameraFixtureHardware()
+        hardware.authorization = AVAuthorizationStatus.authorized.rawValue
+        let engine = NotchCameraEngine(hardware: hardware)
+        await #expect(throws: (any Error).self) {
+            try await engine.execute(request(.select, deviceID: "unknown"))
+        }
+        #expect(hardware.starts.isEmpty)
+        #expect(hardware.stops == 0)
+        _ = try await engine.execute(request(.select, deviceID: "rear"))
+        #expect(hardware.starts == ["rear"])
+        #expect(try engine.state().selectedID == "rear")
+        await engine.shutdownAndWait()
+        #expect(hardware.stops == 1)
+        await #expect(throws: (any Error).self) {
+            try await engine.execute(request(.select, deviceID: "front"))
+        }
+        #expect(hardware.starts == ["rear"])
+    }
+
     @Test func checkedPanelRejectsHiddenInactiveAndStaleCameraAndCollapseStopsCapture() async throws
     {
         let hardware = CameraFixtureHardware()
