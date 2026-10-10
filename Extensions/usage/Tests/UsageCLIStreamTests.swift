@@ -66,13 +66,13 @@ import Testing
     }
 
     @Test func engineRegistryRoutesStreamsAndDisableRejectsFurtherRequests() async throws {
-        try #require(UsageExecutionEnvironment.fixtureHome != nil)
-        let suite = try #require(ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"])
+        let fixture = try UsageIssuedFixture()
+        defer { fixture.remove() }
         try FileManager.default.createDirectory(at: Repo.dataDir, withIntermediateDirectories: true)
         try Data(CLIUsageTests.document.utf8).write(to: Repo.usageJSON)
         defer { try? FileManager.default.removeItem(at: Repo.usageJSON) }
-        let runtime = ExtensionRuntime()
-        let started = runtime.execute(["operation": "start", "defaultsSuite": suite])
+        let runtime = ExtensionRuntime(admitFixture: fixture.admit)
+        let started = runtime.execute(fixture.input(operation: "start"))
         try #require((started as? NSDictionary)?["ok"] as? Bool == true)
         let catalog = try await invoke(runtime, command: "usage.cli.catalog", payload: Data())
         let metadata = try #require(

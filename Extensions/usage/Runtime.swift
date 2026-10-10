@@ -4,6 +4,9 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
 import SwiftUI
+#if canImport(WorkerFixtureSupport)
+import WorkerFixtureSupport
+#endif
 
 @MainActor @objc(EdithUsageExtensionRuntime)
 final class ExtensionRuntime: NSObject {
@@ -26,6 +29,20 @@ final class ExtensionRuntime: NSObject {
     private var uiCommands: UsageUICommands?
     private var navigation: UsageHostNavigation?
     private let uiPresentations = UsageUIPresentations()
+
+    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
+
+    override convenience init() {
+        self.init(admitFixture: {
+            try WorkerFixtureAdmission.current(
+                extensionID: "usage", context: $0, roleBundle: Bundle(for: ExtensionRuntime.self))
+        })
+    }
+
+    init(admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission?) {
+        self.admitFixture = admitFixture
+        super.init()
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -222,8 +239,11 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            let fixture: Bool
+            do { fixture = try admitFixture(input) != nil } catch {
+                return ["ok": false, "error": error.localizedDescription] as NSDictionary
+            }
             guard controller == nil, !recovering else { return ["ok": true] as NSDictionary }
-            let fixture = UsageExecutionEnvironment.fixtureHome != nil
             let launcher = ClaudeStatusLine.publicExecutable(fromVerifiedContext: input)
             let statusLine = UsageStatusLineCommands(executable: launcher)
             self.statusLine = statusLine
@@ -246,7 +266,10 @@ final class ExtensionRuntime: NSObject {
                 return try await UsageMachinesPeer.merge(
                     local: local, policy: policy, onEvent: event)
             }
-            do { cliStreams = try ExtensionCLIStreams(owner: "usage") } catch {
+            do {
+                try controller.applyAmbientPolicy(context: input)
+                cliStreams = try ExtensionCLIStreams(owner: "usage")
+            } catch {
                 return ["ok": false, "error": error.localizedDescription] as NSDictionary
             }
             self.controller = controller
@@ -301,8 +324,16 @@ final class ExtensionRuntime: NSObject {
             return scene.controller() ?? (["ok": false] as NSDictionary)
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
-            usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
-            backup?.preferencesChanged()
+            do {
+                _ = try admitFixture(input)
+                guard let controller else { return ["ok": false] as NSDictionary }
+                try controller.synchronizeAmbientPolicy(context: input) {
+                    usageStore?.syncStatusItem(); usageStore?.refreshMenuBarItem()
+                    backup?.preferencesChanged()
+                }
+            } catch {
+                return ["ok": false, "error": error.localizedDescription] as NSDictionary
+            }
         case "stop": prepareToStop(completion: {})
         case "status": return ["ok": true, "running": controller != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

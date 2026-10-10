@@ -1,8 +1,10 @@
 @_implementationOnly import EdithExtensionSupport_attention_native
 @_implementationOnly import EdithExtensionUI_attention_native
 import AppKit
+import CoreFoundation
 import Foundation
 import SwiftUI
+@_implementationOnly import WorkerFixtureSupport
 
 @MainActor
 @objc(EdithAttentionExtensionController)
@@ -25,8 +27,34 @@ public final class AttentionExtensionController: NSObject {
     private var stoppingTask: Task<Void, Never>?
     private var activeCalls = 0
     private let commands = ExtensionCommandRegistry()
+    private let ambientPolicy: ExtensionAmbientPolicy
+    private let admitFixture: (NSDictionary) throws -> WorkerFixtureAdmission?
 
-    public init(bundle: Bundle) {
+    private let notifySettingsChanged: () -> Void
+
+    public convenience init(bundle: Bundle) {
+        self.init(
+            bundle: bundle, notifySettingsChanged: { IPC.post(IPC.Name.settingsChanged) },
+            admitFixture: {
+                try WorkerFixtureAdmission.current(
+                    extensionID: "attention", context: $0, roleBundle: bundle)
+            })
+    }
+
+    init(
+        bundle: Bundle, notifySettingsChanged: @escaping () -> Void,
+        admitFixture: @escaping (NSDictionary) throws -> WorkerFixtureAdmission? = {
+            try WorkerFixtureAdmission.current(
+                extensionID: "attention", context: $0, roleBundle: .main)
+        }, ambientPolicy: ExtensionAmbientPolicy? = nil
+    ) {
+        self.notifySettingsChanged = notifySettingsChanged
+        self.admitFixture = admitFixture
+        self.ambientPolicy =
+            ambientPolicy
+            ?? ExtensionAmbientPolicy(jobs: [
+                "attention.ingest": ExtensionAmbientCadence(ambient: 900, live: 900)
+            ])
         self.bundle = bundle
         super.init()
     }
@@ -134,21 +162,23 @@ public final class AttentionExtensionController: NSObject {
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            guard service == nil else { return ["ok": true] as NSDictionary }
             do {
+                let admission = try admitFixture(input)
+                guard service == nil else { return ["ok": true] as NSDictionary }
+                try ambientPolicy.apply(context: input)
+                if let admission { AttentionPaths.root = admission.dataDirectory }
                 AttentionResources.directory = bundle.resourceURL
                 let database = try AttentionDatabase(
                     url: AttentionPaths.root.appendingPathComponent("attention-history.sqlite"))
                 self.database = database
-                let fixture =
-                    ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
+                let fixture = admission != nil
                 let service = AttentionBackgroundService(
                     store: database,
                     cloudDirectory: fixture
                         ? AttentionPaths.root.appendingPathComponent("fixture-cloud")
                         : AttentionCloudStorage.directory,
                     cloudAvailable: { !fixture && AttentionCloudStorage.available },
-                    collectsSystemActivity: !fixture)
+                    collectsSystemActivity: !fixture, ambientPolicy: ambientPolicy)
                 self.service = service
                 let repository = AttentionRepository(
                     eventSink: AttentionEventStore(store: database))
@@ -162,7 +192,7 @@ public final class AttentionExtensionController: NSObject {
                             bundleID: "com.example.fixture.editor"))
                 }
                 surface = AttentionSurface(repository: repository, service: service)
-                startup = Task { await service.start() }
+                if !fixture { startup = Task { await service.start() } }
             } catch { return ["ok": false, "message": error.localizedDescription] as NSDictionary }
         case "view":
             guard !stopped, let uiClient, !uiClient.stopped,
@@ -201,7 +231,22 @@ public final class AttentionExtensionController: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             guard !stopped else { return ["ok": false] as NSDictionary }
-            IPC.post(IPC.Name.settingsChanged)
+            do {
+                _ = try admitFixture(input)
+                let policyOnly: Bool
+                if let value = input["ambientPolicyOnly"] {
+                    guard let number = value as? NSNumber,
+                        CFGetTypeID(number) == CFBooleanGetTypeID()
+                    else { throw ExtensionPeerError.invalidRequest }
+                    policyOnly = number.boolValue
+                } else {
+                    policyOnly = false
+                }
+                try ambientPolicy.apply(context: input)
+                if !policyOnly { notifySettingsChanged() }
+            } catch {
+                return ["ok": false, "message": error.localizedDescription] as NSDictionary
+            }
         case "stop":
             stopUI()
             if !stopped { prepareToStop(completion: {}) }
