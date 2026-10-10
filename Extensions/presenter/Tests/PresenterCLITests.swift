@@ -6,6 +6,52 @@ import Testing
 @testable import PresenterExtension
 
 @MainActor @Suite(.serialized) struct PresenterCLITests {
+
+    @Test func discoveryCatalogContainsOnlyOriginalParserRoutesAndRejectsForeignPayloads()
+        throws
+    {
+        let data = try PresenterCLIExecution.catalog(Data("{}".utf8))
+        let catalog = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(catalog["version"] as? Int == 1)
+        #expect(catalog["owner"] as? String == "presenter")
+        #expect(catalog["acceptsInput"] as? Bool == false)
+        let commands = try #require(catalog["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        var expected: [[String]] = [
+            ["presenter"], ["presenter", "status"], ["presenter", "start"], ["presenter", "stop"],
+        ]
+        expected.append(["presenter", "help"])
+        #expect(Set(routes) == Set(expected))
+        #expect(routes.count == Set(routes).count)
+        #expect(commands.allSatisfy { $0["operation"] as? String == "presenter.cli" })
+        let documents = try #require(catalog["parserHelp"] as? [[String: Any]])
+        #expect(documents.count == 1)
+        #expect(documents[0]["serializationVersion"] as? Int == 0)
+        let help = try #require(documents[0]["command"] as? [String: Any])
+        #expect(help["commandName"] as? String == "presenter")
+
+        #expect(throws: (any Error).self) {
+            try PresenterCLIExecution.catalog(Data("{\"arguments\":[]}".utf8))
+        }
+    }
+
+    @Test func originalActionReceivesTheExactCallerContextAndDoesNotLeakIt() async throws {
+        let request = try ExtensionCLIRequest(
+            arguments: ["start"], standardInput: Data("synthetic terminal input".utf8),
+            workingDirectory: "/tmp/synthetic-terminal-context", interactive: true)
+        var observed: ExtensionCLIRequest?
+        let defaults = UserDefaults(suiteName: "edith.presenter.context." + UUID().uuidString)!
+        defaults.set(true, forKey: AppStorageKeys.Presenter.enabled)
+        let reply = try await PresenterCLIExecution.run(request, defaults: defaults) { operation in
+            observed = ExtensionCLIContext.request
+            return PresenterRuntimeOperationExecution.perform(
+                operation, defaults: defaults, post: { _ in })
+        }
+        #expect(reply.exitCode == 0)
+        #expect(observed == request)
+        #expect(ExtensionCLIContext.request == nil)
+    }
     @Test func originalStatusStartStopUseOwnedStateAndExactOutput() async throws {
         let defaults = UserDefaults(suiteName: "edith.presenter.cli." + UUID().uuidString)!
         defaults.set(true, forKey: AppStorageKeys.Presenter.enabled)

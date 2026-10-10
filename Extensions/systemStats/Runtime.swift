@@ -14,12 +14,24 @@ final class ExtensionRuntime: NSObject {
     private var follow = SystemStatsFollow()
 
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             if command.hasPrefix("systemStats.follow.") {
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 return try await self.follow.execute(command, payload: payload)
+            }
+            if command == "systemStats.cli.catalog" {
+                return try SystemStatsCLIExecution.catalog(payload)
+            }
+            if command.hasPrefix("systemStats.cli.stream.") {
+                guard let self, self.service != nil, let streams = self.cliStreams else {
+                    throw ExtensionPeerError.unavailable
+                }
+                return try streams.invoke(
+                    SystemCommand.self, operation: command,
+                    prefix: "systemStats.cli.stream", payload: payload)
             }
             if command == "systemStats.cli" {
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
@@ -70,6 +82,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         Task {
             await commands.shutdownAndWait()
+            await cliStreams?.stopAndWait()
             _ = execute(["operation": "stop"])
             completion()
         }
@@ -100,6 +113,7 @@ final class ExtensionRuntime: NSObject {
             return ["ok": true] as NSDictionary
         case "prepareToStop":
             commands.shutdown()
+            cliStreams?.stop()
             return ["ok": true] as NSDictionary
         case "start":
             guard Bundle.main.bundleURL.pathExtension != "appex", presentation == nil
@@ -108,6 +122,7 @@ final class ExtensionRuntime: NSObject {
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if service == nil { service = SystemStatsStatusItem() }
+            if cliStreams == nil { cliStreams = try? ExtensionCLIStreams(owner: "systemStats") }
         case "view":
             guard let presentation else { return ["ok": false] as NSDictionary }
             return NSHostingController(
@@ -140,6 +155,8 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": break
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
+            cliStreams?.stop()
+            cliStreams = nil
             follow.shutdown()
             presentation?.stop()
             presentation = nil

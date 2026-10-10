@@ -19,6 +19,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "presenter.cli.catalog" {
+                return try PresenterCLIExecution.catalog(payload)
+            }
             if command == "presenter.cli" {
                 guard let self, self.state != nil else { throw ExtensionPeerError.unavailable }
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)

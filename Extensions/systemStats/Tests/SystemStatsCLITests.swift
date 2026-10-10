@@ -30,6 +30,93 @@ private struct FixtureStatsSampler: SystemStatsSampling {
 }
 
 @MainActor @Suite(.serialized) struct SystemStatsCLITests {
+    @Test func originalFollowStreamsCallerContextAndStopsBeforeOwnerReturns() async throws {
+        let previous = SystemStatsCLIEnvironment.makeSampler
+        var observed: ExtensionCLIRequest?
+        SystemStatsCLIEnvironment.makeSampler = {
+            observed = ExtensionCLIContext.request
+            return FixtureStatsSampler()
+        }
+        defer { SystemStatsCLIEnvironment.makeSampler = previous }
+        let streams = try ExtensionCLIStreams(owner: "systemStats")
+        defer { streams.stop() }
+        let request = try ExtensionCLIRequest(
+            arguments: ["stats", "--follow", "--interval", "0.5", "--json"],
+            standardInput: Data("synthetic input".utf8),
+            workingDirectory: "/tmp/synthetic-follow-context", interactive: true)
+        let start = ExtensionCLIStreamStart(
+            owner: "systemStats", session: UUID(), request: request, deadline: 5)
+        let handle = try streams.start(SystemCommand.self, request: start)
+        let deadline = ContinuousClock.now + .seconds(3)
+        var sequence: UInt64 = 0
+        var lines: [Data] = []
+        while lines.count < 2 && ContinuousClock.now < deadline {
+            let frame = try streams.read(ExtensionCLIStreamRead(handle: handle, sequence: sequence))
+            sequence = frame.nextSequence
+            #expect(frame.state == .running)
+            for chunk in frame.chunks {
+                #expect(chunk.channel == .stdout)
+                lines.append(chunk.data)
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(lines.count >= 2)
+        #expect(observed == request)
+        #expect(lines.allSatisfy { (try? JSONSerialization.jsonObject(with: $0)) != nil })
+        await streams.stopAndWait()
+        #expect(ExtensionCLIContext.request == nil)
+        #expect(throws: (any Error).self) {
+            try streams.read(ExtensionCLIStreamRead(handle: handle, sequence: sequence))
+        }
+        #expect(throws: (any Error).self) { try streams.start(SystemCommand.self, request: start) }
+    }
+
+    @Test func discoveryCatalogContainsOnlyOriginalParserRoutesAndRejectsForeignPayloads()
+        throws
+    {
+        let data = try SystemStatsCLIExecution.catalog(Data("{}".utf8))
+        let catalog = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(catalog["version"] as? Int == 1)
+        #expect(catalog["owner"] as? String == "systemStats")
+        #expect(catalog["acceptsInput"] as? Bool == false)
+        let commands = try #require(catalog["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        let expected: [[String]] = [["system", "stats"], ["system", "disks"]]
+        #expect(Set(routes) == Set(expected))
+        #expect(routes.count == Set(routes).count)
+        #expect(commands.allSatisfy { $0["operation"] as? String == "systemStats.cli" })
+        let documents = try #require(catalog["parserHelp"] as? [[String: Any]])
+        #expect(documents.count == 1)
+        #expect(documents[0]["serializationVersion"] as? Int == 0)
+        let help = try #require(documents[0]["command"] as? [String: Any])
+        #expect(help["commandName"] as? String == "system")
+        #expect(!routes.contains(["system"]))
+        #expect(!routes.contains(["system", "status"]))
+        let stats = try #require(
+            commands.first { $0["route"] as? [String] == ["system", "stats"] })
+        #expect(stats["streamOperation"] as? String == "systemStats.cli.stream")
+        let disks = try #require(
+            commands.first { $0["route"] as? [String] == ["system", "disks"] })
+        #expect(disks["streamOperation"] == nil)
+        #expect(throws: (any Error).self) {
+            try SystemStatsCLIExecution.catalog(Data("{\"arguments\":[]}".utf8))
+        }
+    }
+
+    @Test func originalActionReceivesTheExactCallerContextAndDoesNotLeakIt() async throws {
+        let request = try ExtensionCLIRequest(
+            arguments: ["disks", "--json"], standardInput: Data("synthetic terminal input".utf8),
+            workingDirectory: "/tmp/synthetic-terminal-context", interactive: true)
+        var observed: ExtensionCLIRequest?
+        let reply = try await SystemStatsCLIExecution.run(request) {
+            observed = ExtensionCLIContext.request
+            return FixtureStatsSampler()
+        }
+        #expect(reply.exitCode == 0)
+        #expect(observed == request)
+        #expect(ExtensionCLIContext.request == nil)
+    }
     @Test func originalStatsAndDisksOutputAndValidation() async throws {
         let stats = try await SystemStatsCLIExecution.run(
             ExtensionCLIRequest(arguments: ["stats", "--json", "--processes", "1"]),

@@ -6,6 +6,53 @@ import Testing
 @testable import EmojiExtension
 
 @MainActor @Suite(.serialized) struct EmojiCLITests {
+
+    @Test func discoveryCatalogContainsOnlyOriginalParserRoutesAndRejectsForeignPayloads()
+        throws
+    {
+        let data = try EmojiCLIExecution.catalog(Data("{}".utf8))
+        let catalog = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(catalog["version"] as? Int == 1)
+        #expect(catalog["owner"] as? String == "emoji")
+        #expect(catalog["acceptsInput"] as? Bool == false)
+        let commands = try #require(catalog["commands"] as? [[String: Any]])
+        let routes = commands.compactMap { $0["route"] as? [String] }
+        var expected: [[String]] = [
+            ["emoji"], ["emoji", "pick"], ["emoji", "ls"], ["emoji", "insert"], ["emoji", "tone"],
+            ["emoji", "forget"], ["emoji", "clear"],
+        ]
+        expected.append(["emoji", "help"])
+        #expect(Set(routes) == Set(expected))
+        #expect(routes.count == Set(routes).count)
+        #expect(commands.allSatisfy { $0["operation"] as? String == "emoji.cli" })
+        let documents = try #require(catalog["parserHelp"] as? [[String: Any]])
+        #expect(documents.count == 1)
+        #expect(documents[0]["serializationVersion"] as? Int == 0)
+        let help = try #require(documents[0]["command"] as? [String: Any])
+        #expect(help["commandName"] as? String == "emoji")
+
+        #expect(throws: (any Error).self) {
+            try EmojiCLIExecution.catalog(Data("{\"arguments\":[]}".utf8))
+        }
+    }
+
+    @Test func originalActionReceivesTheExactCallerContextAndDoesNotLeakIt() async throws {
+        let request = try ExtensionCLIRequest(
+            arguments: ["insert", "1F44D"], standardInput: Data("synthetic terminal input".utf8),
+            workingDirectory: "/tmp/synthetic-terminal-context", interactive: true)
+        var observed: ExtensionCLIRequest?
+        let defaults = UserDefaults(suiteName: "edith.emoji.context." + UUID().uuidString)!
+        defaults.set(true, forKey: AppStorageKeys.Emoji.enabled)
+        let reply = try await EmojiCLIExecution.run(
+            request, defaults: defaults, catalog: catalog(), pick: {},
+            insert: { _ in
+                observed = ExtensionCLIContext.request; return true
+            }, changed: {})
+        #expect(reply.exitCode == 0)
+        #expect(observed == request)
+        #expect(ExtensionCLIContext.request == nil)
+    }
     private func catalog() throws -> EmojiCatalog {
         try EmojiCatalog.decode(
             Data(

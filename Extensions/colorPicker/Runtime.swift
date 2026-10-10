@@ -17,6 +17,9 @@ final class ExtensionRuntime: NSObject {
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
+            if command == "colorPicker.cli.catalog" {
+                return try ColorCLIExecution.catalog(payload)
+            }
             if command == "colorPicker.cli" {
                 guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
                 guard let service = self.service else { throw ExtensionPeerError.unavailable }
