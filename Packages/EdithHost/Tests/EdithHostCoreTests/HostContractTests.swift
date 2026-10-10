@@ -31,6 +31,59 @@ import Testing
         #expect(entries.contains { $0.id == "keepAwake" })
     }
 
+    @Test func packagedAppAndExtensionIndexesNeverUseAdjacentBuildResources() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for suffix in ["app", "appex"] {
+            let bundle = root.appendingPathComponent("Fixture.\(suffix)")
+            let executable = bundle.appendingPathComponent("Contents/MacOS/Edith")
+            let packaged = bundle.appendingPathComponent("Contents/Resources/index.json")
+            try FileManager.default.createDirectory(
+                at: packaged.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("[]".utf8).write(to: packaged)
+            #expect(
+                try HostIndex.resourceURL(bundleURL: bundle, executableURL: executable) == packaged)
+            try FileManager.default.removeItem(at: packaged)
+            let adjacent = executable.deletingLastPathComponent().appendingPathComponent(
+                "EdithHost_EdithHostCore.bundle/index.json")
+            try FileManager.default.createDirectory(
+                at: adjacent.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("[]".utf8).write(to: adjacent)
+            #expect(throws: (any Error).self) {
+                try HostIndex.resourceURL(bundleURL: bundle, executableURL: executable)
+            }
+        }
+    }
+
+    @Test func commandAndNativeTestIndexesResolveOnlyTheirSiblingResourceBundle() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let packaged = root.appendingPathComponent("EdithHost_EdithHostCore.bundle/index.json")
+        try FileManager.default.createDirectory(
+            at: packaged.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("[]".utf8).write(to: packaged)
+        let testBundle = root.appendingPathComponent("FixtureTests.xctest")
+        for pair in [
+            (root, root.appendingPathComponent("HostLifecycleHarness")),
+            (testBundle, testBundle.appendingPathComponent("Contents/MacOS/FixtureTests")),
+            (root, testBundle.appendingPathComponent("Contents/MacOS/FixtureTests")),
+        ] {
+            #expect(
+                try HostIndex.resourceURL(bundleURL: pair.0, executableURL: pair.1) == packaged)
+        }
+        let other = root.appendingPathComponent("other/HostLifecycleHarness")
+        #expect(throws: (any Error).self) {
+            try HostIndex.resourceURL(
+                bundleURL: other.deletingLastPathComponent(), executableURL: other)
+        }
+        try FileManager.default.removeItem(at: packaged)
+        try FileManager.default.createDirectory(at: packaged, withIntermediateDirectories: true)
+        #expect(throws: (any Error).self) {
+            try HostIndex.resourceURL(
+                bundleURL: root, executableURL: root.appendingPathComponent("tool"))
+        }
+    }
+
     @Test func invalidOrDuplicatedIdentifiersAreRejected() throws {
         let valid = HostExtension(
             id: "example", title: "Example", symbolName: "square", category: "Tools")
