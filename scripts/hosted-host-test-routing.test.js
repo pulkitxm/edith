@@ -187,6 +187,7 @@ test("original journey remains callable at reviewed final refs without changing 
     "refs/heads/feat/hosted-journey-registration",
     "refs/heads/feat/hosted-journey-attachments",
     "refs/heads/feat/hosted-journey-state",
+    "refs/heads/fix/hosted-journey-environment",
   ]) {
     for (const actor of ["65671483", "320458784"]) {
       expect(routeAllows({ ...github, ref, actor_id: actor }, inputs)).toBe(
@@ -202,6 +203,7 @@ test("original journey remains callable at reviewed final refs without changing 
     { ref: "refs/heads/feat/hosted-journey-registration-other" },
     { ref: "refs/heads/feat/hosted-journey-attachments-other" },
     { ref: "refs/heads/feat/hosted-journey-state-other" },
+    { ref: "refs/heads/fix/hosted-journey-environment-other" },
     { ref: "refs/tags/main" },
     { ref: "refs/pull/1220/merge" },
     { actor_id: "999" },

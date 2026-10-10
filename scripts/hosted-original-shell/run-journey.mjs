@@ -82,12 +82,16 @@ try {
     EDITH_GUI_FIXTURE_DIRECTORY: directory,
     EDITH_JOURNEY_ACCOUNT_HOME: homedir(),
     HOME: join(directory, "synthetic-data"),
+    CFFIXED_USER_HOME: join(directory, "synthetic-data"),
+    SSH_AUTH_SOCK: "",
     XDG_CONFIG_HOME: join(directory, "synthetic-data/.config"),
     XDG_CACHE_HOME: join(directory, "synthetic-data/.cache"),
     XDG_DATA_HOME: join(directory, "synthetic-data/.local/share"),
     EDITH_APPLICATION_IDENTIFIER: identifier,
     EDITH_SHARED_DEFAULTS_SUITE: identifier,
     EDITH_EXTENSION_FIXTURE_HOME: join(directory, "synthetic-data"),
+    CFFIXED_USER_HOME: join(directory, "synthetic-data"),
+    SSH_AUTH_SOCK: "",
   };
   const auditExecutable = join(output, "JourneyProcessAudit");
   execFileSync(
@@ -192,8 +196,10 @@ try {
       resultBundle: join(output, "HostedShellJourney.xcresult"),
       outputDirectory: join(output, "journey-attachments"),
     });
+    outcome.attachmentExportDiagnostic = attachments.diagnostic;
     await retainJourneyAttachmentProof(attachments, output);
   } catch (error) {
+    outcome.attachmentExportDiagnostic = error.diagnostic;
     outcome.attachmentExportFailed = true;
     outcome.attachmentExportFailure = {
       phase: error.phase ?? "attachment-read",

@@ -3,6 +3,12 @@ import { execFile } from "node:child_process";
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import {
+  attachmentCommandFailureCategory,
+  attachmentCommandOptions,
+  observeAttachmentToolVersion,
+  validateAttachmentToolSchema,
+} from "./attachment-tool.mjs";
 import { journeyImageNames } from "./evidence.mjs";
 
 export const journeyTestIdentifier =
@@ -19,8 +25,6 @@ export function attachmentExportArguments(resultBundle, outputDirectory) {
     "xcresulttool",
     "export",
     "attachments",
-    "--schema-version",
-    "0.4.0",
     "--test-id",
     journeyTestIdentifier,
     "--path",
@@ -128,40 +132,98 @@ export async function exportJourneyAttachments({
   outputDirectory,
   run = promisify(execFile),
 }) {
+  const diagnostic = {
+    schema: 1,
+    requestedSchema: "default",
+    toolVersion: "unobserved",
+    toolSchemaVersion: "unobserved",
+    schemaDigest: "unobserved",
+    manifestContract: "owned-human-names-v1",
+    phase: "attachment-directory",
+    category: "invalid-directory",
+  };
+  const reject = (message, phase, category) => {
+    diagnostic.phase = phase;
+    diagnostic.category = category;
+    return Object.assign(Error(message), {
+      phase,
+      category,
+      diagnostic: { ...diagnostic },
+    });
+  };
   try {
+    attachmentExportArguments(resultBundle, outputDirectory);
     await mkdir(outputDirectory, { recursive: false, mode: 0o700 });
   } catch {
-    throw Object.assign(Error("Attachment export directory rejected"), {
-      phase: "attachment-directory",
-      category: "invalid-directory",
-    });
+    throw reject(
+      "Attachment export directory rejected",
+      "attachment-directory",
+      "invalid-directory",
+    );
+  }
+  for (const [phase, args, observe] of [
+    [
+      "attachment-tool",
+      ["xcresulttool", "version"],
+      (stdout) => {
+        Object.assign(diagnostic, observeAttachmentToolVersion(stdout));
+      },
+    ],
+    [
+      "attachment-schema",
+      ["xcresulttool", "export", "attachments", "--schema"],
+      (stdout) => {
+        diagnostic.schemaDigest = validateAttachmentToolSchema(stdout);
+      },
+    ],
+  ]) {
+    let stdout;
+    try {
+      ({ stdout } = await run("xcrun", args, attachmentCommandOptions));
+    } catch (error) {
+      throw reject(
+        "Attachment tool discovery rejected",
+        phase,
+        attachmentCommandFailureCategory(error),
+      );
+    }
+    try {
+      observe(stdout);
+    } catch {
+      throw reject(
+        "Attachment tool format rejected",
+        phase,
+        "invalid-tool-format",
+      );
+    }
   }
   try {
     await run(
       "xcrun",
       attachmentExportArguments(resultBundle, outputDirectory),
       {
+        ...attachmentCommandOptions,
         timeout: 30_000,
-        maxBuffer: 262_144,
       },
     );
   } catch (error) {
-    throw Object.assign(Error("Attachment export command rejected"), {
-      phase: "attachment-command",
-      category: error.killed
-        ? "timed-out"
-        : error.code === "ENOENT"
-          ? "tool-unavailable"
-          : "command-rejected",
-    });
+    throw reject(
+      "Attachment export command rejected",
+      "attachment-command",
+      attachmentCommandFailureCategory(error, resultBundle),
+    );
   }
   try {
-    return await readJourneyAttachments(outputDirectory);
+    const attachments = await readJourneyAttachments(outputDirectory);
+    diagnostic.phase = "attachment-read";
+    diagnostic.category = "validated";
+    return { ...attachments, diagnostic: { ...diagnostic } };
   } catch {
-    throw Object.assign(Error("Attachment manifest rejected"), {
-      phase: "attachment-read",
-      category: "invalid-export",
-    });
+    throw reject(
+      "Attachment manifest rejected",
+      "attachment-read",
+      "invalid-export",
+    );
   }
 }
 
