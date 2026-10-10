@@ -233,7 +233,7 @@ final class HostWorkerApplication {
                 throw MarketplaceError.invalidSignature
             }
             configuration = next
-            let navigation = HostWorkerNavigationClient(
+            let navigation = HostFolderChoiceNavigationClient(
                 configuration: next,
                 available: { [weak self] in
                     guard let self else { return false }
