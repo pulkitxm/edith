@@ -13,7 +13,9 @@ test("portable planning uses Ubuntu while native checks and publication keep mac
   expect(plan["runs-on"]).toBe("ubuntu-latest");
   for (const job of [workflow.jobs.tests, build, publish])
     expect(job["runs-on"]).toBe("macos-26");
-  expect(text(plan)).toContain("node scripts/verify-extension-catalog.mjs");
+  expect(text(plan)).toContain(
+    "node scripts/extension-publish.mjs --read-catalog",
+  );
   expect(text(plan)).toContain(
     "node --test scripts/verify-extension-catalog.test.mjs",
   );

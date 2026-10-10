@@ -180,19 +180,16 @@ jobs:
           node-version: 24
       - run: node --test scripts/verify-extension-catalog.test.mjs
       - run: bun scripts/extension-host-abi.mjs --write
+      - name: Require production publication from main
+        if: "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)"
+        run: 'test "$GITHUB_REF" = refs/heads/main || { echo "Extension publication requires main" >&2; exit 1; }'
       - name: Compare with the last trusted catalog
         id: plan
+        env:
+          GH_TOKEN: "${{ github.token }}"
         run: |
           mkdir -p dist/extensions
-          status="$(curl --silent --show-error --location --output dist/extensions/catalog.json --write-out '%{http_code}' https://github.com/pulkitxm/edith/releases/download/extension-catalog-v1/catalog.json)"
-          if [ "$status" = 404 ]; then
-            printf '%s' '{"schemaVersion":1,"revision":0,"packages":[]}' > dist/extensions/previous.json
-          elif [ "$status" = 200 ]; then
-            node scripts/verify-extension-catalog.mjs dist/extensions/catalog.json dist/extensions/previous.json "$EXTENSION_CATALOG_PUBLIC_KEY"
-          else
-            echo "Cannot read the published catalog: HTTP $status" >&2
-            exit 1
-          fi
+          node scripts/extension-publish.mjs --read-catalog dist/extensions/previous.json
           bun scripts/extension-release-plan.mjs dist/extensions/previous.json > dist/extensions/plan.json
           {
             echo "matrix=$(cat dist/extensions/plan.json)"
@@ -335,7 +332,7 @@ jobs:
     needs:
       - plan
       - build
-    if: "github.event_name != 'pull_request' && needs.build.result == 'success' && needs.plan.outputs.changed == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true))"
+    if: "github.event_name != 'pull_request' && needs.build.result == 'success' && needs.plan.outputs.changed == 'true' && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.publish == true && github.ref == 'refs/heads/main'))"
     runs-on: macos-26
     env:
       GH_TOKEN: "${{ secrets.RELEASE_PUSH_TOKEN }}"
