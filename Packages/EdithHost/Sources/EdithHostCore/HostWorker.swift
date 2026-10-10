@@ -210,7 +210,7 @@ public final class HostWorker {
                         request.continuation.resume(
                             throwing: HostWorkerError.disableRejected(
                                 message
-                                    ?? "The extension could not restore its system settings. It remains enabled. Open the extension and try again."
+                                    ?? "Cleanup is pending. Restore system settings or finish macOS approval, then try again."
                             ))
                     } else {
                         request.continuation.resume(throwing: HostWorkerError.rejected)

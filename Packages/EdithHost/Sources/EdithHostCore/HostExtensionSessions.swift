@@ -60,6 +60,10 @@ public final class HostExtensionSessions {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
+        if pendingDisableIDs.contains(id) {
+            packages[id] = package
+            try await disable(id: id, remember: false)
+        }
         if let worker = workers[id], worker.ready {
             if worker.configuration.recoveryOnly {
                 try await worker.stop()

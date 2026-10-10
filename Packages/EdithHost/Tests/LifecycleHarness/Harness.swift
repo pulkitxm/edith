@@ -437,6 +437,17 @@ struct HostLifecycleHarness {
                 sessions.states[extensionID] == .disabled, surfaces.context.activeIDs.isEmpty,
                 surfaces.layouts.home == savedSurface
             else { throw HostWorkerError.invalidResponse }
+            stage = "manual enable after pending disable recovery"
+            try await sessions.enable(second)
+            guard sessions.activeIDs == [extensionID], sessions.pendingDisableIDs.isEmpty,
+                sessions.versions[extensionID] == second.version
+            else { throw HostWorkerError.invalidResponse }
+            try await verifySurfaceContext(
+                endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
+            try await sessions.disable(id: extensionID)
+            guard sessions.processIdentifiers.isEmpty, sessions.pendingDisableIDs.isEmpty,
+                sessions.enabledIDs.isEmpty, surfaces.context.activeIDs.isEmpty
+            else { throw HostWorkerError.invalidResponse }
             guard try store.requestRemoval(id: first.id), try store.installedPackages().isEmpty
             else { throw HostWorkerError.rejected }
             guard surfaces.layouts.home == savedSurface,

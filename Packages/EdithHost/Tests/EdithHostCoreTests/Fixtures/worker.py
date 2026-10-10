@@ -44,7 +44,7 @@ for line in sys.stdin:
     response = {"token": request["token"], "ok": mode != "reject"}
     if operation == "prepareDisable":
         prepare_count += 1
-        if mode == "reject-disable-once" and prepare_count == 1:
+        if mode == "reject-disable-always" or (mode == "reject-disable-once" and prepare_count == 1):
             response["ok"] = False
             response["message"] = "Restore sleep settings and try again."
         if mode == "late-disable" and prepare_count == 1:

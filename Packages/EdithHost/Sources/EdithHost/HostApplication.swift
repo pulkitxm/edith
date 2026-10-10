@@ -235,6 +235,12 @@ struct MarketplacePage: View {
                             Spacer()
                             if !compact { controls(entry) }
                         }
+                        if marketplace.sessions.pendingDisableIDs.contains(entry.id) {
+                            Text(
+                                "Cleanup is still pending. Home and Notch cards are inactive. System resources may remain until cleanup or macOS approval finishes."
+                            )
+                            .font(.edithText(.caption)).foregroundStyle(.secondary)
+                        }
                         if compact {
                             HStack {
                                 Spacer(); controls(entry)
@@ -255,6 +261,9 @@ struct MarketplacePage: View {
 
     private func subtitle(_ entry: HostExtension) -> String {
         if let package = marketplace.installed[entry.id] {
+            if marketplace.sessions.pendingDisableIDs.contains(entry.id) {
+                return "Disable pending · \(package.version)"
+            }
             return
                 "\(marketplace.sessions.states[entry.id] == .active ? "Enabled" : "Disabled") · \(package.version)"
         }
@@ -271,7 +280,10 @@ struct MarketplacePage: View {
                 if marketplace.updateAvailable(id: entry.id) {
                     Button("Update") { Task { await marketplace.download(id: entry.id) } }
                 }
-                if marketplace.sessions.states[entry.id] == .active {
+                if marketplace.sessions.pendingDisableIDs.contains(entry.id) {
+                    Button("Retry disable") { Task { await marketplace.disable(id: entry.id) } }
+                    Button("Enable instead") { Task { await marketplace.enable(id: entry.id) } }
+                } else if marketplace.sessions.states[entry.id] == .active {
                     Button("Open") { Task { await marketplace.show(id: entry.id) } }
                     Button("Disable") { Task { await marketplace.disable(id: entry.id) } }
                 } else {

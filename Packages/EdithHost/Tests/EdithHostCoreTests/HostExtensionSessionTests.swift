@@ -182,7 +182,9 @@ import Testing
         try await fixture.sessions.enable(fixture.package("1.0.0"))
         #expect(fixture.sessions.pendingDisableIDs.isEmpty)
         #expect(fixture.sessions.activeIDs == ["sample"])
-        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(fixture.sessions.processIdentifiers["sample"] != pid)
+        #expect(kill(try #require(pid), 0) == -1)
+        #expect(await fixture.sessions.shutdown() == false)
         #expect(await fixture.sessions.shutdown())
     }
 
@@ -280,10 +282,57 @@ import Testing
         #expect(recovered.sessions.processIdentifiers.isEmpty)
     }
 
+    @Test func failedManualEnableCannotReuseDrainedWorkerOrDiscardPendingIntent() async throws {
+        let fixture = try Fixture(mode: "reject-disable-always")
+        defer { fixture.clean() }
+        try await fixture.sessions.enable(fixture.package("1.0.0"))
+        let pid = try #require(fixture.sessions.processIdentifiers["sample"])
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) {
+            try await fixture.sessions.disable(id: "sample")
+        }
+        await #expect(
+            throws: HostWorkerError.disableRejected("Restore sleep settings and try again.")
+        ) {
+            try await fixture.sessions.enable(fixture.package("1.0.0"))
+        }
+        #expect(fixture.sessions.pendingDisableIDs == ["sample"])
+        #expect(fixture.sessions.activeIDs.isEmpty)
+        #expect(fixture.sessions.processIdentifiers["sample"] == pid)
+        #expect(kill(pid, SIGKILL) == 0)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while kill(pid, 0) == 0 {
+            guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    @Test func manualEnableFromFreshPendingSessionFinishesRecoveryBeforeNormalStartup() async throws
+    {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        fixture.defaults.set(["sample"], forKey: "enabledExtensions")
+        fixture.defaults.set(["sample"], forKey: "pendingDisableExtensions")
+        let restarted = try Fixture(suite: fixture.suite)
+        try await restarted.sessions.enable(fixture.package("1.0.0"))
+        #expect(restarted.records.workers.count == 2)
+        #expect(restarted.records.workers.first?.configuration.recoveryOnly == true)
+        #expect(restarted.records.workers.first?.ready == false)
+        #expect(restarted.records.workers.last?.configuration.recoveryOnly == false)
+        #expect(restarted.records.workers.last?.ready == true)
+        #expect(restarted.sessions.pendingDisableIDs.isEmpty)
+        #expect(restarted.sessions.activeIDs == ["sample"])
+        #expect(await restarted.sessions.shutdown())
+    }
+
+    @MainActor private final class WorkerRecords { var workers: [HostWorker] = [] }
+
     @MainActor private struct Fixture {
         var sessions: HostExtensionSessions
         let suite: String
         let defaults: UserDefaults
+        let records: WorkerRecords
 
         init(
             rejectVersion: String? = nil, rejectDisable: Bool = false,
@@ -297,8 +346,10 @@ import Testing
             let identity = try HostIdentity(
                 identifier: "com.pulkit.edith.tests.sessions",
                 supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+            let records = WorkerRecords()
+            self.records = records
             sessions = HostExtensionSessions(defaults: defaults) { package in
-                HostWorker(
+                let worker = HostWorker(
                     configuration: HostWorkerConfiguration(
                         identity: identity, extensionID: package.id, version: package.version),
                     executable: URL(fileURLWithPath: "/usr/bin/python3"),
@@ -308,6 +359,8 @@ import Testing
                             ?? (package.version == rejectVersion
                                 ? "reject" : rejectDisable ? "reject-disable-once" : "normal"),
                     ], requestTimeout: .seconds(2))
+                records.workers.append(worker)
+                return worker
             }
         }
 

@@ -195,6 +195,52 @@ import Testing
         }
     }
 
+    @Test(arguments: [true, false])
+    func pendingDisableExplainsInactiveCardsAndOffersExplicitRecoveryActions(compact: Bool)
+        async throws
+    {
+        let fixture = try Fixture(pendingDisableID: "calendar")
+        defer { fixture.clean() }
+        let restore = enableAccessibility()
+        defer { restore() }
+        let host = NSHostingView(
+            rootView: MarketplacePage(marketplace: fixture.marketplace)
+                .frame(width: compact ? 600 : 1100, height: 650)
+                .environment(\.compactLayout, compact).environment(
+                    \.automaticViewActionsEnabled, false))
+        host.frame = CGRect(x: 0, y: 0, width: compact ? 600 : 1100, height: 650)
+        let window = TestWindowHost.window(contentRect: host.frame)
+        window.contentView = host; window.orderBack(nil)
+        defer { window.orderOut(nil) }
+        await settle(window, host: host)
+        #expect(find(host, label: "Disable pending · 1.0.0") != nil)
+        #expect(find(host, label: "Enabled · 1.0.0") == nil)
+        #expect(find(host, label: "Disabled · 1.0.0") == nil)
+        #expect(
+            find(
+                host,
+                label:
+                    "Cleanup is still pending. Home and Notch cards are inactive. System resources may remain until cleanup or macOS approval finishes."
+            ) != nil)
+        let retry = try #require(find(host, label: "Retry disable"))
+        #expect((retry as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(fixture.marketplace.sessions.pendingDisableIDs == ["calendar"])
+        #expect(fixture.marketplace.error != nil)
+        #expect(fixture.marketplace.surfaceAvailability.activeIDs.isEmpty)
+        let enable = try #require(find(host, label: "Enable instead"))
+        #expect((enable as AnyObject).accessibilityPerformPress?() == true)
+        await settle(window, host: host)
+        #expect(fixture.marketplace.sessions.pendingDisableIDs == ["calendar"])
+        #expect(fixture.marketplace.sessions.states["calendar"] == .failed)
+        #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
+        #expect(find(host, label: "Disable pending · 1.0.0") != nil)
+        #expect(find(host, label: "Retry disable") != nil)
+        #expect(fixture.marketplace.error?.contains("Cleanup is pending") == true)
+        #expect(fixture.marketplace.surfaceAvailability.activeIDs.isEmpty)
+        #expect(await fixture.requests.count == 0)
+    }
+
     private func find(_ node: NSObject, label: String, depth: Int = 0) -> NSObject? {
         guard depth < 64 else { return nil }
         if (node as AnyObject).accessibilityLabel?() == label { return node }
@@ -206,6 +252,11 @@ import Testing
         }
         for child in (node as AnyObject).accessibilityChildren?() as? [NSObject] ?? [] {
             if let result = find(child, label: label, depth: depth + 1) { return result }
+        }
+        if let view = node as? NSView {
+            for child in view.subviews {
+                if let result = find(child, label: label, depth: depth + 1) { return result }
+            }
         }
         return nil
     }
@@ -244,7 +295,7 @@ import Testing
         let marketplace: HostMarketplace
         let requests = Requests()
 
-        init() throws {
+        init(pendingDisableID: String? = nil) throws {
             directory = FileManager.default.temporaryDirectory.appendingPathComponent(
                 UUID().uuidString)
             let identity = try HostIdentity(
@@ -253,6 +304,22 @@ import Testing
             let store = ExtensionPackageStore(
                 root: identity.root.appendingPathComponent("Extensions"))
             let defaults = try #require(UserDefaults(suiteName: identity.defaultsSuite))
+            if let id = pendingDisableID {
+                try FileManager.default.createDirectory(
+                    at: store.root, withIntermediateDirectories: true)
+                defaults.set([id], forKey: "enabledExtensions")
+                defaults.set([id], forKey: "pendingDisableExtensions")
+                try store.commit([
+                    ExtensionPackage(
+                        id: id, version: "1.0.0", hostABI: HostContract.compatibility,
+                        downloadURL: URL(
+                            string:
+                                "https://github.com/pulkitxm/edith/releases/download/synthetic/fixture.zip"
+                        )!,
+                        sha256: String(repeating: "a", count: 64), downloadBytes: 1,
+                        installedBytes: 1)
+                ])
+            }
             let sessions = HostExtensionSessions(defaults: defaults) { _ in
                 throw HostWorkerError.rejected
             }
@@ -266,7 +333,10 @@ import Testing
                 store: store, download: { _, _ in throw MarketplaceError.downloadFailed },
                 verify: { _ in throw MarketplaceError.invalidSignature })
             marketplace = try HostMarketplace(
-                identity: identity, entries: HostIndex.bundled(), store: store,
+                identity: identity,
+                entries: try HostIndex.bundled().filter {
+                    pendingDisableID == nil || $0.id == pendingDisableID
+                }, store: store,
                 catalogClient: client, installer: installer, sessions: sessions)
         }
 

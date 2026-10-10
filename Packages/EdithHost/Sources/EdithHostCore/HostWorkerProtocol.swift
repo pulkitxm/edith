@@ -115,6 +115,6 @@ public extension HostWorkerError {
     var disableMessage: String {
         if case .disableRejected(let message) = self { return message }
         return
-            "The extension could not finish restoring its system settings. It remains enabled. Open the extension and try again."
+            "Cleanup is pending. Restore system settings or finish macOS approval, then try again."
     }
 }

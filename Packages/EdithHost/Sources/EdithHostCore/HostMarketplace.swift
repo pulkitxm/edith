@@ -142,7 +142,11 @@ public final class HostMarketplace {
         error = nil
         defer { operationID = nil }
         do { try await sessions.enable(package) } catch {
-            self.error = "The extension could not start. Try enabling it again."
+            self.error =
+                sessions.pendingDisableIDs.contains(id)
+                ? (error as? HostWorkerError)?.disableMessage
+                    ?? "Cleanup is pending. Retry disable after finishing macOS approval."
+                : "The extension could not start. Try enabling it again."
         }
     }
 
@@ -154,7 +158,7 @@ public final class HostMarketplace {
         do { try await sessions.disable(id: id) } catch {
             self.error =
                 (error as? HostWorkerError)?.disableMessage
-                ?? "The extension could not stop. It remains enabled. Open the extension and try again."
+                ?? "Cleanup is pending. Retry disable after restoring system settings or finishing macOS approval."
         }
     }
 
