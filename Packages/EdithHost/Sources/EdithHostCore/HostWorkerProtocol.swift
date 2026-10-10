@@ -11,10 +11,11 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     public let zoom: Double
     public var recoveryOnly: Bool = false
     public let publicLauncher: HostPublicLauncher?
+    public let ambientPolicy: HostAmbientPolicy
 
     public init(
         identity: HostIdentity, extensionID: String, version: String,
-        publicLauncher: HostPublicLauncher? = nil
+        publicLauncher: HostPublicLauncher? = nil, ambientPolicy: HostAmbientPolicy? = nil
     ) {
         self.publicLauncher = publicLauncher
         identifier = identity.identifier
@@ -25,6 +26,12 @@ public struct HostWorkerConfiguration: Codable, Sendable {
         self.extensionID = extensionID
         self.version = version
         let preferences = SharedDefaults.applicationStore(identifier: identity.identifier)
+        self.ambientPolicy =
+            ambientPolicy
+            ?? .initial(
+                owner: extensionID,
+                pauseAmbientOnBattery: preferences?.bool(
+                    forKey: HostCoreBackgroundPolicy.preferenceKey) ?? false)
         theme = preferences?.string(forKey: AppStorageKeys.General.theme) ?? "accent"
         appearance = preferences?.string(forKey: AppStorageKeys.General.appearance) ?? "system"
         let storedZoom = preferences?.double(forKey: AppStorageKeys.General.mainWindowZoom) ?? 1

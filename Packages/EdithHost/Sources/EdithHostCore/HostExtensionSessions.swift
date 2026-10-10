@@ -6,6 +6,7 @@ import Observation
 @Observable
 public final class HostExtensionSessions {
     public static let enabledExtensionsKey = "enabledExtensions"
+    public let ambientPolicyCoordinator = HostAmbientPolicyCoordinator()
 
     public private(set) var states: [String: HostActivationState] = [:] {
         didSet { didChange() }
@@ -42,6 +43,14 @@ public final class HostExtensionSessions {
         self.defaults = defaults
         self.create = create
         pendingDisableIDs = Set(defaults.stringArray(forKey: "pendingDisableExtensions") ?? [])
+        ambientPolicyCoordinator.changed = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                _ = try? await synchronizeAmbientPolicy(
+                    pauseAmbientOnBattery: defaults.bool(
+                        forKey: HostCoreBackgroundPolicy.preferenceKey))
+            }
+        }
     }
 
     public var enabledIDs: Set<String> {
@@ -57,6 +66,8 @@ public final class HostExtensionSessions {
 
     public func requestDisable(ids: Set<String>) {
         pendingDisableIDs.formUnion(ids.intersection(enabledIDs.union(workers.keys)))
+        for id in ids { ambientPolicyCoordinator.release(owner: id) }
+        ambientPolicyCoordinator.invalidate()
     }
 
     public func restore(packages: [String: ExtensionPackage]) async {
@@ -102,6 +113,8 @@ public final class HostExtensionSessions {
                 guard let self, let worker, self.workers[id] === worker else { return }
                 self.workers[id] = nil
                 self.versions[id] = nil
+                self.ambientPolicyCoordinator.release(owner: id)
+                self.ambientPolicyCoordinator.invalidate()
                 if self.states[id] != .stopping {
                     self.states[id] = .failed
                     self.failures.insert(id)
@@ -139,6 +152,7 @@ public final class HostExtensionSessions {
             packages[id] = package
             states[id] = .active
             save(enabledIDs.union([id]))
+            ambientPolicyCoordinator.invalidate()
         } catch {
             if let worker = workers[id] { try? await worker.stop() }
             workers[id] = nil
@@ -159,6 +173,8 @@ public final class HostExtensionSessions {
         }
         if remember, enabledIDs.contains(id) || workers[id] != nil { pendingDisableIDs.insert(id) }
         states[id] = .stopping
+        ambientPolicyCoordinator.release(owner: id)
+        ambientPolicyCoordinator.invalidate()
         do {
             try await willDisable(id)
             if workers[id]?.ready != true, pendingDisableIDs.contains(id) {
@@ -190,11 +206,54 @@ public final class HostExtensionSessions {
     }
 
     public func synchronizeAppearance(identity: HostIdentity) async {
-        for (id, worker) in workers where worker.ready {
+        for (id, worker) in workers where worker.ready && HostAmbientPolicy.jobs[id] == nil {
             try? await worker.synchronize(
                 configuration: HostWorkerConfiguration(
                     identity: identity, extensionID: id, version: worker.configuration.version))
         }
+        _ = try? await synchronizeAmbientPolicy(
+            pauseAmbientOnBattery: defaults.bool(forKey: HostCoreBackgroundPolicy.preferenceKey))
+    }
+
+    public func ambientPolicyOwners() -> [HostAmbientPolicyOwner] {
+        activeIDs.intersection(HostAmbientPolicy.jobs.keys).sorted().map { id in
+            let worker = workers[id]
+            let pid = worker?.processIdentifier ?? 0
+            let kernel = try? HostRemoteKernelIdentity.read(pid)
+            return .init(
+                id: id, version: versions[id] ?? "", processIdentifier: pid,
+                processGeneration: kernel?.generation ?? "")
+        }
+    }
+
+    public func synchronizeAmbientPolicy(pauseAmbientOnBattery: Bool) async throws
+        -> HostAmbientPolicyReceipt
+    {
+        try await ambientPolicyCoordinator.synchronize(
+            pauseAmbientOnBattery: pauseAmbientOnBattery,
+            owners: { self.ambientPolicyOwners() },
+            apply: { owner, policy in
+                guard let worker = self.workers[owner.id] else { throw HostWorkerError.rejected }
+                try self.validateAmbientOwner(owner, worker: worker)
+                let configuration = HostWorkerConfiguration(
+                    identity: try worker.configuration.identity(), extensionID: owner.id,
+                    version: owner.version, publicLauncher: worker.configuration.publicLauncher,
+                    ambientPolicy: policy)
+                try await worker.synchronize(configuration: configuration)
+                try Task.checkCancellation()
+                try self.validateAmbientOwner(owner, worker: worker)
+            })
+    }
+
+    private func validateAmbientOwner(_ owner: HostAmbientPolicyOwner, worker: HostWorker) throws {
+        guard workers[owner.id] === worker, worker.ready, !worker.configuration.recoveryOnly,
+            activeIDs.contains(owner.id), versions[owner.id] == owner.version,
+            packages[owner.id]?.version == owner.version,
+            worker.configuration.version == owner.version,
+            worker.processIdentifier == owner.processIdentifier,
+            try HostRemoteKernelIdentity.read(owner.processIdentifier).generation
+                == owner.processGeneration
+        else { throw HostWorkerError.rejected }
     }
 
     public func applyUpdate(_ package: ExtensionPackage) async throws {

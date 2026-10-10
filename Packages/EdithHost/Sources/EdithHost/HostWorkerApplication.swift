@@ -216,6 +216,7 @@ final class HostWorkerApplication {
             guard configuration == nil, let next = request.configuration,
                 next.identifier == Bundle.main.bundleIdentifier
             else { throw HostWorkerError.rejected }
+            try next.ambientPolicy.validate(owner: next.extensionID)
             let identity = try next.identity()
             guard try HostIndex.bundled().contains(where: { $0.id == next.extensionID }) else {
                 throw HostWorkerError.rejected
@@ -256,6 +257,10 @@ final class HostWorkerApplication {
             ]
             if let launcher = try next.publicLauncherContext(teamIdentifier: team) {
                 values["publicLauncher"] = launcher
+            }
+            for (key, value) in try next.ambientPolicy.context(owner: next.extensionID) {
+                guard let key = key as? String else { throw HostWorkerError.rejected }
+                values[key] = value
             }
             let context = values as NSDictionary
             for role in [ExtensionBundleRuntime.Role.helper, .agent, .app] {
@@ -340,16 +345,21 @@ final class HostWorkerApplication {
         switch request.operation {
         case "synchronize":
             guard !configuration.recoveryOnly else { return }
-            if let next = request.configuration {
+            guard let next = request.configuration else { throw HostWorkerError.rejected }
+            do {
                 guard next.identifier == configuration.identifier,
                     next.extensionID == configuration.extensionID,
                     next.version == configuration.version
                 else { throw HostWorkerError.rejected }
+                try next.ambientPolicy.validate(owner: next.extensionID)
                 try applyAppearance(next)
             }
             for runtime in runtimes {
-                try runtime.synchronize(id: configuration.extensionID, context: [:])
+                try runtime.synchronize(
+                    id: configuration.extensionID,
+                    context: next.ambientPolicy.context(owner: next.extensionID))
             }
+            self.configuration = next
         case "status":
             for runtime in runtimes {
                 guard try runtime.snapshot(id: configuration.extensionID)?.active == true else {
