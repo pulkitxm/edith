@@ -124,6 +124,76 @@ import Testing
         #expect(released == nil && scene?.isRetained == false && invalidated == 1)
     }
 
+    @Test(arguments: [320.0, 640.0], [false, true])
+    func originalNotchRendersScopedUpcomingMeetingsAndInjectedActions(width: Double, dark: Bool)
+        async throws
+    {
+        let priorScale = UIScale.current
+        UIScale.apply(1.5)
+        defer { UIScale.apply(priorScale) }
+        let now = Date()
+        let events = [
+            CalendarEventPayload(
+                id: "past", title: "Synthetic finished meeting", calendarID: "one",
+                start: now.addingTimeInterval(-3600), end: now.addingTimeInterval(-1800),
+                isAllDay: false),
+            CalendarEventPayload(
+                id: "next", title: "Synthetic Notch meeting", calendarID: "one",
+                start: now.addingTimeInterval(600), end: now.addingTimeInterval(1200),
+                isAllDay: false, meetingURL: "https://meet.google.com/synthetic"),
+            CalendarEventPayload(
+                id: "other", title: "Synthetic other source", calendarID: "two",
+                start: now.addingTimeInterval(900), end: now.addingTimeInterval(1500),
+                isAllDay: false),
+        ]
+        var joined: [String] = []
+        let store = CalendarUIFacade(invoke: { operation, payload in
+            if operation == "calendar.ui.action" {
+                let action = try JSONDecoder().decode(CalendarUIActionRequest.self, from: payload)
+                #expect(action.action == .join)
+                joined.append(try #require(action.eventID))
+            }
+            return try JSONEncoder().encode(
+                CalendarUISnapshot(authorized: true, blurEvents: false, days: 14, events: events))
+        })
+        defer { store.shutdown() }
+        await store.refreshAndWait()
+        var opened = 0
+        var tile = SurfaceTile(.calendar)
+        tile.sourceIDs = ["one"]
+        tile.itemLimit = 1
+        let host = NSHostingView(rootView: AnyView(EmptyView()))
+        let fixture = UnorderedCalendarWindow(host: host, width: width)
+        defer { fixture.close() }
+        func render() async {
+            host.rootView = AnyView(
+                CalendarNotchScene(tile: tile, store: store, open: { opened += 1 })
+                    .environment(\.colorScheme, dark ? .dark : .light)
+                    .environment(\.automaticViewActionsEnabled, false)
+                    .transaction { $0.animation = nil })
+            await fixture.layout()
+        }
+        await render()
+        #expect(find(host, label: "Synthetic Notch meeting") != nil)
+        #expect(find(host, label: "Synthetic finished meeting") == nil)
+        #expect(find(host, label: "Synthetic other source") == nil)
+        let join = try #require(find(host, label: "Join meeting"))
+        _ = (join as AnyObject).accessibilityPerformPress?()
+        for _ in 0..<8 { await Task.yield() }
+        #expect(joined == ["next"])
+        let open = try #require(find(host, label: "Open Calendar"))
+        _ = (open as AnyObject).accessibilityPerformPress?()
+        #expect(opened == 1)
+        tile.showActions = false
+        await render()
+        #expect(find(host, label: "Join meeting") == nil)
+        #expect(find(host, label: "Open Calendar") == nil)
+        #expect(!fixture.window.isVisible && !fixture.window.isKeyWindow)
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
+    }
+
     private func find(_ node: NSObject, label: String, depth: Int = 0) -> NSObject? {
         guard depth < 64 else { return nil }
         if (node as AnyObject).accessibilityLabel?() == label { return node }

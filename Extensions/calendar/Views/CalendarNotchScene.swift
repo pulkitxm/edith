@@ -73,7 +73,7 @@ struct CalendarNotchScene: View {
                                     store.perform(.join, eventID: event.id)
                                 } label: {
                                     Image(systemName: "video.fill")
-                                }.help("Join meeting")
+                                }.help("Join meeting").accessibilityLabel("Join meeting")
                             }
                         }
                     }

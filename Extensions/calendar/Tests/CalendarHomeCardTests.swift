@@ -52,7 +52,7 @@ import Testing
             contentRect: .init(x: -10000, y: -10000, width: width, height: 400),
             styleMask: .borderless, backing: .buffered, defer: false)
         window.contentView = host
-        defer { window.orderOut(nil) }
+        defer { window.contentView = nil }
         func render(authorized: Bool) async {
             host.rootView = AnyView(
                 HomeMeetingsCard(
