@@ -2464,5 +2464,105 @@
         "Extensions/quinjet/Resources/review.js"
       ]
     }
+  },
+  {
+    "id": "database",
+    "version": "1.0.0",
+    "hostABI": "edith-host-1",
+    "contractVersion": 1,
+    "surfaceContractVersion": 1,
+    "supportProduct": "EdithExtensionUI",
+    "nativePackage": "Extensions/database/DatabaseEngine",
+    "nativeProduct": "DatabaseEngine",
+    "nativeResources": [
+      "GRDB_GRDB.bundle"
+    ],
+    "inputs": [
+      "Extensions/database"
+    ],
+    "sharedInputs": [
+      "scripts/build-extension-package.mjs",
+      "scripts/build-extension-support.mjs",
+      "Packages/ExtensionSupport/Package.swift",
+      "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
+      "Packages/ExtensionSupport/Sources/EdithExtensionUI"
+    ],
+    "dependencies": [],
+    "roles": {
+      "app": [
+        "Extensions/database/AccessibilityAnnouncement.swift",
+        "Extensions/database/DatabaseWorkerClient.swift",
+        "Extensions/database/Models/DatabaseColumnsModel.swift",
+        "Extensions/database/Models/DatabaseConnectionCreationModel.swift",
+        "Extensions/database/Models/DatabaseConnectionManagementModel.swift",
+        "Extensions/database/Models/DatabaseConnectionSummary.swift",
+        "Extensions/database/Models/DatabaseConnectionWorkspaceModel.swift",
+        "Extensions/database/Models/DatabaseDataWorkspaceModel+Editing.swift",
+        "Extensions/database/Models/DatabaseDataWorkspaceModel+Mutations.swift",
+        "Extensions/database/Models/DatabaseDataWorkspaceModel+Queries.swift",
+        "Extensions/database/Models/DatabaseDataWorkspaceModel+Values.swift",
+        "Extensions/database/Models/DatabaseDataWorkspaceModel.swift",
+        "Extensions/database/Models/DatabaseFilterOperatorPolicy.swift",
+        "Extensions/database/Models/DatabaseGridProjection.swift",
+        "Extensions/database/Models/DatabaseMachineForwardRouter.swift",
+        "Extensions/database/Models/DatabaseObjectExplorerModel.swift",
+        "Extensions/database/Models/DatabasePageModel.swift",
+        "Extensions/database/Models/DatabasePageSession.swift",
+        "Extensions/database/Models/DatabaseQueryHistory.swift",
+        "Extensions/database/Models/DatabaseSafetyReviewPresentation.swift",
+        "Extensions/database/Models/DatabaseTableTabsModel.swift",
+        "Extensions/database/Models/DatabaseWorkspaceModel.swift",
+        "Extensions/database/Models/DatabaseWorkspaceTypes.swift",
+        "Extensions/database/Runtime.swift",
+        "Extensions/database/Surface.swift",
+        "Extensions/database/Views/DatabaseConnectionCreationSheet.swift",
+        "Extensions/database/Views/DatabaseConnectionGallery.swift",
+        "Extensions/database/Views/DatabaseConnectionManagementSheet.swift",
+        "Extensions/database/Views/DatabaseConnectionOverview.swift",
+        "Extensions/database/Views/DatabaseConnectionSidebar.swift",
+        "Extensions/database/Views/DatabaseDocumentOutline.swift",
+        "Extensions/database/Views/DatabaseFilterRibbon.swift",
+        "Extensions/database/Views/DatabaseNativeTableStyle.swift",
+        "Extensions/database/Views/DatabaseNativeTableView.swift",
+        "Extensions/database/Views/DatabaseNativeValueField.swift",
+        "Extensions/database/Views/DatabaseObjectNavigatorView.swift",
+        "Extensions/database/Views/DatabasePage.swift",
+        "Extensions/database/Views/DatabaseRecordInspector.swift",
+        "Extensions/database/Views/DatabaseSafetyComponents.swift",
+        "Extensions/database/Views/DatabaseSafetyReviewSheet.swift",
+        "Extensions/database/Views/DatabaseServiceStatusViews.swift",
+        "Extensions/database/Views/DatabaseStructureView.swift",
+        "Extensions/database/Views/DatabaseThemePalette.swift",
+        "Extensions/database/Views/DatabaseWorkbenchTabView.swift",
+        "Extensions/database/Views/DatabaseWorkbenchView.swift"
+      ]
+    },
+    "minimumSystemVersion": 14,
+    "nativeLicenses": [
+      {
+        "source": "Extensions/database/DatabaseEngine/THIRD-PARTY-NOTICES.txt",
+        "destination": "Database-Third-Party-Notices.txt"
+      }
+    ],
+    "nativeClangTargets": [
+      "CNIOWASI",
+      "CNIOAtomics",
+      "CNIODarwin",
+      "CNIOPosix",
+      "CNIOLinux",
+      "CNIOFreeBSD",
+      "CNIOOpenBSD",
+      "CNIOSHA1",
+      "CNIOBoringSSLShims"
+    ],
+    "nativeClangDirectories": [
+      ".build/checkouts/GRDB.swift/Sources/GRDBSQLite",
+      ".build/checkouts/swift-nio-ssl/Sources/CNIOBoringSSL/include",
+      ".build/checkouts/swift-crypto/Sources/CCryptoBoringSSL/include",
+      ".build/checkouts/swift-crypto/Sources/CCryptoBoringSSLShims/include",
+      ".build/checkouts/swift-atomics/Sources/_AtomicsShims/include",
+      ".build/checkouts/swift-numerics/Sources/_NumericsShims/include",
+      ".build/checkouts/swift-nio/Sources/CNIOWindows/include"
+    ]
   }
 ]

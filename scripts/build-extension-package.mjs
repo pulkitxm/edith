@@ -112,15 +112,34 @@ export function nativeClangModuleFlags(root, definition) {
     targets.some((target) => !/^[A-Za-z][A-Za-z0-9_]{0,127}$/.test(target))
   )
     throw new Error("Invalid native Clang target");
-  return targets.flatMap((target) => [
-    "-I",
-    resolve(
-      root,
-      definition.nativePackage,
-      ".build/release",
-      `${target}.build`,
-    ),
-  ]);
+  const packageRoot = resolve(root, definition.nativePackage);
+  const directories = definition.nativeClangDirectories ?? [];
+  if (
+    new Set(directories).size !== directories.length ||
+    directories.some(
+      (directory) =>
+        typeof directory !== "string" ||
+        !directory ||
+        directory.includes("\0") ||
+        !resolve(packageRoot, directory).startsWith(packageRoot + "/"),
+    )
+  )
+    throw new Error("Invalid native Clang directory");
+  return [
+    ...targets.flatMap((target) => [
+      "-I",
+      resolve(
+        root,
+        definition.nativePackage,
+        ".build/release",
+        target + ".build",
+      ),
+    ]),
+    ...directories.flatMap((directory) => [
+      "-I",
+      resolve(packageRoot, directory),
+    ]),
+  ];
 }
 
 export function nativeSwiftPackageArguments(root, definition, developer) {

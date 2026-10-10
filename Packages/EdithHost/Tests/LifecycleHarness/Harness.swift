@@ -207,6 +207,8 @@ struct HostLifecycleHarness {
                 try await verifyClipboard(endpoint, seed: true)
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: true)
+            } else if extensionID == "database" {
+                try await verifyDatabase(endpoint, seed: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -273,6 +275,8 @@ struct HostLifecycleHarness {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: false)
+            } else if extensionID == "database" {
+                try await verifyDatabase(endpoint, seed: false)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -330,6 +334,7 @@ struct HostLifecycleHarness {
             guard let restoredPID = sessions.processIdentifiers[first.id], restoredPID != newPID,
                 kill(restoredPID, 0) == 0
             else { throw HostWorkerError.rejected }
+            stage = "restore surface in replacement host"
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             guard sessions.versions[first.id] == second.version,
@@ -337,6 +342,7 @@ struct HostLifecycleHarness {
             else {
                 throw HostWorkerError.rejected
             }
+            stage = "restored commands"
             if extensionID == "virtualCamera" {
                 try await CameraFixture.verify(endpoint, fixture: fixture, seed: false)
                 cameraChildren = childProcesses(of: restoredPID)
@@ -363,6 +369,8 @@ struct HostLifecycleHarness {
                 try await verifyClipboard(endpoint, seed: false)
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: false)
+            } else if extensionID == "database" {
+                try await verifyDatabase(endpoint, seed: false)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -427,7 +435,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
