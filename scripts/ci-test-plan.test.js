@@ -1,5 +1,14 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { planSwiftTests } from "./ci-test-plan.mjs";
 
 test("an independent feature uses its extension build without unrelated macOS lanes", () => {
@@ -94,4 +103,81 @@ test("the actual planner consumes changed paths and rejects unknown options", ()
       stdio: "pipe",
     }),
   ).toThrow();
+});
+
+test("a child behind its base routes the tested merge revision with the current planner", () => {
+  const workflow = Bun.YAML.parse(
+    readFileSync(".github/workflows/ci.yml", "utf8"),
+  );
+  const job = workflow.jobs.changes;
+  const checkout = job.steps.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  expect(checkout.with.ref).toBe(["$", "{{ github.sha }}"].join(""));
+  const root = mkdtempSync(join(tmpdir(), "edith-routing-"));
+  const git = (...args) =>
+    execFileSync("git", ["-c", "core.hooksPath=/dev/null", ...args], {
+      cwd: root,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+  const save = (path, contents) => {
+    const target = join(root, path);
+    mkdirSync(join(target, ".."), { recursive: true });
+    writeFileSync(target, contents);
+  };
+  const commit = (message) => {
+    git("add", ".");
+    git("-c", "commit.gpgsign=false", "commit", "-m", message);
+  };
+  try {
+    git("init", "--initial-branch=base");
+    git("config", "user.name", "Fixture");
+    git("config", "user.email", "fixture@example.invalid");
+    save("Extensions/calendar/Runtime.swift", "initial\n");
+    commit("Initial fixture");
+    git("switch", "-c", "feature");
+    save("Extensions/calendar/Runtime.swift", "changed\n");
+    commit("Change Calendar fixture");
+    const head = git("rev-parse", "HEAD").trim();
+    git("switch", "base");
+    save("scripts/ci-test-plan.mjs", readFileSync("scripts/ci-test-plan.mjs"));
+    commit("Add planner fixture");
+    git("update-ref", "refs/remotes/origin/base", "HEAD");
+    git("merge", "--no-edit", "feature");
+    const merge = git("rev-parse", "HEAD").trim();
+    expect(merge).not.toBe(head);
+    const output = join(root, "routing-output");
+    execFileSync(
+      "bash",
+      ["-e", "-c", job.steps.find((step) => step.id === "areas").run],
+      {
+        cwd: root,
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          BASE_REF: "base",
+          BEFORE: "",
+          GITHUB_OUTPUT: output,
+        },
+      },
+    );
+    const values = new Map(
+      readFileSync(output, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const split = line.indexOf("=");
+          return [line.slice(0, split), line.slice(split + 1)];
+        }),
+    );
+    expect(values.get("swift")).toBe("true");
+    expect(values.get("host")).toBe("false");
+    expect(values.get("scripts")).toBe("false");
+    expect(values.get("swift_tests")).toBe("false");
+    expect(JSON.parse(values.get("swift_matrix"))).toEqual({ include: [] });
+    expect(() => git("show", `${head}:scripts/ci-test-plan.mjs`)).toThrow();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
