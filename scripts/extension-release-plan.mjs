@@ -159,8 +159,10 @@ export async function extensionFingerprint(root, definition, definitions) {
       )
         continue;
       if (
-        `${path}/${entry.name}` ===
-        "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift"
+        [
+          "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+          "Extensions/database/DatabaseEngine/MCPTests",
+        ].includes(`${path}/${entry.name}`)
       )
         continue;
       if (entry.isSymbolicLink()) throw new Error("Symlink in extension input");

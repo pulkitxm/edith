@@ -728,3 +728,81 @@ test("native private SDK consumers invalidate on every selected support source",
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("Database MCP tests run their owner without rebuilding the downloaded engine", async () => {
+  const { planUnpublishedExtensions } = await import(
+    "./extension-release-plan.mjs"
+  );
+  const { planSwiftTests } = await import("./ci-test-plan.mjs");
+  const root = await mkdtemp(join(tmpdir(), "extension-mcp-test-inputs-"));
+  const definition = {
+    id: "database",
+    version: "1.0.0",
+    hostABI: "edith-host-2",
+    inputs: ["Extensions/database"],
+    sharedInputs: [],
+    dependencies: [],
+  };
+  const testPath =
+    "Extensions/database/DatabaseEngine/MCPTests/DatabaseMCPServerTests.swift";
+  const sourcePath =
+    "Extensions/database/DatabaseEngine/Sources/DatabaseMCP/DatabaseMCPServer.swift";
+  try {
+    for (const directory of [
+      "Extensions/database/DatabaseEngine/MCPTests",
+      "Extensions/database/DatabaseEngine/Sources/DatabaseMCP",
+      "Extensions/database/MCPTests",
+    ])
+      await mkdir(join(root, directory), { recursive: true });
+    await writeFile(join(root, testPath), "initial tests");
+    await writeFile(join(root, sourcePath), "production engine");
+    const fingerprint = await extensionFingerprint(root, definition, [
+      definition,
+    ]);
+    const published = [
+      {
+        id: definition.id,
+        version: definition.version,
+        hostABI: definition.hostABI,
+        architecture: "arm64",
+        sourceFingerprint: fingerprint,
+      },
+    ];
+    await writeFile(join(root, testPath), "changed MCP tests");
+    expect(planSwiftTests([testPath]).include).toEqual([
+      {
+        lane: "extension-database",
+        extension: "database",
+        targets: "ci-extension-database",
+        ghostty: false,
+      },
+    ]);
+    expect(await extensionFingerprint(root, definition, [definition])).toBe(
+      fingerprint,
+    );
+    expect(
+      await planUnpublishedExtensions(root, [definition], published),
+    ).toEqual([]);
+    await writeFile(join(root, sourcePath), "changed production engine");
+    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
+      fingerprint,
+    );
+    expect(
+      (await planUnpublishedExtensions(root, [definition], published)).map(
+        ({ id }) => id,
+      ),
+    ).toEqual(["database"]);
+    const changedEngine = await extensionFingerprint(root, definition, [
+      definition,
+    ]);
+    await writeFile(
+      join(root, "Extensions/database/MCPTests/Production.swift"),
+      "neighboring production path",
+    );
+    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
+      changedEngine,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
