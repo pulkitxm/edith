@@ -1,13 +1,19 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
+  chmod,
   cp,
+  link,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   realpath,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -444,8 +450,130 @@ test("authenticated fixed state endpoint observes delayed synthetic producer wit
   }
 });
 
-test("state reader rejects oversized files, different owner and replaced root before claiming application state", async () => {
+async function setupStateReader() {
   const value = await setup();
+  const producer = {
+    schema: 1,
+    hostIdentifier: value.fixture.identifier,
+    sourceCommit: value.fixture.sourceCommit,
+    phase: "telemetry",
+    category: "ready",
+  };
+  const state = {
+    schema: 1,
+    hostIdentifier: value.fixture.identifier,
+    sourceCommit: value.fixture.sourceCommit,
+    applicationVersion: "1.0.0",
+    producerExecutableSHA256: value.fixture.executableSHA256["1.0.0"],
+    protectedDataUnchanged: true,
+    declinedPermissionRequests: 0,
+  };
+  for (const [name, contents] of [
+    ["producer.json", producer],
+    ["state.json", state],
+  ])
+    await writeFile(join(value.directory, name), JSON.stringify(contents), {
+      mode: 0o600,
+    });
+  const reader = await createJourneyStateReader({
+    directory: value.directory,
+    environment,
+    accountHome: value.accountHome,
+    fixture: value.fixture,
+  });
+  expect((await reader()).state).toEqual(state);
+  return { ...value, reader };
+}
+
+for (const name of ["producer.json", "state.json"]) {
+  test(`fixed ${name} rejects an actual FIFO without blocking`, async () => {
+    const value = await setupStateReader();
+    const path = join(value.directory, name);
+    let timer;
+    let reading;
+    try {
+      await rm(path);
+      execFileSync("/usr/bin/mkfifo", ["-m", "600", path]);
+      reading = value.reader().then(
+        () => "accepted",
+        () => "rejected",
+      );
+      const outcome = await Promise.race([
+        reading,
+        new Promise((resolve) => {
+          timer = setTimeout(() => resolve("blocked"), 1000);
+        }),
+      ]);
+      if (outcome === "blocked") {
+        const writer = await open(
+          path,
+          constants.O_WRONLY | constants.O_NONBLOCK,
+        );
+        await writer.close();
+        await reading;
+      }
+      expect(outcome).toBe("rejected");
+    } finally {
+      clearTimeout(timer);
+      await value.cleanup();
+    }
+  });
+
+  test(`fixed ${name} rejects a hard link and public read permissions`, async () => {
+    const value = await setupStateReader();
+    const path = join(value.directory, name);
+    const alias = join(value.directory, "same-inode.json");
+    try {
+      await link(path, alias);
+      await expect(value.reader()).rejects.toThrow();
+      await rm(alias);
+      expect((await value.reader()).state.schema).toBe(1);
+      await chmod(path, 0o644);
+      await expect(value.reader()).rejects.toThrow();
+      await chmod(path, 0o600);
+      expect((await value.reader()).state.schema).toBe(1);
+    } finally {
+      await value.cleanup();
+    }
+  });
+
+  test(`fixed ${name} rejects an actual same-size mutation after read`, async () => {
+    const value = await setupStateReader();
+    const path = join(value.directory, name);
+    const probe = await open(path);
+    const prototype = Object.getPrototypeOf(probe);
+    const originalRead = prototype.read;
+    await probe.close();
+    let mutated = false;
+    prototype.read = async function (...args) {
+      const result = await originalRead.apply(this, args);
+      const bytes = args[0].subarray(0, result.bytesRead);
+      const contents = JSON.parse(bytes);
+      if (
+        !mutated &&
+        contents.hostIdentifier === value.fixture.identifier &&
+        (name === "producer.json"
+          ? contents.phase === "telemetry"
+          : contents.applicationVersion === "1.0.0")
+      ) {
+        await writeFile(path, bytes);
+        await utimes(path, new Date(0), new Date(0));
+        mutated = true;
+      }
+      return result;
+    };
+    try {
+      await expect(value.reader()).rejects.toThrow();
+      expect(mutated).toBe(true);
+    } finally {
+      prototype.read = originalRead;
+      await value.cleanup();
+    }
+  });
+}
+
+test("state reader rejects oversized files, different owner and replaced root before claiming application state", async () => {
+  const value = await setupStateReader();
   try {
     const reader = await createJourneyStateReader({
       directory: value.directory,

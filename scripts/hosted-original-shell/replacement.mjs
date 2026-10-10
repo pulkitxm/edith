@@ -319,73 +319,73 @@ export async function createJourneyStateReader({
     assert.equal(current.dev, root.dev);
     assert.equal(current.ino, root.ino);
     assert.equal(await realpath(directory), directory);
-    const receipt = await open(
-      join(directory, "producer.json"),
-      constants.O_RDONLY | constants.O_NOFOLLOW,
+    const readFixedFile = async (name, maximumBytes) => {
+      assert(name === "producer.json" || name === "state.json");
+      const file = await open(
+        join(directory, name),
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        const before = await file.stat({ bigint: true });
+        assert(
+          before.isFile() &&
+            before.uid === BigInt(uid) &&
+            (before.mode & 0o7777n) === 0o600n &&
+            before.nlink === 1n &&
+            before.size > 0n &&
+            before.size <= BigInt(maximumBytes),
+        );
+        const bytes = Buffer.alloc(Number(before.size) + 1);
+        const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+        assert.equal(BigInt(bytesRead), before.size);
+        const after = await file.stat({ bigint: true });
+        assert(after.isFile());
+        for (const field of [
+          "dev",
+          "ino",
+          "uid",
+          "mode",
+          "nlink",
+          "size",
+          "mtimeNs",
+          "ctimeNs",
+        ])
+          assert.equal(after[field], before[field]);
+        return JSON.parse(bytes.subarray(0, bytesRead));
+      } finally {
+        await file.close();
+      }
+    };
+    const producer = await readFixedFile("producer.json", 1024);
+    assert.deepEqual(
+      Object.keys(producer).sort(),
+      ["schema", "hostIdentifier", "sourceCommit", "phase", "category"].sort(),
     );
-    try {
-      const info = await receipt.stat();
-      assert(
-        info.isFile() &&
-          info.uid === uid &&
-          (info.mode & 0o022) === 0 &&
-          info.size > 0 &&
-          info.size <= 1024,
-      );
-      const bytes = Buffer.alloc(info.size + 1);
-      const { bytesRead } = await receipt.read(bytes, 0, bytes.length, 0);
-      assert.equal(bytesRead, info.size);
-      const producer = JSON.parse(bytes.subarray(0, bytesRead));
-      assert.deepEqual(
-        Object.keys(producer).sort(),
-        [
-          "schema",
-          "hostIdentifier",
-          "sourceCommit",
-          "phase",
-          "category",
-        ].sort(),
-      );
-      assert.equal(producer.schema, 1);
-      assert.equal(producer.hostIdentifier, fixture.identifier);
-      assert.equal(producer.sourceCommit, fixture.sourceCommit);
-      assert.equal(producer.phase, "telemetry");
-      assert.equal(producer.category, "ready");
-    } finally {
-      await receipt.close();
-    }
-    const path = join(directory, "state.json");
-    const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-    try {
-      const info = await file.stat();
-      assert(info.isFile() && info.uid === uid && (info.mode & 0o022) === 0);
-      assert(info.size > 0 && info.size <= 131_072);
-      const bytes = Buffer.alloc(info.size + 1);
-      const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
-      assert.equal(bytesRead, info.size);
-      const state = JSON.parse(bytes.subarray(0, bytesRead));
-      assert.equal(state.schema, 1);
-      assert.equal(state.hostIdentifier, fixture.identifier);
-      assert.equal(state.sourceCommit, fixture.sourceCommit);
-      assert(fixture.appVersions.includes(state.applicationVersion));
-      assert.equal(
-        state.producerExecutableSHA256,
-        fixture.executableSHA256[state.applicationVersion],
-      );
-      assert.equal(state.protectedDataUnchanged, true);
-      assert.equal(state.declinedPermissionRequests, 0);
-      const result = {
-        schema: 1,
-        operation: "state",
-        hostIdentifier: fixture.identifier,
-        sourceCommit: fixture.sourceCommit,
-        state,
-      };
-      assert(Buffer.byteLength(JSON.stringify(result)) <= 131_072);
-      return result;
-    } finally {
-      await file.close();
-    }
+    assert.equal(producer.schema, 1);
+    assert.equal(producer.hostIdentifier, fixture.identifier);
+    assert.equal(producer.sourceCommit, fixture.sourceCommit);
+    assert.equal(producer.phase, "telemetry");
+    assert.equal(producer.category, "ready");
+    const state = await readFixedFile("state.json", 131_072);
+    assert.equal(state.schema, 1);
+    assert.equal(state.hostIdentifier, fixture.identifier);
+    assert.equal(state.sourceCommit, fixture.sourceCommit);
+    assert(fixture.appVersions.includes(state.applicationVersion));
+    assert.equal(
+      state.producerExecutableSHA256,
+      fixture.executableSHA256[state.applicationVersion],
+    );
+    assert.equal(state.protectedDataUnchanged, true);
+    assert.equal(state.declinedPermissionRequests, 0);
+    const result = {
+      schema: 1,
+      operation: "state",
+      hostIdentifier: fixture.identifier,
+      sourceCommit: fixture.sourceCommit,
+      state,
+    };
+    assert(Buffer.byteLength(JSON.stringify(result)) <= 131_072);
+    return result;
   };
 }
 
