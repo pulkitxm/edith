@@ -5,6 +5,25 @@ import Testing
 @testable import HostLifecycleHarness
 
 @Suite struct CalendarLifecycleFixtureTests {
+    @Test func nativeDirectoryAliasesCanonicalizeBeforeIdentityAndPackagePathsAreBuilt() throws {
+        try fixture { root, _ in
+            let alias = root.appendingPathComponent("alias")
+            let owned = root.appendingPathComponent("owned")
+            try FileManager.default.createDirectory(at: owned, withIntermediateDirectories: false)
+            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: owned)
+            let canonical = CalendarLifecycleFixture.canonicalDirectory(alias)
+            #expect(canonical.path == owned.path)
+            try FileManager.default.createDirectory(
+                at: canonical.appendingPathComponent("Host.app"), withIntermediateDirectories: false
+            )
+            let identity = try HostIdentity(
+                identifier: "com.pulkit.edith.tests.remote-" + UUID().uuidString,
+                supportDirectory: canonical.appendingPathComponent("support"))
+            let admitted = try CalendarLifecycleFixture(directory: canonical, identity: identity)
+            #expect(admitted.directory.path == owned.path)
+        }
+    }
+
     @Test func selectedVersionMarkerUpdatesWithoutChangingPrivateIdentity() throws {
         try fixture { root, identity in
             let helper = try CalendarLifecycleFixture(directory: root, identity: identity)

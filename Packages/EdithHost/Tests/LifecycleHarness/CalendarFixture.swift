@@ -4,7 +4,15 @@ import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
+enum CalendarLifecycleFixtureError: Error {
+    case identity, package, marker, path
+}
+
 struct CalendarLifecycleFixture {
+    static func canonicalDirectory(_ requested: URL) -> URL {
+        requested.resolvingSymlinksInPath()
+    }
+
     let directory: URL
     let identity: HostIdentity
 
@@ -21,7 +29,7 @@ struct CalendarLifecycleFixture {
                 .appendingPathComponent(
                     String(identity.identifier.dropFirst("com.pulkit.edith.tests.".count))
                 ).path
-        else { throw HostWorkerError.rejected }
+        else { throw CalendarLifecycleFixtureError.identity }
         self.directory = directory; self.identity = identity
         try FileManager.default.createDirectory(
             at: home, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -33,14 +41,14 @@ struct CalendarLifecycleFixture {
             ExtensionPackage.validComponent(package.hostABI),
             ExtensionPackage.validComponent(package.version)
         else {
-            throw HostWorkerError.rejected
+            throw CalendarLifecycleFixtureError.package
         }
         let data = identity.extensionDirectory("calendar")
         let selected = store.directory(for: package).appendingPathComponent("calendar")
         let expected = identity.root.appendingPathComponent("Extensions/calendar")
             .appendingPathComponent(package.hostABI).appendingPathComponent(package.architecture)
             .appendingPathComponent(package.version).appendingPathComponent("calendar")
-        guard selected.path == expected.path else { throw HostWorkerError.rejected }
+        guard selected.path == expected.path else { throw CalendarLifecycleFixtureError.package }
         try FileManager.default.createDirectory(
             at: data, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         for path in [directory, home, app, identity.root, data, selected] {
@@ -63,7 +71,7 @@ struct CalendarLifecycleFixture {
                 oldPath.hasPrefix(
                     identity.root.appendingPathComponent("Extensions/calendar").path + "/"),
                 oldPath == URL(fileURLWithPath: oldPath).standardizedFileURL.path
-            else { throw HostWorkerError.rejected }
+            else { throw CalendarLifecycleFixtureError.marker }
         }
         let bytes = try JSONSerialization.data(withJSONObject: [
             "schema": 1, "hostIdentifier": identity.identifier,
@@ -73,9 +81,11 @@ struct CalendarLifecycleFixture {
         guard
             FileManager.default.createFile(
                 atPath: temporary.path, contents: bytes, attributes: [.posixPermissions: 0o600])
-        else { throw HostWorkerError.rejected }
+        else { throw CalendarLifecycleFixtureError.marker }
         defer { try? FileManager.default.removeItem(at: temporary) }
-        guard rename(temporary.path, marker.path) == 0 else { throw HostWorkerError.rejected }
+        guard rename(temporary.path, marker.path) == 0 else {
+            throw CalendarLifecycleFixtureError.path
+        }
         try Self.validate(marker, directory: false, mode: 0o600)
     }
 
@@ -87,7 +97,7 @@ struct CalendarLifecycleFixture {
             let permissions = attributes[.posixPermissions] as? NSNumber,
             permissions.intValue & 0o022 == 0,
             mode == nil || permissions.intValue == mode
-        else { throw HostWorkerError.rejected }
+        else { throw CalendarLifecycleFixtureError.path }
     }
 }
 

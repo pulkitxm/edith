@@ -19,7 +19,10 @@ struct HostLifecycleHarness {
         let headlessCLI = arguments.count == 6
         let validateSurface = arguments[4] == "1"
         let extensionID = arguments[3]
-        let fixture = URL(fileURLWithPath: arguments[0])
+        let requestedFixture = URL(fileURLWithPath: arguments[0])
+        let fixture =
+            extensionID == "calendar"
+            ? CalendarLifecycleFixture.canonicalDirectory(requestedFixture) : requestedFixture
         if extensionID == "studio" {
             setenv(
                 "EDITH_TEST_RUNTIME_ROOT", fixture.appendingPathComponent("studio-runtime").path, 1)
