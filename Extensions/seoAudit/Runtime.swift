@@ -15,6 +15,7 @@ final class ExtensionRuntime: NSObject {
     private var surface: SEOAuditSurface?
     private var startup: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
+    private var cliStreams: ExtensionCLIStreams?
     private var fixture: Bool {
         ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil
     }
@@ -24,6 +25,15 @@ final class ExtensionRuntime: NSObject {
             guard let self, self.service != nil else { throw ExtensionPeerError.unavailable }
             await self.startup?.value
             try Task.checkCancellation()
+            if command.hasPrefix("seoAudit.cli.") {
+                guard let service = self.service else { throw ExtensionPeerError.unavailable }
+                if self.cliStreams == nil {
+                    self.cliStreams = try ExtensionCLIStreams(owner: "seoAudit")
+                }
+                guard let streams = self.cliStreams else { throw ExtensionPeerError.unavailable }
+                return try SEOCLIExecution.stream(
+                    streams, operation: command, payload: payload, service: service)
+            }
             if command == "seoAudit.cli", let service = self.service {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(
@@ -42,7 +52,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        guard service != nil else { commands.shutdown(); completion(); return }
+        let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown(); startup?.cancel()
         uiEngine?.shutdown(); uiEngine = nil
         SEOAuditModel.shared.shutdown(); SEOAuditPrivacyState.shared.shutdown()
@@ -54,6 +64,8 @@ final class ExtensionRuntime: NSObject {
             await service?.shutdown()
             await startup?.value
             await SEOAuditModel.shared.drain()
+            await streams?.stopAndWait()
+            await commands.shutdownAndWait()
             completion()
         }
     }

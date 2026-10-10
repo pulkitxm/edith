@@ -3,7 +3,7 @@ import EdithExtensionSupport
 import Foundation
 
 @MainActor enum SEOCLIEnvironment {
-    static var service: SEOAuditService?
+    @TaskLocal static var service: SEOAuditService?
 }
 struct SEOCLILaunch {
     struct Snapshot { let id: UUID; let state: SEOAuditJobState }
@@ -64,9 +64,16 @@ struct SEOCLILaunch {
         -> ExtensionCLIReply
     {
         try request.validate()
-        let old = SEOCLIEnvironment.service
-        SEOCLIEnvironment.service = service
-        defer { SEOCLIEnvironment.service = old }
-        return try await ExtensionCLIExecution.run(SEOCommand.self, arguments: request.arguments)
+        return try await SEOCLIEnvironment.$service.withValue(service) {
+            try await ExtensionCLIExecution.run(SEOCommand.self, request: request)
+        }
+    }
+    static func stream(
+        _ streams: ExtensionCLIStreams, operation: String, payload: Data, service: SEOAuditService
+    ) throws -> Data {
+        try SEOCLIEnvironment.$service.withValue(service) {
+            try streams.invoke(
+                SEOCommand.self, operation: operation, prefix: "seoAudit.cli", payload: payload)
+        }
     }
 }
