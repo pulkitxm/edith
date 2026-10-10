@@ -31,6 +31,9 @@ final class HostNotchPanelAssembly {
         panel.contentViewController = container
     }
 
+    var presentationIDs: Set<UUID> {
+        Set(records.values.map { $0.request.presentationID }).union(retiring.keys)
+    }
     var attachedCount: Int { records.values.filter { $0.lease != nil }.count }
     var pendingCleanupCount: Int { retiring.count }
 
