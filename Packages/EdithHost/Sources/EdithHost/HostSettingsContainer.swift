@@ -35,7 +35,8 @@ struct HostSettingsContainer<Content: View>: View {
         .navigationTitle(section.title)
     }
     private var maximumWidth: CGFloat {
-        ["permissions", "agent", "data", "surfaces", "agentActivity"].contains(section.id)
+        ["permissions", "agent", "data", "storage", "surfaces", "agentActivity"].contains(
+            section.id)
             ? .infinity : UIScale.pt(1180)
     }
 }
@@ -49,6 +50,7 @@ enum HostSettingsSummary {
         case "agent": "The headless process that collects in the background"
         case "jev": "Fast typed decisions from TypeSafe's Jev model"
         case "data": "Where Edith keeps things, and what leaves this Mac"
+        case "storage": "Measured app, extension packages, cache and retained user data"
         case "shortcuts": "Global and application keyboard shortcuts"
         case "terminal": "Command line and terminal integration"
         case "icloud": "Backup and synchronization"

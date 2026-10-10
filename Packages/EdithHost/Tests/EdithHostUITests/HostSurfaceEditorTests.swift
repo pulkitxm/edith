@@ -389,7 +389,7 @@ import Testing
         #expect(
             HostNavigationCatalog.settings.map(\.id) == [
                 "general", "surfaces", "agentActivity", "permissions", "agent", "jev", "data",
-                "shortcuts", "terminal", "icloud", "updates",
+                "storage", "shortcuts", "terminal", "icloud", "updates",
             ])
         #expect(
             HostNavigationCatalog.maintenance.map(\.id) == [
@@ -461,9 +461,11 @@ import Testing
     @Test func extensionSettingsRequireCompatibleInstalledPackagesAndHidePendingCleanup() {
         let core = HostNavigationCatalog.settingsSections(installed: [], pending: [])
         #expect(core.allSatisfy { $0.extensionID == nil })
+        #expect(core.first { $0.id == "storage" }?.title == "Storage")
         #expect(
             core.map(\.id) == [
-                "general", "surfaces", "permissions", "agent", "data", "shortcuts", "icloud",
+                "general", "surfaces", "permissions", "agent", "data", "storage", "shortcuts",
+                "icloud",
                 "updates",
             ])
         let installed = HostNavigationCatalog.settingsSections(

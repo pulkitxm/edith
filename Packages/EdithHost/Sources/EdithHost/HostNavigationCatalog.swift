@@ -44,6 +44,7 @@ enum HostNavigationCatalog {
         .init(
             id: "data", title: "Data & backup", symbol: "externaldrive.badge.icloud",
             extensionID: nil),
+        .init(id: "storage", title: "Storage", symbol: "internaldrive", extensionID: nil),
         .init(id: "shortcuts", title: "Shortcuts", symbol: "keyboard", extensionID: nil),
         .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: "terminal"),
         .init(id: "icloud", title: "iCloud", symbol: "icloud", extensionID: nil),
