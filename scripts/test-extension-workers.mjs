@@ -101,7 +101,10 @@ try {
     if (fixtureHome !== root) await mkdir(fixtureHome);
     const result = JSON.parse(
       execFileSync(
-        resolve("Packages/EdithHost/.build/debug/HostLifecycleHarness"),
+        resolve(
+          process.env.EXTENSION_LIFECYCLE_HARNESS ??
+            "Packages/EdithHost/.build/debug/HostLifecycleHarness",
+        ),
         [
           join(root, `${id}-host`),
           sourceApp,

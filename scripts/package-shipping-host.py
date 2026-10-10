@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
-from verify_shipping_host import inspect_host, run
+from verify_shipping_host import extension_point_descriptor, inspect_host, run
 
 parser = argparse.ArgumentParser()
 parser.add_argument('source', type=Path)
@@ -54,6 +54,8 @@ with tempfile.TemporaryDirectory(prefix='edith-host-package-', dir=destination.p
     plist['SUEnableAutomaticChecks'] = args.release
     plist['SUAutomaticallyUpdate'] = args.release
     plist_path.write_bytes(plistlib.dumps(plist))
+    point_path = bundle / 'Contents/Extensions/ExtensionUI.appextensionpoints'
+    point_path.write_bytes(plistlib.dumps(extension_point_descriptor(identifier)))
     resources = bundle / 'Contents/Resources'
     launcher = resources / 'ed-launcher'
     shutil.copyfile('Resources/ed-launcher', launcher)

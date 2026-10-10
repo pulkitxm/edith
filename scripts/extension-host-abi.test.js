@@ -129,7 +129,7 @@ test("isolated worker contracts survive unrelated legacy feature changes", async
       JSON.parse(await readFile(manifest, "utf8")).map(
         (entry) => entry.hostABI,
       ),
-    ).toEqual(["edith-host-1", next]);
+    ).toEqual(["edith-host-2", next]);
   });
 });
 
@@ -162,6 +162,28 @@ test("database interfaces invalidate legacy bundles without changing the worker 
       JSON.parse(await readFile(manifest, "utf8")).map(
         (entry) => entry.hostABI,
       ),
-    ).toEqual(["edith-host-1", next]);
+    ).toEqual(["edith-host-2", next]);
+  });
+});
+
+test("worker ABI preparation replaces an obsolete worker compatibility version", async () => {
+  await fixture(async ({ root, configuration, manifest }) => {
+    await writeFile(
+      configuration,
+      'public static let hostABI = "stale"\npublic static let workerHostABI = "edith-host-1"\n',
+    );
+    await writeFile(
+      manifest,
+      JSON.stringify([
+        { id: "isolated", contractVersion: 1, hostABI: "edith-host-1" },
+      ]),
+    );
+    await writeHostABI(root);
+    expect(await readFile(configuration, "utf8")).toContain(
+      'workerHostABI = "edith-host-2"',
+    );
+    expect(JSON.parse(await readFile(manifest, "utf8"))[0].hostABI).toBe(
+      "edith-host-2",
+    );
   });
 });

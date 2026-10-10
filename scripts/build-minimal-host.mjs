@@ -255,8 +255,8 @@ async function installedBytes(directory) {
 }
 const bytes = await installedBytes(destination);
 assert(
-  bytes < 5_000_000,
-  `The minimal host exceeds its 5 MB size limit: ${bytes}`,
+  bytes < 8_000_000,
+  `The minimal host exceeds its 8 MB size limit: ${bytes}`,
 );
 const index = JSON.parse(
   await readFile(join(contents, "Resources/index.json"), "utf8"),

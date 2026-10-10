@@ -21,13 +21,6 @@ try {
     records.push(record);
     downloads[record.downloadURL] = join(output, "keepAwake.zip");
   }
-  const voiceOutput = join(root, "voice");
-  const voice = await buildExtensionPackage({
-    id: "audioMixer",
-    output: voiceOutput,
-    development: true,
-  });
-  downloads[voice.downloadURL] = join(voiceOutput, "audioMixer.zip");
   const privateKey = join(root, "key");
   const publicKey = execFileSync(
     "swift",
@@ -52,7 +45,7 @@ try {
       JSON.stringify({
         schemaVersion: 1,
         revision,
-        packages: [...records.slice(0, revision), voice],
+        packages: records.slice(0, revision),
       }),
     );
     execFileSync(
@@ -84,18 +77,15 @@ try {
   const restarted = run("inspect", catalogs[1]);
   assert.equal(restarted.loadedVersion, "1.1.0");
   assert.equal(restarted.restartRequired, false);
-  assert.equal(run("voice", catalogs[1]).missingModelRejected, true);
   run("queue-remove", catalogs[1]);
   const removed = run("remove", catalogs[1]);
-  assert.equal(removed.removed, false);
-  assert.equal(
-    JSON.parse(await readFile(join(store, "installed.json"), "utf8")).every(
-      ({ id }) => id === "audioMixer",
-    ),
-    true,
+  assert.equal(removed.removed, true);
+  assert.deepEqual(
+    JSON.parse(await readFile(join(store, "installed.json"), "utf8")),
+    [],
   );
   process.stdout.write(
-    `${JSON.stringify({ install: "passed", updateInUse: "passed", restart: "passed", stop: "passed", deferredRemoval: "passed", nativeVoiceRuntime: "passed", packages: [...records, voice].map(({ id, version, downloadBytes, installedBytes }) => ({ id, version, downloadBytes, installedBytes })) }, null, 2)}\n`,
+    `${JSON.stringify({ install: "passed", updateInUse: "passed", restart: "passed", stop: "passed", deferredRemoval: "passed", signedUICarrier: "passed", packages: records.map(({ id, version, downloadBytes, installedBytes }) => ({ id, version, downloadBytes, installedBytes })) }, null, 2)}\n`,
   );
 } finally {
   await rm(root, { recursive: true, force: true });

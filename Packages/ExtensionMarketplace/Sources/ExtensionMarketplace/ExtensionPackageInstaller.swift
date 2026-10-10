@@ -79,6 +79,9 @@ public enum ExtensionArchive {
                 ).allSatisfy({ $0.pathExtension != "bundle" })
             else { throw MarketplaceError.invalidArchive }
         } else {
+            guard package.hostABI != MarketplaceConfiguration.workerHostABI else {
+                throw MarketplaceError.invalidArchive
+            }
             uiCarrier = nil
         }
         let bundles = try FileManager.default.contentsOfDirectory(
@@ -144,6 +147,9 @@ public actor ExtensionPackageInstaller {
                     try carrier.verify(teamIdentifier: teamIdentifier)
                     rolePayload = carrier.payloadDirectory
                 } else {
+                    guard manifest.hostABI != MarketplaceConfiguration.workerHostABI else {
+                        throw MarketplaceError.invalidBundle
+                    }
                     rolePayload = directory
                 }
                 for bundle in try FileManager.default.contentsOfDirectory(

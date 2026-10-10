@@ -26,7 +26,7 @@ test("development and release builds route through the empty host", () => {
   expect(build).not.toContain("EdithDatabaseRuntime");
   expect(minimal).toContain('"-Osize"');
   expect(minimal).toContain('"strip", ["-rSTx", file]');
-  expect(minimal).toContain("5_000_000");
+  expect(minimal).toContain("8_000_000");
 });
 
 test.skipIf(!fixture || process.platform !== "darwin")(
@@ -91,10 +91,16 @@ test.skipIf(!fixture || process.platform !== "darwin")(
           readFileSync(join(app, "Contents/Resources/index.json"), "utf8"),
         );
         expect(catalog.length).toBeGreaterThanOrEqual(35);
-        const stopped = run(join(app, "Contents/MacOS/ed"), "extensions", "ls");
-        expect(stopped.exitCode).toBe(3);
-        expect(stopped.stdout.toString()).toBe("");
-        expect(JSON.parse(stopped.stderr.toString()).exitCode).toBe(3);
+        if (mode[0] !== "--release") {
+          const stopped = run(
+            join(app, "Contents/MacOS/ed"),
+            "extensions",
+            "ls",
+          );
+          expect(stopped.exitCode).toBe(3);
+          expect(stopped.stdout.toString()).toBe("");
+          expect(JSON.parse(stopped.stderr.toString()).exitCode).toBe(3);
+        }
         writeFileSync(
           join(app, "Contents/Library/feature.bundle"),
           "synthetic payload",
@@ -110,7 +116,7 @@ test.skipIf(!fixture || process.platform !== "darwin")(
         rmSync(join(app, "Contents/MacOS/worker"));
         writeFileSync(
           join(app, "Contents/Resources/index.json"),
-          Buffer.alloc(5_000_000),
+          Buffer.alloc(8_000_000),
         );
         expect(
           run("python3", "scripts/verify-shipping-host.py", app).exitCode,

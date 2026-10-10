@@ -6,6 +6,7 @@ import {
   extensionFingerprint,
   planExtensionBuilds,
   supportCacheFingerprint,
+  workerRuntimeInputs,
 } from "./extension-release-plan.mjs";
 
 const definitions = [
@@ -399,6 +400,85 @@ test("publication resumes from released fingerprints after skipped workflow runs
     expect(pending[0].version).toBe("1.0.1");
     expect(pending[0].fingerprint).not.toBe(initial[0].fingerprint);
     expect(pending[0].tag).not.toBe(initial[0].tag);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("same-executable worker inputs rebuild consumers while host presentation changes remain independent", () => {
+  const workers = definitions.map((entry) => ({
+    ...entry,
+    sameExecutableWorker: true,
+  }));
+  expect(
+    planExtensionBuilds(workers, [
+      "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
+    ]).map((entry) => entry.id),
+  ).toEqual(["music", "calendar", "shelf"]);
+  expect(
+    planExtensionBuilds(workers, [
+      "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
+    ]),
+  ).toEqual([]);
+  expect(
+    planExtensionBuilds(workers, ["Extensions/music/Track.swift"]).map(
+      (entry) => entry.id,
+    ),
+  ).toEqual(["music", "shelf"]);
+});
+
+test("shared runtime fingerprints include code fixes and exclude generated legacy compatibility hashes", async () => {
+  const root = await mkdtemp(join(tmpdir(), "extension-worker-inputs-"));
+  const definition = {
+    id: "calendar",
+    inputs: ["Extensions/calendar"],
+    sharedInputs: [],
+    dependencies: [],
+    sameExecutableWorker: true,
+  };
+  try {
+    for (const path of workerRuntimeInputs) {
+      if (
+        path.endsWith(".swift") ||
+        path.endsWith(".resolved") ||
+        path.endsWith(".mjs") ||
+        path.endsWith(".py")
+      ) {
+        await mkdir(join(root, path, ".."), { recursive: true });
+        await writeFile(join(root, path), "synthetic source");
+      } else {
+        await mkdir(join(root, path), { recursive: true });
+        await writeFile(
+          join(root, path, "Synthetic.swift"),
+          "synthetic source",
+        );
+      }
+    }
+    await mkdir(join(root, "Extensions/calendar"), { recursive: true });
+    await writeFile(
+      join(root, "Extensions/calendar/Calendar.swift"),
+      "synthetic calendar",
+    );
+    const generated = join(
+      root,
+      "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift",
+    );
+    await writeFile(generated, "legacy hash one");
+    const first = await extensionFingerprint(root, definition, [definition]);
+    await writeFile(generated, "legacy hash two");
+    expect(await extensionFingerprint(root, definition, [definition])).toBe(
+      first,
+    );
+    await writeFile(
+      join(
+        root,
+        "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
+      ),
+      "changed owned worker runtime",
+    );
+    expect(await extensionFingerprint(root, definition, [definition])).not.toBe(
+      first,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

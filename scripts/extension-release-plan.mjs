@@ -4,6 +4,31 @@ import { relative, resolve } from "node:path";
 import { supportSourceInputs } from "./build-extension-support.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 
+export const workerRuntimeInputs = [
+  "Packages/EdithHost/Package.swift",
+  "Packages/EdithHost/Package.resolved",
+  "scripts/build-minimal-host.mjs",
+  "scripts/package-shipping-host.py",
+  "Packages/EdithHost/Sources/HostBootstrap",
+  "Packages/EdithHost/Sources/EdithHost/HostEntry.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostWorkerApplication.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostWorkerControl.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostNativeTask.swift",
+  "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProtocol.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProcessGroups.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostWorker.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostContract.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostExtensionSessions.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostSurfaces.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteProtocol.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteAuthentication.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteEndpoint.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteChannel.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostRemoteConfiguration.swift",
+  "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace",
+];
+
 export function definitionInputs(definition) {
   const shared = definition.supportProduct
     ? [
@@ -15,7 +40,11 @@ export function definitionInputs(definition) {
         ...supportSourceInputs(definition.supportProduct),
       ]
     : definition.sharedInputs;
-  return [...definition.inputs, ...shared];
+  return [
+    ...definition.inputs,
+    ...shared,
+    ...(definition.sameExecutableWorker ? workerRuntimeInputs : []),
+  ];
 }
 
 export async function supportCacheFingerprint(root, definition) {
@@ -114,6 +143,11 @@ export async function extensionFingerprint(root, definition, definitions) {
           "tests",
           "vendor",
         ].includes(entry.name)
+      )
+        continue;
+      if (
+        `${path}/${entry.name}` ===
+        "Packages/ExtensionMarketplace/Sources/ExtensionMarketplace/MarketplaceConfiguration.swift"
       )
         continue;
       if (entry.isSymbolicLink()) throw new Error("Symlink in extension input");

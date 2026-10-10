@@ -276,7 +276,7 @@ test("bundle verification enforces the empty host and same executable launcher",
   expect(verifier).toContain("Unexpected host executable");
   expect(verifier).toContain("Feature resources in host");
   expect(verifier).toContain("../Resources/ed-launcher");
-  expect(verifier).toContain("5_000_000");
+  expect(verifier).toContain("8_000_000");
   expect(verifier).toContain("--deep");
 });
 

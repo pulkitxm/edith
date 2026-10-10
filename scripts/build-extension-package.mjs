@@ -16,10 +16,23 @@ import { buildCameraCarrier } from "./build-camera-carrier.mjs";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
+  supportProducts,
 } from "./build-extension-support.mjs";
+import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
 import { writeHostABI } from "./extension-host-abi.mjs";
 import { buildHostInterfaces } from "./extension-host-build.mjs";
 import { extensionFingerprint } from "./extension-release-plan.mjs";
+
+export function presentationLinkerFlags(product) {
+  return product && supportProducts(product).includes("EdithExtensionUI")
+    ? [
+        "-Xlinker",
+        "-exported_symbol",
+        "-Xlinker",
+        "_edith_extension_presentation_create",
+      ]
+    : [];
+}
 
 export function nativeTaskLinkerFlags(definition, role) {
   const roles = definition.nativeTaskRoles ?? [];
@@ -170,6 +183,10 @@ export function nativeRolePolicy(definition) {
   const native = !!(definition.nativePackage || definition.nativeCargo);
   const roles = Object.keys(definition.roles ?? {});
   const selected = definition.nativeRoles ?? roles;
+  const presentations =
+    definition.nativePresentationRoles === undefined
+      ? []
+      : definition.nativePresentationRoles;
   if (
     (definition.nativeRoles !== undefined &&
       (!native || !Array.isArray(definition.nativeRoles))) ||
@@ -181,12 +198,23 @@ export function nativeRolePolicy(definition) {
           (role) => typeof role !== "string" || !roles.includes(role),
         ))) ||
     (definition.nativeLink !== undefined &&
-      (typeof definition.nativeLink !== "boolean" || !definition.nativePackage))
+      (typeof definition.nativeLink !== "boolean" ||
+        !definition.nativePackage)) ||
+    !Array.isArray(presentations) ||
+    new Set(presentations).size !== presentations.length ||
+    presentations.some(
+      (role) =>
+        !definition.nativePackage ||
+        definition.nativeLink === false ||
+        typeof role !== "string" ||
+        !selected.includes(role),
+    )
   )
     throw new Error("Invalid native role or linking policy");
   return {
     roles: native ? selected : [],
     link: definition.nativeLink !== false,
+    presentations,
   };
 }
 
@@ -224,6 +252,20 @@ export async function buildExtensionPackage({
   );
   const definition = definitions.find((entry) => entry.id === id);
   if (!definition) throw new Error(`Unknown extension ${id}`);
+  containedHostApp ??= development
+    ? resolve(root, "local/minimal-host/Edith.app")
+    : undefined;
+  if (!containedHostApp)
+    throw new Error(
+      "A frozen signed host app is required for extension UI packages",
+    );
+  execFileSync(
+    "codesign",
+    ["--verify", "--deep", "--strict", containedHostApp],
+    {
+      stdio: "pipe",
+    },
+  );
   const nativePolicy = nativeRolePolicy(definition);
   if (definition.contractVersion === 1 && definition.usesHostFramework)
     throw new Error(
@@ -430,6 +472,16 @@ export async function buildExtensionPackage({
         resolve(root, definition.nativePackage, ".build/release", libraryName),
         library,
       );
+      if (
+        nativePolicy.presentations.includes(role) &&
+        !execFileSync("nm", ["-gUj", library], {
+          encoding: "utf8",
+          maxBuffer: 16 * 1024 * 1024,
+        })
+          .split("\n")
+          .includes("_edith_extension_presentation_create")
+      )
+        throw new Error("Native presentation entry point was not exported");
       execFileSync("install_name_tool", [
         "-id",
         `@rpath/${libraryName}`,
@@ -524,6 +576,7 @@ export async function buildExtensionPackage({
           : []),
         ...nativeFlags,
         ...nativeTaskLinkerFlags(definition, role),
+        ...presentationLinkerFlags(supportProduct),
         "-Xlinker",
         "-install_name",
         "-Xlinker",
@@ -604,6 +657,11 @@ export async function buildExtensionPackage({
     });
     if (!symbols.includes(" T _edith_extension_create"))
       throw new Error("Extension entry point was not exported");
+    if (
+      presentationLinkerFlags(supportProduct).length > 0 &&
+      !symbols.includes(" T _edith_extension_presentation_create")
+    )
+      throw new Error("Extension presentation entry point was not exported");
     const flags = development ? [] : ["--options", "runtime", "--timestamp"];
     execFileSync(
       "codesign",
@@ -664,6 +722,20 @@ export async function buildExtensionPackage({
   await writeFile(
     resolve(payload, "package.json"),
     JSON.stringify(payloadManifest),
+  );
+  const uiCarrier = await buildExtensionUICarrier({
+    hostApp: containedHostApp,
+    payloadDirectory: payload,
+    id,
+    version: releaseVersion,
+    hostABI: definition.hostABI,
+    dependencies: definition.dependencies,
+    development,
+    identity,
+  });
+  await writeFile(
+    resolve(target, `${id}.ui-carrier-provenance.json`),
+    `${JSON.stringify(uiCarrier, null, 2)}\n`,
   );
   const archive = resolve(target, `${id}.zip`);
   const summary = JSON.parse(

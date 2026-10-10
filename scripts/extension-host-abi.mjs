@@ -3,6 +3,8 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export const workerHostABI = "edith-host-2";
+
 export async function hostABI(root = process.cwd()) {
   const files = [];
   async function visit(path) {
@@ -51,10 +53,15 @@ export async function writeHostABI(root = process.cwd()) {
   const source = await readFile(configuration, "utf8");
   const manifestPath = resolve(root, "Extensions/manifest.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  const nextSource = source.replace(
-    /public static let hostABI = "[^"]+"/,
-    `public static let hostABI = "${abi}"`,
-  );
+  const nextSource = source
+    .replace(
+      /public static let hostABI = "[^"]+"/,
+      `public static let hostABI = "${abi}"`,
+    )
+    .replace(
+      /public static let workerHostABI = "[^"]+"/,
+      `public static let workerHostABI = "${workerHostABI}"`,
+    );
   if (
     source === nextSource &&
     !source.includes(`public static let hostABI = "${abi}"`)
@@ -64,11 +71,11 @@ export async function writeHostABI(root = process.cwd()) {
   if (
     manifest.some(
       (entry) =>
-        entry.hostABI !== (entry.contractVersion === 1 ? "edith-host-1" : abi),
+        entry.hostABI !== (entry.contractVersion === 1 ? workerHostABI : abi),
     )
   ) {
     for (const entry of manifest)
-      entry.hostABI = entry.contractVersion === 1 ? "edith-host-1" : abi;
+      entry.hostABI = entry.contractVersion === 1 ? workerHostABI : abi;
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   }
   return abi;
@@ -93,9 +100,13 @@ if (
   if (process.argv.includes("--write")) await writeHostABI(root);
   else if (
     !source.includes(`public static let hostABI = "${abi}"`) ||
+    (source.includes("public static let workerHostABI =") &&
+      !source.includes(
+        `public static let workerHostABI = "${workerHostABI}"`,
+      )) ||
     manifest.some(
       (entry) =>
-        entry.hostABI !== (entry.contractVersion === 1 ? "edith-host-1" : abi),
+        entry.hostABI !== (entry.contractVersion === 1 ? workerHostABI : abi),
     )
   ) {
     throw new Error(
