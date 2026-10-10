@@ -353,3 +353,49 @@ test("PR planning fetches the exact trusted base while releases retain signed ca
   expect(publish.if).toContain("github.event_name != 'pull_request'");
   expect(publish.if).toContain("github.ref == 'refs/heads/main'");
 });
+
+test("frozen lifecycle tools include and verify their exact sibling source index", () => {
+  const packaging = frozen.steps.find((step) =>
+    step.run?.includes("package_extension_lifecycle_tools.py --host "),
+  );
+  expect(packaging).toBeDefined();
+  expect(packaging.run).toContain("--host local/minimal-host/Edith.app");
+  expect(packaging.run).toContain("--output local/extension-tools");
+  expect(packaging.run).toContain("--host-products");
+  expect(packaging.run).toContain("--marketplace-products");
+  expect(packaging.run).toContain("--show-bin-path");
+  expect(packaging.run).not.toContain("cp ");
+  const archive = frozen.steps.findIndex((step) =>
+    step.run?.includes("tar -czf"),
+  );
+  expect(frozen.steps.indexOf(packaging)).toBeLessThan(archive);
+  expect(frozen.steps[archive].run).toContain("local/extension-tools");
+  for (const job of [workflow.jobs.tests, build]) {
+    const restore = job.steps.findIndex((step) =>
+      step.run?.includes("tar -xzf"),
+    );
+    const verification = job.steps.findIndex((step) =>
+      step.run?.includes("package_extension_lifecycle_tools.py --verify"),
+    );
+    expect(verification).toBe(restore + 1);
+    expect(job.steps[verification].run).toContain(
+      "--host local/minimal-host/Edith.app --output local/extension-tools",
+    );
+  }
+  expect(text(plan)).toContain("test-package-extension-lifecycle-tools.py");
+});
+
+test("lifecycle tool packaging does not alter any shipping package fingerprint input", () => {
+  const definitions = JSON.parse(
+    readFileSync("Extensions/manifest.json", "utf8"),
+  );
+  expect(definitions).toHaveLength(39);
+  expect(
+    planExtensionBuilds(definitions, [
+      "scripts/package_extension_lifecycle_tools.py",
+      "scripts/test-package-extension-lifecycle-tools.py",
+      "scripts/extensions-workflow.test.js",
+      ".github/workflows/extensions.yml",
+    ]),
+  ).toEqual([]);
+});
