@@ -67,6 +67,22 @@ import Testing
         #expect(latest.week?.resetsAt == Date(timeIntervalSince1970: 4_102_531_200))
     }
 
+    @Test func statusLinePreservesTheWebsiteFableWindowUntilItsReset() throws {
+        let root = try sandbox()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let history = root.appendingPathComponent("limits-history.jsonl")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let fable = LimitWindow(percent: 7, resetsAt: now.addingTimeInterval(3600))
+        var store = LimitsHistory(url: history)
+        store.append(provider: .claude, session: nil, week: nil, fable: fable, now: now)
+        let input = statusInput(
+            session: 23, sessionReset: 4_102_444_800, week: 41, weekReset: 4_102_531_200)
+        ClaudeStatusLine.record(input, now: now.addingTimeInterval(10), history: history)
+        #expect(LimitsHistory.latest(provider: .claude, url: history)?.fable == fable)
+        ClaudeStatusLine.record(input, now: now.addingTimeInterval(3601), history: history)
+        #expect(LimitsHistory.latest(provider: .claude, url: history)?.fable == nil)
+    }
+
     @Test func installAddsTheRecorderAndKeepsOtherSettings() throws {
         let root = try sandbox()
         defer { try? FileManager.default.removeItem(at: root) }

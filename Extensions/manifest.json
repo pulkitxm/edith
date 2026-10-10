@@ -1367,6 +1367,8 @@
         "Extensions/usage/Models/UsageSourceSelection.swift",
         "Extensions/usage/Runtime.swift",
         "Extensions/usage/Services/ClaudeStatusLine.swift",
+        "Extensions/usage/Services/ClaudeLimitsReader.swift",
+        "Extensions/usage/Services/ClaudeSavedLogin.swift",
         "Extensions/usage/Services/CodexLimitsReader.swift",
         "Extensions/usage/Services/CursorLimitsReader.swift",
         "Extensions/usage/Services/GrokLimitsReader.swift",

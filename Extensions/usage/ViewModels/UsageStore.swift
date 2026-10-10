@@ -98,6 +98,8 @@ final class UsageStore {
     private(set) var limitsUpdatedAt: Date?
     private(set) var refreshingLimits = false
 
+    private let historyURL: URL
+    private var claudeUnavailable = false
     private var launchObserver: NSObjectProtocol?
     private var limitsUpdatedObserver: NSObjectProtocol?
     private var limitsTopicTask: Task<Void, Never>?
@@ -155,10 +157,11 @@ final class UsageStore {
         UsageLimitProviders.enabled(claude: claude, codex: codex, cursor: cursor, grok: grok)
     }
 
-    init(showMenuBar: Bool = true) {
+    init(showMenuBar: Bool = true, historyURL: URL = LimitsHistory.url) {
+        self.historyURL = historyURL
         menuBarAllowed = showMenuBar
         seedTask = Task { @MainActor [weak self] in
-            let latest = await LimitsHistory.loadLatestProviders()
+            let latest = await LimitsHistory.loadLatestProviders(url: historyURL)
             guard !Task.isCancelled, self?.terminating == false else { return }
             self?.seedFromHistory(latest)
             self?.updateStatusItem()
@@ -189,7 +192,7 @@ final class UsageStore {
     }
 
     private func seedFromHistory(_ latest: [LimitProvider: LimitsHistory.Latest]) {
-        if let last = latest[.claude] {
+        if !claudeUnavailable, let last = latest[.claude] {
             session = Self.fresh(last.session)
             week = Self.fresh(last.week)
             fableWeek = Self.fresh(last.fable)
@@ -278,6 +281,12 @@ final class UsageStore {
 
     func receiveLimitsSnapshot(_ snapshot: LimitsTopicSnapshot) async {
         guard !terminating else { return }
+        if let claude = snapshot.providers.first(where: { $0.provider == .claude }) {
+            claudeUnavailable = claude.error != nil && claude.session == nil
+            session = Self.fresh(claude.session)
+            week = Self.fresh(claude.week)
+            fableWeek = Self.fresh(claude.fable)
+        }
         await reloadLimitsFromHistory()
         limitsError = snapshot.failure ?? snapshot.providers.compactMap(\.error).first
         refreshingLimits = false
@@ -287,7 +296,7 @@ final class UsageStore {
 
     func reloadLimitsFromHistory() async {
         guard !terminating else { return }
-        let latest = await LimitsHistory.loadLatestProviders()
+        let latest = await LimitsHistory.loadLatestProviders(url: historyURL)
         guard !Task.isCancelled, !terminating else { return }
         seedFromHistory(latest)
         updateStatusItem()
