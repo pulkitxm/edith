@@ -827,7 +827,10 @@
     "contractVersion": 1,
     "supportProduct": "EdithExtensionCommands",
     "surfaceContractVersion": 1,
-    "sameExecutableWorker": true
+    "sameExecutableWorker": true,
+    "testTargets": [
+      "ci-extension-notch-native"
+    ]
   },
   {
     "id": "clipboard",
