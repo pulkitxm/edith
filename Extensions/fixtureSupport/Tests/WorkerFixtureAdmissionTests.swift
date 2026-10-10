@@ -5,25 +5,29 @@ import Testing
 @Suite struct WorkerFixtureAdmissionTests {
     @Test(arguments: [
         "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji", "presenter",
-        "keystrokeHighlight", "music",
+        "keystrokeHighlight", "music", "plugins", "studio",
     ])
     func admitsBoundOwnedFixture(_ owner: String) throws {
         let fixture = try Fixture(owner: owner)
         defer { fixture.remove() }
         let admission = try #require(try fixture.admit())
         #expect(admission.extensionID == owner)
-        #expect(admission.role == (owner == "music" ? .app : .helper))
+        #expect(
+            admission.role == (["music", "plugins", "studio"].contains(owner) ? .app : .helper))
         #expect(admission.home.path == fixture.home.path)
         #expect(admission.dataDirectory.path == fixture.data.path)
     }
 
     @Test(arguments: [
-        "music", "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker", "emoji",
+        "music", "plugins", "studio", "focusDim", "micMute", "systemStats", "windowSweaters",
+        "colorPicker", "emoji",
         "presenter", "keystrokeHighlight",
     ])
     func rejectsWrongRole(_ owner: String) throws {
         let fixture = try Fixture(owner: owner); defer { fixture.remove() }
-        let wrong = "com.pulkit.edith.extensions." + owner + (owner == "music" ? ".helper" : ".app")
+        let wrong =
+            "com.pulkit.edith.extensions." + owner
+            + (["music", "plugins", "studio"].contains(owner) ? ".helper" : ".app")
         #expect(throws: (any Error).self) { try fixture.admit(roleIdentifierOverride: wrong) }
     }
 
@@ -92,7 +96,9 @@ import Testing
             role = root.appendingPathComponent(
                 "support/Extensions/" + owner + "/edith-host-2/arm64/1.0.0/" + owner
                     + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
-                    + owner + "/" + (owner == "music" ? "app" : "helper") + ".bundle")
+                    + owner + "/"
+                    + (["music", "plugins", "studio"].contains(owner) ? "app" : "helper")
+                    + ".bundle")
             for directory in [home, data, role, root.appendingPathComponent("Fixture.app")] {
                 try FileManager.default.createDirectory(
                     at: directory, withIntermediateDirectories: true,
@@ -127,7 +133,7 @@ import Testing
                 hostIdentifier: identifier, hostBundle: root.appendingPathComponent("Fixture.app"),
                 roleDirectory: role,
                 roleIdentifier: roleIdentifierOverride ?? "com.pulkit.edith.extensions." + owner
-                    + "." + (owner == "music" ? "app" : "helper"),
+                    + "." + (["music", "plugins", "studio"].contains(owner) ? "app" : "helper"),
                 version: "1.0.0", hostABI: "edith-host-2")
         }
 

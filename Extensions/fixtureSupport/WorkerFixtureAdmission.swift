@@ -48,8 +48,9 @@ public struct WorkerFixtureAdmission: Sendable {
             "focusDim", "micMute", "systemStats", "windowSweaters", "colorPicker",
             "emoji", "presenter", "keystrokeHighlight",
         ]
-        let role: WorkerFixtureRole = extensionID == "music" ? .app : .helper
-        guard (helperIDs.contains(extensionID) || extensionID == "music"),
+        let appIDs: Set<String> = ["music", "plugins", "studio"]
+        let role: WorkerFixtureRole = appIDs.contains(extensionID) ? .app : .helper
+        guard (helperIDs.contains(extensionID) || appIDs.contains(extensionID)),
             let identifier = hostIdentifier,
             identifier.hasPrefix(prefix),
             UUID(uuidString: String(identifier.dropFirst(prefix.count))) != nil,

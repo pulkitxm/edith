@@ -23,7 +23,8 @@ public struct EngineFixture {
         role = root.appendingPathComponent(
             "support/Extensions/" + owner + "/edith-host-2/arm64/1.0.0/" + owner
                 + "/ExtensionCarrier.app/Contents/Extensions/ExtensionWorker.appex/Contents/Resources/Payload/"
-                + owner + "/" + (owner == "music" ? "app" : "helper") + ".bundle")
+                + owner + "/" + (["music", "plugins", "studio"].contains(owner) ? "app" : "helper")
+                + ".bundle")
         for directory in [home, data, role, root.appendingPathComponent("Fixture.app")] {
             try FileManager.default.createDirectory(
                 at: directory, withIntermediateDirectories: true,
@@ -58,7 +59,7 @@ public struct EngineFixture {
             hostIdentifier: identifier, hostBundle: root.appendingPathComponent("Fixture.app"),
             roleDirectory: role,
             roleIdentifier: "com.pulkit.edith.extensions." + owner + "."
-                + (owner == "music" ? "app" : "helper"),
+                + (["music", "plugins", "studio"].contains(owner) ? "app" : "helper"),
             version: "1.0.0", hostABI: "edith-host-2")
     }
 
