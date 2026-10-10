@@ -9,7 +9,7 @@ import Foundation
         .init(id: "backup.restore", title: "Settings restore", trigger: .queue, topic: "backup"),
         .init(id: "storage.inspect", title: "Storage inspection", trigger: .queue),
     ]
-    private struct Journal: Codable {
+    struct Journal: Codable {
         let schemaVersion: Int
         var jobs: [HostCoreJobSnapshot]
         var events: [HostCoreAgentEvent]
@@ -20,12 +20,7 @@ import Foundation
 
     init(directory: URL) throws {
         url = directory.appendingPathComponent("agent.json")
-        let empty = Self.descriptors.map {
-            HostCoreJobSnapshot(
-                descriptor: $0, phase: .idle, subscribers: 0,
-                lastRun: nil, lastDuration: nil, lastError: nil, runCount: 0)
-        }
-        journal = Journal(schemaVersion: 1, jobs: empty, events: [])
+        journal = Self.initialJournal(events: [])
         let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         if fd >= 0 {
             defer { close(fd) }
@@ -60,6 +55,15 @@ import Foundation
                 category: "lifecycle", name: "core.started", message: "Background service started.")
         )
         try save()
+    }
+
+    static func initialJournal(events: [HostCoreAgentEvent]) -> Journal {
+        let jobs = Self.descriptors.map {
+            HostCoreJobSnapshot(
+                descriptor: $0, phase: .idle, subscribers: 0,
+                lastRun: nil, lastDuration: nil, lastError: nil, runCount: 0)
+        }
+        return Journal(schemaVersion: 1, jobs: jobs, events: Array(events.suffix(500)))
     }
 
     func snapshot() -> HostCoreAgentSnapshot {

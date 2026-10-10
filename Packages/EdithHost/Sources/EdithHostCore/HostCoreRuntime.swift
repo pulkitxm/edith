@@ -35,6 +35,7 @@ import Foundation
             metadata.st_mode & S_IFMT == S_IFDIR, metadata.st_uid == getuid(),
             metadata.st_mode & 0o077 == 0
         else { throw CocoaError(.fileReadNoPermission) }
+        try HostCoreStateMigration.importExisting(identity: identity)
         agent = try HostCoreAgentStore(directory: directory)
         journal = directory.appendingPathComponent("tasks.json")
         settings = try HostSettingsArchive(identity: identity, cloudDirectory: cloud)

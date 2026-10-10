@@ -4,7 +4,7 @@ import Foundation
 public actor HostAgentScheduleService {
     public static let maximumSchedules = 64
     public static let maximumJournalBytes = 4 << 20
-    private struct Entry: Codable, Sendable {
+    struct Entry: Codable, Sendable {
         let id: UUID
         let definition: HostScheduledTaskDefinition
         var enabled: Bool
@@ -41,7 +41,7 @@ public actor HostAgentScheduleService {
         self.calendar = calendar; self.sleep = sleep; self.record = record
         let files = try journal.files()
         if files.contains(where: { $0.lastPathComponent == "schedules.json" }) {
-            entries = try HostAgentPayload.decode(
+            entries = try JSONDecoder().decode(
                 [Entry].self,
                 from: journal.read("schedules.json", maximumBytes: Self.maximumJournalBytes))
             guard entries.count <= Self.maximumSchedules,
@@ -264,7 +264,7 @@ public actor HostAgentScheduleService {
 
     private func save(_ next: [Entry]) throws {
         try journal.write(
-            HostAgentPayload.encode(next), name: "schedules.json",
+            JSONEncoder().encode(next), name: "schedules.json",
             maximumBytes: Self.maximumJournalBytes)
         entries = next
     }
