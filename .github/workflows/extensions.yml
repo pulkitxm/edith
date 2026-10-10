@@ -96,9 +96,7 @@ jobs:
       - run: |
           swift build --package-path Packages/EdithHost --build-system native --jobs 2 --product HostLifecycleHarness
           swift build --package-path Packages/ExtensionMarketplace --build-system native --jobs 2 --product MarketplaceHarness
-          mkdir -p local/extension-tools
-          cp Packages/EdithHost/.build/debug/HostLifecycleHarness local/extension-tools/HostLifecycleHarness
-          cp Packages/ExtensionMarketplace/.build/debug/MarketplaceHarness local/extension-tools/MarketplaceHarness
+          python3 scripts/package_extension_lifecycle_tools.py --host local/minimal-host/Edith.app --host-products "$(swift build --package-path Packages/EdithHost --build-system native --show-bin-path)" --marketplace-products "$(swift build --package-path Packages/ExtensionMarketplace --build-system native --show-bin-path)" --output local/extension-tools
       - name: Import the release signing certificate
         if: "github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)"
         env:
@@ -156,6 +154,8 @@ jobs:
           name: frozen-extension-host
           path: local/extension-host-artifact
       - run: tar -xzf local/extension-host-artifact/host.tar.gz
+      - name: Verify lifecycle tools and their frozen index
+        run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
       - name: Verify native cache integrity and private SDK composition
         timeout-minutes: 20
         env:
@@ -186,6 +186,7 @@ jobs:
         with:
           node-version: 24
       - run: node --test scripts/verify-extension-catalog.test.mjs
+      - run: python3 -B scripts/test-package-extension-lifecycle-tools.py
       - name: Check portable publication and selective planning
         run: bun test scripts/extension-publication-guard.test.js scripts/extension-release-plan.test.js scripts/extensions-workflow.test.js
       - run: bun scripts/extension-host-abi.mjs --write
@@ -243,6 +244,8 @@ jobs:
           name: frozen-extension-host
           path: local/extension-host-artifact
       - run: tar -xzf local/extension-host-artifact/host.tar.gz
+      - name: Verify lifecycle tools and their frozen index
+        run: python3 scripts/package_extension_lifecycle_tools.py --verify --host local/minimal-host/Edith.app --output local/extension-tools
       - name: Require a native worker package
         env:
           EXTENSION_ID: "${{ matrix.id }}"
