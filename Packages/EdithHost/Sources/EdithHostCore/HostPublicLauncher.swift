@@ -148,7 +148,8 @@ public struct HostPublicLauncher: Codable, Equatable, Sendable {
         let prefix = "com.pulkit.edith.tests."
         guard identifier.hasPrefix(prefix) else { return false }
         let suffix = String(identifier.dropFirst(prefix.count))
-        return UUID(uuidString: suffix)?.uuidString.lowercased() == suffix.lowercased()
+        let value = suffix.hasPrefix("worker-") ? String(suffix.dropFirst("worker-".count)) : suffix
+        return UUID(uuidString: value)?.uuidString.lowercased() == value.lowercased()
     }
 
     private static func signingIdentity(

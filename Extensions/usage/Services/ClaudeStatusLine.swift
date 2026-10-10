@@ -175,6 +175,14 @@ public enum ClaudeStatusLine {
         let launcherSHA256: String
     }
 
+    static func permitsAdHocPublicLauncher(_ identifier: String) -> Bool {
+        let prefix = "com.pulkit.edith.tests."
+        guard identifier.hasPrefix(prefix) else { return false }
+        let suffix = String(identifier.dropFirst(prefix.count))
+        let value = suffix.hasPrefix("worker-") ? String(suffix.dropFirst("worker-".count)) : suffix
+        return UUID(uuidString: value)?.uuidString.lowercased() == value.lowercased()
+    }
+
     static func publicExecutable(fromVerifiedContext context: NSDictionary) -> String? {
         let required: Set<String> = [
             "version", "hostIdentifier", "applicationURL", "launcherURL", "buildVersion",
@@ -208,9 +216,7 @@ public enum ClaudeStatusLine {
                 !$0.isEmpty && $0.utf8.count <= 64
                     && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
             })
-                ?? (UUID(
-                    uuidString: String(hostIdentifier.dropFirst("com.pulkit.edith.tests.".count)))
-                    != nil && hostIdentifier.hasPrefix("com.pulkit.edith.tests.")),
+                ?? permitsAdHocPublicLauncher(hostIdentifier),
             value.applicationURL.isFileURL,
             value.applicationURL.host == nil || value.applicationURL.host == "",
             value.applicationURL.query == nil, value.applicationURL.fragment == nil,

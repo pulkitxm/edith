@@ -5,6 +5,55 @@ import Testing
 @testable import UsageExtension
 
 @MainActor @Suite(.serialized) struct UsagePublicLauncherTests {
+    @Test func adHocPublicLauncherAdmissionRequiresExactCanonicalTestUUID() {
+        let id = UUID().uuidString
+        for value in [
+            "com.pulkit.edith.tests." + id,
+            "com.pulkit.edith.tests.worker-" + id,
+            "com.pulkit.edith.tests.worker-" + id.lowercased(),
+        ] {
+            #expect(ClaudeStatusLine.permitsAdHocPublicLauncher(value))
+        }
+        for value in [
+            "com.pulkit.edith", "com.pulkit.edith.dev." + id,
+            "com.pulkit.edith.tests.sample", "com.pulkit.edith.tests.launcher-" + id,
+            "com.pulkit.edith.tests." + id + ".other", "other.tests." + id,
+            "com.pulkit.edith.tests.worker-" + id + ".other",
+            "com.pulkit.edith.tests.worker-" + id + ".appex",
+            "com.pulkit.edith.tests.worker-" + id.replacingOccurrences(of: "-", with: ""),
+            "com.pulkit.edith.tests.worker-worker-" + id,
+            "com.pulkit.edith.tests.other-worker-" + id,
+            "prefix.com.pulkit.edith.tests.worker-" + id,
+            "com.pulkit.edith.dev.worker-" + id,
+            "com.pulkit.edith.tests.worker-", "com.pulkit.edith.tests.worker-invalid",
+            "com.pulkit.edith.tests.worker-" + id + "\n",
+        ] {
+            #expect(!ClaudeStatusLine.permitsAdHocPublicLauncher(value))
+        }
+    }
+
+    @Test func workerUUIDLauncherContextStillRequiresSealedMetadataAndCurrentResources() throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = root.appendingPathComponent("Worker Public Fixture.app")
+        _ = try fixture(app: app)
+        var metadata = try info(app)
+        metadata["CFBundleIdentifier"] = "com.pulkit.edith.tests.worker-" + UUID().uuidString
+        try writeInfo(metadata, app: app)
+        let current = try context(app: app)
+        #expect(
+            ClaudeStatusLine.publicExecutable(fromVerifiedContext: current)
+                == app.appendingPathComponent("Contents/MacOS/ed").path)
+        let resource = app.appendingPathComponent("Contents/Resources/ed-launcher")
+        let original = try Data(contentsOf: resource)
+        try Data("changed synthetic launcher".utf8).write(to: resource)
+        #expect(ClaudeStatusLine.publicExecutable(fromVerifiedContext: current) == nil)
+        try original.write(to: resource)
+        metadata["EdithExtensionID"] = "usage"
+        try writeInfo(metadata, app: app)
+        #expect(ClaudeStatusLine.publicExecutable(fromVerifiedContext: current) == nil)
+    }
+
     @Test func onlyClosedVerifiedPublicLauncherContextSuppliesHookCapability() throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }

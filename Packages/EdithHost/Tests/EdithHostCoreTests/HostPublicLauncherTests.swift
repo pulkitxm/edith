@@ -15,10 +15,21 @@ import Testing
     @Test func adHocAdmissionIsLimitedToExactUUIDTestNamespaces() {
         let id = UUID().uuidString
         #expect(HostPublicLauncher.permitsAdHoc("com.pulkit.edith.tests." + id))
+        #expect(HostPublicLauncher.permitsAdHoc("com.pulkit.edith.tests.worker-" + id))
+        #expect(HostPublicLauncher.permitsAdHoc("com.pulkit.edith.tests.worker-" + id.lowercased()))
         for value in [
             "com.pulkit.edith", "com.pulkit.edith.dev." + id,
             "com.pulkit.edith.tests.sample", "com.pulkit.edith.tests.launcher-" + id,
             "com.pulkit.edith.tests." + id + ".other", "other.tests." + id,
+            "com.pulkit.edith.tests.worker-" + id + ".other",
+            "com.pulkit.edith.tests.worker-" + id + ".appex",
+            "com.pulkit.edith.tests.worker-" + id.replacingOccurrences(of: "-", with: ""),
+            "com.pulkit.edith.tests.worker-worker-" + id,
+            "com.pulkit.edith.tests.other-worker-" + id,
+            "prefix.com.pulkit.edith.tests.worker-" + id,
+            "com.pulkit.edith.dev.worker-" + id,
+            "com.pulkit.edith.tests.worker-", "com.pulkit.edith.tests.worker-invalid",
+            "com.pulkit.edith.tests.worker-" + id + "\n",
         ] {
             #expect(!HostPublicLauncher.permitsAdHoc(value))
         }
