@@ -2655,18 +2655,14 @@
     "supportProduct": "EdithExtensionCommands",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": [
-      "TerminalNative_GhosttyTerminal.bundle"
-    ],
+    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": [
-      "Extensions/herdr"
-    ],
+    "inputs": ["Extensions/herdr"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -2677,12 +2673,8 @@
       "scripts/build-contained-host-runtime.mjs"
     ],
     "dependencies": [],
-    "nativeTaskRoles": [
-      "app"
-    ],
-    "testTargets": [
-      "ci-extension-herdr"
-    ],
+    "nativeTaskRoles": ["app"],
+    "testTargets": ["ci-extension-herdr"],
     "roles": {
       "app": [
         "Extensions/herdr/Activity/AgentActivityHookFiles.swift",
@@ -2883,18 +2875,14 @@
     "supportProduct": "EdithExtensionCommands",
     "nativePackage": "Extensions/terminal/Native",
     "nativeProduct": "GhosttyTerminal",
-    "nativeResources": [
-      "TerminalNative_GhosttyTerminal.bundle"
-    ],
+    "nativeResources": ["TerminalNative_GhosttyTerminal.bundle"],
     "nativeLicenses": [
       {
         "source": "Extensions/terminal/Native/LICENSE-GHOSTTY",
         "destination": "Ghostty-LICENSE"
       }
     ],
-    "inputs": [
-      "Extensions/quinjet"
-    ],
+    "inputs": ["Extensions/quinjet"],
     "sharedInputs": [
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
@@ -2905,12 +2893,8 @@
       "scripts/build-contained-host-runtime.mjs"
     ],
     "dependencies": [],
-    "nativeTaskRoles": [
-      "app"
-    ],
-    "testTargets": [
-      "ci-extension-quinjet"
-    ],
+    "nativeTaskRoles": ["app"],
+    "testTargets": ["ci-extension-quinjet"],
     "roles": {
       "app": [
         "Extensions/quinjet/Models/QuinjetLaunchModels.swift",
