@@ -1,5 +1,5 @@
-import EdithExtensionSupport
 import CoreFoundation
+import EdithExtensionSupport
 import Foundation
 
 public enum AgentActivityHookScope: Equatable, Sendable {
@@ -114,7 +114,8 @@ public struct AgentActivityHookInstaller: Sendable {
                     if filtered.count == handlers.count {
                         retained.append(group)
                     } else if !filtered.isEmpty {
-                        group["hooks"] = filtered; retained.append(group)
+                        group["hooks"] = filtered
+                        retained.append(group)
                     }
                 }
                 hooks[event] = retained.isEmpty ? nil : retained
@@ -235,18 +236,25 @@ public struct AgentActivityHookInstaller: Sendable {
     }
 
     private static func owns(_ handler: [String: Any]) -> Bool {
-        handler["type"] as? String == "command"
-            && (handler["command"] as? String)?.contains("EDITH_PROVIDER_HOOK=" + integrationID)
-                == true
-            && (handler["command"] as? String)?.contains("activity.hook.") == true
+        guard handler["type"] as? String == "command",
+            let command = handler["command"] as? String,
+            command.contains("EDITH_PROVIDER_HOOK=" + integrationID)
+        else { return false }
+        return command.contains("agent activity hook --provider")
+            || command.contains("activity.hook.")
     }
 
     private func command(_ provider: AgentActivityProvider) -> String {
-        ShellQuote.command([
-            "/usr/bin/env", "EDITH_PROVIDER_HOOK=" + Self.integrationID, executable.path, "invoke",
-            "herdr", "activity.hook." + provider.rawValue,
-            "--json", "-", "--timeout", "120",
+        let arguments = ShellQuote.command([
+            executable.path, "agent", "activity", "hook", "--provider", provider.rawValue,
+            "--integration-id", Self.integrationID,
         ])
+        let environment = ShellQuote.command([
+            "/usr/bin/env", "EDITH_PROVIDER_HOOK=" + Self.integrationID,
+        ])
+        return """
+            set -- \(arguments); if [ -n "${TMUX_PANE-}" ]; then set -- "$@" --pane "$TMUX_PANE"; fi; exec \(environment) "$@"
+            """
     }
 
     private func events(_ provider: AgentActivityProvider) -> [String] {
@@ -293,7 +301,10 @@ public struct AgentActivityHookInstaller: Sendable {
               const events = new Set(["session.created", "session.status", "session.idle", "session.error", "session.deleted", "permission.asked", "permission.replied"])
 
               const forward = async (event: any) => {
-                const process = Bun.spawn([executable, "invoke", "herdr", "activity.hook.opencode", "--json", "-", "--timeout", "120"], {
+                const command = [executable, "agent", "activity", "hook", "--provider", "opencode", "--integration-id", integrationID]
+                const pane = Bun.env.TMUX_PANE
+                if (pane) command.push("--pane", pane)
+                const process = Bun.spawn(command, {
                   stdin: new Blob([JSON.stringify({ ...event, directory })]), stdout: "pipe", stderr: "ignore"
                 })
                 const requestID = event.type === "permission.asked" ? event.properties.id : undefined
