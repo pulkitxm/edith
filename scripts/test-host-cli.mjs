@@ -68,6 +68,12 @@ async function command(args, expected = 0, input, options = {}) {
       clients.delete(child);
       resolveResult({
         code,
+        ...(options.rawBytes
+          ? {
+              stdoutData: Buffer.concat(stdout),
+              stderrData: Buffer.concat(stderr),
+            }
+          : {}),
         stdout: Buffer.concat(stdout).toString("utf8"),
         stderr: Buffer.concat(stderr).toString("utf8"),
       });
@@ -86,7 +92,8 @@ async function command(args, expected = 0, input, options = {}) {
       stderr: result.stderr.slice(0, 2048),
     }),
   );
-  if (args[0] === "calendar" || options.rawResult) return result;
+  if (args[0] === "calendar" || options.rawResult || options.rawBytes)
+    return result;
   if (expected !== 0) {
     assert.equal(result.stdout, "");
     assert.match(result.stderr, /^error: /);
@@ -603,6 +610,180 @@ try {
     unknownJob.stderr,
     "error: The background job is unavailable: unknown-owned-job\nhint: Choose a job from ed agent jobs.\n",
   );
+  const commandDirectory = join(fixture, "CommandDirectory");
+  await mkdir(commandDirectory);
+  const taskBytes = await command(
+    [
+      "agent",
+      "tasks",
+      "exec",
+      "--timeout",
+      "5",
+      "--",
+      "/bin/sh",
+      "-c",
+      "printf 'out\\000tail'; printf 'err\\377' >&2; printf '%s' \"$SYNTHETIC_COMMAND\"; /bin/pwd; exit 7",
+    ],
+    7,
+    undefined,
+    {
+      rawBytes: true,
+      cwd: commandDirectory,
+      env: { ...environment, SYNTHETIC_COMMAND: "owned" },
+    },
+  );
+  assert.deepEqual(
+    taskBytes.stdoutData,
+    Buffer.concat([
+      Buffer.from([111, 117, 116, 0, 116, 97, 105, 108]),
+      Buffer.from(`owned${await realpath(commandDirectory)}\n`),
+    ]),
+  );
+  assert.deepEqual(taskBytes.stderrData, Buffer.from([101, 114, 114, 255]));
+  const taskJSON = await command(
+    [
+      "agent",
+      "tasks",
+      "exec",
+      "--json",
+      "--",
+      "/bin/sh",
+      "-c",
+      "printf 'json'; printf 'error' >&2; exit 9",
+    ],
+    9,
+    undefined,
+    { rawResult: true, cwd: commandDirectory },
+  );
+  const exactTaskResult = JSON.parse(taskJSON.stdout);
+  assert.equal(taskJSON.stderr, "");
+  assert.equal(exactTaskResult.terminationStatus, 9);
+  assert.equal(
+    Buffer.from(exactTaskResult.standardOutputData, "base64").toString(),
+    "json",
+  );
+  assert.equal(
+    Buffer.from(exactTaskResult.standardErrorData, "base64").toString(),
+    "error",
+  );
+  const detachedTask = await command(
+    [
+      "agent",
+      "tasks",
+      "exec",
+      "--detach",
+      "--json",
+      "--",
+      "/bin/sh",
+      "-c",
+      "echo $$ > detached-pid; exec /bin/sleep 120",
+    ],
+    0,
+    undefined,
+    { cwd: commandDirectory },
+  );
+  await until(async () => existsSync(join(commandDirectory, "detached-pid")));
+  const detachedTaskPID = Number(
+    (await readFile(join(commandDirectory, "detached-pid"), "utf8")).trim(),
+  );
+  assert(detachedTaskPID > 1 && detachedTaskPID !== coreFixturePID);
+  assert(
+    (await command(["agent", "tasks", "ls", "--json"])).some(
+      (task) =>
+        task.id === detachedTask.id &&
+        !["succeeded", "failed", "cancelled", "interrupted"].includes(
+          task.state,
+        ),
+    ),
+  );
+  await command(["agent", "tasks", "cancel", detachedTask.id, "--json"]);
+  await until(
+    async () =>
+      (await command(["agent", "tasks", "inspect", detachedTask.id, "--json"]))
+        .snapshot.state === "cancelled",
+  );
+  assert.throws(() => process.kill(detachedTaskPID, 0), /ESRCH/);
+  const callerTask = await liveCLI([
+    "agent",
+    "tasks",
+    "exec",
+    "--",
+    "/bin/sh",
+    "-c",
+    `echo $$ > '${join(commandDirectory, "caller-pid")}'; exec /bin/sleep 120`,
+  ]);
+  await until(async () => existsSync(join(commandDirectory, "caller-pid")));
+  const callerTaskPID = Number(
+    (await readFile(join(commandDirectory, "caller-pid"), "utf8")).trim(),
+  );
+  callerTask.child.kill("SIGINT");
+  await until(async () => callerTask.child.exitCode !== null);
+  assert.equal(callerTask.child.exitCode, 130);
+  assert.throws(() => process.kill(callerTaskPID, 0), /ESRCH/);
+  const addedSchedule = await command([
+    "agent",
+    "schedule",
+    "add",
+    "owned",
+    "--every",
+    "60s",
+    "--cwd",
+    commandDirectory,
+    "--json",
+    "--",
+    "/bin/sh",
+    "-c",
+    "echo $$ > schedule-pid; exec /bin/sleep 120",
+  ]);
+  assert.equal(addedSchedule.definition.name, "owned");
+  await command(["agent", "schedule", "disable", "owned", "--json"]);
+  const enabledSchedule = await command([
+    "agent",
+    "schedule",
+    "enable",
+    "owned",
+    "--json",
+  ]);
+  const scheduledTask = await command([
+    "agent",
+    "schedule",
+    "run",
+    "owned",
+    "--json",
+  ]);
+  await until(async () => existsSync(join(commandDirectory, "schedule-pid")));
+  const scheduledTaskPID = Number(
+    (await readFile(join(commandDirectory, "schedule-pid"), "utf8")).trim(),
+  );
+  const scheduledState = (
+    await command(["agent", "schedule", "ls", "--json"])
+  )[0];
+  assert.equal(scheduledState.nextRunAt, enabledSchedule.nextRunAt);
+  assert.equal(
+    (await command(["agent", "schedule", "rm", "owned", "--json"])).removed,
+    true,
+  );
+  process.kill(scheduledTaskPID, 0);
+  await command(["agent", "tasks", "cancel", scheduledTask.id, "--json"]);
+  await until(
+    async () =>
+      (await command(["agent", "tasks", "inspect", scheduledTask.id, "--json"]))
+        .snapshot.state === "cancelled",
+  );
+  assert.throws(() => process.kill(scheduledTaskPID, 0), /ESRCH/);
+  await command([
+    "agent",
+    "schedule",
+    "add",
+    "retained",
+    "--cron",
+    "0 * * * *",
+    "--json",
+    "--",
+    "/usr/bin/printf",
+    "scheduled",
+  ]);
+  const retainedGenericTaskID = detachedTask.id;
   await writeFile(join(fixture, "power-request"), "synthetic-owned-test");
   await command(["agent", "jobs", "--json"]);
   const powerProof = JSON.parse(
@@ -672,6 +853,25 @@ try {
     1,
   );
   assert.equal(children().length, 1);
+  assert.equal(
+    (
+      await command([
+        "agent",
+        "tasks",
+        "inspect",
+        retainedGenericTaskID,
+        "--json",
+      ])
+    ).snapshot.state,
+    "cancelled",
+  );
+  assert.deepEqual(
+    (await command(["agent", "schedule", "ls", "--json"])).map(
+      (item) => item.definition.name,
+    ),
+    ["retained"],
+  );
+  await command(["agent", "schedule", "rm", "retained", "--json"]);
   for (const operation of ["status", "verify", "doctor"]) {
     const report = await command([
       "extensions",
@@ -690,10 +890,16 @@ try {
   );
   assert.match(setupUnavailable.stderr, /owning setup provider is unavailable/);
   assert(!existsSync(join(identityRoot, "Extensions/calendar")));
-  const missingOwner = await command(["agent", "tasks", "ls"], 4);
+  const restoredTasks = await command(["agent", "tasks", "ls", "--json"]);
+  assert(
+    restoredTasks.some(
+      (task) => task.id === retainedGenericTaskID && task.state === "cancelled",
+    ),
+  );
+  const missingOwner = await command(["agent", "activity", "status"], 4);
   assert.match(
     missingOwner.stderr,
-    /original agent tasks provider is unavailable/,
+    /original agent activity provider is unavailable/,
   );
 
   assert.equal(ready.pid, host.pid);
@@ -813,6 +1019,37 @@ try {
   assert(initialTools.result, JSON.stringify(initialTools));
   let tools = initialTools.result.tools;
   assert(tools.some((item) => item.name === "edith_config_get"));
+  assert(tools.some((item) => item.name === "edith_agent_tasks_exec"));
+  assert(tools.some((item) => item.name === "edith_agent_schedule_add"));
+  assert(!tools.some((item) => item.name === "edith_agent_activity_hook"));
+  const previewTask = await mcp.call("tools/call", {
+    name: "edith_agent_tasks_exec",
+    arguments: { arguments: ["--", "/usr/bin/printf", "preview"] },
+  });
+  assert.equal(JSON.parse(previewTask.result.content[0].text).preview, true);
+  const mcpTask = await mcp.call("tools/call", {
+    name: "edith_agent_tasks_exec",
+    arguments: {
+      arguments: [
+        "--",
+        "/bin/sh",
+        "-c",
+        "printf 'mcp'; printf 'stderr' >&2; exit 6",
+      ],
+      confirm: true,
+    },
+  });
+  assert.equal(mcpTask.result.isError, true);
+  const mcpTaskResult = JSON.parse(mcpTask.result.content[0].text);
+  assert.equal(mcpTaskResult.terminationStatus, 6);
+  assert.equal(
+    Buffer.from(mcpTaskResult.standardOutputData, "base64").toString(),
+    "mcp",
+  );
+  assert.equal(
+    Buffer.from(mcpTaskResult.standardErrorData, "base64").toString(),
+    "stderr",
+  );
   assert(!tools.some((item) => item.name.startsWith("edith_calendar_")));
   const configTool = await mcp.call("tools/call", {
     name: "edith_config_get",
@@ -1224,7 +1461,7 @@ try {
   await until(() => !existsSync(ready.socket));
   await command(["extensions", "ls"], 4);
   process.stdout.write(
-    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, originalOwnedAgentCallbacks: true, actualAmbientBatteryPolicy: true, actualCoreJournalAndRestart: true, ownedQueuedCancellation: true, unhealthyReadinessExitZero: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
+    `${JSON.stringify({ fixtureScope: "synthetic transport and core behavior, not feature parity", shippingEntrypoint: true, originalOwnedAgentCallbacks: true, actualAmbientBatteryPolicy: true, originalCoreGenericTasksAndSchedules: true, exactCoreCommandBytesAndExit: true, actualCommandCallerCancellation: true, persistedCoreSchedules: true, coreMCPConfirmedExecution: true, actualCoreJournalAndRestart: true, ownedQueuedCancellation: true, unhealthyReadinessExitZero: true, reservedCoreServer: true, liveProviderCatalog: true, dynamicMCP: true, callerStdinAndDirectory: true, sdkOutputStream: true, liveStdinEOF: true, concurrentInputStreams: true, bidirectionalSyntheticFraming: true, callerPTYResizeAndRestoration: true, boundedMCPInput: true, idleMCPCancellation: true, shutdownCommandExitCode: stoppingCommand.exitCode, originalPlainVersionAndErrors: true, publicLauncher: true, sameSignedExecutable: true, install: "1.0.0", update: "1.1.0", invokeJSONAndStdin: true, scopedArchiveDecoder: true, abi2Carrier: true, syntheticProviderRouting: true, exactProviderExitCodes: true, duplicateRuntimeClasses: false, timeoutAndDisconnectCancellation: true, responsiveHost: true, forgedCallerRejected: true, boundedRequests: true, offlineError: true, disabledWorkers: 0, removedPayload: true, socketCleanup: true })}\n`,
   );
 } finally {
   for (const client of clients) {
