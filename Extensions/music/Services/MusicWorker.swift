@@ -87,9 +87,51 @@ final class MusicWorker {
         return result
     }
 
+    func readNotch(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        await external.refreshPresentationPlayback()
+        try Task.checkCancellation()
+        return try await read(tile)
+    }
+
+    func notchAppIcon(_ sourceID: String) -> SurfaceThumbnail? {
+        guard
+            let app = ExternalApp.allCases.first(where: {
+                sourceID == "external." + $0.rawValue || sourceID == $0.rawValue
+            })
+        else { return nil }
+        if let icon = NSRunningApplication.runningApplications(
+            withBundleIdentifier: app.bundleID
+        ).first?.icon {
+            return Self.thumbnail(icon)
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleID)
+        else { return nil }
+        return Self.thumbnail(NSWorkspace.shared.icon(forFile: url.path))
+    }
+
     func perform(_ command: MusicSurfaceCommand) async throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
-        if command.action == "open" { try await MusicHostNavigation.open(); return }
+        if ["open", "openPlayer"].contains(command.action) {
+            if let app = ExternalApp.allCases.first(where: {
+                command.sourceID == "external." + $0.rawValue
+            }) {
+                guard
+                    let url = NSWorkspace.shared.urlForApplication(
+                        withBundleIdentifier: app.bundleID)
+                else {
+                    throw ExtensionPeerError.unavailable
+                }
+                _ = try await NSWorkspace.shared.openApplication(
+                    at: url, configuration: NSWorkspace.OpenConfiguration())
+            } else {
+                let path =
+                    command.sourceID == "local" && command.action == "open"
+                    ? (command.trackKey as NSString).deletingLastPathComponent : nil
+                try await MusicHostNavigation.open(path: path)
+            }
+            return
+        }
         if command.sourceID == "local" {
             if command.action == "playQueue" {
                 guard

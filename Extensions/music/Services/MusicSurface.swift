@@ -43,17 +43,21 @@ struct MusicSurfaceCommand: Equatable, Sendable {
 final class MusicSurface {
     typealias Read = @MainActor (SurfaceTile) async throws -> [MusicSurfacePlayback]
     typealias Perform = @MainActor (MusicSurfaceCommand) async throws -> Void
+    private let appIcon: @MainActor (String) -> SurfaceThumbnail?
+    private let readNotch: Read
     private let read: Read
     private let perform: Perform
     private let privacyValues: @MainActor () -> [String: String]
 
     init(
-        read: @escaping Read, perform: @escaping Perform,
+        read: @escaping Read, perform: @escaping Perform, readNotch: Read? = nil,
+        appIcon: @escaping @MainActor (String) -> SurfaceThumbnail? = { _ in nil },
         privacyValues: @escaping @MainActor () -> [String: String] = {
             ExtensionSharedState.current?.values(for: "presenter") ?? [:]
         }
     ) {
         self.read = read; self.perform = perform; self.privacyValues = privacyValues
+        self.appIcon = appIcon; self.readNotch = readNotch ?? read
     }
 
     func execute(_ command: String, payload: Data) async throws -> Data {
@@ -62,6 +66,44 @@ final class MusicSurface {
             request = try SurfaceActionRequest.decode(payload, providerID: "music").snapshot
         } else {
             request = try SurfaceSnapshotRequest.decode(payload, providerID: "music")
+        }
+        if command == "music.notch.snapshot" {
+            guard request.target == .notch, request.tile.widget == .music else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            if SurfacePrivacyState.hides(.music, values: privacyValues()) {
+                return try MusicNotchState(
+                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
+                    playback: []
+                ).encoded()
+            }
+            let states = try await readNotch(request.tile)
+            try Task.checkCancellation()
+            guard !SurfacePrivacyState.hides(.music, values: privacyValues()) else {
+                return try MusicNotchState(
+                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
+                    playback: []
+                ).encoded()
+            }
+            let snapshot = SurfaceCommandService.project(
+                Self.snapshot(states, tile: request.tile, target: .notch), tile: request.tile)
+            let playback = states.compactMap { state -> MusicNotchPlayback? in
+                let rowID = state.sourceID + ":" + state.token
+                guard !state.trackKey.isEmpty, snapshot.rows.contains(where: { $0.id == rowID })
+                else { return nil }
+                return .init(
+                    rowID: rowID,
+                    sourceName: state.sourceID == "local" ? "Music" : state.sourceTitle,
+                    playing: state.playing,
+                    elapsed: request.tile.shows("progress")
+                        ? max(0, min(state.elapsed, 86_400)) : 0,
+                    duration: request.tile.shows("progress")
+                        ? max(0, min(state.duration, 86_400)) : 0,
+                    shuffle: request.tile.shows("shuffle") ? state.shuffle : nil,
+                    repeating: request.tile.shows("repeat") ? state.repeating : nil,
+                    appIcon: appIcon(state.sourceID))
+            }
+            return try MusicNotchState(snapshot: snapshot, playback: playback).encoded()
         }
         return try await SurfaceCommandService.execute(
             providerID: "music", command: command, payload: payload,
@@ -82,7 +124,8 @@ final class MusicSurface {
         try Task.checkCancellation()
         for state in states {
             let commands = [
-                "open", "toggle", "previous", "next", "shuffle", "repeat", "backward", "forward",
+                "open", "openPlayer", "toggle", "previous", "next", "shuffle", "repeat", "backward",
+                "forward",
                 "seek", "volume",
             ]
             if let action = commands.first(where: { state.identifier($0) == identifier }) {
@@ -190,6 +233,10 @@ final class MusicSurface {
         }
         return .init(
             providerID: "music", rows: rows,
+            actions: target == .notch
+                ? Array(ordered.prefix(8)).map {
+                    .init($0.identifier("openPlayer"), "Open player", "arrow.up.forward.app")
+                } : [],
             sources: states.map { .init($0.sourceID, $0.sourceTitle) },
             message: rows.isEmpty ? "No available player in this selection." : nil, updatedAt: .now)
     }

@@ -1045,7 +1045,10 @@
         "Extensions/music/Bridge/MusicBrowserEnvelope.swift",
         "Extensions/music/Services/MusicBrowserPresentation.swift",
         "Extensions/music/UI/MusicBrowserEnvelope.swift",
-        "Extensions/music/UI/MusicNativeBrowser.swift"
+        "Extensions/music/UI/MusicNativeBrowser.swift",
+        "Extensions/music/Bridge/MusicNotchEnvelope.swift",
+        "Extensions/music/UI/MusicNotchEnvelope.swift",
+        "Extensions/music/UI/MusicNotchScenes.swift"
       ]
     },
     "nativeCargo": {

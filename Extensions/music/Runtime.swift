@@ -71,7 +71,9 @@ final class ExtensionRuntime: NSObject {
                 worker = MusicWorker()
             }
             if let worker, surface == nil {
-                surface = MusicSurface(read: worker.read, perform: worker.perform)
+                surface = MusicSurface(
+                    read: worker.read, perform: worker.perform, readNotch: worker.readNotch,
+                    appIcon: worker.notchAppIcon)
                 uiService = MusicUIService(
                     worker: worker,
                     version: Bundle(for: ExtensionRuntime.self).object(
