@@ -45,7 +45,7 @@ public struct AgentActivitySettings: Codable, Equatable, Sendable {
     }
 
     public static func load(in defaults: UserDefaults = SharedDefaults.store) -> Self {
-        guard let raw = defaults.string(forKey: "surfaceAgentActivity"),
+        guard let raw = defaults.string(forKey: "agentActivityProviders"),
             let data = raw.data(using: .utf8),
             let settings = try? JSONDecoder().decode(Self.self, from: data)
         else { return Self() }
@@ -57,7 +57,7 @@ public struct AgentActivitySettings: Codable, Equatable, Sendable {
     }
 
     public func save() throws {
-        SharedDefaults.store.set(encoded, forKey: "surfaceAgentActivity")
+        SharedDefaults.store.set(encoded, forKey: "agentActivityProviders")
     }
 }
 
