@@ -11,12 +11,14 @@ def rounded(value):
     return (value + PAGE - 1) // PAGE * PAGE
 
 
-def parse(data, signed):
+def parse(data, signed, *, filetype=2):
+    if filetype not in (2, 6):
+        raise ValueError('Unsupported Mach-O file type')
     if len(data) < 32:
         raise ValueError('Truncated Mach-O header')
     header = struct.unpack_from('<8I', data)
-    if header[0] != 0xfeedfacf or header[1] != 0x0100000c or header[2] != 0 or header[3] != 2:
-        raise ValueError('Only thin arm64 executables are supported')
+    if header[0] != 0xfeedfacf or header[1] != 0x0100000c or header[2] != 0 or header[3] != filetype:
+        raise ValueError('Only thin arm64 code images are supported')
     count, size = header[4:6]
     if not 1 <= count <= 4096 or size > len(data) - 32:
         raise ValueError('Invalid load command bounds')
@@ -75,9 +77,9 @@ def parse(data, signed):
     return {'header': header, 'commands': commands, 'linkedit': linkedit, 'signature': signatures[0] if signed else None}
 
 
-def normalize_signed_and_unsigned(signed, unsigned):
-    before = parse(signed, True)
-    after = parse(unsigned, False)
+def normalize_signed_and_unsigned(signed, unsigned, *, filetype=2):
+    before = parse(signed, True, filetype=filetype)
+    after = parse(unsigned, False, filetype=filetype)
     link_before, link_after = before['linkedit'], after['linkedit']
     signature_offset, signature_start, _ = before['signature']
     if len(unsigned) > signature_start or signature_start - len(unsigned) > 15 or any(signed[len(unsigned):signature_start]):
@@ -102,20 +104,20 @@ def normalize_signed_and_unsigned(signed, unsigned):
     return bytes(canonical)
 
 
-def identity_from_bytes(signed, unsigned, expected=None):
-    normalized = normalize_signed_and_unsigned(signed, unsigned)
+def identity_from_bytes(signed, unsigned, expected=None, *, filetype=2):
+    normalized = normalize_signed_and_unsigned(signed, unsigned, filetype=filetype)
     result = {'signedBytes': len(signed), 'signedSHA256': hashlib.sha256(signed).hexdigest(), 'rawUnsignedBytes': len(unsigned), 'rawUnsignedSHA256': hashlib.sha256(unsigned).hexdigest(), 'normalizedUnsignedSHA256': hashlib.sha256(normalized).hexdigest(), 'normalization': 'arm64-terminal-linkedit-vmsize-after-verified-signature-removal-v1'}
     if expected is not None and result['normalizedUnsignedSHA256'] != expected:
         raise ValueError('Executable code differs from the pinned source')
     return result
 
 
-def executable_identity(path, expected=None):
+def executable_identity(path, expected=None, *, filetype=2):
     path = Path(path)
     signed = path.read_bytes()
-    parse(signed, True)
+    parse(signed, True, filetype=filetype)
     with tempfile.TemporaryDirectory(prefix='edith-static-code-') as directory:
         target = Path(directory) / 'Edith'
         target.write_bytes(signed)
         subprocess.run(['codesign', '--remove-signature', str(target)], check=True, capture_output=True, timeout=30)
-        return identity_from_bytes(signed, target.read_bytes(), expected)
+        return identity_from_bytes(signed, target.read_bytes(), expected, filetype=filetype)

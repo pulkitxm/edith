@@ -12,7 +12,7 @@ LINK_COMMAND = 184
 SIGNATURE_COMMAND = 256
 
 
-def pair(signature_bytes=64):
+def pair(signature_bytes=64, filetype=2):
     fileoff = 32768
     unsigned_size = fileoff + 16300
     signature_start = (unsigned_size + 15) // 16 * 16
@@ -30,7 +30,7 @@ def pair(signature_bytes=64):
     unsigned_commands = text + link(16300) + rpath
     signed_commands = text + link(signed_size - fileoff) + signature + rpath
     for data, commands, count in [(signed, signed_commands, 4), (unsigned, unsigned_commands, 3)]:
-        struct.pack_into('<8I', data, 0, 0xfeedfacf, 0x0100000c, 0, 2, count, len(commands), 0, 0)
+        struct.pack_into('<8I', data, 0, 0xfeedfacf, 0x0100000c, 0, filetype, count, len(commands), 0, 0)
         data[32:32 + len(commands)] = commands
     return signed, unsigned
 
@@ -176,6 +176,44 @@ class StrictMachOIdentityTests(unittest.TestCase):
         struct.pack_into('<I', unsigned, SIGNATURE_COMMAND, 0x1d)
         with self.assertRaisesRegex(ValueError, 'signature command'):
             normalize_signed_and_unsigned(signed, unsigned)
+
+
+class StrictDylibIdentityTests(StrictMachOIdentityTests):
+    def test_explicit_dylib_admission_preserves_all_bytes_except_verified_signature_mapping(self):
+        original = identity_from_bytes(*pair(64, 6), filetype=6)
+        rebound = identity_from_bytes(*pair(512, 6), original['normalizedUnsignedSHA256'], filetype=6)
+        self.assertNotEqual(original['signedSHA256'], rebound['signedSHA256'])
+        self.assertNotEqual(original['rawUnsignedSHA256'], rebound['rawUnsignedSHA256'])
+        for signed, unsigned in [pair(64, 6), pair(64, 2)]:
+            with self.assertRaises(ValueError):
+                identity_from_bytes(signed, unsigned, filetype=2 if signed[12] == 6 else 6)
+
+    def test_dylib_payload_load_command_section_and_header_tampering_cannot_match_source(self):
+        expected_hash = identity_from_bytes(*pair(64, 6), filetype=6)['normalizedUnsignedSHA256']
+        for offset in [4100, 40000, SIGNATURE_COMMAND + 28, TEXT_COMMAND + 104, 28]:
+            signed, unsigned = pair(512, 6)
+            unsigned_offset = offset - 16 if offset == SIGNATURE_COMMAND + 28 else offset
+            signed[offset] ^= 1
+            unsigned[unsigned_offset] ^= 1
+            with self.subTest(offset=offset), self.assertRaises(ValueError):
+                identity_from_bytes(signed, unsigned, expected_hash, filetype=6)
+
+    def test_dylib_malformed_signature_segment_and_truncation_are_rejected(self):
+        for offset, value in [(SIGNATURE_COMMAND + 8, 10), (SIGNATURE_COMMAND + 12, 0), (LINK_COMMAND + 64, 1), (16, 4097), (TEXT_COMMAND + 4, 7), (LINK_COMMAND + 48, 0xffffffff)]:
+            signed, unsigned = pair(512, 6)
+            struct.pack_into('<I', signed, offset, value)
+            with self.subTest(offset=offset), self.assertRaises(ValueError):
+                identity_from_bytes(signed, unsigned, filetype=6)
+        signed, unsigned = pair(512, 6)
+        with self.assertRaises(ValueError):
+            identity_from_bytes(signed[:31], unsigned, filetype=6)
+        struct.pack_into('<I', signed, SIGNATURE_COMMAND + 16, 0x1d)
+        with self.assertRaises(ValueError):
+            identity_from_bytes(signed, unsigned, filetype=6)
+
+    def test_unsupported_filetype_is_rejected_before_removing_signature(self):
+        with self.assertRaisesRegex(ValueError, 'Unsupported'):
+            identity_from_bytes(*pair(), filetype=8)
 
 
 if __name__ == '__main__':
