@@ -6,6 +6,8 @@ import Foundation
     private let session: Session
     private let state: () -> MachineUIState
     private let mutation: (MachineUIMutation) async throws -> Void
+    private let preview: (MachinePreviewRequest) async throws -> Data
+    private let files: (MachineFileRequest) async throws -> MachineFileState
     private let observe: (UUID, Bool) -> Void
     private let workspace: (WorkspaceStore) throws -> Void
     private var stopped = false
@@ -22,13 +24,21 @@ import Foundation
         session: @escaping Session, state: @escaping () -> MachineUIState,
         mutation: @escaping (MachineUIMutation) async throws -> Void,
         workspace: @escaping (WorkspaceStore) throws -> Void,
-        observe: @escaping (UUID, Bool) -> Void = { _, _ in }
+        observe: @escaping (UUID, Bool) -> Void = { _, _ in },
+        files: @escaping (MachineFileRequest) async throws -> MachineFileState = { _ in
+            throw MachineUIError.unavailable
+        },
+        preview: @escaping (MachinePreviewRequest) async throws -> Data = { _ in
+            throw MachineUIError.unavailable
+        }
     ) {
         self.session = session
         self.state = state
         self.mutation = mutation
         self.workspace = workspace
         self.observe = observe
+        self.files = files
+        self.preview = preview
     }
 
     func stop() {
@@ -117,6 +127,17 @@ import Foundation
             let id = try JSONDecoder().decode(UUID.self, from: payload)
             cancelJob(id)
             return try encode(true)
+        case "machines.ui.preview":
+            let value = try JSONDecoder().decode(MachinePreviewRequest.self, from: payload)
+            _ = try session(value.machineID)
+            return try await preview(value)
+        case "machines.ui.files":
+            let value = try JSONDecoder().decode(MachineFileRequest.self, from: payload)
+            try value.validate()
+            _ = try session(value.machineID)
+            let result = try await files(value)
+            try Task.checkCancellation()
+            return try encode(result)
         case "machines.ui.configuration":
             guard let value = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
                 value.isEmpty

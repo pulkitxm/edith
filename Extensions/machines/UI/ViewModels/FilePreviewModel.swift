@@ -41,7 +41,11 @@ final class FilePreviewModel {
 
     init(
         materialize: @escaping Materialize = { entry, session, maximumBytes in
-            try await RemoteFileOperationExecution.materialize(
+            if let client = session.uiClient {
+                return try await client.materialize(
+                    entry: entry, machineID: session.id, maximumBytes: maximumBytes)
+            }
+            return try await RemoteFileOperationExecution.materialize(
                 entry, machineID: session.machine.id, isLocal: session.isLocal,
                 maximumBytes: maximumBytes
             ) { remotePath, destination in
@@ -157,7 +161,7 @@ final class FilePreviewModel {
     }
 
     private func loadText(entry: RemoteFileEntry, session: MachineSession, request: UInt64) async {
-        if session.isLocal {
+        if session.isLocal && session.uiClient == nil {
             let path = entry.path
             let data: Data? = await Task.detached(priority: .utility) { () -> Data? in
                 guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path))

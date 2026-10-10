@@ -23,7 +23,7 @@ public struct MachineItemsPayload: Codable, Equatable, Sendable {
     }
 }
 
-public enum DropIntent: Equatable, Sendable {
+public enum DropIntent: Codable, Equatable, Sendable {
     case moveWithinMachine([String])
     case copyWithinMachine([String])
     case transferBetweenMachines(from: UUID, paths: [String], moving: Bool)
@@ -94,7 +94,7 @@ public enum DropResolver {
     }
 }
 
-public enum NameConflictResolution: String, Equatable, Sendable {
+public enum NameConflictResolution: String, Codable, Equatable, Sendable {
     case replace
     case keepBoth
     case skip
@@ -212,8 +212,8 @@ public enum BatchRename {
     }
 }
 
-public struct FinderUndoStep: Equatable, Sendable {
-    public struct Move: Equatable, Sendable {
+public struct FinderUndoStep: Codable, Equatable, Sendable {
+    public struct Move: Codable, Equatable, Sendable {
         public var from: String
         public var to: String
 

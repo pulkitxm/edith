@@ -11,6 +11,8 @@ final class ExtensionRuntime: NSObject {
     private var surface: MachineSurface?
     private var transport: MachinePeerTransport?
     private var cli: MachineCLIService?
+    private var previewEngine: MachinePreviewEngine?
+    private var filesEngine: MachineFilesEngine?
     private var uiEngine: MachineUIEngine?
     private var uiClient: MachineUIClient?
     private var health: MachineHealthLifecycle?
@@ -151,6 +153,21 @@ final class ExtensionRuntime: NSObject {
                         model.selection = id
 
                     }, stopped: { [weak self] in self?.running != true })
+                let files = MachineFilesEngine(session: { id in
+                    guard MachinesModel.shared.knows(id) else {
+                        throw MachineUIError.invalidRequest
+                    }
+                    return MachinesModel.shared.session(for: id)
+                })
+                filesEngine = files
+                let previews = MachinePreviewEngine(session: { id in
+                    guard MachinesModel.shared.knows(id) else {
+                        throw MachineUIError.invalidRequest
+                    }
+                    return MachinesModel.shared.session(for: id)
+                })
+                previewEngine = previews
+                MachinesCLIEnvironment.undo = { id in try await files.undo(machineID: id) }
                 uiEngine = MachineUIEngine(
                     session: { id in
                         guard MachinesModel.shared.knows(id) else {
@@ -187,7 +204,8 @@ final class ExtensionRuntime: NSObject {
                     },
                     observe: { _, active in
                         if active, !fixture { MachinesModel.shared.reconcileSSHClipboards() }
-                    })
+                    }, files: { value in try await files.execute(value) },
+                    preview: { value in try await previews.execute(value) })
                 cli = MachineCLIService()
                 MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
                 if !fixture {
@@ -220,6 +238,9 @@ final class ExtensionRuntime: NSObject {
     private func shutdown() async {
         running = false
         await uiEngine?.shutdown(); uiEngine = nil
+        filesEngine?.shutdown(); filesEngine = nil
+        previewEngine?.shutdown(); previewEngine = nil
+        MachinesCLIEnvironment.undo = { _ in throw MachineUIError.unavailable }
         await commands.shutdownAndWait()
         await health?.stop(); health = nil
         await cli?.shutdown(); cli = nil

@@ -59,6 +59,60 @@ import Foundation
         receive(state)
     }
 
+    func materialize(entry: RemoteFileEntry, machineID: UUID, maximumBytes: Int64) async throws
+        -> URL
+    {
+        let handle: MachinePreviewHandle = try await job(
+            "machines.ui.preview",
+            value: MachinePreviewRequest(
+                operation: .prepare, machineID: machineID, entry: entry, maximumBytes: maximumBytes)
+        )
+        guard handle.count <= UInt64(maximumBytes), !handle.name.contains("/"),
+            !handle.name.contains("\\"), !handle.name.utf8.contains(0)
+        else { throw MachineUIError.invalidRequest }
+        let directory = ExtensionData.root.appendingPathComponent("ui-previews")
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let destination = directory.appendingPathComponent(handle.name)
+        FileManager.default.createFile(atPath: destination.path, contents: Data())
+        let output = try FileHandle(forWritingTo: destination)
+        do {
+            var offset: UInt64 = 0
+            while true {
+                try Task.checkCancellation()
+                let chunk: MachinePreviewChunk = try await request(
+                    "machines.ui.preview",
+                    value: MachinePreviewRequest(
+                        operation: .read, machineID: machineID, id: handle.id, offset: offset))
+                guard chunk.offset == offset, chunk.bytes.count <= 65_536,
+                    UInt64(chunk.bytes.count) <= handle.count - offset,
+                    !chunk.bytes.isEmpty || chunk.complete
+                else { throw MachineUIError.invalidRequest }
+                try output.write(contentsOf: chunk.bytes)
+                offset += UInt64(chunk.bytes.count)
+                if chunk.complete {
+                    guard offset == handle.count else { throw MachineUIError.invalidRequest }
+                    break
+                }
+            }
+            try output.close()
+            return destination
+        } catch {
+            try? output.close()
+            try? FileManager.default.removeItem(at: directory)
+            let _: Bool? = try? await request(
+                "machines.ui.preview",
+                value: MachinePreviewRequest(operation: .close, machineID: machineID, id: handle.id)
+            )
+            throw error
+        }
+    }
+
+    func files(_ value: MachineFileRequest) async throws -> MachineFileState {
+        try value.validate()
+        return try await job("machines.ui.files", value: value)
+    }
+
     func configuration() async throws -> MachineUIConfigurationState {
         try await request("machines.ui.configuration", value: [String: String]())
     }
