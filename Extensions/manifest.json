@@ -2742,6 +2742,7 @@
         "Extensions/herdr/Services/HerdrBoardCache.swift",
         "Extensions/herdr/Services/HerdrCollector.swift",
         "Extensions/herdr/Services/HerdrCommand.swift",
+        "Extensions/herdr/Services/HerdrDiscoveryAdmission.swift",
         "Extensions/herdr/Services/HerdrFleetScheduler.swift",
         "Extensions/herdr/Services/HerdrInventoryCommands.swift",
         "Extensions/herdr/Services/HerdrLaunchDefaultsOperations.swift",
