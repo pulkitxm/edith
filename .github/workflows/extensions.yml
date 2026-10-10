@@ -41,6 +41,12 @@ on:
       - '.github/actions/cache-host/**'
       - '.github/workflows/extensions.yml'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish verified packages and the signed catalog from this ref
+        type: boolean
+        required: true
+        default: false
 
 permissions:
   contents: read
@@ -164,7 +170,7 @@ jobs:
           make host
           make ci-extension-workers EXTENSION=${{ matrix.id }}
       - name: Import the release signing certificate
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
         env:
           MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
@@ -189,7 +195,7 @@ jobs:
         env:
           EXTENSION_ID: ${{ matrix.id }}
           EXTENSION_VERSION: ${{ matrix.version }}
-          DEVELOPMENT: ${{ github.event_name == 'pull_request' }}
+          DEVELOPMENT: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.publish != true) }}
         run: |
           if [ "$DEVELOPMENT" = true ]; then
             bun scripts/build-extension-package.mjs "$EXTENSION_ID" --development
@@ -197,7 +203,7 @@ jobs:
             bun scripts/build-extension-package.mjs "$EXTENSION_ID"
           fi
       - name: Notarize the downloaded package
-        if: ${{ github.event_name != 'pull_request' && env.HAS_NOTARY == 'true' }}
+        if: ${{ env.HAS_NOTARY == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)) }}
         env:
           EXTENSION_ID: ${{ matrix.id }}
           NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
@@ -221,7 +227,11 @@ jobs:
 
   publish:
     needs: [plan, build]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.plan.outputs.changed == 'true'
+    if: >-
+      github.event_name != 'pull_request' && needs.build.result == 'success'
+      && needs.plan.outputs.changed == 'true'
+      && ((github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'workflow_dispatch' && inputs.publish == true))
     runs-on: macos-26
     env:
       GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
@@ -245,5 +255,6 @@ jobs:
           pukbot release create --help
           pukbot release edit --help
           pukbot release upload-asset --help
+          gh release upload --help
       - name: Publish immutable extension releases and the signed catalog
         run: bun scripts/extension-publish.mjs

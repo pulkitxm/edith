@@ -73,6 +73,32 @@ test("only successful changed extension builds can publish", () => {
   expect(text(publish)).toContain("EXTENSION_CATALOG_PRIVATE_KEY");
 });
 
+test("manual publication is explicit and checked builds can publish from the dispatched ref", () => {
+  expect(workflow.on.workflow_dispatch.inputs.publish).toEqual({
+    description:
+      "Publish verified packages and the signed catalog from this ref",
+    type: "boolean",
+    required: true,
+    default: false,
+  });
+  expect(publish.if).toContain("needs.build.result == 'success'");
+  expect(publish.if).toContain(
+    "github.event_name == 'workflow_dispatch' && inputs.publish == true",
+  );
+  const signing = build.steps.find(
+    (step) => step.name === "Import the release signing certificate",
+  );
+  expect(signing.if).toContain("inputs.publish == true");
+  const packaging = build.steps.find(
+    (step) => step.name === "Build only this extension",
+  );
+  expect(packaging.env.DEVELOPMENT).toContain("inputs.publish != true");
+  expect(publish.env.GH_TOKEN).toContain("secrets.RELEASE_PUSH_TOKEN");
+  expect(publish.env.EXTENSION_CATALOG_PRIVATE_KEY).toContain(
+    "secrets.EXTENSION_CATALOG_PRIVATE_KEY",
+  );
+});
+
 test("terminal dependencies are restored before native lifecycle builds", () => {
   const native = build.steps.findIndex((step) => step.id === "native");
   const cache = build.steps.findIndex(
