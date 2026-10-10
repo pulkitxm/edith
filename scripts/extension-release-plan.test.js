@@ -517,6 +517,13 @@ test("same-executable worker inputs rebuild consumers while host presentation ch
       "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
     ]).map((entry) => entry.id),
   ).toEqual(["music", "calendar", "shelf"]);
+  for (const path of [
+    "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
+    "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
+  ])
+    expect(
+      planExtensionBuilds(workers, [path]).map((entry) => entry.id),
+    ).toEqual(["music", "calendar", "shelf"]);
   expect(
     planExtensionBuilds(workers, [
       "Packages/EdithHost/Sources/EdithHost/HostSidebar.swift",
@@ -567,6 +574,19 @@ test("shared runtime fingerprints include code fixes and exclude generated legac
     );
     await writeFile(generated, "legacy hash one");
     const first = await extensionFingerprint(root, definition, [definition]);
+    for (const path of [
+      "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
+      "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
+    ]) {
+      await writeFile(join(root, path), "changed ambient worker admission");
+      expect(
+        await extensionFingerprint(root, definition, [definition]),
+      ).not.toBe(first);
+      await writeFile(join(root, path), "synthetic source");
+      expect(await extensionFingerprint(root, definition, [definition])).toBe(
+        first,
+      );
+    }
     await writeFile(generated, "legacy hash two");
     expect(await extensionFingerprint(root, definition, [definition])).toBe(
       first,

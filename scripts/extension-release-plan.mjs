@@ -17,6 +17,8 @@ export const workerRuntimeInputs = [
   "Packages/EdithHost/Sources/EdithHost/HostNativeTask.swift",
   "Packages/EdithHost/Sources/EdithHost/HostRemoteApplication.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProtocol.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostAmbientPolicyCoordinator.swift",
+  "Packages/EdithHost/Sources/EdithHostCore/HostCoreBackgroundPolicy.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostWorkerProcessGroups.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostWorker.swift",
   "Packages/EdithHost/Sources/EdithHostCore/HostContract.swift",
