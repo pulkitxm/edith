@@ -10,6 +10,7 @@ struct HostHomePage: View {
     let customize: () -> Void
     let extensions: () -> Void
     var openExtension: ((String) -> Void)? = nil
+    var presenter: (any HostExtensionContentPresenting)? = nil
     @Environment(\.compactLayout) private var compact
 
     @State private var editing = false
@@ -70,7 +71,7 @@ struct HostHomePage: View {
                 } else {
                     HostSurfaceCard(
                         marketplace: marketplace, target: .home, tile: tile,
-                        openExtension: openExtension)
+                        openExtension: openExtension, presenter: presenter)
                 }
             }
             if layout.visible.isEmpty, !editing {
@@ -196,6 +197,7 @@ struct HostSurfaceCard: View {
     let target: SurfaceTarget
     let tile: SurfaceTile
     var openExtension: ((String) -> Void)? = nil
+    var presenter: (any HostExtensionContentPresenting)? = nil
     @Environment(\.surfaceFillHeight) private var fillHeight
     @Environment(\.compactLayout) private var compact
 
@@ -207,6 +209,25 @@ struct HostSurfaceCard: View {
     }
 
     var body: some View {
+        Group {
+            if let presenter, !marketplace.surfaces.privacy.hides(tile.widget),
+                providers.count == 1, let provider = providers.first,
+                let section = HostNativeSurfaceRoute.section(
+                    provider: provider.id, target: target, tile: tile)
+            {
+                HostExtensionContent(
+                    marketplace: marketplace, extensionID: provider.id, location: "home",
+                    section: section, presenter: presenter,
+                    openMarketplace: { openExtension?(provider.id) },
+                    surface: SurfaceSnapshotRequest(target: target, tile: tile))
+            } else {
+                genericCard
+            }
+        }
+        .environment(\.compactLayout, compact || tile.dense)
+    }
+
+    private var genericCard: some View {
         PageCard(
             title: tile.showTitle ? title : nil,
             note: tile.widget == .clocks ? "hover a clock to remove" : nil,
@@ -223,7 +244,6 @@ struct HostSurfaceCard: View {
                 }
             }
         }
-        .environment(\.compactLayout, compact || tile.dense)
     }
 
     private var title: String {

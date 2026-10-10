@@ -23,7 +23,8 @@ struct HostPageContent: View {
         case "home":
             HostHomePage(
                 marketplace: marketplace, customize: customize,
-                extensions: { select("extensions") }, openExtension: openExtension)
+                extensions: { select("extensions") }, openExtension: openExtension,
+                presenter: presenter)
         case "extensions": MarketplacePage(marketplace: marketplace, presenter: presenter)
         case "settings": HostSettingsContainer(category: $settings) { settingsContent }
         case "about": HostAboutPage(identity: marketplace.identity)
