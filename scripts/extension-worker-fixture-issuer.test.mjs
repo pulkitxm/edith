@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
   inertFixtureWorkers,
+  parseWorkerFixtureArguments,
   supportedFixtureWorkers,
+  validateCameraFixtureHost,
   validateWorkerFixtureProof,
   validateWorkerFixtureSelection,
   workerFixtureEnvironment,
@@ -58,6 +69,8 @@ test("launcher and native harness have the same fail-closed boundary", async () 
   assert.deepEqual(
     new Set([...inert.matchAll(/"([^"]+)"/g)].map((match) => match[1])),
     inertFixtureWorkers,
+    parseWorkerFixtureArguments,
+    validateCameraFixtureHost,
   );
   const admission = await readFile(
     "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
@@ -180,5 +193,215 @@ test("fixture subprocesses inherit only owned homes and closed environment", asy
     }
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test("Camera tracked host arguments are exact and never select other owners", () => {
+  const app = "/private/tmp/synthetic/Fixture.app";
+  assert.deepEqual(
+    parseWorkerFixtureArguments([
+      "virtualCamera",
+      "--retain-packages",
+      "--camera-fixture-host",
+      app,
+    ]),
+    {
+      requested: ["virtualCamera"],
+      retainPackages: true,
+      headlessCLI: false,
+      cameraFixtureHost: app,
+    },
+  );
+  assert.deepEqual(parseWorkerFixtureArguments([]).requested, []);
+  assert.equal(
+    parseWorkerFixtureArguments(["virtualCamera"]).cameraFixtureHost,
+    undefined,
+  );
+  assert.equal(
+    parseWorkerFixtureArguments(["database", "--headless-cli"]).headlessCLI,
+    true,
+  );
+  for (const arguments_ of [
+    ["--camera-fixture-host", app],
+    ["music", "--camera-fixture-host", app],
+    ["virtualCamera", "music", "--camera-fixture-host", app],
+    ["virtualCamera", "--camera-fixture-host"],
+    ["virtualCamera", "--camera-fixture-host", "relative.app"],
+    ["virtualCamera", "--camera-fixture-host", "/private/tmp/../Fixture.app"],
+    [
+      "virtualCamera",
+      "--camera-fixture-host",
+      app,
+      "--camera-fixture-host",
+      app,
+    ],
+    ["virtualCamera", "--camera-fixture-host", app, app],
+    ["virtualCamera", "--retain-packages", "--retain-packages"],
+    ["virtualCamera", "virtualCamera"],
+    ["virtualCamera", "--unknown"],
+    ["virtualCamera", "--headless-cli"],
+  ])
+    assert.throws(() => parseWorkerFixtureArguments(arguments_));
+});
+
+async function syntheticCameraHost(run) {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "edith-camera-host-")),
+  );
+  const app = join(root, "Fixture.app");
+  const files = [
+    "Contents/Info.plist",
+    "Contents/MacOS/Edith",
+    "Contents/Resources/AppIcon.icns",
+    "Contents/Resources/index.json",
+    "Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+    "Contents/Frameworks/Sparkle.framework/Sparkle",
+    "Contents/Extensions/ExtensionUI.appextensionpoints",
+  ];
+  for (const relative of files) {
+    const path = join(app, relative);
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(
+      path,
+      relative.endsWith("index.json")
+        ? JSON.stringify(workers.map(({ id }) => ({ id })))
+        : "synthetic",
+    );
+  }
+  await chmod(join(app, "Contents/MacOS/Edith"), 0o700);
+  const metadata = {
+    CFBundleIdentifier:
+      "com.pulkit.edith.tests.worker-20000000-0000-0000-0000-000000000001",
+    CFBundleExecutable: "Edith",
+    CFBundlePackageType: "APPL",
+  };
+  const dependencies = {
+    readMetadata: () => metadata,
+    inspectArchitecture: () => "arm64",
+    verifySignature: () => {},
+  };
+  try {
+    await run({ root, app, metadata, dependencies });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+test("tracked Camera host admission preserves the caller's app and identity", async () => {
+  await syntheticCameraHost(async ({ app, metadata, dependencies }) => {
+    const before = await readFile(join(app, "Contents/Info.plist"));
+    let verified;
+    const result = await validateCameraFixtureHost(app, {
+      ...dependencies,
+      verifySignature: (path) => {
+        verified = path;
+      },
+    });
+    assert.deepEqual(result, {
+      sourceApp: app,
+      fixtureIdentifier: metadata.CFBundleIdentifier,
+    });
+    assert.equal(verified, app);
+    assert.deepEqual(await readFile(join(app, "Contents/Info.plist")), before);
+  });
+});
+
+test("tracked Camera host rejects foreign identities, executables and signatures", async () => {
+  await syntheticCameraHost(async ({ app, metadata, dependencies }) => {
+    for (const change of [
+      { CFBundleIdentifier: "com.pulkit.edith" },
+      {
+        CFBundleIdentifier:
+          "com.pulkit.edith.tests.camera-build-20000000-0000-0000-0000-000000000001",
+      },
+      { CFBundleIdentifier: "com.pulkit.edith.tests.worker-invalid" },
+      { CFBundleExecutable: "Other" },
+      { CFBundlePackageType: "BNDL" },
+    ])
+      await assert.rejects(
+        validateCameraFixtureHost(app, {
+          ...dependencies,
+          readMetadata: () => ({ ...metadata, ...change }),
+        }),
+      );
+    await assert.rejects(
+      validateCameraFixtureHost(app, {
+        ...dependencies,
+        inspectArchitecture: () => "x86_64",
+      }),
+    );
+    await assert.rejects(
+      validateCameraFixtureHost(app, {
+        ...dependencies,
+        verifySignature: () => {
+          throw new Error("synthetic bad signature");
+        },
+      }),
+    );
+  });
+});
+
+test("tracked Camera host rejects missing resources, symlink trees and malformed index", async () => {
+  for (const mode of [
+    "root-link",
+    "parent-link",
+    "resource-link",
+    "missing",
+    "empty",
+    "index",
+    "not-executable",
+    "index-oversize",
+    "foreign-index",
+  ]) {
+    await syntheticCameraHost(async ({ root, app, dependencies }) => {
+      let path = app;
+      if (mode === "root-link") {
+        path = join(root, "Alias.app");
+        await symlink(app, path);
+      } else if (mode === "parent-link") {
+        const alias = join(root, "alias");
+        await symlink(root, alias);
+        path = join(alias, "Fixture.app");
+      } else if (mode === "resource-link") {
+        const icon = join(app, "Contents/Resources/AppIcon.icns");
+        await rm(icon);
+        await symlink(join(app, "Contents/Info.plist"), icon);
+      } else if (mode === "missing")
+        await rm(
+          join(
+            app,
+            "Contents/Resources/EdithHost_EdithHost.bundle/MarketplaceArtwork.lzma",
+          ),
+        );
+      else if (mode === "empty")
+        await writeFile(join(app, "Contents/Resources/AppIcon.icns"), "");
+      else if (mode === "index")
+        await writeFile(join(app, "Contents/Resources/index.json"), "[]");
+      else if (mode === "index-oversize")
+        await writeFile(
+          join(app, "Contents/Resources/index.json"),
+          " ".repeat(131_073),
+        );
+      else if (mode === "foreign-index")
+        await writeFile(
+          join(app, "Contents/Resources/index.json"),
+          JSON.stringify(
+            workers.map(({ id }, index) => ({
+              id: index === 0 ? "foreign" : id,
+            })),
+          ),
+        );
+      else await chmod(join(app, "Contents/MacOS/Edith"), 0o600);
+      let verified = false;
+      await assert.rejects(
+        validateCameraFixtureHost(path, {
+          ...dependencies,
+          verifySignature: () => {
+            verified = true;
+          },
+        }),
+      );
+      assert.equal(verified, false);
+    });
   }
 });
