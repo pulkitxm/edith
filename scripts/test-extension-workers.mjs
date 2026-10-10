@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { buildExtensionPackage } from "./build-extension-package.mjs";
+import { validateWorkerLifecycleScope } from "./extension-worker-proof.mjs";
 
 await mkdir(resolve("local"), { recursive: true });
 const root = await realpath(
@@ -34,6 +35,7 @@ try {
       ["database"],
       "Headless CLI proof is Database-only",
     );
+
   const workers = definitions.filter((entry) => entry.contractVersion === 1);
   for (const id of requested)
     assert(
@@ -148,9 +150,9 @@ try {
       "surfaceLayoutRestored",
     ])
       assert.equal(result[key], true);
-    assert.equal(result.nativeWindow, !headlessCLI);
+    validateWorkerLifecycleScope(result);
     assert.equal(result.headlessCLI, headlessCLI);
-    assert.equal(result.headlessLifecycle, headlessCLI);
+    assert.equal(result.headlessLifecycle, true);
     assert.equal(result.disabledProcesses, 0);
     assert.equal(result.surfaceDataValidated, surfaceContractVersion === 1);
     assert.equal(result.clipboardDataValidated, id === "clipboard");
@@ -163,6 +165,7 @@ try {
     assert.equal(result.usageHookLifecycleValidated, id === "usage");
     assert.equal(result.cameraDataValidated, id === "virtualCamera");
     assert.equal(result.databaseDataValidated, id === "database");
+    assert.equal(result.calendarFixtureLifecycleValidated, id === "calendar");
     assert.equal(result.agentActivityValidated, id === "herdr");
     if (id === "lidAwake") {
       const privileged = JSON.parse(

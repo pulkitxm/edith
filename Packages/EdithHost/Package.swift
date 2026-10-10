@@ -53,5 +53,6 @@ let package = Package(
             name: "EdithHostCoreTests", dependencies: ["EdithHostCore"],
             resources: [.copy("Fixtures")]),
         .testTarget(name: "EdithHostUITests", dependencies: ["EdithHost"]),
+        .testTarget(name: "HostLifecycleHarnessTests", dependencies: ["HostLifecycleHarness"]),
     ]
 )

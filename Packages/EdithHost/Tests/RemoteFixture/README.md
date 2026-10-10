@@ -55,3 +55,43 @@ bun scripts/test-host-remote-ui.mjs verify "$fixture_dir"
 Verification exits the fixture after all lifecycle assertions pass and writes
 `result.json`. Public approval and button interaction require a GUI session.
 The fixture flags and source bodies are excluded from production builds.
+
+## Shipping original-view background smoke
+
+Worker lifecycle verification and managed view verification are separate. The
+worker harness reports `engineLifecycleValidated: true`, `nativeWindow: false`
+and `managedNativeViewValidated: false`. Engine command, update, cancellation,
+disable and package removal checks do not prove an embedded view.
+
+Build the fixture host with `EDITH_CLI_FIXTURE` and prepare a selected shipping
+extension using `prepare-managed-shipping-fixture.mjs`. Preparation builds its
+actual scoped release roles, uses the configured signing identity, preserves
+current package metadata and installs the selected version into a private test
+store. It uses the same frozen executable in the host and carrier. No synthetic
+replacement UI role or direct carrier stub is used.
+
+```sh
+bun scripts/prepare-managed-shipping-fixture.mjs calendar "$fixture_dir" "$frozen_host" "$synthetic_identifier" "$fixture_executable"
+bun scripts/test-managed-shipping-ui.mjs "$fixture_dir"
+```
+
+The selected provider must first support a validated synthetic backend bound to
+this fixture host, canonical package and private data root. The runner passes
+`EDITH_EXTENSION_FIXTURE_HOME=$fixture_dir/synthetic-data`. A directory or an
+environment variable alone does not make a feature engine safe: verify its
+provider-owned admission and injected services before running it. Do not use
+production preferences, caches, permissions, network services or feature data.
+
+This background runner embeds the original selected main scene in a window
+that is never shown, ordered, focused or activated. It requires real public
+carrier registration and authenticated control readiness, two fresh UI process
+generations, last-close exit, engine disable, empty owned process state and
+released package leases. Public approval required is a failed smoke, never
+native-view success. It does not open an approval browser or a standalone
+extension main-page window. The result is `result-managed-shipping.json`.
+
+Each of the 39 final packages still needs its selected original-role smoke with
+provider-owned safe fixtures after the final source and frozen host settle.
+Passing worker lifecycle checks or the synthetic `sample` registration fixture
+is insufficient. No visible layout, keyboard interaction or OS feature actions
+are verified by this background smoke.

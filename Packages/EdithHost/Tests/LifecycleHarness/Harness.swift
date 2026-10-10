@@ -19,14 +19,18 @@ struct HostLifecycleHarness {
         let headlessCLI = arguments.count == 6
         let validateSurface = arguments[4] == "1"
         let extensionID = arguments[3]
-        let fixture = URL(fileURLWithPath: arguments[0])
+        let requestedFixture = URL(fileURLWithPath: arguments[0])
+        let fixture =
+            extensionID == "calendar"
+            ? CalendarLifecycleFixture.canonicalDirectory(requestedFixture) : requestedFixture
         if extensionID == "studio" {
             setenv(
                 "EDITH_TEST_RUNTIME_ROOT", fixture.appendingPathComponent("studio-runtime").path, 1)
         }
         let sourceApp = URL(fileURLWithPath: arguments[1])
         let releases = URL(fileURLWithPath: arguments[2])
-        let app = fixture.appendingPathComponent("Fixture.app")
+        let app = fixture.appendingPathComponent(
+            extensionID == "calendar" ? "Host.app" : "Fixture.app")
         try FileManager.default.copyItem(at: sourceApp, to: app)
         if extensionID == "usage" {
             let launcher = app.appendingPathComponent("Contents/Resources/ed-launcher")
@@ -52,7 +56,9 @@ struct HostLifecycleHarness {
                 Bundle(url: sourceApp)?.bundleIdentifier == requestedIdentifier
             else { throw HostWorkerError.rejected }
         }
-        let identifier = requestedIdentifier ?? "com.pulkit.edith.tests.worker-\(UUID().uuidString)"
+        let identifier =
+            requestedIdentifier
+            ?? "com.pulkit.edith.tests.\(extensionID == "calendar" ? "remote" : "worker")-\(UUID().uuidString)"
         let info = app.appendingPathComponent("Contents/Info.plist")
         var plist =
             try PropertyListSerialization.propertyList(from: Data(contentsOf: info), format: nil)
@@ -68,7 +74,16 @@ struct HostLifecycleHarness {
         sign.waitUntilExit()
         guard sign.terminationStatus == 0 else { throw MarketplaceError.invalidSignature }
         let executable = app.appendingPathComponent("Contents/MacOS/Edith")
-        let identity = try HostIdentity(identifier: identifier, supportDirectory: fixture)
+        let identity = try HostIdentity(
+            identifier: identifier,
+            supportDirectory: extensionID == "calendar"
+                ? fixture.appendingPathComponent("support") : fixture)
+        let calendarFixture =
+            extensionID == "calendar"
+            ? try CalendarLifecycleFixture(directory: fixture, identity: identity) : nil
+        if let calendarFixture {
+            setenv("EDITH_EXTENSION_FIXTURE_HOME", calendarFixture.home.path, 1)
+        }
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
         if extensionID == "machines" { try MachinesFixture.seed(identity: identity, home: fixture) }
         let suite = identity.defaultsSuite
@@ -117,6 +132,7 @@ struct HostLifecycleHarness {
         var logHandles: [FileHandle] = []
         func makeSessions(executable: URL) -> HostExtensionSessions {
             HostExtensionSessions(defaults: UserDefaults(suiteName: suite)!) { package in
+                try calendarFixture?.prepare(package: package, store: store)
                 let log = fixture.appendingPathComponent("worker-" + UUID().uuidString + ".log")
                 FileManager.default.createFile(atPath: log.path, contents: nil)
                 let handle = try! FileHandle(forWritingTo: log)
@@ -173,17 +189,11 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.invalidResponse
             }
             let savedSurface = surfaces.layouts.home
-            if !headlessCLI {
-                stage = "window"
-                try await sessions.show(id: first.id)
-                let opened = try await endpoint.invoke("extension.open")
-                guard String(decoding: opened, as: UTF8.self) == "{\"opened\":true}" else {
-                    throw HostWorkerError.invalidResponse
-                }
-            }
+            stage = "engine data"
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "initial commands"
+            if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             if extensionID == "virtualCamera" {
                 guard childProcesses(of: oldPID).isEmpty else {
                     throw HostWorkerError.invalidResponse
@@ -217,7 +227,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: true)
             } else if extensionID == "database" {
-                try await verifyDatabase(endpoint, seed: true, headlessCLI: headlessCLI)
+                try await verifyDatabase(endpoint, seed: true, headlessCLI: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -252,6 +262,7 @@ struct HostLifecycleHarness {
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             stage = "updated commands"
+            if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             guard sessions.versions[first.id] == second.version,
                 let newPID = sessions.processIdentifiers[first.id], newPID != oldPID,
                 kill(oldPID, 0) == -1
@@ -291,7 +302,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: false)
             } else if extensionID == "database" {
-                try await verifyDatabase(endpoint, seed: false, headlessCLI: headlessCLI)
+                try await verifyDatabase(endpoint, seed: false, headlessCLI: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -338,8 +349,15 @@ struct HostLifecycleHarness {
                 throw MarketplaceError.invalidSignature
             }
             try FileManager.default.removeItem(at: app)
+            let replacementApp: URL
+            if calendarFixture != nil {
+                try FileManager.default.moveItem(at: replacement, to: app)
+                replacementApp = app
+            } else {
+                replacementApp = replacement
+            }
             sessions = makeSessions(
-                executable: replacement.appendingPathComponent("Contents/MacOS/Edith"))
+                executable: replacementApp.appendingPathComponent("Contents/MacOS/Edith"))
             surfaces = try HostSurfaces(
                 identity: identity, entries: HostIndex.bundled(), sessions: sessions)
             guard sessions.processIdentifiers.isEmpty,
@@ -360,6 +378,7 @@ struct HostLifecycleHarness {
                 throw HostWorkerError.rejected
             }
             stage = "restored commands"
+            if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             if extensionID == "virtualCamera" {
                 guard childProcesses(of: restoredPID).isEmpty else {
                     throw HostWorkerError.invalidResponse
@@ -393,7 +412,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: false)
             } else if extensionID == "database" {
-                try await verifyDatabase(endpoint, seed: false, headlessCLI: headlessCLI)
+                try await verifyDatabase(endpoint, seed: false, headlessCLI: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -459,7 +478,7 @@ struct HostLifecycleHarness {
             recoveryDefaults.set([extensionID], forKey: "enabledExtensions")
             recoveryDefaults.set([extensionID], forKey: "pendingDisableExtensions")
             sessions = makeSessions(
-                executable: replacement.appendingPathComponent("Contents/MacOS/Edith"))
+                executable: replacementApp.appendingPathComponent("Contents/MacOS/Edith"))
             surfaces = try HostSurfaces(
                 identity: identity, entries: HostIndex.bundled(), sessions: sessions)
             guard sessions.pendingDisableIDs == [extensionID], sessions.activeIDs.isEmpty,
@@ -480,6 +499,7 @@ struct HostLifecycleHarness {
             try await verifySurfaceContext(
                 endpoint, saved: savedSurface, id: extensionID, validateData: validateSurface)
             if extensionID == "usage" { try await verifyUsageHook(endpoint, restored: true) }
+            if extensionID == "calendar" { try await verifyCalendar(endpoint) }
             try await sessions.disable(id: extensionID)
             if extensionID == "usage" { try verifyUsageStoppedHook() }
             guard sessions.processIdentifiers.isEmpty, sessions.pendingDisableIDs.isEmpty,
@@ -500,7 +520,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":\(!headlessCLI),\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":\(headlessCLI),\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"calendarFixtureLifecycleValidated\":\(extensionID == "calendar"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -555,7 +575,6 @@ struct HostLifecycleHarness {
     @MainActor private static func verifyLaTeX(
         _ endpoint: ExtensionPeerEndpoint, fixture: URL, seed: Bool
     ) async throws {
-        _ = try await endpoint.invoke("extension.open")
         let projectID = "20000000-0000-0000-0000-000000000001"
         let source = fixture.appendingPathComponent("synthetic-paper.tex")
         let original =
