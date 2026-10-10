@@ -14,6 +14,11 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.worker != nil else { throw ExtensionPeerError.unavailable }
+            if command == "music.cli", let worker = self.worker {
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    await MusicCLIExecution.run(request, player: worker.player))
+            }
             if command.hasPrefix("backup."), let backup = self.backup {
                 return try await backup.execute(command, payload: payload)
             }

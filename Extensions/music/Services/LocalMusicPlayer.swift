@@ -181,7 +181,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
             }
         case "renamed":
             if let from = info["from"] as? String, let to = info["to"] as? String {
-                handleRenamed(from: from, to: to)
+                renameCurrent(from, to)
             }
         case "seek":
             if let fraction = info["value"] as? Double { seek(to: fraction) }
@@ -210,7 +210,7 @@ final class LocalMusicPlayer: NSObject, AVAudioPlayerDelegate, FeatureModule {
         return Array(order.dropFirst(index + 1).prefix(max(0, min(limit, 10))))
     }
 
-    private func handleRenamed(from: String, to: String) {
+    func renameCurrent(_ from: String, _ to: String) {
         guard current?.relativePath == from else { return }
         current = track(for: to)
         updateNowPlaying()

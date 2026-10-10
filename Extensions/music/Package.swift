@@ -8,7 +8,7 @@ let package = Package(
     targets: [
         .target(
             name: "MusicExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: ".", exclude: ["Tests", "Runtime.swift", "Native", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
