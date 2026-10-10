@@ -1813,7 +1813,8 @@
         "Extensions/usage/Models/UsageCompactLimitsSnapshot.swift",
         "Extensions/usage/Services/UsageHostNavigation.swift",
         "Extensions/usage/Views/UsageUIPresentation.swift",
-        "Extensions/usage/Views/UsageHomeLimitsCard.swift"
+        "Extensions/usage/Views/UsageHomeLimitsCard.swift",
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
       ]
     },
     "resources": {
@@ -1835,7 +1836,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
-      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "sameExecutableWorker": true,
@@ -2001,7 +2003,8 @@
       "scripts/build-extension-ui-carrier.mjs",
       "scripts/build-contained-host-runtime.mjs",
       "Packages/ExtensionSupport/Sources/EdithExtensionCommands",
-      "scripts/prepare-extension-native-support.mjs"
+      "scripts/prepare-extension-native-support.mjs",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift"
     ],
     "dependencies": [],
     "contractVersion": 1,

@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.library(name: "AttentionNative", type: .dynamic, targets: ["AttentionNative"])],
     dependencies: [
+        .package(path: "../../fixtureSupport"),
         .package(path: "../../../local/extension-support/attention_native"),
         .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
     ],
@@ -13,6 +14,7 @@ let package = Package(
         .target(
             name: "AttentionNative",
             dependencies: [
+                .product(name: "WorkerFixtureSupport", package: "fixtureSupport"),
                 .product(
                     name: "EdithExtensionCommands_attention_native",
                     package: "attention_native"),
@@ -26,7 +28,11 @@ let package = Package(
                 .unsafeFlags(["-Xlinker", "-u", "-Xlinker", "_edith_extension_presentation_create"])
             ]),
         .testTarget(
-            name: "AttentionNativeTests", dependencies: ["AttentionNative"],
+            name: "AttentionNativeTests",
+            dependencies: [
+                "AttentionNative",
+                .product(name: "WorkerFixtureTestSupport", package: "fixtureSupport"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )

@@ -10,7 +10,9 @@ struct AttentionAmbientPolicyTests {
 
     @Test func policyOnlySynchronizationDoesNotEnqueueExplicitIngestion() throws {
         var explicitCalls = 0
-        let controller = AttentionExtensionController(bundle: .main) { explicitCalls += 1 }
+        let controller = AttentionExtensionController(
+            bundle: .main, notifySettingsChanged: { explicitCalls += 1 }, admitFixture: { _ in nil }
+        )
         let context: NSMutableDictionary = [
             "operation": "synchronize", "ambientPolicyOnly": true,
             "ambientPolicy": [
