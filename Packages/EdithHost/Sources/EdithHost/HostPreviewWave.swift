@@ -94,6 +94,8 @@ private final class WaveBarsView: NSView {
 
     private static let resting: CGFloat = 0.15
     private static let transition = 0.4
+    private static let settleAnimationKey = "host.previewWave.settle"
+    private static let waveAnimationKey = "host.previewWave.wave"
 
     private var envelope: CGFloat { 0.28 + 0.72 * level }
 
@@ -102,8 +104,8 @@ private final class WaveBarsView: NSView {
         CATransaction.setAnimationDuration(Self.transition)
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
         for bar in bars {
-            bar.removeAnimation(forKey: "settle")
-            bar.add(Self.texture(), forKey: "wave")
+            bar.removeAnimation(forKey: Self.settleAnimationKey)
+            bar.add(Self.texture(), forKey: Self.waveAnimationKey)
         }
         container.transform = CATransform3DMakeScale(1, envelope, 1)
         CATransaction.commit()
@@ -118,7 +120,7 @@ private final class WaveBarsView: NSView {
                 bar.presentation()?.value(forKeyPath: "transform.scale.y") as? CGFloat ?? 1
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            bar.removeAnimation(forKey: "wave")
+            bar.removeAnimation(forKey: Self.waveAnimationKey)
             bar.transform = CATransform3DIdentity
             CATransaction.commit()
             let settle = CABasicAnimation(keyPath: "transform.scale.y")
@@ -126,7 +128,7 @@ private final class WaveBarsView: NSView {
             settle.toValue = 1
             settle.duration = Self.transition
             settle.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            bar.add(settle, forKey: "settle")
+            bar.add(settle, forKey: Self.settleAnimationKey)
         }
         container.transform = CATransform3DMakeScale(1, Self.resting, 1)
         CATransaction.commit()
