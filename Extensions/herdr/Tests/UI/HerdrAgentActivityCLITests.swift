@@ -56,6 +56,19 @@ import Testing
             try JSONSerialization.jsonObject(
                 with: await worker.execute("herdr.agent.catalog", payload: Data("{}".utf8)))
             as! [String: Any]
+        let help = try #require(catalog["parserHelp"] as? [String: Any])
+        #expect(help["serializationVersion"] as? Int == 0)
+        let root = try #require(help["command"] as? [String: Any])
+        #expect((root["subcommands"] as? [[String: Any]])?.count == 1)
+        let activity = try #require(
+            (root["subcommands"] as? [[String: Any]])?.first {
+                $0["commandName"] as? String == "activity"
+            })
+        let hook = try #require(
+            (activity["subcommands"] as? [[String: Any]])?.first {
+                $0["commandName"] as? String == "hook"
+            })
+        #expect(hook["shouldDisplay"] as? Bool == false)
         let routes = catalog["routes"] as! [[String: Any]]
         #expect(routes.count == 2)
         #expect(

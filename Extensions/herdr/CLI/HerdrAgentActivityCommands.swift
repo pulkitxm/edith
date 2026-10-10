@@ -106,9 +106,19 @@ struct HerdrAgentActivityHookCommand: AsyncParsableCommand {
         }
     }
 
-    static var catalog: [String: Any] {
-        [
-            "version": 1, "owner": "herdr",
+    static func catalog() throws -> [String: Any] {
+        let bytes = Data(HerdrAgentCLICommand._dumpHelp().utf8)
+        guard bytes.count <= 1_048_576,
+            var parserHelp = try JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+            parserHelp["serializationVersion"] as? Int == 0,
+            var command = parserHelp["command"] as? [String: Any],
+            command["commandName"] as? String == "agent",
+            let children = command["subcommands"] as? [[String: Any]]
+        else { throw ExtensionPeerError.invalidRequest }
+        command["subcommands"] = children.filter { $0["commandName"] as? String == "activity" }
+        parserHelp["command"] = command
+        return [
+            "version": 1, "owner": "herdr", "parserHelp": parserHelp,
             "routes": [
                 [
                     "route": ["agent", "activity", "status"], "operation": "herdr.agent.cli",

@@ -221,7 +221,7 @@ import Foundation
         }
         if command == "herdr.agent.catalog" {
             guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
-            return try JSONSerialization.data(withJSONObject: HerdrAgentCLIExecution.catalog)
+            return try JSONSerialization.data(withJSONObject: try HerdrAgentCLIExecution.catalog())
         }
         if [
             "herdr.agent.cli.start", "herdr.agent.cli.read", "herdr.agent.cli.write",
