@@ -148,15 +148,15 @@ public enum ClaudeStatusLine {
         let existing = statusCommand(in: document)
         let previous = existing.flatMap { existing in
             let wrapped = wrappedCommand(in: existing)
-            let canonical = command(executable: executable, wrapping: wrapped)
+            let canonical = Self.command(executable: executable, wrapping: wrapped)
             return existing == ownedCommand || existing == canonical ? wrapped : existing
         }
-        let command = command(executable: executable, wrapping: previous)
-        try preserveOwnership(command)
-        guard existing != command else { return .unchanged }
+        let installed = Self.command(executable: executable, wrapping: previous)
+        try preserveOwnership(installed)
+        guard existing != installed else { return .unchanged }
         var statusLine = document["statusLine"] as? [String: Any] ?? [:]
         statusLine["type"] = "command"
-        statusLine["command"] = command
+        statusLine["command"] = installed
         document["statusLine"] = statusLine
         try writeSettings(document, to: url)
         return previous == nil ? .installed : .wrapped
