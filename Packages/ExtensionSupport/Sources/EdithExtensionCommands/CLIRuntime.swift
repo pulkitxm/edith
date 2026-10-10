@@ -89,15 +89,27 @@ struct JSONOutputOptions: ParsableArguments {
 }
 
 public enum CLIOut {
-    nonisolated(unsafe) static var writeOutput: (String, Bool) -> Void = { text, error in
+    static let writeOutput: (String, Bool) -> Void = { text, error in
         (error ? FileHandle.standardError : FileHandle.standardOutput).write(Data(text.utf8))
     }
 
     private static func write(_ text: String, _ error: Bool) {
         if let sink = ExtensionCLIContext.outputSink {
             sink(text, error)
+        } else if let sink = ExtensionCLIContext.rawOutputSink {
+            sink(Data(text.utf8), error)
         } else {
             writeOutput(text, error)
+        }
+    }
+
+    public static func raw(_ data: Data, error: Bool = false) throws {
+        if let sink = ExtensionCLIContext.rawOutputSink {
+            sink(data, error)
+        } else if ExtensionCLIContext.outputSink != nil || ExtensionCLIContext.request != nil {
+            throw CLIFailure.unavailable("Raw terminal output requires a data sink.")
+        } else {
+            (error ? FileHandle.standardError : FileHandle.standardOutput).write(data)
         }
     }
 
