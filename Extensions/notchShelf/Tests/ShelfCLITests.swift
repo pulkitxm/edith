@@ -89,6 +89,45 @@ import Testing
         #expect(try await fixture.run(["ls", "--json"]).exitCode == 0)
     }
 
+    @Test func openAndRevealUsePinnedOwnedSelectionsAndPreserveNativeFailures() async throws {
+        let fixture = try Fixture()
+        defer { fixture.clean() }
+        _ = try await fixture.run(["add-text", "native action fixture"])
+        var opened: [URL] = []
+        var openedContent: String?
+        let open = try await ShelfCLIExecution.run(
+            .init(arguments: ["open", "1", "--json"]), root: fixture.root,
+            defaults: fixture.defaults,
+            open: { url in
+                opened.append(url)
+                openedContent = try? String(contentsOf: url, encoding: .utf8)
+                return true
+            }
+        ) { _ in Issue.record("Open must not share") }
+        #expect(open.exitCode == 0)
+        #expect(open.stderr.isEmpty)
+        #expect(opened.count == 1)
+        #expect(open.stdout.contains("\"opened\": true"))
+        #expect(openedContent == "native action fixture")
+        var revealed: [URL] = []
+        let reveal = try await ShelfCLIExecution.run(
+            .init(arguments: ["reveal", "1", "--json"]), root: fixture.root,
+            defaults: fixture.defaults,
+            reveal: { revealed = $0 }
+        ) { _ in Issue.record("Reveal must not share") }
+        #expect(reveal.exitCode == 0)
+        #expect(revealed.map(\.lastPathComponent) == opened.map(\.lastPathComponent))
+        #expect(reveal.stdout.contains("\"requested\": true"))
+        let failure = try await ShelfCLIExecution.run(
+            .init(arguments: ["open", "1"]), root: fixture.root, defaults: fixture.defaults,
+            open: { _ in false }
+        ) { _ in Issue.record("Open must not share") }
+        #expect(failure.exitCode == 4)
+        #expect(failure.stdout.isEmpty)
+        #expect(failure.stderr == "error: macOS could not open the shelf items\n")
+        #expect(try ShelfMutationExecution.snapshot(root: fixture.root).items.count == 1)
+    }
+
     @MainActor private struct Fixture {
         let id = "shelf-cli-fixture-" + UUID().uuidString
         let directory: URL

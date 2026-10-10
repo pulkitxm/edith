@@ -40,7 +40,11 @@ enum ShelfActionBridge {
             } catch {
                 throw ShelfBridge.failure(error, action: "read the selected shelf items")
             }
-            guard await ShelfItemOperationExecution.perform(operation, urls: urls) else {
+            guard
+                await ShelfItemOperationExecution.perform(
+                    operation, urls: urls, open: ShelfCLIEnvironment.open,
+                    reveal: ShelfCLIEnvironment.reveal)
+            else {
                 throw CLIFailure.unavailable(
                     "macOS could not \(operation.rawValue) the shelf items")
             }
@@ -539,7 +543,7 @@ struct ShelfPurgeCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let stored = ShelfCLIEnvironment.defaults.string(
+            let stored = ShelfCLIEnvironment.defaults?.string(
                 forKey: AppStorageKeys.Notch.shelfKeepDuration)
             let raw = keep ?? stored ?? ShelfKeepDuration.forever.rawValue
             guard let duration = ShelfKeepDuration(rawValue: raw) else {
