@@ -6,6 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      hosted_native_probe_sha:
+        description: "Exact reviewed feature SHA for the isolated managed native probe."
+        type: string
+        required: false
+        default: ""
       release:
         description: "Run every product check, then cut a release from main."
         type: boolean
@@ -34,9 +39,10 @@ jobs:
   changes:
     name: changes
     if: >-
-      github.event_name != 'push'
+      (github.event_name != 'workflow_dispatch' || inputs.hosted_native_probe_sha == '')
+      && (github.event_name != 'push'
       || (!startsWith(github.event.head_commit.message, 'Release v')
-      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list'))
+      && !startsWith(github.event.head_commit.message, 'Refresh the contributor list')))
     runs-on: ubuntu-latest
     outputs:
       swift: ${{ steps.areas.outputs.swift }}
@@ -682,3 +688,20 @@ jobs:
           git add Casks/edith.rb
           GH_TOKEN="$TAP_PUSH_TOKEN" pukbot commit create --repo pulkitxm/homebrew-tap --branch main \
             --message "Update the Edith cask to ${RELEASE_TAG}" Casks/edith.rb --json
+
+  hosted-native-probe:
+    name: Hosted managed native probe
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.hosted_native_probe_sha != ''
+      && inputs.hosted_native_probe_sha == github.sha
+      && inputs.release != true && inputs.rebuild == ''
+      && github.repository == 'pulkitxm/edith'
+      && (github.actor == 'pulkitxm' || github.actor == 'pukbot[bot]')
+      && github.ref == 'refs/heads/feat/hosted-managed-native-probe'
+    uses: ./.github/workflows/hosted-managed-native.yml
+    with:
+      expected_sha: ${{ inputs.hosted_native_probe_sha }}
+    secrets:
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
