@@ -2697,6 +2697,7 @@
       "scripts/build-extension-package.mjs",
       "scripts/build-extension-support.mjs",
       "Packages/ExtensionSupport",
+      "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
       "Extensions/terminal/Native",
       "scripts/build-ghostty.sh",
       "scripts/build-extension-ui-carrier.mjs",
@@ -2707,6 +2708,7 @@
     "testTargets": ["ci-extension-herdr"],
     "roles": {
       "app": [
+        "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
         "Extensions/herdr/Activity/AgentActivityHookFiles.swift",
         "Extensions/herdr/Activity/AgentActivityHookInstaller.swift",
         "Extensions/herdr/Activity/AgentActivityHookRunner.swift",

@@ -36,7 +36,7 @@ private actor HerdrAmbientFlight {
                 }
             })
         let defaults = HerdrUIDefaults()
-        let worker = makeWorker(defaults: defaults, policy: policy)
+        let worker = makeWorker(defaults: defaults, policy: policy, automaticActions: true)
         #expect(worker.discoveryInterval == nil)
         try worker.applyAmbientPolicy(context: context(pause: false))
         #expect(worker.discoveryInterval == 30)
@@ -195,7 +195,8 @@ private actor HerdrAmbientFlight {
     private func makeWorker(
         defaults: HerdrUIDefaults, policy: ExtensionAmbientPolicy? = nil,
         tracking: @escaping @MainActor () async throws -> Bool = { false },
-        version: @escaping @MainActor () -> String? = { "fixture-v1" }
+        version: @escaping @MainActor () -> String? = { "fixture-v1" },
+        automaticActions: Bool = false
     ) -> HerdrWorker {
         let policy =
             policy
@@ -207,7 +208,7 @@ private actor HerdrAmbientFlight {
         let store = HerdrStore(defaults: defaults, machinesProvider: { [] })
         return HerdrWorker(
             store: store, defaults: defaults, ambientPolicy: policy, trackingDemand: tracking,
-            trackingOwnerVersion: version, automaticActions: false)
+            trackingOwnerVersion: version, automaticActions: automaticActions)
     }
 
     private func waitUntil(_ condition: @MainActor () async -> Bool) async -> Bool {

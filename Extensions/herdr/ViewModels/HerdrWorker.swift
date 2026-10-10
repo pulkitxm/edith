@@ -3,6 +3,9 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 
 @MainActor final class HerdrWorker {
     let activity: AgentActivityMonitor
@@ -12,6 +15,8 @@ import Foundation
     let hooks: AgentHookService
     let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
+    let fixture: WorkerFixtureAdmission?
+    var isInertFixture: Bool { fixture != nil }
     let ambientPolicy: ExtensionAmbientPolicy
     private var ambientPolicyApplied = false
     private var tracksAgents = false
@@ -23,7 +28,7 @@ import Foundation
         self?.discoveryInterval
     })
     var discoveryInterval: TimeInterval? {
-        guard ambientPolicyApplied, !isStopped,
+        guard fixture == nil, ambientPolicyApplied, !isStopped,
             ambientPolicy.subscribers(for: "sessions.discover") > 0
                 || HerdrAttentionSettings(defaults: defaults).anyEnabled
                 || (tracksAgents && trackingVersion == trackingOwnerVersion())
@@ -72,7 +77,7 @@ import Foundation
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
         defaults: UserDefaults = SharedDefaults.store,
         notifications: HerdrNotificationService? = nil,
-        ambientPolicy: ExtensionAmbientPolicy? = nil,
+        ambientPolicy: ExtensionAmbientPolicy? = nil, fixture: WorkerFixtureAdmission? = nil,
         trackingDemand: @escaping @MainActor () async throws -> Bool =
             HerdrWorker.originalTrackingDemand,
         trackingOwnerVersion: @escaping @MainActor () -> String? =
@@ -81,8 +86,7 @@ import Foundation
         hooks: AgentHookService = .shared, catalogs: AgentLaunchCatalogs = AgentLaunchCatalogs(),
         searchDecider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() },
         attention: HerdrAttentionBridge? = nil,
-        automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
-            == nil, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
+        automaticActions: Bool = true, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
         prepareShell:
             @escaping @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest =
             HerdrShellLaunch.prepare,
@@ -128,7 +132,8 @@ import Foundation
         self.catalogs = catalogs
         self.searchDecider = searchDecider
         self.attention = attention ?? HerdrAttentionBridge()
-        self.automaticActions = automaticActions
+        self.fixture = fixture
+        self.automaticActions = automaticActions && fixture == nil
         self.inventory = inventory
         self.send = send
         self.prepareShell = prepareShell
@@ -187,13 +192,15 @@ import Foundation
     func applyAmbientPolicy(context: NSDictionary) throws {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try ambientPolicy.apply(context: context)
-        try ambientPolicy.start { [weak self] in self?.discoveryAdmission.refresh() }
+        if automaticActions {
+            try ambientPolicy.start { [weak self] in self?.discoveryAdmission.refresh() }
+        }
         ambientPolicyApplied = true
         discoveryAdmission.refresh()
     }
 
     func refreshDiscoveryDemand() async {
-        guard !isStopped else { return }
+        guard fixture == nil, !isStopped else { return }
         let version = trackingOwnerVersion()
         let next: Bool
         do {
@@ -239,7 +246,7 @@ import Foundation
     }
 
     private func startOwned() async {
-        guard !started, !isStopped, ambientPolicyApplied else { return }
+        guard fixture == nil, !started, !isStopped, ambientPolicyApplied else { return }
         started = true
         do { try await activity.hookFiles.resume(activityInstaller) } catch {
             activity.hookError = error.localizedDescription

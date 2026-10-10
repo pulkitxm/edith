@@ -4,6 +4,9 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 
 @MainActor @objc(EdithHerdrExtensionRuntime)
 final class ExtensionRuntime: NSObject {
@@ -18,6 +21,45 @@ final class ExtensionRuntime: NSObject {
     private var surface: HerdrSurface?
     private var startup: Task<Void, Never>?
     private let commands = ExtensionCommandRegistry()
+    private let fixtureAdmission: @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?
+    private let workerFactory: @MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker
+    private var fixture: WorkerFixtureAdmission?
+
+    override convenience init() {
+        self.init(
+            fixtureAdmission: { context in
+                try WorkerFixtureAdmission.current(
+                    extensionID: "herdr", context: context,
+                    roleBundle: Bundle(for: ExtensionRuntime.self))
+            }, workerFactory: Self.makeWorker)
+    }
+
+    init(
+        fixtureAdmission: @escaping @MainActor (NSDictionary) throws -> WorkerFixtureAdmission?,
+        workerFactory: @escaping @MainActor (NSDictionary, WorkerFixtureAdmission?) -> HerdrWorker
+    ) {
+        self.fixtureAdmission = fixtureAdmission
+        self.workerFactory = workerFactory
+        super.init()
+    }
+
+    private static func makeWorker(
+        _ input: NSDictionary, fixture: WorkerFixtureAdmission?
+    ) -> HerdrWorker {
+        let navigation = (input["hostNavigation"] as? NSObject).flatMap {
+            HerdrHostWindowNavigationClient(bridge: $0)
+        }
+        let folderChoice = (input["hostNavigation"] as? NSObject).flatMap {
+            HerdrHostFolderChoiceClient(bridge: $0)
+        }
+        return HerdrWorker(
+            hostWindowNavigation: navigation, hostFolderChoice: folderChoice, fixture: fixture)
+    }
+
+    private func matchesFixture(_ next: WorkerFixtureAdmission?) -> Bool {
+        next?.extensionID == fixture?.extensionID && next?.role == fixture?.role
+            && next?.home == fixture?.home && next?.dataDirectory == fixture?.dataDirectory
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -60,6 +102,7 @@ final class ExtensionRuntime: NSObject {
             await startup?.value
             await worker?.shutdown()
             worker = nil
+            fixture = nil
             surface = nil
             startup = nil
             completion()
@@ -174,22 +217,30 @@ final class ExtensionRuntime: NSObject {
             return binding.execute(input)
         case "stopUI": stopUI()
         case "start":
-            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex",
-                let suite = input["defaultsSuite"] as? String,
-                suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
-            else { return ["ok": false] as NSDictionary }
-            guard worker == nil else { return ["ok": true] as NSDictionary }
-            let navigation = (input["hostNavigation"] as? NSObject).flatMap {
-                HerdrHostWindowNavigationClient(bridge: $0)
+            guard uiLocation == nil, Bundle.main.bundleURL.pathExtension != "appex" else {
+                return ["ok": false] as NSDictionary
             }
-            let folderChoice = (input["hostNavigation"] as? NSObject).flatMap {
-                HerdrHostFolderChoiceClient(bridge: $0)
+            let admitted: WorkerFixtureAdmission?
+            do { admitted = try fixtureAdmission(input) } catch {
+                return ["ok": false] as NSDictionary
             }
-            let created = HerdrWorker(
-                hostWindowNavigation: navigation, hostFolderChoice: folderChoice)
+            if admitted == nil {
+                guard let suite = input["defaultsSuite"] as? String,
+                    suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
+                else { return ["ok": false] as NSDictionary }
+            }
+            if let worker {
+                guard matchesFixture(admitted) else { return ["ok": false] as NSDictionary }
+                do { try worker.applyAmbientPolicy(context: input) } catch {
+                    return ["ok": false] as NSDictionary
+                }
+                return ["ok": true] as NSDictionary
+            }
+            let created = workerFactory(input, admitted)
             do { try created.applyAmbientPolicy(context: input) } catch {
                 return ["ok": false] as NSDictionary
             }
+            fixture = admitted
             worker = created
             surface = HerdrSurface(worker: created)
             let recovery =
@@ -204,9 +255,12 @@ final class ExtensionRuntime: NSObject {
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize":
             guard let worker else { return ["ok": false] as NSDictionary }
-            do { try worker.applyAmbientPolicy(context: input) } catch {
-                return ["ok": false] as NSDictionary
-            }
+            do {
+                guard matchesFixture(try fixtureAdmission(input)) else {
+                    return ["ok": false] as NSDictionary
+                }
+                try worker.applyAmbientPolicy(context: input)
+            } catch { return ["ok": false] as NSDictionary }
         case "status": return ["ok": true, "running": worker?.isStopped == false] as NSDictionary
         case "stop":
             commands.shutdown()
