@@ -10,6 +10,7 @@ struct HostApplication: App {
     @State private var marketplace: HostMarketplace?
     @State private var cliServer: HostCLIServer?
     @State private var coreServices: HostCoreServices?
+    @State private var sectionWindows: HostSectionWindows?
     @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var theme =
@@ -28,7 +29,8 @@ struct HostApplication: App {
                             panelShortcutChanged: { coreServices?.panelShortcutChanged() },
                             additionalSettings: { coreServices?.settings($0) },
                             coreOnline: coreServices?.online ?? false,
-                            coreSummary: coreServices?.activityLabel ?? "Starting")
+                            coreSummary: coreServices?.activityLabel ?? "Starting",
+                            sectionWindows: sectionWindows)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -69,9 +71,29 @@ struct HostApplication: App {
                             identity: identity, marketplace: loaded,
                             togglePanel: { delegate.showMainWindow() })
                         coreServices = services
+                        weak var detached: HostSectionWindows?
+                        let windows = HostSectionWindows { page in
+                            AnyView(
+                                HostDetachedSection(
+                                    marketplace: loaded, updater: updater, destination: page,
+                                    panelShortcutChanged: { services.panelShortcutChanged() },
+                                    additionalSettings: { services.settings($0) },
+                                    select: { id in
+                                        guard detached?.focusExisting(id) != true else { return }
+                                        SharedDefaults.store.set(
+                                            id, forKey: AppStorageKeys.General.mainWindowSection)
+                                        delegate.showMainWindow()
+                                    }))
+                        }
+                        detached = windows
+                        sectionWindows = windows
+                        windows.install()
                         delegate.shutdown = {
                             let ready = await loaded.sessions.shutdown()
-                            if ready { await services.shutdown(); control.shutdown() }
+                            if ready {
+                                windows.closeAll(); windows.uninstall()
+                                await services.shutdown(); control.shutdown()
+                            }
                             return ready
                         }
                         await services.start()
