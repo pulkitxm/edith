@@ -496,7 +496,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {
@@ -893,6 +893,7 @@ struct HostLifecycleHarness {
     }
 
     @MainActor private static func verifySystem(_ endpoint: ExtensionPeerEndpoint) async throws {
+        try await SystemFixture.verify(endpoint)
         let data = try await endpoint.invoke("apps.list", payload: Data("{}".utf8), timeout: 5)
         guard let apps = try JSONSerialization.jsonObject(with: data) as? [[String: Any]],
             apps.allSatisfy({ ($0["pid"] as? Int ?? 0) > 0 && $0["name"] is String })

@@ -10,7 +10,20 @@ final class ExtensionRuntime: NSObject {
     private var model: RunningAppsModel?
     private var presentation: SystemPresentationState?
     private var cleaning: KeyboardCleaning?
-    private let operations = RunningAppOperationCenter()
+    private let operations: RunningAppOperationCenter = {
+        guard ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] != nil else {
+            return RunningAppOperationCenter()
+        }
+        return RunningAppOperationCenter(
+            snapshot: {
+                [
+                    .init(
+                        pid: 12345, name: "Synthetic editor", bundleID: "test.synthetic.editor",
+                        active: true)
+                ]
+            }, perform: { _, _ in 0 },
+            resource: { _ in .init(cpuNanoseconds: 0, memoryMB: 0) })
+    }()
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
