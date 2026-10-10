@@ -320,7 +320,7 @@ final class ExtensionRuntime: NSObject {
     private func shutdown() async {
         running = false
         await uiEngine?.shutdown(); uiEngine = nil
-        filesEngine?.shutdown(); filesEngine = nil
+        await filesEngine?.shutdownAndWait(); filesEngine = nil
         previewEngine?.shutdown(); previewEngine = nil
         directoryExport?.shutdown(); directoryExport = nil
         await logEngine?.shutdown(); logEngine = nil

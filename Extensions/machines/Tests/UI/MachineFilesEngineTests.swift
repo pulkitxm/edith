@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import Foundation
 import Testing
 
@@ -9,6 +10,63 @@ import Testing
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
+    }
+
+    @Test func presentationReleaseCancelsAndDrainsOriginalFileLoadProcess() async throws {
+        let session = MachineSession(machine: .local, local: true, observesWakeRequests: false)
+        let owner = MachineExecutionOwner()
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        process.arguments = ["30"]
+        defer { if process.isRunning { process.terminate() } }
+        let stream = SSHLineStream(process: process, onLine: { _, _ in }, onExit: { _ in })
+        let files = MachineFilesEngine(
+            session: { _ in session },
+            makeModel: { session, path in
+                FinderModel(
+                    session: session, path: path,
+                    directoryLoader: { _ in
+                        do {
+                            try owner.start(stream)
+                            _ = await stream.waitForExit()
+                            await stream.waitForProcessExit()
+                            owner.release(stream)
+                            return .failure(CancellationError())
+                        } catch { return .failure(error) }
+                    }, freeSpaceLoader: { _ in nil })
+            })
+        let engine = MachineUIEngine(
+            session: { _ in session },
+            state: {
+                MachineUIState(
+                    machines: [], forwards: [], snippets: [], sessions: [], workspaces: .init())
+            }, mutation: { _ in }, workspace: { _ in }, files: { try await files.execute($0) },
+            presentationRelease: { files.release($0) })
+        let presentation = UUID()
+        let request = MachineFileRequest(
+            presentationID: presentation, viewID: UUID(), machineID: session.id,
+            operation: .load, path: "/synthetic")
+        let begin = try await engine.execute(
+            "machines.ui.begin",
+            payload: JSONEncoder().encode(
+                MachineUIJobInput(
+                    presentationID: presentation, operation: "machines.ui.files",
+                    payload: JSONEncoder().encode(request))))
+        let reply = try JSONDecoder().decode(MachineUIReply.self, from: begin)
+        #expect(reply.error == nil)
+        for _ in 0..<100 {
+            if process.isRunning { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(process.isRunning)
+        _ = try await engine.execute(
+            "machines.ui.release",
+            payload: JSONEncoder().encode(MachineUIPresentation(id: presentation)))
+        await engine.shutdown()
+        await files.shutdownAndWait()
+        #expect(!process.isRunning)
+        await owner.shutdown()
+        await session.shutdown()
     }
 
     @Test func originalTransfersExposeLiveProgressAndPresentationRelease() async throws {

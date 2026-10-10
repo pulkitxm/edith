@@ -265,7 +265,9 @@ import Foundation
     ) async throws -> Reply {
         let id: UUID = try await request(
             "machines.ui.begin",
-            value: MachineUIJobInput(operation: operation, payload: JSONEncoder().encode(value)))
+            value: MachineUIJobInput(
+                presentationID: client.presentationID, operation: operation,
+                payload: JSONEncoder().encode(value)))
         return try await withTaskCancellationHandler {
             while true {
                 try Task.checkCancellation()

@@ -33,6 +33,7 @@ import Foundation
     private let workspace: (WorkspaceStore) throws -> Void
     private var stopped = false
     private struct Job {
+        var presentationID: UUID?
         var task: Task<Void, Never>
         var touched: Date
         var reply: MachineUIReply?
@@ -116,6 +117,16 @@ import Foundation
             value.operation == "machines.ui.files"
             ? try JSONDecoder().decode(MachineFileRequest.self, from: value.payload) : nil
         try fileRequest?.validate()
+        if let presentation = value.presentationID {
+            guard presentations[presentation] != nil || presentations.count < 128 else {
+                throw MachineUIError.invalidRequest
+            }
+            if let fileRequest {
+                guard fileRequest.presentationID == presentation else {
+                    throw MachineUIError.invalidRequest
+                }
+            }
+        }
         let id = UUID()
         let task = Task { [weak self] in
             guard let self else { return }
@@ -132,8 +143,9 @@ import Foundation
             jobs[id]?.reply = reply
         }
         jobs[id] = Job(
-            task: task, touched: now(),
+            presentationID: value.presentationID, task: task, touched: now(),
             fileRequest: fileRequest)
+        if let presentation = value.presentationID { presentations[presentation] = now() }
         ensureReaper()
         return id
     }
@@ -165,6 +177,7 @@ import Foundation
     }
 
     private func release(_ id: UUID) {
+        for job in jobs.keys.filter({ jobs[$0]?.presentationID == id }) { cancelJob(job) }
         for key in leases.keys.filter({ $0.presentation == id }) {
             guard let lease = leases.removeValue(forKey: key) else { continue }
             change(lease, active: false)

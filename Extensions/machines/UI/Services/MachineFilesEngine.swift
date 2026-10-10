@@ -2,11 +2,18 @@ import Foundation
 
 @MainActor final class MachineFilesEngine {
     private var presentations: [UUID: UUID] = [:]
+    private var retired: [UUID: Task<Void, Never>] = [:]
+    private let makeModel: @MainActor (MachineSession, String) -> FinderModel
     private var models: [UUID: FinderModel] = [:]
     private let session: (UUID) throws -> MachineSession
     private var stopped = false
 
-    init(session: @escaping (UUID) throws -> MachineSession) { self.session = session }
+    init(
+        session: @escaping (UUID) throws -> MachineSession,
+        makeModel: @escaping @MainActor (MachineSession, String) -> FinderModel = {
+            FinderModel(session: $0, path: $1)
+        }
+    ) { self.session = session; self.makeModel = makeModel }
 
     func execute(_ request: MachineFileRequest) async throws -> MachineFileState {
         try request.validate()
@@ -20,7 +27,7 @@ import Foundation
             }
             model = retained
         } else {
-            model = FinderModel(session: try session(request.machineID), path: request.path)
+            model = makeModel(try session(request.machineID), request.path)
             models[request.viewID] = model
         }
         if let presentation = request.presentationID {
@@ -80,7 +87,7 @@ import Foundation
                 intent: intent, destination: request.text, resolutions: request.resolutions)
         case .cancel: model.cancelTransfer(); model.stopLoading()
         case .release:
-            model.cancelTransfer(); model.stopLoading()
+            await model.cancelAndDrain().value
             FinderUndoBridge.forget(model)
             models.removeValue(forKey: request.viewID)
             presentations.removeValue(forKey: request.viewID)
@@ -110,16 +117,30 @@ import Foundation
     func release(_ presentation: UUID) {
         for id in presentations.keys.filter({ presentations[$0] == presentation }) {
             if let model = models.removeValue(forKey: id) {
-                model.cancelTransfer(); model.stopLoading(); FinderUndoBridge.forget(model)
+                retire(model)
             }
             presentations.removeValue(forKey: id)
         }
     }
 
+    private func retire(_ model: FinderModel) {
+        let id = UUID(), task = model.cancelAndDrain()
+        FinderUndoBridge.forget(model)
+        retired[id] = Task { [weak self] in
+            await task.value; self?.retired.removeValue(forKey: id)
+        }
+    }
+
+    func shutdownAndWait() async {
+        shutdown()
+        let owned = Array(retired.values)
+        for task in owned { await task.value }
+    }
+
     func shutdown() {
         stopped = true
         for model in models.values {
-            model.cancelTransfer(); model.stopLoading(); FinderUndoBridge.forget(model)
+            retire(model)
         }
         models = [:]
     }

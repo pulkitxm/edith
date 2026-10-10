@@ -110,6 +110,7 @@ public struct MachineUIConfigurationState: Codable, Sendable {
 }
 
 struct MachineUIJobInput: Codable, Sendable {
+    var presentationID: UUID?
     let operation: String
     let payload: Data
 }

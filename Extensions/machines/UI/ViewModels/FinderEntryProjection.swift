@@ -12,6 +12,7 @@ final class FinderEntryProjection {
     private(set) var isUpdating = false
     @ObservationIgnored private var worker: Task<[RemoteFileEntry], Error>?
     @ObservationIgnored private var publication: Task<Void, Never>?
+    @ObservationIgnored private var retired: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private let sort: Sort
     static let backgroundThreshold = 2_000
@@ -66,11 +67,26 @@ final class FinderEntryProjection {
     }
 
     func cancel() {
+        let worker = worker, publication = publication
         worker?.cancel()
         publication?.cancel()
-        worker = nil
-        publication = nil
+        self.worker = nil
+        self.publication = nil
         isUpdating = false
+        if worker != nil || publication != nil {
+            let id = UUID()
+            retired[id] = Task { [weak self] in
+                _ = try? await worker?.value
+                await publication?.value
+                self?.retired.removeValue(forKey: id)
+            }
+        }
+    }
+
+    func cancelAndDrain() -> Task<Void, Never> {
+        cancel()
+        let owned = Array(retired.values)
+        return Task { for task in owned { await task.value } }
     }
 
     func wait() async { await publication?.value }

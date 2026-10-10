@@ -289,7 +289,12 @@ final class FinderModel {
 
     func load() async {
         if session.uiClient != nil { await remotePerform(.load); return }
-        await scheduleLoad().value
+        let task = scheduleLoad()
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func scheduleLoad() -> Task<Void, Never> {
@@ -321,7 +326,11 @@ final class FinderModel {
                 await self?.loadDirectory(request.path)
             }
             activeLoadTask = operation
-            let outcome = await operation.value
+            let outcome = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
             guard workerGeneration == loadWorkerGeneration else { return }
             activeLoadTask = nil
             guard !operation.isCancelled, listingLoad.isCurrent(request.generation), let outcome
@@ -372,6 +381,20 @@ final class FinderModel {
             selection = selection.filter { path in items.contains { $0.path == path } }
         case let .failure(failure):
             errorMessage = failure.localizedDescription
+        }
+    }
+
+    func cancelAndDrain() -> Task<Void, Never> {
+        let worker = loadWorkerTask, active = activeLoadTask
+        let search = searchTask, shallow = shallowSearchTask
+        let transfer = transferTask, command = transferCommandTask, remote = remoteTransferTask
+        let projection = entryProjection.cancelAndDrain()
+        cancelTransfer(); stopLoading()
+        return Task {
+            await worker?.value; _ = await active?.value
+            await search?.value; _ = await shallow?.value
+            _ = try? await transfer?.value; _ = await command?.value; _ = try? await remote?.value
+            await projection.value
         }
     }
 
