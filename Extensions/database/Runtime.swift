@@ -9,7 +9,22 @@ final class ExtensionRuntime: NSObject {
     private var session: DatabasePageSession?
     private var surface: DatabaseSurface?
     private var uiCommands: DatabaseUICommands?
+    private var uiSessions: [UUID: (DatabaseUIClient, DatabasePageSession)] = [:]
     private let commands = ExtensionCommandRegistry()
+
+    @objc(prepareUIToClose:completion:)
+    func prepareUIToClose(_ presentationID: NSString, completion: @escaping (NSString?) -> Void) {
+        guard let id = UUID(uuidString: presentationID as String), let (client, _) = uiSessions[id]
+        else {
+            completion(nil)
+            return
+        }
+        Task {
+            do { try await client.flushColumns(); completion(nil) } catch {
+                completion("Database preferences are not saved.")
+            }
+        }
+    }
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -79,9 +94,41 @@ final class ExtensionRuntime: NSObject {
             self.session = session
             surface = DatabaseSurface(session: session)
         case "view":
+            if let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+                let (client, session) = uiSessions[id]
+            {
+                return NSHostingController(
+                    rootView: ExtensionPageHost {
+                        DatabaseRemotePage(client: client, session: session)
+                    })
+            }
             guard let session else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { DatabasePage(session: session) })
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "database", !configuration.uiOnly,
+                input["location"] as? String == "main", input["section"] as? String == "database",
+                let client = configuration.engineClient,
+                uiSessions.count < 16 || uiSessions[client.presentationID] != nil
+            else { return ["ok": false] as NSDictionary }
+            if uiSessions[client.presentationID] == nil {
+                let facade = DatabaseUIClient(engine: client)
+                uiSessions[client.presentationID] = (facade, facade.makeSession())
+            }
+        case "releaseUI":
+            if let value = input["presentationID"] as? String, let id = UUID(uuidString: value),
+                let (client, session) = uiSessions.removeValue(forKey: id)
+            {
+                session.shutdown()
+                client.shutdown()
+            }
+        case "stopUI":
+            for (client, session) in uiSessions.values {
+                session.shutdown()
+                client.shutdown()
+            }
+            uiSessions.removeAll()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": DatabasePrivacy.refresh()
         case "stop": prepareToStop(completion: {})

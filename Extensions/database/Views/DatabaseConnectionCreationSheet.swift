@@ -26,6 +26,7 @@ struct DatabaseConnectionCreationSheet: View {
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         AppTheme.accent.rawValue
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.databaseRemotePrivacy) private var remotePrivacy
 
     private var dark: Bool { scheme == .dark }
     private var palette: DatabaseThemePalette {
@@ -70,7 +71,7 @@ struct DatabaseConnectionCreationSheet: View {
             minHeight: UIScale.pt(480), idealHeight: UIScale.pt(640)
         )
         .background(palette.canvas)
-        .presenterCover(DatabasePrivacy.hidden)
+        .presenterCover(remotePrivacy ?? DatabasePrivacy.hidden)
         .transientPresentation(dismissible: false)
         .onDisappear {
             submissionTask?.cancel()

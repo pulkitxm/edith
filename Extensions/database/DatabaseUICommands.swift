@@ -50,11 +50,17 @@ final class DatabaseUICommands {
             if let columns { try DatabaseColumnsModel.validateStoredLayouts(columns) }
             return try JSONEncoder().encode(
                 DatabaseUIState(columns: columns, privateContent: privateContent()))
+        case "database.ui.privacy":
+            try requireEmptyObject(payload)
+            return try JSONEncoder().encode(privateContent())
         case "database.ui.columns":
             let request = try JSONDecoder().decode(DatabaseUIColumns.self, from: payload)
             try DatabaseColumnsModel.validateStoredLayouts(request.data)
             try Task.checkCancellation()
-            writeColumns(request.data)
+            let merged = try DatabaseColumnsModel.mergedLayouts(
+                stored: readColumns(), updates: request.data)
+            writeColumns(merged)
+            return try JSONEncoder().encode(DatabaseUIColumns(data: merged))
         case "database.ui.prepare":
             let request = try JSONDecoder().decode(DatabaseConnectionGetRequest.self, from: payload)
             let response = try await sender.send(.connectionGet(request))

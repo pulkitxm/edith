@@ -22,15 +22,19 @@ final class DatabaseTableTab: Identifiable {
     let id = UUID()
     let object: DatabaseObjectIdentifier
     let data: DatabaseDataWorkspaceModel
-    let columns = DatabaseColumnsModel()
+    let columns: DatabaseColumnsModel
     let history = DatabaseQueryHistory()
     var hasOpenedQuery = false
     var mode = DatabaseWorkbenchMode.browse
     @ObservationIgnored var scrollOffset = CGPoint.zero
 
-    init(object: DatabaseObjectIdentifier, data: DatabaseDataWorkspaceModel) {
+    init(
+        object: DatabaseObjectIdentifier, data: DatabaseDataWorkspaceModel,
+        columns: DatabaseColumnsModel? = nil
+    ) {
         self.object = object
         self.data = data
+        self.columns = columns ?? DatabaseColumnsModel()
     }
 
     func selectMode(_ next: DatabaseWorkbenchMode, connection: DatabaseConnectionSummary) {
@@ -67,15 +71,18 @@ final class DatabaseTableTabsModel {
     private(set) var connectionID: DatabaseConnectionID?
     private let initialData: DatabaseDataWorkspaceModel
     private let makeData: @MainActor () -> DatabaseDataWorkspaceModel
+    private let makeColumns: @MainActor () -> DatabaseColumnsModel
 
     init(
         data: DatabaseDataWorkspaceModel? = nil,
         makeData: @escaping @MainActor () -> DatabaseDataWorkspaceModel = {
             DatabaseDataWorkspaceModel()
-        }
+        },
+        makeColumns: @escaping @MainActor () -> DatabaseColumnsModel = { DatabaseColumnsModel() }
     ) {
         initialData = data ?? makeData()
         self.makeData = makeData
+        self.makeColumns = makeColumns
     }
 
     var selected: DatabaseTableTab? { tabs.first { $0.id == selectedID } }
@@ -98,7 +105,7 @@ final class DatabaseTableTabsModel {
         }
         let data = tabs.isEmpty ? initialData : makeData()
         data.prepare(for: connection)
-        let tab = DatabaseTableTab(object: object, data: data)
+        let tab = DatabaseTableTab(object: object, data: data, columns: makeColumns())
         tabs.append(tab)
         selectedID = tab.id
         if data.selectedObject != object || data.state == .idle {

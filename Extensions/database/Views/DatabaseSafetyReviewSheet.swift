@@ -14,6 +14,7 @@ struct DatabaseSafetyReviewSheet: View {
     let dismiss: () -> Void
 
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.databaseRemotePrivacy) private var remotePrivacy
     @Environment(\.databaseAppTheme) private var appTheme
     @FocusState private var confirmationFocused: Bool
     @State private var interaction: DatabaseSafetyReviewInteractionState
@@ -80,7 +81,7 @@ struct DatabaseSafetyReviewSheet: View {
             idealHeight: UIScale.pt(720)
         )
         .background(palette.canvas)
-        .presenterCover(DatabasePrivacy.hidden)
+        .presenterCover(remotePrivacy ?? DatabasePrivacy.hidden)
         .transientPresentation(dismissible: !activePhase.blocksInteractiveDismissal)
         .onAppear {
             announce("Destructive database operation requires review.")

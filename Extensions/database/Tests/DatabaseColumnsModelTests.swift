@@ -7,6 +7,34 @@ import Testing
 @MainActor
 @Suite("Database columns model")
 struct DatabaseColumnsModelTests {
+    @Test func remoteColumnDeltasPreserveAnotherPresentationsLayout() throws {
+        let connection = DatabaseConnectionID()
+        let fields = Self.fields("id", "name")
+        var firstData: Data?
+        let first = DatabaseColumnsModel(read: { firstData }, write: { firstData = $0 })
+        first.synchronize(connectionID: connection, object: Self.object("orders"), fields: fields)
+        let originalFirst = try #require(firstData)
+        var secondData: Data?
+        let second = DatabaseColumnsModel(read: { secondData }, write: { secondData = $0 })
+        second.synchronize(
+            connectionID: connection, object: Self.object("customers"), fields: fields)
+        second.setWidth(230, for: fields[1].path)
+        let stored = try DatabaseColumnsModel.mergedLayouts(
+            stored: originalFirst, updates: #require(secondData))
+        first.setVisible(false, for: fields[1].path)
+        let delta = try DatabaseColumnsModel.changedLayouts(
+            from: originalFirst, to: #require(firstData))
+        let merged = try DatabaseColumnsModel.mergedLayouts(stored: stored, updates: delta)
+        let restored = DatabaseColumnsModel(read: { merged }, write: { _ in })
+        restored.synchronize(
+            connectionID: connection, object: Self.object("customers"), fields: fields)
+        #expect(restored.width(for: fields[1].path) == 230)
+        #expect(restored.allFieldsVisible)
+        restored.synchronize(
+            connectionID: connection, object: Self.object("orders"), fields: fields)
+        #expect(!restored.isVisible(fields[1].path))
+    }
+
     @Test("Columns start visible in source order")
     func defaultLayout() {
         let defaults = Self.defaults()

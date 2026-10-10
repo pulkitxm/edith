@@ -17,7 +17,9 @@ struct DatabaseUICommandsTests {
         let updated = Data(#"{"version":1,"layouts":[]}"#.utf8)
         _ = try await commands.invoke(
             "database.ui.columns", payload: JSONEncoder().encode(DatabaseUIColumns(data: updated)))
-        #expect(fixture.columns == updated)
+        #expect(
+            try JSONSerialization.jsonObject(with: #require(fixture.columns)) as? NSDictionary
+                == JSONSerialization.jsonObject(with: updated) as? NSDictionary)
         #expect(fixture.writes == 1)
         #expect(await fixture.sender.requests.isEmpty)
     }

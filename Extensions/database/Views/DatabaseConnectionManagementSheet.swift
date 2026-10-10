@@ -24,6 +24,7 @@ struct DatabaseConnectionManagementSheet: View {
     @State private var name: String
     @State private var submitting = false
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.databaseRemotePrivacy) private var remotePrivacy
     @Environment(\.databaseAppTheme) private var appTheme
 
     init(
@@ -78,7 +79,7 @@ struct DatabaseConnectionManagementSheet: View {
             minHeight: UIScale.pt(presentation == .edit ? 540 : 300),
             idealHeight: UIScale.pt(presentation == .edit ? 680 : 360)
         )
-        .background(palette.canvas).presenterCover(DatabasePrivacy.hidden)
+        .background(palette.canvas).presenterCover(remotePrivacy ?? DatabasePrivacy.hidden)
         .transientPresentation(dismissible: false)
         .pageTask(id: taskID) {
             await prepare()
