@@ -4,6 +4,8 @@ import Foundation
 
 @MainActor enum HomebrewCLIEnvironment {
     static var owner = HomebrewEngineCommands()
+    @TaskLocal static var streamOwner: HomebrewEngineCommands?
+    static var currentOwner: HomebrewEngineCommands { streamOwner ?? owner }
 }
 
 @MainActor enum HomebrewCLIExecution {
@@ -39,6 +41,6 @@ import Foundation
         HomebrewCLIEnvironment.owner = owner
         defer { HomebrewCLIEnvironment.owner = previous }
         return try await ExtensionCLIExecution.run(
-            HomebrewCommand.self, arguments: request.arguments)
+            HomebrewCommand.self, request: request)
     }
 }

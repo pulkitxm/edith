@@ -74,6 +74,55 @@ import Testing
         await owner.shutdownAndWait()
     }
 
+    @Test func originalCLIStreamRetainsOwningClientAndDrainsOnDisable() async throws {
+        let recorder = Requests()
+        let owner = makeOwner(recorder)
+        let encoder = JSONEncoder()
+        let start = ExtensionCLIStreamStart(
+            owner: "homebrew", session: UUID(), request: try .init(arguments: ["list", "--json"]))
+        let data = try await owner.execute(
+            "homebrew.cli.stream.start", payload: encoder.encode(start))
+        let handle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: data)
+        var sequence: UInt64 = 0
+        var output = Data()
+        let deadline = ContinuousClock.now + .seconds(3)
+        while true {
+            let reply = try await owner.execute(
+                "homebrew.cli.stream.read",
+                payload: encoder.encode(ExtensionCLIStreamRead(handle: handle, sequence: sequence)))
+            let frame = try JSONDecoder().decode(ExtensionCLIStreamFrame.self, from: reply)
+            try frame.validate()
+            for chunk in frame.chunks {
+                #expect(chunk.channel == .stdout)
+                output.append(chunk.data)
+            }
+            sequence = frame.nextSequence
+            if frame.state != .running {
+                #expect(frame.state == .completed && frame.exitCode == 0)
+                break
+            }
+            guard ContinuousClock.now < deadline else { throw ExtensionEngineError.timedOut }
+            await Task.yield()
+        }
+        #expect(String(decoding: output, as: UTF8.self).contains("synthetic-formula"))
+        #expect(!recorder.arguments.isEmpty)
+        _ = try await owner.execute("homebrew.cli.stream.end", payload: encoder.encode(handle))
+        recorder.hold = true
+        let install = ExtensionCLIStreamStart(
+            owner: "homebrew", session: UUID(),
+            request: try .init(arguments: ["install", "synthetic-formula"]))
+        let active = try await owner.execute(
+            "homebrew.cli.stream.start", payload: encoder.encode(install))
+        let activeHandle = try JSONDecoder().decode(ExtensionCLIStreamHandle.self, from: active)
+        try await wait { recorder.arguments.contains(["install", "synthetic-formula"]) }
+        await owner.shutdownAndWait()
+        await #expect(throws: ExtensionPeerError.self) {
+            try await owner.execute(
+                "homebrew.cli.stream.read",
+                payload: encoder.encode(ExtensionCLIStreamRead(handle: activeHandle, sequence: 0)))
+        }
+    }
+
     @Test func cancelAndDisableDrainOnlyOwnedMutationAndRejectLateReads() async throws {
         let recorder = Requests()
         recorder.hold = true

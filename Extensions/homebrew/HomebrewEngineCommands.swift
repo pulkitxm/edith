@@ -4,6 +4,7 @@ import Foundation
 
 @MainActor final class HomebrewEngineCommands {
     let uiJobs = HomebrewUIJobs()
+    private let cliStreams = try? ExtensionCLIStreams(owner: "homebrew")
     let client: HomebrewClient
     private let store: HomebrewListingStore
     private var mutations: [UUID: Task<HomebrewMutationResult, Error>] = [:]
@@ -19,6 +20,15 @@ import Foundation
 
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !stopped else { throw ExtensionPeerError.unavailable }
+        if command == "homebrew.cli.catalog" { return try HomebrewCLICatalog.data() }
+        if command.hasPrefix("homebrew.cli.stream.") {
+            guard let cliStreams else { throw ExtensionPeerError.unavailable }
+            return try HomebrewCLIEnvironment.$streamOwner.withValue(self) {
+                try cliStreams.invoke(
+                    HomebrewCommand.self, operation: command, prefix: "homebrew.cli.stream",
+                    payload: payload)
+            }
+        }
         if command.hasPrefix("homebrew.ui.") {
             return try uiJobs.execute(command, payload: payload, owner: self)
         }
@@ -94,11 +104,12 @@ import Foundation
         return active
     }
 
-    func shutdown() { stopped = true; cancel(); uiJobs.shutdown() }
+    func shutdown() { stopped = true; cancel(); uiJobs.shutdown(); cliStreams?.stop() }
 
     func shutdownAndWait() async {
         shutdown()
         await uiJobs.shutdownAndWait()
+        await cliStreams?.stopAndWait()
         for task in mutations.values { _ = try? await task.value }
     }
 }

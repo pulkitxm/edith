@@ -26,7 +26,7 @@ struct HomebrewCommand: AsyncParsableCommand {
 }
 
 @MainActor enum HomebrewCLI {
-    static var client: HomebrewClient { HomebrewCLIEnvironment.owner.client }
+    static var client: HomebrewClient { HomebrewCLIEnvironment.currentOwner.client }
 
     static func kind(_ raw: String) throws -> HomebrewPackageKind {
         guard let kind = HomebrewPackageKind(rawValue: raw.lowercased()) else {
@@ -76,7 +76,7 @@ struct HomebrewCommand: AsyncParsableCommand {
         _ action: HomebrewMutation, name: String, kind: HomebrewPackageKind, json: Bool
     ) async throws {
         do {
-            let result = try await HomebrewCLIEnvironment.owner.mutate(
+            let result = try await HomebrewCLIEnvironment.currentOwner.mutate(
                 action, kind: kind, name: name)
             guard !json else {
                 CLIOut.json(
@@ -307,13 +307,13 @@ struct HomebrewUninstallCommand: AsyncParsableCommand {
             } catch {
                 throw HomebrewCLI.failure(error)
             }
-            let plan = HomebrewDestructivePlan(
+            let plan = CLIDestructivePlan(
                 action: "uninstall Homebrew \(packageKind.rawValue)", targets: [validatedName],
                 confirmed: yes, json: json,
                 fields: ["kind": .string(packageKind.rawValue), "name": .string(validatedName)])
             guard plan.shouldApply() else { return }
             do {
-                let result = try await HomebrewCLIEnvironment.owner.mutate(
+                let result = try await HomebrewCLIEnvironment.currentOwner.mutate(
                     .uninstall, kind: packageKind, name: validatedName)
                 plan.finish(
                     changed: true,
@@ -333,7 +333,7 @@ struct HomebrewCancelCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit JSON on stdout.") var json = false
     @MainActor func run() async throws {
         try await execute {
-            let cancelled = await HomebrewCLIEnvironment.owner.cancel()
+            let cancelled = await HomebrewCLIEnvironment.currentOwner.cancel()
             if json {
                 CLIOut.json(
                     .object([

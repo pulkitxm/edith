@@ -394,9 +394,9 @@
         "Extensions/homebrew/HomebrewPageClient.swift",
         "Extensions/homebrew/HomebrewEngineCommands.swift",
         "Extensions/homebrew/CLI/HomebrewCommands.swift",
-        "Extensions/homebrew/CLI/HomebrewDestructivePlan.swift",
         "Extensions/homebrew/CLI/HomebrewCLIExecution.swift",
-        "Extensions/homebrew/HomebrewUIJobs.swift"
+        "Extensions/homebrew/HomebrewUIJobs.swift",
+        "Extensions/homebrew/CLI/HomebrewCLICatalog.swift"
       ]
     },
     "inputs": [
