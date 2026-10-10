@@ -28,7 +28,9 @@ final class CalendarSurface {
             let action = try SurfaceActionRequest.decode(payload, providerID: "calendar")
             request = action.snapshot
             guard action.value == nil, authorized(),
-                let event = selected(request.tile).prefix(request.tile.itemLimit).first(where: {
+                let event = selected(request.tile, target: request.target).prefix(
+                    request.tile.itemLimit
+                ).first(where: {
                     "join:" + $0.id == action.actionID
                 }),
                 request.tile.showActions, request.tile.shows("join"),
@@ -44,16 +46,18 @@ final class CalendarSurface {
         store.refreshAuthStatus()
         if command == "surface.snapshot" { _ = await store.refreshAndWait() }
         try Task.checkCancellation()
-        return try snapshot(request.tile).encoded()
+        return try snapshot(request.tile, target: request.target).encoded()
     }
 
-    func snapshot(_ tile: SurfaceTile, now: Date = Date()) -> SurfaceSnapshot {
+    func snapshot(
+        _ tile: SurfaceTile, target: SurfaceTarget = .home, now: Date = Date()
+    ) -> SurfaceSnapshot {
         guard authorized() else {
             return .init(
                 providerID: "calendar", message: "Open Calendar to grant access to your meetings.",
                 updatedAt: now)
         }
-        let events = selected(tile, now: now)
+        let events = selected(tile, target: target, now: now)
         let privateContent = presentation.blurEvents
         var sourceIDs = Set<String>()
         let sources =
@@ -85,7 +89,11 @@ final class CalendarSurface {
                     ? "" : String(event.calendar.prefix(256)),
                 value: tile.shows("time")
                     ? (event.isAllDay
-                        ? "All day" : event.start.formatted(date: .omitted, time: .shortened)) : "",
+                        ? "All day"
+                        : event.start.formatted(date: .omitted, time: .shortened)
+                            + (target == .home
+                                ? "–" + event.end.formatted(date: .omitted, time: .shortened) : ""))
+                    : "",
                 icon: "calendar", actions: actions)
         }
         return .init(
@@ -94,9 +102,13 @@ final class CalendarSurface {
             updatedAt: now)
     }
 
-    private func selected(_ tile: SurfaceTile, now: Date = Date()) -> [CalendarEventPayload] {
+    private func selected(
+        _ tile: SurfaceTile, target: SurfaceTarget, now: Date = Date()
+    ) -> [CalendarEventPayload] {
         CalendarDayEvents.sorted(CalendarDayEvents.deduplicated(store.events)).filter {
-            $0.end >= now && (tile.sourceIDs?.contains($0.calendarID) ?? true)
+            (target == .home
+                ? Calendar.current.isDate($0.start, inSameDayAs: now) : $0.end >= now)
+                && (tile.sourceIDs?.contains($0.calendarID) ?? true)
         }
     }
 }
