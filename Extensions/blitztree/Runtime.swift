@@ -8,6 +8,8 @@ import SwiftUI
 @objc(EdithBlitzTreeExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: BlitzTreeModel?
+    private var uiModel: BlitzTreeModel?
+    private var uiClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -35,8 +37,8 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
-        commands.shutdown()
         Task {
+            await commands.shutdownAndWait()
             await model?.shutdown()
             completion()
         }
@@ -58,8 +60,14 @@ final class ExtensionRuntime: NSObject {
             else { return ["ok": false] as NSDictionary }
             if model == nil { model = BlitzTreeModel() }
             TextEditingCommands.install()
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI(); uiClient = client; uiModel = BlitzTreeModel(engineClient: client)
+        case "stopUI": stopUI()
         case "view":
-            guard let model else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost { BlitzTreePage(model: model) })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
@@ -74,6 +82,11 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
 
+    private func stopUI() {
+        let model = uiModel; uiModel = nil
+        uiClient?.invalidate(); uiClient = nil
+        Task { await model?.shutdown() }
+    }
 }
 
 @_cdecl("edith_extension_create")

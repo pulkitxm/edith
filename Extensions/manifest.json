@@ -664,7 +664,8 @@
         "Extensions/blitztree/BlitzTreeRings.swift",
         "Extensions/blitztree/BlitzTreeScanner.swift",
         "Extensions/blitztree/Runtime.swift",
-        "Extensions/blitztree/Surface.swift"
+        "Extensions/blitztree/Surface.swift",
+        "Extensions/blitztree/BlitzTreeUISnapshot.swift"
       ]
     },
     "inputs": [
