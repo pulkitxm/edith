@@ -11,10 +11,18 @@ public enum HostCLI {
 
     static func run(
         _ arguments: [String], invoke: (HostCLIRequest) throws -> Data,
+        standardInput: Data = Data(),
+        workingDirectory: String = FileManager.default.currentDirectoryPath,
+        interactive: Bool = callerInteractive,
+        readInput: () throws -> Data = { try HostCLI.readInput() },
         write: (Data, Bool) -> Void
     ) -> Int32 {
         do {
-            switch try HostCLICommand.parse(arguments, readInput: readInput) {
+            switch try HostCLICommand.parse(
+                arguments, readInput: readInput,
+                standardInput: standardInput, workingDirectory: workingDirectory,
+                interactive: interactive)
+            {
             case .help: print(HostCLICommand.usageText)
             case .version:
                 let version =
@@ -75,7 +83,16 @@ public enum HostCLI {
         return Data(value.utf8)
     }
 
-    private static func readInput() throws -> Data {
+    public static var callerInteractive: Bool {
+        ProcessInfo.processInfo.environment["NO_COLOR"] == nil
+            && ProcessInfo.processInfo.environment["TERM"] != "dumb"
+            && isatty(STDERR_FILENO) == 1
+    }
+
+    public static func readInput(maximumBytes: Int = HostCLIRequest.maximumPayload) throws -> Data {
+        guard (1...HostCLIRequest.maximumPayload).contains(maximumBytes) else {
+            throw HostCLIError.usage("Invalid stdin size limit.")
+        }
         guard isatty(STDIN_FILENO) == 0 else {
             throw HostCLIError.usage("Pipe JSON into stdin with --json -.")
         }
@@ -94,8 +111,8 @@ public enum HostCLI {
             guard count >= 0 else { throw HostCLIError.usage("Could not read JSON from stdin.") }
             if count == 0 { return result }
             result.append(contentsOf: bytes.prefix(count))
-            guard result.count <= HostCLIRequest.maximumPayload else {
-                throw HostCLIError.usage("The JSON payload exceeds 512 KiB.")
+            guard result.count <= maximumBytes else {
+                throw HostCLIError.usage("The stdin payload exceeds its size limit.")
             }
         }
     }

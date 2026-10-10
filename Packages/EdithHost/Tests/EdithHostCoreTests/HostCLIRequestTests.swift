@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 import Testing
 @testable import EdithHostCore
@@ -59,6 +60,72 @@ import Testing
             try HostCLIRequest.decoded(JSONSerialization.data(withJSONObject: object))
         }
     }
+    @Test func maximumEnginePayloadRoundTripsWithinUnchangedFrameBound() throws {
+        let payload = Data(
+            ("\"" + String(repeating: "?", count: HostCLIRequest.maximumPayload - 2) + "\"").utf8)
+        let request = try HostCLIRequest(
+            action: .invoke, id: "synthetic", operation: "synthetic.echo", payload: payload)
+        let encoded = try request.encoded()
+        #expect(payload.count == 8 * 1_024 * 1_024)
+        #expect(HostCLITransport.maximumFrame == 12 * 1_024 * 1_024)
+        #expect(
+            encoded.count > 10 * 1_024 * 1_024 && encoded.count < HostCLITransport.maximumRequest)
+        #expect(try HostCLIRequest.decoded(encoded) == request)
+        #expect(throws: HostCLIError.self) {
+            try HostCLIRequest(
+                action: .invoke, id: "synthetic", operation: "synthetic.echo",
+                payload: Data(
+                    ("\"" + String(repeating: "?", count: HostCLIRequest.maximumPayload - 1) + "\"")
+                        .utf8))
+        }
+        #expect(throws: HostCLIError.self) {
+            try HostCLIRequest.decoded(
+                Data(repeating: 32, count: HostCLITransport.maximumRequest + 1))
+        }
+    }
+
+    @Test func largestCalendarContextSurvivesDoubleBase64AndRejectsExtraInput() throws {
+        let input = Data(repeating: 0xFF, count: ExtensionCLIRequest.maximumInputBytes)
+        let directory = "/" + String(repeating: "x", count: 4_095)
+        let args = Array(repeating: String(repeating: "a", count: 4_096), count: 4)
+        guard
+            case .terminal(let request) = try HostCLICommand.parse(
+                ["calendar"] + args,
+                readInput: { throw HostCLIError.rejected("stdin must not be read") },
+                standardInput: input, workingDirectory: directory, interactive: true)
+        else { Issue.record("Calendar context missing"); return }
+        let encoded = try request.encoded()
+        #expect(encoded.count < HostCLITransport.maximumRequest)
+        let decoded = try HostCLIRequest.decoded(encoded)
+        let context = try JSONDecoder().decode(ExtensionCLIRequest.self, from: decoded.payload)
+        #expect(context.arguments == args && context.standardInput == input)
+        #expect(context.workingDirectory == directory && context.interactive)
+        #expect(throws: HostCLIError.self) {
+            try HostCLICommand.parse(["calendar"], standardInput: Data(count: input.count + 1))
+        }
+        for path in ["relative", "/bad\0", "/" + String(repeating: "x", count: 4_096)] {
+            #expect(throws: HostCLIError.self) {
+                try HostCLICommand.parse(["calendar"], workingDirectory: path)
+            }
+        }
+    }
+
+    @Test func calendarCapturesActualCallerDirectoryAndStyleWithoutReadingStdin() throws {
+        guard
+            case .terminal(let request) = try HostCLICommand.parse(
+                ["calendar", "ls"],
+                readInput: { throw HostCLIError.rejected("stdin must not be read") })
+        else { Issue.record("Calendar context missing"); return }
+        let context = try JSONDecoder().decode(ExtensionCLIRequest.self, from: request.payload)
+        #expect(context.workingDirectory == FileManager.default.currentDirectoryPath)
+        #expect(context.interactive == HostCLI.callerInteractive)
+        #expect(context.standardInput.isEmpty)
+        #expect(throws: HostCLIError.self) { try HostCLI.readInput(maximumBytes: 0) }
+        #expect(throws: HostCLIError.self) {
+            try HostCLI.readInput(maximumBytes: HostCLIRequest.maximumPayload + 1)
+        }
+    }
+
     @Test func rawOutputDecodesOnlyJSONStringResponses() throws {
         for value in ["", "synthetic ☀️", "first\nsecond\n"] {
             let encoded = try JSONSerialization.data(

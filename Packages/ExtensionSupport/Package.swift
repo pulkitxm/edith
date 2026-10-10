@@ -31,7 +31,7 @@ let package = Package(
         .target(
             name: "EdithExtensionCommands",
             dependencies: [
-                "EdithExtensionUI",
+                "EdithExtensionSupport", "EdithExtensionUI",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(

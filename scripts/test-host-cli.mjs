@@ -44,13 +44,27 @@ async function command(args, expected = 0, input) {
       stderr += data;
     });
     child.on("error", reject);
+    child.stdin.on("error", (error) => {
+      if (error.code !== "EPIPE") reject(error);
+    });
     child.on("exit", (code) => {
       clearTimeout(timer);
       resolveResult({ code, stdout, stderr });
     });
     child.stdin.end(input);
   });
-  assert.equal(result.code, expected, JSON.stringify({ args, ...result }));
+  assert.equal(
+    result.code,
+    expected,
+    JSON.stringify({
+      args,
+      code: result.code,
+      stdoutBytes: Buffer.byteLength(result.stdout),
+      stderrBytes: Buffer.byteLength(result.stderr),
+      stdout: result.stdout.slice(0, 2048),
+      stderr: result.stderr.slice(0, 2048),
+    }),
+  );
   if (args[0] === "calendar") return result;
   if (expected !== 0) {
     assert.equal(result.stdout, "");
@@ -429,10 +443,19 @@ try {
     (await command(["extensions", "info", "keepAwake"])).running,
     true,
   );
+  const largerInput = "x".repeat(512 * 1024);
+  assert.equal(
+    await command(
+      ["invoke", "keepAwake", "echo", "--json", "-"],
+      0,
+      JSON.stringify(largerInput),
+    ),
+    largerInput,
+  );
   await command(
     ["invoke", "keepAwake", "echo", "--json", "-"],
     2,
-    `"${"x".repeat(512 * 1024)}"`,
+    `"${"x".repeat(8 * 1024 * 1024)}"`,
   );
   await rm(join(fixture, "catalog.json"));
   await rm(join(fixture, "keepAwake-1.1.0.zip"));

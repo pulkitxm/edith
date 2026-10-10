@@ -93,10 +93,18 @@ public enum CLIOut {
         (error ? FileHandle.standardError : FileHandle.standardOutput).write(Data(text.utf8))
     }
 
-    public static func out(_ text: String) { writeOutput(text + "\n", false) }
-    public static func raw(_ text: String) { writeOutput(text, false) }
-    public static func note(_ text: String) { writeOutput(text + "\n", true) }
-    public static func rawError(_ text: String) { writeOutput(text, true) }
+    private static func write(_ text: String, _ error: Bool) {
+        if let sink = ExtensionCLIContext.outputSink {
+            sink(text, error)
+        } else {
+            writeOutput(text, error)
+        }
+    }
+
+    public static func out(_ text: String) { write(text + "\n", false) }
+    public static func raw(_ text: String) { write(text, false) }
+    public static func note(_ text: String) { write(text + "\n", true) }
+    public static func rawError(_ text: String) { write(text, true) }
 
     public static func json(_ value: JSONValue) {
         out(JSONSerializer.string(value))

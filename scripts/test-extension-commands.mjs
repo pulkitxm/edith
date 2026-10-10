@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   buildExtensionSupport,
   rewriteSupportImports,
 } from "./build-extension-support.mjs";
+import { buildExtensionUICarrier } from "./build-extension-ui-carrier.mjs";
 
 const root = await mkdtemp(join(tmpdir(), "extension-command-fixture-"));
 try {
@@ -26,7 +27,8 @@ try {
       products.modules,
     ),
   );
-  const bundle = join(root, "helper.bundle");
+  const payload = join(root, "keepAwake");
+  const bundle = join(payload, "helper.bundle");
   const contents = join(bundle, "Contents");
   await mkdir(join(contents, "MacOS"), { recursive: true });
   const developer =
@@ -69,7 +71,7 @@ try {
       CFBundleExecutable: "Runtime",
       CFBundlePackageType: "BNDL",
       CFBundleShortVersionString: "1.0.0",
-      EdithHostABI: "edith-host-1",
+      EdithHostABI: "edith-host-2",
     }),
   );
   execFileSync("python3", [
@@ -83,9 +85,28 @@ try {
   });
   const fixture = join(root, "host");
   await mkdir(fixture);
+  const app = join(fixture, "Fixture.app");
+  const identifier = `com.pulkit.edith.tests.command-${crypto.randomUUID()}`;
+  await cp(resolve("local/minimal-host/Edith.app"), app, { recursive: true });
+  execFileSync("python3", [
+    "-c",
+    "import plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,'rb')); d['CFBundleIdentifier']=sys.argv[2]; d['CFBundleName']='Command Fixture'; plistlib.dump(d,open(p,'wb'))",
+    join(app, "Contents/Info.plist"),
+    identifier,
+  ]);
+  execFileSync("codesign", ["--force", "--sign", "-", app], { stdio: "inherit" });
+  execFileSync("codesign", ["--verify", "--deep", "--strict", app], { stdio: "pipe" });
+  await buildExtensionUICarrier({
+    hostApp: app,
+    payloadDirectory: payload,
+    id: "keepAwake",
+    version: "1.0.0",
+    hostABI: "edith-host-2",
+    development: true,
+  });
   const output = execFileSync(
     resolve("Packages/EdithHost/.build/debug/HostCommandHarness"),
-    [fixture, resolve("local/minimal-host/Edith.app"), bundle],
+    [fixture, app, payload],
     { encoding: "utf8", timeout: 120_000 },
   );
   const results = output
@@ -98,6 +119,10 @@ try {
   );
   for (const result of results) {
     assert.equal(result.sameAppExecutable, true);
+    assert.equal(result.nestedHelperRole, true);
+    assert.equal(result.carrierMetadata, true);
+    assert.equal(result.signatureVerified, true);
+    assert.equal(result.frozenExecutableProvenance, true);
     assert.equal(result.binaryInput, true);
     assert.equal(result.argumentsAndEnvironment, true);
     assert.equal(result.peerCommands, true);

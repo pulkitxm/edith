@@ -55,22 +55,40 @@ struct HostCLIResponse: Sendable {
         var object: [String: Any] = ["exitCode": exitCode]
         object["payload"] = payload?.base64EncodedString()
         object["error"] = error
-        return try JSONSerialization.data(withJSONObject: object)
+        return try JSONSerialization.data(withJSONObject: object, options: .withoutEscapingSlashes)
     }
     static func decoded(_ data: Data) throws -> Self {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        guard data.count <= HostCLITransport.maximumFrame,
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            Set(object.keys).isSubset(of: ["exitCode", "payload", "error"]),
             let code = object["exitCode"] as? NSNumber,
-            CFGetTypeID(code) != CFBooleanGetTypeID(), (0...4).contains(code.int32Value)
+            CFGetTypeID(code) != CFBooleanGetTypeID(), (0...4).contains(code.int32Value),
+            code.doubleValue == Double(code.int32Value),
+            object["error"] == nil || object["error"] is String,
+            object["payload"] == nil || object["payload"] is String
         else { throw HostCLIError.rejected("Invalid command response.") }
-        return Self(
-            payload: (object["payload"] as? String).flatMap { Data(base64Encoded: $0) },
-            error: object["error"] as? String, exitCode: code.int32Value)
+        let payload: Data?
+        if let encoded = object["payload"] as? String {
+            guard encoded.utf8.count <= 4 * ((HostCLIRequest.maximumPayload + 2) / 3),
+                let decoded = Data(base64Encoded: encoded),
+                decoded.count <= HostCLIRequest.maximumPayload
+            else { throw HostCLIError.rejected("Invalid command response payload.") }
+            payload = decoded
+        } else {
+            payload = nil
+        }
+        let error = object["error"] as? String
+        guard
+            (code.int32Value == 0 && payload != nil && error == nil)
+                || (code.int32Value != 0 && payload == nil && error != nil)
+        else { throw HostCLIError.rejected("Invalid command response result.") }
+        return Self(payload: payload, error: error, exitCode: code.int32Value)
     }
 }
 
 public enum HostCLITransport {
     static let maximumFrame = 12 * 1024 * 1024
-    static let maximumRequest = 1024 * 1024
+    static let maximumRequest = maximumFrame
     static let directory = "/tmp/edith-cli-\(getuid())"
 
     public static func socketPath(identity: HostIdentity) throws -> String {
@@ -184,7 +202,7 @@ final class HostCLIConnection: @unchecked Sendable {
         return data
     }
     func write(_ data: Data, limit: Int) throws {
-        guard data.count <= limit else {
+        guard !data.isEmpty, data.count <= limit, data.count <= Int(UInt32.max) else {
             throw HostCLIError.rejected("The result exceeds its size limit.")
         }
         var size = UInt32(data.count).bigEndian
