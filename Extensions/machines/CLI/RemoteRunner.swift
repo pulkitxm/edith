@@ -8,6 +8,7 @@ public struct RemoteRunner {
     private let owner: MachineExecutionOwner
     private let makeProcess: @Sendable (String) -> Process
     private let connectAction: (@Sendable () async throws -> Void)?
+    private let disconnectAction: (@Sendable () async -> Void)?
     private let runAction: (@Sendable (String, Data?, TimeInterval) async throws -> SSHExecResult)?
 
     public init(
@@ -15,6 +16,7 @@ public struct RemoteRunner {
         owner: MachineExecutionOwner = MachineExecutionOwner(),
         makeProcess: (@Sendable (String) -> Process)? = nil,
         connect: (@Sendable () async throws -> Void)? = nil,
+        disconnect: (@Sendable () async -> Void)? = nil,
         run: (@Sendable (String, Data?, TimeInterval) async throws -> SSHExecResult)? = nil
     ) {
         self.machine = machine
@@ -23,6 +25,7 @@ public struct RemoteRunner {
         self.owner = owner
         self.makeProcess = makeProcess ?? { connection.streamProcess(command: $0) }
         connectAction = connect
+        disconnectAction = disconnect
         runAction = run
     }
 
@@ -43,6 +46,7 @@ public struct RemoteRunner {
     }
 
     public func disconnect() async {
+        if let disconnectAction { await disconnectAction(); return }
         await connection.disconnect()
     }
 
@@ -78,12 +82,15 @@ public struct RemoteRunner {
 
     public func passthrough(_ command: String) async -> Int32 {
         let process = makeProcess(command)
+        let outputSink = ExtensionCLIContext.outputSink
         let stream = SSHLineStream(
-            process: process, stdinData: MachineCLIContext.input,
+            process: process, stdinData: ExtensionCLIContext.request?.standardInput,
             onLine: { _, _ in }, onExit: { _ in },
             onData: { data, isStderr in
-                let text = String(decoding: data, as: UTF8.self)
-                if isStderr { CLIOut.rawError(text) } else { CLIOut.raw(text) }
+                ExtensionCLIContext.$outputSink.withValue(outputSink) {
+                    let text = String(decoding: data, as: UTF8.self)
+                    if isStderr { CLIOut.rawError(text) } else { CLIOut.raw(text) }
+                }
             })
         do {
             try owner.start(stream)
@@ -92,15 +99,27 @@ public struct RemoteRunner {
             return 1
         }
         defer { owner.release(stream) }
-        return await stream.waitForExit()
+        let code = await stream.waitForExit()
+        await stream.waitForProcessExit()
+        return code
+    }
+
+    public func finish(_ stream: SSHLineStream) async {
+        stream.cancel()
+        await stream.waitForProcessExit()
+        owner.release(stream)
     }
 
     public func stream(
         command: String, stdin: Data? = nil, onLine: @escaping @Sendable (String, Bool) -> Void
     ) throws -> SSHLineStream {
         let process = makeProcess(command)
+        let outputSink = ExtensionCLIContext.outputSink
         let stream = SSHLineStream(
-            process: process, stdinData: stdin, onLine: onLine, onExit: { _ in })
+            process: process, stdinData: stdin,
+            onLine: { line, error in
+                ExtensionCLIContext.$outputSink.withValue(outputSink) { onLine(line, error) }
+            }, onExit: { _ in })
         try owner.start(stream)
         return stream
     }

@@ -354,7 +354,7 @@ struct MachineFilesPutCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let source = URL(fileURLWithPath: local.expandingTilde())
+            let source = try ExtensionCLIContext.resolvePath(local.expandingTilde())
             var isDirectory: ObjCBool = false
             guard
                 FileManager.default.fileExists(

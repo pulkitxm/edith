@@ -8,7 +8,7 @@ public enum CLIStyle {
         if let forcedColor { return forcedColor }
         if ProcessInfo.processInfo.environment["NO_COLOR"] != nil { return false }
         if ProcessInfo.processInfo.environment["TERM"] == "dumb" { return false }
-        return isatty(FileHandle.standardError.fileDescriptor) == 1
+        return ExtensionCLIContext.request?.interactive ?? false
     }
 
     public static func dim(_ text: String) -> String { wrap(text, "2") }

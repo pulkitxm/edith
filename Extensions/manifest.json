@@ -2000,9 +2000,8 @@
     "minimumSystemVersion": 14,
     "roles": {
       "app": [
-        "Extensions/machines/CLI/CLIDestructivePlan.swift",
         "Extensions/machines/CLI/CLIProgress.swift",
-        "Extensions/machines/CLI/MachineCLIInput.swift",
+        "Extensions/machines/CLI/MachineCLICatalog.swift",
         "Extensions/machines/CLI/MachineCLIService.swift",
         "Extensions/machines/CLI/MachineCommands.swift",
         "Extensions/machines/CLI/MachineControlCommands.swift",

@@ -5,7 +5,7 @@ import Foundation
 
 enum SecretInput {
     static func readFromStdin(_ what: String) throws -> String {
-        guard let data = MachineCLIContext.input,
+        guard let data = ExtensionCLIContext.request?.standardInput,
             let line = String(data: data, encoding: .utf8)?.split(whereSeparator: \.isNewline).first
                 .map(String.init), !line.isEmpty
         else {

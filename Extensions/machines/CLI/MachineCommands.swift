@@ -276,6 +276,8 @@ struct MachinesMetricsCommand: AsyncParsableCommand {
             }
             defer { stream.cancel() }
             _ = await stream.waitForExit()
+            await runner.finish(stream)
+            try Task.checkCancellation()
             if !sink.sawSample {
                 throw CLIFailure.unavailable(
                     "\(runner.machine.name) did not report metrics",

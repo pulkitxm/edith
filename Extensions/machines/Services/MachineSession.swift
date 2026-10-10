@@ -225,6 +225,29 @@ public final class MachineSession {
         connect(afterFailures: 0, closingFirst: false)
     }
 
+    public func connectForCommand() async throws {
+        guard uiClient == nil, connection != nil else { throw MachineUIError.unavailable }
+        start()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            switch state {
+            case .connected: return
+            case let .failed(message, recoverable):
+                throw SSHConnectionError.connectFailed(
+                    SSHConnectFailure(message: message, isRecoverable: recoverable))
+            case let .reconnecting(message):
+                throw SSHConnectionError.connectFailed(
+                    SSHConnectFailure(
+                        message: message ?? "The connection was interrupted.", isRecoverable: true))
+            case .disconnected: throw MachineUIError.unavailable
+            case .connecting: try await Task.sleep(for: .milliseconds(50))
+            }
+        }
+        throw SSHConnectionError.connectFailed(
+            SSHConnectFailure(message: "The connection timed out.", isRecoverable: true))
+    }
+
     public func stop() {
         if let uiClient {
             uiClient.enqueue(MachineUIAction(operation: .disconnect, machineID: id)); return

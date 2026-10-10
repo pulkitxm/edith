@@ -79,7 +79,9 @@ struct MachinesMountCommand: AsyncParsableCommand {
             let runner = try await MachineResolver.runner(machine)
             let platform = await runner.ssh.remotePlatform ?? .linux
             let remote = path.flatMap { $0.isEmpty ? nil : $0 } ?? "/"
-            let destination = at.map { URL(fileURLWithPath: $0.expandingTilde()) }
+            let destination = try at.map {
+                try ExtensionCLIContext.resolvePath($0.expandingTilde())
+            }
             switch await MachineMountOperationExecution.perform(
                 .mount, machine: runner.machine, remotePath: remote,
                 platform: platform, mountPoint: destination, readOnly: readOnly,

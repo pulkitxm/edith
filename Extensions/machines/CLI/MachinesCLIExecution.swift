@@ -48,9 +48,15 @@ public enum MachinesCLIEnvironment {
 
 @MainActor enum MachinesCLIExecution {
     static func run(_ request: ExtensionCLIRequest) async throws -> ExtensionCLIReply {
+        try await ExtensionCLIExecution.run(MachinesCommand.self, request: rewrite(request))
+    }
+
+    static func rewrite(_ request: ExtensionCLIRequest) throws -> ExtensionCLIRequest {
         try request.validate()
-        let arguments = MachineCLIArguments.rewrite(request.arguments)
-        return try await ExtensionCLIExecution.run(MachinesCommand.self, arguments: arguments)
+        return try ExtensionCLIRequest(
+            arguments: MachineCLIArguments.rewrite(request.arguments),
+            standardInput: request.standardInput, workingDirectory: request.workingDirectory,
+            interactive: request.interactive)
     }
 }
 

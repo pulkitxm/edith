@@ -23,13 +23,22 @@ final class ExtensionRuntime: NSObject {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard self?.running == true else { throw ExtensionPeerError.unavailable }
             guard let self else { throw ExtensionPeerError.unavailable }
+            if command == "machines.cli.catalog" {
+                guard payload == Data("{}".utf8) else { throw ExtensionPeerError.invalidRequest }
+                return try MachineCLICatalog.encoded()
+            }
+            if command == "machines.cli.complete" { return try MachineCLICatalog.complete(payload) }
             if command.hasPrefix("machines.ui.") {
                 guard let uiEngine = self.uiEngine else { throw ExtensionPeerError.unavailable }
                 return try await uiEngine.execute(command, payload: payload)
             }
+            if command.hasPrefix("machines.cli.stream.") {
+                guard let cli = self.cli else { throw ExtensionPeerError.unavailable }
+                return try cli.invoke(command, payload: payload)
+            }
             if command == "machines.cli" {
                 guard let cli = self.cli else { throw ExtensionPeerError.unavailable }
-                let request = try JSONDecoder().decode(MachineCLIInput.self, from: payload)
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 return try JSONEncoder().encode(try await cli.execute(request))
             }
             if command == "machines.health.snapshot" {
@@ -215,7 +224,15 @@ final class ExtensionRuntime: NSObject {
                     }, files: { value in try await files.execute(value) },
                     preview: { value in try await previews.execute(value) },
                     logs: { value in try logs.execute(value) })
-                cli = MachineCLIService()
+                do {
+                    cli = try MachineCLIService(runner: { machine, owner in
+                        let session = MachinesModel.shared.session(for: machine.id)
+                        return RemoteRunner(
+                            machine: machine, connection: session.connectionRef, owner: owner,
+                            connect: { try await session.connectForCommand() },
+                            disconnect: { await session.shutdown() })
+                    })
+                } catch { return ["ok": false] as NSDictionary }
                 MachinesCLIEnvironment.changed = { MachinesModel.shared.reloadOwnedRecords() }
                 if !fixture {
                     let health = MachineHealthLifecycle()

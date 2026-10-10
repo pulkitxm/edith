@@ -161,7 +161,7 @@ struct MachineFilesGetManyCommand: AsyncParsableCommand {
     func run() async throws {
         try await execute {
             guard !paths.isEmpty else { throw CLIFailure("name at least one remote file") }
-            let destination = URL(fileURLWithPath: to.expandingTilde()).standardizedFileURL
+            let destination = try ExtensionCLIContext.resolvePath(to.expandingTilde())
             var isDirectory: ObjCBool = false
             guard
                 FileManager.default.fileExists(
