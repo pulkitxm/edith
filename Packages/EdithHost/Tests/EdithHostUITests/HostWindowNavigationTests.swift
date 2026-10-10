@@ -13,7 +13,7 @@ struct HostWindowNavigationTests {
         defer { fixture.finish() }
         let gate = NavigationGate()
         var acknowledged = false
-        let navigation = fixture.navigation { _ in acknowledged = true }
+        let navigation = fixture.navigation(didApply: { _ in acknowledged = true })
         navigation.register(
             window: fixture.window,
             apply: { route in
@@ -51,6 +51,19 @@ struct HostWindowNavigationTests {
         #expect(!fixture.window.isVisible)
     }
 
+    @Test func missingPresentationWindowCannotAcknowledgeASelectionInAnotherWindow() async throws {
+        let fixture = NavigationFixture()
+        defer { fixture.finish() }
+        let navigation = fixture.navigation()
+        fixture.register(navigation)
+        await #expect(throws: HostWindowNavigationError.unavailable) {
+            try await navigation.navigate(
+                extensionID: "calendar", version: "1.0.0", presentationID: UUID(), location: "home")
+        }
+        #expect(fixture.selected == "home")
+        #expect(!fixture.window.isVisible)
+    }
+
     @Test func inactiveHiddenForeignAndUnboundedRoutesAreRejectedBeforeSelection() async throws {
         let fixture = NavigationFixture()
         defer { fixture.finish() }
@@ -83,7 +96,8 @@ struct HostWindowNavigationTests {
         let fixture = NavigationFixture()
         defer { fixture.finish() }
         var routes: [HostWindowRoute] = []
-        let navigation = fixture.navigation { routes.append($0) }
+        let navigation = fixture.navigation(
+            originatingWindow: { _ in fixture.window }, didApply: { routes.append($0) })
         fixture.register(navigation)
         try await navigation.navigate(
             extensionID: "music", version: "1.0.0", relativePath: "Synthetic Album",
@@ -128,7 +142,7 @@ struct HostWindowNavigationTests {
             let fixture = NavigationFixture()
             let gate = NavigationGate()
             var acknowledged = false
-            let navigation = fixture.navigation { _ in acknowledged = true }
+            let navigation = fixture.navigation(didApply: { _ in acknowledged = true })
             let token = navigation.register(
                 window: fixture.window,
                 apply: { route in
@@ -176,7 +190,7 @@ struct HostWindowNavigationTests {
         defer { fixture.finish() }
         fixture.versions["cleaner"] = "1.0.0"
         var received: HostWindowRoute?
-        let navigation = fixture.navigation { received = $0 }
+        let navigation = fixture.navigation(didApply: { received = $0 })
         fixture.register(navigation)
         try await navigation.navigate(extensionID: "cleaner", version: "1.0.0")
         #expect(fixture.selected == "appMaintenance")
@@ -206,11 +220,12 @@ private final class NavigationFixture {
         window.identifier = .init("EdithMainWindow")
     }
     func navigation(
+        originatingWindow: @escaping @MainActor (UUID) -> NSWindow? = { _ in nil },
         didApply: @escaping @MainActor (HostWindowRoute) async throws -> Void = { _ in }
     ) -> HostWindowNavigation {
         HostWindowNavigation(
             defaults: defaults, activeVersions: { [weak self] in self?.versions ?? [:] },
-            didApply: didApply)
+            originatingWindow: originatingWindow, didApply: didApply)
     }
     func register(_ navigation: HostWindowNavigation) {
         navigation.register(

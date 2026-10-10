@@ -13,6 +13,8 @@ struct HostApplication: App {
     @State private var coreServices: HostCoreServices?
     @State private var sectionWindows: HostSectionWindows?
     @State private var remotePresenter: HostRemoteContentPresenter?
+    @State private var windowNavigation: HostWindowNavigation?
+    @State private var musicSlots: HostMusicSlots?
     @State private var remoteCleanupNotice = false
     @Environment(\.openWindow) private var openWindow
     @State private var startupError = false
@@ -34,7 +36,8 @@ struct HostApplication: App {
                             additionalSettings: { coreServices?.settings($0) },
                             coreOnline: coreServices?.online ?? false,
                             coreSummary: coreServices?.activityLabel ?? "Starting",
-                            sectionWindows: sectionWindows)
+                            sectionWindows: sectionWindows, windowNavigation: windowNavigation,
+                            musicSlots: musicSlots)
                     } else if startupError {
                         ContentUnavailableView(
                             "Edith could not start", systemImage: "exclamationmark.triangle")
@@ -84,8 +87,35 @@ struct HostApplication: App {
                         try control.start()
                         cliServer = control
                         coreCLI = core
-                        let presenter = HostRemoteContentPresenter(
-                            manager: HostRemoteSessionManager(marketplace: loaded))
+                        let manager = HostRemoteSessionManager(marketplace: loaded)
+                        let presenter = HostRemoteContentPresenter(manager: manager)
+                        let navigation = HostWindowNavigation(
+                            activeVersions: {
+                                loaded.sessions.versions.filter {
+                                    loaded.surfaceAvailability.activeIDs.contains($0.key)
+                                }
+                            }, originatingWindow: { [weak presenter] in presenter?.window(for: $0) }
+                        )
+                        let slots = HostMusicSlots.live(marketplace: loaded)
+                        loaded.sessions.didRequestNavigation = {
+                            [weak manager, weak navigation] request in
+                            guard let manager, let navigation else {
+                                throw HostWorkerError.rejected
+                            }
+                            try manager.validateNavigationOrigin(request)
+                            try await navigation.navigate(
+                                extensionID: request.extensionID, version: request.version,
+                                section: request.section, relativePath: request.relativePath,
+                                presentationID: request.presentationID, location: request.location)
+                            try manager.validateNavigationOrigin(request)
+                        }
+                        let disable = loaded.sessions.willDisable
+                        loaded.sessions.willDisable = { id in
+                            if id == "music" { await slots.stop() }
+                            try await disable(id)
+                        }
+                        windowNavigation = navigation
+                        musicSlots = slots
                         remotePresenter = presenter
                         marketplace = loaded
                         delegate.openMainWindow = { openWindow(id: "main") }
@@ -115,6 +145,7 @@ struct HostApplication: App {
                             let ready = await loaded.sessions.shutdown()
                             if ready {
                                 windows.closeAll(); windows.uninstall()
+                                await slots.stop()
                                 await services.shutdown(); core.shutdown(); control.shutdown()
                             }
                             return ready

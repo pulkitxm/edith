@@ -51,7 +51,9 @@ final class HostRemoteContentPresenter: HostExtensionContentPresenting {
     }
 
     func window(for presentationID: UUID) -> NSWindow? {
-        guard let controller = controllers[presentationID], controller.isViewLoaded else {
+        guard closing[presentationID] == nil, let controller = controllers[presentationID],
+            controller.isViewLoaded, !controller.detached
+        else {
             return nil
         }
         return controller.view.window

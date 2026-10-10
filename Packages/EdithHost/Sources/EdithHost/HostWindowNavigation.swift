@@ -91,6 +91,9 @@ final class HostWindowNavigation {
         }
         registrations = registrations.filter { $0.value.window != nil }
         let origin = presentationID.flatMap(originatingWindow)
+        guard presentationID == nil || origin != nil else {
+            throw HostWindowNavigationError.unavailable
+        }
         let candidates = registrations.filter {
             $0.value.window?.identifier?.rawValue == "EdithMainWindow"
         }
