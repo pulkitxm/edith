@@ -78,19 +78,21 @@ final class OwnedTerminalPTY {
         Darwin.close(descriptor)
         pendingInput.removeAll()
         output.removeAll()
-        reap()
-        ExtensionCommandOwnership.release(pid)
-        guard exitCode == nil else { return }
+        observeExit()
+        let members = sessionMembers()
+        for member in members where member.isAlive { _ = kill(member.pid, SIGHUP) }
         _ = kill(-pid, SIGHUP)
         _ = kill(pid, SIGHUP)
+        for member in members where member.isAlive { _ = kill(member.pid, SIGKILL) }
         _ = kill(-pid, SIGKILL)
         _ = kill(pid, SIGKILL)
+        ExtensionCommandOwnership.release(pid)
         var status: Int32 = 0
         while waitpid(pid, &status, 0) < 0 && errno == EINTR {}
     }
 
     func poll() throws {
-        reap()
+        observeExit()
         if exitCode == nil { try flushInput() } else { pendingInput.removeAll() }
         var buffer = [UInt8](repeating: 0, count: 8_192)
         for _ in 0..<32 {
@@ -111,7 +113,7 @@ final class OwnedTerminalPTY {
                 throw Self.error()
             }
         }
-        reap()
+        observeExit()
     }
 
     private func flushInput() throws {
@@ -131,16 +133,31 @@ final class OwnedTerminalPTY {
         }
     }
 
-    private func reap() {
+    private func observeExit() {
         guard exitCode == nil else { return }
-        var status: Int32 = 0
-        var result: pid_t
-        repeat { result = waitpid(pid, &status, WNOHANG) } while result < 0 && errno == EINTR
-        if result == pid {
-            let signal = status & 0x7f
-            exitCode = signal == 0 ? (status >> 8) & 0xff : 128 + signal
-        } else if result < 0 && errno == ECHILD {
-            exitCode = 255
+        var information = siginfo_t()
+        var result: Int32
+        repeat {
+            result = waitid(P_PID, id_t(pid), &information, WEXITED | WNOHANG | WNOWAIT)
+        } while result < 0 && errno == EINTR
+        if result == 0, information.si_pid == pid {
+            exitCode =
+                information.si_code == CLD_EXITED
+                ? information.si_status : 128 + information.si_status
+        }
+    }
+
+    private func sessionMembers() -> [ExtensionProcessIdentity] {
+        var identifiers = [pid_t](repeating: 0, count: 65_536)
+        let count = identifiers.withUnsafeMutableBytes {
+            proc_listallpids($0.baseAddress, Int32($0.count))
+        }
+        guard count > 0, count <= identifiers.count else { return [] }
+        return identifiers.prefix(Int(count)).compactMap { candidate in
+            guard candidate > 1, candidate != pid, getsid(candidate) == pid,
+                let identity = ExtensionProcessIdentity.read(candidate)
+            else { return nil }
+            return identity
         }
     }
 

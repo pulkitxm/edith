@@ -133,6 +133,47 @@ import Testing
         await #expect(throws: ExtensionPeerError.self) { try await client.read(after: 0) }
     }
 
+    @Test func exitRetainsOutputAndCloseStopsBackgroundJobInSeparateGroup() async throws {
+        let session = try OwnedTerminalSession(
+            launch: launch(
+                "set -m; (trap '' HUP; exec /bin/sleep 60) & printf '%s %s\\n' $$ $!; /bin/sleep 0.1; printf final-output; exit 9"
+            ))
+        defer { session.stop() }
+        let client = try client(session)
+        defer { client.stop() }
+        var bytes = Data()
+        var offset: UInt64 = 0
+        var exit: Int32?
+        for _ in 0..<100 {
+            let output = try await client.read(after: offset)
+            bytes.append(output.bytes)
+            offset = output.nextOffset
+            if let code = output.exitCode { exit = code; break }
+        }
+        #expect(exit == 9)
+        let text = String(decoding: bytes, as: UTF8.self)
+        let identifiers = text.split(whereSeparator: { $0.isWhitespace }).prefix(2)
+        let leader = try #require(identifiers.first.flatMap { Int32($0) })
+        let child = try #require(identifiers.dropFirst().first.flatMap { Int32($0) })
+        #expect(getsid(child) == leader)
+        #expect(getpgid(child) != leader)
+        #expect(text.contains("final-output"))
+        #expect(try await client.read(after: 0).bytes == bytes)
+        try await client.close()
+        var status: Int32 = 0
+        #expect(waitpid(leader, &status, WNOHANG) == -1 && errno == ECHILD)
+        var running = true
+        for _ in 0..<100 {
+            var information = proc_bsdinfo()
+            let size = MemoryLayout<proc_bsdinfo>.size
+            let count = proc_pidinfo(child, PROC_PIDTBSDINFO, 0, &information, Int32(size))
+            running = count == size && information.pbi_status != UInt32(SZOMB)
+            if !running { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(!running)
+    }
+
     @Test func cancelledClientRejectsLateRepliesAndInvalidOutputCursors() async throws {
         let descriptor = OwnedTerminalDescriptor(
             handle: .init(owner: "quinjet", id: UUID(), generation: UUID()),
