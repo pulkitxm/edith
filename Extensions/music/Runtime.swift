@@ -8,19 +8,20 @@ import SwiftUI
 final class ExtensionRuntime: NSObject {
     private var worker: MusicWorker?
     private var surface: MusicSurface?
+    private var uiService: MusicUIService?
+    private let embeddedUI = MusicEmbeddedRuntime()
     private var backup: MusicBackupLifecycle?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.worker != nil else { throw ExtensionPeerError.unavailable }
-            if command == "music.cli", let worker = self.worker {
-                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                return try JSONEncoder().encode(
-                    await MusicCLIExecution.run(request, player: worker.player))
-            }
             if command.hasPrefix("backup."), let backup = self.backup {
                 return try await backup.execute(command, payload: payload)
+            }
+            if command.hasPrefix("music.ui.") || command == "music.cli" {
+                guard let service = self.uiService else { throw ExtensionPeerError.unavailable }
+                return try await service.execute(command, payload: payload)
             }
             guard let surface = self.surface else { throw ExtensionPeerError.unavailable }
             return try await surface.execute(command, payload: payload)
@@ -29,13 +30,14 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        uiService?.stop()
         commands.shutdown()
         backup?.beginShutdown()
         Task {
             await backup?.shutdown()
             await commands.shutdownAndWait()
             await worker?.shutdown()
-            backup = nil; worker = nil; surface = nil
+            backup = nil; worker = nil; surface = nil; uiService = nil
             TextEditingCommands.shutdown(); InputFocus.uninstall()
             completion()
         }
@@ -52,7 +54,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard Bundle.main.bundleURL.pathExtension != "appex",
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"],
                 SurfaceHostContext.current != nil
             else { return ["ok": false] as NSDictionary }
@@ -65,26 +68,22 @@ final class ExtensionRuntime: NSObject {
             }
             if let worker, surface == nil {
                 surface = MusicSurface(read: worker.read, perform: worker.perform)
+                uiService = MusicUIService(worker: worker)
             }
             TextEditingCommands.install()
+        case "configureUI": return embeddedUI.configure(input)
         case "view":
-            guard worker != nil else { return ["ok": false] as NSDictionary }
-            if input["location"] as? String == "home" {
-                guard input["section"] as? String == "music",
-                    let data = input["tile"] as? Data, data.count <= 65_536,
-                    let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
-                    tile.widget == .music
-                else { return ["ok": false] as NSDictionary }
-                return NSHostingController(
-                    rootView: ExtensionPageHost { MusicHomeScene(tile: tile) })
+            guard let controller = embeddedUI.view(input) else {
+                return ["ok": false] as NSDictionary
             }
-            if let controller = MusicAuxiliaryScenes.controller(input) { return controller }
-            return NSHostingController(rootView: ExtensionPageHost { MusicRootView() })
+            return controller
+        case "stopUI": embeddedUI.stop()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": break
         case "stop":
             backup?.beginShutdown()
-            commands.shutdown(); worker?.stop(); worker = nil; surface = nil
+            uiService?.stop(); commands.shutdown(); worker?.stop(); worker = nil; surface = nil;
+            uiService = nil
             TextEditingCommands.shutdown(); InputFocus.uninstall()
         case "status": return ["ok": true, "running": worker != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

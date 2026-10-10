@@ -21,6 +21,7 @@ final class MusicSpotifySession {
     private(set) var duration = 0.0
     private(set) var volume = 0.7
     var error: String?
+    var receiveUIEvent: (([String: Any]) -> Void)?
     private var elapsedBase = 0.0
     private var updatedAt = Date()
     private var process: MusicNativePlayer?
@@ -104,6 +105,7 @@ final class MusicSpotifySession {
     }
 
     private func apply(_ event: [String: Any]) {
+        receiveUIEvent?(event)
         switch event["event"] as? String {
         case "connected":
             authorizationDeadline?.cancel()

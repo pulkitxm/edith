@@ -18,13 +18,16 @@ final class MusicWorker {
 
     init(
         player: LocalMusicPlayer? = nil, external: ExternalMusic? = nil,
-        accounts: MusicAccounts? = nil
+        accounts: MusicAccounts? = nil, startImmediately: Bool = true
     ) {
         self.player = player ?? LocalMusicPlayer()
         self.external = external ?? ExternalMusic()
         self.accounts = accounts ?? .shared
-        self.external.start()
-        tasks.start { try? await DownloadWorker.shared.start() }
+        if startImmediately {
+            self.accounts.activate()
+            self.external.start()
+            tasks.start { try? await DownloadWorker.shared.start() }
+        }
     }
 
     func read(_ tile: SurfaceTile) async throws -> [MusicSurfacePlayback] {
@@ -57,7 +60,7 @@ final class MusicWorker {
             if tile.shows("artwork"), tile.sourceIDs?.contains("spotify") ?? true,
                 let url = spotify.artworkURL
             {
-                value.thumbnail = try await thumbnail(url)
+                value.thumbnail = try await streamingThumbnail(url)
             }
             result.append(value)
         }
@@ -106,7 +109,7 @@ final class MusicWorker {
 
     func perform(_ command: MusicSurfaceCommand) async throws {
         guard !stopped else { throw ExtensionPeerError.unavailable }
-        if command.action == "open" { ExtensionPresentation.showWindow(); return }
+        if command.action == "open" { try await MusicHostNavigation.open(); return }
         if command.sourceID == "local" {
             if command.action == "playQueue" {
                 guard
@@ -216,7 +219,7 @@ final class MusicWorker {
         }
     }
 
-    private func thumbnail(_ url: URL) async throws -> SurfaceThumbnail? {
+    func streamingThumbnail(_ url: URL) async throws -> SurfaceThumbnail? {
         if let cached = artwork[url] { return cached }
         let (bytes, response) = try await session.bytes(from: url)
         guard let response = response as? HTTPURLResponse, response.statusCode == 200,
@@ -251,7 +254,7 @@ final class MusicWorker {
         return value
     }
 
-    private static func thumbnail(_ image: NSImage) -> SurfaceThumbnail? {
+    static func thumbnail(_ image: NSImage) -> SurfaceThumbnail? {
         guard
             let bitmap = NSBitmapImageRep(
                 bitmapDataPlanes: nil, pixelsWide: 160, pixelsHigh: 160,
