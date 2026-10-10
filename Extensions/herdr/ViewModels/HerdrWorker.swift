@@ -3,6 +3,9 @@ import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
+#if SWIFT_PACKAGE
+import WorkerFixtureSupport
+#endif
 
 @MainActor final class HerdrWorker {
     let activity: AgentActivityMonitor
@@ -12,6 +15,26 @@ import Foundation
     let hooks: AgentHookService
     let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
+    let fixture: WorkerFixtureAdmission?
+    var isInertFixture: Bool { fixture != nil }
+    let ambientPolicy: ExtensionAmbientPolicy
+    private var ambientPolicyApplied = false
+    private var tracksAgents = false
+    private var trackingVersion: String?
+    private let trackingOwnerVersion: @MainActor () -> String?
+    private let trackingDemand: @MainActor () async throws -> Bool
+    private(set) var trackingDemandError: String?
+    private lazy var discoveryAdmission = HerdrDiscoveryAdmission(interval: { [weak self] in
+        self?.discoveryInterval
+    })
+    var discoveryInterval: TimeInterval? {
+        guard fixture == nil, ambientPolicyApplied, !isStopped,
+            ambientPolicy.subscribers(for: "sessions.discover") > 0
+                || HerdrAttentionSettings(defaults: defaults).anyEnabled
+                || (tracksAgents && trackingVersion == trackingOwnerVersion())
+        else { return nil }
+        return ambientPolicy.interval(for: "sessions.discover")
+    }
     private let openGuide: @MainActor () throws -> Void
     private let activityInstaller: AgentActivityHookInstaller
     private let notifications: HerdrNotificationService
@@ -54,12 +77,16 @@ import Foundation
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
         defaults: UserDefaults = SharedDefaults.store,
         notifications: HerdrNotificationService? = nil,
+        ambientPolicy: ExtensionAmbientPolicy? = nil, fixture: WorkerFixtureAdmission? = nil,
+        trackingDemand: @escaping @MainActor () async throws -> Bool =
+            HerdrWorker.originalTrackingDemand,
+        trackingOwnerVersion: @escaping @MainActor () -> String? =
+            HerdrWorker.originalTrackingVersion,
         activityInstaller: AgentActivityHookInstaller? = nil,
         hooks: AgentHookService = .shared, catalogs: AgentLaunchCatalogs = AgentLaunchCatalogs(),
         searchDecider: @escaping @MainActor () -> JevDeciding? = { AgentJevDecider.configured() },
         attention: HerdrAttentionBridge? = nil,
-        automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
-            == nil, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
+        automaticActions: Bool = true, inventory: HerdrInventoryCommands = HerdrInventoryCommands(),
         prepareShell:
             @escaping @MainActor (PaneTarget, HerdrStore) async throws -> TerminalLaunchRequest =
             HerdrShellLaunch.prepare,
@@ -71,6 +98,13 @@ import Foundation
         self.hostFolderChoice = hostFolderChoice
         let ownedStore = store ?? .shared
         self.defaults = defaults
+        self.ambientPolicy =
+            ambientPolicy
+            ?? ExtensionAmbientPolicy(jobs: [
+                "sessions.discover": ExtensionAmbientCadence(ambient: 30, live: 2)
+            ])
+        self.trackingDemand = trackingDemand
+        self.trackingOwnerVersion = trackingOwnerVersion
         self.notifications =
             notifications
             ?? HerdrNotificationService(
@@ -98,11 +132,13 @@ import Foundation
         self.catalogs = catalogs
         self.searchDecider = searchDecider
         self.attention = attention ?? HerdrAttentionBridge()
-        self.automaticActions = automaticActions
+        self.fixture = fixture
+        self.automaticActions = automaticActions && fixture == nil
         self.inventory = inventory
         self.send = send
         self.prepareShell = prepareShell
         HerdrWorkOwnership.enable()
+        HerdrLive.admission = discoveryAdmission
         ownedStore.ownsSpaceAgent = { [weak self] in self?.spaces.holds($0) ?? false }
         ownedStore.prepareNotificationAgent = { [weak self] id in
             guard let self else { return }
@@ -153,12 +189,64 @@ import Foundation
         }
     }
 
+    func applyAmbientPolicy(context: NSDictionary) throws {
+        guard !isStopped else { throw ExtensionPeerError.unavailable }
+        try ambientPolicy.apply(context: context)
+        if automaticActions {
+            try ambientPolicy.start { [weak self] in self?.discoveryAdmission.refresh() }
+        }
+        ambientPolicyApplied = true
+        discoveryAdmission.refresh()
+    }
+
+    func refreshDiscoveryDemand() async {
+        guard fixture == nil, !isStopped else { return }
+        let version = trackingOwnerVersion()
+        let next: Bool
+        do {
+            next = version == nil ? false : try await trackingDemand()
+            guard !isStopped, !Task.isCancelled else { return }
+            trackingDemandError = nil
+        } catch {
+            guard !isStopped, !Task.isCancelled else { return }
+            next = false
+            trackingDemandError = error.localizedDescription
+        }
+        guard version == trackingOwnerVersion() else {
+            tracksAgents = false
+            trackingVersion = nil
+            discoveryAdmission.refresh()
+            return
+        }
+        if tracksAgents != next || trackingVersion != version {
+            tracksAgents = next
+            trackingVersion = version
+            discoveryAdmission.refresh()
+        }
+    }
+
+    private static func originalTrackingVersion() -> String? {
+        guard let context = SurfaceHostContext.current,
+            context.activeIDs.contains("attention")
+        else { return nil }
+        return context.activeVersions["attention"]
+    }
+
+    private static func originalTrackingDemand() async throws -> Bool {
+        await HerdrTrackingDemand.read(activeVersion: originalTrackingVersion) { command, payload in
+            guard let endpoint = ExtensionPeerEndpoint.current(owner: "attention") else {
+                throw ExtensionPeerError.unavailable
+            }
+            return try await endpoint.invoke(command, payload: payload, timeout: 5)
+        }
+    }
+
     func start() async {
         await OwnedTerminalContext.$registry.withValue(terminalSessions) { await startOwned() }
     }
 
     private func startOwned() async {
-        guard !started, !isStopped else { return }
+        guard fixture == nil, !started, !isStopped, ambientPolicyApplied else { return }
         started = true
         do { try await activity.hookFiles.resume(activityInstaller) } catch {
             activity.hookError = error.localizedDescription
@@ -168,11 +256,16 @@ import Foundation
         PresenterState.shared.start()
         guard automaticActions else { return }
         _ = try? await MachineRegistry.refresh()
+        await refreshDiscoveryDemand()
+        guard !Task.isCancelled, !isStopped else { return }
         await store.watch()
         await hooks.start { data in HerdrTopicFeed.publish(.hooks, data: data) }
         maintenance = HerdrWorkOwnership.start { [weak self] in
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { return }
+                await self.refreshDiscoveryDemand()
+                guard !Task.isCancelled, !self.isStopped else { break }
+                self.discoveryAdmission.refresh()
                 await self.recordAttention()
                 await self.notifications.evaluate(
                     self.store.hosts, hidden: PresenterState.shared.hidesAgents)
@@ -310,6 +403,7 @@ import Foundation
                 providers.monitorTerminalAttention = settings.monitoring
                 defaults.set(providers.encoded, forKey: AgentActivitySettings.defaultsKey)
                 notifications.reconcile(settings)
+                discoveryAdmission.refresh()
             } else if !object.isEmpty {
                 throw ExtensionPeerError.invalidRequest
             }
@@ -508,6 +602,8 @@ import Foundation
     func cancelPendingWork() async {
         hostWindowNavigation?.invalidate()
         hostFolderChoice?.invalidate()
+        ambientPolicy.stop()
+        await discoveryAdmission.stopAndWait()
         await terminalSessions.stopAllAndWait()
         maintenance?.cancel()
         await catalogs.shutdown()
@@ -518,6 +614,9 @@ import Foundation
     func shutdown() async {
         guard !isStopped else { return }
         isStopped = true
+        ambientPolicy.stop()
+        await discoveryAdmission.stopAndWait()
+        if HerdrLive.admission === discoveryAdmission { HerdrLive.admission = nil }
         hostWindowNavigation?.invalidate()
         hostFolderChoice?.invalidate()
         await terminalSessions.stopAllAndWait()
