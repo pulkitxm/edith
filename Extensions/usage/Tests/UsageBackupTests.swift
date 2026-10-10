@@ -96,10 +96,16 @@ import Testing
         try FileManager.default.createDirectory(at: cloud, withIntermediateDirectories: true)
         let existing = try usage("2026-08-21", tokens: 42)
         try existing.write(to: cloud.appendingPathComponent("usage.json"))
+        defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
         let provider = UsageBackupProvider(directory: local, cloud: cloud, defaults: defaults)
         let result = try await provider.execute("backup.synchronize", payload: Data())
         #expect(String(decoding: result, as: UTF8.self) == "{\"enabled\":false}")
         #expect(!FileManager.default.fileExists(atPath: local.path))
+        #expect(await provider.restoreOnEnable())
+        #expect(!FileManager.default.fileExists(atPath: local.path))
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        defaults.set(false, forKey: AppStorageKeys.Backup.usage)
+        defaults.set(false, forKey: AppStorageKeys.Backup.limits)
         #expect(await provider.restoreOnEnable())
         #expect(try Data(contentsOf: local.appendingPathComponent("usage.json")) == existing)
         #expect(
@@ -139,6 +145,93 @@ import Testing
             try UsageBackupProvider.cloudDirectory(identifier: "com.pulkit.edith", root: root)
         }
         await provider.shutdown()
+    }
+
+    @Test @MainActor func ownedCompletionEventsExportOnlyChosenClassesAndRestoreBeforeReenable()
+        async throws
+    {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "com.pulkit.edith.tests.usage-scheduling-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        defaults.set(true, forKey: AppStorageKeys.Backup.usage)
+        defaults.set(false, forKey: AppStorageKeys.Backup.limits)
+        let local = root.appendingPathComponent("local"),
+            cloud = root.appendingPathComponent("cloud")
+        try FileManager.default.createDirectory(at: local, withIntermediateDirectories: true)
+        let document = local.appendingPathComponent("usage.json")
+        let exported = cloud.appendingPathComponent("usage.json")
+        try usage("2026-08-20", tokens: 23).write(to: document)
+        let provider = UsageBackupProvider(directory: local, cloud: cloud, defaults: defaults)
+        provider.startScheduling(debounce: .milliseconds(20))
+        await wait { FileManager.default.fileExists(atPath: exported.path) }
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: cloud.appendingPathComponent("limits-history.jsonl").path))
+        try usage("2026-08-21", tokens: 42).write(to: document)
+        UsageEvents.post(UsageEvents.usageUpdated)
+        await wait { (try? Data(contentsOf: document)) == (try? Data(contentsOf: exported)) }
+        let saved = try Data(contentsOf: exported)
+        defaults.set(false, forKey: AppStorageKeys.Backup.usage)
+        provider.preferencesChanged()
+        try usage("2026-08-22", tokens: 51).write(to: document)
+        UsageEvents.post(UsageEvents.usageUpdated)
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(try Data(contentsOf: exported) == saved)
+        #expect(
+            String(
+                decoding: try await provider.execute("backup.synchronize", payload: Data()),
+                as: UTF8.self) == "{\"enabled\":false}")
+        defaults.set(false, forKey: AppStorageKeys.Backup.icloud)
+        provider.preferencesChanged()
+        try usage("2026-08-23", tokens: 64).write(to: exported)
+        defaults.set(true, forKey: AppStorageKeys.Backup.usage)
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        provider.preferencesChanged()
+        await wait {
+            guard let data = try? Data(contentsOf: document),
+                let cloudData = try? Data(contentsOf: exported)
+            else { return false }
+            return data == cloudData && String(decoding: data, as: UTF8.self).contains("2026-08-23")
+        }
+        await provider.shutdown()
+        let finished = try Data(contentsOf: exported)
+        try usage("2026-08-24", tokens: 80).write(to: document)
+        UsageEvents.post(UsageEvents.usageUpdated)
+        provider.preferencesChanged()
+        try await Task.sleep(for: .milliseconds(60))
+        #expect(try Data(contentsOf: exported) == finished)
+    }
+
+    @Test @MainActor func unavailableCloudCannotCreateAnAutomaticBackupDirectory() async throws {
+        let root = try fixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let suite = "com.pulkit.edith.tests.usage-unavailable-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: AppStorageKeys.Backup.icloud)
+        let cloud = root.appendingPathComponent("unavailable")
+        let provider = UsageBackupProvider(
+            directory: root, cloud: cloud, defaults: defaults, cloudAvailable: { false })
+        provider.startScheduling(debounce: .zero)
+        UsageEvents.post(UsageEvents.usageUpdated)
+        #expect(await provider.restoreOnEnable())
+        #expect(
+            String(
+                decoding: try await provider.execute("backup.synchronize", payload: Data()),
+                as: UTF8.self) == "{\"enabled\":false}")
+        await provider.shutdown()
+        #expect(!FileManager.default.fileExists(atPath: cloud.path))
+    }
+
+    @MainActor private func wait(_ ready: () -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while !ready(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(ready())
     }
 
     private func fixture() throws -> URL {

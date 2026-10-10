@@ -9,12 +9,21 @@ import Foundation
     private var cancellation: UsageBackupCancellation?
     private var restoreToken: UsageBackupRestoreToken?
     private var stopping = false
+    private var events: UsageBackupEventQueue?
+    private var observers: [NSObjectProtocol] = []
+    private var observedCloudEnabled = false
+    private var needsRestore = false
+    private let cloudAvailable: () -> Bool
     private(set) var failure: String?
 
-    init(directory: URL, cloud: URL, defaults: UserDefaults) {
+    init(
+        directory: URL, cloud: URL, defaults: UserDefaults,
+        cloudAvailable: @escaping () -> Bool = { true }
+    ) {
         self.directory = directory
         self.cloud = cloud
         self.defaults = defaults
+        self.cloudAvailable = cloudAvailable
     }
 
     static func live(environment: [String: String] = ProcessInfo.processInfo.environment) throws
@@ -28,7 +37,12 @@ import Foundation
         let root = URL(fileURLWithPath: path, isDirectory: true)
         let cloud = try cloudDirectory(identifier: identifier, root: root)
         return UsageBackupProvider(
-            directory: root.appendingPathComponent("data"), cloud: cloud, defaults: defaults)
+            directory: root.appendingPathComponent("data"), cloud: cloud, defaults: defaults,
+            cloudAvailable: {
+                identifier != "com.pulkit.edith"
+                    || FileManager.default.fileExists(
+                        atPath: cloud.deletingLastPathComponent().deletingLastPathComponent().path)
+            })
     }
 
     static func cloudDirectory(
@@ -58,31 +72,95 @@ import Foundation
         switch command {
         case "backup.status":
             return try JSONSerialization.data(withJSONObject: [
-                "running": work != nil, "failure": failure as Any? ?? NSNull(),
+                "running": work != nil, "scheduled": events?.scheduled ?? false,
+                "failure": failure as Any? ?? NSNull(),
             ])
         case "backup.cancel":
+            await events?.cancel()
             await cancel()
             return Data("{\"cancelled\":true}".utf8)
         case "backup.synchronize":
-            guard defaults.bool(forKey: AppStorageKeys.Backup.icloud) else {
-                return Data("{\"enabled\":false}".utf8)
-            }
-            let usage = defaults.object(forKey: AppStorageKeys.Backup.usage) as? Bool ?? true
-            let limits = defaults.object(forKey: AppStorageKeys.Backup.limits) as? Bool ?? true
-            guard await transfer(usage: usage, limits: limits, export: true) else {
-                throw ExtensionPeerError.rejected(
-                    "Usage backup could not finish. Retry after iCloud has downloaded the files.")
-            }
-            return Data("{\"synchronized\":true}".utf8)
+            await events?.cancel()
+            return try await exportCurrent()
         default: throw ExtensionPeerError.invalidRequest
         }
     }
 
-    func restoreOnEnable() async -> Bool {
-        await transfer(usage: true, limits: true, export: false)
+    private var cloudEnabled: Bool {
+        !stopping && (defaults.object(forKey: AppStorageKeys.Backup.icloud) as? Bool ?? true)
+            && cloudAvailable()
+    }
+    private var exportEnabled: Bool {
+        (defaults.object(forKey: AppStorageKeys.Backup.usage) as? Bool ?? true)
+            || (defaults.object(forKey: AppStorageKeys.Backup.limits) as? Bool ?? true)
     }
 
-    func shutdown() async { stopping = true; await cancel() }
+    func restoreOnEnable() async -> Bool {
+        guard !stopping else { return false }
+        guard cloudEnabled else { return true }
+        return await transfer(usage: true, limits: true, export: false)
+    }
+
+    func startScheduling(debounce: Duration = .milliseconds(100)) {
+        guard !stopping, events == nil else { return }
+        observedCloudEnabled = cloudEnabled
+        events = UsageBackupEventQueue(
+            debounce: debounce,
+            enabled: { [weak self] in
+                guard let self else { return false }
+                return cloudEnabled && (exportEnabled || needsRestore)
+            },
+            transfer: { [weak self] in
+                guard let self, !stopping else { throw CancellationError() }
+                if needsRestore {
+                    guard await restoreOnEnable() else { throw ExtensionPeerError.unavailable }
+                    try Task.checkCancellation()
+                    needsRestore = false
+                }
+                _ = try await exportCurrent()
+            })
+        for name in [UsageEvents.usageUpdated, UsageEvents.limitsUpdated] {
+            observers.append(UsageEvents.observe(name) { [weak self] in self?.events?.changed() })
+        }
+        observers.append(
+            IPC.observe(IPC.Name.settingsChanged) { [weak self] in
+                MainActor.assumeIsolated { self?.preferencesChanged() }
+            })
+        events?.changed()
+    }
+
+    func preferencesChanged() {
+        guard !stopping else { return }
+        defaults.synchronize()
+        let enabled = cloudEnabled
+        if enabled && !observedCloudEnabled { needsRestore = true }
+        observedCloudEnabled = enabled
+        if !enabled {
+            restoreToken?.invalidate(); cancellation?.cancel(); work?.cancel()
+        }
+        events?.changed()
+    }
+
+    func shutdown() async {
+        stopping = true
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+        await events?.shutdown()
+        events = nil
+        await cancel()
+    }
+
+    private func exportCurrent() async throws -> Data {
+        guard cloudEnabled, exportEnabled else { return Data("{\"enabled\":false}".utf8) }
+        let usage = defaults.object(forKey: AppStorageKeys.Backup.usage) as? Bool ?? true
+        let limits = defaults.object(forKey: AppStorageKeys.Backup.limits) as? Bool ?? true
+        guard await transfer(usage: usage, limits: limits, export: true) else {
+            try Task.checkCancellation()
+            throw ExtensionPeerError.rejected(
+                "Usage backup could not finish. Retry after iCloud has downloaded the files.")
+        }
+        return Data("{\"synchronized\":true}".utf8)
+    }
 
     private func cancel() async {
         restoreToken?.invalidate()
@@ -142,5 +220,74 @@ import Foundation
             }
         }
         return completed
+    }
+}
+
+@MainActor final class UsageBackupEventQueue {
+    private let enabled: () -> Bool
+    private let transfer: () async throws -> Void
+    private let debounce: Duration
+    private let retry: Duration
+    private var pending = false
+    private var stopping = false
+    private var cancelling = false
+    private var deadline = ContinuousClock.now
+    private var task: Task<Void, Never>?
+    var scheduled: Bool { pending || task != nil }
+
+    init(
+        debounce: Duration, retry: Duration = .seconds(3), enabled: @escaping () -> Bool,
+        transfer: @escaping () async throws -> Void
+    ) {
+        self.debounce = max(.zero, debounce)
+        self.retry = max(.milliseconds(1), retry)
+        self.enabled = enabled
+        self.transfer = transfer
+    }
+
+    func changed() {
+        guard !stopping, !cancelling else { return }
+        guard enabled() else { pending = false; task?.cancel(); return }
+        pending = true
+        deadline = ContinuousClock.now.advanced(by: debounce)
+        guard task == nil else { return }
+        task = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                task = nil
+                if pending, !stopping, enabled() { changed() }
+            }
+            while pending, !stopping, enabled(), !Task.isCancelled {
+                let delay = ContinuousClock.now.duration(to: deadline)
+                if delay > .zero {
+                    do { try await Task.sleep(for: delay) } catch { return }
+                    continue
+                }
+                pending = false
+                do {
+                    try Task.checkCancellation()
+                    try await transfer()
+                } catch is CancellationError { return } catch {
+                    guard !stopping, enabled(), !Task.isCancelled else { return }
+                    pending = true
+                    deadline = ContinuousClock.now.advanced(by: retry)
+                }
+            }
+        }
+    }
+
+    func cancel() async {
+        cancelling = true
+        pending = false
+        let owned = task
+        owned?.cancel()
+        await owned?.value
+        pending = false
+        cancelling = false
+    }
+
+    func shutdown() async {
+        stopping = true
+        await cancel()
     }
 }
