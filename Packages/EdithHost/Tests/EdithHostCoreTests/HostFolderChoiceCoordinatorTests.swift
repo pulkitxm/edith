@@ -10,6 +10,9 @@ import Testing
             "supportDirectory": "file:///tmp/synthetic-chooser",
             "extensionID": "herdr", "version": "1", "theme": "accent", "appearance": "system",
             "zoom": 1, "recoveryOnly": false,
+            "ambientPolicy": [
+                "pauseAmbientOnBattery": false, "subscribers": ["sessions.discover": 0],
+            ],
         ])
         let config = try JSONDecoder().decode(HostWorkerConfiguration.self, from: data)
         let presentation = UUID()
