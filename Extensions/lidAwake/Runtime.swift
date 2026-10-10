@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
 import Foundation
@@ -7,12 +8,20 @@ import SwiftUI
 @MainActor @objc(EdithLidAwakeExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var worker: LidAwakeWorker?
+    private var uiModel: LidAwakeSettingsModel?
+    private var uiClient: ExtensionEngineClient?
     private var surface: LidAwakeSurface?
     private let commands = ExtensionCommandRegistry()
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let surface = self?.surface else { throw ExtensionPeerError.unavailable }
+            if command == "lidAwake.cli" {
+                guard let worker = self?.worker else { throw ExtensionPeerError.unavailable }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                return try JSONEncoder().encode(
+                    try await LidAwakeCLIExecution.run(request, worker: worker))
+            }
             return try await surface.execute(command, payload: payload)
         }
     }
@@ -45,10 +54,16 @@ final class ExtensionRuntime: NSObject {
                 let created = LidAwakeWorker(); worker = created
                 surface = LidAwakeSurface(worker: created)
             }
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                let client = configuration.engineClient
+            else { return ["ok": false] as NSDictionary }
+            stopUI(); uiClient = client; uiModel = LidAwakeSettingsModel(client: client)
+        case "stopUI": stopUI()
         case "view":
-            guard let worker else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
-                rootView: ExtensionPageHost { LidAwakeSettings(worker: worker) })
+                rootView: ExtensionPageHost { LidAwakeSettings(model: model) })
         case "synchronize": worker?.engine.syncSettings()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "stop":
@@ -57,6 +72,17 @@ final class ExtensionRuntime: NSObject {
         default: return ["ok": false] as NSDictionary
         }
         return ["ok": true] as NSDictionary
+    }
+    private func stopUI() {
+        uiModel?.stop(); uiModel = nil
+        uiClient?.invalidate(); uiClient = nil
+    }
+
+    @objc(prepareToStopWithCompletion:)
+    func prepareToStop(completion: @escaping () -> Void) {
+        Task {
+            await commands.shutdownAndWait(); try? await worker?.prepareDisable(); completion()
+        }
     }
 }
 

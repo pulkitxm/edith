@@ -161,7 +161,7 @@ public struct LidAwakeRuntimeRequest: Equatable, Sendable {
     }
 }
 
-public struct LidAwakeSnapshot: Equatable, Sendable {
+public struct LidAwakeSnapshot: Codable, Equatable, Sendable {
     public var extensionEnabled: Bool
     public var active: Bool
     public var requestedActive: Bool

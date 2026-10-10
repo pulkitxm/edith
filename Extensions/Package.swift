@@ -11,9 +11,12 @@ let package = Package(
     targets: [
         .target(
             name: "LidAwakeExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "lidAwake",
-            exclude: ["Tests", "Runtime.swift", "Privileged/LidAwakePrivilegedRuntime.swift"],
+            exclude: [
+                "Tests", "Runtime.swift", "Package.swift",
+                "Privileged/LidAwakePrivilegedRuntime.swift",
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "LidAwakeExtensionTests", dependencies: ["LidAwakeExtension"],

@@ -1686,7 +1686,7 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/lidAwake/Models/LidAwakeOperations.swift",
@@ -1703,7 +1703,10 @@
         "Extensions/lidAwake/Services/LidAwakeWorker.swift",
         "Extensions/lidAwake/Surface.swift",
         "Extensions/lidAwake/Views/LidAwakeRows.swift",
-        "Extensions/lidAwake/Views/LidAwakeSettings.swift"
+        "Extensions/lidAwake/Views/LidAwakeSettings.swift",
+        "Extensions/lidAwake/Views/LidAwakeSettingsModel.swift",
+        "Extensions/lidAwake/CLI/LidAwakeCommands.swift",
+        "Extensions/lidAwake/CLI/LidAwakeCLIExecution.swift"
       ],
       "privileged": [
         "Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift",

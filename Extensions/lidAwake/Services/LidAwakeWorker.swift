@@ -75,6 +75,12 @@ import Foundation
         }
     }
 
+    func setSession(_ session: LidAwakeSession) throws {
+        guard !stopped, !recoveryOnly else { throw ExtensionPeerError.unavailable }
+        defaults.set(session.rawValue, forKey: LidAwakeState.sessionKey)
+        engine.syncSettings()
+    }
+
     func prepareDisable() async throws { try await engine.prepareDisable() }
     func requestApproval() throws { try engine.requestApproval() }
     func shutdown() {

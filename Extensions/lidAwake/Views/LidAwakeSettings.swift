@@ -2,21 +2,8 @@ import EdithExtensionSupport
 import EdithExtensionUI
 import SwiftUI
 
-extension Binding {
-    func lidAwakeSetting(_ key: String) -> Binding<Value> {
-        Binding(
-            get: { wrappedValue },
-            set: { value in
-                wrappedValue = value; SharedDefaults.store.set(value, forKey: key);
-                NotificationCenter.default.post(
-                    name: Notification.Name("lidAwakeSettingsChanged"), object: nil)
-            })
-    }
-}
-
 struct LidAwakeSettings: View {
-    let worker: LidAwakeWorker
-    @State private var approvalError: String?
+    let model: LidAwakeSettingsModel
     var body: some View {
         PageWorkspace {
             PageHeader("Lid Awake")
@@ -24,15 +11,14 @@ struct LidAwakeSettings: View {
             Form {
                 Section("Administrator approval") {
                     LabeledContent(
-                        "Privileged carrier", value: worker.engine.snapshot().helperStatus)
+                        "Privileged carrier",
+                        value: model.operations.lastSnapshot?.helperStatus ?? "Checking")
                     Button("Approve Lid Awake") {
-                        do { try worker.requestApproval(); approvalError = nil } catch {
-                            approvalError = error.localizedDescription
-                        }
+                        model.requestApproval()
                     }
-                    if let approvalError { Text(approvalError).foregroundStyle(.red) }
+                    if let error = model.error { Text(error).foregroundStyle(.red) }
                 }
-                LidAwakeRows(operations: worker.operations)
+                LidAwakeRows(operations: model.operations, chooseSession: model.setSession)
                 Section {
                     Text(
                         "Disabling or updating Lid Awake restores the sleep policy before its worker exits. If restoration fails, the extension stays enabled and reports the error."
