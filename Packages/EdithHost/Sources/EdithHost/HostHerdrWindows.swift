@@ -82,6 +82,7 @@ final class HostHerdrWindows {
     var pendingCount: Int { presentations.count }
 
     func open(_ request: HostWorkerNavigationRequest) async throws {
+        try Task.checkCancellation()
         guard !stopping, failed.isEmpty, request.extensionID == "herdr",
             let target = request.herdrWindow,
             presentations.count < 8
@@ -99,6 +100,7 @@ final class HostHerdrWindows {
                 closures[existing.key] == nil, opening[existing.key] == nil
             else { throw HostWorkerError.rejected }
             try await retained.validate()
+            try Task.checkCancellation()
             guard try origin(request) === owner,
                 windows.focusExisting("herdr.window." + existing.key.uuidString)
             else { throw HostWorkerError.rejected }
@@ -147,6 +149,7 @@ final class HostHerdrWindows {
                 throw HostWorkerError.rejected
             }
             try await retained.admit()
+            try Task.checkCancellation()
             guard !stopping, presentations[id] != nil, try origin(request) === owner else {
                 throw HostWorkerError.rejected
             }

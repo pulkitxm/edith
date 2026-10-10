@@ -132,6 +132,24 @@ struct HostHerdrWindowsTests {
         #expect(fixture.closed == [fixture.token] && service.pendingCount == 0)
     }
 
+    @Test func cancellationDuringProviderAdmissionClosesAndDrainsBeforeReturningFailure()
+        async throws
+    {
+        let fixture = HerdrWindowsFixture()
+        defer { fixture.owner.close() }
+        let gate = HerdrWindowGate()
+        fixture.admitGate = gate
+        let service = fixture.service()
+        let open = Task { try await service.open(fixture.request()) }
+        await settle { gate.waiting }
+        #expect(fixture.admitted && fixture.closed.isEmpty)
+        open.cancel()
+        gate.release()
+        await #expect(throws: CancellationError.self) { try await open.value }
+        #expect(service.pendingCount == 0 && fixture.closed == [fixture.token])
+        #expect(fixture.created.allSatisfy { !$0.isVisible })
+    }
+
     private func settle(until condition: () -> Bool) async {
         for _ in 0..<200 {
             if condition() { return }
@@ -157,6 +175,7 @@ private final class HerdrWindowsFixture {
     var releaseAttempts: [UUID] = []
     var loadGate: HerdrWindowGate?
     var readyGate: HerdrWindowGate?
+    var admitGate: HerdrWindowGate?
     var releaseFails = false
 
     func request(presented: Bool = false) throws -> HostWorkerNavigationRequest {
@@ -221,7 +240,10 @@ private final class HerdrWindowsFixture {
                             closed.append(target.token)
                             return Data("{\"presentations\":[]}".utf8)
                         }
-                        if operation.hasSuffix("admit") { admitted = true }
+                        if operation.hasSuffix("admit") {
+                            admitted = true
+                            if let admitGate { await admitGate.wait() }
+                        }
                         var object = try #require(
                             JSONSerialization.jsonObject(with: JSONEncoder().encode(target))
                                 as? [String: Any])
