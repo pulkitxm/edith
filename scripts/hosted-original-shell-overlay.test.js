@@ -76,3 +76,23 @@ test("only authenticated connected scenes contribute managed process receipts", 
   expect(() => fixturePresenterOverlay(source + source)).toThrow();
   expect(source).not.toContain("HostGUIFixture.recordUI(handle)");
 });
+
+test("navigation identifiers qualify the existing original buttons without changing their actions", async () => {
+  const { fixtureNavigationOverlay } = await import(
+    "./hosted-original-shell/source-overlay.mjs"
+  );
+  const source = await readFile(
+    "Packages/EdithHost/Sources/EdithHost/HostWorkspace.swift",
+    "utf8",
+  );
+  const result = fixtureNavigationOverlay(source);
+  expect(result).toContain(
+    '.accessibilityIdentifier("journey.navigation." + page.id)',
+  );
+  expect(result).toContain(
+    '.accessibilityIdentifier("journey.section." + parent.id + "." + section.id)',
+  );
+  expect(result).toContain("select(page.id)");
+  expect(result).toContain("settings = section.id");
+  expect(() => fixtureNavigationOverlay(source + source)).toThrow();
+});

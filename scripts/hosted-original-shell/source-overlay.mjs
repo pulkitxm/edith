@@ -15,6 +15,11 @@ export function originalShellFixtureOverlay(source) {
     "@State private var coreServices: HostCoreServices?",
     "@State private var coreServices: HostGUIJourneyServices?",
   );
+  result = replaceExact(
+    result,
+    "            interactions.install(delegate: delegate)",
+    "",
+  );
   const start = result.indexOf(
     "            let gateway = HostCLIGateway(marketplace: loaded)",
   );
@@ -80,4 +85,18 @@ export function fixturePresenterOverlay(source) {
     "width: state.width, receive: receive)",
     "width: state.width, receive: receive)\n                try HostGUIFixture.recordUI(handle)",
   );
+}
+
+export function fixtureNavigationOverlay(source) {
+  let result = replaceExact(
+    source,
+    ".padding(.leading, page.parentID == nil ? 0 : UIScale.pt(18))",
+    '.padding(.leading, page.parentID == nil ? 0 : UIScale.pt(18))\n                .accessibilityIdentifier("journey.navigation." + page.id)',
+  );
+  result = replaceExact(
+    result,
+    ").padding(.leading, UIScale.pt(18))\n    }\n    private var sidebarEdge:",
+    ').padding(.leading, UIScale.pt(18))\n        .accessibilityIdentifier("journey.section." + parent.id + "." + section.id)\n    }\n    private var sidebarEdge:',
+  );
+  return result;
 }
