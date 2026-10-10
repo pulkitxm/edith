@@ -2,11 +2,12 @@ import ArgumentParser
 import EdithExtensionSupport
 import Foundation
 
-enum HerdrCLICatalog {
+@MainActor enum HerdrCLICatalog {
     static func data() throws -> Data {
         try JSONSerialization.data(withJSONObject: [
             "version": 1, "owner": "herdr", "commands": commands(HerdrCLICommand.self, route: []),
             "settings": [], "acceptsInput": true,
+            "coreOwner": try HerdrAgentCLIExecution.catalog(),
         ])
     }
 

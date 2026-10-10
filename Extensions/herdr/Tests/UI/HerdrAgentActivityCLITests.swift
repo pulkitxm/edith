@@ -56,6 +56,12 @@ import Testing
             try JSONSerialization.jsonObject(
                 with: await worker.execute("herdr.agent.catalog", payload: Data("{}".utf8)))
             as! [String: Any]
+        let ordinary =
+            try JSONSerialization.jsonObject(with: HerdrCLICatalog.data()) as! [String: Any]
+        let promoted = try #require(ordinary["coreOwner"] as? [String: Any])
+        #expect(NSDictionary(dictionary: promoted).isEqual(to: catalog))
+        #expect(ordinary["owner"] as? String == "herdr")
+        #expect(!(ordinary["commands"] as! [[String: Any]]).isEmpty)
         let help = try #require(catalog["parserHelp"] as? [String: Any])
         #expect(help["serializationVersion"] as? Int == 0)
         let root = try #require(help["command"] as? [String: Any])
@@ -107,7 +113,8 @@ import Testing
         let forged = AgentApprovalDecision(
             token: .init(id: request.id, nonce: UUID()), choice: .allowOnce)
         #expect(await worker.activity.service.decide(forged) == false)
-        try streams.cancel(handle); try streams.end(handle)
+        try streams.cancel(handle)
+        try streams.end(handle)
         await streams.stopAndWait()
         #expect(await worker.activity.service.snapshot().approvals.isEmpty)
         await worker.activity.shutdown()
