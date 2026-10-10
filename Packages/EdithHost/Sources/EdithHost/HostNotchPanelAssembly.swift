@@ -54,6 +54,7 @@ final class HostNotchPanelAssembly {
     var presentationIDs: Set<UUID> {
         Set(records.values.map { $0.request.presentationID }).union(retiring.keys)
     }
+    var ownsVisiblePanel: Bool { !stopped && state?.visible == true && !records.isEmpty }
     var attachedCount: Int { records.values.filter { $0.lease != nil }.count }
     var pendingCleanupCount: Int { retiring.count }
 

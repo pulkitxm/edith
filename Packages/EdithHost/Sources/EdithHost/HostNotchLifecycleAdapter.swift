@@ -12,11 +12,42 @@ struct HostNotchWindowAssociation {
 }
 
 @MainActor
+struct HostNotchPointerMonitors {
+    let start: @MainActor (@escaping @MainActor () -> Void) -> [Any]
+    let remove: @MainActor (Any) -> Void
+
+    static var native: Self {
+        .init(
+            start: { deliver in
+                let mask: NSEvent.EventTypeMask = [
+                    .mouseMoved, .leftMouseDragged, .rightMouseDragged,
+                ]
+                var monitors: [Any] = []
+                if let monitor = NSEvent.addGlobalMonitorForEvents(
+                    matching: mask, handler: { _ in deliver() })
+                {
+                    monitors.append(monitor)
+                }
+                if let monitor = NSEvent.addLocalMonitorForEvents(
+                    matching: mask,
+                    handler: { event in
+                        deliver(); return event
+                    })
+                {
+                    monitors.append(monitor)
+                }
+                return monitors
+            }, remove: { NSEvent.removeMonitor($0) })
+    }
+}
+
+@MainActor
 final class HostNotchLifecycleAdapter {
     typealias Make = @MainActor (String) throws -> HostNotchPanelCoordinator
     private let environment: HostNotchPanelCoordinator.Environment
     private let screens: @MainActor () -> [HostNotchPanelScreen]
     private let make: Make
+    private let monitors: HostNotchPointerMonitors
     private var coordinator: HostNotchPanelCoordinator?
     private var version: String?
     private var attachedScreens: [HostNotchPanelScreen] = []
@@ -31,9 +62,11 @@ final class HostNotchLifecycleAdapter {
 
     init(
         environment: @escaping HostNotchPanelCoordinator.Environment,
-        screens: @escaping @MainActor () -> [HostNotchPanelScreen], make: @escaping Make
+        screens: @escaping @MainActor () -> [HostNotchPanelScreen],
+        monitors: HostNotchPointerMonitors = .native, make: @escaping Make
     ) {
         self.environment = environment; self.screens = screens; self.make = make
+        self.monitors = monitors
     }
 
     convenience init(
@@ -94,7 +127,16 @@ final class HostNotchLifecycleAdapter {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleRefresh() }
         }
-        let deliver: @MainActor () -> Void = { [weak self] in
+        observe()
+        scheduleRefresh()
+    }
+
+    private func synchronizeMonitors() {
+        guard installed, !stopped, environment().activeVersions["notchShelf"] == version,
+            (coordinator?.activePanelCount ?? 0) > 0
+        else { removeMonitors(); return }
+        guard eventMonitors.isEmpty else { return }
+        eventMonitors = monitors.start { [weak self] in
             guard let self, !stopped else { return }
             for screen in attachedScreens {
                 coordinator?.pointer(
@@ -103,22 +145,11 @@ final class HostNotchLifecycleAdapter {
                     option: NSEvent.modifierFlags.contains(.option), draggingFiles: false)
             }
         }
-        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged]
-        if let monitor = NSEvent.addGlobalMonitorForEvents(
-            matching: mask, handler: { _ in deliver() })
-        {
-            eventMonitors.append(monitor)
-        }
-        if let monitor = NSEvent.addLocalMonitorForEvents(
-            matching: mask,
-            handler: { event in
-                deliver(); return event
-            })
-        {
-            eventMonitors.append(monitor)
-        }
-        observe()
-        scheduleRefresh()
+    }
+
+    private func removeMonitors() {
+        for monitor in eventMonitors { monitors.remove(monitor) }
+        eventMonitors = []
     }
 
     func refresh() async throws {
@@ -128,6 +159,7 @@ final class HostNotchLifecycleAdapter {
     private func refreshOwned() async throws {
         try Task.checkCancellation()
         guard !stopped else { return }
+        defer { synchronizeMonitors() }
         let current = environment()
         let nextScreens = screens()
         let nextVersion = current.activeVersions["notchShelf"]
@@ -139,6 +171,7 @@ final class HostNotchLifecycleAdapter {
         if let coordinator { coordinator.synchronize(); return }
         let next = try make(nextVersion)
         coordinator = next; version = nextVersion; attachedScreens = nextScreens
+        next.didChangePanels = { [weak self] in self?.synchronizeMonitors() }
         do {
             try await next.start(version: nextVersion, screens: nextScreens)
             failure = nil
@@ -182,8 +215,7 @@ final class HostNotchLifecycleAdapter {
         stopped = true
         if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
         screenObserver = nil
-        for monitor in eventMonitors { NSEvent.removeMonitor(monitor) }
-        eventMonitors = []
+        removeMonitors()
         updating?.cancel()
         if let updating { await updating.value }
         updating = nil
@@ -191,6 +223,7 @@ final class HostNotchLifecycleAdapter {
     }
 
     private func retireCurrent() async throws {
+        removeMonitors()
         guard let coordinator else { return }
         do {
             try await coordinator.stop()

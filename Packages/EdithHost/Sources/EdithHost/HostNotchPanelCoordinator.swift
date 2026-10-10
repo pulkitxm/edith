@@ -37,6 +37,13 @@ final class HostNotchPanelCoordinator {
     private var measurements: [UUID: HostNotchPanelMeasure] = [:]
     private var retired = false
     private(set) var failure: String?
+    var didChangePanels: (@MainActor () -> Void)?
+    var activePanelCount: Int {
+        guard !retired, environment().activeVersions["notchShelf"] == attachRequest?.version else {
+            return 0
+        }
+        return assemblies.values.filter(\.ownsVisiblePanel).count
+    }
 
     init(
         invoke: @escaping Invoke, environment: @escaping Environment,
@@ -114,6 +121,7 @@ final class HostNotchPanelCoordinator {
     }
 
     func synchronize() {
+        defer { didChangePanels?() }
         let current = environment()
         if current.activeVersions["notchShelf"] != attachRequest?.version {
             waiting?.cancel(); writing?.cancel(); pointers = [:]; measurements = [:]
@@ -153,6 +161,7 @@ final class HostNotchPanelCoordinator {
     }
 
     func stop() async throws {
+        defer { didChangePanels?() }
         if let stopping { try await stopping.value; return }
         retired = true
         for assembly in assemblies.values { assembly.hide() }
@@ -206,6 +215,7 @@ final class HostNotchPanelCoordinator {
     }
 
     private func accept(_ next: HostNotchPanelBatch) throws {
+        defer { didChangePanels?() }
         guard !retired, let identity, next.identity == identity,
             let attachRequest, next.states.count == screens.count,
             Set(next.states.map(\.displayID)) == Set(screens.keys),
@@ -329,6 +339,7 @@ final class HostNotchPanelCoordinator {
                     failure = "The Notch panel connection stopped."
                     transfers.cancelPending(); drops.cancelPending()
                     for assembly in assemblies.values { assembly.hide() }
+                    didChangePanels?()
                     return
                 }
             }

@@ -8,6 +8,54 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HostNotchLifecycleAdapterTests {
+    @Test func monitorsExistOnlyWhileEnabledPanelsOwnPointerInput() async throws {
+        let fixture = NotchLifecycleFixture()
+        fixture.environment.activeVersions = [:]
+        let adapter = fixture.adapter()
+        adapter.install()
+        try await adapter.refresh()
+        #expect(fixture.monitorStarts == 0 && fixture.monitorTokens.isEmpty)
+        fixture.environment.activeVersions = ["notchShelf": "1.0.0"]
+        try await adapter.refresh()
+        await fixture.settle()
+        #expect(fixture.monitorStarts == 1 && fixture.monitorTokens.count == 2)
+        try await adapter.refresh()
+        #expect(fixture.monitorStarts == 1)
+        fixture.environment.activeVersions = [:]
+        fixture.failSceneStop = true
+        await #expect(throws: HostWorkerError.rejected) { try await adapter.refresh() }
+        #expect(fixture.monitorTokens.isEmpty && fixture.monitorRemovals == 2)
+        fixture.failSceneStop = false
+        try await adapter.refresh()
+        fixture.environment.activeVersions = ["notchShelf": "1.0.0"]
+        try await adapter.refresh()
+        #expect(fixture.monitorStarts == 2 && fixture.monitorTokens.count == 2)
+        try await adapter.stop()
+        #expect(fixture.monitorTokens.isEmpty && fixture.monitorRemovals == 4)
+        #expect(TestWindowHost.exposedWindows.isEmpty)
+    }
+
+    @Test func attachedButHiddenPanelDoesNotInstallPointerMonitors() async throws {
+        let fixture = NotchLifecycleFixture()
+        fixture.visible = false
+        let adapter = fixture.adapter()
+        adapter.install()
+        try await adapter.refresh()
+        #expect(adapter.panelCount == 1 && fixture.sceneCreated == 0)
+        #expect(fixture.monitorStarts == 0 && fixture.monitorTokens.isEmpty)
+        try await adapter.stop()
+    }
+
+    @Test func failedPanelAdmissionNeverInstallsPointerMonitors() async throws {
+        let fixture = NotchLifecycleFixture()
+        fixture.rejectAssociation = true
+        let adapter = fixture.adapter()
+        adapter.install()
+        await #expect(throws: HostWorkerError.rejected) { try await adapter.refresh() }
+        #expect(fixture.monitorStarts == 0 && fixture.monitorTokens.isEmpty)
+        try await adapter.stop()
+    }
+
     @Test func enabledVersionStartsOriginalDisplaySceneAndUnchangedRefreshReusesIt() async throws {
         let fixture = NotchLifecycleFixture()
         let adapter = fixture.adapter()
@@ -148,11 +196,15 @@ private final class NotchLifecycleFixture {
     var attach: HostNotchPanelAttach?
     var current: HostNotchPanelBatch?
     var released = false
+    var visible = true
     var failDetach = false
     var failSceneStop = false
     var rejectAssociation = false
     var associations: [UUID: NSWindow] = [:]
     var removed: [UUID] = []
+    var monitorStarts = 0
+    var monitorRemovals = 0
+    var monitorTokens: Set<UUID> = []
 
     init() {
         _ = TestWindowHost.application
@@ -166,7 +218,21 @@ private final class NotchLifecycleFixture {
 
     func adapter() -> HostNotchLifecycleAdapter {
         HostNotchLifecycleAdapter(
-            environment: { [self] in environment }, screens: { [self] in screens }
+            environment: { [self] in environment }, screens: { [self] in screens },
+            monitors: .init(
+                start: { [self] _ in
+                    monitorStarts += 1
+                    let tokens = [UUID(), UUID()]
+                    monitorTokens.formUnion(tokens)
+                    return tokens
+                },
+                remove: { [self] token in
+                    guard let token = token as? UUID else {
+                        Issue.record("Unexpected monitor token"); return
+                    }
+                    #expect(monitorTokens.remove(token) != nil)
+                    monitorRemovals += 1
+                })
         ) { [self] _ in
             created += 1
             return HostNotchPanelCoordinator(
@@ -214,7 +280,7 @@ private final class NotchLifecycleFixture {
                         contractVersion: 1, ownershipID: request.ownershipID,
                         version: request.version, revision: 1, displayID: screen.displayID,
                         presentationID: screen.presentationID, phase: .expanded, activeTab: "home",
-                        shapeWidth: 580, shapeHeight: 400, visible: true, acceptsPointer: true,
+                        shapeWidth: 580, shapeHeight: 400, visible: visible, acceptsPointer: true,
                         acceptsKeyFocus: false, slots: [])
                 })
             return try JSONEncoder().encode(current)
