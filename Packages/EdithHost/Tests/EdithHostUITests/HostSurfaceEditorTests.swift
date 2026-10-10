@@ -413,7 +413,14 @@ import Testing
         defaults.set(true, forKey: AppStorageKeys.Suites.media)
         #expect(HostNavigationCatalog.resolve("calendar", active: [], defaults: defaults) == "home")
         #expect(
-            HostNavigationCatalog.resolve("machines", active: [], defaults: defaults) == "machines")
+            HostNavigationCatalog.resolve("machines", active: [], defaults: defaults) == "home")
+        #expect(
+            HostNavigationCatalog.resolve("docs", active: [], defaults: defaults) == "home")
+        #expect(
+            HostNavigationCatalog.resolve("machines", active: ["machines"], defaults: defaults)
+                == "machines")
+        #expect(
+            HostNavigationCatalog.resolve("docs", active: ["docs"], defaults: defaults) == "docs")
         #expect(HostNavigationCatalog.resolve("missing", active: [], defaults: defaults) == "home")
         defaults.set(false, forKey: AppStorageKeys.General.settingsCategoriesExpanded)
         #expect(
@@ -421,7 +428,10 @@ import Testing
                 HostNavigationCatalog.page("settings"), defaults: defaults))
     }
 
-    @Test func mainShellShowsOriginalCoreAndAppNavigationWithoutStartingExtensions() async throws {
+    @Test(arguments: [540.0, 1240.0])
+    func mainShellShowsOriginalCoreAndAppNavigationWithoutStartingExtensions(width: Double)
+        async throws
+    {
         let fixture = try Fixture()
         defer { fixture.clean() }
         let restore = enableAccessibility()
@@ -431,19 +441,39 @@ import Testing
                 marketplace: fixture.marketplace, defaults: fixture.marketplace.surfaces.preferences
             ).environment(\.automaticViewActionsEnabled, false).environment(
                 \.surfaceSampleContent, true))
-        host.frame = CGRect(x: 0, y: 0, width: 1240, height: 850)
+        host.frame = CGRect(x: 0, y: 0, width: width, height: 850)
         let window = TestWindowHost.window(contentRect: host.frame)
         window.contentView = host; window.orderBack(nil)
         defer { window.orderOut(nil) }
         await settle(window, host: host)
-        for title in ["Home", "Fleet", "Docs", "Extensions", "Settings", "About", "Toggle sidebar"]
-        {
+        for title in ["Home", "Extensions", "Settings", "About", "Toggle sidebar"] {
             #expect(find(host, label: title) != nil)
+        }
+        for title in ["Fleet", "Docs", "Agents", "Media", "Agent connections", "Jev", "Terminal"] {
+            #expect(find(host, label: title) == nil)
         }
         #expect(fixture.marketplace.sessions.processIdentifiers.isEmpty)
         #expect(await fixture.requests.count == 0)
         #expect(window.titleVisibility == .hidden)
         #expect(window.styleMask.contains(.fullSizeContentView))
+    }
+
+    @Test func extensionSettingsRequireCompatibleInstalledPackagesAndHidePendingCleanup() {
+        let core = HostNavigationCatalog.settingsSections(installed: [], pending: [])
+        #expect(core.allSatisfy { $0.extensionID == nil })
+        #expect(
+            core.map(\.id) == [
+                "general", "surfaces", "permissions", "agent", "data", "shortcuts", "icloud",
+                "updates",
+            ])
+        let installed = HostNavigationCatalog.settingsSections(
+            installed: ["herdr", "jev", "terminal"], pending: [])
+        #expect(installed == HostNavigationCatalog.settings)
+        let cleaning = HostNavigationCatalog.settingsSections(
+            installed: ["herdr", "jev", "terminal"], pending: ["herdr", "terminal"])
+        #expect(cleaning.first { $0.id == "jev" }?.extensionID == "jev")
+        #expect(!cleaning.contains { $0.id == "agentActivity" || $0.id == "terminal" })
+        #expect(HostNavigationCatalog.settings.map(\.id).contains("agentActivity"))
     }
 
     @Test func originalSidebarFocusesExplicitDetachedSectionsAndOtherwiseUsesMainSelection()

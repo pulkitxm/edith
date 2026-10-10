@@ -3,10 +3,10 @@ import SwiftUI
 
 struct HostSettingsContainer<Content: View>: View {
     @Binding var category: String
+    var sections: [HostNavigationSection] = HostNavigationCatalog.settings
     @ViewBuilder let content: () -> Content
     private var section: HostNavigationSection {
-        HostNavigationCatalog.settings.first { $0.id == category }
-            ?? HostNavigationCatalog.settings[0]
+        sections.first { $0.id == category } ?? HostNavigationCatalog.settings[0]
     }
     var body: some View {
         PageWorkspace {
@@ -14,7 +14,7 @@ struct HostSettingsContainer<Content: View>: View {
                 section.title,
                 trailing: {
                     Picker("Category", selection: $category) {
-                        ForEach(HostNavigationCatalog.settings) { item in
+                        ForEach(sections) { item in
                             Label(item.title, systemImage: item.symbol).tag(item.id)
                         }
                     }.pickerStyle(.menu).labelsHidden().accessibilityLabel("Settings category")
@@ -30,7 +30,7 @@ struct HostSettingsContainer<Content: View>: View {
         }
         .navigationRoute(
             "tab", selection: $category,
-            isValid: { raw in HostNavigationCatalog.settings.contains { $0.id == raw } }
+            isValid: { raw in sections.contains { $0.id == raw } }
         )
         .navigationTitle(section.title)
     }
