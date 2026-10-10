@@ -101,7 +101,7 @@ struct SEOAuditPageAccordion: View {
     }
 
     private var score: some View {
-        Text(page.scores.average.map(String.init) ?? "—")
+        Text(page.scores.average.map(String.init) ?? "-")
             .font(DashSkin.mono(11, weight: .semibold))
             .foregroundStyle(scoreColor(page.scores.average))
             .frame(width: UIScale.pt(28), alignment: .trailing)
@@ -395,7 +395,7 @@ struct SEOAuditPageAccordion: View {
                 alignment: .leading, spacing: UIScale.pt(10)
             ) {
                 fact("Status", page.statusCode.map(String.init) ?? "Failed")
-                fact("Response", page.responseMilliseconds.map { "\($0) ms" } ?? "—")
+                fact("Response", page.responseMilliseconds.map { "\($0) ms" } ?? "-")
                 fact(
                     "Size",
                     ByteCountFormatter.string(fromByteCount: Int64(page.bytes), countStyle: .file))
@@ -449,7 +449,7 @@ struct SEOAuditPageAccordion: View {
 
     private func scoreTile(_ label: String, _ value: Int?) -> some View {
         VStack(spacing: UIScale.pt(3)) {
-            Text(value.map(String.init) ?? "—")
+            Text(value.map(String.init) ?? "-")
                 .font(DashSkin.mono(15, weight: .semibold))
                 .foregroundStyle(scoreColor(value))
             Text(label).font(DashSkin.mono(7.5, weight: .bold)).foregroundStyle(.tertiary)
@@ -500,7 +500,7 @@ struct SEOAuditPageAccordion: View {
                         .font(.system(size: UIScale.pt(10)))
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(previous.scores.average.map(String.init) ?? "—")
+                    Text(previous.scores.average.map(String.init) ?? "-")
                         .font(DashSkin.mono(10.5, weight: .semibold))
                         .foregroundStyle(scoreColor(previous.scores.average))
                 }
