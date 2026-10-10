@@ -29,6 +29,16 @@ if mode in ["child", "child-group", "child-reserved", "child-group-crash", "chil
     with open(sys.argv[2], "w") as stream:
         stream.write(str(child.pid))
 prepare_count = 0
+configuration = None
+
+def navigate():
+    event = {"kind": "navigation", "extensionID": configuration["extensionID"], "version": configuration["version"]}
+    if mode == "navigation-wrong-id":
+        event["extensionID"] = "other"
+    if mode == "navigation-wrong-version":
+        event["version"] = "99.0.0"
+    print(json.dumps(event), flush=True)
+
 for line in sys.stdin:
     request = json.loads(line)
     operation = request["operation"]
@@ -42,6 +52,10 @@ for line in sys.stdin:
     if mode in ["ignore-stop", "child-group-ignore-stop"] and operation == "stop":
         time.sleep(30)
     response = {"token": request["token"], "ok": mode != "reject"}
+    if operation == "show" and mode.startswith("navigation"):
+        navigate()
+    if operation == "prepareDisable" and mode == "navigation-disable":
+        navigate()
     if operation == "prepareDisable":
         prepare_count += 1
         if mode == "reject-disable-always" or (mode == "reject-disable-once" and prepare_count == 1):
@@ -50,6 +64,9 @@ for line in sys.stdin:
         if mode == "late-disable" and prepare_count == 1:
             time.sleep(0.3)
     if operation == "start":
+        configuration = request["configuration"]
+        if mode == "navigation-early":
+            navigate()
         recovery = request["configuration"]["recoveryOnly"]
         if mode == "require-recovery" and not recovery:
             response["ok"] = False

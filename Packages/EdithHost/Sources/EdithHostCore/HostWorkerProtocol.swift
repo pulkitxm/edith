@@ -71,6 +71,24 @@ public struct HostWorkerProcessGroup: Codable, Sendable {
     }
 }
 
+public struct HostWorkerNavigation: Codable, Sendable {
+    public let kind: String
+    public let extensionID: String
+    public let version: String
+
+    public init(configuration: HostWorkerConfiguration) {
+        kind = "navigation"
+        extensionID = configuration.extensionID
+        version = configuration.version
+    }
+
+    public func validate(configuration: HostWorkerConfiguration) throws {
+        guard kind == "navigation", extensionID == configuration.extensionID,
+            version == configuration.version
+        else { throw HostWorkerError.invalidResponse }
+    }
+}
+
 public enum HostWorkerError: Error, Equatable {
     case exited
     case timedOut

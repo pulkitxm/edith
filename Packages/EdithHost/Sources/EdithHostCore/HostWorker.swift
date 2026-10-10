@@ -12,6 +12,7 @@ public final class HostWorker {
     public private(set) var configuration: HostWorkerConfiguration
     public private(set) var ready = false
     public var didExit: (@MainActor () -> Void)?
+    public var didRequestNavigation: (@MainActor () -> Void)?
     public var processIdentifier: Int32? { process.isRunning ? process.processIdentifier : nil }
     private let process = Process()
     private let input = Pipe()
@@ -192,6 +193,16 @@ public final class HostWorker {
                     resource.kind == "processGroup"
                 {
                     try receive(resource)
+                    continue
+                }
+                if let navigation = try? JSONDecoder().decode(
+                    HostWorkerNavigation.self, from: data),
+                    navigation.kind == "navigation"
+                {
+                    try navigation.validate(configuration: configuration)
+                    if ready, !configuration.recoveryOnly, preparationToken == nil {
+                        didRequestNavigation?()
+                    }
                     continue
                 }
                 let response = try JSONDecoder().decode(HostWorkerResponse.self, from: data)

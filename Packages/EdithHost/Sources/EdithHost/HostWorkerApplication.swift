@@ -12,7 +12,6 @@ final class HostWorkerApplication {
     private var frames = HostWorkerFrames()
     private var runtimes: [ExtensionBundleRuntime] = []
     private var configuration: HostWorkerConfiguration?
-    private var window: NSWindow?
     private var parentWatcher: DispatchSourceProcess?
     private var windowObserver: NSObjectProtocol?
     private let nativeAdmission = ExtensionNativeTaskAdmission()
@@ -276,37 +275,10 @@ final class HostWorkerApplication {
     }
 
     private func showWindow() throws {
-        guard !stopping, let configuration, !configuration.recoveryOnly else {
+        guard !stopping, !preparingDisable, let configuration, !configuration.recoveryOnly else {
             throw HostWorkerError.rejected
         }
-        if let window {
-            window.makeKeyAndOrderFront(nil);
-            NSApplication.shared.activate(ignoringOtherApps: true); return
-        }
-        let identity = try configuration.identity()
-        let context: NSDictionary = [
-            "defaultsSuite": identity.extensionDefaultsSuite(configuration.extensionID),
-            "dataDirectory": identity.extensionDirectory(configuration.extensionID).path,
-        ]
-        for runtime in runtimes {
-            if let controller = try runtime.viewController(
-                id: configuration.extensionID, context: context)
-            {
-                let window = NSWindow(contentViewController: controller)
-                window.title =
-                    try HostIndex.bundled().first { $0.id == configuration.extensionID }?.title
-                    ?? "Edith"
-                window.setContentSize(NSSize(width: 900, height: 650))
-                window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-                window.isReleasedWhenClosed = false
-                window.center()
-                self.window = window
-                window.makeKeyAndOrderFront(nil)
-                NSApplication.shared.activate(ignoringOtherApps: true)
-                return
-            }
-        }
-        throw HostWorkerError.rejected
+        try control.send(HostWorkerNavigation(configuration: configuration))
     }
 
     private func shutdown(token: UUID? = nil) {
@@ -321,11 +293,9 @@ final class HostWorkerApplication {
         windowObserver = nil
         resourceObservers.forEach(NotificationCenter.default.removeObserver)
         resourceObservers.removeAll()
-        window?.orderOut(nil)
         shutdownTask = Task { [self] in
             for runtime in runtimes { try? await runtime.prepareToStopAll() }
             for runtime in runtimes { try? runtime.stopAll() }
-            window?.close()
             if let token {
                 try? control.send(
                     HostWorkerResponse(token: token, ok: true, version: configuration?.version))

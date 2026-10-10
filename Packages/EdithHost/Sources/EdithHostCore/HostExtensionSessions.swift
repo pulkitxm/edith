@@ -11,6 +11,7 @@ public final class HostExtensionSessions {
         didSet { didChange() }
     }
     @ObservationIgnored public var didChange: @MainActor () -> Void = {}
+    @ObservationIgnored public var didRequestNavigation: @MainActor (String) -> Void = { _ in }
     @ObservationIgnored public var willDisable: @MainActor (String) async throws -> Void = { id in
         try await HostRemoteCarrierCheckIn.stop(extensionID: id)
         try await HostRemoteSession.stopAll(extensionID: id)
@@ -98,6 +99,13 @@ public final class HostExtensionSessions {
                     self.states[id] = .failed
                     self.failures.insert(id)
                 }
+            }
+            worker.didRequestNavigation = { [weak self, weak worker] in
+                guard let self, let worker, self.workers[id] === worker,
+                    worker.ready, !worker.configuration.recoveryOnly,
+                    self.activeIDs.contains(id), self.versions[id] == worker.configuration.version
+                else { return }
+                self.didRequestNavigation(id)
             }
             try await worker.start()
             guard workers[id] === worker, worker.ready else { throw HostWorkerError.exited }
