@@ -11,7 +11,7 @@ import Foundation
 
     init(
         directory: URL = Repo.dataDir, defaults: UserDefaults = SharedDefaults.store,
-        executable: String? = ClaudeStatusLine.defaultExecutable()
+        executable: String? = nil
     ) {
         self.directory = directory
         self.defaults = defaults

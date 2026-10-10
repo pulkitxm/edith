@@ -162,6 +162,86 @@ public enum ClaudeStatusLine {
         return previous == nil ? .installed : .wrapped
     }
 
+    private struct PublicLauncher: Decodable {
+        let version: Int
+        let hostIdentifier: String
+        let applicationURL: URL
+        let launcherURL: URL
+        let buildVersion: String
+        let signatureHash: Data
+        let teamIdentifier: String?
+        let bundleFileID: String
+        let launcherFileID: String
+        let launcherSHA256: String
+    }
+
+    static func publicExecutable(fromVerifiedContext context: NSDictionary) -> String? {
+        let required: Set<String> = [
+            "version", "hostIdentifier", "applicationURL", "launcherURL", "buildVersion",
+            "signatureHash", "bundleFileID", "launcherFileID", "launcherSHA256",
+        ]
+        guard context["recoveryOnly"] as? Bool != true,
+            let hostIdentifier = context["hostIdentifier"] as? String,
+            let object = context["publicLauncher"] as? NSDictionary,
+            Set(object.allKeys.compactMap { $0 as? String }).isSubset(
+                of: required.union(["teamIdentifier"])),
+            required.isSubset(of: Set(object.allKeys.compactMap { $0 as? String })),
+            let data = try? JSONSerialization.data(withJSONObject: object), data.count <= 32_768,
+            let value = try? JSONDecoder().decode(PublicLauncher.self, from: data),
+            value.version == 1, value.hostIdentifier == hostIdentifier,
+            !hostIdentifier.isEmpty, hostIdentifier.utf8.count <= 200,
+            hostIdentifier.allSatisfy({
+                $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "." || $0 == "-")
+            }),
+            !value.buildVersion.isEmpty, value.buildVersion.utf8.count <= 80,
+            !value.buildVersion.unicodeScalars.contains(
+                where: CharacterSet.controlCharacters.contains),
+            [20, 32].contains(value.signatureHash.count),
+            [value.bundleFileID, value.launcherFileID].allSatisfy({
+                $0.utf8.count <= 80
+                    && $0.split(separator: ":", omittingEmptySubsequences: false).count == 2
+                    && $0.split(separator: ":", omittingEmptySubsequences: false).allSatisfy {
+                        !$0.isEmpty && $0.allSatisfy { $0.isASCII && $0.isNumber }
+                    }
+            }),
+            value.teamIdentifier.map({
+                !$0.isEmpty && $0.utf8.count <= 64
+                    && $0.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+            })
+                ?? (UUID(
+                    uuidString: String(hostIdentifier.dropFirst("com.pulkit.edith.tests.".count)))
+                    != nil && hostIdentifier.hasPrefix("com.pulkit.edith.tests.")),
+            value.applicationURL.isFileURL,
+            value.applicationURL.host == nil || value.applicationURL.host == "",
+            value.applicationURL.query == nil, value.applicationURL.fragment == nil,
+            value.applicationURL.path.hasPrefix("/"), value.applicationURL.path.utf8.count <= 4096,
+            !value.applicationURL.path.utf8.contains(0),
+            value.applicationURL.pathExtension == "app",
+            !value.applicationURL.pathComponents.contains(where: { $0.hasSuffix(".appex") }),
+            value.applicationURL.standardizedFileURL == value.applicationURL,
+            value.launcherURL == value.applicationURL.appendingPathComponent("Contents/MacOS/ed"),
+            let infoData = try? UsageDataFiles.readRegularFile(
+                at: value.applicationURL.appendingPathComponent("Contents/Info.plist"),
+                maximumBytes: 65_536),
+            let info = try? PropertyListSerialization.propertyList(from: infoData, format: nil)
+                as? [String: Any],
+            info["CFBundleIdentifier"] as? String == hostIdentifier,
+            info["CFBundleVersion"] as? String == value.buildVersion,
+            info["CFBundlePackageType"] as? String == "APPL",
+            info["CFBundleExecutable"] as? String == "Edith",
+            ["NSExtension", "EdithContainedRole", "EdithExtensionID", "EdithHostIdentifier"]
+                .allSatisfy({ info[$0] == nil }),
+            (try? FileManager.default.destinationOfSymbolicLink(atPath: value.launcherURL.path))
+                == "../Resources/ed-launcher",
+            FileManager.default.isExecutableFile(atPath: value.launcherURL.path),
+            let resource = try? UsageDataFiles.readRegularFile(
+                at: value.applicationURL.appendingPathComponent("Contents/Resources/ed-launcher"),
+                maximumBytes: 65_536),
+            UsageMachinesPeer.hash(resource) == value.launcherSHA256
+        else { return nil }
+        return value.launcherURL.path
+    }
+
     public static func defaultExecutable(
         bundle: Bundle = .main, fileManager: FileManager = .default
     ) -> String? {
