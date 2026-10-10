@@ -1,3 +1,4 @@
+import EdithExtensionSupport
 import Foundation
 
 @MainActor
@@ -12,14 +13,18 @@ public final class HostRemoteChannel {
     private let connection: NSXPCConnection
     private var pending: [UUID: Pending] = [:]
     private var invalidated = false
-    private let events: EventReceiver
+    private let events: HostRemoteEngineReceiver
 
     public init(
         connection: NSXPCConnection,
-        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in }
+        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        executeEngine:
+            @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
+                _ in throw HostWorkerError.rejected
+            }
     ) {
         self.connection = connection
-        events = EventReceiver(receive: receive)
+        events = HostRemoteEngineReceiver(receive: receive, execute: executeEngine)
         connection.remoteObjectInterface = NSXPCInterface(with: HostRemoteControl.self)
         connection.exportedInterface = NSXPCInterface(with: HostRemoteEvents.self)
         connection.exportedObject = events
@@ -34,22 +39,35 @@ public final class HostRemoteChannel {
 
     public static func connect(
         through bootstrap: NSXPCConnection, executable: URL,
-        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in }
+        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        executeEngine:
+            @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
+                _ in throw HostWorkerError.rejected
+            }
     ) async throws -> HostRemoteChannel {
         let endpoint = try await endpoint(through: bootstrap)
-        return try await connect(to: endpoint.value, executable: executable, receive: receive)
+        return try await connect(
+            to: endpoint.value, executable: executable, receive: receive,
+            executeEngine: executeEngine)
     }
 
     public static func connect(
         to endpoint: NSXPCListenerEndpoint, executable: URL,
-        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in }
+        receive: @escaping @MainActor (HostRemoteEvent) -> Void = { _ in },
+        executeEngine:
+            @escaping @MainActor @Sendable (ExtensionEngineRequest) async throws -> Data = {
+                _ in throw HostWorkerError.rejected
+            }
     ) async throws -> HostRemoteChannel {
         let channel = HostRemoteChannel(
-            connection: NSXPCConnection(listenerEndpoint: endpoint), receive: receive)
+            connection: NSXPCConnection(listenerEndpoint: endpoint), receive: receive,
+            executeEngine: executeEngine)
         do {
             _ = try await channel.request(HostRemoteCommand(operation: "authenticate"))
-            channel.peer = try HostRemoteProcessIdentity.verify(
+            let peer = try HostRemoteProcessIdentity.verify(
                 channel.connection, executable: executable)
+            channel.peer = peer
+            channel.events.authenticate(peer)
             return channel
         } catch {
             channel.invalidate()
@@ -114,6 +132,7 @@ public final class HostRemoteChannel {
         connection.invalidationHandler = nil
         connection.interruptionHandler = nil
         connection.invalidate()
+        events.invalidate()
         for token in Array(pending.keys) {
             finish(token, result: .failure(HostWorkerError.exited))
         }
@@ -183,18 +202,4 @@ public final class HostRemoteChannel {
         }
     }
 
-    private final class EventReceiver: NSObject, HostRemoteEvents, @unchecked Sendable {
-        let receive: @MainActor (HostRemoteEvent) -> Void
-
-        init(receive: @escaping @MainActor (HostRemoteEvent) -> Void) {
-            self.receive = receive
-        }
-
-        func receive(_ data: Data) {
-            guard let event = try? HostRemoteWire.decode(HostRemoteEvent.self, from: data) else {
-                return
-            }
-            Task { @MainActor [receive] in receive(event) }
-        }
-    }
 }

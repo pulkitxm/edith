@@ -11,6 +11,8 @@ import Foundation
 
 @objc public protocol HostRemoteEvents {
     func receive(_ data: Data)
+    func invoke(_ data: Data, reply: @escaping (Data) -> Void)
+    func cancelEngine(_ token: String)
 }
 
 public struct HostExtensionContentRequest: Codable, Equatable, Sendable {
