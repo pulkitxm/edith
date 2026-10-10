@@ -1,4 +1,5 @@
 import ctypes
+import datetime
 import json
 import os
 import re
@@ -106,7 +107,11 @@ def owned_crash_reports(report_directory, output, identities, started):
             payload, _ = decoder.raw_decode(text[offset:].lstrip())
             pid = payload.get('pid')
             executable = payload.get('procPath')
-            if not any(item[0] == pid and item[3] == executable for item in identities):
+            launch = datetime.datetime.strptime(payload.get('procLaunch', ''),
+                                                '%Y-%m-%d %H:%M:%S.%f %z').timestamp()
+            if not any(item[0] == pid and item[3] == executable
+                       and abs(launch - (item[1] + item[2] / 1_000_000)) < 0.001
+                       for item in identities):
                 continue
             destination = output / f'owned-crash-{pid}-{len(retained)}.ips'
             destination.write_text(text)
@@ -114,6 +119,12 @@ def owned_crash_reports(report_directory, output, identities, started):
         except (ValueError, OSError, AttributeError):
             continue
     return retained
+
+
+def completed_tests(batch, text):
+    return batch == 'build' or bool(re.search(
+        r'Test run with [1-9][0-9]* tests? (?:in [1-9][0-9]* suites? )?passed|Executed [1-9][0-9]* tests?',
+        text))
 
 
 def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.Popen,
@@ -162,8 +173,7 @@ def run_batch(batch, arguments, directory, deadline, process_factory=subprocess.
         if sample.stat().st_size > 8_388_608:
             sample.write_text('Owned process sample exceeded the diagnostic bound.\n')
     text = log_path.read_text(errors='replace')
-    tests_completed = batch == 'build' or bool(re.search(
-        r'Test run with [1-9][0-9]* tests? passed|Executed [1-9][0-9]* tests?', text))
+    tests_completed = completed_tests(batch, text)
     return {'batch': batch, 'testsCompleted': tests_completed, 'argv': arguments, 'exitCode': process.returncode,
             'timedOut': timed_out, 'durationSeconds': round(clock() - start, 3),
             'remainingOwnedProcesses': len(ownership.refresh()),

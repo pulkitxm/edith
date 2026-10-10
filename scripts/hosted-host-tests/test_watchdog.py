@@ -109,12 +109,23 @@ class WatchdogTests(unittest.TestCase):
                                           ('changed', 123, '/foreign/executable')]:
                 path = directory / f'{name}.ips'
                 path.write_text(json.dumps({'bug_type': '309'}) + '\n' +
-                                json.dumps({'pid': pid, 'procPath': executable}))
+                                json.dumps({'pid': pid, 'procPath': executable,
+                                            'procLaunch': '1970-01-01 00:00:04.000005 +0000'}))
             (directory / 'symlink.ips').symlink_to(directory / 'owned.ips')
             retained = watchdog.owned_crash_reports(directory, output, [identity], time.time() - 1)
             self.assertEqual(retained, ['owned-crash-123-0.ips'])
             self.assertIn('bug_type', (output / retained[0]).read_text())
             self.assertEqual(watchdog.owned_crash_reports(directory, output, [identity], time.time() + 1), [])
+
+    def test_actual_testing_summaries_require_nonzero_completed_tests(self):
+        for text in ['Test run with 644 tests in 92 suites passed after 42 seconds.',
+                     'Test run with 1 test in 1 suite passed after 1 second.',
+                     'Test run with 2 tests passed after 1 second.',
+                     'Executed 3 tests, with 0 failures']:
+            self.assertTrue(watchdog.completed_tests('core', text))
+        for text in ['', 'Test run with 0 tests passed', 'Executed 0 tests',
+                     'Test run with 4 tests started', 'error: unexpected signal code 11']:
+            self.assertFalse(watchdog.completed_tests('ui', text))
 
     def test_public_process_structure_matches_sdk_layout(self):
         self.assertEqual(watchdog.ctypes.sizeof(watchdog.ProcessInfo), 136)
