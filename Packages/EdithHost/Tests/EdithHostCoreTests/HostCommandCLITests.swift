@@ -20,6 +20,57 @@ import Testing
         #expect(entries.first?.label == "pulkitxm/edith")
         #expect(entries.count == 4)
     }
+    @Test func coreSnapshotDirectoryUsesCallerContextWithoutChangingProcessDirectory() async throws
+    {
+        let suite = "com.pulkit.edith.tests.snapshot-context-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let original = FileManager.default.currentDirectoryPath
+        var received: String?
+        let app = HostAppCommandCLI(
+            available: ["snapshot"],
+            perform: { _, value in
+                received = value["dir"]?.string
+                return .object(["files": .array([])])
+            })
+        let service = HostCoreCLIService(
+            configuration: try HostConfigurationCLI(shared: defaults, standard: defaults),
+            action: { try await app.execute(Array($0.dropFirst())) })
+        _ = try await service.execute(
+            HostCoreCLIEnvelope(
+                arguments: ["app", "snapshot", "--dir", "review"],
+                workingDirectory: "/synthetic/caller"
+            ).request())
+        #expect(received == "/synthetic/caller/review")
+        #expect(
+            FileManager.default.currentDirectoryPath == original
+                && HostCoreCLIContext.workingDirectory == "/")
+    }
+
+    @Test func originalKeyboardStatesKeepUnavailableExitCodesAndNeverClaimUnacceptedLock()
+        async throws
+    {
+        let accepted = Data(
+            "{\"result\":\"arming\",\"status\":{\"phase\":\"arming\",\"hasInputMonitoring\":true,\"hasAccessibility\":true}}"
+                .utf8)
+        let app = HostAppCommandCLI(
+            available: ["clean-keys"],
+            perform: { _, _ in try HostAppKeyboardCLI.response(accepted) })
+        #expect(try await app.execute(["clean-keys"]).stdout == "keyboard cleaning is arming\n")
+        let denied = Data(
+            "{\"result\":\"inputMonitoringRequired\",\"status\":{\"phase\":\"idle\",\"hasInputMonitoring\":false,\"hasAccessibility\":true}}"
+                .utf8)
+        let blocked = HostAppCommandCLI(
+            available: ["clean-keys"], perform: { _, _ in try HostAppKeyboardCLI.response(denied) })
+        let reply = try await blocked.execute(["clean-keys", "--json"])
+        #expect(
+            reply.exitCode == 4 && reply.stdout.isEmpty
+                && reply.stderr.contains("permissions request inputMonitoring"))
+        let inconsistent = Data(
+            "{\"result\":\"cleaning\",\"status\":{\"phase\":\"idle\",\"hasInputMonitoring\":true,\"hasAccessibility\":true}}"
+                .utf8)
+        #expect(throws: HostCLIError.self) { try HostAppKeyboardCLI.response(inconsistent) }
+    }
     @Test func localGuideVersionSchemaAndCompletionRemainAvailableWithoutRunningApp() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             "cli-\(UUID().uuidString)")

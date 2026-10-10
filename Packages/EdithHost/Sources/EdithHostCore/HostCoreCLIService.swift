@@ -4,14 +4,23 @@ import Foundation
 public struct HostCoreCLIEnvelope: Codable, Sendable {
     public let arguments: [String]
     public let input: Data
-    public init(arguments: [String], input: Data = Data()) throws {
+    public let workingDirectory: String
+    public init(
+        arguments: [String], input: Data = Data(),
+        workingDirectory: String = FileManager.default.currentDirectoryPath
+    ) throws {
         _ = try ExtensionCLIRequest(arguments: arguments)
         guard input.count <= HostCLIInvocationContext.maximumInputBytes else {
             throw HostCLIError.usage("Input exceeds 4 MiB.")
         }
         self.arguments = arguments; self.input = input
+        _ = try HostCLIInvocationContext(
+            arguments: arguments, standardInput: input, workingDirectory: workingDirectory)
+        self.workingDirectory = workingDirectory
     }
-    public func validate() throws { _ = try Self(arguments: arguments, input: input) }
+    public func validate() throws {
+        _ = try Self(arguments: arguments, input: input, workingDirectory: workingDirectory)
+    }
     public func request(timeout: Double = 30) throws -> HostCLIRequest {
         try validate()
         return try HostCLIRequest(
@@ -85,7 +94,11 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
             else {
                 throw HostCLIError.usage("Unknown core command.")
             }
-            reply = try await action(envelope.arguments)
+            reply = try await HostCoreCLIContext.$workingDirectory.withValue(
+                envelope.workingDirectory
+            ) {
+                try await action(envelope.arguments)
+            }
         }
         try Task.checkCancellation()
         guard !stopped else {
@@ -96,4 +109,8 @@ public struct HostCoreCLIEnvelope: Codable, Sendable {
     }
 
     public func shutdown() { stopped = true }
+}
+
+public enum HostCoreCLIContext {
+    @TaskLocal public static var workingDirectory = "/"
 }

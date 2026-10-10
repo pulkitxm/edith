@@ -43,8 +43,13 @@ import Foundation
                             ]
                         }))
         }
-        guard Self.actions.contains(action), available().contains(action) else {
-            throw HostCLIError.rejected("This app installation does not provide \(action).")
+        guard Self.actions.contains(action) else {
+            throw HostCLIError.usage("Unknown app command.")
+        }
+        guard available().contains(action) else {
+            return try ExtensionCLIReply(
+                stdout: "", stderr: "error: this app installation does not provide \(action)\n",
+                exitCode: 4)
         }
         var payload: [String: HostCLIJSON] = [:]
         switch action {
@@ -64,7 +69,12 @@ import Foundation
         case "snapshot":
             try args.require(words: 0...0, flags: ["--json"], options: ["--dir"])
             if let directory = args.options["--dir"] {
-                payload["dir"] = .string((directory as NSString).expandingTildeInPath)
+                payload["dir"] = .string(
+                    URL(
+                        fileURLWithPath: (directory as NSString).expandingTildeInPath,
+                        relativeTo: URL(
+                            fileURLWithPath: HostCoreCLIContext.workingDirectory, isDirectory: true)
+                    ).standardizedFileURL.path)
             }
         case "updates":
             try args.require(words: 0...0, flags: ["--json"], options: ["--limit"])
@@ -103,7 +113,16 @@ import Foundation
         default: try args.require(words: 0...0, flags: ["--json"])
         }
         try Task.checkCancellation()
-        var value = try await perform(action, payload)
+        var value: HostCLIJSON
+        do { value = try await perform(action, payload) } catch let unavailable
+            as HostAppCLIUnavailable
+        {
+            try Task.checkCancellation()
+            return try ExtensionCLIReply(
+                stdout: "",
+                stderr: "error: " + unavailable.message + "\nhint: " + unavailable.hint + "\n",
+                exitCode: 4)
+        }
         try Task.checkCancellation()
         if Self.destructive.contains(action), var object = value.object {
             object["applied"] = .bool(true)
@@ -117,6 +136,10 @@ import Foundation
         }
         if action == "snapshot", let files = value.object?["files"]?.array {
             return try HostCLIOutput.text(files.compactMap(\.string).joined(separator: "\n"))
+        }
+        if action == "clean-keys", let state = value.object?["state"]?.string {
+            return try HostCLIOutput.text(
+                state == "arming" ? "keyboard cleaning is arming" : "keyboard is locked")
         }
         if ["info", "diagnostics"].contains(action), let object = value.object {
             let info = action == "info" ? object : object["info"]?.object ?? [:]
@@ -184,4 +207,10 @@ import Foundation
         ("reveal", "Reveal an Edith section.", "mainApp"),
         ("snapshot", "Capture Edith windows as images.", "mainApp"),
     ]
+}
+
+public struct HostAppCLIUnavailable: Error, Sendable {
+    public let message: String
+    public let hint: String
+    public init(message: String, hint: String) { self.message = message; self.hint = hint }
 }

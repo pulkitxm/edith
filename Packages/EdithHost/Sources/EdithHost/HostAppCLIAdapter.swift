@@ -191,14 +191,9 @@ import UserNotifications
             return .object(["action": .string(action), "requested": .bool(true)])
         case "clean-keys":
             let request = try HostCLIRequest(
-                action: .invoke, id: "system", operation: "system.cli",
-                payload: JSONEncoder().encode(
-                    HostCLIInvocationContext(arguments: ["clean-keys", "--json"])))
+                action: .invoke, id: "system", operation: "system.cleanKeys", timeout: 3)
             let data = try await HostCLIGateway(marketplace: marketplace).execute(request)
-            let reply = try JSONDecoder().decode(ExtensionCLIReply.self, from: data)
-            try reply.validate()
-            guard reply.exitCode == 0 else { throw HostCLIError.rejected(reply.stderr) }
-            return try JSONDecoder().decode(HostCLIJSON.self, from: Data(reply.stdout.utf8))
+            return try HostAppKeyboardCLI.response(data)
         default: throw HostCLIError.usage("Unknown app action.")
         }
     }
