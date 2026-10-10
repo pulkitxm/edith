@@ -117,7 +117,16 @@ import Testing
                 ExtensionCLIRequest(arguments: ["connections", "list"]), sender: sender,
                 credentials: { throw CredentialAccess.forbidden })
         }
-        while await !sender.started { try await Task.sleep(for: .milliseconds(5)) }
+        let deadline = ContinuousClock.now + .seconds(3)
+        while await !sender.started && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        guard await sender.started else {
+            task.cancel()
+            _ = await task.result
+            Issue.record("The owned command did not start before its deadline.")
+            return
+        }
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(await sender.cancelled)

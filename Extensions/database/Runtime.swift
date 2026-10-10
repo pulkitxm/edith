@@ -41,8 +41,7 @@ final class ExtensionRuntime: NSObject {
                         sender: DatabaseWorkerClient(),
                         credentials: { try DatabaseWorkerClient.credentialStore() },
                         runMCP: {
-                            throw CLIFailure.unavailable(
-                                "database MCP input streaming is unavailable")
+                            try await DatabaseCLIMCP.run()
                         })
                 ) {
                     try streams.invoke(

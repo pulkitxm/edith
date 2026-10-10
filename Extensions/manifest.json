@@ -2694,6 +2694,7 @@
       "app": [
         "Extensions/database/AccessibilityAnnouncement.swift",
         "Extensions/database/CLI/DatabaseCLIExecution.swift",
+        "Extensions/database/CLI/DatabaseCLIMCP.swift",
         "Extensions/database/CLI/DatabaseCommands.swift",
         "Extensions/database/CLI/DatabaseExecutionCommands.swift",
         "Extensions/database/CLI/DatabaseMCPCommand.swift",

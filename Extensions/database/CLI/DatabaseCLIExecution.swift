@@ -117,7 +117,7 @@ enum DatabaseCLIEnvironment {
         _ request: ExtensionCLIRequest, sender: any DatabaseBrokerCommandSending,
         credentials: @escaping @Sendable () throws -> any DatabaseSecretStore,
         runMCP: @escaping @Sendable () async throws -> Void = {
-            throw CLIFailure.unavailable("database MCP input streaming is unavailable")
+            try await DatabaseCLIMCP.run()
         }
     ) async throws -> ExtensionCLIReply {
         try await DatabaseCLIEnvironment.$resources.withValue(
