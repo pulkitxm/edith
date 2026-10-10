@@ -200,6 +200,7 @@ public final class HostMarketplace {
             let plan = try result.catalog.installationPlan(
                 for: id, hostABI: HostContract.compatibility, architecture: "arm64",
                 systemVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion)
+            if let previous = installed[id] { try store.select(previous) }
             _ = try await installer.install(plan, repository: MarketplaceConfiguration.repository) {
                 [weak self] value in
                 Task { @MainActor in
@@ -207,13 +208,15 @@ public final class HostMarketplace {
                     self?.progress = value
                 }
             }
-            try reloadInstalled()
-            if let package = installed[id] {
+            if let package = plan.first(where: { $0.id == id }) {
                 do {
                     if sessions.enabledIDs.contains(id), sessions.states[id] != .active {
                         try await sessions.enable(package)
                     } else {
                         try await sessions.applyUpdate(package)
+                    }
+                    if sessions.states[id] != .active || sessions.versions[id] == package.version {
+                        try store.select(package)
                     }
                 } catch {
                     self.error =
@@ -222,6 +225,7 @@ public final class HostMarketplace {
                 }
             }
             try store.prune(hostABI: HostContract.compatibility)
+            try reloadInstalled()
         } catch {
             self.error = "The extension could not be downloaded. Try again."
         }

@@ -33,9 +33,41 @@ public struct ExtensionPackageStore: Sendable {
     public func installedPackage(id: String, hostABI: String, architecture: String) throws
         -> ExtensionPackage?
     {
-        try installedPackages().filter {
+        let compatible = try installedPackages().filter {
             $0.id == id && $0.hostABI == hostABI && $0.architecture == architecture
-        }.max { $0.version.compare($1.version, options: .numeric) == .orderedAscending }
+        }
+        if let selected = try selections().first(where: { compatible.contains($0) }) {
+            return selected
+        }
+        return compatible.max {
+            $0.version.compare($1.version, options: .numeric) == .orderedAscending
+        }
+    }
+
+    public func select(_ package: ExtensionPackage) throws {
+        let operation = try PackageFileLock(
+            url: root.appendingPathComponent(".operation.lock"), exclusive: true)
+        defer { operation.close() }
+        guard try installedPackages().contains(package) else {
+            throw MarketplaceError.packageNotInstalled
+        }
+        var selected = try selections().filter {
+            $0.id != package.id || $0.hostABI != package.hostABI
+                || $0.architecture != package.architecture
+        }
+        selected.append(package)
+        try saveSelections(selected)
+    }
+
+    private func selections() throws -> [ExtensionPackage] {
+        let file = root.appendingPathComponent("selected-packages.json")
+        guard FileManager.default.fileExists(atPath: file.path) else { return [] }
+        return try JSONDecoder().decode([ExtensionPackage].self, from: Data(contentsOf: file))
+    }
+
+    private func saveSelections(_ packages: [ExtensionPackage]) throws {
+        try JSONEncoder().encode(packages).write(
+            to: root.appendingPathComponent("selected-packages.json"), options: .atomic)
     }
 
     public func commit(_ packages: [ExtensionPackage]) throws {
@@ -59,6 +91,7 @@ public struct ExtensionPackageStore: Sendable {
             try PackageFileLock(url: leaseURL(for: package), exclusive: true)
         }
         defer { leases.forEach { $0.close() } }
+        try saveSelections(selections().filter { $0.id != id })
         try commit(packages.filter { $0.id != id })
         for package in removed { try FileManager.default.removeItem(at: directory(for: package)) }
         return !removed.isEmpty
@@ -121,6 +154,7 @@ public struct ExtensionPackageStore: Sendable {
             url: root.appendingPathComponent(".operation.lock"), exclusive: true)
         defer { operation.close() }
         let packages = try installedPackages()
+        let selected = try selections()
         let groups = Dictionary(grouping: packages) { "\($0.id)/\($0.architecture)" }
         var retained = packages
         for group in groups.values {
@@ -128,7 +162,9 @@ public struct ExtensionPackageStore: Sendable {
                 $0.version.compare($1.version, options: .numeric) == .orderedDescending
             }
             let compatible = ordered.filter { $0.hostABI == hostABI }
-            let keep = compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2))
+            let keep =
+                (compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2)))
+                + compatible.filter { selected.contains($0) }
             for package in ordered where !keep.contains(package) {
                 guard let lease = try? PackageFileLock(url: leaseURL(for: package), exclusive: true)
                 else { continue }
@@ -141,6 +177,7 @@ public struct ExtensionPackageStore: Sendable {
             }
         }
         try commit(retained)
+        try saveSelections(selected.filter { retained.contains($0) })
     }
 
     public func diskBytes() -> Int64 {
