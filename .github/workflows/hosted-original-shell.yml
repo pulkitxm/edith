@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   calendar-journey:
-    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-original-shell-journey'
+    if: github.repository == 'pulkitxm/edith' && github.event_name == 'workflow_dispatch' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics')
     runs-on: macos-26
     timeout-minutes: 45
     env:
@@ -82,6 +82,16 @@ jobs:
             local/hosted-original-shell/result.json
             local/hosted-original-shell/state.json
             local/hosted-original-shell/journey-outcome.json
+      - name: Retain completed synthetic window evidence
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hosted-original-shell-synthetic-windows
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            local/hosted-original-shell/marketplace-installed-calendar.png
+            local/hosted-original-shell/storage-distribution.png
       - name: Remove the owned disposable signing keychain
         if: always()
         run: |

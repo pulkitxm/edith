@@ -37,7 +37,7 @@ permissions:
 
 jobs:
   hosted-original-shell:
-    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && github.ref == 'refs/heads/feat/hosted-original-shell-journey' && inputs.hosted_shell_journey_sha == github.sha
+    if: github.event_name == 'workflow_dispatch' && inputs.hosted_shell_journey_sha != '' && !inputs.release && inputs.rebuild == '' && github.repository == 'pulkitxm/edith' && (github.actor_id == '65671483' || github.actor_id == '320458784') && (github.ref == 'refs/heads/feat/hosted-original-shell-journey' || github.ref == 'refs/heads/feat/hosted-host-test-diagnostics') && inputs.hosted_shell_journey_sha == github.sha
     uses: ./.github/workflows/hosted-original-shell.yml
     with:
       expected_sha: ${{ inputs.hosted_shell_journey_sha }}

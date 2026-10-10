@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
 import { configureUITestRun, writeUIProject } from "./ui-project.mjs";
 
@@ -205,6 +206,16 @@ try {
     ).length,
     proof,
   };
+  const images = [];
+  for (const name of journeyImageNames) {
+    const bytes = await readFile(join(directory, name));
+    images.push(validateJourneyImage(name, bytes, outcome));
+  }
+  for (const name of journeyImageNames)
+    await writeFile(join(output, name), await readFile(join(directory, name)), {
+      mode: 0o600,
+    });
+  outcome.images = images;
 } catch (error) {
   failure = error;
   outcome = { ...outcome, reason: String(error.message).slice(0, 4096) };
