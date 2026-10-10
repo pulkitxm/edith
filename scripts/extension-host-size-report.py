@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 
-BUILD_FIELDS = ("sourceCommit", "sourceTreeDirty", "configuration", "optimization", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive")
+BUILD_FIELDS = ("sourceCommit", "sourceTreeDirty", "configuration", "optimization", "linkTimeOptimization", "architecture", "signature", "xcode", "sdk", "ghosttySourceCommit", "ghosttyArchive")
 
 
 def measure_host_components(app):
@@ -95,7 +95,7 @@ def build_report(baseline, app, packages, definitions, index, expected_fingerpri
 def describe_build(build):
     labels = {
         "sourceCommit": "source commit", "sourceTreeDirty": "uncommitted source changes", "configuration": "configuration",
-        "optimization": "optimization", "architecture": "architecture",
+        "optimization": "optimization", "linkTimeOptimization": "link-time optimization", "architecture": "architecture",
         "signature": "signing", "xcode": "Xcode", "sdk": "SDK",
         "ghosttySourceCommit": "Ghostty source commit", "ghosttyArchive": "Ghostty archive",
     }

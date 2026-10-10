@@ -97,15 +97,18 @@ class HostSizeReportTests(unittest.TestCase):
         host_build = {
             "hostExecutableSHA256": hashlib.sha256(self.executable.read_bytes()).hexdigest(),
             "sourceCommit": "host-fixture", "configuration": "Release", "optimization": "-Osize",
+            "linkTimeOptimization": "full",
             "architecture": "arm64", "signature": "ad-hoc", "xcode": "27.0 (fixture)", "sdk": "27.0",
         }
         result = report.build_report(self.baseline, self.app, self.packages, definitions, index, host_build=host_build)
         self.assertEqual(result["measurement"]["hostBuild"]["signature"], "ad-hoc")
+        self.assertEqual(result["measurement"]["hostBuild"]["linkTimeOptimization"], "full")
         self.assertNotIn("signature", result["measurement"])
         rendered = report.render_markdown(result, index)
         self.assertIn("Baseline build: source commit: `baseline-fixture`; configuration: `Release`", rendered)
         self.assertIn("Host build: source commit: `host-fixture`; configuration: `Release`; optimization: `-Osize`", rendered)
         self.assertIn("signing: `ad-hoc`", rendered)
+        self.assertIn("link-time optimization: `full`", rendered)
         for dirty in [False, True]:
             host_build["sourceTreeDirty"] = dirty
             measured = report.build_report(self.baseline, self.app, self.packages, definitions, index, host_build=host_build)
