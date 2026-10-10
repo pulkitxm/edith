@@ -108,6 +108,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
+                && !Self.running($0, role: "managedUI")
         }
         try assertLayouts(home: home, notch: notch)
         XCTAssertFalse(application.buttons["journey.navigation.calendar"].exists)
@@ -147,6 +148,7 @@ final class OriginalShellJourneyTests: XCTestCase {
             ($0["workers"] as? [String: Int]) == [:]
                 && ($0["presentationCounts"] as? [String: Int]) == [:]
                 && !Self.running($0, role: "engine")
+                && !Self.running($0, role: "managedUI")
         }
         try click(application.buttons["Remove"], in: application)
         try waitState("removed-packages") { ($0["downloaded"] as? [String]) == [] }

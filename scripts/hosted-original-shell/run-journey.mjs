@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { journeyImageNames, validateJourneyImage } from "./evidence.mjs";
+import { validateDisabledJourneyProcesses } from "./outcomes.mjs";
 import { admitHostedJourney, prepareJourney } from "./prepare-journey.mjs";
 import { configureUITestRun, writeUIProject } from "./ui-project.mjs";
 
@@ -201,9 +202,7 @@ try {
     sourceCommit: receipt.sourceCommit,
     productionExecutableUnchangedProof: false,
     postQuitProcesses: currentProcesses,
-    remainingKnownUIProcesses: final.ownedProcesses.filter(
-      (item) => item.role === "managedUI" && item.running,
-    ).length,
+    disabledProcessObservations: validateDisabledJourneyProcesses(proof),
     proof,
   };
   const images = [];
