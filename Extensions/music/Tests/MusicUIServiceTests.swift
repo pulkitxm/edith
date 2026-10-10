@@ -6,6 +6,43 @@ import Testing
 
 extension MusicExtensionTests {
     @MainActor @Suite(.serialized) struct MusicUIServiceTests {
+        @Test func folderIntentRequiresAcknowledgementAndRejectsLateCompletionAfterStop()
+            async throws
+        {
+            let worker = MusicWorker(startImmediately: false)
+            let service = MusicUIService(worker: worker)
+            let prior = MusicHostNavigation.navigate
+            defer {
+                service.stop(); worker.stop(); MusicHostNavigation.navigate = prior
+            }
+            var pending: CheckedContinuation<Void, Error>?
+            MusicHostNavigation.navigate = { _ in
+                try await withCheckedThrowingContinuation { pending = $0 }
+            }
+            let navigation = Task { try await MusicHostNavigation.open(path: "Mock Collection") }
+            for _ in 0..<50 where pending == nil { await Task.yield() }
+            #expect(pending != nil)
+            #expect(MusicHostNavigation.folderIntent == nil)
+            pending?.resume(); pending = nil
+            try await navigation.value
+            #expect(MusicHostNavigation.folderIntent == .init(revision: 1, path: "Mock Collection"))
+            MusicHostNavigation.navigate = { _ in throw ExtensionPeerError.unavailable }
+            await #expect(throws: (any Error).self) {
+                try await MusicHostNavigation.open(path: "Mock Rejected")
+            }
+            #expect(MusicHostNavigation.folderIntent?.path == "Mock Collection")
+            MusicHostNavigation.navigate = { _ in
+                try await withCheckedThrowingContinuation { pending = $0 }
+            }
+            let late = Task { try await MusicHostNavigation.open(path: "Mock Late") }
+            for _ in 0..<50 where pending == nil { await Task.yield() }
+            #expect(pending != nil)
+            service.stop()
+            pending?.resume()
+            await #expect(throws: CancellationError.self) { try await late.value }
+            #expect(MusicHostNavigation.folderIntent == nil)
+        }
+
         @Test func hostSlotsPreserveOriginalPlaybackAndCollapseGates() async throws {
             let defaults = SharedDefaults.store
             let keys = [
@@ -214,6 +251,11 @@ extension MusicExtensionTests {
                 payload: JSONEncoder().encode(
                     MusicUIAction(kind: .openMusic, path: "Mock Collection")))
             #expect(navigation == [.init(section: "music", path: "Mock Collection")])
+            let navigated = try JSONDecoder().decode(
+                MusicUIState.self,
+                from: await service.execute(
+                    "music.ui.read", payload: JSONEncoder().encode(MusicUIQuery())))
+            #expect(navigated.folderIntent == .init(revision: 1, path: "Mock Collection"))
             service.stop()
             await #expect(throws: (any Error).self) {
                 try await service.execute(

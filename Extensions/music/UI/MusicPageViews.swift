@@ -1154,8 +1154,7 @@ struct EmbeddedMusicDetailOverlay: View {
                             deleteTarget = track
                         },
                         onOpenFolder: {
-                            remote.navigate(to: $0)
-                            remote.send(.openMusic, path: $0)
+                            remote.send(.openMusic, path: $0, target: "folder")
                         },
                         onClose: { presenter.dismiss() }
                     )

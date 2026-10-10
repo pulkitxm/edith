@@ -18,6 +18,7 @@ import WebKit
     init(worker: MusicWorker, version: String = "") {
         self.worker = worker
         self.version = version
+        MusicHostNavigation.reset()
         worker.accounts.spotify.receiveUIEvent = { [weak self] event in
             guard let self, let data = try? JSONSerialization.data(withJSONObject: event),
                 data.count <= 262_144
@@ -107,6 +108,7 @@ import WebKit
                     forKey: MusicBackupProvider.restorePendingKey),
                 events: events.filter { $0.sequence > query.cursor }, cursor: sequence,
                 privacy: MusicPrivacyState.shared.active,
+                folderIntent: MusicHostNavigation.folderIntent,
                 preferences: .init(
                     crossfade: SharedDefaults.store.object(forKey: MusicFade.enabledKey) as? Bool
                         ?? true,
@@ -302,7 +304,11 @@ import WebKit
             MusicLibraryOperationExecution.reveal(try MusicLibrary.folder(at: action.path).url)
         case .openDownloads: try await MusicHostNavigation.open(section: "downloads")
         case .openMusic:
-            try await MusicHostNavigation.open(path: action.path.isEmpty ? nil : action.path)
+            guard ["", "folder"].contains(action.target) else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            try await MusicHostNavigation.open(
+                path: action.path.isEmpty && action.target != "folder" ? nil : action.path)
         case .openSource:
             let track = try MusicLibrary.track(at: action.path)
             guard
@@ -395,6 +401,7 @@ import WebKit
     func stop() {
         guard !stopped else { return }
         stopped = true
+        MusicHostNavigation.reset()
         libraryPanel?.cancel(nil); libraryPanel = nil
         downloads?.stop(); downloads = nil; resumeAudio = false; closeVideo()
         worker.accounts.spotify.receiveUIEvent = nil

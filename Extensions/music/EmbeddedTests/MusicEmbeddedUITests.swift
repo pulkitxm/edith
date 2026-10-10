@@ -8,6 +8,48 @@ import Testing
 @testable import MusicEmbeddedUI
 
 @MainActor @Suite(.serialized) struct MusicEmbeddedUITests {
+    @Test func folderIntentIsConsumedOnceAndOnlyAfterEngineAcknowledgement() async throws {
+        let remote = EmbeddedMusicRemote()
+        var value = state()
+        var queries: [EmbeddedMusicUIQuery] = []
+        var actions: [EmbeddedMusicUIAction] = []
+        remote.configure { operation, payload in
+            if operation == "music.ui.read" {
+                queries.append(try JSONDecoder().decode(EmbeddedMusicUIQuery.self, from: payload))
+                return try JSONEncoder().encode(value)
+            }
+            actions.append(try JSONDecoder().decode(EmbeddedMusicUIAction.self, from: payload))
+            return Data("{}".utf8)
+        }
+        defer { remote.stop() }
+        remote.rescan()
+        for _ in 0..<50 where !remote.entriesLoaded { await Task.yield() }
+        remote.reveal(
+            .init(
+                url: URL(fileURLWithPath: "/tmp/mock-music-library/Mock Collection/Mock.wav"),
+                relativePath: "Mock Collection/Mock.wav"))
+        for _ in 0..<50 where actions.isEmpty { await Task.yield() }
+        #expect(actions.first?.kind == .openMusic)
+        #expect(actions.first?.path == "Mock Collection")
+        #expect(actions.first?.target == "folder")
+        #expect(remote.folderPath.isEmpty)
+        value.folderIntent = .init(revision: 1, path: "Mock Collection")
+        remote.rescan(force: true)
+        for _ in 0..<50 where remote.folderPath != "Mock Collection" || !remote.entriesLoaded {
+            await Task.yield()
+        }
+        #expect(remote.folderPath == "Mock Collection")
+        #expect(queries.last?.path == "Mock Collection")
+        remote.navigate(to: "Mock Other")
+        for _ in 0..<50 where !remote.entriesLoaded { await Task.yield() }
+        #expect(remote.folderPath == "Mock Other")
+        var invalid = value
+        invalid.folderIntent = .init(revision: 2, path: "../escape")
+        #expect(throws: (any Error).self) { try invalid.validate() }
+        invalid.folderIntent = .init(revision: 0, path: "Mock")
+        #expect(throws: (any Error).self) { try invalid.validate() }
+    }
+
     private func state(title: String = "Mock Garden") -> EmbeddedMusicUIState {
         let root = URL(fileURLWithPath: "/tmp/mock-music-library")
         let entry = EmbeddedMusicUIEntry(

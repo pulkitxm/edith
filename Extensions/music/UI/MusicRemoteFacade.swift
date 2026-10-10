@@ -37,6 +37,7 @@ import Observation
     private var query = ""
     private var lifecycle: UInt64 = 0
     private var cursor = 0
+    private var folderIntentRevision: UInt64 = 0
     private var readQuery: EmbeddedMusicUIQuery?
     private var folderCache: [String: [EmbeddedMusicFolder]] = [:]
 
@@ -71,6 +72,7 @@ import Observation
 
     func stop() {
         generation &+= 1; lifecycle &+= 1; cursor = 0
+        folderIntentRevision = 0
         readTask?.cancel(); readTask = nil
         levelGeneration &+= 1; levelTask?.cancel(); levelTask = nil
         EmbeddedPlaybackLevel.shared.onViewersChange = nil
@@ -129,10 +131,10 @@ import Observation
         }
     }
 
-    func rescan() {
+    func rescan(force: Bool = false) {
         guard let invoke else { return }
         let request = EmbeddedMusicUIQuery(path: folderPath, search: query, cursor: cursor)
-        if readTask != nil, readQuery == request { return }
+        if !force, readTask != nil, readQuery == request { return }
         readTask?.cancel(); generation &+= 1
         let token = generation
         readQuery = request
@@ -196,6 +198,16 @@ import Observation
                 EmbeddedMusicAccounts.shared.spotify.library.apply(object)
             }
         }
+        if let intent = value.folderIntent, intent.revision > folderIntentRevision {
+            folderIntentRevision = intent.revision
+            let changed = folderPath != intent.path || showingFavourites || !query.isEmpty
+            folderPath = intent.path; showingFavourites = false; query = ""
+            if changed {
+                folders = []; folderTracks = []; searchTracks = []; searchFolders = []
+                entriesLoaded = false; searchLoaded = false
+                rescan()
+            }
+        }
     }
 
     func dataRequest(_ operation: String, payload: Data = Data("{}".utf8)) async throws -> Data {
@@ -230,7 +242,7 @@ import Observation
                 _ = try await self.request(
                     "music.ui.action",
                     action: .init(kind: kind, path: path, target: target, value: value))
-                self.rescan()
+                self.rescan(force: true)
             } catch {
                 if !Task.isCancelled { self.libraryError = error.localizedDescription }
             }
@@ -296,8 +308,7 @@ import Observation
     func navigate(to path: String) { folderPath = path; showingFavourites = false; rescan() }
     func reveal(_ track: EmbeddedTrack) {
         let path = (track.relativePath as NSString).deletingLastPathComponent
-        navigate(to: path)
-        send(.openMusic, path: path)
+        send(.openMusic, path: path, target: "folder")
     }
     func openFavourites() { showingFavourites = true; rescan() }
     func toggleFavourite(_ track: EmbeddedTrack) { send(.favourite, path: track.relativePath) }

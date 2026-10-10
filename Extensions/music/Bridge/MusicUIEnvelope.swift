@@ -6,6 +6,11 @@ struct MusicHostSlots: Codable, Equatable, Sendable {
     var sidebar: Bool
 }
 
+struct MusicUIFolderIntent: Codable, Equatable, Sendable {
+    var revision: UInt64
+    var path: String
+}
+
 struct MusicUIQuery: Codable, Equatable, Sendable {
     var path = ""
     var search = ""
@@ -45,6 +50,7 @@ struct MusicUIState: Codable, Sendable {
     var events: [MusicUIEvent]
     var cursor: Int
     var privacy: Bool
+    var folderIntent: MusicUIFolderIntent?
     var preferences = MusicUIPreferences()
     var tools = MusicUITools()
     func validate() throws {
@@ -58,6 +64,12 @@ struct MusicUIState: Codable, Sendable {
             tracks.count <= 50_000, folders.count <= 50_000, events.count <= 64,
             ["local", "spotify", "youtubeMusic"].contains(selected), cursor >= 0
         else { throw CocoaError(.validationMissingMandatoryProperty) }
+        if let folderIntent {
+            guard folderIntent.revision > 0 else {
+                throw CocoaError(.validationMissingMandatoryProperty)
+            }
+            try MusicUIAction(kind: .openMusic, path: folderIntent.path).validate()
+        }
         for entry in tracks + folders + folderTracks + searchTracks + searchFolders + favourites {
             try MusicUIAction(kind: .startTrack, path: entry.path).validate()
             guard entry.url.isFileURL else { throw CocoaError(.validationMissingMandatoryProperty) }

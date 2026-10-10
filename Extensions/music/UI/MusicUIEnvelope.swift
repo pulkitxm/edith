@@ -1,5 +1,10 @@
 import Foundation
 
+struct EmbeddedMusicUIFolderIntent: Codable, Equatable, Sendable {
+    var revision: UInt64
+    var path: String
+}
+
 struct EmbeddedMusicUIQuery: Codable, Equatable, Sendable {
     var path = ""
     var search = ""
@@ -39,6 +44,7 @@ struct EmbeddedMusicUIState: Codable, Sendable {
     var events: [EmbeddedMusicUIEvent]
     var cursor: Int
     var privacy: Bool
+    var folderIntent: EmbeddedMusicUIFolderIntent?
     var preferences = EmbeddedMusicUIPreferences()
     var tools = EmbeddedMusicUITools()
     func validate() throws {
@@ -52,6 +58,12 @@ struct EmbeddedMusicUIState: Codable, Sendable {
             tracks.count <= 50_000, folders.count <= 50_000, events.count <= 64,
             ["local", "spotify", "youtubeMusic"].contains(selected), cursor >= 0
         else { throw CocoaError(.validationMissingMandatoryProperty) }
+        if let folderIntent {
+            guard folderIntent.revision > 0 else {
+                throw CocoaError(.validationMissingMandatoryProperty)
+            }
+            try EmbeddedMusicUIAction(kind: .openMusic, path: folderIntent.path).validate()
+        }
         for entry in tracks + folders + folderTracks + searchTracks + searchFolders + favourites {
             try EmbeddedMusicUIAction(kind: .startTrack, path: entry.path).validate()
             guard entry.url.isFileURL else { throw CocoaError(.validationMissingMandatoryProperty) }
