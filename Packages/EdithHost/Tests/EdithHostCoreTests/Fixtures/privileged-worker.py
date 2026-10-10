@@ -33,4 +33,6 @@ for line in sys.stdin:
         os._exit(0)
     print(json.dumps(response), flush=True)
     if operation == "stop":
+        if mode == "stop-after-response-crash":
+            os._exit(2)
         break

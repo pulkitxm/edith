@@ -90,8 +90,9 @@ import Testing
         #expect(worker.processIdentifier == nil && kill(pid, 0) == -1)
     }
 
-    @Test func unacknowledgedQuitCannotCountAsSuccessfulRetention() async throws {
-        let worker = try fixture("stop-without-response")
+    @Test(arguments: ["stop-without-response", "stop-after-response-crash"])
+    func unacknowledgedOrCrashedQuitCannotCountAsSuccessfulRetention(mode: String) async throws {
+        let worker = try fixture(mode)
         try await worker.start()
         let host = try #require(ExtensionProcessIdentity.current)
         await #expect(throws: HostWorkerError.exited) {

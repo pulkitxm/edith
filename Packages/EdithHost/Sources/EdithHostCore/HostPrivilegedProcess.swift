@@ -137,6 +137,11 @@ struct HostPrivilegedResponse: Codable {
             guard ContinuousClock.now < deadline else { throw HostWorkerError.stillRunning }
             try await Task.sleep(for: .milliseconds(20))
         }
+        if quitPolicy != nil {
+            guard process.terminationReason == .exit, process.terminationStatus == 0 else {
+                throw HostWorkerError.exited
+            }
+        }
         finish()
     }
 

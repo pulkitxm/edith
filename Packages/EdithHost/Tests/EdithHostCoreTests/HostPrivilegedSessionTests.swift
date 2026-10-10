@@ -105,7 +105,7 @@ import Testing
         #expect(fixture.ended)
     }
 
-    @Test(arguments: ["stop-without-response", "late-stop"])
+    @Test(arguments: ["stop-without-response", "late-stop", "stop-after-response-crash"])
     func lostAcknowledgementOrOwnerConnectionRestoresBeforeReleasingLease(mode: String) async throws
     {
         let fixture = try Fixture(mode: mode, owner: "lidAwake")
