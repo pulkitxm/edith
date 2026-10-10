@@ -798,6 +798,7 @@
         "Extensions/music/Services/ExternalMusic.swift",
         "Extensions/music/Services/LocalMusicPlayer.swift",
         "Extensions/music/Services/MediaDownloadRequest.swift",
+        "Extensions/music/Services/MusicBackupProvider.swift",
         "Extensions/music/Services/MusicBrowserConnection.swift",
         "Extensions/music/Services/MusicDownloadClient.swift",
         "Extensions/music/Services/MusicEvents.swift",
