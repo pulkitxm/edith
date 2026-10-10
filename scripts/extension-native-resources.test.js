@@ -260,3 +260,30 @@ test("native role policy rejects empty, duplicated, unknown and mistyped declara
     }).roles,
   ).toEqual(["helper"]);
 });
+
+test("native system module directories remain inside their owned package", () => {
+  const nativePackage = "Extensions/mock/Native";
+  expect(
+    nativeClangModuleFlags("/synthetic", {
+      nativePackage,
+      nativeClangDirectories: [".build/checkouts/mock/Sources/SQLite"],
+    }),
+  ).toEqual([
+    "-I",
+    "/synthetic/Extensions/mock/Native/.build/checkouts/mock/Sources/SQLite",
+  ]);
+  for (const nativeClangDirectories of [
+    ["../Outside"],
+    ["/absolute"],
+    [""],
+    ["a", "a"],
+    ["bad\0path"],
+  ]) {
+    expect(() =>
+      nativeClangModuleFlags("/synthetic", {
+        nativePackage,
+        nativeClangDirectories,
+      }),
+    ).toThrow("Invalid native Clang directory");
+  }
+});
