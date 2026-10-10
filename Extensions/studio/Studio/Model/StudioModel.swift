@@ -124,6 +124,9 @@ final class StudioModel {
     @ObservationIgnored private var pdfEditors: [URL: StudioPDFEditorModel] = [:]
     @ObservationIgnored private var videoEditors: [String: VideoEditorModel] = [:]
 
+    let facade: StudioUIFacade?
+    var destinationMode = StudioDestinationMode.original.rawValue
+    var destinationFolder = ""
     let defaults: UserDefaults
     private var engineTask: Task<Void, Never>?
     private var installTask: Task<Void, Never>?
@@ -133,9 +136,15 @@ final class StudioModel {
     private var libraryWatcher: FileSystemWatcher?
     private var libraryWatchPaths: [URL]?
 
-    init(defaults: UserDefaults = SharedDefaults.store, loadsState: Bool = true) {
+    init(
+        defaults: UserDefaults = SharedDefaults.store, loadsState: Bool = true,
+        facade: StudioUIFacade? = nil
+    ) {
         self.defaults = defaults
-        guard loadsState else { return }
+        self.facade = facade
+        facade?.onState = { [weak self] value in self?.apply(value) }
+        facade?.onFailure = { [weak self] message in self?.message = message }
+        guard loadsState, facade == nil else { return }
         files = StudioLibraryStore.loadFiles(from: defaults)
         observeLibrary()
     }
@@ -173,6 +182,7 @@ final class StudioModel {
 
     func start() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); facade.observe(); return }
         refreshLibrary()
         watchLibrary()
         refreshEngines()
@@ -184,6 +194,7 @@ final class StudioModel {
     func shutdown() {
         guard !isStopped else { return }
         isStopped = true
+        facade?.stop()
         for task in projectRemovalTasks.values { task.cancel() }
         projectRemovalTasks.removeAll()
         engineTask?.cancel()
@@ -206,6 +217,7 @@ final class StudioModel {
 
     func refreshLibrary() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         files = StudioLibraryStore.loadFiles(from: defaults)
         let known = StudioLibraryQuery.urls(files)
         selection.formIntersection(known)
@@ -214,6 +226,7 @@ final class StudioModel {
 
     func observeLibrary() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         guard librarySubscriptions.isEmpty else { return }
         NotificationCenter.default.publisher(for: IPC.Name.studioWorkflowsChanged)
             .sink { [weak self] _ in
@@ -238,8 +251,12 @@ final class StudioModel {
 
     func watchLibrary(paths: [URL]? = nil) {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         if let paths { libraryWatchPaths = paths }
-        let home = FileManager.default.homeDirectoryForCurrentUser
+        let home =
+            ProcessInfo.processInfo.environment["EDITH_EXTENSION_DATA_ROOT"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser
         var candidates =
             libraryWatchPaths
             ?? [
@@ -277,6 +294,7 @@ final class StudioModel {
 
     func loadWorkflows() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         workflowsTask?.cancel()
         workflowsTask = Task { [weak self] in
             let loaded = await Task.detached(priority: .utility) { StudioWorkflowStore.load() }
@@ -293,6 +311,18 @@ final class StudioModel {
 
     func saveWorkflow(_ draft: StudioWorkflowDraft) {
         guard !isStopped else { return }
+        if let facade {
+            do {
+                try draft.workflow.validate()
+                let object = try JSONSerialization.jsonObject(
+                    with: JSONEncoder().encode(draft.workflow))
+                facade.action("studio.ui.workflow.save", object: ["workflow": object]) {
+                    [weak self] in
+                    self?.editingWorkflow = nil
+                }
+            } catch { draft.failure = error.localizedDescription }
+            return
+        }
         let workflow = draft.workflow
         do {
             try workflow.validate()
@@ -312,6 +342,10 @@ final class StudioModel {
 
     func deleteWorkflow(_ workflow: StudioWorkflow) {
         guard !isStopped else { return }
+        if let facade {
+            facade.action("studio.ui.workflow.remove", object: ["id": workflow.id.uuidString]);
+            return
+        }
         workflows.removeAll { $0.id == workflow.id }
         StudioWorkflowStore.save(workflows)
     }
@@ -327,6 +361,7 @@ final class StudioModel {
 
     func refreshEngines() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         engineTask?.cancel()
         engineTask = Task { [weak self] in
             let detected = await Task.detached(priority: .utility) {
@@ -339,6 +374,7 @@ final class StudioModel {
 
     func refreshProjects() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         projectsTask?.cancel()
         projectsTask = Task { [weak self] in
             let listings = await Task.detached(priority: .utility) {
@@ -352,6 +388,7 @@ final class StudioModel {
 
     func loadRecent() {
         guard !isStopped else { return }
+        if let facade { facade.refresh(); return }
         recentTask?.cancel()
         recentTask = Task { [weak self] in
             let runs = await Task.detached(priority: .utility) {
@@ -364,6 +401,7 @@ final class StudioModel {
 
     func add(_ urls: [URL]) {
         guard !isStopped else { return }
+        if let facade { facade.add(urls); return }
         let current = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
         let added = StudioLibraryQuery.newItems(StudioLibraryStore.expand(urls), existing: current)
         do {
@@ -382,6 +420,7 @@ final class StudioModel {
 
     func remove(_ urls: Set<URL>) {
         guard !isStopped else { return }
+        if let facade { facade.remove(urls); return }
         do {
             try StudioMediaLibrary.remove(urls, defaults: defaults)
             refreshLibrary()
@@ -392,6 +431,7 @@ final class StudioModel {
 
     func clearMissing() {
         guard !isStopped else { return }
+        if let facade { facade.clearMissing(); return }
         let current = (try? StudioMediaLibrary.list(defaults: defaults)) ?? []
         var missing = Set<URL>()
         for item in current where !FileManager.default.fileExists(atPath: item.url.path) {
@@ -414,6 +454,12 @@ final class StudioModel {
 
     func loadFacts(for url: URL) async {
         guard !isStopped, facts[url] == nil else { return }
+        if let facade {
+            do { facts[url] = try await facade.facts(url) } catch {
+                if !Task.isCancelled, !isStopped { message = error.localizedDescription }
+            }
+            return
+        }
         let loaded = await Task.detached(priority: .utility) {
             await StudioInspector.facts(for: url)
         }.value
@@ -463,7 +509,7 @@ final class StudioModel {
 
     func openRunner(_ tool: StudioTool, with urls: [URL]) {
         guard !isStopped else { return }
-        let job = StudioJob(tool: tool, inputs: urls)
+        let job = StudioJob(tool: tool, inputs: urls, facade: facade)
         jobs.insert(job, at: 0)
         trimJobs()
         route = .tool(job.id)
@@ -482,7 +528,7 @@ final class StudioModel {
 
     func rerun(_ job: StudioJob, with tool: StudioTool, inputs: [URL]) {
         guard !isStopped else { return }
-        let next = StudioJob(tool: tool, inputs: inputs, settings: nil)
+        let next = StudioJob(tool: tool, inputs: inputs, settings: nil, facade: facade)
         jobs.insert(next, at: 0)
         trimJobs()
         route = .tool(next.id)
@@ -557,6 +603,9 @@ final class StudioModel {
 
     func trashProject(_ project: VideoProject.Listing) {
         guard !isStopped else { return }
+        if let facade {
+            facade.action("studio.ui.project.trash", object: ["path": project.url.path]); return
+        }
         let id = UUID()
         projectRemovalTasks[id] = Task { [weak self] in
             defer { self?.projectRemovalTasks[id] = nil }
@@ -582,6 +631,7 @@ final class StudioModel {
     }
 
     func recordSaved(toolID: String, title: String, outputs: [URL]) {
+        if let facade { facade.refresh(); return }
         guard !isStopped else { return }
         guard !outputs.isEmpty else { return }
         let entry = StudioRecentRun(
@@ -595,6 +645,9 @@ final class StudioModel {
 
     func install(_ engine: StudioEngine) {
         guard !isStopped else { return }
+        if let facade {
+            facade.action("studio.ui.install", object: ["engine": engine.rawValue]); return
+        }
         guard installing == nil else { return }
         installTask?.cancel()
         installing = engine
@@ -620,6 +673,7 @@ final class StudioModel {
 
     func paste() {
         guard !isStopped else { return }
+        if let facade { facade.action("studio.ui.paste"); return }
         do {
             let urls = try StudioLibraryStore.pasteboardFiles(.general)
             guard !urls.isEmpty else {
@@ -645,6 +699,38 @@ final class StudioModel {
                 self?.add(panel.urls)
             }
         }
+    }
+
+    func apply(_ state: StudioUIState) {
+        guard !isStopped else { return }
+        files = state.files
+        videoProjects = state.projects.map(\.value)
+        recent = state.recent
+        workflows = state.workflows
+        environment = state.environment.value
+        destinationMode = state.destinationMode
+        destinationFolder = state.destinationFolder
+        installing = state.installing
+        installLog = state.installLog
+        if let failure = state.message { message = failure }
+        selection.formIntersection(StudioLibraryQuery.urls(files))
+    }
+
+    func setDestination(mode: String, folder: String) {
+        if let facade {
+            facade.action("studio.ui.preferences", object: ["mode": mode, "folder": folder])
+        } else {
+            defaults.set(mode, forKey: AppStorageKeys.Studio.destination)
+            defaults.set(folder, forKey: AppStorageKeys.Studio.folder)
+        }
+        destinationMode = mode
+        destinationFolder = folder
+    }
+
+    func stopAndWait() async {
+        let owned = jobs
+        shutdown()
+        for job in owned { await job.stopAndWait() }
     }
 
     private func trimJobs() {

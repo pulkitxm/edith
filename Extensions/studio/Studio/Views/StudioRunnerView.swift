@@ -289,7 +289,7 @@ struct StudioOptionsPanel: View {
                     Text("Save to")
                         .font(.system(size: UIScale.pt(11)))
                         .foregroundStyle(.secondary)
-                    StudioDestinationPicker()
+                    StudioDestinationPicker(model: model)
                         .labelsHidden()
                         .controlSize(.small)
                 }

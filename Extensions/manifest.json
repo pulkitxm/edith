@@ -1383,7 +1383,9 @@
         "Extensions/studio/CLI/TextColumns.swift",
         "Extensions/studio/UIBridge/StudioUICommands.swift",
         "Extensions/studio/UIBridge/StudioUIFacade.swift",
-        "Extensions/studio/UIBridge/StudioUIState.swift"
+        "Extensions/studio/UIBridge/StudioUIState.swift",
+        "Extensions/studio/UIBridge/StudioUIJobState.swift",
+        "Extensions/studio/UIBridge/StudioUIPreview.swift"
       ]
     },
     "nativeSources": [

@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor
 @Observable
 final class StudioPreviewModel {
+    var facade: StudioUIFacade?
     var before: CGImage?
     var after: CGImage?
     var failure: String?
@@ -22,6 +23,27 @@ final class StudioPreviewModel {
         previewTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled else { return }
+            if let facade = self?.facade {
+                do {
+                    let object = try JSONSerialization.jsonObject(
+                        with: JSONEncoder().encode(settings))
+                    let value: StudioUIPreview = try await facade.read(
+                        "studio.ui.preview",
+                        object: ["toolID": tool.id, "path": input.path, "settings": object])
+                    guard let self, !Task.isCancelled else { return }
+                    self.before = NSImage(data: value.before)?.cgImage(
+                        forProposedRect: nil, context: nil, hints: nil)
+                    self.after = NSImage(data: value.after)?.cgImage(
+                        forProposedRect: nil, context: nil, hints: nil)
+                    self.failure = nil
+                    self.isRendering = false
+                } catch {
+                    guard let self, !Task.isCancelled else { return }
+                    self.failure = error.localizedDescription
+                    self.isRendering = false
+                }
+                return
+            }
             let outcome = await Task.detached(priority: .userInitiated) {
                 await StudioPreviewWork.render(
                     tool, input: input, settings: settings, environment: environment)

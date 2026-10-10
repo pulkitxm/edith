@@ -49,6 +49,11 @@ struct StudioUIState: Codable, Sendable {
     let recent: [StudioRecentRun]
     let workflows: [StudioWorkflow]
     let environment: Environment
+    var destinationMode: String = StudioDestinationMode.original.rawValue
+    var destinationFolder: String = ""
+    var installing: StudioEngine?
+    var installLog: String?
+    var message: String?
 }
 
 struct StudioUIFileFacts: Codable, Sendable {

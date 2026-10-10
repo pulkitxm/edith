@@ -20,10 +20,16 @@ struct StudioLayoutTests {
             UIScale.apply(scale)
             for scheme in [ColorScheme.dark, .light] {
                 for tab in [StudioTab.files, .tools] {
-                    let model = StudioModel(defaults: StudioTestFiles.defaults(), loadsState: false)
+                    let facade = StudioUIFacade { _, _ in
+                        throw ExtensionEngineError.unavailable
+                    }
+                    let model = StudioModel(
+                        defaults: StudioTestFiles.defaults(),
+                        loadsState: false, facade: facade)
                     model.tab = tab
                     let host = NSHostingView(
                         rootView: StudioPage(model: model)
+                            .environment(\.studioFacade, facade)
                             .environment(\.compactLayout, size.width / scale < 700)
                             .environment(\.colorScheme, scheme)
                             .environment(\.automaticViewActionsEnabled, false)

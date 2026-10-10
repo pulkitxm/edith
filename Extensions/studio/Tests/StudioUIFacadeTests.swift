@@ -1,3 +1,4 @@
+import EdithStudio
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -98,6 +99,53 @@ import Testing
         await #expect(throws: ExtensionEngineError.self) {
             try await facade.facts(URL(fileURLWithPath: "/synthetic/disabled"))
         }
+    }
+
+    @Test func originalRemoteModelRunsNativeToolAndPersistsOwnedPreferences() async throws {
+        let root = try VideoEditorServiceTests.folder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        _ = try await VideoEditorServiceTests.movie(in: root)
+        let image = root.appendingPathComponent("synthetic.png")
+        let suite = "studio.remote-model.tests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let engine = StudioModel(defaults: defaults, loadsState: false)
+        defer { engine.shutdown() }
+        var invalidations = 0
+        let facade = StudioUIFacade(
+            invoke: { operation, payload in
+                if operation.hasPrefix("studio.ui.") {
+                    return try await StudioUICommands.execute(
+                        operation, payload: payload, model: engine)
+                }
+                return try await StudioCommands.execute(operation, payload: payload, model: engine)
+            }, invalidate: { invalidations += 1 })
+        let remote = StudioModel(defaults: defaults, facade: facade)
+        defer { remote.shutdown() }
+        #expect(remote.files.isEmpty)
+        remote.start()
+        remote.add([image])
+        try await waitUntil { remote.files.first?.url == image || remote.message != nil }
+        #expect(remote.message == nil)
+        remote.setDestination(mode: StudioDestinationMode.folder.rawValue, folder: root.path)
+        try await waitUntil { defaults.string(forKey: AppStorageKeys.Studio.folder) == root.path }
+        #expect(defaults.string(forKey: AppStorageKeys.Studio.destination) == "folder")
+        let tool = try #require(StudioCatalog.tool("image.rotate"))
+        remote.openRunner(tool, with: [image])
+        let job = try #require(remote.jobs.first)
+        #expect(job.facade === facade && engine.jobs.isEmpty)
+        remote.run(job)
+        try await waitUntil { job.phase != .running }
+        #expect(job.phase == .finished)
+        let result = try #require(job.result)
+        let output = try #require(result.outputs.first)
+        #expect(output.bytes > 0 && output.url != image)
+        #expect(StudioImageIO.info(output.url)?.width == 64)
+        #expect(engine.jobs.first?.id == job.id)
+        #expect(remote.files.contains { $0.url == image })
+        remote.shutdown()
+        #expect(invalidations == 1 && facade.isStopped)
+        await engine.stopAndWait()
     }
 
     @Test func engineAdmissionRejectsUnknownFieldsAndNonlocalPaths() async throws {

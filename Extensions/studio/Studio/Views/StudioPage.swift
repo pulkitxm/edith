@@ -107,7 +107,7 @@ struct StudioPage: View {
             }
             .onChange(of: VideoEditorOpenBridge.shared.pending?.request.requestID, initial: true) {
                 _, _ in
-                if let presentation = VideoEditorOpenBridge.shared.pending {
+                if model.facade == nil, let presentation = VideoEditorOpenBridge.shared.pending {
                     model.openCommandProject(presentation)
                 }
             }
@@ -121,6 +121,7 @@ struct StudioPage: View {
 
     private func editorIsValid(_ token: String) -> Bool {
         guard let route = StudioRoute(navigationToken: token) else { return false }
+        if model.facade != nil { return true }
         switch route {
         case .home:
             return true
@@ -181,7 +182,7 @@ struct StudioPage: View {
     }
 
     private func accept(_ urls: [URL]) {
-        let files = StudioLibraryStore.expand(urls)
+        let files = model.facade == nil ? StudioLibraryStore.expand(urls) : urls
         guard !files.isEmpty, acceptsDrops else { return }
         model.add(files)
         if case let .tool(id) = model.route, let job = model.job(id) {

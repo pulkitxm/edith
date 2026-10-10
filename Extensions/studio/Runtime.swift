@@ -9,6 +9,7 @@ import SwiftUI
 @objc(EdithStudioExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var model: StudioModel?
+    private var uiModel: StudioModel?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
     private let streams = try! ExtensionCLIStreams(owner: "studio")
@@ -52,6 +53,7 @@ final class ExtensionRuntime: NSObject {
         Task {
             await streams.stopAndWait()
             await commands.shutdownAndWait()
+            await model?.stopAndWait()
             shutdown()
             if #available(macOS 15.0, *) {
                 await StudioRecordBridge.shared.shutdown(); await VideoRecorder.shutdownAll()
@@ -71,7 +73,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard input["remoteUI"] as? Bool != true,
+            guard Bundle.main.bundleURL.pathExtension != "appex",
+                input["remoteUI"] as? Bool != true,
                 let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
@@ -81,12 +84,32 @@ final class ExtensionRuntime: NSObject {
                     privacy = SurfacePrivacyState(channel: channel)
                 }
             }
+            model?.start()
             TextEditingCommands.install()
+        case "configureUI":
+            guard let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "studio", let client = configuration.engineClient,
+                model == nil
+            else { return ["ok": false] as NSDictionary }
+            uiModel?.shutdown()
+            let facade = StudioUIFacade(client: client)
+            uiModel = StudioModel(loadsState: false, facade: facade)
+            TextEditingCommands.install()
+            if let channel = ExtensionSharedState.current {
+                privacy = SurfacePrivacyState(channel: channel)
+            }
+        case "stopUI":
+            TextEditingCommands.shutdown()
+            uiModel?.shutdown()
+            uiModel = nil
+            privacy?.shutdown()
+            privacy = nil
         case "view":
-            guard let model else { return ["ok": false] as NSDictionary }
+            guard let model = uiModel else { return ["ok": false] as NSDictionary }
             return NSHostingController(
                 rootView: ExtensionPageHost {
                     StudioPage(model: model).environment(\.studioPrivacy, self.privacy)
+                        .environment(\.studioFacade, model.facade)
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": privacy?.refresh()
@@ -101,6 +124,8 @@ final class ExtensionRuntime: NSObject {
         streams.stop()
         commands.shutdown()
         TextEditingCommands.shutdown()
+        uiModel?.shutdown()
+        uiModel = nil
         model?.shutdown()
         model = nil
         privacy?.shutdown()
