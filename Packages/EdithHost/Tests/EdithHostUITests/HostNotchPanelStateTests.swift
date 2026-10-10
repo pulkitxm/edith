@@ -7,6 +7,62 @@ import Testing
 @testable import EdithHost
 
 struct HostNotchPanelStateTests {
+    @Test func commonOriginalCardSlotsUseOnlyExactSavedTilesAndCanonicalActiveProviderAnchor()
+        throws
+    {
+        let fixture = HostNotchStateFixture()
+        for widget: SurfaceWidget in [
+            .codeStats, .databases, .machines, .github, .desk, .media, .ability("latex"),
+        ] {
+            let tile = SurfaceTile(widget)
+            let providers = widget.providerIDs.sorted()
+            let provider = try #require(providers.first)
+            var active = Dictionary(uniqueKeysWithValues: providers.map { ($0, "1.0.0") })
+            active["notchShelf"] = "1.0.0"
+            let slot = fixture.slot(provider: provider, tile: tile)
+            let state = fixture.state(slots: [slot])
+            let admission = fixture.admission(active: active, layout: .init(tiles: [tile]))
+            try state.validate(admission)
+            #expect(try slot.request(presentationID: UUID()).section == "surface.card")
+            #expect(throws: HostNotchPanelError.invalidState) {
+                try state.validate(fixture.admission(active: active, layout: .init(tiles: [])))
+            }
+            #expect(throws: HostNotchPanelError.unavailableProvider) {
+                var hidden = admission
+                hidden.hiddenWidgets = [widget]
+                try state.validate(hidden)
+            }
+            if providers.count > 1 {
+                let noncanonical = fixture.slot(provider: providers[1], tile: tile)
+                #expect(throws: HostNotchPanelError.unavailableProvider) {
+                    try fixture.state(slots: [noncanonical]).validate(admission)
+                }
+            }
+        }
+    }
+
+    @Test func actualCalendarNotchRoutePreservesOriginalTileAndEightSceneCapacity() throws {
+        let fixture = HostNotchStateFixture()
+        var tile = SurfaceTile(.calendar)
+        tile.title = "Synthetic meetings"
+        tile.itemLimit = 3
+        let slot = fixture.slot(provider: "calendar", tile: tile)
+        let state = fixture.state(slots: [slot])
+        let request = try slot.request(presentationID: UUID())
+        #expect(request.location == "notch" && request.section == "calendar")
+        #expect(request.surface?.target == .notch && request.surface?.tile == tile)
+        try state.validate(
+            fixture.admission(
+                active: ["notchShelf": "1.0.0", "calendar": "1.0.0"],
+                layout: .init(tiles: [tile]), reserved: ["calendar": 7]))
+        #expect(throws: HostNotchPanelError.capacityExceeded) {
+            try state.validate(
+                fixture.admission(
+                    active: ["notchShelf": "1.0.0", "calendar": "1.0.0"],
+                    layout: .init(tiles: [tile]), reserved: ["calendar": 8]))
+        }
+    }
+
     @Test func originalTileCustomizationAndHardwarePositionArePreserved() throws {
         let fixture = HostNotchStateFixture()
         let state = fixture.state()
@@ -185,7 +241,9 @@ struct HostNotchPanelStateTests {
             try fixture.state(tab: "audio", slots: [slot]).validate(
                 fixture.admission(active: ["notchShelf": "1.0.0", "clipboard": "1.0.0"]))
         }
-        #expect(fixture.slot(provider: "system", tile: .init(.ability("system"))).section == nil)
+        #expect(
+            fixture.slot(provider: "system", tile: .init(.ability("system")), kind: .providerTab)
+                .section == nil)
     }
 }
 

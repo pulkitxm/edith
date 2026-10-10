@@ -11,21 +11,43 @@ final class HostNotchPanelAssembly {
     private let create: Create
     private let present: @MainActor (HostNotchPanel) -> Void
     private let measure: @MainActor (UUID, Double) -> Void
+    private let didRelease: @MainActor (HostExtensionContentRequest) async throws -> Void
     private let reportFailure: @MainActor (UUID, String) -> Void
     private var records: [UUID: Record] = [:]
     private var creating: [UUID: Task<Void, Never>] = [:]
+    private var creationRequests: [UUID: UUID] = [:]
     private var retiring: [UUID: HostNotchSceneLease] = [:]
     private var closing: [UUID: Task<Void, Never>] = [:]
     private(set) var state: HostNotchPanelState?
     private(set) var failures: [UUID: String] = [:]
     private var stopped = false
+    private var association: (UUID, HostNotchWindowAssociation)?
+
+    func associate(_ context: HostNotchWindowAssociation) throws {
+        guard association == nil, state == nil, !stopped else {
+            throw HostNotchPanelError.staleState
+        }
+        association = (try context.associate(panel), context)
+    }
+
+    func containsLivePresentation(_ id: UUID) -> Bool {
+        !stopped && records.values.contains { $0.request.presentationID == id && $0.lease != nil }
+    }
+
+    func slot(for request: HostExtensionContentRequest) -> HostNotchNativeSlot? {
+        guard ownsVisiblePanel else { return nil }
+        return records.values.first { $0.request == request }?.slot
+    }
 
     init(
         create: @escaping Create,
         present: @escaping @MainActor (HostNotchPanel) -> Void = { $0.orderFrontRegardless() },
+        didRelease: @escaping @MainActor (HostExtensionContentRequest) async throws -> Void = { _ in
+        },
         measure: @escaping @MainActor (UUID, Double) -> Void = { _, _ in },
         reportFailure: @escaping @MainActor (UUID, String) -> Void = { _, _ in }
     ) {
+        self.didRelease = didRelease
         self.create = create
         self.present = present
         self.measure = measure
@@ -37,6 +59,7 @@ final class HostNotchPanelAssembly {
     var presentationIDs: Set<UUID> {
         Set(records.values.map { $0.request.presentationID }).union(retiring.keys)
     }
+    var ownsVisiblePanel: Bool { !stopped && state?.visible == true && !records.isEmpty }
     var attachedCount: Int { records.values.filter { $0.lease != nil }.count }
     var pendingCleanupCount: Int { retiring.count }
 
@@ -117,12 +140,19 @@ final class HostNotchPanelAssembly {
         for task in Array(closing.values) { await task.value }
         var failure: (any Error)?
         for (id, lease) in Array(retiring) {
-            do { try await lease.close(); retiring[id] = nil; failures[id] = nil } catch {
+            do {
+                try await release(lease)
+                retiring[id] = nil; failures[id] = nil
+            } catch {
                 failure = error
             }
         }
         if let failure { throw failure }
         panel.close()
+        if let (token, context) = association {
+            association = nil
+            context.remove(token)
+        }
     }
 
     private func upsert(id: UUID, request: HostExtensionContentRequest, slot: HostNotchNativeSlot?)
@@ -131,22 +161,44 @@ final class HostNotchPanelAssembly {
             record.slot?.providerVersion == slot?.providerVersion
         {
             record.slot = slot
-            if let lease = record.lease { position(lease, record: record) }
+            if let lease = record.lease {
+                position(lease, record: record)
+            } else if record.task == nil {
+                startCreate(id: id, record: record)
+            }
             return
         }
         remove(id)
         let record = Record(request: request, slot: slot)
         records[id] = record
+        startCreate(id: id, record: record)
+    }
+
+    private func startCreate(id: UUID, record: Record) {
+        let request = record.request
         let token = record.token
         let task = Task { [weak self, weak record] in
             guard let self, let record else { return }
-            defer { creating[token] = nil }
+            defer { creating[token] = nil; creationRequests[token] = nil; record.task = nil }
             do {
+                try Task.checkCancellation()
+                for (other, pending) in Array(creating)
+                where other != token && creationRequests[other] == request.presentationID {
+                    await pending.value
+                }
+                if let pending = closing[request.presentationID] { await pending.value }
+                if let previous = retiring[request.presentationID] {
+                    try await release(previous)
+                    retiring[request.presentationID] = nil
+                }
+                try Task.checkCancellation()
+                guard !stopped, records[id] === record else { return }
                 let lease = try await create(request)
                 guard !Task.isCancelled, !stopped, records[id] === record else {
                     retire(lease); return
                 }
                 record.lease = lease
+                failures[id] = nil
                 lease.measuredHeight = { [weak self, weak record] height in
                     guard let self, let record, records[id] === record, !stopped,
                         let slot = record.slot, height.isFinite, (0...1200).contains(height)
@@ -166,6 +218,7 @@ final class HostNotchPanelAssembly {
         }
         record.task = task
         creating[token] = task
+        creationRequests[token] = request.presentationID
     }
 
     private func position(_ lease: HostNotchSceneLease, record: Record) {
@@ -192,10 +245,18 @@ final class HostNotchPanelAssembly {
         closing[id] = Task { [weak self] in
             guard let self else { return }
             defer { closing[id] = nil }
-            do { try await lease.close(); retiring[id] = nil; failures[id] = nil } catch {
+            do {
+                try await release(lease)
+                retiring[id] = nil; failures[id] = nil
+            } catch {
                 failures[id] = "The extension interface is still stopping."
             }
         }
+    }
+
+    private func release(_ lease: HostNotchSceneLease) async throws {
+        try await lease.close()
+        try await didRelease(lease.request)
     }
 
     private final class Record {

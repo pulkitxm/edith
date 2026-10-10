@@ -53,6 +53,61 @@ struct HostNotchPanelAssemblyTests {
         #expect(owner.leases.allSatisfy { $0.closed })
     }
 
+    @Test func originalEditingChromeReceivesHitsWhileProviderRemainsMounted() async throws {
+        let fixture = HostNotchStateFixture()
+        let owner = NotchTestScenes()
+        let assembly = HostNotchPanelAssembly(create: owner.create, present: { _ in })
+        var state = fixture.state()
+        state.layoutEditing = true
+        try assembly.accept(state, admission: fixture.admission())
+        await settle { assembly.attachedCount == 2 }
+        let card = try #require(owner.leases.first { $0.request.extensionID == "music" })
+        let chrome = try #require(owner.leases.first { $0.request.extensionID == "notchShelf" })
+        let point = CGPoint(x: card.controller.view.frame.midX, y: card.controller.view.frame.midY)
+        let hitPoint = assembly.container.view.convert(point, to: assembly.container.view.superview)
+        #expect(assembly.container.view.hitTest(hitPoint) === chrome.controller.view)
+        #expect(card.controller.parent === assembly.container)
+        state = try advanced(state, revision: 2, slots: state.slots)
+        state.layoutEditing = false
+        try assembly.accept(state, admission: fixture.admission(previousRevision: 1))
+        #expect(assembly.container.view.hitTest(hitPoint) === card.controller.view)
+        try await assembly.stop()
+    }
+
+    @Test func sameChromePresentationCannotReopenUntilReleaseAndEngineSceneStopDrain() async throws
+    {
+        let fixture = HostNotchStateFixture()
+        let owner = NotchTestScenes()
+        let gate = NotchTestGate()
+        let assembly = HostNotchPanelAssembly(
+            create: owner.create, present: { _ in },
+            didRelease: { request in
+                if request.extensionID == "notchShelf" { await gate.wait() }
+            })
+        let first = fixture.state()
+        try assembly.accept(first, admission: fixture.admission())
+        await settle { assembly.attachedCount == 2 }
+        try assembly.accept(
+            try advanced(first, revision: 2, visible: false, slots: []),
+            admission: fixture.admission(previousRevision: 1))
+        await settle { gate.waiting }
+        try assembly.accept(
+            try advanced(first, revision: 3, slots: []),
+            admission: fixture.admission(previousRevision: 2))
+        for _ in 0..<5 { await Task.yield() }
+        #expect(owner.requests.filter { $0.extensionID == "notchShelf" }.count == 1)
+        #expect(assembly.attachedCount == 0)
+        gate.release()
+        await settle { owner.requests.filter { $0.extensionID == "notchShelf" }.count == 2 }
+        #expect(
+            owner.leases.filter { $0.request.extensionID == "notchShelf" }.first?.closed == true)
+        assembly.hide()
+        await settle { gate.waiting }
+        gate.release()
+        try await assembly.stop()
+        #expect(!assembly.panel.isVisible)
+    }
+
     @Test func geometryChangesReuseSceneButCustomizedTileChangesReplaceIt() async throws {
         let fixture = HostNotchStateFixture()
         let owner = NotchTestScenes()

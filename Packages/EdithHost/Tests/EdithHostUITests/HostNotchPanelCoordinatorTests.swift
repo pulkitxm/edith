@@ -166,6 +166,32 @@ struct HostNotchPanelCoordinatorTests {
         #expect(fixture.transport.detached == 1)
     }
 
+    @Test func releaseAndSceneStopFailuresRetainOwnershipBeforeDetachAndRetryAfterDisable()
+        async throws
+    {
+        let fixture = NotchCoordinatorFixture()
+        let coordinator = fixture.coordinator()
+        try await coordinator.start(version: "1.0.0", screens: fixture.screens)
+        await settle { coordinator.attachedSceneCount == 2 }
+        fixture.failSceneRelease = true
+        fixture.environment.activeVersions = [:]
+        await #expect(throws: HostWorkerError.rejected) { try await coordinator.stop() }
+        #expect(fixture.transport.detached == 0)
+        #expect(fixture.transport.stoppedScenes.isEmpty)
+        #expect(coordinator.pendingCleanupCount >= 2)
+        fixture.failSceneRelease = false
+        fixture.transport.failSceneStop = true
+        await #expect(throws: HostWorkerError.rejected) { try await coordinator.stop() }
+        #expect(fixture.leases.allSatisfy { $0.closed })
+        #expect(fixture.transport.detached == 0)
+        #expect(coordinator.pendingCleanupCount >= 1)
+        fixture.transport.failSceneStop = false
+        try await coordinator.stop()
+        #expect(fixture.transport.stoppedScenes == Set(fixture.screens.map(\.presentationID)))
+        #expect(fixture.transport.detached == 1)
+        #expect(coordinator.pendingCleanupCount == 0)
+    }
+
     private func settle(until condition: () -> Bool) async {
         for _ in 0..<100 {
             if condition() { return }
@@ -182,6 +208,7 @@ private final class NotchCoordinatorFixture {
     var environment: HostNotchPanelEnvironment
     var leases: [HostNotchSceneLease] = []
     var presented = 0
+    var failSceneRelease = false
     var failMusicApproval = false
     var now = ContinuousClock.now
     init() {
@@ -204,7 +231,11 @@ private final class NotchCoordinatorFixture {
                 controller.view = NSView()
                 let lease = HostNotchSceneLease(
                     request: request, controller: controller,
-                    update: { _, _, _ in }, release: {})
+                    update: { _, _, _ in },
+                    release: { [self] in
+                        if failSceneRelease { throw HostWorkerError.rejected }
+                        transport.released.insert(request.presentationID)
+                    })
                 leases.append(lease)
                 return lease
             },
@@ -217,6 +248,9 @@ private final class NotchCoordinatorFixture {
 
 @MainActor
 private final class NotchCoordinatorTransport {
+    var released = Set<UUID>()
+    var stoppedScenes = Set<UUID>()
+    var failSceneStop = false
     var tile = SurfaceTile(.music)
     var current: HostNotchPanelBatch?
     var waitCalls = 0
@@ -288,6 +322,12 @@ private final class NotchCoordinatorTransport {
             pointers.append(try decoder.decode(HostNotchPanelPointer.self, from: payload))
         case "notch.panel.measure":
             measures.append(try decoder.decode(HostNotchPanelMeasure.self, from: payload))
+        case "notch.panel.scene.stop":
+            let request = try decoder.decode(HostNotchPanelSceneStop.self, from: payload)
+            #expect(request.identity == current?.identity)
+            #expect(released.contains(request.presentationID))
+            if failSceneStop { throw HostWorkerError.rejected }
+            stoppedScenes.insert(request.presentationID)
         case "notch.panel.detach":
             #expect(
                 try decoder.decode(HostNotchPanelIdentity.self, from: payload) == current?.identity)

@@ -1,4 +1,5 @@
 import AppKit
+import EdithExtensionSupport
 import EdithHostCore
 import Foundation
 
@@ -10,6 +11,17 @@ final class HostNotchPanelCoordinator {
     let ownershipID = UUID()
     private let invoke: Invoke
     private let environment: Environment
+    private lazy var drops = HostNotchDropProxy(invoke: invoke) {
+        [weak self] identity, displayID, presentationID in
+        guard let self, !retired, self.identity == identity,
+            environment().activeVersions["notchShelf"] == attachRequest?.version,
+            let state = batch?.states.first(where: { $0.displayID == displayID }),
+            state.presentationID == presentationID, state.visible, state.acceptsPointer
+        else { return false }
+        return true
+    }
+    private let transfers: HostNotchTransferProxy
+    private let association: HostNotchWindowAssociation?
     private let create: HostNotchPanelAssembly.Create
     private let present: @MainActor (HostNotchPanel) -> Void
     private let now: @MainActor () -> ContinuousClock.Instant
@@ -26,15 +38,29 @@ final class HostNotchPanelCoordinator {
     private var measurements: [UUID: HostNotchPanelMeasure] = [:]
     private var retired = false
     private(set) var failure: String?
+    var didChangePanels: (@MainActor () -> Void)?
+    var activePanelCount: Int {
+        guard !retired, environment().activeVersions["notchShelf"] == attachRequest?.version else {
+            return 0
+        }
+        return assemblies.values.filter(\.ownsVisiblePanel).count
+    }
 
     init(
         invoke: @escaping Invoke, environment: @escaping Environment,
+        association: HostNotchWindowAssociation? = nil,
+        nativeTransfer: HostNotchTransferProxy.Make? = nil,
         create: @escaping HostNotchPanelAssembly.Create,
         present: @escaping @MainActor (HostNotchPanel) -> Void = { $0.orderFrontRegardless() },
         now: @escaping @MainActor () -> ContinuousClock.Instant = { .now }
     ) {
-        self.invoke = invoke; self.environment = environment
+        self.invoke = invoke; self.environment = environment; self.association = association
         self.create = create; self.present = present; self.now = now
+        if let nativeTransfer {
+            transfers = .init(invoke: invoke, make: nativeTransfer)
+        } else {
+            transfers = .init(invoke: invoke)
+        }
     }
 
     var presentationIDs: Set<UUID> {
@@ -44,13 +70,57 @@ final class HostNotchPanelCoordinator {
     var attachedSceneCount: Int { assemblies.values.reduce(0) { $0 + $1.attachedCount } }
     var pendingCleanupCount: Int {
         assemblies.values.reduce(0) { $0 + $1.pendingCleanupCount }
+            + transfers.pendingCount + drops.pendingCount
             + (retired && attachRequest != nil ? 1 : 0)
+    }
+
+    func window(for presentationID: UUID) -> NSWindow? {
+        guard !retired, environment().activeVersions["notchShelf"] == attachRequest?.version else {
+            return nil
+        }
+        return assemblies.values.first(where: { $0.containsLivePresentation(presentationID) })?
+            .panel
+    }
+
+    func compactOrigin(for request: HostExtensionContentRequest) -> HostNotchCompactOrigin? {
+        guard request.location == "notch", request.section == "surface.card", !retired,
+            let identity,
+            let assembly = assemblies.values.first(where: { $0.slot(for: request) != nil }),
+            let state = assembly.state, let slot = assembly.slot(for: request)
+        else { return nil }
+        let origin = HostNotchCompactOrigin(
+            identity: identity, displayID: state.displayID,
+            panelPresentationID: state.presentationID, cardPresentationID: request.presentationID,
+            tile: slot.tile)
+        return compactVersions(origin) == nil ? nil : origin
+    }
+
+    func compactVersions(_ origin: HostNotchCompactOrigin) -> [String: String]? {
+        let current = environment()
+        guard !retired, identity == origin.identity,
+            current.activeVersions["notchShelf"] == attachRequest?.version,
+            let assembly = assemblies[origin.displayID], let state = assembly.state,
+            state.presentationID == origin.panelPresentationID, state.visible,
+            current.layout.visible.contains(origin.tile),
+            !current.hiddenWidgets.contains(origin.tile.widget),
+            let slot = state.slots.first(where: { slot in
+                slot.tile == origin.tile && slot.section == "surface.card"
+                    && (try? slot.request(presentationID: origin.cardPresentationID)).flatMap {
+                        assembly.slot(for: $0)
+                    } == slot
+            }), current.activeVersions[slot.providerID] == slot.providerVersion,
+            slot.providerID
+                == origin.tile.widget.providerIDs.sorted().first(where: {
+                    current.activeVersions[$0] != nil
+                })
+        else { return nil }
+        return current.activeVersions.filter { origin.tile.widget.providerIDs.contains($0.key) }
     }
 
     func start(version: String, screens: [HostNotchPanelScreen]) async throws {
         guard !retired, starting == nil, attachRequest == nil,
             environment().activeVersions["notchShelf"] == version,
-            !screens.isEmpty, screens.count <= 4, screens.allSatisfy({ $0.display.valid }),
+            !screens.isEmpty, screens.count <= 8, screens.allSatisfy({ $0.display.valid }),
             Set(screens.map { $0.display.id }).count == screens.count,
             Set(screens.map(\.presentationID)).count == screens.count,
             screens.filter(\.isBuiltin).count <= 1
@@ -87,9 +157,11 @@ final class HostNotchPanelCoordinator {
     }
 
     func synchronize() {
+        defer { didChangePanels?() }
         let current = environment()
         if current.activeVersions["notchShelf"] != attachRequest?.version {
             waiting?.cancel(); writing?.cancel(); pointers = [:]; measurements = [:]
+            transfers.cancelPending(); drops.cancelPending()
         }
         measurements = measurements.filter { slotID, _ in
             guard let slot = batch?.states.flatMap(\.slots).first(where: { $0.id == slotID }) else {
@@ -125,6 +197,7 @@ final class HostNotchPanelCoordinator {
     }
 
     func stop() async throws {
+        defer { didChangePanels?() }
         if let stopping { try await stopping.value; return }
         retired = true
         for assembly in assemblies.values { assembly.hide() }
@@ -141,6 +214,11 @@ final class HostNotchPanelCoordinator {
         if let writing { await writing.value }
         waiting = nil; writing = nil; pointers = [:]; measurements = [:]
         var cleanupError: (any Error)?
+        do { try await transfers.stop() } catch { cleanupError = error }
+        do { try await drops.stop() } catch { cleanupError = error }
+        guard transfers.pendingCount == 0, drops.pendingCount == 0 else {
+            throw cleanupError ?? HostNotchPanelError.staleState
+        }
         for assembly in assemblies.values {
             do { try await assembly.stop() } catch { cleanupError = error }
         }
@@ -153,6 +231,11 @@ final class HostNotchPanelCoordinator {
                 }
                 identity = recovered.identity
             } catch { cleanupError = error }
+        }
+        guard cleanupError == nil, assemblies.values.allSatisfy({ $0.pendingCleanupCount == 0 })
+        else {
+            failure = "The Notch panel is still stopping. Try cleanup again."
+            throw cleanupError ?? HostNotchPanelError.staleState
         }
         if let identity {
             do {
@@ -168,6 +251,7 @@ final class HostNotchPanelCoordinator {
     }
 
     private func accept(_ next: HostNotchPanelBatch) throws {
+        defer { didChangePanels?() }
         guard !retired, let identity, next.identity == identity,
             let attachRequest, next.states.count == screens.count,
             Set(next.states.map(\.displayID)) == Set(screens.keys),
@@ -182,7 +266,7 @@ final class HostNotchPanelCoordinator {
             $0[$1.providerID, default: 0] += 1
         }
         counts["notchShelf", default: 0] += next.states.filter(\.visible).count
-        guard counts.values.allSatisfy({ $0 <= HostNotchPanelState.providerSceneLimit }) else {
+        guard counts.allSatisfy({ $0.value <= HostNotchPanelState.sceneLimit(for: $0.key) }) else {
             throw HostNotchPanelError.capacityExceeded
         }
         var admissions: [UInt32: HostNotchPanelAdmission] = [:]
@@ -202,6 +286,8 @@ final class HostNotchPanelCoordinator {
             try state.validate(admission)
             admissions[state.displayID] = admission
         }
+        guard next.transfers.count <= 1 else { throw HostNotchPanelError.invalidState }
+        for transfer in next.transfers { try transfer.validate(states: next.states) }
         for state in next.states {
             let assembly: HostNotchPanelAssembly
             if let existing = assemblies[state.displayID] {
@@ -209,6 +295,20 @@ final class HostNotchPanelCoordinator {
             } else {
                 assembly = HostNotchPanelAssembly(
                     create: create, present: present,
+                    didRelease: { [weak self] request in
+                        guard let self, request.extensionID == "notchShelf" else { return }
+                        guard let identity = self.identity,
+                            let screen = screens.values.first(where: {
+                                $0.presentationID == request.presentationID
+                                    && request.section == "panel." + String($0.display.id)
+                            })
+                        else { throw HostNotchPanelError.staleState }
+                        _ = try await self.request(
+                            "notch.panel.scene.stop",
+                            HostNotchPanelSceneStop(
+                                identity: identity, displayID: screen.display.id,
+                                presentationID: request.presentationID), timeout: 5)
+                    },
                     measure: { [weak self] slotID, height in self?.measure(slotID, height: height)
                     },
                     reportFailure: { [weak self] slotID, message in
@@ -222,9 +322,33 @@ final class HostNotchPanelCoordinator {
                         )
                     }
                 )
+                if let association { try assembly.associate(association) }
+                assembly.container.drop = { [weak self] input, point in
+                    guard let self else { return false }
+                    do {
+                        try drops.accept(
+                            input, identity: identity, displayID: state.displayID,
+                            presentationID: state.presentationID, point: point)
+                        return true
+                    } catch {
+                        failure = "The shelf drop could not be accepted."
+                        return false
+                    }
+                }
+                assembly.container.dragging = { [weak self, weak assembly] point, dragging in
+                    guard let self, let assembly else { return }
+                    pointer(
+                        displayID: state.displayID,
+                        globalPoint: assembly.panel.convertPoint(toScreen: point),
+                        buttons: UInt32(NSEvent.pressedMouseButtons & 31),
+                        option: NSEvent.modifierFlags.contains(.option), draggingFiles: dragging)
+                }
                 assemblies[state.displayID] = assembly
             }
             try assembly.accept(state, admission: admissions[state.displayID]!)
+        }
+        try transfers.accept(next.transfers, identity: identity, states: next.states) {
+            assemblies[$0]?.panel
         }
         batch = next
         failure = nil
@@ -249,7 +373,9 @@ final class HostNotchPanelCoordinator {
                 } catch {
                     guard !Task.isCancelled, !retired else { return }
                     failure = "The Notch panel connection stopped."
+                    transfers.cancelPending(); drops.cancelPending()
                     for assembly in assemblies.values { assembly.hide() }
+                    didChangePanels?()
                     return
                 }
             }

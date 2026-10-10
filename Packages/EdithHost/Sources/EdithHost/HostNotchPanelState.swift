@@ -49,6 +49,7 @@ struct HostNotchNativeSlot: Codable, Equatable, Sendable, Identifiable {
     let rectangle: HostNotchRectangle
 
     var section: String? {
+        if kind == .card, HostNotchCompactCardModel.supports(tile.widget) { return "surface.card" }
         switch (kind, providerID, tile.widget) {
         case (.card, "music", .music), (.providerTab, "music", .music): return "music"
         case (.card, "calendar", .calendar): return "calendar"
@@ -91,12 +92,16 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
     let acceptsPointer: Bool
     let acceptsKeyFocus: Bool
     let slots: [HostNotchNativeSlot]
+    var layoutEditing: Bool? = nil
     var capacityWidth: Double? = nil
     var capacityHeight: Double? = nil
 
     static let maximumBytes = 131_072
     static let maximumSlots = 32
     static let providerSceneLimit = 16
+    static func sceneLimit(for provider: String) -> Int {
+        provider == "calendar" ? 8 : providerSceneLimit
+    }
 
     static func decode(_ data: Data) throws -> Self {
         guard !data.isEmpty, data.count <= maximumBytes else {
@@ -133,8 +138,8 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
                 $0.isFinite && $0 >= shapeHeight
                     && $0 <= admission.display.frame.height - 12
             }) ?? true,
-            admission.reservedProviderScenes.values.allSatisfy({
-                (0...Self.providerSceneLimit).contains($0)
+            admission.reservedProviderScenes.allSatisfy({
+                (0...Self.sceneLimit(for: $0.key)).contains($0.value)
             }),
             slots.count <= Self.maximumSlots, Set(slots.map(\.id)).count == slots.count,
             !slots.contains(where: { $0.id == presentationID }),
@@ -147,11 +152,21 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
         for slot in slots {
             guard slot.rectangle.valid, panelBounds.contains(slot.rectangle.frame),
                 slot.section != nil, !slot.tile.hidden,
-                slot.tile.widget.providerIDs == [slot.providerID]
+                (slot.kind == .card && HostNotchCompactCardModel.supports(slot.tile.widget)
+                    ? slot.tile.widget.providerIDs.contains(slot.providerID)
+                    : slot.tile.widget.providerIDs == [slot.providerID])
             else { throw HostNotchPanelError.invalidState }
             guard admission.activeVersions[slot.providerID] == slot.providerVersion,
                 !admission.hiddenWidgets.contains(slot.tile.widget)
             else { throw HostNotchPanelError.unavailableProvider }
+            if slot.section == "surface.card" {
+                guard
+                    slot.providerID
+                        == slot.tile.widget.providerIDs.sorted().first(where: {
+                            admission.activeVersions[$0] != nil
+                        })
+                else { throw HostNotchPanelError.unavailableProvider }
+            }
             _ = try SurfaceSnapshotRequest(target: .notch, tile: slot.tile).encoded(
                 providerID: slot.providerID)
             switch slot.kind {
@@ -181,7 +196,9 @@ struct HostNotchPanelState: Codable, Equatable, Sendable {
                 }
             }
             providerCounts[slot.providerID, default: 0] += 1
-            guard providerCounts[slot.providerID, default: 0] <= Self.providerSceneLimit else {
+            guard
+                providerCounts[slot.providerID, default: 0] <= Self.sceneLimit(for: slot.providerID)
+            else {
                 throw HostNotchPanelError.capacityExceeded
             }
         }
