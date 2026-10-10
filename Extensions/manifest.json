@@ -1563,7 +1563,7 @@
     "minimumSystemVersion": 14,
     "contractVersion": 1,
     "surfaceContractVersion": 1,
-    "supportProduct": "EdithExtensionUI",
+    "supportProduct": "EdithExtensionCommands",
     "roles": {
       "app": [
         "Extensions/usage/Collection/UsageNativeArchive.swift",
@@ -1680,7 +1680,18 @@
         "Extensions/usage/Models/UsageUIPreferences.swift",
         "Extensions/usage/Services/UsageUICommands.swift",
         "Extensions/usage/ViewModels/UsageUIClient.swift",
-        "Extensions/usage/Views/UsageHomeActivityCard.swift"
+        "Extensions/usage/Views/UsageHomeActivityCard.swift",
+        "Extensions/usage/CLI/CLIProgress.swift",
+        "Extensions/usage/CLI/ExportPlan.swift",
+        "Extensions/usage/CLI/UsageAttributionCommands.swift",
+        "Extensions/usage/CLI/UsageCLIExecution.swift",
+        "Extensions/usage/CLI/UsageCLIMachines.swift",
+        "Extensions/usage/CLI/UsageCommands.swift",
+        "Extensions/usage/CLI/UsageExportCommand.swift",
+        "Extensions/usage/CLI/UsageMachineCommands.swift",
+        "Extensions/usage/CLI/UsageReport.swift",
+        "Extensions/usage/CLI/UsageStatusLineCLICommands.swift",
+        "Extensions/usage/Services/UsageRefreshObservation.swift"
       ]
     },
     "resources": {
@@ -1703,7 +1714,8 @@
       "Packages/ExtensionSupport/Sources/EdithExtensionSupport",
       "Packages/ExtensionSupport/Sources/EdithExtensionUI",
       "scripts/build-extension-ui-carrier.mjs",
-      "scripts/build-contained-host-runtime.mjs"
+      "scripts/build-contained-host-runtime.mjs",
+      "Packages/ExtensionSupport/Sources/EdithExtensionCommands"
     ],
     "dependencies": [],
     "sameExecutableWorker": true

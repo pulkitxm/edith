@@ -1,6 +1,7 @@
 import AppKit
 import EdithExtensionSupport
 import EdithExtensionUI
+import EdithExtensionCommands
 import Foundation
 import SwiftUI
 
@@ -29,6 +30,22 @@ final class ExtensionRuntime: NSObject {
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let self, self.controller != nil else { throw ExtensionPeerError.unavailable }
+            if command == "usage.cli", let controller = self.controller {
+                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+                guard let object,
+                    Set(object.keys).isSubset(of: [
+                        "arguments", "standardInput", "workingDirectory",
+                    ])
+                else { throw ExtensionPeerError.invalidRequest }
+                let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
+                let context = try JSONDecoder().decode(UsageCLIContext.self, from: payload)
+                let reply = try await UsageCLIExecution.run(
+                    request, controller: controller,
+                    standardInput: context.standardInput ?? Data(),
+                    workingDirectory: context.workingDirectory
+                        ?? FileManager.default.currentDirectoryPath)
+                return try JSONEncoder().encode(reply)
+            }
             if command.hasPrefix("usage.ui."), let uiCommands = self.uiCommands {
                 return try await uiCommands.execute(command, payload: payload)
             }
@@ -173,7 +190,7 @@ final class ExtensionRuntime: NSObject {
                 let local = try await UsageNativeCollector.collect(
                     home: UsageExecutionEnvironment.home, dataDirectory: Repo.dataDir,
                     environment: UsageExecutionEnvironment.collectorEnvironment(), onEvent: event)
-                if fixture || policy == .skip { return local }
+                if fixture { return local }
                 return try await UsageMachinesPeer.merge(
                     local: local, policy: policy, onEvent: event)
             }
@@ -259,4 +276,9 @@ public func createExtension() -> UnsafeMutableRawPointer? {
         bitPattern: MainActor.assumeIsolated {
             UInt(bitPattern: Unmanaged.passRetained(ExtensionRuntime()).toOpaque())
         })
+}
+
+private struct UsageCLIContext: Decodable {
+    let standardInput: Data?
+    let workingDirectory: String?
 }

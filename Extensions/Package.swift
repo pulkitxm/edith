@@ -110,7 +110,7 @@ let package = Package(
             path: "clipboard/Tests", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(
             name: "UsageExtension",
-            dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
+            dependencies: [.product(name: "EdithExtensionCommands", package: "ExtensionSupport")],
             path: "usage", exclude: ["Tests", "Runtime.swift", "Package.swift", "Makefile"],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v5)]),

@@ -77,8 +77,9 @@ struct UsageMachinesPeer: Sendable {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    static func current() async -> UsageMachinesPeer? {
-        await MainActor.run {
+    static func current(timeout: TimeInterval = 900) async -> UsageMachinesPeer? {
+        guard timeout.isFinite, timeout > 0, timeout <= 1_800 else { return nil }
+        return await MainActor.run {
             guard let context = SurfaceHostContext.current, context.activeIDs.contains("machines"),
                 let endpoint = ExtensionPeerEndpoint.current(owner: "machines"),
                 let version = context.activeVersions["machines"]
@@ -93,7 +94,7 @@ struct UsageMachinesPeer: Sendable {
                 invoke: { command, data in
                     try await endpoint.invoke(
                         command, payload: data,
-                        timeout: command == "machines.usage.collect" ? 900 : 5)
+                        timeout: command == "machines.usage.collect" ? timeout : 5)
                 })
         }
     }
@@ -120,7 +121,7 @@ struct UsageMachinesPeer: Sendable {
             let date = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?
                 .contentModificationDate
             let due = date.map { Date().timeIntervalSince($0) >= 900 } ?? true
-            if let peer, policy == .all || due {
+            if let peer, policy != .skip, policy == .all || due {
                 do {
                     onEvent(.note("Collecting " + String(machine.name.prefix(256))))
                     let collected = try await peer.collect(

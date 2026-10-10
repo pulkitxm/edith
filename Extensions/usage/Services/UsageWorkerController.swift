@@ -19,6 +19,8 @@ public final class UsageWorkerController {
     public private(set) var failure: String?
     public private(set) var notice: String?
     private var progress: UsageRefreshProgress?
+    private var refreshRecorder: UsageRefreshRecorder?
+    var refreshObservation: UsageRefreshObservation? { refreshRecorder?.snapshot }
     private var backgroundTask: Task<Void, Never>?
     private let fetchLimits: FetchLimits
     private let collect: Collect
@@ -53,9 +55,15 @@ public final class UsageWorkerController {
         let directory = dataDirectory
         let progress = UsageRefreshProgress(directory: directory)
         self.progress = progress
+        let recorder = UsageRefreshRecorder()
+        refreshRecorder = recorder
         usageTask = Task { [weak self] in
             do {
-                let collected = try await collect(policy, { progress.record($0) })
+                let collected = try await collect(
+                    policy,
+                    {
+                        progress.record($0); recorder.record($0)
+                    })
                 try Task.checkCancellation()
                 let cache = UsageAttributionCache.load(dataDir: directory)
                 let next = await UsageAttributionAdvisor.advise(
@@ -126,6 +134,12 @@ public final class UsageWorkerController {
             self.limitsTask = nil
             UsageEvents.post(UsageEvents.limitsUpdated)
         }
+    }
+
+    public func waitForLimitsRefresh() async throws {
+        await limitsTask?.value
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
     }
 
     public func startBackgroundCollection(interval: Duration = .seconds(300)) {
