@@ -184,12 +184,13 @@ import Foundation
 
     private static func snapshot(_ model: StudioModel) async throws -> Data {
         let files = try StudioMediaLibrary.list(defaults: model.defaults)
+        let detect = model.detectEnvironment
         var value = try await BlockingWork.perform {
             StudioUIState(
                 files: files.filter { FileManager.default.fileExists(atPath: $0.url.path) },
                 projects: VideoProject.listProjects().map(StudioUIState.Project.init),
                 recent: StudioLibraryStore.loadRecent(), workflows: StudioWorkflowStore.load(),
-                environment: StudioUIState.Environment(StudioEngineLocator.detect()))
+                environment: StudioUIState.Environment(detect()))
         }
         try Task.checkCancellation()
         value.destinationMode =

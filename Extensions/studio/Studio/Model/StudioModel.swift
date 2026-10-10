@@ -143,12 +143,29 @@ final class StudioModel {
     private var libraryWatcher: FileSystemWatcher?
     private var libraryWatchPaths: [URL]?
 
+    @ObservationIgnored let detectEnvironment: @Sendable () -> StudioEnvironment
+    @ObservationIgnored private let installEngine:
+        @Sendable (StudioEngine, @escaping @Sendable (String) -> Void) async -> String?
+    private let startsLibrary: Bool
+
     init(
         defaults: UserDefaults = SharedDefaults.store, loadsState: Bool = true,
-        facade: StudioUIFacade? = nil
+        facade: StudioUIFacade? = nil,
+        startsLibrary: Bool = true,
+        detectEnvironment: @escaping @Sendable () -> StudioEnvironment = {
+            StudioEngineLocator.detect()
+        },
+        installEngine:
+            @escaping @Sendable (StudioEngine, @escaping @Sendable (String) -> Void) async ->
+            String? = {
+                await StudioEngineLocator.install($0, log: $1)
+            }
     ) {
         self.defaults = defaults
         self.facade = facade
+        self.startsLibrary = startsLibrary
+        self.detectEnvironment = detectEnvironment
+        self.installEngine = installEngine
         facade?.onState = { [weak self] value in self?.apply(value) }
         facade?.onFailure = { [weak self] message in self?.message = message }
         guard loadsState, facade == nil else { return }
@@ -194,6 +211,7 @@ final class StudioModel {
     func start() {
         guard !isStopped else { return }
         if let facade { facade.refresh(); facade.observe(); return }
+        guard startsLibrary else { refreshEngines(); return }
         refreshLibrary()
         watchLibrary()
         refreshEngines()
@@ -376,9 +394,10 @@ final class StudioModel {
         guard !isStopped else { return }
         if let facade { facade.refresh(); return }
         engineTask?.cancel()
+        let detect = detectEnvironment
         engineTask = Task { [weak self] in
             let detected = await Task.detached(priority: .utility) {
-                StudioEngineLocator.detect()
+                detect()
             }.value
             guard let self, !self.isStopped, !Task.isCancelled else { return }
             self.environment = detected
@@ -673,8 +692,9 @@ final class StudioModel {
                 self.installLog = line
             }
         }
+        let install = installEngine
         installTask = Task { [weak self] in
-            let failure = await StudioEngineLocator.install(engine, log: log)
+            let failure = await install(engine, log)
             guard let self, !self.isStopped, !Task.isCancelled else { return }
             self.installing = nil
             if let failure {

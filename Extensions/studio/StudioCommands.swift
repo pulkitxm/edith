@@ -404,7 +404,7 @@ enum StudioCommands {
         guard FileManager.default.isWritableFile(atPath: destination.path) else {
             throw Failure.invalid("Tool output directory is not writable.")
         }
-        var environment = StudioEngineLocator.detect()
+        var environment = model.detectEnvironment()
         environment.temporaryRoot = DataRoot.studio.appendingPathComponent(
             "command-staging", isDirectory: true)
         let result = try await StudioRunner.run(
@@ -529,7 +529,7 @@ enum StudioCommands {
             return try VideoEditPlan.schema(operation: request.optional("operation"))
         case "studio.edit.audio.health":
             return try encode(
-                await StudioAudioMastering.health(environment: StudioEngineLocator.detect()))
+                await StudioAudioMastering.health(environment: model.detectEnvironment()))
         case "studio.edit.create":
             let result = try VideoEditorService.create(
                 at: request.path("path"), title: request.text("title"),
