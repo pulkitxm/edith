@@ -671,10 +671,15 @@ test("the actual no-argument publisher finalizes a zero-build draft and refuses 
     for (const invalid of ["stale", "corrupt"]) {
       const invalidState = JSON.parse(readFileSync(stateFile));
       invalidState.release.draft = true;
+      invalidState.target = target;
+      invalidState.data = live.data.toString("base64");
       if (invalid === "stale") invalidState.target = "b".repeat(40);
       else invalidState.data = Buffer.from("broken").toString("base64");
       writeFileSync(stateFile, JSON.stringify(invalidState));
-      expect(run().status).not.toBe(0);
+      const rejected = run();
+      expect(rejected.status).not.toBe(0);
+      if (invalid === "corrupt")
+        expect(rejected.stderr).not.toContain("main changed");
       expect(JSON.parse(readFileSync(stateFile)).mutations).toBe(1);
     }
   } finally {
