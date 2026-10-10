@@ -191,8 +191,10 @@ public struct ExtensionPackageStore: Sendable {
                 (compatible.isEmpty ? Array(ordered.prefix(2)) : Array(compatible.prefix(2)))
                 + compatible.filter { selected.contains($0) }
             for package in ordered where !keep.contains(package) {
-                guard let lease = try? PackageFileLock(url: leaseURL(for: package), exclusive: true)
-                else { continue }
+                let lease: PackageFileLock
+                do {
+                    lease = try PackageFileLock(url: leaseURL(for: package), exclusive: true)
+                } catch MarketplaceError.packageBusy { continue }
                 defer { lease.close() }
                 try PackageDirectory(root, create: true).remove(package)
                 retained.removeAll { $0 == package }
@@ -227,7 +229,7 @@ public final class PackageFileLock: @unchecked Sendable {
         descriptor = openat(
             parent.descriptor, url.lastPathComponent, O_CREAT | O_RDWR | O_NOFOLLOW | O_CLOEXEC,
             S_IRUSR | S_IWUSR)
-        guard descriptor >= 0 else { throw MarketplaceError.packageBusy }
+        guard descriptor >= 0 else { throw PackageDirectory.failure() }
         do { try PackageDirectory.validate(descriptor, directory: false, owned: true) } catch {
             Darwin.close(descriptor)
             descriptor = -1

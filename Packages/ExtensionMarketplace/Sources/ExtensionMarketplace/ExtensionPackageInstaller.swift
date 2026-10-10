@@ -183,8 +183,10 @@ public actor ExtensionPackageInstaller {
         var resulting = original
         let authority = try PackageDirectory(store.root, create: true)
         var added: [ExtensionPackage] = []
-        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(
-            ".staging-\(UUID().uuidString)")
+        let temporaryRoot = URL(
+            fileURLWithPath: ProcessInfo.processInfo.environment["TMPDIR"]
+                ?? FileManager.default.temporaryDirectory.path)
+        let temporary = temporaryRoot.appendingPathComponent(".staging-\(UUID().uuidString)")
         try FileManager.default.createDirectory(
             at: temporary, withIntermediateDirectories: false,
             attributes: [.posixPermissions: 0o700])

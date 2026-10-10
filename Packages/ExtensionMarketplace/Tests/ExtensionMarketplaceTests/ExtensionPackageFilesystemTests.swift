@@ -305,4 +305,76 @@ struct ExtensionPackageFilesystemTests {
                 atPath: data.appendingPathComponent("installed.json").path))
     }
 
+    @Test(arguments: [0, 1, 2, 3, 4])
+    func ancestorSubstitutionDuringDownloadCannotWriteOutsideThePinnedStore(_ depth: Int)
+        async throws
+    {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let (package, archive) = try fixture.archive()
+        let components = [package.id, package.hostABI, package.architecture, package.version]
+        let data = fixture.directory.appendingPathComponent("Data")
+        let target = components.dropFirst(depth).reduce(data) { $0.appendingPathComponent($1) }
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let sentinel = target.appendingPathComponent("history")
+        let bytes = Data("synthetic data outside package authority".utf8)
+        try bytes.write(to: sentinel)
+        let detached = fixture.directory.appendingPathComponent("detached-download-root")
+        let installer = ExtensionPackageInstaller(
+            store: fixture.store,
+            download: { _, _ in
+                let ancestor = components.prefix(depth).reduce(fixture.store.root) {
+                    $0.appendingPathComponent($1)
+                }
+                try FileManager.default.createDirectory(
+                    at: ancestor, withIntermediateDirectories: true)
+                try FileManager.default.moveItem(at: ancestor, to: detached)
+                try FileManager.default.createSymbolicLink(at: ancestor, withDestinationURL: data)
+                let copy = fixture.directory.appendingPathComponent("downloaded.zip")
+                try FileManager.default.copyItem(at: archive, to: copy)
+                return copy
+            }, verify: { _ in })
+        await #expect(throws: (any Error).self) {
+            try await installer.install([package], repository: "example/app")
+        }
+        #expect(try Data(contentsOf: sentinel) == bytes)
+        let files = try #require(
+            FileManager.default.enumerator(
+                at: data, includingPropertiesForKeys: [.isRegularFileKey]))
+        var regularFiles: [URL] = []
+        for file in files.allObjects.compactMap({ $0 as? URL }) {
+            if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
+                regularFiles.append(file)
+            }
+        }
+        #expect(
+            regularFiles.map { $0.resolvingSymlinksInPath() }
+                == [sentinel.resolvingSymlinksInPath()])
+        #expect(
+            !FileManager.default.fileExists(atPath: target.appendingPathComponent(package.id).path))
+        if depth == 0 {
+            #expect(
+                !FileManager.default.fileExists(
+                    atPath: components.reduce(detached) {
+                        $0.appendingPathComponent($1)
+                    }.path))
+        } else {
+            #expect(try fixture.store.installedPackages().isEmpty)
+        }
+    }
+
+    @Test func linkedLeaseStorageIsRejectedInsteadOfSilentlySkippingPruning() throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let packages = ["1.0.0", "2.0.0", "3.0.0"].map { fixturePackage("keepAwake", version: $0) }
+        try fixture.store.commit(packages)
+        let outside = fixture.directory.appendingPathComponent("Data")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: false)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.store.root.appendingPathComponent(".leases"), withDestinationURL: outside)
+        #expect(throws: (any Error).self) { try fixture.store.prune(hostABI: "host-1") }
+        #expect(try fixture.store.installedPackages() == packages)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: outside.path).isEmpty)
+    }
+
 }
