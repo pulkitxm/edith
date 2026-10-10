@@ -164,7 +164,9 @@ final class StudioModel {
     var destination: StudioDestination {
         let mode =
             StudioDestinationMode(
-                rawValue: defaults.string(forKey: AppStorageKeys.Studio.destination) ?? "")
+                rawValue: facade == nil
+                    ? defaults.string(forKey: AppStorageKeys.Studio.destination) ?? ""
+                    : destinationMode)
             ?? .original
         switch mode {
         case .original:
@@ -174,7 +176,9 @@ final class StudioModel {
                 FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
                     ?? FileManager.default.temporaryDirectory)
         case .folder:
-            let path = defaults.string(forKey: AppStorageKeys.Studio.folder) ?? ""
+            let path =
+                facade == nil
+                ? defaults.string(forKey: AppStorageKeys.Studio.folder) ?? "" : destinationFolder
             guard !path.isEmpty else { return .nextToOriginal }
             return .folder(URL(fileURLWithPath: path, isDirectory: true))
         }
@@ -555,7 +559,7 @@ final class StudioModel {
 
     func imageEditor(for url: URL) -> StudioImageEditorModel {
         if let editor = imageEditors[url] { return editor }
-        let editor = StudioImageEditorModel(url: url)
+        let editor = StudioImageEditorModel(url: url, facade: facade)
         imageEditors[url] = editor
         return editor
     }

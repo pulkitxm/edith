@@ -12,6 +12,8 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: StudioModel?
     private var privacy: SurfacePrivacyState?
     private let commands = ExtensionCommandRegistry()
+    private let resources = StudioUIResources()
+    private let work = StudioUILongOperations()
     private let streams = try! ExtensionCLIStreams(owner: "studio")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
@@ -20,6 +22,17 @@ final class ExtensionRuntime: NSObject {
             if command.hasPrefix("studio.cli.") {
                 return try self.streams.invoke(
                     StudioCommand.self, operation: command, prefix: "studio.cli", payload: payload)
+            }
+            if command.hasPrefix("studio.ui.blob.") {
+                return try self.resources.invoke(command, payload: payload)
+            }
+            if command.hasPrefix("studio.ui.work.") {
+                return try self.work.invoke(command, payload: payload)
+            }
+            if command.hasPrefix("studio.ui.image.") {
+                return try await StudioUIImageCommands.execute(
+                    command, payload: payload, model: model,
+                    resources: self.resources, work: self.work)
             }
             if command.hasPrefix("studio.ui.") {
                 return try await StudioUICommands.execute(command, payload: payload, model: model)
@@ -52,6 +65,7 @@ final class ExtensionRuntime: NSObject {
         streams.stop()
         Task {
             await streams.stopAndWait()
+            await work.stopAndWait()
             await commands.shutdownAndWait()
             await model?.stopAndWait()
             shutdown()
@@ -122,6 +136,8 @@ final class ExtensionRuntime: NSObject {
 
     private func shutdown() {
         streams.stop()
+        resources.shutdown()
+        Task { await work.stopAndWait() }
         commands.shutdown()
         TextEditingCommands.shutdown()
         uiModel?.shutdown()

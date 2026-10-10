@@ -1385,7 +1385,11 @@
         "Extensions/studio/UIBridge/StudioUIFacade.swift",
         "Extensions/studio/UIBridge/StudioUIState.swift",
         "Extensions/studio/UIBridge/StudioUIJobState.swift",
-        "Extensions/studio/UIBridge/StudioUIPreview.swift"
+        "Extensions/studio/UIBridge/StudioUIPreview.swift",
+        "Extensions/studio/UIBridge/StudioUIResources.swift",
+        "Extensions/studio/UIBridge/StudioUITransfer.swift",
+        "Extensions/studio/UIBridge/StudioUILongOperations.swift",
+        "Extensions/studio/UIBridge/StudioUIImageCommands.swift"
       ]
     },
     "nativeSources": [
