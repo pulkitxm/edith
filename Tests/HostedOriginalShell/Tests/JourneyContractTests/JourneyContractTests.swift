@@ -131,3 +131,34 @@ private func fixture(identifier: String = identifier, directory: String = direct
     #expect(observations.first?.running == false)
     #expect(observations.first?.residentBytes == nil)
 }
+
+@Test func runnerHomeAndAmbientCredentialsNeverBecomeApplicationEnvironment() throws {
+    let value = fixture()
+    let environment = runner.merging([
+        "EDITH_JOURNEY_ACCOUNT_HOME": "/Users/fixture",
+        "EDITH_APPLICATION_IDENTIFIER": identifier,
+        "EDITH_SHARED_DEFAULTS_SUITE": value.defaultsSuite,
+        "EDITH_EXTENSION_FIXTURE_HOME": value.home,
+        "EDITH_GUI_FIXTURE_DIRECTORY": directory,
+        "HOME": "/Users/fixture/Library/Developer/XCTestDevices/runner",
+        "XDG_CONFIG_HOME": "/ambient/config", "SSH_AUTH_SOCK": "/ambient/socket",
+        "PRIVATE_TOKEN": "synthetic-secret",
+    ]) { _, next in next }
+    let application = try value.applicationEnvironment(from: environment)
+    try value.validateApplicationEnvironment(application)
+    #expect(application["HOME"] == value.home)
+    #expect(application["XDG_CONFIG_HOME"] == value.home + "/.config")
+    #expect(application["SSH_AUTH_SOCK"] == nil)
+    #expect(application["PRIVATE_TOKEN"] == nil)
+    for key in [
+        "EDITH_JOURNEY_ACCOUNT_HOME", "EDITH_APPLICATION_IDENTIFIER",
+        "EDITH_SHARED_DEFAULTS_SUITE", "EDITH_EXTENSION_FIXTURE_HOME",
+        "EDITH_GUI_FIXTURE_DIRECTORY", "EDITH_HOSTED_SHELL_JOURNEY",
+    ] {
+        var changed = environment
+        changed[key] = "invalid"
+        #expect(throws: (any Error).self) {
+            try value.applicationEnvironment(from: changed)
+        }
+    }
+}

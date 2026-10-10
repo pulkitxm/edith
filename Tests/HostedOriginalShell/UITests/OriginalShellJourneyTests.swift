@@ -20,16 +20,8 @@ final class OriginalShellJourneyTests: XCTestCase {
         )
         let accountHome = try XCTUnwrap(environment["EDITH_JOURNEY_ACCOUNT_HOME"])
         try fixture.validate(accountHome: accountHome, environment: environment)
-        try fixture.validateApplicationEnvironment(environment)
         let application = XCUIApplication(bundleIdentifier: fixture.identifier)
-        application.launchEnvironment = environment.filter {
-            [
-                "GITHUB_ACTIONS", "RUNNER_OS", "RUNNER_ENVIRONMENT", "EDITH_HOSTED_SHELL_JOURNEY",
-                "HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
-                "EDITH_APPLICATION_IDENTIFIER", "EDITH_SHARED_DEFAULTS_SUITE",
-                "EDITH_EXTENSION_FIXTURE_HOME", "EDITH_GUI_FIXTURE_DIRECTORY",
-            ].contains($0.key)
-        }
+        application.launchEnvironment = try fixture.applicationEnvironment(from: environment)
         defer {
             if application.state != .notRunning { application.terminate() }
             try? saveOutcome()
@@ -174,7 +166,7 @@ final class OriginalShellJourneyTests: XCTestCase {
         try fixture.validate(
             accountHome: try XCTUnwrap(environment["EDITH_JOURNEY_ACCOUNT_HOME"]),
             environment: environment)
-        try fixture.validateApplicationEnvironment(environment)
+        try fixture.validateApplicationEnvironment(application.launchEnvironment)
         XCTAssertEqual(root.resolvingSymlinksInPath().standardizedFileURL, root.standardizedFileURL)
         XCTAssertTrue(
             ["marketplace-installed-calendar.png", "storage-distribution.png"].contains(name))
