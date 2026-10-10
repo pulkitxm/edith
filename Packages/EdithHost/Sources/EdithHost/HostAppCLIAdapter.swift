@@ -12,6 +12,7 @@ import UserNotifications
     private let showMainWindow: @MainActor () -> Void
     private let navigation: Navigation
     private let relaunch: @MainActor () async throws -> HostCLIJSON
+    private let quit: @MainActor () -> Void
     private let core: @MainActor () -> HostCoreServices?
     private let startedAt = Date()
 
@@ -20,11 +21,13 @@ import UserNotifications
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
+        quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
         relaunch: @escaping @MainActor () async throws -> HostCLIJSON
     ) {
         self.identity = identity; self.marketplace = marketplace; self.updater = updater
         self.showMainWindow = showMainWindow; self.navigation = navigation; self.relaunch = relaunch
         self.core = core
+        self.quit = quit
     }
 
     func execute(_ arguments: [String]) async throws -> ExtensionCLIReply {
@@ -105,7 +108,7 @@ import UserNotifications
         case "open":
             showMainWindow(); return .object(["action": .string(action), "requested": .bool(true)])
         case "quit":
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { NSApp.terminate(nil) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [quit] in quit() }
             return .object([
                 "action": .string(action), "requested": .bool(true), "changed": .bool(true),
             ])

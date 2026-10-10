@@ -23,17 +23,39 @@ public struct HostCommandCLI: Sendable {
                     for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil,
                     create: false)
                 let identity = try HostIdentity(identifier: identifier, supportDirectory: support)
-                let executable = URL(fileURLWithPath: CommandLine.arguments[0])
-                    .resolvingSymlinksInPath()
-                let cli = HostCommandCLI(
-                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
-                        as? String ?? "development",
-                    tooling: HostToolingCLI(
+                let executable =
+                    HostToolingCLI.bundledLauncher()
+                    ?? URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
+                let tooling: HostToolingCLI
+                #if EDITH_CLI_FIXTURE
+                if identifier.hasPrefix("com.pulkit.edith.tests.cli-"),
+                    let fixtureHome = ProcessInfo.processInfo.environment["EDITH_CLI_FIXTURE_HOME"],
+                    fixtureHome.hasPrefix("/")
+                {
+                    let home = URL(fileURLWithPath: fixtureHome, isDirectory: true)
+                    tooling = HostToolingCLI(
+                        home: home, executable: executable,
+                        directory: home.appendingPathComponent("bin"),
+                        path: [home.appendingPathComponent("bin").path])
+                } else {
+                    tooling = HostToolingCLI(
                         home: FileManager.default.homeDirectoryForCurrentUser,
                         executable: executable,
                         path: (ProcessInfo.processInfo.environment["PATH"] ?? "").split(
                             separator: ":"
-                        ).map(String.init)),
+                        ).map(String.init))
+                }
+                #else
+                tooling = HostToolingCLI(
+                    home: FileManager.default.homeDirectoryForCurrentUser,
+                    executable: executable,
+                    path: (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":")
+                        .map(String.init))
+                #endif
+                let cli = HostCommandCLI(
+                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                        as? String ?? "development",
+                    tooling: tooling,
                     invoke: { try await HostCommandCLITransport.invoke($0, identity: identity) })
                 if arguments == ["mcp"] {
                     let io = try HostMCPStdio()
@@ -212,7 +234,13 @@ public struct HostCommandCLI: Sendable {
             default: throw HostCLIError.usage("Invalid extension command.")
             }
         }
-        let registry = try await HostCLIProviderRegistry.load(invoke: invoke)
+        let registry: HostCLIProviderRegistry
+        do { registry = try await HostCLIProviderRegistry.load(invoke: invoke) } catch {
+            try Task.checkCancellation()
+            guard HostCLIProviderCatalog.prefixes.values.contains(where: { $0.contains(command) })
+            else { throw HostCLIError.usage("Unknown command. Run ed --help.") }
+            throw error
+        }
         guard
             HostCLIProviderCatalog.prefixes.values.contains(where: { $0.contains(command) })
                 || registry.providers.contains(where: {
@@ -545,13 +573,15 @@ public struct HostCommandCLI: Sendable {
         if isatty(descriptor) == 0, let command = arguments.first,
             !Self.coreCommands.contains(command)
         {
-            let registry = try await HostCLIProviderRegistry.load(invoke: invoke)
-            declaredInput = registry.providers.contains { provider in
-                provider.catalog.acceptsInput == true
-                    && provider.catalog.commands.contains {
-                        $0.readsInput == true && arguments.starts(with: $0.route)
-                    }
-            }
+            let registry = try? await HostCLIProviderRegistry.load(invoke: invoke)
+            try Task.checkCancellation()
+            declaredInput =
+                registry?.providers.contains { provider in
+                    provider.catalog.acceptsInput == true
+                        && provider.catalog.commands.contains {
+                            $0.readsInput == true && arguments.starts(with: $0.route)
+                        }
+                } ?? false
         }
         guard
             declaredInput

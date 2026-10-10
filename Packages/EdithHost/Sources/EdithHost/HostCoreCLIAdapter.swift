@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionSupport
 import EdithHostCore
 import Foundation
@@ -6,17 +7,18 @@ import Foundation
     static func make(
         identity: HostIdentity, marketplace: HostMarketplace, updater: HostUpdater,
         shared: UserDefaults, standard: UserDefaults,
+        permissionState: HostPermissions = HostPermissions(),
         showMainWindow: @escaping @MainActor () -> Void,
         navigation: @escaping HostAppCLIAdapter.Navigation,
         core: @escaping @MainActor () -> HostCoreServices? = { nil },
+        quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
         changed: @escaping @MainActor () -> Void
     ) throws -> HostCoreCLIService {
-        let permissionState = HostPermissions()
         let permissions = HostPermissionCLIAdapter(
             permissions: permissionState, marketplace: marketplace, defaults: shared)
         let app = HostAppCLIAdapter(
             identity: identity, marketplace: marketplace, updater: updater,
-            showMainWindow: showMainWindow, navigation: navigation, core: core,
+            showMainWindow: showMainWindow, navigation: navigation, core: core, quit: quit,
             relaunch: {
                 throw HostCLIError.rejected(
                     "Relaunch must be performed by the matching CLI caller.")
@@ -27,7 +29,7 @@ import Foundation
                 as? String ?? "development",
             tooling: HostToolingCLI(
                 home: FileManager.default.homeDirectoryForCurrentUser,
-                executable: Bundle.main.executableURL
+                executable: HostToolingCLI.bundledLauncher() ?? Bundle.main.executableURL
                     ?? URL(fileURLWithPath: CommandLine.arguments[0]),
                 path: (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(
                     String.init)),

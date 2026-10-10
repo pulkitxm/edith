@@ -5,6 +5,21 @@ import Testing
 @testable import EdithHostCore
 
 @MainActor @Suite struct HostCommandCLITests {
+    @Test func unknownOfflineCommandStillReturnsOriginalUsageExitCode() async throws {
+        let cli = HostCommandCLI(
+            version: "0.1.0",
+            tooling: HostToolingCLI(
+                home: URL(fileURLWithPath: "/synthetic"),
+                executable: URL(fileURLWithPath: "/synthetic/ed"), path: []),
+            invoke: { _ in throw HostCLIError.unavailable })
+        let reply = await cli.run(["unrecognized"])
+        #expect(
+            reply.exitCode == 2 && reply.stdout.isEmpty
+                && reply.stderr == "error: Unknown command. Run ed --help.\n")
+        let unavailable = await cli.run(["calendar", "ls"])
+        #expect(unavailable.exitCode == 4 && unavailable.stdout.isEmpty)
+    }
+
     @Test func originalAppDocumentationAndContributorLinksKeepTheirStableNames() {
         let entries = HostAppLinksCLI.entries(
             extensions: [

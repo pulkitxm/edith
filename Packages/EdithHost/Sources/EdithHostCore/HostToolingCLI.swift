@@ -7,6 +7,12 @@ public struct HostToolingCLI: Sendable {
     public let directory: URL
     public let path: [String]
 
+    public static func bundledLauncher() -> URL? {
+        ["Contents/MacOS/ed", "Contents/Resources/ed-launcher"].map {
+            Bundle.main.bundleURL.appendingPathComponent($0)
+        }.first { FileManager.default.isExecutableFile(atPath: $0.path) }?.resolvingSymlinksInPath()
+    }
+
     public init(home: URL, executable: URL, directory: URL? = nil, path: [String]) {
         self.home = home; self.executable = executable; self.path = path
         let system = URL(fileURLWithPath: "/usr/local/bin")

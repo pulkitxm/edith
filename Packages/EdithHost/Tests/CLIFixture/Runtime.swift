@@ -1,3 +1,5 @@
+import ArgumentParser
+import EdithExtensionCommands
 import EdithExtensionArchive
 import EdithExtensionSupport
 import Foundation
@@ -5,20 +7,40 @@ import Foundation
 @MainActor @objc(EdithCLIFixtureRuntime)
 final class CLIFixtureRuntime: NSObject {
     private let commands = ExtensionCommandRegistry()
+    private let streams = try! ExtensionCLIStreams(owner: "keepAwake")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { operation, payload in
             switch operation {
+            case "calendar.cli.catalog":
+                return try JSONSerialization.data(withJSONObject: [
+                    "version": 1, "owner": "calendar", "acceptsInput": true,
+                    "commands": [
+                        "list", "ls", "synthetic-error", "context", "wait", "stream", "stream-wait",
+                    ].map { command in
+                        var value: [String: Any] = [
+                            "route": ["calendar", command], "operation": "calendar.cli",
+                            "summary": "Exercise the synthetic signed CLI protocol.",
+                            "destructive": false, "timeout": 30,
+                            "readsInput": command == "context",
+                            "jsonOutput": command != "stream" && command != "stream-wait",
+                        ]
+                        if command.hasPrefix("stream") {
+                            value["streamOperation"] = "calendar.cli.stream"
+                            value["streamDeadline"] = 30
+                        }
+                        return value
+                    }, "settings": [],
+                ])
             case "calendar.cli":
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
-                try request.validate()
-                let failed = request.arguments == ["synthetic-error"]
-                let output = try JSONSerialization.data(withJSONObject: request.arguments)
                 return try JSONEncoder().encode(
-                    ExtensionCLIReply(
-                        stdout: failed ? "" : String(decoding: output, as: UTF8.self) + "\n",
-                        stderr: failed ? "error: synthetic unavailable\n" : "",
-                        exitCode: failed ? 4 : 0))
+                    await ExtensionCLIExecution.run(CalendarFixtureRoot.self, request: request))
+            case "calendar.cli.stream.start", "calendar.cli.stream.read",
+                "calendar.cli.stream.cancel", "calendar.cli.stream.end":
+                return try self.streams.invoke(
+                    CalendarFixtureRoot.self, operation: operation, prefix: "calendar.cli.stream",
+                    payload: payload)
             case "echo": return payload
             case "archive":
                 guard
@@ -49,7 +71,7 @@ final class CLIFixtureRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:) func prepareToStop(completion: @escaping () -> Void) {
         Task {
-            await commands.shutdownAndWait(); completion()
+            await commands.shutdownAndWait(); await streams.stopAndWait(); completion()
         }
     }
 
@@ -71,7 +93,7 @@ final class CLIFixtureRuntime: NSObject {
             commands.cancel(input["token"] as? String ?? "")
             return ["ok": true] as NSDictionary
         case "stop":
-            commands.shutdown()
+            commands.shutdown(); streams.stop()
             return ["ok": true] as NSDictionary
         default: return ["ok": false] as NSDictionary
         }
@@ -84,4 +106,86 @@ public func createCLIFixture() -> UnsafeMutableRawPointer? {
         UInt(bitPattern: Unmanaged.passRetained(CLIFixtureRuntime()).toOpaque())
     }
     return UnsafeMutableRawPointer(bitPattern: address)
+}
+
+struct CalendarFixtureRoot: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "calendar",
+        subcommands: [
+            List.self, Failure.self, Context.self, Wait.self, Stream.self, StreamWait.self,
+        ],
+        defaultSubcommand: List.self)
+
+    struct List: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "list", aliases: ["ls"])
+        @Flag var json = false
+        func run() async throws {
+            let arguments = try JSONSerialization.data(
+                withJSONObject: ExtensionCLIContext.request!.arguments)
+            CLIOut.out(String(decoding: arguments, as: UTF8.self))
+        }
+    }
+
+    struct Failure: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "synthetic-error")
+        @Flag var json = false
+        func run() async throws { CLIOut.note("error: synthetic unavailable"); throw ExitCode(4) }
+    }
+
+    struct Context: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "context")
+        @Flag var json = false
+        @Argument var path: String
+        func run() async throws {
+            let request = try await CLIFixtureContext.request()
+            let file = try ExtensionCLIContext.resolvePath(path)
+            let content = try String(contentsOf: file, encoding: .utf8)
+            let value: [String: Any] = [
+                "workingDirectory": request.workingDirectory,
+                "input": request.standardInput.base64EncodedString(),
+                "interactive": request.interactive, "file": file.path, "content": content,
+            ]
+            CLIOut.out(
+                String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self))
+        }
+    }
+
+    struct Wait: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "wait")
+        @Flag var json = false
+        func run() async throws { try await CLIFixtureContext.wait() }
+    }
+
+    struct Stream: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "stream")
+        func run() async throws {
+            CLIOut.raw("first\0🌤\n")
+            try await Task.sleep(for: .milliseconds(75))
+            CLIOut.note("synthetic diagnostic")
+            CLIOut.out("last")
+            throw ExitCode(7)
+        }
+    }
+
+    struct StreamWait: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(commandName: "stream-wait")
+        func run() async throws { try await CLIFixtureContext.wait() }
+    }
+}
+
+@MainActor private enum CLIFixtureContext {
+    static func request() throws -> ExtensionCLIRequest {
+        guard let request = ExtensionCLIContext.request else {
+            throw ExtensionPeerError.invalidRequest
+        }
+        return request
+    }
+    static func wait() async throws {
+        let marker = ExtensionData.root.appendingPathComponent("cli-wait.ready")
+        try Data("ready".utf8).write(to: marker, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: marker) }
+        try await Task.sleep(for: .seconds(30))
+        try Task.checkCancellation()
+        CLIOut.out("finished")
+    }
 }
