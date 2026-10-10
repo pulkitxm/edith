@@ -1,3 +1,4 @@
+import AppKit
 import EdithExtensionCommands
 import EdithExtensionSupport
 import EdithExtensionUI
@@ -11,6 +12,7 @@ import Foundation
     let hooks: AgentHookService
     let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
+    private let openGuide: @MainActor () throws -> Void
     private let activityInstaller: AgentActivityHookInstaller
     private let notifications: HerdrNotificationService
     private let defaults: UserDefaults
@@ -33,7 +35,16 @@ import Foundation
     private lazy var uiEngine = HerdrUIEngine(worker: self)
     private var maintenance: Task<Void, Never>?
 
+    private static func openOriginalGuide() throws {
+        let url = URL(
+            string: "https://github.com/pulkitxm/edith/blob/main/docs/cli/herdr/README.md")!
+        guard NSWorkspace.shared.open(url) else {
+            throw ExtensionPeerError.rejected("The Herdr setup guide could not be opened.")
+        }
+    }
+
     init(
+        openGuide: @escaping @MainActor () throws -> Void = HerdrWorker.openOriginalGuide,
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
         defaults: UserDefaults = SharedDefaults.store,
         notifications: HerdrNotificationService? = nil,
@@ -73,6 +84,7 @@ import Foundation
             ?? AgentActivityHookInstaller(
                 executable: Bundle.main.executableURL
                     ?? URL(fileURLWithPath: CommandLine.arguments[0]))
+        self.openGuide = openGuide
         self.store = ownedStore
         self.hooks = hooks
         self.catalogs = catalogs
@@ -228,6 +240,19 @@ import Foundation
                 where holder.descriptor?.handle == request.session { holder.reset() }
             }
             return result
+        }
+        if command == "herdr.settings.sessions" || command == "herdr.settings.guide" {
+            guard payload.count <= 4096,
+                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                object.isEmpty
+            else { throw ExtensionPeerError.invalidRequest }
+            if command == "herdr.settings.sessions" {
+                let result = try await inventory.checkSessions()
+                guard !isStopped else { throw ExtensionPeerError.unavailable }
+                return try JSONEncoder().encode(result)
+            }
+            try openGuide()
+            return Data("{}".utf8)
         }
         if command == "herdr.settings.read" || command == "herdr.settings.save" {
             guard payload.count <= 4096,

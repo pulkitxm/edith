@@ -49,9 +49,11 @@ struct QuinjetLaunchOptions: ParsableArguments {
         guard !(cmux && embedded) else {
             throw CLIFailure.usage("--cmux and --embedded cannot be used together")
         }
-        let preferred = QuinjetLaunchConfiguration.preferred(
-            sharedDefaults: CLIEnvironment.sharedDefaults,
-            standardDefaults: CLIEnvironment.standardDefaults)
+        let preferred =
+            QuinjetCLIEnvironment.context?.preferred
+            ?? QuinjetLaunchConfiguration.preferred(
+                sharedDefaults: CLIEnvironment.sharedDefaults,
+                standardDefaults: CLIEnvironment.standardDefaults)
         let themeName = theme ?? preferred.theme.rawValue
         guard let theme = QuinjetTheme(rawValue: themeName) else {
             throw CLIFailure.usage(
@@ -560,6 +562,7 @@ enum QuinjetCLIEnvironment {
 
     struct Context: Sendable {
         let client: QuinjetClient
+        var preferred: QuinjetLaunchConfiguration? = nil
         let session: @Sendable (QuinjetSessionRequest) async throws -> QuinjetSessionResult
     }
     @TaskLocal static var context: Context?

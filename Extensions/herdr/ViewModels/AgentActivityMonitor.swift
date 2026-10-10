@@ -9,6 +9,7 @@ final class AgentActivityMonitor {
     static let discoveryKey = "surfaceAgentTerminalDiscovery"
     let uiClient: HerdrUIClient?
     var connectionsPresented = false
+    private(set) var uiSettingsRevision = 0
     private(set) var now = Date()
     private(set) var activity = AgentActivitySnapshot()
     private(set) var deciding: Set<UUID> = []
@@ -156,6 +157,7 @@ final class AgentActivityMonitor {
         defaults.set(state.activitySettings.encoded, forKey: AgentActivitySettings.defaultsKey)
         state.attention.save(in: defaults)
         defaults.set(state.discovery, forKey: Self.discoveryKey)
+        uiSettingsRevision += 1
         receive(state.activity)
     }
 

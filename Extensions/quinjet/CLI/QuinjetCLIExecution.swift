@@ -36,6 +36,8 @@ import Foundation
         let client = worker.client
         return .init(
             client: client,
+            preferred: .preferred(
+                sharedDefaults: worker.defaults, standardDefaults: worker.defaults),
             session: { request in
                 guard await !worker.isStopped else { throw ExtensionPeerError.unavailable }
                 try Task.checkCancellation()

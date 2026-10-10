@@ -99,12 +99,19 @@ struct AgentConnectionsPane: View {
         .edithForm()
         .disabled(working)
         .pageTask { await monitor.observe() }
+        .onChange(of: monitor.uiSettingsRevision) {
+            settings = monitor.settings
+            discovery = monitor.discoversTerminals
+            stuckMinutes = monitor.stuckMinutes
+        }
         .onChange(of: discovery) {
+            guard discovery != monitor.discoversTerminals else { return }
             HerdrWorkOwnership.start {
                 await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
             }
         }
         .onChange(of: stuckMinutes) {
+            guard stuckMinutes != monitor.stuckMinutes else { return }
             HerdrWorkOwnership.start {
                 await monitor.saveMonitoring(discovery: discovery, stuckMinutes: stuckMinutes)
             }
@@ -238,6 +245,10 @@ struct AgentConnectionsPane: View {
     }
 
     private func chooseProject() {
+        guard monitor.uiClient == nil else {
+            error = "Project folder selection requires the owning window's folder chooser."
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true

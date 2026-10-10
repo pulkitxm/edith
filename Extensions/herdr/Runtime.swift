@@ -8,6 +8,7 @@ import SwiftUI
 @MainActor @objc(EdithHerdrExtensionRuntime)
 final class ExtensionRuntime: NSObject {
     private var uiClient: ExtensionEngineClient?
+    private var sessionSettingsModel: HerdrSessionSettingsModel?
     private var settingsModel: HerdrSettingsModel?
     private var uiStore: HerdrStore?
     private var uiActivity: AgentActivityMonitor?
@@ -83,6 +84,10 @@ final class ExtensionRuntime: NSObject {
                 configuration.extensionID == "herdr",
                 location == "settings" || configuration.engineClient != nil
             else { return ["ok": false] as NSDictionary }
+            let settingsSection = (input["section"] as? String).flatMap(HerdrSettingsSection.init)
+            guard location != "settings" || settingsSection != nil else {
+                return ["ok": false] as NSDictionary
+            }
             if location.hasPrefix("herdr.") {
                 guard let target = input["target"] as? String, !target.isEmpty,
                     target.utf8.count <= 4096, !target.utf8.contains(0)
@@ -112,6 +117,33 @@ final class ExtensionRuntime: NSObject {
                         }
                     })
                 PresenterState.shared.start()
+            } else if settingsSection == .agentActivity {
+                let facade: HerdrUIClient
+                if let client = configuration.engineClient {
+                    facade = HerdrUIClient(client: client)
+                } else {
+                    facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
+                }
+                let store = HerdrStore(uiClient: facade)
+                let activity = AgentActivityMonitor(defaults: store.uiDefaults, uiClient: facade)
+                store.uiActivity = activity
+                uiStore = store
+                uiActivity = activity
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost {
+                        HerdrActivitySettingsPage(store: store, monitor: activity)
+                    })
+            } else if settingsSection == .extensionSettings {
+                let facade: HerdrUIClient
+                if let client = configuration.engineClient {
+                    facade = HerdrUIClient(client: client)
+                } else {
+                    facade = HerdrUIClient { _, _ in throw ExtensionPeerError.unavailable }
+                }
+                let model = HerdrSessionSettingsModel(client: facade)
+                sessionSettingsModel = model
+                uiController = NSHostingController(
+                    rootView: ExtensionPageHost { HerdrExtensionSettingsPage(model: model) })
             } else {
                 let model: HerdrSettingsModel
                 if let client = configuration.engineClient {
@@ -153,6 +185,8 @@ final class ExtensionRuntime: NSObject {
         return ["ok": true] as NSDictionary
     }
     private func stopUI() {
+        sessionSettingsModel?.shutdown()
+        sessionSettingsModel = nil
         settingsModel?.shutdown()
         settingsModel = nil
         let store = uiStore

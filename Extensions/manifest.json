@@ -2842,11 +2842,13 @@
         "Extensions/herdr/ViewModels/HerdrUIProjection.swift",
         "Extensions/herdr/ViewModels/HerdrUIPanelProjection.swift",
         "Extensions/herdr/ViewModels/HerdrUIHookProjection.swift",
-        "ViewModels/HerdrUILaunchSettings.swift",
-        "ViewModels/HerdrSpaceSessions.swift",
+        "Extensions/herdr/ViewModels/HerdrUILaunchSettings.swift",
+        "Extensions/herdr/ViewModels/HerdrSpaceSessions.swift",
         "Extensions/herdr/ViewModels/HerdrUISpaceProjection.swift",
         "Extensions/herdr/Views/HerdrRemoteScene.swift",
-        "Extensions/herdr/Transport/OwnedTerminalFiles.swift"
+        "Extensions/herdr/Transport/OwnedTerminalFiles.swift",
+        "Extensions/herdr/ViewModels/HerdrSessionSettingsModel.swift",
+        "Extensions/herdr/Views/HerdrExtensionSettingsPage.swift"
       ]
     },
     "resources": {
@@ -2961,7 +2963,10 @@
         "Extensions/quinjet/Transport/OwnedTerminalPTY.swift",
         "Extensions/quinjet/Transport/OwnedTerminalSession.swift",
         "Extensions/quinjet/ViewModels/QuinjetUIProjection.swift",
-        "Extensions/quinjet/Transport/OwnedTerminalFiles.swift"
+        "Extensions/quinjet/Transport/OwnedTerminalFiles.swift",
+        "Extensions/quinjet/ViewModels/QuinjetSettingsModel.swift",
+        "Extensions/quinjet/ViewModels/QuinjetSettingsEngine.swift",
+        "Extensions/quinjet/Views/QuinjetSettingsPage.swift"
       ]
     },
     "resources": {

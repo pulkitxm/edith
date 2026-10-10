@@ -5,6 +5,7 @@ import Foundation
 
 @MainActor final class QuinjetWorker {
     let model: QuinjetPageModel
+    let defaults: UserDefaults
     let client: QuinjetClient
     let terminalSessions = OwnedTerminalSessionRegistry()
     let automaticActions: Bool
@@ -22,6 +23,7 @@ import Foundation
     private var worktrees: [UUID: (UUID, QuinjetWorktree, [QuinjetWorktree])] = [:]
 
     init(
+        defaults: UserDefaults = SharedDefaults.store,
         client: QuinjetClient = .live,
         previewExecutable: @escaping @MainActor () -> URL? = QuinjetExecutable.local,
         resolveRemote: @escaping @MainActor (UUID) async throws -> QuinjetRemote = QuinjetWorker
@@ -29,6 +31,7 @@ import Foundation
         automaticActions: Bool = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
             == nil
     ) {
+        self.defaults = defaults
         self.client = client
         self.previewExecutable = previewExecutable
         self.resolveRemote = resolveRemote
@@ -178,6 +181,9 @@ import Foundation
         guard payload.count <= 16_384,
             let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
         else { throw ExtensionPeerError.invalidRequest }
+        if command == "quinjet.settings.read" || command == "quinjet.settings.save" {
+            return try await QuinjetSettingsEngine.execute(command, object: object, worker: self)
+        }
         if command.hasPrefix("quinjet.ui.") {
             return try await uiEngine.execute(command, object: object)
         }
