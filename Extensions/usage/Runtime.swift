@@ -249,7 +249,8 @@ final class ExtensionRuntime: NSObject {
                 return NSHostingController(
                     rootView: ExtensionPageHost {
                         UsageEmbeddedScene(client: self.uiClient, readOnly: self.uiOnly) {
-                            Form { UsageSettingsRows() }.formStyle(.grouped).disabled(self.uiOnly)
+                            Form { UsageSettingsRows() }.formStyle(.grouped)
+                                .disabled(self.uiOnly || self.uiClient?.prepared != true)
                         }
                     })
             }

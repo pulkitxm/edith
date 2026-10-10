@@ -42,6 +42,71 @@ import Testing
         await controller.shutdown()
     }
 
+    @Test func firstDashboardRestoresEnginePreferencesBeforeReadingItsDocument() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try data.write(to: directory.appendingPathComponent("usage.json"))
+        let suite = "usage-ui-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set("yesterday", forKey: "dashRange")
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let service = UsageUICommands(
+            controller: controller, directory: directory, defaults: defaults)
+        var gate: CheckedContinuation<Void, Never>?
+        var documentRequested = false
+        let client = UsageUIClient(invoke: { command, payload in
+            if command == "usage.ui.preferences" { await withCheckedContinuation { gate = $0 } }
+            if command == "usage.ui.document" { documentRequested = true }
+            return try await service.execute(command, payload: payload)
+        })
+        let model = DashboardModel(
+            homeUsageStore: HomeUsageSnapshotStore(
+                file: directory.appendingPathComponent("unused.json")))
+        UsageUIClient.current = client
+        defer { client.stop(); UsageUIClient.current = nil; model.shutdown(); service.shutdown() }
+        let load = Task { await model.load() }
+        while gate == nil { await Task.yield() }
+        #expect(!documentRequested && !model.loaded)
+        gate?.resume()
+        await load.value
+        await model.awaitPendingComputation()
+        #expect(model.loaded && model.range == .yesterday && client.prepared)
+        await controller.shutdown()
+    }
+
+    @Test func failedPreferenceLoadCanRecoverBeforeShowingOwnedData() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try data.write(to: directory.appendingPathComponent("usage.json"))
+        let suite = "usage-ui-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let controller = UsageWorkerController(
+            dataDirectory: directory, collect: { _, _ in Data() })
+        let service = UsageUICommands(
+            controller: controller, directory: directory, defaults: defaults)
+        var attempts = 0
+        let client = UsageUIClient(invoke: { command, payload in
+            if command == "usage.ui.preferences" {
+                attempts += 1
+                if attempts == 1 { throw ExtensionPeerError.unavailable }
+            }
+            return try await service.execute(command, payload: payload)
+        })
+        defer { client.stop(); service.shutdown() }
+        await #expect(throws: ExtensionPeerError.self) { try await client.prepare() }
+        #expect(!client.prepared)
+        let document = try await client.document()
+        #expect(client.prepared && attempts == 2 && document.daily.count == 1)
+        await controller.shutdown()
+    }
+
     @Test func rejectsArbitraryPreferencesAndDocumentOffsets() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString)
@@ -274,6 +339,9 @@ import Testing
         let data = data
         let id = UUID()
         let client = UsageUIClient(invoke: { operation, _ in
+            if operation == "usage.ui.preferences" {
+                return try JSONEncoder().encode(UsageUIPreferences(values: [:]))
+            }
             if operation == "usage.ui.document" {
                 return try JSONSerialization.data(withJSONObject: [
                     "id": id.uuidString,

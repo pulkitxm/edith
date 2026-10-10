@@ -12,6 +12,8 @@ import Observation
     private var requests: [UUID: Task<Data, Error>] = [:]
     private var polling: Task<Void, Never>?
     private var preferences: UsageUIPreferences?
+    private var preparation: Task<Void, Error>?
+    private(set) var prepared = false
     private var preferencesTask: Task<Void, Never>?
     private var observer: NSObjectProtocol?
     private(set) var presentationValues: [String: String]?
@@ -62,6 +64,7 @@ import Observation
     }
 
     func document() async throws -> DashUsage {
+        try await prepare()
         let data = try await checkedPayload("usage.ui.document")
         guard UsageHistory.isValidDocument(data) else { throw ExtensionPeerError.invalidRequest }
         return try JSONDecoder().decode(DashUsage.self, from: data)
@@ -112,22 +115,43 @@ import Observation
         }
     }
 
+    func prepare() async throws {
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+        if preparation == nil {
+            preparation = Task {
+                do {
+                    let snapshot: UsageUIPreferences = try await value("usage.ui.preferences")
+                    try Task.checkCancellation()
+                    guard !stopped else { throw ExtensionPeerError.unavailable }
+                    snapshot.apply(to: SharedDefaults.store, replacing: true)
+                    preferences = UsageUIPreferences.read(SharedDefaults.store)
+                    observer = NotificationCenter.default.addObserver(
+                        forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+                    ) { [weak self] _ in
+                        Task { @MainActor [weak self] in self?.syncPreferences() }
+                    }
+                    prepared = true
+                } catch {
+                    preparation = nil
+                    throw error
+                }
+            }
+        }
+        try await preparation?.value
+        try Task.checkCancellation()
+        guard !stopped else { throw ExtensionPeerError.unavailable }
+    }
+
     func start() {
         guard !stopped, polling == nil else { return }
         polling = Task { [weak self] in
             guard let self else { return }
-            do {
-                let snapshot: UsageUIPreferences = try await value("usage.ui.preferences")
-                snapshot.apply(to: SharedDefaults.store, replacing: true)
-                preferences = UsageUIPreferences.read(SharedDefaults.store)
-                observer = NotificationCenter.default.addObserver(
-                    forName: UserDefaults.didChangeNotification, object: nil, queue: .main
-                ) { [weak self] _ in
-                    Task { @MainActor [weak self] in self?.syncPreferences() }
-                }
-            } catch { if !Task.isCancelled { failure = error.localizedDescription } }
+            do { try await prepare() } catch {
+                if !Task.isCancelled { failure = error.localizedDescription }
+            }
             while !Task.isCancelled, !stopped {
                 do {
+                    if !prepared { try await prepare() }
                     try await refreshState()
                 } catch { if !Task.isCancelled { failure = error.localizedDescription } }
                 do { try await Task.sleep(for: .seconds(2)) } catch { return }
@@ -200,6 +224,8 @@ import Observation
     func stop() {
         guard !stopped else { return }
         stopped = true
+        prepared = false
+        preparation?.cancel(); preparation = nil
         polling?.cancel(); polling = nil
         preferencesTask?.cancel(); preferencesTask = nil
         for task in tasks.values { task.cancel() }
