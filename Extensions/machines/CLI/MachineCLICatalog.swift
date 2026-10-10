@@ -100,8 +100,10 @@ enum MachineCLICatalog {
                         route: route,
                         summary: configuration.abstract.isEmpty ? name : configuration.abstract,
                         destructive: route.contains(where: mutationNames.contains),
-                        readsInput: ["exec", "run", "add", "edit", "put", "upload", "write"]
-                            .contains(name)))
+                        readsInput: [
+                            "exec", "run", "shell", "add", "edit", "put", "upload", "write",
+                        ]
+                        .contains(name)))
                 for child in configuration.subcommands { append(child, prefix: route) }
             }
         }

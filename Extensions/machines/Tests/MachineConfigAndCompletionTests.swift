@@ -67,6 +67,11 @@ extension MachineCLITests {
             let children = try #require(parser["subcommands"] as? [[String: Any]])
             let exec = try #require(children.first { $0["commandName"] as? String == "exec" })
             #expect((exec["arguments"] as? [[String: Any]])?.isEmpty == false)
+            let commands = try #require(object["commands"] as? [[String: Any]])
+            let shell = try #require(
+                commands.first { $0["route"] as? [String] == ["machines", "docker", "shell"] })
+            #expect(shell["readsInput"] as? Bool == true)
+            #expect(shell["streamOperation"] as? String == "machines.cli.stream")
         }
 
         @Test func originalMachineFirstCompletionPreservesFlagsFilesAliasesAndPassthrough() {

@@ -271,12 +271,33 @@ import GhosttyTerminal
         guard cliPTYs[caller] == nil else { throw MachineUIError.unavailable }
         let pty = try MachinePTY(launch: interactiveLaunch(machine, arguments, environment))
         cliPTYs[caller] = pty
-        let input = ExtensionCLIContext.request?.standardInput ?? Data()
+        let liveInput = ExtensionCLIContext.input
+        let input = liveInput == nil ? ExtensionCLIContext.request?.standardInput ?? Data() : Data()
+        var inputFailure: Error?
+        let inputTask = liveInput.map { input in
+            Task {
+                do {
+                    while let event = try await input.read() {
+                        guard !self.stopped, self.cliPTYs[caller] === pty else {
+                            throw MachineUIError.unavailable
+                        }
+                        switch event {
+                        case .bytes(let bytes): try await self.send(bytes, to: pty)
+                        case .resize(let columns, let rows):
+                            try pty.resize(columns: UInt16(columns), rows: UInt16(rows))
+                        }
+                    }
+                } catch {
+                    if !Task.isCancelled { inputFailure = error }
+                }
+            }
+        }
         var sent = 0
         var cursor: UInt64 = 0
         do {
             while true {
                 try Task.checkCancellation()
+                if let inputFailure { throw inputFailure }
                 try pty.poll()
                 let count = min(pty.inputCapacity, input.count - sent)
                 if count > 0 {
@@ -286,15 +307,19 @@ import GhosttyTerminal
                 cursor = output.nextOffset
                 if !output.bytes.isEmpty { try CLIOut.raw(output.bytes) }
                 if let code = output.exitCode {
+                    inputTask?.cancel()
                     cliPTYs.removeValue(forKey: caller)
                     await pty.closeAndWait()
+                    await inputTask?.value
                     return code
                 }
                 try await Task.sleep(for: .milliseconds(20))
             }
         } catch {
+            inputTask?.cancel()
             cliPTYs.removeValue(forKey: caller)
             await pty.closeAndWait()
+            await inputTask?.value
             throw error
         }
     }
