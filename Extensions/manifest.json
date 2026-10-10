@@ -2640,6 +2640,7 @@
         "Extensions/codeStats/Services/CodeStatsStore.swift",
         "Extensions/codeStats/Services/CodeStatsSurface.swift",
         "Extensions/codeStats/Services/CodeStatsTaskRunner.swift",
+        "Extensions/codeStats/Services/CodeStatsScheduleLifecycle.swift",
         "Extensions/codeStats/Services/CodeStatsVolumeWatch.swift",
         "Extensions/codeStats/Services/CodeStatsWorkflow.swift",
         "Extensions/codeStats/ViewModels/CodeStatsModel.swift",

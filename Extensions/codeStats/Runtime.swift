@@ -13,7 +13,10 @@ final class ExtensionRuntime: NSObject {
     private var surface: CodeStatsSurface?
     private var operations: CodeStatsCommands?
     private var startup: Task<Void, Never>?
-    private var schedule: Task<Void, Never>?
+    private let ambientPolicy = ExtensionAmbientPolicy(jobs: [
+        CodeStatsScheduleLifecycle.jobID: .init(ambient: 600)
+    ])
+    private var schedule: CodeStatsScheduleLifecycle?
     private var wake: Task<Void, Never>?
     private var volumeWatch: CodeStatsVolumeWatch?
     private var defaultsObserver: NSObjectProtocol?
@@ -54,6 +57,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         let streams = cliStreams; cliStreams = nil; streams?.stop()
         commands.shutdown()
+        ambientPolicy.stop()
         schedule?.cancel(); wake?.cancel(); startup?.cancel()
         volumeWatch?.stop(); volumeWatch = nil
         if let defaultsObserver { NotificationCenter.default.removeObserver(defaultsObserver) }
@@ -62,9 +66,11 @@ final class ExtensionRuntime: NSObject {
         CodeStatsWorkerOperations.workflow = nil
         let workflow = workflow; self.workflow = nil
         let operations = operations; self.operations = nil
-        let jobs = [startup, schedule, wake]; startup = nil; schedule = nil; wake = nil
+        let schedule = schedule; self.schedule = nil
+        let jobs = [startup, wake]; startup = nil; wake = nil
         surface = nil
         Task {
+            await schedule?.shutdown()
             await workflow?.shutdown()
             await operations?.shutdown()
             for job in jobs { await job?.value }
@@ -98,6 +104,9 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
             guard workflow == nil else { return ["ok": true] as NSDictionary }
             CodeStatsPaths.prepare()
             let store = CodeStatsStore()
@@ -120,13 +129,16 @@ final class ExtensionRuntime: NSObject {
                 ) { [weak self] _ in
                     MainActor.assumeIsolated { self?.wakeSchedule() }
                 }
-                schedule = Task { [weak self] in
-                    await self?.startup?.value
-                    while !Task.isCancelled {
-                        _ = await workflow.scheduledCheck()
-                        do { try await Task.sleep(for: .seconds(30)) } catch { return }
-                    }
+                let policy = ambientPolicy
+                let schedule = CodeStatsScheduleLifecycle(
+                    interval: { policy.interval(for: CodeStatsScheduleLifecycle.jobID) },
+                    ready: { [weak self] in await self?.startup?.value },
+                    check: { _ = await workflow.scheduledCheck() })
+                self.schedule = schedule
+                do { try policy.start { [weak schedule] in schedule?.reschedule() } } catch {
+                    self.schedule = nil; return ["ok": false] as NSDictionary
                 }
+                schedule.start()
             }
         case "view":
             guard let model = uiModel else { return ["ok": false] as NSDictionary }
@@ -140,7 +152,12 @@ final class ExtensionRuntime: NSObject {
                     }
                 })
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
-        case "synchronize": wakeSchedule()
+        case "synchronize":
+            let previous = ambientPolicy.pauseAmbientOnBattery
+            do { try ambientPolicy.apply(context: input) } catch {
+                return ["ok": false] as NSDictionary
+            }
+            if previous == ambientPolicy.pauseAmbientOnBattery { wakeSchedule() }
         case "stop": prepareToStop(completion: {})
         case "status": return ["ok": true, "running": workflow != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary
@@ -156,7 +173,11 @@ final class ExtensionRuntime: NSObject {
             guard !Task.isCancelled else { return }
             await workflow.settingsChanged()
             guard !Task.isCancelled else { return }
-            _ = await workflow.scheduledCheck()
+            if let schedule = self?.schedule {
+                await schedule.runExplicit()
+            } else {
+                _ = await workflow.scheduledCheck()
+            }
         }
     }
 }
