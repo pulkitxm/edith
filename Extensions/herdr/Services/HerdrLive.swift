@@ -1,0 +1,280 @@
+import EdithExtensionSupport
+import Foundation
+
+public enum HerdrLive {
+    static let remoteLeaseDuration = Duration.seconds(20)
+    @MainActor static weak var admission: HerdrDiscoveryAdmission?
+
+    public static func watch(_ yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) async {
+        guard let admission = await MainActor.run(body: { admission }) else { return }
+        let fleet = FleetBag(yield: yield)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await watchLocal(fleet, admission: admission) }
+            group.addTask {
+                await watchRemotes(MachineRegistry.machines()) { machine in
+                    await watchRemoteLease(machine, fleet, admission: admission)
+                }
+            }
+            await group.waitForAll()
+        }
+    }
+
+    static func watchRemotes(
+        _ machines: [Machine],
+        maximumInFlight: Int = HerdrFleetScheduler.defaultMaximumInFlight,
+        watcher: @escaping @Sendable (Machine) async -> Void
+    ) async {
+        await HerdrFleetScheduler.cycle(
+            machines, maximumInFlight: maximumInFlight, operation: watcher)
+    }
+
+    private static func watchLocal(
+        _ fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        while await admission.admit("local.discovery") {
+            let sockets = HerdrSocketDiscovery.local()
+            if sockets.isEmpty {
+                let present = HerdrCollector.executable() != nil
+                fleet.put(
+                    .local(
+                        herdrPresent: present,
+                        error: present
+                            ? "no herdr server is running" : "herdr is not on PATH"))
+                continue
+            }
+            await runHost(
+                sockets: sockets,
+                connect: { try HerdrSocketClient.unix(path: $0) },
+                machineID: HerdrHostSnapshot.localID,
+                machineName: "This Mac",
+                machineIsLocal: true,
+                sshTarget: nil,
+                fleet: fleet, admission: admission)
+        }
+    }
+
+    private static func watchRemoteLease(
+        _ machine: Machine, _ fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        guard await admission.admit("remote.discovery.\(machine.id)") else { return }
+        let connection = SSHConnection(machine: machine, controlSocketMode: .isolated)
+        do {
+            try await connection.connect()
+        } catch {
+            fleet.put(
+                HerdrHostSnapshot(
+                    id: machine.id.uuidString, name: machine.name, isLocal: false,
+                    sshTarget: machine.sshTarget, herdrPresent: false, reachable: false,
+                    error: error.localizedDescription))
+            try? await Task.sleep(for: .seconds(5))
+            return
+        }
+        guard !Task.isCancelled else {
+            await connection.disconnect()
+            return
+        }
+        let sockets = await remoteSockets(connection)
+        guard !Task.isCancelled else {
+            await connection.disconnect()
+            return
+        }
+        if sockets.isEmpty {
+            fleet.put(await HerdrCollector.collectRemote(machine, connection: connection))
+            try? await Task.sleep(for: .seconds(8))
+            await connection.disconnect()
+            return
+        }
+        await runHostLease(
+            sockets: sockets,
+            connect: { try HerdrSocketClient.ssh(connection, socketPath: $0) },
+            machineID: machine.id.uuidString,
+            machineName: machine.name,
+            machineIsLocal: false,
+            sshTarget: machine.sshTarget,
+            fleet: fleet, admission: admission)
+        await connection.disconnect()
+    }
+
+    private static func runHostLease(
+        sockets: [(name: String, path: String)],
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
+        machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
+        fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await runHost(
+                    sockets: sockets, connect: connect, machineID: machineID,
+                    machineName: machineName, machineIsLocal: machineIsLocal,
+                    sshTarget: sshTarget, fleet: fleet, admission: admission)
+            }
+            group.addTask { try? await Task.sleep(for: remoteLeaseDuration) }
+            await group.next()
+            group.cancelAll()
+            await group.waitForAll()
+        }
+    }
+
+    private static func remoteSockets(_ connection: SSHConnection) async -> [(
+        name: String, path: String
+    )] {
+        guard await connection.remotePlatform != .windows else { return [] }
+        let result = try? await connection.run(
+            HerdrSocketDiscovery.remoteProbeCommand(), timeout: 12)
+        return HerdrSocketDiscovery.sockets(fromRemoteListing: result?.stdoutText ?? "")
+    }
+
+    private static func runHost(
+        sockets: [(name: String, path: String)],
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
+        machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?,
+        fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        let sessions = SessionBag(
+            machineID: machineID, machineName: machineName, machineIsLocal: machineIsLocal,
+            sshTarget: sshTarget)
+        await withTaskGroup(of: Void.self) { group in
+            for socket in sockets {
+                group.addTask {
+                    await runSession(
+                        socket: socket, connect: connect, sessions: sessions, fleet: fleet,
+                        admission: admission)
+                }
+            }
+            await group.waitForAll()
+        }
+    }
+
+    private static func runSession(
+        socket: (name: String, path: String),
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient,
+        sessions: SessionBag,
+        fleet: FleetBag, admission: HerdrDiscoveryAdmission
+    ) async {
+        await poll(
+            admission: admission, key: "snapshot.\(sessions.machineID).\(socket.path)"
+        ) {
+            do {
+                fleet.put(
+                    sessions.applySnapshot(
+                        session: socket.name,
+                        text: try await snapshot(path: socket.path, connect: connect)))
+            } catch {
+                fleet.put(sessions.failed(session: socket.name, error: error.localizedDescription))
+            }
+        }
+    }
+
+    static func poll(
+        admission: HerdrDiscoveryAdmission, key: String,
+        operation: @escaping @Sendable () async -> Void
+    ) async {
+        while await admission.admit(key) {
+            await operation()
+            await admission.complete(key)
+        }
+    }
+
+    static func snapshot(
+        path: String,
+        connect: @escaping @Sendable (String) throws -> HerdrSocketClient
+    ) async throws -> String {
+        let stream = try connect(path)
+        defer { stream.close() }
+        return try await stream.snapshot()
+    }
+}
+
+private final class FleetBag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hosts: [String: HerdrHostSnapshot] = [:]
+    private let yield: @Sendable ([HerdrHostSnapshot]) -> Void
+
+    init(yield: @escaping @Sendable ([HerdrHostSnapshot]) -> Void) {
+        self.yield = yield
+    }
+
+    func put(_ host: HerdrHostSnapshot) {
+        lock.lock()
+        hosts[host.id] = host
+        var ordered: [HerdrHostSnapshot] = []
+        if let local = hosts[HerdrHostSnapshot.localID] { ordered.append(local) }
+        for machine in MachineRegistry.machines() {
+            if let host = hosts[machine.id.uuidString] { ordered.append(host) }
+        }
+        lock.unlock()
+        yield(ordered)
+    }
+}
+
+private final class SessionBag: @unchecked Sendable {
+    let machineID: String
+    let machineName: String
+    let machineIsLocal: Bool
+    let sshTarget: String?
+    private let lock = NSLock()
+    private var caches: [String: HerdrBoardCache] = [:]
+    private var errors: [String: String] = [:]
+
+    init(
+        machineID: String, machineName: String, machineIsLocal: Bool, sshTarget: String?
+    ) {
+        self.machineID = machineID
+        self.machineName = machineName
+        self.machineIsLocal = machineIsLocal
+        self.sshTarget = sshTarget
+    }
+
+    func applySnapshot(session: String, text: String) -> HerdrHostSnapshot {
+        let cache = lockedCache(for: session)
+        _ = cache.applySnapshot(text)
+        lock.lock()
+        errors[session] = nil
+        let host = hostLocked()
+        lock.unlock()
+        return host
+    }
+
+    func applyEvent(session: String, text: String) -> HerdrHostSnapshot {
+        let cache = lockedCache(for: session)
+        _ = cache.applyEvent(text)
+        lock.lock()
+        let host = hostLocked()
+        lock.unlock()
+        return host
+    }
+
+    func failed(session: String, error: String) -> HerdrHostSnapshot {
+        lock.lock()
+        if caches[session]?.agents.isEmpty != false {
+            errors[session] = error
+        }
+        let host = hostLocked()
+        lock.unlock()
+        return host
+    }
+
+    private func lockedCache(for session: String) -> HerdrBoardCache {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = caches[session] { return existing }
+        let created = HerdrBoardCache(
+            context: HerdrBoardContext(
+                session: session, machineID: machineID, machineName: machineName,
+                machineIsLocal: machineIsLocal, sshTarget: sshTarget))
+        caches[session] = created
+        return created
+    }
+
+    private func hostLocked() -> HerdrHostSnapshot {
+        let all = caches.values.flatMap(\.agents)
+        let terminals = caches.values.flatMap(\.terminals)
+        let error = all.isEmpty ? errors.values.compactMap { $0 }.first : nil
+        if machineIsLocal {
+            return .local(herdrPresent: true, agents: all, terminals: terminals, error: error)
+        }
+        return HerdrHostSnapshot(
+            id: machineID, name: machineName, isLocal: false, sshTarget: sshTarget,
+            herdrPresent: true, reachable: true, agents: all, terminals: terminals, error: error)
+    }
+}

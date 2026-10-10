@@ -1,0 +1,756 @@
+import AppKit
+import Carbon.HIToolbox
+@_implementationOnly import GhosttyKit
+
+extension GhosttyTerminalView {
+    static func mods(from flags: NSEvent.ModifierFlags) -> ghostty_input_mods_e {
+        var value = GHOSTTY_MODS_NONE.rawValue
+        if flags.contains(.shift) { value |= GHOSTTY_MODS_SHIFT.rawValue }
+        if flags.contains(.control) { value |= GHOSTTY_MODS_CTRL.rawValue }
+        if flags.contains(.option) { value |= GHOSTTY_MODS_ALT.rawValue }
+        if flags.contains(.command) { value |= GHOSTTY_MODS_SUPER.rawValue }
+        if flags.contains(.capsLock) { value |= GHOSTTY_MODS_CAPS.rawValue }
+        if flags.rawValue & UInt(NX_DEVICERSHIFTKEYMASK) != 0 {
+            value |= GHOSTTY_MODS_SHIFT_RIGHT.rawValue
+        }
+        if flags.rawValue & UInt(NX_DEVICERCTLKEYMASK) != 0 {
+            value |= GHOSTTY_MODS_CTRL_RIGHT.rawValue
+        }
+        if flags.rawValue & UInt(NX_DEVICERALTKEYMASK) != 0 {
+            value |= GHOSTTY_MODS_ALT_RIGHT.rawValue
+        }
+        if flags.rawValue & UInt(NX_DEVICERCMDKEYMASK) != 0 {
+            value |= GHOSTTY_MODS_SUPER_RIGHT.rawValue
+        }
+        return ghostty_input_mods_e(value)
+    }
+
+    public override func keyDown(with event: NSEvent) {
+        guard let surface else {
+            interpretKeyEvents([event])
+            return
+        }
+        let action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS
+        let translationEvent = Self.translationEvent(
+            for: event,
+            mods: ghostty_surface_key_translation_mods(
+                surface, Self.mods(from: event.modifierFlags)))
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if !flags.isDisjoint(with: [.command, .control]) {
+            let delivered = send(
+                event: event, translationEvent: translationEvent, action: action,
+                text: Self.inputText(for: translationEvent), composing: false)
+            if delivered { resetTerminalAfterInterruptIfNeeded(event) }
+            guard delivered
+            else {
+                super.keyDown(with: event)
+                return
+            }
+            return
+        }
+        let markedBefore = hasMarkedText()
+        keyTextAccumulator = []
+        interpretKeyEvents([translationEvent])
+        let accumulated = keyTextAccumulator ?? []
+        keyTextAccumulator = nil
+        syncPreedit(clearIfNeeded: markedBefore)
+        let composing = hasMarkedText() || markedBefore
+        if !accumulated.isEmpty {
+            for text in accumulated where !Self.suppresses(text, whileComposing: composing) {
+                _ = send(
+                    event: event, translationEvent: translationEvent, action: action, text: text,
+                    composing: false)
+            }
+            return
+        }
+        if Self.suppresses(translationEvent.characters, whileComposing: composing) { return }
+        guard
+            send(
+                event: event, translationEvent: translationEvent, action: action,
+                text: Self.inputText(for: translationEvent), composing: composing)
+        else {
+            super.keyDown(with: event)
+            return
+        }
+    }
+
+    public override func keyUp(with event: NSEvent) {
+        _ = send(event: event, action: GHOSTTY_ACTION_RELEASE, text: nil, composing: false)
+    }
+
+    func handleLocalEvent(_ event: NSEvent) -> NSEvent? {
+        switch event.type {
+        case .keyUp: handleLocalKeyUp(event)
+        case .leftMouseDown: handleLocalLeftMouseDown(event)
+        default: event
+        }
+    }
+
+    func handleLocalKeyUp(_ event: NSEvent) -> NSEvent? {
+        guard
+            Self.shouldHandleLocalKeyUp(
+                flags: event.modifierFlags, matchesWindow: event.window === window,
+                focused: window?.firstResponder === self)
+        else { return event }
+        keyUp(with: event)
+        return nil
+    }
+
+    static func shouldHandleLocalKeyUp(
+        flags: NSEvent.ModifierFlags, matchesWindow: Bool, focused: Bool
+    ) -> Bool {
+        flags.contains(.command) && matchesWindow && focused
+    }
+
+    static func shouldForwardLocalModifier(
+        matchesWindow: Bool, focused: Bool
+    ) -> Bool {
+        !(matchesWindow && focused)
+    }
+
+    func handleLocalLeftMouseDown(_ event: NSEvent) -> NSEvent? {
+        guard let window, event.window === window,
+            window.contentView?.superview?.hitTest(event.locationInWindow) === self
+        else { return event }
+        suppressNextLeftMouseUp = false
+        focusMouseDown = nil
+        let focused = window.firstResponder === self
+        guard !focused else { return event }
+        let activatesTerminalLink =
+            event.clickCount == 1 && event.modifierFlags.contains(.command)
+            && commandClickTarget(for: event) != nil
+        window.makeFirstResponder(self)
+        guard
+            Self.shouldConsumeFocusClick(
+                appActive: owningApplicationActive, keyWindow: owningWindowKey,
+                focused: focused, hitSurface: true,
+                activatesTerminalLink: activatesTerminalLink)
+        else { return event }
+        suppressNextLeftMouseUp = true
+        focusMouseDown = event
+        return nil
+    }
+
+    static func shouldConsumeFocusClick(
+        appActive: Bool, keyWindow: Bool, focused: Bool, hitSurface: Bool,
+        activatesTerminalLink: Bool = false
+    ) -> Bool {
+        appActive && keyWindow && !focused && hitSurface && !activatesTerminalLink
+    }
+
+    public override func flagsChanged(with event: NSEvent) {
+        applyModifierChange(event, mouseOverSurface: mouseOverSurface)
+    }
+
+    func applyModifierChange(
+        _ event: NSEvent, mouseOverSurface: Bool,
+        pressedMouseButtons: Int = NSEvent.pressedMouseButtons
+    ) {
+        guard let surface else { return }
+        var key = ghostty_input_key_s()
+        key.action = Self.modifierAction(for: event)
+        key.mods = Self.mods(from: event.modifierFlags)
+        key.consumed_mods = ghostty_input_mods_e(GHOSTTY_MODS_NONE.rawValue)
+        key.keycode = UInt32(event.keyCode)
+        key.text = nil
+        key.unshifted_codepoint = 0
+        key.composing = false
+        _ = ghostty_surface_key(surface, key)
+        if Self.shouldRefreshCapturedLink(
+            commandActive: event.modifierFlags.contains(.command),
+            mouseCaptured: ghostty_surface_mouse_captured(surface)),
+            mouseOverSurface, pressedMouseButtons == 0
+        {
+            var refresh = ghostty_input_key_s()
+            refresh.action = GHOSTTY_ACTION_RELEASE
+            refresh.mods = Self.mods(from: event.modifierFlags.union(.shift))
+            refresh.consumed_mods = ghostty_input_mods_e(GHOSTTY_MODS_NONE.rawValue)
+            refresh.keycode = UInt32.max
+            refresh.text = nil
+            refresh.unshifted_codepoint = 0
+            refresh.composing = false
+            _ = ghostty_surface_key(surface, refresh)
+        }
+    }
+
+    static func shouldRefreshCapturedLink(
+        commandActive: Bool, mouseCaptured: Bool
+    ) -> Bool {
+        mouseCaptured && commandActive
+    }
+
+    static func modifierAction(for event: NSEvent) -> ghostty_input_action_e {
+        let flags = event.modifierFlags
+        let modifierActive: Bool
+        switch event.keyCode {
+        case 54, 55: modifierActive = flags.contains(.command)
+        case 56, 60: modifierActive = flags.contains(.shift)
+        case 58, 61: modifierActive = flags.contains(.option)
+        case 59, 62: modifierActive = flags.contains(.control)
+        case 57: modifierActive = flags.contains(.capsLock)
+        default: return GHOSTTY_ACTION_RELEASE
+        }
+        guard modifierActive else { return GHOSTTY_ACTION_RELEASE }
+        let mask: UInt
+        switch event.keyCode {
+        case 54: mask = UInt(NX_DEVICERCMDKEYMASK)
+        case 55: mask = UInt(NX_DEVICELCMDKEYMASK)
+        case 56: mask = UInt(NX_DEVICELSHIFTKEYMASK)
+        case 60: mask = UInt(NX_DEVICERSHIFTKEYMASK)
+        case 58: mask = UInt(NX_DEVICELALTKEYMASK)
+        case 61: mask = UInt(NX_DEVICERALTKEYMASK)
+        case 59: mask = UInt(NX_DEVICELCTLKEYMASK)
+        case 62: mask = UInt(NX_DEVICERCTLKEYMASK)
+        default: return GHOSTTY_ACTION_PRESS
+        }
+        return flags.rawValue & mask != 0 ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
+    }
+
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        guard event.type == .keyDown, window?.firstResponder === self else {
+            return super.performKeyEquivalent(with: event)
+        }
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .function, .numericPad])
+        let character = event.charactersIgnoringModifiers?.lowercased()
+        if flags == [.command, .shift], character == "g" {
+            _ = performBindingAction("navigate_search:previous")
+            return true
+        }
+        guard flags == .command else { return super.performKeyEquivalent(with: event) }
+        switch character {
+        case "c":
+            guard Self.shouldHandleCopyShortcut(hasSelection: hasSelection) else {
+                return super.performKeyEquivalent(with: event)
+            }
+            copyTerminalSelection(nil)
+            return true
+        case "v":
+            pasteTerminalClipboard(nil)
+            return true
+        case "a":
+            selectAllTerminalText(nil)
+            return true
+        case "k":
+            clearTerminalScrollback(nil)
+            return true
+        case "f":
+            startTerminalSearch(nil)
+            return true
+        case "e":
+            guard hasSelection else { return super.performKeyEquivalent(with: event) }
+            _ = performBindingAction("search_selection")
+            return true
+        case "g":
+            _ = performBindingAction("navigate_search:next")
+            return true
+        case "+", "=":
+            _ = performBindingAction("increase_font_size:1")
+            return true
+        case "-":
+            _ = performBindingAction("decrease_font_size:1")
+            return true
+        case "0":
+            _ = performBindingAction("reset_font_size")
+            return true
+        default:
+            return super.performKeyEquivalent(with: event)
+        }
+    }
+
+    static func shouldHandleCopyShortcut(hasSelection: Bool) -> Bool {
+        hasSelection
+    }
+
+    static func shouldResetTerminalAfterInterrupt(
+        keyCode: UInt16, flags: NSEvent.ModifierFlags, isARepeat: Bool
+    ) -> Bool {
+        guard keyCode == UInt16(kVK_ANSI_C), !isARepeat else { return false }
+        let flags = flags.intersection(.deviceIndependentFlagsMask)
+        return flags.contains(.control) && flags.isDisjoint(with: [.command, .option])
+    }
+
+    private func resetTerminalAfterInterruptIfNeeded(_ event: NSEvent) {
+        guard shouldResetTerminalAfterInterrupt,
+            Self.shouldResetTerminalAfterInterrupt(
+                keyCode: event.keyCode, flags: event.modifierFlags, isARepeat: event.isARepeat)
+        else { return }
+        _ = performBindingAction("reset")
+    }
+
+    private func send(
+        event: NSEvent, translationEvent: NSEvent? = nil, action: ghostty_input_action_e,
+        text: String?, composing: Bool
+    ) -> Bool {
+        guard let surface else { return false }
+        var key = Self.keyEvent(
+            for: event, translationFlags: translationEvent?.modifierFlags, action: action,
+            composing: composing)
+        guard let text, !Self.startsWithASCIIControl(text) else {
+            key.text = nil
+            return ghostty_surface_key(surface, key)
+        }
+        return text.withCString { pointer in
+            key.text = pointer
+            return ghostty_surface_key(surface, key)
+        }
+    }
+
+    static func inputText(for event: NSEvent) -> String? {
+        guard let characters = event.characters, !characters.isEmpty else { return nil }
+        if characters.unicodeScalars.count == 1, let scalar = characters.unicodeScalars.first,
+            scalar.value < 0x20
+        {
+            return event.characters(
+                byApplyingModifiers: event.modifierFlags.subtracting(.control))
+        }
+        if characters.unicodeScalars.count == 1, let scalar = characters.unicodeScalars.first,
+            scalar.value >= 0xF700, scalar.value <= 0xF8FF
+        {
+            return nil
+        }
+        return characters
+    }
+
+    static func translationFlags(
+        original: NSEvent.ModifierFlags, mods: ghostty_input_mods_e
+    ) -> NSEvent.ModifierFlags {
+        var result = original
+        let mappings: [(NSEvent.ModifierFlags, UInt32)] = [
+            (.shift, GHOSTTY_MODS_SHIFT.rawValue),
+            (.control, GHOSTTY_MODS_CTRL.rawValue),
+            (.option, GHOSTTY_MODS_ALT.rawValue),
+            (.command, GHOSTTY_MODS_SUPER.rawValue),
+        ]
+        for (flag, mask) in mappings {
+            if mods.rawValue & mask != 0 {
+                result.insert(flag)
+            } else {
+                result.remove(flag)
+            }
+        }
+        return result
+    }
+
+    static func translationEvent(
+        for event: NSEvent, mods: ghostty_input_mods_e
+    ) -> NSEvent {
+        let flags = translationFlags(original: event.modifierFlags, mods: mods)
+        guard flags != event.modifierFlags else { return event }
+        return NSEvent.keyEvent(
+            with: event.type, location: event.locationInWindow, modifierFlags: flags,
+            timestamp: event.timestamp, windowNumber: event.windowNumber, context: nil,
+            characters: event.characters(byApplyingModifiers: flags) ?? "",
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+            isARepeat: event.isARepeat, keyCode: event.keyCode) ?? event
+    }
+
+    static func keyEvent(
+        for event: NSEvent, translationFlags: NSEvent.ModifierFlags? = nil,
+        action: ghostty_input_action_e, composing: Bool
+    ) -> ghostty_input_key_s {
+        var key = ghostty_input_key_s()
+        key.action = action
+        key.mods = mods(from: event.modifierFlags)
+        key.consumed_mods = mods(
+            from: (translationFlags ?? event.modifierFlags)
+                .subtracting([.control, .command]))
+        key.keycode = UInt32(event.keyCode)
+        key.text = nil
+        key.unshifted_codepoint = unshiftedCodepoint(for: event)
+        key.composing = composing
+        return key
+    }
+
+    static func unshiftedCodepoint(for event: NSEvent) -> UInt32 {
+        guard event.type == .keyDown || event.type == .keyUp,
+            let characters = event.characters(byApplyingModifiers: []),
+            let scalar = characters.unicodeScalars.first
+        else { return 0 }
+        return scalar.value
+    }
+
+    static func startsWithASCIIControl(_ text: String) -> Bool {
+        guard let scalar = text.unicodeScalars.first else { return false }
+        return scalar.value < 0x20 || scalar.value == 0x7F
+    }
+
+    static func suppresses(_ text: String?, whileComposing composing: Bool) -> Bool {
+        guard composing, let text, text.unicodeScalars.count == 1,
+            let scalar = text.unicodeScalars.first
+        else { return false }
+        return scalar.value < 0x20
+    }
+
+    static func pointerFlags(
+        _ flags: NSEvent.ModifierFlags, mouseCaptured: Bool, escapeCapture: Bool = true
+    ) -> NSEvent.ModifierFlags {
+        guard escapeCapture, mouseCaptured, flags.contains(.command) else { return flags }
+        return flags.union(.shift)
+    }
+
+    private func pointerMods(
+        _ flags: NSEvent.ModifierFlags, surface: ghostty_surface_t, escapeCapture: Bool
+    ) -> ghostty_input_mods_e {
+        let flags = Self.pointerFlags(
+            flags,
+            mouseCaptured: ghostty_surface_mouse_captured(surface)
+                && !selectionMouseReportingSuspended,
+            escapeCapture: escapeCapture)
+        var value = GHOSTTY_MODS_NONE.rawValue
+        if flags.contains(.shift) { value |= GHOSTTY_MODS_SHIFT.rawValue }
+        if flags.contains(.control) { value |= GHOSTTY_MODS_CTRL.rawValue }
+        if flags.contains(.option) { value |= GHOSTTY_MODS_ALT.rawValue }
+        if flags.contains(.command) { value |= GHOSTTY_MODS_SUPER.rawValue }
+        return ghostty_input_mods_e(value)
+    }
+
+    private func sendPointerPosition(
+        _ surface: ghostty_surface_t, point: NSPoint, flags: NSEvent.ModifierFlags,
+        escapeCapture: Bool, force: Bool = false
+    ) {
+        let mods = pointerMods(flags, surface: surface, escapeCapture: escapeCapture)
+        if force { ghostty_surface_mouse_pos(surface, -1, -1, mods) }
+        ghostty_surface_mouse_pos(
+            surface, Double(point.x), Double(bounds.height - point.y), mods)
+    }
+
+    @discardableResult
+    private func button(
+        _ event: NSEvent, _ state: ghostty_input_mouse_state_e,
+        _ which: ghostty_input_mouse_button_e
+    ) -> Bool {
+        guard let surface else { return false }
+        let local = convert(event.locationInWindow, from: nil)
+        mouseOverSurface = bounds.contains(local)
+        let escapeCapture = Self.shouldEscapeCapture(
+            button: which, clickCount: event.clickCount, flags: event.modifierFlags)
+        let mods = pointerMods(
+            event.modifierFlags, surface: surface, escapeCapture: escapeCapture)
+        ghostty_surface_mouse_pos(
+            surface, Double(local.x), Double(bounds.height - local.y), mods)
+        return ghostty_surface_mouse_button(surface, state, which, mods)
+    }
+
+    static func shouldEscapeCapture(
+        button: ghostty_input_mouse_button_e, clickCount: Int,
+        flags: NSEvent.ModifierFlags
+    ) -> Bool {
+        button == GHOSTTY_MOUSE_LEFT && clickCount == 1 && flags.contains(.command)
+    }
+
+    private func commandClickTarget(for event: NSEvent) -> String? {
+        guard surface != nil, event.modifierFlags.contains(.command) else { return nil }
+        if let hoveredLink { return hoveredLink }
+        guard let target = terminalTargetAtPointer(),
+            Self.linkTarget(
+                for: target, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks, fileExists: { _ in true }) != nil
+        else { return nil }
+        return target
+    }
+
+    public override func mouseDown(with event: NSEvent) {
+        suppressNextLeftMouseUp = false
+        focusMouseDown = nil
+        resumeSelectionMouseReporting()
+        programOwnsMouseGesture = false
+        selectionMouseActive = true
+        window?.makeFirstResponder(self)
+        let local = convert(event.locationInWindow, from: nil)
+        let commandClick = event.clickCount == 1 && event.modifierFlags.contains(.command)
+        commandClickGesture.begin(
+            active: commandClick, at: local,
+            candidate: commandClick ? commandClickTarget(for: event) : nil)
+        if let surface, configuredMouseReporting, ghostty_surface_mouse_captured(surface) {
+            if event.modifierFlags.contains(.shift) || commandClick {
+                selectionMouseReportingSuspended = performBindingAction("toggle_mouse_reporting")
+            } else {
+                programOwnsMouseGesture = true
+            }
+        }
+        if event.clickCount == 1 {
+            button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT)
+        } else if let surface {
+            _ = ghostty_surface_mouse_button(
+                surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_LEFT,
+                pointerMods(event.modifierFlags, surface: surface, escapeCapture: false))
+        }
+    }
+
+    public override func mouseUp(with event: NSEvent) {
+        if suppressNextLeftMouseUp {
+            suppressNextLeftMouseUp = false
+            focusMouseDown = nil
+            return
+        }
+        commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
+        let target = hoveredLink ?? terminalTargetAtPointer()
+        commandClickOpenedTarget = false
+        button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT)
+        selectionMouseActive = false
+        if !programOwnsMouseGesture { copyTerminalSelection(nil) }
+        programOwnsMouseGesture = false
+        resumeSelectionMouseReporting()
+        if let target = commandClickGesture.finish(
+            active: event.modifierFlags.contains(.command), opened: commandClickOpenedTarget,
+            candidate: target)
+        {
+            _ = openTerminalTarget(target)
+        }
+    }
+
+    public override func rightMouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        guard button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT) else {
+            super.rightMouseDown(with: event)
+            return
+        }
+    }
+
+    public override func rightMouseUp(with event: NSEvent) {
+        guard button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT) else {
+            super.rightMouseUp(with: event)
+            return
+        }
+    }
+
+    public override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        window?.makeFirstResponder(self)
+        button(event, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_MIDDLE)
+    }
+
+    public override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseUp(with: event)
+            return
+        }
+        button(event, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_MIDDLE)
+    }
+
+    public override func mouseDragged(with event: NSEvent) {
+        if let focusMouseDown { mouseDown(with: focusMouseDown) }
+        guard !suppressNextLeftMouseUp else { return }
+        commandClickGesture.move(to: convert(event.locationInWindow, from: nil))
+        moved(event)
+    }
+
+    private func resumeSelectionMouseReporting() {
+        guard selectionMouseReportingSuspended else { return }
+        selectionMouseReportingSuspended = false
+        if configuredMouseReporting { _ = performBindingAction("toggle_mouse_reporting") }
+    }
+
+    func cancelSelectionGesture() {
+        if selectionMouseActive, let surface {
+            _ = ghostty_surface_mouse_button(
+                surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_LEFT, GHOSTTY_MODS_NONE)
+        }
+        programOwnsMouseGesture = false
+        focusMouseDown = nil
+        selectionMouseActive = false
+        selectionCopyPending = false
+        resumeSelectionMouseReporting()
+    }
+
+    public override func rightMouseDragged(with event: NSEvent) {
+        moved(event)
+    }
+
+    public override func otherMouseDragged(with event: NSEvent) {
+        guard event.buttonNumber == 2 else {
+            super.otherMouseDragged(with: event)
+            return
+        }
+        moved(event)
+    }
+
+    public override func mouseMoved(with event: NSEvent) {
+        moved(event)
+    }
+
+    public override func mouseEntered(with event: NSEvent) {
+        mouseOverSurface = true
+        moved(event)
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        mouseOverSurface = false
+        guard let surface, NSEvent.pressedMouseButtons == 0 else { return }
+        ghostty_surface_mouse_pos(
+            surface, -1, -1,
+            pointerMods(event.modifierFlags, surface: surface, escapeCapture: true))
+        setHoveredLink(nil)
+    }
+
+    private func moved(_ event: NSEvent) {
+        guard let surface else { return }
+        let local = convert(event.locationInWindow, from: nil)
+        mouseOverSurface = bounds.contains(local)
+        let escapeCapture = NSEvent.pressedMouseButtons == 0 || commandClickGesture.origin != nil
+        sendPointerPosition(
+            surface, point: local, flags: event.modifierFlags,
+            escapeCapture: escapeCapture)
+    }
+
+    static func momentum(_ phase: NSEvent.Phase) -> UInt8 {
+        switch phase {
+        case .began: 1
+        case .stationary: 2
+        case .changed: 3
+        case .ended: 4
+        case .cancelled: 5
+        case .mayBegin: 6
+        default: 0
+        }
+    }
+
+    static func scrollMods(precise: Bool, phase: NSEvent.Phase) -> Int32 {
+        var value: Int32 = precise ? 1 : 0
+        value |= Int32(momentum(phase)) << 1
+        return value
+    }
+
+    public override func scrollWheel(with event: NSEvent) {
+        guard let surface else { return }
+        let precise = event.hasPreciseScrollingDeltas
+        var x = event.scrollingDeltaX
+        var y = event.scrollingDeltaY
+        if precise {
+            x *= 2
+            y *= 2
+        }
+        ghostty_surface_mouse_scroll(
+            surface, Double(x), Double(y),
+            Self.scrollMods(precise: precise, phase: event.momentumPhase))
+    }
+
+    public override func pressureChange(with event: NSEvent) {
+        guard let surface else { return }
+        ghostty_surface_mouse_pressure(surface, UInt32(event.stage), Double(event.pressure))
+    }
+
+    public override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(
+            NSTrackingArea(
+                rect: bounds,
+                options: [.mouseEnteredAndExited, .mouseMoved, .inVisibleRect, .activeAlways],
+                owner: self))
+    }
+
+    func terminalTargetAtPointer() -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let raw = text.text, text.text_len > 0 else { return nil }
+        return String(
+            decoding: UnsafeRawBufferPointer(start: raw, count: Int(text.text_len)), as: UTF8.self)
+    }
+
+    @objc func copyTerminalSelection(_ sender: Any?) {
+        selectionCopyPending = false
+        guard surface != nil else { return }
+        guard hasSelection else { return }
+        if performBindingAction("copy_to_clipboard:plain") { return }
+        guard let text = selectedText(), !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        if NSPasteboard.general.setString(text, forType: .string) { showCopyConfirmation() }
+    }
+
+    @objc func pasteTerminalClipboard(_ sender: Any?) {
+        guard surface != nil else { return }
+        if let payload = TerminalDropPayload.files(from: .general) {
+            _ = accept(payload)
+            return
+        }
+        _ = performBindingAction("paste_from_clipboard")
+    }
+
+    @objc func selectAllTerminalText(_ sender: Any?) {
+        _ = performBindingAction("select_all")
+        copyTerminalSelection(nil)
+    }
+
+    @objc func clearTerminalScrollback(_ sender: Any?) {
+        _ = performBindingAction("clear_screen")
+    }
+
+    @objc func startTerminalSearch(_ sender: Any?) {
+        _ = performBindingAction(hasSelection ? "search_selection" : "start_search")
+    }
+
+    @discardableResult
+    func performBindingAction(_ name: String) -> Bool {
+        guard let surface else { return false }
+        return name.withCString { pointer in
+            ghostty_surface_binding_action(surface, pointer, UInt(name.utf8.count))
+        }
+    }
+
+    @objc func openContextLink(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String else { return }
+        _ = openTerminalTarget(rawValue)
+    }
+
+    @objc func copyContextLink(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(rawValue, forType: .string)
+    }
+
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        guard let surface else { return nil }
+        let mouseCaptured = ghostty_surface_mouse_captured(surface)
+        guard !mouseCaptured || event.modifierFlags.contains(.shift) else { return nil }
+        window?.makeFirstResponder(self)
+        let local = convert(event.locationInWindow, from: nil)
+        sendPointerPosition(
+            surface, point: local, flags: event.modifierFlags, escapeCapture: false, force: true)
+        let link = hoveredLink ?? terminalTargetAtPointer()
+        let menu = NSMenu()
+        if let link,
+            Self.linkTarget(
+                for: link, workingDirectory: currentDirectory,
+                allowsLocalFiles: allowsLocalFileLinks, fileExists: { _ in true }) != nil
+        {
+            let open = menu.addItem(
+                withTitle: "Open Link", action: #selector(openContextLink(_:)), keyEquivalent: "")
+            open.target = self
+            open.representedObject = link
+            let copyLink = menu.addItem(
+                withTitle: "Copy Link", action: #selector(copyContextLink(_:)), keyEquivalent: "")
+            copyLink.target = self
+            copyLink.representedObject = link
+            menu.addItem(.separator())
+        }
+        if hasSelection {
+            let copy = menu.addItem(
+                withTitle: "Copy", action: #selector(copyTerminalSelection(_:)), keyEquivalent: "")
+            copy.target = self
+        }
+        let paste = menu.addItem(
+            withTitle: "Paste", action: #selector(pasteTerminalClipboard(_:)), keyEquivalent: "")
+        paste.target = self
+        paste.isEnabled = TerminalDropPayload.canRead(.general)
+        let selectAll = menu.addItem(
+            withTitle: "Select All", action: #selector(selectAllTerminalText(_:)), keyEquivalent: ""
+        )
+        selectAll.target = self
+        let find = menu.addItem(
+            withTitle: "Find", action: #selector(startTerminalSearch(_:)), keyEquivalent: "")
+        find.target = self
+        menu.addItem(.separator())
+        let clear = menu.addItem(
+            withTitle: "Clear Scrollback", action: #selector(clearTerminalScrollback(_:)),
+            keyEquivalent: "")
+        clear.target = self
+        return menu
+    }
+}

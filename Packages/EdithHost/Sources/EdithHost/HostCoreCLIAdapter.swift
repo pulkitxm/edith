@@ -1,0 +1,151 @@
+import AppKit
+import EdithExtensionSupport
+import EdithHostCore
+import Foundation
+
+@MainActor enum HostCoreCLIAdapter {
+    static func make(
+        identity: HostIdentity, marketplace: HostMarketplace, updater: HostUpdater,
+        shared: UserDefaults, standard: UserDefaults,
+        permissionState: HostPermissions = HostPermissions(),
+        requirementToolDirectories: [URL]? = nil,
+        showMainWindow: @escaping @MainActor () -> Void,
+        navigation: @escaping HostAppCLIAdapter.Navigation,
+        core: @escaping @MainActor () -> HostCoreServices? = { nil },
+        agentBackend: HostCoreAgentCLIBackend? = nil,
+        quit: @escaping @MainActor () -> Void = { NSApp.terminate(nil) },
+        changed: @escaping @MainActor () -> Void
+    ) throws -> HostCoreCLIService {
+        let permissions = HostPermissionCLIAdapter(
+            permissions: permissionState, marketplace: marketplace, defaults: shared)
+        let app = HostAppCLIAdapter(
+            identity: identity, marketplace: marketplace, updater: updater,
+            showMainWindow: showMainWindow, navigation: navigation, core: core, quit: quit,
+            relaunch: {
+                throw HostCLIError.rejected(
+                    "Relaunch must be performed by the matching CLI caller.")
+            })
+        let gateway = HostCLIGateway(marketplace: marketplace)
+        let invoke: HostCLIProviderRegistry.Invoke = { try await gateway.execute($0) }
+        let backend = agentBackend ?? HostCoreAgentCLIAdapter.backend(core: core)
+        let agent = HostCoreAgentCLIFactory.make(local: backend, invoke: invoke)
+        let readinessHooks = HostCoreOwnerHooks(invoke: invoke)
+        let readiness = HostCoreReadinessCLI(
+            backend: try HostRequirementsCLIAdapter.make(
+                marketplace: marketplace, permissions: permissionState, hooks: readinessHooks,
+                toolDirectories: requirementToolDirectories
+                    ?? (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map
+                {
+                    URL(fileURLWithPath: String($0), isDirectory: true)
+                }))
+        let local = HostCommandCLI(
+            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+                as? String ?? "development",
+            tooling: HostToolingCLI(
+                home: FileManager.default.homeDirectoryForCurrentUser,
+                executable: HostToolingCLI.bundledLauncher() ?? Bundle.main.executableURL
+                    ?? URL(fileURLWithPath: CommandLine.arguments[0]),
+                path: (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map(
+                    String.init)),
+            invoke: { try await gateway.execute($0) })
+        let camera = HostCameraLifecycleCLI(
+            invoke: { try await gateway.execute($0) },
+            missingPermissions: {
+                try await permissions.refresh()
+                return await permissionState.usages(
+                    entries: marketplace.entries, activeIDs: ["virtualCamera"]
+                ).filter { $0.requiredBy.contains { $0.id == "virtualCamera" } && !$0.isGranted }
+                    .map { $0.permission.rawValue }
+            })
+        return HostCoreCLIService(
+            configuration: try HostConfigurationCLI(
+                shared: shared, standard: standard, changed: changed),
+            commandProvider: {
+                commands.filter { command in
+                    let generic =
+                        command.route.starts(with: ["agent", "tasks"])
+                        || command.route.starts(with: ["agent", "schedule"])
+                    return (!generic || backend.command != nil)
+                        && (command.route.first != "agent"
+                            || agentBackend?.ownedJobs().isEmpty == false
+                            || core()?.online == true)
+                        && (command.route != ["app", "clean-keys"]
+                            || marketplace.sessions.activeIDs.contains("system"))
+                        && (command.route != ["app", "check-updates"] || updater.available)
+                }
+            },
+            commandHandler: { request in
+                guard let command = backend.command else {
+                    throw HostAgentCommandError(
+                        .unavailable, "The owned core command queue is unavailable.")
+                }
+                return try await command(request.operation, request.payload.encoded())
+            },
+            prepareConfiguration: { arguments in
+                if arguments.isEmpty
+                    || ["ls", "list", "get", "describe"].contains(arguments.first ?? "")
+                {
+                    try await permissions.refresh()
+                }
+            },
+            action: { arguments in
+                let remainder = Array(arguments.dropFirst())
+                switch arguments.first {
+                case "app": return try await app.execute(remainder)
+                case "permissions": return try await permissions.execute(remainder)
+                case "camera": return try await camera.execute(remainder)
+                case "agent":
+                    if ["tasks", "schedule"].contains(remainder.first ?? "") {
+                        guard let command = backend.command else {
+                            throw HostAgentCommandError(
+                                .unavailable, "The owned core command queue is unavailable.")
+                        }
+                        return try await HostCoreCommandCLI(
+                            invoke: command,
+                            workingDirectory: { HostCoreCLIContext.workingDirectory }
+                        ).execute(remainder)
+                    }
+                    return try await agent.execute(remainder)
+                case "extensions"
+                where ["status", "verify", "doctor", "setup"].contains(remainder.first ?? ""):
+                    return try await readiness.execute(remainder)
+                default: return try await local.execute(arguments)
+                }
+            })
+    }
+
+    private static var commands: [HostCLIProviderCommand] {
+        let app = (["actions"] + HostAppCommandCLI.actions).map { action in
+            HostCLIProviderCommand(
+                route: ["app", action], operation: "host.cli", summary: "Run ed app \(action).",
+                destructive: ["quit", "relaunch", "clear-updates"].contains(action),
+                timeout: action == "check-updates" ? 65 : 30)
+        }
+        let permissions = ["ls", "refresh", "request", "settings"].map { action in
+            HostCLIProviderCommand(
+                route: ["permissions", action], operation: "host.cli",
+                summary: "Run ed permissions \(action).")
+        }
+        let local = HostCLIHelp.routes.filter { route in
+            [
+                "guide", "schema", "version", "status", "install", "uninstall", "completions",
+                "extensions", "agent",
+            ].contains(route.first ?? "")
+        }.map { route in
+            HostCLIProviderCommand(
+                route: route, operation: "host.cli",
+                summary: "Run ed " + route.joined(separator: " "),
+                destructive: route == ["agent", "restart"]
+                    || route.first == "agent" && ["run", "cancel"].contains(route.last ?? "")
+                    || route == ["extensions", "setup"]
+                    || route.starts(with: ["agent", "tasks"])
+                        && ["exec", "cancel"].contains(route.last ?? "")
+                    || route.starts(with: ["agent", "schedule"])
+                        && ["add", "rm", "enable", "disable", "run"].contains(route.last ?? ""),
+                timeout: route == ["extensions", "setup"] ? 120 : 30,
+                jsonOutput: route.first != "schema" && route.first != "guide"
+                    && route.first != "completions")
+        }
+        return app + permissions + local
+    }
+}

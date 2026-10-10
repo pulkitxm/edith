@@ -1,0 +1,236 @@
+[
+  {
+    "id": "usage",
+    "title": "Usage",
+    "symbolName": "chart.bar.fill",
+    "category": "agents"
+  },
+  {
+    "id": "herdr",
+    "title": "Sessions",
+    "symbolName": "rectangle.split.3x1.fill",
+    "category": "agents"
+  },
+  {
+    "id": "quinjet",
+    "title": "Review",
+    "symbolName": "arrow.triangle.branch",
+    "category": "agents"
+  },
+  {
+    "id": "companion",
+    "title": "Memory",
+    "symbolName": "brain.head.profile",
+    "category": "agents"
+  },
+  {
+    "id": "plugins",
+    "title": "Plugins",
+    "symbolName": "square.stack.3d.up",
+    "category": "agents"
+  },
+  {
+    "id": "appMaintenance",
+    "title": "Updates",
+    "symbolName": "shippingbox.and.arrow.backward",
+    "category": "maintenance"
+  },
+  {
+    "id": "homebrew",
+    "title": "Packages",
+    "symbolName": "cube.box",
+    "category": "maintenance"
+  },
+  {
+    "id": "cleaner",
+    "title": "Cleaner",
+    "symbolName": "sparkles.rectangle.stack",
+    "category": "maintenance"
+  },
+  {
+    "id": "blitztree",
+    "title": "BlitzTree",
+    "symbolName": "square.grid.3x3.fill",
+    "category": "maintenance"
+  },
+  {
+    "id": "system",
+    "title": "System",
+    "symbolName": "switch.2",
+    "category": "system"
+  },
+  {
+    "id": "keepAwake",
+    "title": "Keep Awake",
+    "symbolName": "moon.zzz",
+    "category": "system"
+  },
+  {
+    "id": "lidAwake",
+    "title": "Lid Awake",
+    "symbolName": "laptopcomputer",
+    "category": "system"
+  },
+  {
+    "id": "systemStats",
+    "title": "CPU & Memory in menu bar",
+    "symbolName": "gauge.with.needle",
+    "category": "system"
+  },
+  {
+    "id": "micMute",
+    "title": "Mic Mute",
+    "symbolName": "mic.slash.fill",
+    "category": "system"
+  },
+  {
+    "id": "bifrost",
+    "title": "Bifrost",
+    "symbolName": "rainbow",
+    "category": "desk"
+  },
+  {
+    "id": "clipboard",
+    "title": "Clipboard",
+    "symbolName": "doc.on.clipboard",
+    "category": "desk"
+  },
+  {
+    "id": "emoji",
+    "title": "Emoji Picker",
+    "symbolName": "face.smiling",
+    "category": "desk"
+  },
+  {
+    "id": "colorPicker",
+    "title": "Color Picker",
+    "symbolName": "eyedropper",
+    "category": "desk"
+  },
+  {
+    "id": "keystrokeHighlight",
+    "title": "Keystroke Highlight",
+    "symbolName": "keyboard.badge.ellipsis",
+    "category": "desk"
+  },
+  {
+    "id": "focusDim",
+    "title": "Focus Dim",
+    "symbolName": "circle.lefthalf.filled",
+    "category": "desk"
+  },
+  {
+    "id": "windowSweaters",
+    "title": "Window Sweaters",
+    "symbolName": "square.dashed",
+    "category": "desk"
+  },
+  {
+    "id": "presenter",
+    "title": "Presenter",
+    "symbolName": "theatermasks.fill",
+    "category": "desk"
+  },
+  {
+    "id": "studio",
+    "title": "Studio",
+    "symbolName": "wand.and.stars",
+    "category": "media"
+  },
+  {
+    "id": "latex",
+    "title": "LaTeX",
+    "symbolName": "doc.richtext",
+    "category": "media"
+  },
+  {
+    "id": "timeLapse",
+    "title": "Screen Recorder",
+    "symbolName": "record.circle",
+    "category": "media"
+  },
+  {
+    "id": "music",
+    "title": "Music",
+    "symbolName": "music.note",
+    "category": "media"
+  },
+  {
+    "id": "downloads",
+    "title": "Downloads",
+    "symbolName": "arrow.down.circle",
+    "category": "media"
+  },
+  {
+    "id": "notchShelf",
+    "title": "Notch Shelf",
+    "symbolName": "tray.and.arrow.down",
+    "category": "media"
+  },
+  {
+    "id": "audioMixer",
+    "title": "Audio Mixer",
+    "symbolName": "slider.horizontal.3",
+    "category": "media"
+  },
+  {
+    "id": "calendar",
+    "title": "Calendar",
+    "symbolName": "calendar",
+    "category": "media"
+  },
+  {
+    "id": "virtualCamera",
+    "title": "Virtual Camera",
+    "symbolName": "web.camera",
+    "category": "media"
+  },
+  {
+    "id": "database",
+    "title": "Database",
+    "symbolName": "cylinder.fill",
+    "category": "data"
+  },
+  {
+    "id": "attention",
+    "title": "Attention",
+    "symbolName": "hourglass",
+    "category": "data"
+  },
+  {
+    "id": "seoAudit",
+    "title": "Site Audit",
+    "symbolName": "doc.text.magnifyingglass",
+    "category": "data"
+  },
+  {
+    "id": "codeStats",
+    "title": "Code Stats",
+    "symbolName": "chart.line.uptrend.xyaxis",
+    "category": "data"
+  },
+  {
+    "id": "machines",
+    "title": "Machines",
+    "symbolName": "desktopcomputer",
+    "category": "tools"
+  },
+  {
+    "id": "docs",
+    "title": "Documents",
+    "symbolName": "doc.text",
+    "category": "tools"
+  },
+  {
+    "id": "terminal",
+    "title": "Terminal",
+    "symbolName": "terminal",
+    "category": "tools"
+  },
+  {
+    "id": "jev",
+    "title": "Jev",
+    "symbolName": "sparkles",
+    "category": "agents"
+  }
+]

@@ -3,8 +3,10 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 export const docsRoot = "docs/cli";
-export const bundlePath =
-  "Packages/Edith/Sources/EdithKit/Resources/cli-docs.json";
+export const bundlePaths = [
+  "Packages/Edith/Sources/EdithKit/Resources/cli-docs.json",
+  "Packages/EdithDocsWorker/Sources/EdithDocsWorker/Resources/cli-docs.json",
+];
 
 export const parseArguments = (arguments_) => {
   const options = { check: false };
@@ -37,18 +39,20 @@ export const renderBundle = (pages) =>
 if (import.meta.main) {
   const options = parseArguments(process.argv.slice(2));
   const expected = renderBundle(collectPages());
-  if (options.check) {
-    const current = existsSync(bundlePath)
-      ? readFileSync(bundlePath, "utf8")
-      : "";
-    if (current !== expected) {
-      process.stderr.write(
-        `${bundlePath} is out of date; run bun scripts/generate-cli-docs-bundle.mjs\n`,
-      );
-      process.exit(1);
+  for (const bundlePath of bundlePaths) {
+    if (options.check) {
+      const current = existsSync(bundlePath)
+        ? readFileSync(bundlePath, "utf8")
+        : "";
+      if (current !== expected) {
+        process.stderr.write(
+          `${bundlePath} is out of date; run bun scripts/generate-cli-docs-bundle.mjs\n`,
+        );
+        process.exit(1);
+      }
+    } else {
+      writeFileSync(bundlePath, expected);
+      process.stderr.write(`wrote ${bundlePath}\n`);
     }
-  } else {
-    writeFileSync(bundlePath, expected);
-    process.stderr.write(`wrote ${bundlePath}\n`);
   }
 }

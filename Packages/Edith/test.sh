@@ -123,6 +123,7 @@ finish_isolation() {
 }
 trap finish_isolation EXIT
 mkdir -p "$EDITH_DATA_ROOT" "$EDITH_CLOUD_ROOT" "$EDITH_DATABASE_HOME"
+node ../../scripts/extension-host-abi.mjs --write ../.. >/dev/null
 
 DEV="$(xcode-select -p)"
 FW="$DEV/Library/Developer/Frameworks"

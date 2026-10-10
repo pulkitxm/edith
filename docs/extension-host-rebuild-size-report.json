@@ -1,0 +1,305 @@
+{
+  "baseline": {
+    "installedBytes": 131607239,
+    "comparisonZipBytes": 59298754
+  },
+  "appWithoutExtensions": {
+    "installedBytes": 4837537,
+    "comparisonZipBytes": 2129589
+  },
+  "savedBytes": {
+    "installedBytes": 126769702,
+    "comparisonZipBytes": 57169165
+  },
+  "savedPercent": {
+    "installedBytes": 96.32,
+    "comparisonZipBytes": 96.41
+  },
+  "packages": [
+    {
+      "id": "appMaintenance",
+      "version": "1.0.0",
+      "downloadBytes": 974045,
+      "installedBytes": 2259839,
+      "sha256": "fcaeb6336d1a8e2321816d7a137ad2f0acf2d9770bd0cecfc53e2c76f69c6058",
+      "releaseMetadataBytes": 528
+    },
+    {
+      "id": "blitztree",
+      "version": "1.0.0",
+      "downloadBytes": 771051,
+      "installedBytes": 1834498,
+      "sha256": "b367b570b988c2d1c6f3b5136939db5013ce13790bb1006d86002671465fe7be",
+      "releaseMetadataBytes": 513
+    },
+    {
+      "id": "calendar",
+      "version": "1.0.0",
+      "downloadBytes": 788501,
+      "installedBytes": 1852639,
+      "sha256": "1fa4215ea317533df1436da5065a390d02e0c56657f6312d5c7178e8532ef16e",
+      "releaseMetadataBytes": 510
+    },
+    {
+      "id": "cleaner",
+      "version": "1.0.0",
+      "downloadBytes": 807875,
+      "installedBytes": 1901596,
+      "sha256": "9f065de3453da988aaad2b2e3aaedaa588654368e2a259f9e38d182f8fbee432",
+      "releaseMetadataBytes": 507
+    },
+    {
+      "id": "clipboard",
+      "version": "1.0.0",
+      "downloadBytes": 1039661,
+      "installedBytes": 2367477,
+      "sha256": "434cd262400dd1f3e886d4f23b4566c387b1047c1b349aeb97df7a2674cc6086",
+      "releaseMetadataBytes": 514
+    },
+    {
+      "id": "colorPicker",
+      "version": "1.0.0",
+      "downloadBytes": 713734,
+      "installedBytes": 1716107,
+      "sha256": "d6908edf96371278a1283160133679dc0105e3ed4aa949bf7a710809dae12513",
+      "releaseMetadataBytes": 519
+    },
+    {
+      "id": "docs",
+      "version": "1.0.0",
+      "downloadBytes": 2077920,
+      "installedBytes": 5811483,
+      "sha256": "5089677d99e93ec32d0fc3a0b21939425f99e25a869a0000a8e7bd6836f9e795",
+      "releaseMetadataBytes": 499
+    },
+    {
+      "id": "emoji",
+      "version": "1.0.0",
+      "downloadBytes": 855905,
+      "installedBytes": 2112833,
+      "sha256": "6e8c5a773a9988e8875a071f17db23fb0bba7a6f5d8a9806d3b8c8896c34244c",
+      "releaseMetadataBytes": 501
+    },
+    {
+      "id": "focusDim",
+      "version": "1.0.0",
+      "downloadBytes": 695699,
+      "installedBytes": 1683394,
+      "sha256": "02e6e23ee78c053e15d2c8b7b110beb428a662d0a44c690c74fd9830d3ad95cb",
+      "releaseMetadataBytes": 510
+    },
+    {
+      "id": "homebrew",
+      "version": "1.0.0",
+      "downloadBytes": 770684,
+      "installedBytes": 1817647,
+      "sha256": "e764a66f551b96f3dc43d590eb9cd3db6557e7e363a6aeb5569f7d5570747349",
+      "releaseMetadataBytes": 510
+    },
+    {
+      "id": "jev",
+      "version": "1.0.0",
+      "downloadBytes": 787802,
+      "installedBytes": 1870352,
+      "sha256": "c91aff350af928eb8ca57939ff56134805386d6d82a8cdc578ccb6836af4a032",
+      "releaseMetadataBytes": 495
+    },
+    {
+      "id": "keepAwake",
+      "version": "1.0.0",
+      "downloadBytes": 319450,
+      "installedBytes": 774389,
+      "sha256": "605e7a6923a2dd7ce713fb1e2eee20c520e2caf2731bacb31bd2f185f24fac53",
+      "releaseMetadataBytes": 512
+    },
+    {
+      "id": "keystrokeHighlight",
+      "version": "1.0.0",
+      "downloadBytes": 719533,
+      "installedBytes": 1736144,
+      "sha256": "a8a04089def54bbd85bf26cf90be7d5bfb76789af548f2a396b63485eb3ac3e8",
+      "releaseMetadataBytes": 540
+    },
+    {
+      "id": "latex",
+      "version": "1.0.0",
+      "downloadBytes": 1166967,
+      "installedBytes": 2886037,
+      "sha256": "b974fe5d73fe4be4ad1424c97dc1fd068a7da4d40536c565ebd83078d7ffec68",
+      "releaseMetadataBytes": 502
+    },
+    {
+      "id": "micMute",
+      "version": "1.0.0",
+      "downloadBytes": 701491,
+      "installedBytes": 1699759,
+      "sha256": "b84f7354fb9597420b93fb09070ce777c147e25feca8f5074ffd543fb63fab87",
+      "releaseMetadataBytes": 507
+    },
+    {
+      "id": "music",
+      "version": "1.0.0",
+      "downloadBytes": 5951538,
+      "installedBytes": 14515248,
+      "sha256": "6c155e95bf613dcfe4579b4cbecb86307cd20a7c891f6b1210222509836126f1",
+      "releaseMetadataBytes": 503
+    },
+    {
+      "id": "notchShelf",
+      "version": "1.0.0",
+      "downloadBytes": 1148658,
+      "installedBytes": 2587768,
+      "sha256": "8a56ff04360f17b002fa92f5d5850655d2c78cf33d161b81462a46b93fc66ba3",
+      "releaseMetadataBytes": 517
+    },
+    {
+      "id": "plugins",
+      "version": "1.0.0",
+      "downloadBytes": 1178101,
+      "installedBytes": 3088055,
+      "sha256": "cca47b846076583a90dfb52c41659dd8d4c229c0ad7ccb29ce2ff18dd70db76b",
+      "releaseMetadataBytes": 508
+    },
+    {
+      "id": "presenter",
+      "version": "1.0.0",
+      "downloadBytes": 733586,
+      "installedBytes": 1750437,
+      "sha256": "2cee4516f0252465fa5063e2bc7401d383b6f7c7fb92fcb69f4a337a07689881",
+      "releaseMetadataBytes": 513
+    },
+    {
+      "id": "system",
+      "version": "1.0.0",
+      "downloadBytes": 745068,
+      "installedBytes": 1782985,
+      "sha256": "08caa282e6e1640e86d960ef4e7d498d447126896f27ff0cd24bfcf39622fb5c",
+      "releaseMetadataBytes": 504
+    },
+    {
+      "id": "systemStats",
+      "version": "1.0.0",
+      "downloadBytes": 696862,
+      "installedBytes": 1683531,
+      "sha256": "816bd8f4e7e419a199e0228f49b8d698cd3ba55fe4515c6d6df0566f991ff17f",
+      "releaseMetadataBytes": 519
+    },
+    {
+      "id": "timeLapse",
+      "version": "1.0.0",
+      "downloadBytes": 913163,
+      "installedBytes": 2129394,
+      "sha256": "1f089a735b023087d92a0991d964aa606f4acaf49ff601e7b6a16012bbf9fc94",
+      "releaseMetadataBytes": 513
+    },
+    {
+      "id": "windowSweaters",
+      "version": "1.0.0",
+      "downloadBytes": 766122,
+      "installedBytes": 1822130,
+      "sha256": "47279b9417564b363fc4ebfab8102934a524e94c6537116fdf0b66129988e3f3",
+      "releaseMetadataBytes": 528
+    }
+  ],
+  "migratedExtensionPackages": {
+    "downloadBytes": 25323416,
+    "installedBytes": 61683742,
+    "releaseMetadataBytes": 11772,
+    "releaseAssetBytes": 25335188
+  },
+  "appWithMigratedExtensions": {
+    "installedBytes": 66521279,
+    "comparisonZipAndPackageBytes": 27453005
+  },
+  "measuredAtUTC": "2026-10-09T14:36:15+00:00",
+  "status": "superseded-foundation-snapshot",
+  "migratedExtensions": 23,
+  "indexedExtensions": 39,
+  "hostExecutableSHA256": "992150ed3f1720bce3bc1cd2522bd21bc816180e6f7a3ed876dd1141897f1ad9",
+  "measurement": {
+    "baselineSourceCommit": "91d0e13de56aaf297ad4630d2c36ef124da5bf0c",
+    "baselineBuild": {
+      "configuration": "Release",
+      "architecture": "arm64",
+      "signature": "ad-hoc",
+      "xcode": "27.0 (27A266a)",
+      "sdk": "27.0",
+      "ghosttySourceCommit": "88f57ee66eeaad4da77b414b245f7b6693348985",
+      "ghosttyArchive": "verified cache from clean pinned source build"
+    },
+    "architecture": "arm64",
+    "signature": "development",
+    "appZipMethod": "Regular files only, symlinks excluded, ZIP deflate level 9. Comparison metric, not a shipping installer.",
+    "included": [
+      "host executable",
+      "marketplace runtime",
+      "Sparkle updater and its helpers",
+      "application icon",
+      "extension index",
+      "Home, customization editor and shared UI",
+      "code signatures"
+    ],
+    "outstanding": [
+      "remaining feature migrations",
+      "remaining feature navigation integration",
+      "remaining feature card adapters",
+      "required platform carriers",
+      "shipping release packaging",
+      "final release-host measurements"
+    ]
+  },
+  "surfaceCustomization": {
+    "pullRequest": "https://github.com/pulkitxm/edith/pull/1010",
+    "reviewedCommit": "31edeb8ccf693441b1da155a6be6491981d3f08d",
+    "mergedCommit": "98a0f440e161c130f7ebd12a9da5dea42c38b238",
+    "layoutContractVersion": 1,
+    "implemented": [
+      "host-owned layouts and profiles",
+      "undo and redo",
+      "availability for every indexed extension",
+      "composite provider filtering",
+      "read-only worker context",
+      "layout retention through worker updates and app restarts",
+      "visual editor at compact, regular and zoomed sizes in both color schemes",
+      "shared canvas and shelf rendering",
+      "bounded versioned snapshot and action requests",
+      "cancellation on disable, removal, update or hidden views",
+      "immediate Presenter privacy observation",
+      "live cards and validated actions for every migrated worker",
+      "native Notch renderer and explicit customization navigation",
+      "world clock favorites, faces, city search and time differences",
+      "bounded sliders, thumbnails and charts with native socket validation"
+    ],
+    "outstanding": [
+      "remaining Home card data and action adapters",
+      "final combined synthetic visual verification"
+    ]
+  },
+  "latestInterimMeasurement": {
+    "sourceCommit": "55af74b29bf663ccb545c28e30041784381af178",
+    "installedBytes": 8178936,
+    "extensionPayloadBytes": 0,
+    "hostExecutableSHA256": "e9f596546abac16bfcbefc20ac8df407d67b4ca12c85dae62abd0eb1f7a58946",
+    "components": {
+      "hostExecutable": 6296576,
+      "sparkle": 1441041,
+      "icon": 209225,
+      "compressedMarketplaceArtwork": 220928,
+      "other": 11166
+    },
+    "build": {
+      "configuration": "Release",
+      "architecture": "arm64",
+      "optimization": "Osize",
+      "linkTimeOptimization": "full",
+      "signature": "ad-hoc",
+      "xcode": "27.0 (27A266a)",
+      "sdk": "27.0"
+    },
+    "sizeGuard8MBPassed": false,
+    "shippingBuild": false,
+    "finalSourceFrozen": false,
+    "finalVerifiedPackages": 0,
+    "all39Aggregate": null
+  }
+}

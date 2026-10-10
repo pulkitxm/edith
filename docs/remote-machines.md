@@ -80,5 +80,10 @@ Edith treats the expected disconnect as a successful power action and reconnects
 when the host returns. Wake-on-LAN needs a known MAC address and a network path that
 allows the magic packet; it cannot wake every machine across every routed network.
 
-Every machine feature also has scriptable commands with JSON output. Start with the
-[Machines command reference](cli/machines/README.md).
+Enable Machines and keep Edith running before reading saved host records:
+
+```sh
+ed invoke machines machines.companion.hosts --json '{}'
+```
+
+The worker can prepare an owned connection recipe for an already saved machine. Interactive terminals, file management, and power controls remain in the Machines UI. The gateway does not execute arbitrary command strings. See the [public invocation reference](cli/invoke/README.md).

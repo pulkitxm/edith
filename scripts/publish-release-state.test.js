@@ -98,9 +98,44 @@ function createFixture() {
   git(root, "clone", remote, checkout);
   configureRepository(checkout);
   mkdirSync(plists);
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  writeFileSync(
+    join(bin, "pukbot"),
+    String.raw`#!/usr/bin/env python3
+import json, os, subprocess, sys
+args = sys.argv[1:]
+def git(*arguments, cwd=None):
+    return subprocess.check_output(['git', *arguments], cwd=cwd, text=True).strip()
+remote = git('remote', 'get-url', 'origin')
+message = args[args.index('--message') + 1]
+if args[:2] == ['commit', 'create']:
+    parent = git('rev-parse', 'refs/heads/main', cwd=remote)
+    hook = os.path.join(git('rev-parse', '--git-dir'), 'hooks/pre-push')
+    if os.path.exists(hook):
+        subprocess.run(['bash', hook], check=True)
+    tree = git('write-tree')
+    sha = subprocess.check_output(['git', 'commit-tree', tree, '-p', parent], input=message+'\n', text=True).strip()
+    git('fetch', os.getcwd(), sha, cwd=remote)
+    git('update-ref', 'refs/heads/main', sha, parent, cwd=remote)
+    print(json.dumps({'resourceUrl': 'https://github.com/synthetic/fixture/commit/'+sha}))
+elif args[:2] == ['tag', 'create']:
+    if os.environ.get('FIXTURE_FAIL_TAG'):
+        sys.exit(1)
+    target = args[args.index('--target') + 1]
+    tag = args[2]
+    git('tag', '-a', tag, '-m', message, target)
+    git('fetch', os.getcwd(), 'refs/tags/'+tag+':refs/tags/'+tag, cwd=remote)
+    print('{}')
+else:
+    sys.exit(2)
+`,
+    { mode: 0o755 },
+  );
   writeFileSync(join(plists, "Info.plist"), "new app plist\n");
   writeFileSync(join(plists, "HelperInfo.plist"), "new helper plist\n");
   return {
+    bin,
     builtSha: git(checkout, "rev-parse", "HEAD"),
     checkout,
     plists,
@@ -111,6 +146,7 @@ function createFixture() {
 
 function releaseEnvironment(fixture, checksum = firstChecksum) {
   return {
+    PATH: `${fixture.bin}:${process.env.PATH}`,
     BUILT_SHA: fixture.builtSha,
     RELEASE_BUILD: "91",
     RELEASE_PLISTS_DIR: fixture.plists,
@@ -135,9 +171,10 @@ function installPrePushHook(fixture, commandLine) {
   chmodSync(hook, 0o755);
 }
 
-test("a release cut publishes one atomic commit and retries cleanly", () => {
+test("a release cut publishes one version commit through the release client and retries cleanly", () => {
   const fixture = createFixture();
-  expect(publish(fixture, "cut").exitCode).toBe(0);
+  const cut = publish(fixture, "cut");
+  expect(cut.exitCode, cut.stderr).toBe(0);
 
   const main = git(fixture.remote, "rev-parse", "refs/heads/main");
   const tag = git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}");
@@ -164,16 +201,6 @@ test("a release cut publishes one atomic commit and retries cleanly", () => {
       "refs/tags/v0.0.80",
     ),
   ).toBe("Edith v0.0.80 build 91");
-  expect(
-    git(
-      fixture.remote,
-      "for-each-ref",
-      "--format=%(taggername) <%(taggeremail)>",
-      "refs/tags/v0.0.80",
-    ),
-  ).toBe(
-    "github-actions[bot] <<41898282+github-actions[bot]@users.noreply.github.com>>",
-  );
 
   expect(publish(fixture, "cut").exitCode).toBe(0);
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(main);
@@ -190,7 +217,7 @@ test("a release cut reports a superseded build without publishing", () => {
   git(mover, "push", "origin", "main");
 
   const result = publish(fixture, "cut");
-  expect(result.exitCode).toBe(75);
+  expect(result.exitCode, result.stderr).toBe(75);
   expect(result.stderr).toContain(
     "release superseded: main moved after the release build",
   );
@@ -238,7 +265,7 @@ test("a release cut stays superseded when main moves during the push", () => {
   );
 
   const result = publish(fixture, "cut");
-  expect(result.exitCode).toBe(75);
+  expect(result.exitCode, result.stderr).toBe(75);
   expect(result.stderr).toContain(
     "release superseded: main moved after the release build",
   );
@@ -260,7 +287,7 @@ test("a release cut keeps genuine push failures fatal", () => {
 
   const result = publish(fixture, "cut");
   expect(result.exitCode).toBe(1);
-  expect(result.stderr).toContain("release blocked: release push failed");
+  expect(result.stderr).toContain("release blocked: release commit failed");
   expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(
     fixture.builtSha,
   );
@@ -312,5 +339,21 @@ test("invalid release metadata cannot mutate release files", () => {
   expect(malformedChecksum.stderr).toContain("invalid release checksum");
   expect(readFileSync(join(fixture.checkout, "Casks/edith.rb"), "utf8")).toBe(
     originalCask,
+  );
+});
+
+test("a release cut recovers a committed version after tag failure", () => {
+  const fixture = createFixture();
+  const failed = command(fixture.checkout, "bash", [script, "cut"], {
+    ...releaseEnvironment(fixture),
+    FIXTURE_FAIL_TAG: "1",
+  });
+  expect(failed.exitCode).toBe(1);
+  const committed = git(fixture.remote, "rev-parse", "refs/heads/main");
+  expect(committed).not.toBe(fixture.builtSha);
+  expect(publish(fixture, "cut").exitCode).toBe(0);
+  expect(git(fixture.remote, "rev-parse", "refs/heads/main")).toBe(committed);
+  expect(git(fixture.remote, "rev-parse", "refs/tags/v0.0.80^{commit}")).toBe(
+    committed,
   );
 });

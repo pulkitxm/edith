@@ -1,0 +1,754 @@
+import EdithExtensionCommands
+import EdithExtensionSupport
+import EdithExtensionUI
+import Foundation
+
+public struct UsageModelRow: Decodable, Sendable {
+    public static let unattributedCostName = "unattributed-cost"
+
+    public let modelName: String?
+    public let inputTokens: Double?
+    public let outputTokens: Double?
+    public let cacheCreationTokens: Double?
+    public let cacheReadTokens: Double?
+    public let cost: Double?
+
+    public var tokens: Double {
+        (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheCreationTokens ?? 0)
+            + (cacheReadTokens ?? 0)
+    }
+
+    public var name: String { modelName ?? "unknown" }
+
+    public var reportName: String {
+        tokens == 0 && (cost ?? 0) != 0 ? Self.unattributedCostName : name
+    }
+
+    public static func displayName(_ name: String) -> String {
+        name == unattributedCostName ? "Unattributed cost" : name
+    }
+}
+
+public struct UsageProjectChat: Decodable, Sendable {
+    public let id: String?
+    public let title: String?
+    public let path: String?
+    public let source: String?
+    public let cost: Double?
+    public let tokens: Double?
+    public let lastTs: Double?
+}
+
+public struct UsageProjectWorktree: Decodable, Sendable {
+    public let name: String?
+    public let cost: Double?
+    public let tokens: Double?
+    public let chats: [UsageProjectChat]?
+}
+
+public struct UsageProjectMeasure: Decodable, Sendable {
+    public let cost: Double?
+    public let tokens: Double?
+}
+
+public struct UsageProjectSourceBreakdown: Decodable, Sendable {
+    public let cost: Double?
+    public let tokens: Double?
+    public let byModel: [String: UsageProjectMeasure]?
+}
+
+public struct UsageProjectAttribution: Decodable, Sendable {
+    public let method: String?
+}
+
+public struct UsageProject: Decodable, Sendable {
+    public let attribution: UsageProjectAttribution?
+    public let projectName: String?
+    public let repositoryID: String?
+    public let repositoryName: String?
+    public let repositoryURL: String?
+    public let folderName: String?
+    public let path: String?
+    public let machineName: String?
+    public let machineID: String?
+    public let cost: Double?
+    public let tokens: Double?
+    public let bySource: [String: UsageProjectSourceBreakdown]?
+    public let chats: [UsageProjectChat]?
+    public let worktrees: [UsageProjectWorktree]?
+
+    public var name: String {
+        repositoryName ?? projectName ?? folderName ?? path.map {
+            URL(fileURLWithPath: $0).lastPathComponent
+        }
+            ?? "unknown"
+    }
+
+    public var stableRepositoryID: String {
+        if let repositoryID, !repositoryID.isEmpty { return repositoryID }
+        if let repositoryURL, !repositoryURL.isEmpty {
+            return "url:\(repositoryURL.lowercased())"
+        }
+        if let path, !path.isEmpty { return "path:\(path)" }
+        return "name:\(name.lowercased())"
+    }
+
+    public var resolvedFolderName: String {
+        folderName ?? path.map { URL(fileURLWithPath: $0).lastPathComponent } ?? projectName ?? name
+    }
+}
+
+public struct UsageProjectFolderSummary: Equatable, Sendable {
+    public let folderName: String
+    public let path: String?
+    public let machineName: String?
+    public let machineID: String?
+    public var cost: Double
+    public var tokens: Double
+    public var chats: [UsageProjectChatSummary]
+    public var worktrees: [UsageProjectWorktreeSummary]
+    public var attribution: String? = nil
+
+    public var json: JSONValue {
+        .object([
+            "attribution": .optional(attribution),
+            "folderName": .string(folderName),
+            "path": .optional(path),
+            "machineName": .optional(machineName),
+            "machineID": .optional(machineID),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "chats": .array(chats.map(\.json)),
+            "worktrees": .array(worktrees.map(\.json)),
+        ])
+    }
+}
+
+public struct UsageProjectChatSummary: Equatable, Sendable {
+    public let id: String?
+    public var title: String?
+    public var path: String?
+    public var source: String?
+    public var cost: Double
+    public var tokens: Double
+    public var lastTs: Double?
+
+    public var displayName: String {
+        if let title, !title.isEmpty { return title }
+        if let id, !id.isEmpty { return "Chat \(String(id.prefix(8)))" }
+        return "Untitled chat"
+    }
+
+    public var json: JSONValue {
+        .object([
+            "id": .optional(id),
+            "title": .optional(title),
+            "path": .optional(path),
+            "source": .optional(source),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "lastTs": lastTs.map(JSONValue.double) ?? .null,
+        ])
+    }
+}
+
+public struct UsageProjectWorktreeSummary: Equatable, Sendable {
+    public let name: String
+    public var cost: Double
+    public var tokens: Double
+    public var chats: [UsageProjectChatSummary]
+
+    public var json: JSONValue {
+        .object([
+            "name": .string(name),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "chats": .array(chats.map(\.json)),
+        ])
+    }
+}
+
+public struct UsageProjectSummary: Equatable, Sendable {
+    public let repositoryID: String
+    public let repositoryName: String
+    public let repositoryURL: String?
+    public var cost: Double
+    public var tokens: Double
+    public var folders: [UsageProjectFolderSummary]
+
+    public var chatIDs: [String] {
+        let values = folders.flatMap { folder in
+            folder.chats.compactMap(\.id)
+                + folder.worktrees.flatMap { $0.chats.compactMap(\.id) }
+        }
+        return Array(Set(values.filter { !$0.isEmpty })).sorted()
+    }
+
+    public var json: JSONValue {
+        .object([
+            "repositoryID": .string(repositoryID),
+            "repositoryName": .string(repositoryName),
+            "repositoryURL": .optional(repositoryURL),
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "folders": .array(folders.map(\.json)),
+        ])
+    }
+}
+
+private struct UsageRepositoryAccumulator {
+    var repositoryID: String
+    var repositoryName: String
+    var repositoryURL: String?
+    var cost = 0.0
+    var tokens = 0.0
+    var folders: [String: UsageProjectFolderSummary] = [:]
+}
+
+public struct UsageDay: Decodable, Sendable {
+    public let period: String
+    public let bySource: [String: [UsageModelRow]]?
+    public let projects: [UsageProject]?
+
+    public func rows(sources: Set<String>?) -> [(source: String, row: UsageModelRow)] {
+        (bySource ?? [:]).flatMap { source, rows in
+            guard sources == nil || sources?.contains(source) == true else {
+                return [(String, UsageModelRow)]()
+            }
+            return rows.map { (source, $0) }
+        }
+    }
+}
+
+public struct UsageSourceMeta: Decodable, Sendable {
+    public let label: String?
+    public let tool: String?
+    public let machine: String?
+    public let machineID: String?
+}
+
+public enum UsageMachineFilter {
+    public static let localNames = ["local", "this-mac", "thismac", "mac"]
+
+    public static func isLocal(_ query: String) -> Bool {
+        localNames.contains(query.lowercased().replacingOccurrences(of: " ", with: "-"))
+    }
+
+    public static func sources(
+        matching query: String, in document: UsageDocument, machineID: UUID? = nil
+    ) -> Set<String> {
+        let meta = document.sourceMeta ?? [:]
+        let ids = document.sources ?? Array(meta.keys)
+        guard !isLocal(query) else {
+            return Set(ids.filter { meta[$0]?.machine == nil && meta[$0]?.machineID == nil })
+        }
+        let wanted = machineID?.uuidString.lowercased()
+        let needle = query.lowercased()
+        return Set(
+            ids.filter { id in
+                guard let entry = meta[id] else { return false }
+                if let wanted, entry.machineID?.lowercased() == wanted { return true }
+                return entry.machine?.lowercased() == needle
+            })
+    }
+}
+
+public struct UsageDocument: Decodable, Sendable {
+    public let generatedAt: String?
+    public let schemaVersion: Int?
+    public let sources: [String]?
+    public let defaultSources: [String]?
+    public let sourceMeta: [String: UsageSourceMeta]?
+    public let daily: [UsageDay]
+
+    public static func load(from url: URL = Repo.usageJSON) throws -> UsageDocument {
+        guard let data = try? Data(contentsOf: url) else {
+            throw CLIFailure.unavailable(
+                "no usage data at \(url.path)",
+                hint: "run `ed usage refresh` with Edith running, or enable the Agent Usage "
+                    + "extension")
+        }
+        do {
+            return try JSONDecoder().decode(UsageDocument.self, from: data)
+        } catch {
+            throw CLIFailure("could not read \(url.path): \(error.localizedDescription)")
+        }
+    }
+}
+
+public struct UsageTotals: Equatable, Sendable {
+    public var cost = 0.0
+    public var inputTokens = 0.0
+    public var outputTokens = 0.0
+    public var cacheCreationTokens = 0.0
+    public var cacheReadTokens = 0.0
+
+    public var tokens: Double {
+        inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens
+    }
+
+    public mutating func add(_ row: UsageModelRow) {
+        cost += row.cost ?? 0
+        inputTokens += row.inputTokens ?? 0
+        outputTokens += row.outputTokens ?? 0
+        cacheCreationTokens += row.cacheCreationTokens ?? 0
+        cacheReadTokens += row.cacheReadTokens ?? 0
+    }
+
+    public var json: JSONValue {
+        .object([
+            "cost": .double(cost),
+            "tokens": .double(tokens),
+            "inputTokens": .double(inputTokens),
+            "outputTokens": .double(outputTokens),
+            "cacheCreationTokens": .double(cacheCreationTokens),
+            "cacheReadTokens": .double(cacheReadTokens),
+        ])
+    }
+}
+
+public enum UsageRange: String, CaseIterable, Sendable {
+    case today
+    case week
+    case month
+    case all
+
+    public func includes(period: String, today: Date = Date(), calendar: Calendar = .current)
+        -> Bool
+    {
+        guard let start = start(today: today, calendar: calendar) else { return true }
+        return period >= UsageRange.stamp(start, calendar: calendar)
+            && period <= UsageRange.stamp(today, calendar: calendar)
+    }
+
+    public func start(today: Date, calendar: Calendar) -> Date? {
+        let midnight = calendar.startOfDay(for: today)
+        switch self {
+        case .today: return midnight
+        case .week:
+            let daysSinceMonday = (calendar.component(.weekday, from: midnight) + 5) % 7
+            return calendar.date(byAdding: .day, value: -daysSinceMonday, to: midnight)
+        case .month: return calendar.date(byAdding: .day, value: -29, to: midnight)
+        case .all: return nil
+        }
+    }
+
+    public static func stamp(_ date: Date, calendar: Calendar = .current) -> String {
+        CalendarDay.stamp(date, calendar: calendar)
+    }
+}
+
+public enum UsageAnalysis {
+    public static func days(
+        _ document: UsageDocument, range: UsageRange, today: Date = Date()
+    ) -> [UsageDay] {
+        document.daily.filter { range.includes(period: $0.period, today: today) }
+    }
+
+    public static func totals(_ days: [UsageDay], sources: Set<String>?) -> UsageTotals {
+        var totals = UsageTotals()
+        for day in days {
+            for entry in day.rows(sources: sources) { totals.add(entry.row) }
+        }
+        return totals
+    }
+
+    public static func bySource(_ days: [UsageDay], sources: Set<String>?) -> [String: UsageTotals]
+    {
+        var out: [String: UsageTotals] = [:]
+        for day in days {
+            for entry in day.rows(sources: sources) {
+                out[entry.source, default: UsageTotals()].add(entry.row)
+            }
+        }
+        return out
+    }
+
+    public static func byModel(_ days: [UsageDay], sources: Set<String>?) -> [String: UsageTotals] {
+        var out: [String: UsageTotals] = [:]
+        for day in days {
+            for entry in day.rows(sources: sources) {
+                out[entry.row.reportName, default: UsageTotals()].add(entry.row)
+            }
+        }
+        return out
+    }
+
+    public static func orderedModels(_ models: [String: UsageTotals]) -> [(String, UsageTotals)] {
+        models.sorted { left, right in
+            let leftUnattributed = left.key == UsageModelRow.unattributedCostName
+            let rightUnattributed = right.key == UsageModelRow.unattributedCostName
+            if leftUnattributed != rightUnattributed { return !leftUnattributed }
+            if left.value.cost != right.value.cost { return left.value.cost > right.value.cost }
+            if left.value.tokens != right.value.tokens {
+                return left.value.tokens > right.value.tokens
+            }
+            return left.key < right.key
+        }
+    }
+
+    public static func byDay(_ days: [UsageDay], sources: Set<String>?) -> [(String, UsageTotals)] {
+        days.map { day in
+            var totals = UsageTotals()
+            for entry in day.rows(sources: sources) { totals.add(entry.row) }
+            return (day.period, totals)
+        }
+        .sorted { $0.0 < $1.0 }
+    }
+
+    public static func byProject(_ days: [UsageDay]) -> [UsageProjectSummary] {
+        var repositories: [String: UsageRepositoryAccumulator] = [:]
+        for day in days {
+            let projects = day.projects ?? []
+            addProjectsBySource(projects, day: day, to: &repositories)
+        }
+        return repositories.values.map { repository in
+            UsageProjectSummary(
+                repositoryID: repository.repositoryID,
+                repositoryName: repository.repositoryName,
+                repositoryURL: repository.repositoryURL,
+                cost: repository.cost,
+                tokens: repository.tokens,
+                folders: repository.folders.values.sorted {
+                    if $0.cost != $1.cost { return $0.cost > $1.cost }
+                    if $0.folderName != $1.folderName { return $0.folderName < $1.folderName }
+                    return ($0.path ?? "") < ($1.path ?? "")
+                }
+                .map(sorted))
+        }
+        .sorted {
+            if $0.cost != $1.cost { return $0.cost > $1.cost }
+            return $0.repositoryID < $1.repositoryID
+        }
+    }
+
+    public static func projectSelectors(_ days: [UsageDay]) -> [String] {
+        let projects = byProject(days)
+        let projectsByName = Dictionary(grouping: projects) { $0.repositoryName.lowercased() }
+        let values = projects.flatMap { project in
+            var selectors = [project.repositoryID]
+            if projectsByName[project.repositoryName.lowercased()]?.count == 1 {
+                selectors.append(project.repositoryName)
+            }
+            return selectors
+        }
+        return Array(Set(values)).sorted()
+    }
+
+    private static func addProjectsBySource(
+        _ projects: [UsageProject], day: UsageDay,
+        to repositories: inout [String: UsageRepositoryAccumulator]
+    ) {
+        for (source, rows) in day.bySource ?? [:] {
+            let targetCost = rows.reduce(0) { $0 + ($1.cost ?? 0) }
+            let targetTokens = rows.reduce(0) { $0 + $1.tokens }
+            let measured = projects.compactMap { project -> (UsageProject, Double, Double)? in
+                guard let measure = sourceMeasure(project, source: source) else { return nil }
+                return (project, measure.cost, measure.tokens)
+            }
+            let rawCost = measured.reduce(0) { $0 + $1.1 }
+            let rawTokens = measured.reduce(0) { $0 + $1.2 }
+            guard rawCost > 0 || rawTokens > 0 else {
+                for row in rows {
+                    addUnattributed(
+                        source: source, model: row.name, cost: row.cost ?? 0,
+                        tokens: row.tokens, to: &repositories)
+                }
+                continue
+            }
+            for (project, cost, tokens) in measured {
+                add(
+                    project, source: source,
+                    cost: normalized(
+                        cost, alternate: tokens, rawTotal: rawCost,
+                        rawAlternateTotal: rawTokens, target: targetCost),
+                    tokens: normalized(
+                        tokens, alternate: cost, rawTotal: rawTokens,
+                        rawAlternateTotal: rawCost, target: targetTokens),
+                    to: &repositories)
+            }
+        }
+    }
+
+    private static func sourceMeasure(_ project: UsageProject, source: String) -> (
+        cost: Double, tokens: Double
+    )? {
+        if let breakdown = project.bySource?[source] {
+            let models = Array((breakdown.byModel ?? [:]).values)
+            return (
+                breakdown.cost ?? models.reduce(0) { $0 + ($1.cost ?? 0) },
+                breakdown.tokens ?? models.reduce(0) { $0 + ($1.tokens ?? 0) }
+            )
+        }
+        let chats = (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        let matched = chats.filter { $0.source == source }
+        guard !matched.isEmpty else { return nil }
+        return (
+            matched.reduce(0) { $0 + ($1.cost ?? 0) },
+            matched.reduce(0) { $0 + ($1.tokens ?? 0) }
+        )
+    }
+
+    private static func add(
+        _ project: UsageProject, source: String, cost: Double, tokens: Double,
+        to repositories: inout [String: UsageRepositoryAccumulator]
+    ) {
+        guard cost != 0 || tokens != 0 else { return }
+        let repositoryKey = project.stableRepositoryID.lowercased()
+        var repository =
+            repositories[repositoryKey]
+            ?? UsageRepositoryAccumulator(
+                repositoryID: project.stableRepositoryID,
+                repositoryName: project.name,
+                repositoryURL: project.repositoryURL)
+        repository.cost += cost
+        repository.tokens += tokens
+        if repository.repositoryURL == nil { repository.repositoryURL = project.repositoryURL }
+
+        let machineKey = (project.machineID ?? project.machineName ?? "").lowercased()
+        let folderKey = [machineKey, project.path ?? project.resolvedFolderName]
+            .joined(separator: "\u{1F}")
+        var folder =
+            repository.folders[folderKey]
+            ?? UsageProjectFolderSummary(
+                folderName: project.resolvedFolderName,
+                path: project.path,
+                machineName: project.machineName,
+                machineID: project.machineID,
+                cost: 0,
+                tokens: 0,
+                chats: [],
+                worktrees: [])
+        folder.cost += cost
+        folder.tokens += tokens
+        folder.attribution = folder.attribution ?? project.attribution?.method
+        addHierarchy(project, source: source, cost: cost, tokens: tokens, to: &folder)
+        repository.folders[folderKey] = folder
+        repositories[repositoryKey] = repository
+    }
+
+    private static func addUnattributed(
+        source: String, model: String, cost: Double, tokens: Double,
+        to repositories: inout [String: UsageRepositoryAccumulator]
+    ) {
+        guard cost != 0 || tokens != 0 else { return }
+        let repositoryID = "unattributed"
+        let repositoryKey = repositoryID
+        var repository =
+            repositories[repositoryKey]
+            ?? UsageRepositoryAccumulator(
+                repositoryID: repositoryID, repositoryName: "Unattributed",
+                repositoryURL: nil)
+        repository.cost += cost
+        repository.tokens += tokens
+        let folderName = "\(source) / \(model)"
+        var folder =
+            repository.folders[folderName]
+            ?? UsageProjectFolderSummary(
+                folderName: folderName, path: nil, machineName: nil, machineID: nil,
+                cost: 0, tokens: 0, chats: [], worktrees: [])
+        folder.cost += cost
+        folder.tokens += tokens
+        repository.folders[folderName] = folder
+        repositories[repositoryKey] = repository
+    }
+
+    private static func addHierarchy(
+        _ project: UsageProject, source: String, cost: Double, tokens: Double,
+        to folder: inout UsageProjectFolderSummary
+    ) {
+        let direct = (project.chats ?? []).filter { chatBelongs($0, to: source, project: project) }
+        let worktrees = (project.worktrees ?? []).map { worktree in
+            (
+                worktree,
+                (worktree.chats ?? []).filter {
+                    chatBelongs($0, to: source, project: project)
+                }
+            )
+        }
+        let allChats = direct + worktrees.flatMap(\.1)
+        let rawCost = allChats.reduce(0) { $0 + ($1.cost ?? 0) }
+        let rawTokens = allChats.reduce(0) { $0 + ($1.tokens ?? 0) }
+        func summary(_ chat: UsageProjectChat) -> UsageProjectChatSummary {
+            UsageProjectChatSummary(
+                id: nonempty(chat.id), title: nonempty(chat.title), path: nonempty(chat.path),
+                source: nonempty(chat.source) ?? source,
+                cost: normalized(
+                    chat.cost ?? 0, alternate: chat.tokens ?? 0, rawTotal: rawCost,
+                    rawAlternateTotal: rawTokens, target: cost),
+                tokens: normalized(
+                    chat.tokens ?? 0, alternate: chat.cost ?? 0, rawTotal: rawTokens,
+                    rawAlternateTotal: rawCost, target: tokens),
+                lastTs: chat.lastTs)
+        }
+        for chat in direct { merge(summary(chat), into: &folder.chats) }
+        for (worktree, chats) in worktrees where !chats.isEmpty {
+            let name = nonempty(worktree.name) ?? "Unnamed worktree"
+            var index = folder.worktrees.firstIndex { $0.name == name }
+            if index == nil {
+                folder.worktrees.append(
+                    UsageProjectWorktreeSummary(name: name, cost: 0, tokens: 0, chats: []))
+                index = folder.worktrees.indices.last
+            }
+            guard let index else { continue }
+            for chat in chats {
+                let value = summary(chat)
+                folder.worktrees[index].cost += value.cost
+                folder.worktrees[index].tokens += value.tokens
+                merge(value, into: &folder.worktrees[index].chats)
+            }
+        }
+    }
+
+    private static func chatBelongs(
+        _ chat: UsageProjectChat, to source: String, project: UsageProject
+    ) -> Bool {
+        guard let chatSource = nonempty(chat.source) else {
+            return project.bySource?.count == 1
+        }
+        return chatSource == source
+    }
+
+    private static func merge(
+        _ incoming: UsageProjectChatSummary, into chats: inout [UsageProjectChatSummary]
+    ) {
+        let key = chatKey(incoming)
+        guard let index = chats.firstIndex(where: { chatKey($0) == key }) else {
+            chats.append(incoming)
+            return
+        }
+        chats[index].cost += incoming.cost
+        chats[index].tokens += incoming.tokens
+        if let title = incoming.title { chats[index].title = title }
+        if let path = incoming.path { chats[index].path = path }
+        if let source = incoming.source { chats[index].source = source }
+        if (incoming.lastTs ?? 0) > (chats[index].lastTs ?? 0) {
+            chats[index].lastTs = incoming.lastTs
+        }
+    }
+
+    private static func chatKey(_ chat: UsageProjectChatSummary) -> String {
+        if let id = nonempty(chat.id) { return "id:\(id)" }
+        return [chat.source ?? "", chat.path ?? "", chat.title ?? ""]
+            .joined(separator: "\u{1F}")
+    }
+
+    private static func sorted(_ folder: UsageProjectFolderSummary) -> UsageProjectFolderSummary {
+        var value = folder
+        value.chats.sort(by: chatOrder)
+        value.worktrees = value.worktrees.map { worktree in
+            var item = worktree
+            item.chats.sort(by: chatOrder)
+            return item
+        }
+        .sorted {
+            if $0.cost != $1.cost { return $0.cost > $1.cost }
+            if $0.tokens != $1.tokens { return $0.tokens > $1.tokens }
+            return $0.name < $1.name
+        }
+        return value
+    }
+
+    private static func chatOrder(
+        _ left: UsageProjectChatSummary, _ right: UsageProjectChatSummary
+    ) -> Bool {
+        if left.cost != right.cost { return left.cost > right.cost }
+        if left.tokens != right.tokens { return left.tokens > right.tokens }
+        if left.lastTs != right.lastTs { return (left.lastTs ?? 0) > (right.lastTs ?? 0) }
+        return (left.id ?? "") < (right.id ?? "")
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        BlankText.trimmedNonEmpty(value)
+    }
+
+    public static func chatIDs(_ days: [UsageDay]) -> [String] {
+        let ids = days.flatMap { $0.projects ?? [] }.flatMap { project in
+            (project.chats ?? []) + (project.worktrees ?? []).flatMap { $0.chats ?? [] }
+        }
+        .compactMap { nonempty($0.id) }
+        return Array(Set(ids)).sorted()
+    }
+
+    private static func normalized(
+        _ value: Double, alternate: Double, rawTotal: Double, rawAlternateTotal: Double,
+        target: Double
+    ) -> Double {
+        if rawTotal > 0 { return target * value / rawTotal }
+        if rawAlternateTotal > 0 { return target * alternate / rawAlternateTotal }
+        return 0
+    }
+}
+
+public enum LimitsReport {
+    public struct Observation: Sendable {
+        public let provider: LimitProvider
+        public let observedAt: Date
+        public let session: LimitWindow?
+        public let week: LimitWindow?
+        public let fable: LimitWindow?
+        public let grok: GrokAllowance?
+    }
+
+    public static func providers() -> [Observation] {
+        let latest = LimitsHistory.latestProviders()
+        return LimitProvider.allCases.compactMap { provider in
+            guard let value = latest[provider] else { return nil }
+            return Observation(
+                provider: provider, observedAt: value.date, session: value.session,
+                week: value.week, fable: value.fable, grok: value.grok)
+        }
+    }
+
+    public static func window(_ value: LimitWindow?) -> JSONValue {
+        guard let value else { return .null }
+        return .object([
+            "percent": .double(value.percent),
+            "resetsAt": .date(value.resetsAt),
+            "resetsInSeconds": value.resetsAt.map { JSONValue.double($0.timeIntervalSinceNow) }
+                ?? .null,
+        ])
+    }
+
+    public static func alert(_ verdict: LimitAlertVerdict) -> JSONValue {
+        let a = verdict.assessment
+        return .object([
+            "provider": .string(a.target.provider.rawValue),
+            "window": .string(a.target.slot.rawValue),
+            "label": .string(a.target.label),
+            "percent": .double(a.window.percent),
+            "resetsAt": .date(a.window.resetsAt),
+            "burnPerHour": .optional(a.burn.map { ($0.perHour * 10).rounded() / 10 }),
+            "burnMinutes": .optional(a.burn.map { Int(($0.lookback / 60).rounded()) }),
+            "active": .bool(a.active),
+            "projectedCapAt": .date(a.active ? a.projectedCapAt : nil),
+            "alert": .optional(verdict.alert?.kind.rawValue),
+            "title": .optional(verdict.alert?.title),
+            "body": .optional(verdict.alert?.body),
+            "reason": .string(verdict.reason),
+        ])
+    }
+
+    public static func json(_ observation: Observation) -> JSONValue {
+        var fields: [String: JSONValue] = [
+            "provider": .string(observation.provider.rawValue),
+            "label": .string(observation.provider.label),
+            "observedAt": .date(observation.observedAt),
+            "session": window(observation.session),
+            "weekly": window(observation.week),
+        ]
+        if observation.provider == .claude { fields["fable"] = window(observation.fable) }
+        if let allowance = observation.grok {
+            fields["period"] = .string(allowance.period)
+            fields["tier"] = .optional(allowance.tier)
+            fields["products"] = .array(
+                allowance.products.map {
+                    .object(["name": .string($0.name), "percent": .double($0.percent)])
+                })
+            fields["onDemandUsed"] = .double(allowance.onDemandUsed)
+            fields["onDemandCap"] = .double(allowance.onDemandCap)
+            fields["prepaidBalance"] = .double(allowance.prepaidBalance)
+        }
+        return .object(fields)
+    }
+}

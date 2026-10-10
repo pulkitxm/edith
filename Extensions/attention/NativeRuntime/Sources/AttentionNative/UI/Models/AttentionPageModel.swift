@@ -1,0 +1,818 @@
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
+import AppKit
+import ApplicationServices
+import Foundation
+import Observation
+
+enum AttentionPageSection: String, CaseIterable, Identifiable {
+    case overview
+    case timeline
+    case breakdown
+    case agents
+    case focus
+    case settings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overview: "Overview"
+        case .timeline: "Timeline"
+        case .breakdown: "Breakdown"
+        case .agents: "Agents"
+        case .focus: "Focus"
+        case .settings: "Settings"
+        }
+    }
+
+    var usesPeriod: Bool { self != .settings }
+
+    var part: AttentionSummaryPart {
+        switch self {
+        case .overview, .settings: .overview
+        case .timeline: .timeline
+        case .breakdown: .breakdown
+        case .agents: .agents
+        case .focus: .focus
+        }
+    }
+}
+
+@MainActor
+@Observable
+final class AttentionPageModel {
+    var section: AttentionPageSection = .overview {
+        didSet { if section != oldValue { ensurePart() } }
+    }
+    private(set) var period = AttentionPeriod()
+    private(set) var window = AttentionTimeWindow.all
+    var excludeIdleTime = true
+    var settings = AttentionSettings()
+    private(set) var summary: AttentionSummary
+    private(set) var dayRibbon: [AttentionRibbonBlock] = []
+    private(set) var timeline: [AttentionTimelineDay] = []
+    private(set) var triage: [AttentionEntity] = []
+    var focusSessions: [AttentionFocusSession] = []
+    var activeFocus: AttentionFocusSession?
+    var classifications = AttentionClassifications()
+    var browserConnected = false
+    var extensionInstalled = false
+    var message: String?
+    var errorMessage: String?
+    var selectedEntityID: String?
+    var breakdownDimension = AttentionDimension.entity {
+        didSet { if breakdownDimension != oldValue { refilterBreakdown() } }
+    }
+    var breakdownSort = AttentionBreakdownSort.time {
+        didSet { if breakdownSort != oldValue { refilterBreakdown() } }
+    }
+    private(set) var breakdown = AttentionBreakdownProjection()
+    let breakdownLoad = ContentLoad()
+    private(set) var levelFilter: AttentionProductivity?
+    private(set) var sphereFilter: AttentionSphere?
+    private(set) var categoryFilter: String?
+    private(set) var search = ""
+    var searchText = "" {
+        didSet { if searchText != oldValue { scheduleSearch() } }
+    }
+    let loading = ContentLoad()
+    var loaded: Bool { loading.hasContent }
+    var pending: Bool { loading.isRunning }
+    private(set) var hasStoredEvents = false
+    private(set) var transferringBackup = false
+    private(set) var categorizing = false
+
+    private let repository: AttentionRepository
+    let uiClient: AttentionUIClient?
+    private var uiStatus = AttentionUIStatus()
+    private var categorizeTask: Task<Void, Never>?
+    private var backupTask: Task<Void, Never>?
+    private var reloadTask: Task<Void, Never>?
+    private var loadedParts: Set<AttentionSummaryPart> = []
+    private var timelineTask: Task<Void, Never>?
+    private var breakdownTask: Task<Void, Never>?
+    private var searchTask: Task<Void, Never>?
+    private var settingsTask: Task<Void, Never>?
+
+    init(
+        repository: AttentionRepository = AttentionRepository(), uiClient: AttentionUIClient? = nil
+    ) {
+        self.uiClient = uiClient
+        self.repository = repository
+        let interval = AttentionPeriod().interval()
+        summary = AttentionSummary(from: interval.start, to: interval.end)
+        if uiClient?.available == false {
+            section = .settings
+            loading.setContent()
+        }
+    }
+
+    var needsSetup: Bool {
+        !settings.trackingEnabled && !settings.browserTrackingEnabled && !hasStoredEvents
+    }
+
+    var hasActivity: Bool {
+        !summary.categories.isEmpty || summary.idleDuration > 0 || !summary.agents.isEmpty
+    }
+
+    var refreshInterval: Duration {
+        guard period.isCurrent() else { return .seconds(900) }
+        if period.preset == .allTime { return .seconds(120) }
+        return period.isSingleDay ? .seconds(30) : .seconds(120)
+    }
+
+    var cloudBackup: AttentionUIStatus {
+        if uiClient != nil { return uiStatus }
+        let backup = AttentionCloudBackup()
+        return AttentionUIStatus(
+            backupAvailable: backup.available, lastBackupAt: backup.lastBackupAt)
+    }
+
+    func category(_ id: String) -> AttentionCategory { settings.category(id) }
+
+    func select(_ preset: AttentionRangePreset) {
+        setPeriod(AttentionPeriod(preset))
+    }
+
+    func selectRange(from: Date, to: Date) {
+        setPeriod(AttentionPeriod.custom(from: from, to: to))
+    }
+
+    func step(_ steps: Int) {
+        guard period.preset != .allTime else { return }
+        let next = period.shifted(by: steps)
+        guard next.start <= Date() else { return }
+        setPeriod(next)
+    }
+
+    func showToday() {
+        setPeriod(AttentionPeriod(.today))
+    }
+
+    var canStepBackward: Bool { period.preset != .allTime }
+    var canStepForward: Bool { period.preset != .allTime && !period.isCurrent() }
+
+    func setPeriod(_ next: AttentionPeriod) {
+        guard next != period else { return }
+        period = next
+        startLoading()
+    }
+
+    func setDays(_ weekdays: Set<Int>) {
+        setWindow(
+            AttentionTimeWindow(
+                weekdays: weekdays, startHour: window.startHour, endHour: window.endHour))
+    }
+
+    func toggleDay(_ weekday: Int) {
+        var days = window.allDays ? Set(1...7) : window.weekdays
+        if days.contains(weekday) { days.remove(weekday) } else { days.insert(weekday) }
+        guard !days.isEmpty else { return }
+        setDays(days)
+    }
+
+    func setHours(start: Int, end: Int) {
+        setWindow(AttentionTimeWindow(weekdays: window.weekdays, startHour: start, endHour: end))
+    }
+
+    func setWindow(_ next: AttentionTimeWindow) {
+        guard next != window else { return }
+        window = next
+        startLoading()
+    }
+
+    private func startLoading() {
+        loadedParts = []
+        reload()
+    }
+
+    private func ensurePart() {
+        guard loaded, !loadedParts.contains(section.part) else { return }
+        let retained = pending ? [] : loadedParts
+        reload(retaining: retained)
+    }
+
+    func reload(preserveSettings: Bool = false, retaining retained: Set<AttentionSummaryPart> = [])
+    {
+        reloadTask?.cancel()
+        let generation = loading.begin()
+        let repository = repository
+        let uiClient = uiClient
+        let period = period
+        let window = window
+        let parts: Set<AttentionSummaryPart> =
+            retained.isEmpty ? loadedParts.union([section.part]) : [section.part]
+        let publishedParts = retained.union(parts)
+        let knownSettings = settings
+        let knownClassifications = classifications
+        let current = summary
+        let filter = spanFilter
+        reloadTask = Task.detached { [weak self] in
+            do {
+                let state = try await AttentionPageModel.loadState(
+                    repository: repository, uiClient: uiClient, period: period, window: window,
+                    parts: parts,
+                    settings: preserveSettings ? knownSettings : nil, current: current,
+                    filter: filter, retaining: retained, knownSettings: knownSettings,
+                    knownClassifications: knownClassifications)
+                guard !Task.isCancelled else { return }
+                await self?.publish(
+                    state, parts: publishedParts, preserveSettings: preserveSettings,
+                    generation: generation)
+            } catch {
+                guard !Task.isCancelled else { return }
+                await self?.publishFailure(error.localizedDescription, generation: generation)
+            }
+        }
+    }
+
+    func waitForReload() async {
+        await reloadTask?.value
+        await timelineTask?.value
+        await breakdownTask?.value
+    }
+
+    func shutdown() async {
+        let pending = [
+            categorizeTask, backupTask, reloadTask, timelineTask, breakdownTask, searchTask,
+            settingsTask,
+        ].compactMap { $0 }
+        cancelLoading()
+        categorizeTask?.cancel(); categorizeTask = nil
+        backupTask?.cancel(); backupTask = nil
+        settingsTask?.cancel(); settingsTask = nil
+        for task in pending { task.cancel() }
+        for task in pending { await task.value }
+    }
+
+    func cancelLoading() {
+        reloadTask?.cancel()
+        reloadTask = nil
+        timelineTask?.cancel()
+        timelineTask = nil
+        searchTask?.cancel()
+        searchTask = nil
+        breakdownTask?.cancel()
+        breakdownTask = nil
+        breakdownLoad.cancel()
+        loading.cancel()
+    }
+
+    private func publish(
+        _ state: AttentionPageState, parts: Set<AttentionSummaryPart>, preserveSettings: Bool,
+        generation: UInt64
+    ) {
+        guard loading.isCurrent(generation) else { return }
+        reloadTask = nil
+        if !preserveSettings, settings != state.settings { settings = state.settings }
+        if let derived = state.derived {
+            summary = derived.summary
+            if period.preset == .allTime { period.start = summary.from }
+            dayRibbon = derived.dayRibbon
+            timeline = derived.timeline
+            triage = derived.triage
+        }
+        if activeFocus != state.activeFocus { activeFocus = state.activeFocus }
+        if focusSessions != state.focusSessions { focusSessions = state.focusSessions }
+        if classifications != state.classifications { classifications = state.classifications }
+        hasStoredEvents = state.hasStoredEvents
+        extensionInstalled = state.extensionInstalled
+        if let status = state.uiStatus {
+            uiStatus = status; browserConnected = status.browserConnected
+        }
+        loadedParts = parts
+        if state.derived != nil { refilterBreakdown() }
+        loading.complete(generation)
+        errorMessage = nil
+    }
+
+    private func publishFailure(_ message: String, generation: UInt64) {
+        guard loading.isCurrent(generation) else { return }
+        reloadTask = nil
+        errorMessage = message
+        loading.fail(generation, message: message)
+    }
+
+    nonisolated private static func loadState(
+        repository: AttentionRepository, uiClient: AttentionUIClient?, period: AttentionPeriod,
+        window: AttentionTimeWindow,
+        parts: Set<AttentionSummaryPart>, settings: AttentionSettings?,
+        current: AttentionSummary, filter: AttentionSpanFilter,
+        retaining retained: Set<AttentionSummaryPart>, knownSettings: AttentionSettings,
+        knownClassifications: AttentionClassifications
+    ) async throws -> AttentionPageState {
+        let interval =
+            retained.isEmpty
+            ? period.interval() : DateInterval(start: current.from, end: current.to)
+        let request = AttentionSummaryRequest(
+            from: interval.start, to: interval.end, settings: settings,
+            comparePeriod: period.comparePeriod, window: window, parts: parts,
+            allTime: period.preset == .allTime && retained.isEmpty)
+        var snapshot = try await Self.snapshot(request, repository: repository, uiClient: uiClient)
+        try Task.checkCancellation()
+        if !retained.isEmpty {
+            if snapshot.settings == knownSettings, snapshot.classifications == knownClassifications
+            {
+                snapshot.summary = snapshot.summary.preserving(
+                    retained, from: current, loading: parts)
+            } else {
+                snapshot = try await Self.snapshot(
+                    AttentionSummaryRequest(
+                        from: interval.start, to: interval.end, settings: settings,
+                        comparePeriod: period.comparePeriod, window: window,
+                        parts: retained.union(parts)),
+                    repository: repository, uiClient: uiClient)
+            }
+        }
+        try Task.checkCancellation()
+        let status = try await uiClient?.status()
+        let summary = snapshot.summary
+        let derived: AttentionPageDerivedState? =
+            summary == current && retained.isEmpty
+            ? nil
+            : AttentionPageDerivedState(
+                summary: summary,
+                dayRibbon: summary.to.timeIntervalSince(summary.from) <= 90_000
+                    ? AttentionPageDerived.dayRibbon(summary) : [],
+                timeline: retained.union(parts).contains(.timeline)
+                    ? AttentionPageDerived.timeline(summary, filter: filter) : [],
+                triage: triage(summary))
+        return AttentionPageState(
+            settings: snapshot.settings, derived: derived,
+            activeFocus: snapshot.activeFocus, focusSessions: snapshot.focusSessions,
+            classifications: snapshot.classifications,
+            hasStoredEvents: snapshot.hasStoredEvents,
+            extensionInstalled: status?.extensionInstalled
+                ?? FileManager.default.fileExists(
+                    atPath: AttentionExtensionInstaller.installedDirectory.path), uiStatus: status)
+    }
+
+    nonisolated private static func snapshot(
+        _ request: AttentionSummaryRequest, repository: AttentionRepository,
+        uiClient: AttentionUIClient?
+    ) async throws -> AttentionPageSnapshot {
+        if let uiClient { return try await uiClient.snapshot(request) }
+        if repository.resolvedEventSink is AttentionEventStore {
+            return try await AttentionBackgroundClient.summary(request)
+        } else {
+            return AttentionPageSnapshot(request: request, repository: repository)
+                .trimmed(to: request.parts)
+        }
+    }
+
+    var spanFilter: AttentionSpanFilter {
+        AttentionSpanFilter(
+            level: levelFilter, sphere: sphereFilter, category: categoryFilter, search: search)
+    }
+
+    private func refilterBreakdown() {
+        guard loadedParts.contains(.breakdown) else { return }
+        breakdownTask?.cancel()
+        let summary = summary
+        let dimension = breakdownDimension
+        let filter = spanFilter
+        let sort = breakdownSort
+        breakdownTask = Task { [weak self] in
+            guard let self else { return }
+            await self.breakdownLoad.perform(operation: {
+                AttentionBreakdownProjection(
+                    summary: summary, dimension: dimension, filter: filter, sort: sort)
+            }) { result in
+                self.breakdown = result
+            }
+        }
+    }
+
+    private func refilterTimeline() {
+        refilterBreakdown()
+        timelineTask?.cancel()
+        guard loadedParts.contains(.timeline) else { return }
+        let summary = summary
+        let filter = spanFilter
+        timelineTask = Task.detached(priority: .userInitiated) { [weak self] in
+            let days = AttentionPageDerived.timeline(summary, filter: filter)
+            guard !Task.isCancelled else { return }
+            await self?.publishTimeline(days, filter: filter)
+        }
+    }
+
+    private func publishTimeline(_ days: [AttentionTimelineDay], filter: AttentionSpanFilter) {
+        guard filter == spanFilter else { return }
+        timeline = days
+    }
+
+    private func scheduleSearch() {
+        searchTask?.cancel()
+        let text = searchText
+        searchTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, let self, self.searchText == text else { return }
+            self.search = text
+            self.refilterTimeline()
+        }
+    }
+
+    func saveSettings() {
+        if let uiClient {
+            guard uiClient.available, !uiClient.stopped else { return }
+            settings.normalizeCategories()
+            settingsTask?.cancel()
+            let next = settings
+            settingsTask = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                guard let self, !Task.isCancelled, !uiClient.stopped else { return }
+                do {
+                    let payload = try AttentionPayload.encode(next)
+                    uiClient.perform("attention.settings.set", payload: payload) {
+                        [weak self] result in
+                        do {
+                            _ = try result.get()
+                            self?.message = "Settings saved"; self?.errorMessage = nil
+                            self?.reload(preserveSettings: true)
+                        } catch { self?.errorMessage = error.localizedDescription }
+                    }
+                } catch { self.errorMessage = error.localizedDescription }
+            }
+            return
+        }
+        do {
+            settings.normalizeCategories()
+            try repository.saveSettings(settings)
+            IPC.post(IPC.Name.settingsChanged)
+            message = "Settings saved"
+            errorMessage = nil
+            reload()
+            Task { await checkBrowser() }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func completeSetup(applicationTracking: Bool, browserTracking: Bool) {
+        settings.isEnabled = applicationTracking || browserTracking
+        settings.trackingEnabled = applicationTracking
+        settings.browserTrackingEnabled = browserTracking
+        saveSettings()
+        section = .overview
+    }
+
+    func setAttentionEnabled(_ enabled: Bool) {
+        settings.isEnabled = enabled
+        saveSettings()
+    }
+
+    func installExtension() {
+        if uiClient != nil {
+            remote("attention.ui.extension.install", message: "Extension folder ready"); return
+        }
+        do {
+            try AttentionExtensionInstaller.reveal()
+            extensionInstalled = true
+            message = "Extension folder ready"
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func openChromeExtensions() {
+        if uiClient != nil { remote("attention.ui.extension.open"); return }
+        _ = AttentionExtensionInstaller.openExtensionsPage()
+    }
+
+    func copyToken() {
+        if uiClient != nil {
+            remote("attention.ui.token.copy", message: "Private token copied"); return
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(settings.serverToken, forType: .string)
+        message = "Private token copied"
+    }
+
+    func requestAccessibility() {
+        if uiClient != nil { remote("attention.ui.accessibility"); return }
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+    }
+
+    func startFocus(name: String, duration: TimeInterval) {
+        if uiClient != nil {
+            remote(
+                "attention.ui.focus.start",
+                value: AttentionFocusRequest(name: name, duration: duration));
+            return
+        }
+        do {
+            activeFocus = try AttentionFocusOperationExecution.start(
+                name: name, duration: duration, repository: repository)
+            errorMessage = nil
+            reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func stopFocus() {
+        if uiClient != nil { remote("attention.ui.focus.stop"); return }
+        do {
+            try AttentionFocusOperationExecution.stop(repository: repository)
+            activeFocus = nil
+            errorMessage = nil
+            reload()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func assign(entity: AttentionEntity, to categoryID: String) {
+        update(entity) { $0.assign(entityID: entity.id, categoryID: categoryID) }
+    }
+
+    func assign(entity: AttentionEntity, productivity: AttentionProductivity) {
+        update(entity) {
+            $0.assign(
+                entityID: entity.id, productivity: productivity,
+                fallbackCategoryID: entity.category.id)
+        }
+    }
+
+    func assign(entity: AttentionEntity, sphere: AttentionSphere) {
+        update(entity) {
+            $0.assign(entityID: entity.id, sphere: sphere, fallbackCategoryID: entity.category.id)
+        }
+    }
+
+    private func update(
+        _ entity: AttentionEntity,
+        _ change: (inout AttentionSettings) -> AttentionIdentityRule?
+    ) {
+        var next = settings
+        guard change(&next) != nil else { return }
+        settings = next
+        saveSettings()
+    }
+
+    func suggestion(for entity: AttentionEntity) -> AttentionJevDecision? {
+        guard entity.categorySource == .jev || entity.isUnclassified else { return nil }
+        if entity.categorySource == .jev, let confidence = entity.confidence {
+            return AttentionJevDecision(categoryID: entity.category.id, confidence: confidence)
+        }
+        return nil
+    }
+
+    var quickCategories: [AttentionCategory] { Self.quickCategories(settings) }
+
+    nonisolated static func triage(_ summary: AttentionSummary) -> [AttentionEntity] {
+        summary.entities.filter {
+            ($0.isUnclassified || $0.categorySource == .jev) && $0.duration >= 60
+        }
+    }
+
+    nonisolated static func quickCategories(_ settings: AttentionSettings) -> [AttentionCategory] {
+        var used: [String: Int] = [:]
+        for rule in settings.rules { used[rule.categoryID, default: 0] += 1 }
+        let candidates = settings.categories.filter { !$0.isUnclassified }
+        return candidates.sorted { (used[$0.id] ?? 0) > (used[$1.id] ?? 0) }
+    }
+
+    func categorizeNow() {
+        if let uiClient {
+            guard !categorizing else { return }
+            categorizing = true
+            uiClient.perform("attention.categorize") { [weak self] result in
+                self?.categorizing = false
+                do {
+                    let report = try AttentionPayload.decode(
+                        AttentionCategorizeReport.self, from: result.get())
+                    self?.message =
+                        report.available
+                        ? "Jev categorized \(report.entities) apps and sites and \(report.titles) titles"
+                        : "Add a Jev key in Settings to categorize automatically"
+                    self?.errorMessage = nil
+                    self?.reload()
+                } catch { self?.errorMessage = error.localizedDescription }
+            }
+            return
+        }
+        guard !categorizing else { return }
+        categorizing = true
+        categorizeTask = Task { [weak self] in
+            defer { self?.categorizing = false }
+            do {
+                let report = try await AttentionBackgroundClient.categorize()
+                if report.available {
+                    self?.message =
+                        "Jev categorized \(report.entities) apps and sites and \(report.titles) titles"
+                } else {
+                    self?.message = "Add a Jev key in Settings to categorize automatically"
+                }
+                self?.errorMessage = nil
+                self?.reload()
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func addCategory() {
+        settings.categories.append(
+            AttentionCategory(
+                id: "category-\(UUID().uuidString.lowercased())", name: "New category"))
+    }
+
+    func removeCategory(_ id: String) {
+        guard settings.categories.count > 1,
+            AttentionCatalog.categories.contains(where: { $0.id == id }) == false
+        else { return }
+        settings.categories.removeAll { $0.id == id }
+        for index in settings.rules.indices where settings.rules[index].categoryID == id {
+            settings.rules[index].categoryID = AttentionCatalog.unclassified
+        }
+    }
+
+    func addRule() {
+        settings.rules.insert(
+            AttentionIdentityRule(name: "New rule", categoryID: "focus"), at: 0)
+    }
+
+    func removeRule(_ id: String) {
+        settings.rules.removeAll { $0.id == id }
+    }
+
+    func backupNow() {
+        if uiClient != nil {
+            remoteBackup("attention.backup", message: "Attention data backed up to iCloud Drive");
+            return
+        }
+        guard !transferringBackup else { return }
+        transferringBackup = true
+        backupTask = Task { [weak self] in
+            defer { self?.transferringBackup = false }
+            do {
+                try await AttentionBackgroundClient.backup()
+                self?.message = "Attention data backed up to iCloud Drive"
+                self?.errorMessage = nil
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func restoreBackup() {
+        if uiClient != nil {
+            remoteBackup("attention.restore", message: "Attention backup restored"); return
+        }
+        guard !transferringBackup else { return }
+        transferringBackup = true
+        backupTask = Task { [weak self] in
+            defer { self?.transferringBackup = false }
+            do {
+                try await AttentionBackgroundClient.restore()
+                self?.message = "Attention backup restored"
+                self?.errorMessage = nil
+                self?.reload()
+            } catch {
+                self?.errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func checkBrowser() async {
+        if let uiClient {
+            do {
+                let status = try await uiClient.status()
+                guard !Task.isCancelled else { return }
+                uiStatus = status; browserConnected = status.browserConnected
+            } catch {}
+            return
+        }
+        guard settings.isEnabled, settings.browserTrackingEnabled else {
+            browserConnected = false
+            return
+        }
+        browserConnected = await AttentionIngestionServer.isHealthy(port: settings.serverPort)
+    }
+
+    private func remoteBackup(_ operation: String, message: String) {
+        guard !transferringBackup, let uiClient else { return }
+        transferringBackup = true
+        uiClient.perform(operation) { [weak self] result in
+            self?.transferringBackup = false
+            self?.receive(result, message: message)
+        }
+    }
+
+    private func remote(_ operation: String, message: String? = nil) {
+        uiClient?.perform(operation) { [weak self] result in self?.receive(result, message: message)
+        }
+    }
+
+    private func remote(_ operation: String, value: some Encodable, message: String? = nil) {
+        do {
+            let payload = try AttentionPayload.encode(value)
+            uiClient?.perform(operation, payload: payload) { [weak self] result in
+                self?.receive(result, message: message)
+            }
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func receive(_ result: Result<Data, Error>, message: String?) {
+        do { _ = try result.get(); self.message = message; errorMessage = nil; reload() } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func copyBreakdown() {
+        let interval = period.interval()
+        let request = AttentionUIBreakdownRequest(
+            summary: AttentionSummaryRequest(
+                from: interval.start, to: interval.end, window: window,
+                parts: [.breakdown], allTime: period.preset == .allTime),
+            dimension: breakdownDimension,
+            level: levelFilter, sphere: sphereFilter, category: categoryFilter, search: search,
+            sort: breakdownSort.rawValue)
+        remote(
+            "attention.ui.breakdown.copy", value: request,
+            message: "Copied \(breakdown.rows.count) rows")
+    }
+
+    func filter(category id: String?, navigate: Bool = true) {
+        clearSelection()
+        categoryFilter = id
+        refilterTimeline()
+        if navigate { section = .breakdown }
+    }
+
+    func toggle(level: AttentionProductivity) {
+        let active = levelFilter == level
+        clearSelection()
+        levelFilter = active ? nil : level
+        refilterTimeline()
+    }
+
+    func toggle(sphere: AttentionSphere) {
+        let active = sphereFilter == sphere
+        clearSelection()
+        sphereFilter = active ? nil : sphere
+        refilterTimeline()
+    }
+
+    func matches(
+        categories: [String: TimeInterval], levels: [String: TimeInterval],
+        spheres: [String: TimeInterval]
+    ) -> TimeInterval {
+        if let categoryFilter { return categories[categoryFilter] ?? 0 }
+        if let levelFilter { return levels[levelFilter.key] ?? 0 }
+        if let sphereFilter { return spheres[sphereFilter.rawValue] ?? 0 }
+        return Self.total(categories)
+    }
+
+    nonisolated static func total(_ values: [String: TimeInterval]) -> TimeInterval {
+        var total: TimeInterval = 0
+        for value in values.values { total += value }
+        return total
+    }
+
+    func matchesSearch(_ values: [String?]) -> Bool {
+        let query = search.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return true }
+        return values.contains { $0?.lowercased().contains(query) == true }
+    }
+
+    var hasFilters: Bool {
+        levelFilter != nil || sphereFilter != nil || categoryFilter != nil
+            || !search.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    func clearSelection() {
+        levelFilter = nil
+        sphereFilter = nil
+        categoryFilter = nil
+    }
+
+    func clearFilters() {
+        clearSelection()
+        searchTask?.cancel()
+        searchText = ""
+        search = ""
+        refilterTimeline()
+    }
+}
+
+private struct AttentionPageDerivedState: Sendable {
+    var summary: AttentionSummary
+    var dayRibbon: [AttentionRibbonBlock]
+    var timeline: [AttentionTimelineDay]
+    var triage: [AttentionEntity]
+}
+
+private struct AttentionPageState: Sendable {
+    var settings: AttentionSettings
+    var derived: AttentionPageDerivedState?
+    var activeFocus: AttentionFocusSession?
+    var focusSessions: [AttentionFocusSession]
+    var classifications: AttentionClassifications
+    var hasStoredEvents: Bool
+    var extensionInstalled: Bool
+    var uiStatus: AttentionUIStatus? = nil
+}

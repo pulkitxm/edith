@@ -1,0 +1,578 @@
+import AppKit
+import Darwin
+import Foundation
+
+@MainActor
+public final class ExtensionBundleRuntime {
+    public enum Role: String, CaseIterable, Sendable {
+        case app
+        case helper
+        case agent
+        case cli
+        case privileged
+    }
+
+    public struct Snapshot: Equatable, Sendable {
+        public let id: String
+        public let version: String
+        public let active: Bool
+        public let restartRequired: Bool
+    }
+
+    private final class Loaded {
+        let package: ExtensionPackage
+        let bundle: Bundle
+        let handle: UnsafeMutableRawPointer
+        let object: NSObject
+        let lease: PackageFileLock?
+        var active = false
+
+        init(
+            package: ExtensionPackage, bundle: Bundle, handle: UnsafeMutableRawPointer,
+            object: NSObject, lease: PackageFileLock?
+        ) {
+            self.package = package
+            self.bundle = bundle
+            self.handle = handle
+            self.object = object
+            self.lease = lease
+        }
+    }
+
+    public let store: ExtensionPackageStore
+    public let role: Role
+    public let hostABI: String
+    public let architecture: String
+    private let packageVersion: String?
+    private let verify: (URL) throws -> Void
+    private let readOnlyPackage: (package: ExtensionPackage, directory: URL)?
+    private var loaded: [String: Loaded] = [:]
+    private var rendererCallbacks = RendererCallbacks()
+    private var retainedImages: [(Bundle, UnsafeMutableRawPointer, PackageFileLock?)] = []
+    private var failedLoads = Set<String>()
+
+    public init(
+        store: ExtensionPackageStore, role: Role, hostABI: String, architecture: String = "arm64",
+        packageVersion: String? = nil, verify: @escaping (URL) throws -> Void
+    ) {
+        self.store = store
+        self.role = role
+        self.hostABI = hostABI
+        self.architecture = architecture
+        self.packageVersion = packageVersion
+        self.verify = verify
+        readOnlyPackage = nil
+    }
+
+    public init(
+        readOnlyPackage package: ExtensionPackage, directory: URL, role: Role,
+        hostABI: String, verify: @escaping (URL) throws -> Void
+    ) throws {
+        guard [.app, .helper, .agent].contains(role), package.hostABI == hostABI,
+            package.architecture == "arm64",
+            package.minimumSystemVersion
+                <= ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        else { throw MarketplaceError.invalidBundle }
+        store = ExtensionPackageStore(root: directory)
+        self.role = role
+        self.hostABI = hostABI
+        architecture = package.architecture
+        packageVersion = package.version
+        self.verify = verify
+        readOnlyPackage = (package, directory.resolvingSymlinksInPath())
+    }
+
+    public func start(id: String, context: NSDictionary) throws {
+        guard readOnlyPackage == nil else { throw MarketplaceError.invalidBundle }
+        let instance = try load(id: id)
+        guard !instance.active else { return }
+        if context["recoveryOnly"] as? Bool == true,
+            !instance.object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+        {
+            return
+        }
+        let response = try execute(instance, operation: "start", context: context)
+        guard response["ok"] as? Bool == true else {
+            _ = try? execute(instance, operation: "stop", context: [:])
+            throw MarketplaceError.invalidBundle
+        }
+        instance.active = true
+    }
+
+    public func synchronize(id: String, context: NSDictionary) throws {
+        guard let instance = loaded[id], instance.active else { return }
+        let response = try execute(instance, operation: "synchronize", context: context)
+        guard response["ok"] as? Bool == true else { throw MarketplaceError.invalidBundle }
+    }
+
+    public func stop(id: String) throws {
+        guard let instance = loaded[id], instance.active else { return }
+        let response = try execute(instance, operation: "stop", context: [:])
+        guard response["ok"] as? Bool == true else { throw MarketplaceError.invalidBundle }
+        instance.active = false
+    }
+
+    public func prepareDisableAll() async throws {
+        let selector = NSSelectorFromString("prepareDisableWithCompletion:")
+        for instance in loaded.values
+        where instance.active && instance.object.responds(to: selector) {
+            let completion = BundleCommandCompletion()
+            _ = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard completion.begin(continuation) else { return }
+                    typealias Prepare =
+                        @convention(c) (AnyObject, Selector, @convention(block) (NSError?) -> Void)
+                        -> Void
+                    let prepare = unsafeBitCast(
+                        instance.object.method(for: selector), to: Prepare.self)
+                    let callback: @convention(block) (NSError?) -> Void = { error in
+                        if let error {
+                            completion.finish(.failure(error))
+                        } else {
+                            completion.finish(.success(Data()))
+                        }
+                    }
+                    prepare(instance.object, selector, callback)
+                }
+            } onCancel: {
+                completion.finish(.failure(CancellationError()))
+            }
+        }
+    }
+
+    public func prepareToStopAll() async throws {
+        let selector = NSSelectorFromString("prepareToStopWithCompletion:")
+        for instance in loaded.values
+        where instance.active && instance.object.responds(to: selector) {
+            let completion = BundleCommandCompletion()
+            _ = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    guard completion.begin(continuation) else { return }
+                    typealias Prepare =
+                        @convention(c) (AnyObject, Selector, @convention(block) () -> Void) -> Void
+                    let prepare = unsafeBitCast(
+                        instance.object.method(for: selector), to: Prepare.self)
+                    let callback: @convention(block) () -> Void = {
+                        completion.finish(.success(Data()))
+                    }
+                    prepare(instance.object, selector, callback)
+                }
+            } onCancel: {
+                completion.finish(.failure(CancellationError()))
+            }
+        }
+    }
+
+    public func stopAll() throws {
+        var failure: Error?
+        for id in loaded.keys {
+            do { try stop(id: id) } catch { failure = error }
+        }
+        if let failure { throw failure }
+    }
+
+    public func response(id: String, operation: String, context: NSDictionary = [:]) throws
+        -> NSDictionary
+    {
+        if let selected = readOnlyPackage {
+            guard id == selected.package.id else { throw MarketplaceError.invalidBundle }
+            return try rendererCallbacks.response(
+                id: id, role: role, operation: operation, context: context,
+                execute: {
+                    try self.execute(self.load(id: id), operation: operation, context: context)
+                })
+        }
+        return try execute(load(id: id), operation: operation, context: context)
+    }
+
+    public func preparePresentationToClose(id: String, presentationID: UUID) async throws {
+        guard readOnlyPackage != nil, let instance = loaded[id] else { return }
+        try await Self.preparePresentationToClose(
+            object: instance.object, presentationID: presentationID)
+    }
+
+    static func preparePresentationToClose(object: NSObject, presentationID: UUID) async throws {
+        let selector = NSSelectorFromString("prepareUIToClose:completion:")
+        guard object.responds(to: selector) else { return }
+        let completion = BundleCommandCompletion()
+        try await withTaskCancellationHandler {
+            _ = try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                typealias Prepare =
+                    @convention(c) (
+                        AnyObject, Selector, NSString, @convention(block) (NSString?) -> Void
+                    ) -> Void
+                let prepare = unsafeBitCast(object.method(for: selector), to: Prepare.self)
+                let callback: @convention(block) (NSString?) -> Void = { error in
+                    completion.finish(
+                        error == nil ? .success(Data()) : .failure(MarketplaceError.invalidBundle))
+                }
+                prepare(object, selector, presentationID.uuidString as NSString, callback)
+            }
+        } onCancel: {
+            completion.finish(.failure(CancellationError()))
+        }
+    }
+
+    public func supportsCommands(id: String) -> Bool {
+        guard let instance = loaded[id], instance.active else { return false }
+        return instance.object.responds(to: NSSelectorFromString("invoke:completion:"))
+    }
+
+    public func command(id: String, token: UUID, command: String, payload: Data) async throws
+        -> Data
+    {
+        guard let instance = loaded[id], instance.active, supportsCommands(id: id) else {
+            throw MarketplaceError.invalidBundle
+        }
+        let completion = BundleCommandCompletion()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard completion.begin(continuation) else { return }
+                let selector = NSSelectorFromString("invoke:completion:")
+                typealias Invoke =
+                    @convention(c) (
+                        AnyObject, Selector, NSDictionary,
+                        @convention(block) (NSData?, NSString?) -> Void
+                    ) -> Void
+                let invoke = unsafeBitCast(instance.object.method(for: selector), to: Invoke.self)
+                let callback: @convention(block) (NSData?, NSString?) -> Void = {
+                    payload, message in
+                    if let payload {
+                        completion.finish(.success(payload as Data))
+                    } else {
+                        completion.finish(
+                            .failure(
+                                BundleCommandError.failed(
+                                    message as String? ?? "The extension command failed.")))
+                    }
+                }
+                invoke(
+                    instance.object, selector,
+                    ["token": token.uuidString, "command": command, "payload": payload]
+                        as NSDictionary, callback)
+            }
+        } onCancel: {
+            completion.finish(.failure(CancellationError()))
+            Task { @MainActor [weak self] in
+                _ = try? self?.response(
+                    id: id, operation: "cancelCommand", context: ["token": token.uuidString])
+            }
+        }
+    }
+
+    public func nativeTask(id: String, payload: Data) throws -> Int32 {
+        guard readOnlyPackage == nil, role == .app, !payload.isEmpty, payload.count <= 65_536 else {
+            throw MarketplaceError.invalidBundle
+        }
+        let instance = try load(id: id)
+        guard let symbol = dlsym(instance.handle, "edith_extension_native_task") else {
+            throw MarketplaceError.invalidBundle
+        }
+        typealias Entry = @convention(c) (UnsafePointer<UInt8>?, Int32) -> Int32
+        let entry = unsafeBitCast(symbol, to: Entry.self)
+        return payload.withUnsafeBytes { bytes in
+            entry(bytes.bindMemory(to: UInt8.self).baseAddress, Int32(bytes.count))
+        }
+    }
+
+    public func snapshot(id: String) throws -> Snapshot? {
+        guard let instance = loaded[id] else { return nil }
+        let installed =
+            try readOnlyPackage?.package
+            ?? store.installedPackage(id: id, hostABI: hostABI, architecture: architecture)
+        return Snapshot(
+            id: id, version: instance.package.version, active: instance.active,
+            restartRequired: installed != instance.package)
+    }
+
+    public func viewController(id: String, context: NSDictionary) throws -> NSViewController? {
+        let instance = try load(id: id)
+        let input = NSMutableDictionary(dictionary: context)
+        input["operation"] = "view"
+        return instance.object.perform(NSSelectorFromString("execute:"), with: input)?
+            .takeUnretainedValue() as? NSViewController
+    }
+
+    public func presentation(
+        id: String, context: NSDictionary, compact: Bool, visible: Bool, width: Double,
+        intrinsic: Bool
+    ) throws -> ExtensionBundlePresentation? {
+        let instance = try load(id: id)
+        guard let symbol = dlsym(instance.handle, "edith_extension_presentation_create") else {
+            throw MarketplaceError.invalidBundle
+        }
+        typealias Create = @convention(c) () -> UnsafeMutableRawPointer?
+        let create = unsafeBitCast(symbol, to: Create.self)
+        guard let pointer = create() else { throw MarketplaceError.invalidBundle }
+        let presentation = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        var failure: Error?
+        let factory: @convention(block) () -> NSViewController? = {
+            do { return try self.viewController(id: id, context: context) } catch {
+                failure = error; return nil
+            }
+        }
+        let result = try ExtensionBundlePresentation.make(
+            context: presentation,
+            input: [
+                "compact": compact, "visible": visible, "width": width,
+                "intrinsic": intrinsic,
+            ], factory: factory)
+        if let failure { throw failure }
+        return result
+    }
+
+    struct RendererCallbacks {
+        private struct Binding: Equatable {
+            let owner: String
+            let location: String
+            let target: String?
+            let token: String?
+        }
+        private struct Event: Decodable {
+            let version: Int
+            let presentationID: UUID
+            let sequence: UInt64
+            let active: Bool
+            let key: Bool
+            let visible: Bool
+            let action: String?
+        }
+        private var bindings: [UUID: Binding] = [:]
+        private var sequences: [UUID: UInt64] = [:]
+
+        mutating func response(
+            id: String, role: Role, operation: String, context: NSDictionary,
+            execute: () throws -> NSDictionary
+        ) throws -> NSDictionary {
+            switch operation {
+            case "describe": return try execute()
+            case "configureUI":
+                if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID), let binding = bindings[presentation]
+                {
+                    guard binding.owner == id, role == .app,
+                        context["remoteUI"] as? Bool == true, context["uiOnly"] as? Bool == false,
+                        context["extensionID"] as? String == id,
+                        context["engineClient"] as? NSObject != nil,
+                        context["location"] as? String == binding.location,
+                        context["target"] as? String == binding.target,
+                        context["herdrPresentationToken"] as? String == binding.token
+                    else { throw MarketplaceError.invalidBundle }
+                }
+                let result = try execute()
+                if result["ok"] as? Bool == true,
+                    role == .app, context["remoteUI"] as? Bool == true,
+                    context["uiOnly"] as? Bool == false,
+                    context["extensionID"] as? String == id,
+                    context["engineClient"] as? NSObject != nil,
+                    let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID),
+                    let location = context["location"] as? String, Self.accepts(id, location)
+                {
+                    let binding = Binding(
+                        owner: id, location: location, target: context["target"] as? String,
+                        token: context["herdrPresentationToken"] as? String)
+                    if location.hasPrefix("herdr.") {
+                        guard let target = binding.target, !target.isEmpty,
+                            target.utf8.count <= 4096,
+                            !target.utf8.contains(0), let token = binding.token,
+                            UUID(uuidString: token) != nil
+                        else { throw MarketplaceError.invalidBundle }
+                    }
+                    guard bindings.count < 64 || bindings[presentation] != nil,
+                        bindings[presentation].map({ $0 == binding }) ?? true
+                    else { throw MarketplaceError.invalidBundle }
+                    bindings[presentation] = binding
+                } else if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID)
+                {
+                    bindings[presentation] = nil
+                }
+                return result
+            case "releaseUI":
+                if let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID)
+                {
+                    bindings[presentation] = nil; sequences[presentation] = nil
+                }
+                return try execute()
+            case "stopUI":
+                bindings.removeAll(); sequences.removeAll()
+                return try execute()
+            case "terminalUI", "terminalUIStatus":
+                guard role == .app, let rawID = context["presentationID"] as? String,
+                    let presentation = UUID(uuidString: rawID),
+                    let binding = bindings[presentation],
+                    binding.owner == id, Self.accepts(id, binding.location)
+                else { throw MarketplaceError.invalidBundle }
+                if operation == "terminalUIStatus" {
+                    guard Set(context.allKeys.compactMap { $0 as? String }) == ["presentationID"]
+                    else { throw MarketplaceError.invalidBundle }
+                } else {
+                    guard
+                        Set(context.allKeys.compactMap { $0 as? String }) == [
+                            "presentationID", "payload",
+                        ],
+                        let data = context["payload"] as? Data, !data.isEmpty, data.count <= 1024,
+                        let fields = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                        Set(fields.keys).isSubset(of: [
+                            "version", "presentationID", "sequence", "active", "key", "visible",
+                            "action",
+                        ])
+                    else { throw MarketplaceError.invalidBundle }
+                    let event = try JSONDecoder().decode(Event.self, from: data)
+                    guard event.version == 1, event.presentationID == presentation,
+                        event.sequence > (sequences[presentation] ?? 0),
+                        event.action.map({
+                            [
+                                "fontZoomIn", "fontZoomOut", "fontZoomReset", "newTab", "closeTab",
+                                "nextTab", "previousTab", "windowClosed",
+                            ].contains($0)
+                        }) ?? true
+                    else { throw MarketplaceError.invalidBundle }
+                    sequences[presentation] = event.sequence
+                }
+                return try execute()
+            default: throw MarketplaceError.invalidBundle
+            }
+        }
+
+        private static func accepts(_ id: String, _ location: String) -> Bool {
+            switch (id, location) {
+            case ("terminal", "main"), ("herdr", "main"), ("herdr", "herdr.agent"),
+                ("herdr", "herdr.space"), ("quinjet", "main"):
+                true
+            default: false
+            }
+        }
+    }
+
+    private func load(id: String) throws -> Loaded {
+        if readOnlyPackage == nil {
+            guard try !store.pendingRemovals().contains(id) else {
+                throw MarketplaceError.packageBusy
+            }
+        }
+        if let instance = loaded[id] { return instance }
+        guard !failedLoads.contains(id) else { throw MarketplaceError.invalidBundle }
+        let package: ExtensionPackage
+        let directory: URL
+        let lease: PackageFileLock?
+        if let selected = readOnlyPackage {
+            guard selected.package.id == id else { throw MarketplaceError.invalidBundle }
+            package = selected.package
+            directory = selected.directory
+            lease = nil
+        } else {
+            guard
+                let installed = try store.installedPackage(
+                    id: id, hostABI: hostABI, architecture: architecture, version: packageVersion)
+            else { throw MarketplaceError.packageNotInstalled }
+            package = installed
+            directory = store.directory(for: package)
+            lease = try store.lease(package)
+        }
+        let url =
+            readOnlyPackage == nil
+            ? store.roleBundle(for: package, role: role)
+            : directory.appendingPathComponent(id).appendingPathComponent("\(role.rawValue).bundle")
+        try verify(url)
+        guard let bundle = Bundle(url: url), let executable = bundle.executableURL else {
+            throw MarketplaceError.invalidBundle
+        }
+        guard bundle.bundleIdentifier == "com.pulkit.edith.extensions.\(id).\(role.rawValue)",
+            bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                == package.version,
+            bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String == hostABI
+        else { throw MarketplaceError.invalidBundle }
+        try bundle.loadAndReturnError()
+        guard let handle = dlopen(executable.path, RTLD_NOW | RTLD_LOCAL) else {
+            throw MarketplaceError.invalidBundle
+        }
+        retainedImages.append((bundle, handle, lease))
+        failedLoads.insert(id)
+        guard let entrypoint = dlsym(handle, "edith_extension_create") else {
+            throw MarketplaceError.invalidBundle
+        }
+        typealias Factory = @convention(c) () -> UnsafeMutableRawPointer?
+        let factory = unsafeBitCast(entrypoint, to: Factory.self)
+        guard let pointer = factory() else {
+            throw MarketplaceError.invalidBundle
+        }
+        let object = Unmanaged<NSObject>.fromOpaque(pointer).takeRetainedValue()
+        guard object.responds(to: NSSelectorFromString("execute:")) else {
+            throw MarketplaceError.invalidBundle
+        }
+        let privileged =
+            readOnlyPackage == nil
+            ? store.roleBundle(for: package, role: .privileged)
+            : directory.appendingPathComponent(id).appendingPathComponent("privileged.bundle")
+        guard
+            readOnlyPackage != nil || !FileManager.default.fileExists(atPath: privileged.path)
+                || object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
+        else { throw MarketplaceError.invalidBundle }
+        let instance = Loaded(
+            package: package, bundle: bundle, handle: handle, object: object, lease: lease)
+        let description = try execute(instance, operation: "describe", context: [:])
+        guard description["id"] as? String == id,
+            description["version"] as? String == package.version,
+            description["hostABI"] as? String == hostABI,
+            description["role"] as? String == role.rawValue
+        else {
+            throw MarketplaceError.invalidBundle
+        }
+        failedLoads.remove(id)
+        loaded[id] = instance
+        return instance
+    }
+
+    private func execute(_ instance: Loaded, operation: String, context: NSDictionary) throws
+        -> NSDictionary
+    {
+        let input = NSMutableDictionary(dictionary: context)
+        input["operation"] = operation
+        guard
+            let result = instance.object.perform(NSSelectorFromString("execute:"), with: input)?
+                .takeUnretainedValue() as? NSDictionary
+        else {
+            throw MarketplaceError.invalidBundle
+        }
+        return result
+    }
+}
+
+private enum BundleCommandError: LocalizedError {
+    case failed(String)
+    var errorDescription: String? {
+        switch self {
+        case let .failed(message): message
+        }
+    }
+}
+
+private final class BundleCommandCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Data, any Error>?
+    private var result: Result<Data, any Error>?
+
+    func begin(_ continuation: CheckedContinuation<Data, any Error>) -> Bool {
+        let completedResult = lock.withLock { () -> Result<Data, any Error>? in
+            if let result = self.result { return result }
+            self.continuation = continuation
+            return nil
+        }
+        if let completedResult { continuation.resume(with: completedResult); return false }
+        return true
+    }
+
+    func finish(_ result: Result<Data, any Error>) {
+        let continuation = lock.withLock { () -> CheckedContinuation<Data, any Error>? in
+            guard self.result == nil else { return nil }
+            self.result = result
+            defer { self.continuation = nil }
+            return self.continuation
+        }
+        continuation?.resume(with: result)
+    }
+}

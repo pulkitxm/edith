@@ -1,0 +1,502 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
+
+@MainActor
+final class LimitsStatusItem {
+    nonisolated(unsafe) static private(set) weak var button: NSStatusBarButton?
+
+    private let panel = StatusItemPanel()
+    private weak var store: UsageStore?
+    private var item: NSStatusItem?
+    private var stackedView: StackedLimitsView?
+
+    init(store: UsageStore) {
+        self.store = store
+        showUnavailable()
+    }
+
+    func remove() {
+        panel.close()
+        if let item { NSStatusBar.system.removeStatusItem(item) }
+        item = nil
+        stackedView = nil
+        Self.button = nil
+    }
+
+    @objc private func clicked() {
+        guard let item else { return }
+        StatusItemMenu.handleClick(on: item) {
+            if let store {
+                panel.show(
+                    from: item, title: "Rate Limits",
+                    actions: [
+                        .init(
+                            title: store.refreshingLimits ? "Refreshing…" : "Refresh",
+                            enabled: !store.refreshingLimits
+                        ) {
+                            Task { await store.refreshLimits(force: true) }
+                        },
+                        .init(title: "Open Usage…") { ExtensionPresentation.showWindow() },
+                    ]
+                ) {
+                    LimitsMenuPanel(store: store)
+                }
+            }
+        }
+    }
+
+    func update(_ providers: [ProviderLimits]) {
+        let defaults = SharedDefaults.store
+        let masked =
+            UsagePresenterState.shared.active
+            && (defaults.object(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+                as? Bool ?? false)
+        let source = Self.stableProviders(providers, defaults: defaults)
+        let groups = MenuBarLimits.groups(
+            providers: source,
+            selection: { MenuBarLimits.selection(for: $0, defaults: defaults) },
+            masked: masked)
+        guard !groups.isEmpty else {
+            item?.isVisible = false
+            return
+        }
+        switch MenuBarLimits.style(defaults) {
+        case .stacked: renderStacked(groups)
+        case .tagged: renderTagged(groups)
+        case .slash: renderSlash(groups)
+        }
+        item?.isVisible = true
+    }
+
+    func showUnavailable() { update([]) }
+
+    private func setTitle(_ title: NSAttributedString) {
+        ensureStatusItem(length: StatusItemSizing.titleLength(title))
+        stackedView?.removeFromSuperview()
+        stackedView = nil
+        item?.button?.attributedTitle = title
+    }
+
+    private func renderTagged(_ groups: [MenuBarProviderGroup]) {
+        setTitle(taggedTitle(groups))
+    }
+
+    private func taggedTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
+        let multi = groups.count > 1
+        let title = NSMutableAttributedString()
+        for (index, group) in groups.enumerated() {
+            if index > 0 { title.append(NSAttributedString(string: "   ")) }
+            if showsLogo(group.provider, multi: multi) { appendLogo(group.provider, into: title) }
+            for (segmentIndex, segment) in group.segments.enumerated() {
+                if segmentIndex > 0 { title.append(NSAttributedString(string: "  ")) }
+                appendLabel(
+                    segment.slot.menuBarLabel(for: group.provider, period: segment.window?.period)
+                        + " ",
+                    into: title)
+                appendValue(segment, provider: group.provider, percentSuffix: !multi, into: title)
+            }
+        }
+        return title
+    }
+
+    private func renderSlash(_ groups: [MenuBarProviderGroup]) {
+        setTitle(slashTitle(groups))
+    }
+
+    private func slashTitle(_ groups: [MenuBarProviderGroup]) -> NSAttributedString {
+        let title = NSMutableAttributedString()
+        let separatorColor = (subColor ?? NSColor.labelColor)
+            .withAlphaComponent(0.65)
+        for (index, group) in groups.enumerated() {
+            if index > 0 { title.append(NSAttributedString(string: "   ")) }
+            appendLogo(group.provider, into: title)
+            for (segmentIndex, segment) in group.segments.enumerated() {
+                if segmentIndex > 0 {
+                    title.append(
+                        NSAttributedString(
+                            string: "/",
+                            attributes: [
+                                .font: NSFont.monospacedDigitSystemFont(
+                                    ofSize: 11, weight: .medium),
+                                .foregroundColor: separatorColor,
+                            ]))
+                }
+                appendValue(segment, provider: group.provider, percentSuffix: false, into: title)
+            }
+        }
+        return title
+    }
+
+    private func renderStacked(_ groups: [MenuBarProviderGroup]) {
+        let renderedGroups = stackedGroups(groups)
+        let view = stackedView ?? StackedLimitsView()
+        view.groups = renderedGroups
+        let width = view.desiredWidth
+        ensureStatusItem(length: width)
+        guard let button = item?.button else { return }
+        button.attributedTitle = NSAttributedString(
+            string: " ", attributes: [.foregroundColor: NSColor.clear])
+        if stackedView == nil, let button = item?.button {
+            view.autoresizingMask = [.width, .height]
+            button.addSubview(view)
+            stackedView = view
+        }
+        view.frame = NSRect(
+            x: 0, y: 0, width: width,
+            height: max(button.bounds.height, NSStatusBar.system.thickness))
+        view.needsDisplay = true
+    }
+
+    private func ensureStatusItem(length: CGFloat) {
+        if let item {
+            item.length = length
+            return
+        }
+        let next = NSStatusBar.system.statusItem(withLength: length)
+        StatusItemMenu.attach(to: next, target: self, action: #selector(clicked))
+        item = next
+        Self.button = next.button
+    }
+
+    static func stableProviders(
+        _ providers: [ProviderLimits], defaults: UserDefaults
+    ) -> [ProviderLimits] {
+        var available: [LimitProvider: ProviderLimits] = [:]
+        for provider in providers.prefix(LimitProvider.allCases.count) {
+            available[provider.provider] = provider
+        }
+        let enabled = UsageStore.enabledLimitProviders(
+            claude: defaults.object(forKey: AppStorageKeys.Limits.claudeEnabled) as? Bool ?? true,
+            codex: defaults.object(forKey: AppStorageKeys.Limits.codexEnabled) as? Bool ?? true,
+            cursor: defaults.object(forKey: AppStorageKeys.Limits.cursorEnabled) as? Bool ?? true,
+            grok: defaults.object(forKey: AppStorageKeys.Limits.grokEnabled) as? Bool ?? true)
+        var stable: [ProviderLimits] = []
+        stable.reserveCapacity(enabled.count)
+        for provider in enabled.prefix(LimitProvider.allCases.count) {
+            stable.append(
+                available[provider]
+                    ?? ProviderLimits(provider: provider, session: nil, week: nil))
+        }
+        return stable
+    }
+
+    private func showsLogo(_ provider: LimitProvider, multi: Bool) -> Bool {
+        multi || provider == .cursor || provider == .grok
+    }
+
+    private func stackedGroups(_ groups: [MenuBarProviderGroup]) -> [StackedLimitsView.Group] {
+        let multi = groups.count > 1
+        return groups.map { stackedGroup($0, multi: multi) }
+    }
+
+    private func stackedGroup(
+        _ group: MenuBarProviderGroup, multi: Bool
+    ) -> StackedLimitsView.Group {
+        let logoColor = subColor ?? NSColor.labelColor
+        let labelColor = subColor ?? NSColor.secondaryLabelColor
+        let dimColor = subColor ?? NSColor.tertiaryLabelColor
+        let showsLogo = showsLogo(group.provider, multi: multi)
+        var columns: [StackedLimitsView.Column] = []
+        columns.reserveCapacity(group.segments.count)
+        for segment in group.segments {
+            let value: String
+            let color: NSColor
+            switch segment.value {
+            case .masked:
+                value = "·"
+                color = dimColor
+            case .missing:
+                value = "\u{2013}"
+                color = dimColor
+            case .percent(let percent):
+                value = "\(percent)"
+                color =
+                    segment.window.map {
+                        self.color(
+                            for: $0,
+                            duration: segment.slot.pacingDuration(
+                                for: group.provider, period: $0.period))
+                    }
+                    ?? dimColor
+            }
+            columns.append(
+                StackedLimitsView.Column(
+                    label: segment.slot.menuBarLabel(
+                        for: group.provider, period: segment.window?.period), value: value,
+                    valueColor: color,
+                    labelColor: labelColor))
+        }
+        return StackedLimitsView.Group(
+            logo: showsLogo ? ProviderLogo.tintedImage(group.provider, color: logoColor) : nil,
+            columns: columns)
+    }
+
+    private func appendLogo(_ provider: LimitProvider, into out: NSMutableAttributedString) {
+        let textColor = subColor ?? NSColor.labelColor
+        guard let image = ProviderLogo.tintedImage(provider, color: textColor) else { return }
+        let attachment = NSTextAttachment()
+        attachment.image = image
+        attachment.bounds = NSRect(x: 0, y: -2, width: 13, height: 13)
+        out.append(NSAttributedString(attachment: attachment))
+        out.append(NSAttributedString(string: " "))
+    }
+
+    private func appendLabel(_ label: String, into out: NSMutableAttributedString) {
+        out.append(
+            NSAttributedString(
+                string: label,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 9, weight: .bold),
+                    .foregroundColor: subColor ?? NSColor.secondaryLabelColor,
+                    .baselineOffset: 1.5,
+                ]))
+    }
+
+    private func appendValue(
+        _ segment: MenuBarLimitSegment, provider: LimitProvider, percentSuffix: Bool,
+        into out: NSMutableAttributedString
+    ) {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
+        let dimColor = subColor ?? NSColor.tertiaryLabelColor
+        switch segment.value {
+        case .masked:
+            out.append(
+                NSAttributedString(
+                    string: "·", attributes: [.font: font, .foregroundColor: dimColor]))
+        case .missing:
+            out.append(
+                NSAttributedString(
+                    string: "\u{2013}", attributes: [.font: font, .foregroundColor: dimColor]))
+        case .percent(let percent):
+            let tint =
+                segment.window.map {
+                    color(
+                        for: $0,
+                        duration: segment.slot.pacingDuration(for: provider, period: $0.period))
+                }
+                ?? dimColor
+            out.append(
+                NSAttributedString(
+                    string: "\(percent)", attributes: [.font: font, .foregroundColor: tint]))
+            if percentSuffix {
+                out.append(
+                    NSAttributedString(
+                        string: "%",
+                        attributes: [
+                            .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold),
+                            .foregroundColor: tint.withAlphaComponent(0.75),
+                        ]))
+            }
+        }
+    }
+
+    private func color(for window: LimitWindow, duration: TimeInterval) -> NSColor {
+        let d = SharedDefaults.store
+        if d.object(forKey: AppStorageKeys.General.smartColor) as? Bool ?? true {
+            let risk = LimitMath.smartRisk(
+                utilization: window.percent, resetsAt: window.resetsAt,
+                windowDuration: duration,
+                pacingMargin: d.object(forKey: AppStorageKeys.Limits.pacingMargin) as? Double ?? 10)
+            return Self.color(forRisk: risk, low: lowColor, mid: midColor, high: highColor)
+        }
+        switch UsageLevel.from(pct: window.percent, thresholds: .fromDefaults(d)) {
+        case .green: return lowColor
+        case .orange: return midColor
+        case .red: return highColor
+        }
+    }
+
+    private var mode: MenuBarTintMode {
+        MenuBarTintMode(
+            preference: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.colorMode))
+    }
+
+    private var subColor: NSColor? {
+        switch mode {
+        case .automatic:
+            return nil
+        case .custom:
+            return Self.nsColor(
+                hex: SharedDefaults.store.string(forKey: AppStorageKeys.MenuBar.subColorHex))
+        }
+    }
+
+    private func anchor(_ key: String, _ fallback: NSColor) -> NSColor {
+        guard mode == .custom else { return fallback }
+        return Self.nsColor(hex: SharedDefaults.store.string(forKey: key)) ?? fallback
+    }
+
+    private var lowColor: NSColor { anchor(AppStorageKeys.MenuBar.lowColorHex, .systemGreen) }
+    private var midColor: NSColor { anchor(AppStorageKeys.MenuBar.midColorHex, .systemOrange) }
+    private var highColor: NSColor { anchor(AppStorageKeys.MenuBar.highColorHex, .systemRed) }
+
+    static func color(
+        forRisk risk: Double, low: NSColor = .systemGreen, mid: NSColor = .systemOrange,
+        high: NSColor = .systemRed
+    ) -> NSColor {
+        let r = max(0, min(1, risk))
+        if r <= 0.30 { return low }
+        if r >= 0.85 { return high }
+        if r <= 0.55 { return interpolateHSB(low, mid, t: (r - 0.30) / 0.25) }
+        return interpolateHSB(mid, high, t: (r - 0.55) / 0.30)
+    }
+
+    static func nsColor(hex: String?) -> NSColor? {
+        guard var s = hex else { return nil }
+        if s.hasPrefix("#") { s.removeFirst() }
+        guard s.count == 6, let v = UInt64(s, radix: 16) else { return nil }
+        return NSColor(
+            srgbRed: CGFloat((v >> 16) & 0xff) / 255,
+            green: CGFloat((v >> 8) & 0xff) / 255,
+            blue: CGFloat(v & 0xff) / 255, alpha: 1)
+    }
+
+    private static func interpolateHSB(_ a: NSColor, _ b: NSColor, t: Double) -> NSColor {
+        let f = CGFloat(max(0, min(1, t)))
+        guard let x = a.usingColorSpace(.sRGB), let y = b.usingColorSpace(.sRGB) else { return a }
+        let dh = y.hueComponent - x.hueComponent
+        let h: CGFloat
+        if abs(dh) <= 0.5 {
+            h = (x.hueComponent + dh * f + 1).truncatingRemainder(dividingBy: 1)
+        } else if dh > 0.5 {
+            h = (x.hueComponent + (dh - 1) * f + 1).truncatingRemainder(dividingBy: 1)
+        } else {
+            h = (x.hueComponent + (dh + 1) * f + 1).truncatingRemainder(dividingBy: 1)
+        }
+        return NSColor(
+            hue: h,
+            saturation: x.saturationComponent + (y.saturationComponent - x.saturationComponent) * f,
+            brightness: x.brightnessComponent + (y.brightnessComponent - x.brightnessComponent) * f,
+            alpha: 1)
+    }
+}
+
+final class StackedLimitsView: NSView {
+    struct Column {
+        let label: String
+        let value: String
+        let valueColor: NSColor
+        let labelColor: NSColor
+    }
+
+    struct Group {
+        let logo: NSImage?
+        let columns: [Column]
+    }
+
+    var groups: [Group] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    private static let labelFont = NSFont.systemFont(ofSize: 7, weight: .bold)
+    private static let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+    private static let edgeInset: CGFloat = 5
+    private static let columnGap: CGFloat = 7
+    private static let groupGap: CGFloat = 12
+    private static let logoSize: CGFloat = 12
+    private static let logoGap: CGFloat = 4
+    private static let rowGap: CGFloat = 1
+
+    var desiredWidth: CGFloat {
+        var width = Self.edgeInset * 2
+        for (index, group) in groups.enumerated() {
+            if index > 0 { width += Self.groupGap }
+            if group.logo != nil { width += Self.logoSize + Self.logoGap }
+            for (columnIndex, column) in group.columns.enumerated() {
+                if columnIndex > 0 { width += Self.columnGap }
+                width += Self.columnWidth(column)
+            }
+        }
+        return width.rounded(.up)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let labelHeight = Self.labelFont.capHeight + 2
+        let valueHeight = ceil(Self.valueFont.ascender - Self.valueFont.descender)
+        let blockHeight = labelHeight + Self.rowGap + valueHeight
+        let blockTop = (bounds.height + blockHeight) / 2
+        var x = Self.edgeInset
+        for (index, group) in groups.enumerated() {
+            if index > 0 { x += Self.groupGap }
+            if let logo = group.logo {
+                let y = (bounds.height - Self.logoSize) / 2
+                logo.draw(
+                    in: NSRect(x: x, y: y, width: Self.logoSize, height: Self.logoSize),
+                    from: .zero, operation: .sourceOver, fraction: 1)
+                x += Self.logoSize + Self.logoGap
+            }
+            for (columnIndex, column) in group.columns.enumerated() {
+                if columnIndex > 0 { x += Self.columnGap }
+                let width = Self.columnWidth(column)
+                let label = Self.attributed(
+                    column.label, font: Self.labelFont, color: column.labelColor)
+                let value = Self.attributed(
+                    column.value, font: Self.valueFont, color: column.valueColor)
+                let labelX = x + (width - label.size().width) / 2
+                let valueX = x + (width - value.size().width) / 2
+                label.draw(at: NSPoint(x: labelX, y: blockTop - labelHeight))
+                value.draw(
+                    at: NSPoint(
+                        x: valueX, y: blockTop - labelHeight - Self.rowGap - valueHeight))
+                x += width
+            }
+        }
+    }
+
+    private static func columnWidth(_ column: Column) -> CGFloat {
+        let label = attributed(column.label, font: labelFont, color: .labelColor).size().width
+        let value = attributed(column.value, font: valueFont, color: .labelColor).size().width
+        return ceil(max(label, value))
+    }
+
+    private static func attributed(
+        _ text: String, font: NSFont, color: NSColor
+    ) -> NSAttributedString {
+        NSAttributedString(
+            string: text, attributes: [.font: font, .foregroundColor: color])
+    }
+}
+
+struct LimitsMenuPanel: View {
+    let store: UsageStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if UsagePresenterState.shared.active
+                && SharedDefaults.store.bool(forKey: AppStorageKeys.Presenter.hideMenuBarNumbers)
+            {
+                Text("Usage hidden during presentation").foregroundStyle(.secondary)
+            } else {
+                ForEach(store.enabledProviders) { provider in
+                    let limits = store.limits(for: provider)
+                    Text(provider.label).font(.edithText(.headline))
+                    let slots = MenuBarLimits.slots(for: provider).filter { slot in
+                        slot != .fable || limits.window(for: slot) != nil
+                    }
+                    ForEach(slots, id: \.self) { slot in
+                        let window = limits.window(for: slot)
+                        StatusProgressRow(
+                            title: slot.title(for: provider), percent: window?.percent,
+                            resetsAt: window?.resetsAt)
+                    }
+                }
+            }
+            if let error = store.limitsError {
+                Text(error).font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+            if let updated = store.limitsUpdatedAt {
+                Text("Updated \(updated, style: .relative) ago")
+                    .font(.edithText(.caption)).foregroundStyle(.secondary)
+            }
+        }
+    }
+}

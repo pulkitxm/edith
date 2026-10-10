@@ -1,0 +1,333 @@
+import EdithExtensionUI
+import EdithExtensionSupport
+import Foundation
+import Testing
+@testable import StudioExtension
+
+@Suite @MainActor struct VideoEditorOpenBridgeTests {
+    private func fixture() throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        var project = VideoProject.create(title: "Synthetic launch")
+        let url = root.appendingPathComponent("sample.openscreen")
+        try project.save(to: url)
+        return url
+    }
+
+    private func waitUntil(_ ready: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !ready(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(ready())
+    }
+
+    @Test func ownedOpenCompletesOnlyAfterExactMountedAcknowledgement() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge()
+        defer { bridge.shutdown() }
+        let request = try VideoEditorService.prepareOpen(url)
+        var completed = false
+        let task = Task {
+            try await bridge.open(request, timeout: 5)
+            completed = true
+        }
+        try await waitUntil { bridge.pending != nil }
+        #expect(!completed)
+        let presentation = try #require(bridge.pending)
+        bridge.mounted(presentation)
+        try await task.value
+        #expect(completed)
+    }
+
+    @Test func ownedOpenCancellationReleasesPendingNativeEditor() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge()
+        defer { bridge.shutdown() }
+        let request = try VideoEditorService.prepareOpen(url)
+        let task = Task { try await bridge.open(request, timeout: 5) }
+        try await waitUntil { bridge.pending != nil }
+        task.cancel()
+        do {
+            try await task.value
+            Issue.record("Cancelled open was acknowledged.")
+        } catch is CancellationError {}
+        #expect(bridge.pending == nil && bridge.activeEditor == nil)
+    }
+
+    @Test func stoppingBridgeAwaitsNativeLoadingAndRejectsLateMount() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let bridge = VideoEditorOpenBridge()
+        let request = try VideoEditorService.prepareOpen(url)
+        let opening = Task { try await bridge.open(request, timeout: 5) }
+        try await waitUntil { bridge.pending != nil }
+        let presentation = try #require(bridge.pending)
+        let stopped = ContinuousClock.now
+        await bridge.stopAndWait()
+        #expect(stopped.duration(to: .now) < .seconds(5))
+        do {
+            try await opening.value
+            Issue.record("Stopped editor open completed.")
+        } catch is CancellationError {}
+        #expect(bridge.pending == nil && bridge.activeEditor == nil)
+        #expect(
+            presentation.model.player.currentItem == nil && !presentation.model.isRebuildingPreview)
+        bridge.mounted(presentation)
+        #expect(bridge.activeEditor == nil)
+    }
+
+    @Test func commandPresentationHasOneOwnerAndOnlyThatOwnerClosesIt() throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let model = VideoEditorModel { _ in throw CancellationError() }
+        defer { model.close() }
+        var project = VideoProject.create()
+        project.addAsset(
+            URL(fileURLWithPath: "/synthetic/pending.mov"), duration: 1, width: 64, height: 64)
+        model.project = project
+        model.rebuild()
+        let presentation = VideoEditorOpenBridge.Presentation(
+            request: try VideoEditorService.prepareOpen(url), model: model)
+        let first = StudioModel(loadsState: false)
+        let second = StudioModel(loadsState: false)
+        first.openCommandProject(presentation)
+        second.openCommandProject(presentation)
+        #expect(first.commandEditor === presentation)
+        #expect(second.commandEditor == nil)
+        #expect(second.route == .home)
+        presentation.close(for: second)
+        second.closeEditors()
+        #expect(model.isRebuildingPreview)
+        first.closeEditors()
+        #expect(!model.isRebuildingPreview)
+        #expect(!presentation.claim(for: second))
+    }
+
+    @Test func successRequiresExactMountedModelAndRoutesRepeatedOpens() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let movie = try await VideoEditorServiceTests.movie(in: url.deletingLastPathComponent())
+        _ = try await VideoEditorService.apply(
+            VideoEditPlan(operations: [.addMedia(path: movie.path, name: "intro")]),
+            to: url, overwrite: true)
+        let original = try Data(contentsOf: url)
+        var replies: [[String: Any]] = []
+        var presentations = 0
+        let bridge = VideoEditorOpenBridge(
+            reply: { replies.append($0) }, present: { presentations += 1 })
+        let studio = StudioModel(loadsState: false)
+        let first = try VideoEditorService.prepareOpen(url)
+        bridge.receive(first, deadline: Date().addingTimeInterval(5))
+        try await waitUntil { bridge.pending != nil }
+        #expect(replies.isEmpty)
+        let prepared = try #require(bridge.pending)
+        #expect(prepared.model.pipeline != nil)
+        #expect(prepared.model.player.currentItem != nil)
+        #expect(prepared.model.duration > 0)
+        studio.openCommandProject(prepared)
+        #expect(studio.route == .commandVideoEditor(first.requestID))
+        #expect(studio.commandEditor?.model === prepared.model)
+        let unrelated = VideoEditorModel()
+        bridge.mounted(.init(request: first, model: unrelated))
+        unrelated.close()
+        #expect(replies.isEmpty)
+        bridge.mounted(prepared)
+        #expect(replies.count == 1)
+        #expect(first.matches(replies[0]))
+        #expect(replies[0]["state"] as? String == "opened")
+        let second = try VideoEditorService.prepareOpen(url)
+        bridge.receive(second, deadline: Date().addingTimeInterval(5))
+        try await waitUntil { bridge.pending != nil }
+        let next = try #require(bridge.pending)
+        studio.openCommandProject(next)
+        #expect(studio.route == .commandVideoEditor(second.requestID))
+        bridge.mounted(prepared)
+        #expect(replies.count == 1)
+        bridge.mounted(next)
+        #expect(replies.count == 2)
+        #expect(second.matches(replies[1]))
+        #expect(presentations == 2)
+        #expect(try Data(contentsOf: url) == original)
+        prepared.model.close()
+        next.model.close()
+    }
+
+    @Test func concurrentRequestIsRejectedAndUnmountedRequestTimesOut() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        var replies: [[String: Any]] = []
+        let bridge = VideoEditorOpenBridge(reply: { replies.append($0) }, present: {})
+        let first = try VideoEditorService.prepareOpen(url)
+        let second = try VideoEditorService.prepareOpen(url)
+        bridge.receive(first, deadline: Date().addingTimeInterval(0.1))
+        bridge.receive(second, deadline: Date().addingTimeInterval(1))
+        #expect(replies.first?["code"] as? String == "editor_busy")
+        #expect(second.matches(try #require(replies.first)))
+        try await waitUntil { replies.count == 2 }
+        #expect(replies.last?["code"] as? String == "open_timeout")
+        #expect(first.matches(try #require(replies.last)))
+        #expect(bridge.pending == nil)
+    }
+
+    @Test func changesBeforeMountAndMissingMediaFailWithoutDialogs() async throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        var replies: [[String: Any]] = []
+        let bridge = VideoEditorOpenBridge(reply: { replies.append($0) }, present: {})
+        let request = try VideoEditorService.prepareOpen(url)
+        bridge.receive(request, deadline: Date().addingTimeInterval(5))
+        try await waitUntil { bridge.pending != nil }
+        let prepared = try #require(bridge.pending)
+        var project = try VideoProject.open(url)
+        project.rename("Changed synthetic project")
+        try project.save(to: url)
+        bridge.mounted(prepared)
+        #expect(replies.last?["code"] as? String == "project_changed")
+        prepared.model.close()
+        project.addAsset(
+            url.deletingLastPathComponent().appendingPathComponent("missing.mov"), duration: 1,
+            width: 64, height: 64)
+        try project.save(to: url)
+        let missing = try VideoEditorService.prepareOpen(url)
+        bridge.receive(missing, deadline: Date().addingTimeInterval(5))
+        try await waitUntil { replies.count == 2 }
+        #expect(replies.last?["code"] as? String == "missing_media")
+        #expect(bridge.pending == nil)
+    }
+
+    @Test func unsavedEditorIsPreservedAndExpiredRequestsNeverPresent() throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let active = VideoEditorModel()
+        defer { active.close() }
+        active.project = VideoProject.create(title: "Unsaved synthetic edit")
+        active.mutate { $0.rename("Keep this edit") }
+        #expect(active.hasUnsavedEdits)
+        var replies: [[String: Any]] = []
+        var presented = false
+        let bridge = VideoEditorOpenBridge(
+            reply: { replies.append($0) }, present: { presented = true })
+        bridge.activeEditor = active
+        let request = try VideoEditorService.prepareOpen(url)
+        bridge.receive(request, deadline: Date().addingTimeInterval(5))
+        #expect(replies.last?["code"] as? String == "editor_busy")
+        #expect(active.project?.title == "Keep this edit")
+        bridge.receive(request, deadline: Date().addingTimeInterval(-1))
+        #expect(replies.last?["code"] as? String == "open_timeout")
+        #expect(!presented)
+    }
+
+    @Test func unsubmittedTitleInOrdinaryEditorBlocksHandoffButUnchangedTitleDoesNot() async throws
+    {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let original = try Data(contentsOf: url)
+        let active = VideoEditorModel()
+        defer { active.close() }
+        active.openProject(at: url)
+        try await waitUntil { !active.blocksCommandOpen }
+        active.titleDraft = active.project?.title
+        #expect(!active.blocksCommandOpen)
+        active.titleDraft = "Unsubmitted synthetic title"
+        #expect(active.blocksCommandOpen)
+        var replies: [[String: Any]] = []
+        var presented = false
+        let bridge = VideoEditorOpenBridge(
+            reply: { replies.append($0) }, present: { presented = true })
+        bridge.activeEditor = active
+        let destination = url.deletingLastPathComponent().appendingPathComponent("other.openscreen")
+        _ = try VideoEditorService.create(at: destination, title: "Other synthetic project")
+        let request = try VideoEditorService.prepareOpen(destination)
+        bridge.receive(request, deadline: Date().addingTimeInterval(5))
+        #expect(replies.last?["code"] as? String == "editor_busy")
+        #expect(active.titleDraft == "Unsubmitted synthetic title")
+        #expect(try Data(contentsOf: url) == original)
+        #expect(!presented)
+        active.titleDraft = active.project?.title
+        bridge.receive(request, deadline: Date().addingTimeInterval(5))
+        try await waitUntil { bridge.pending != nil }
+        let pending = try #require(bridge.pending)
+        bridge.mounted(pending)
+        #expect(replies.last?["state"] as? String == "opened")
+        pending.model.close()
+    }
+
+    @Test func independentPendingViewDraftsEachBlockHandoffUntilCleared() throws {
+        let url = try fixture()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let active = VideoEditorModel()
+        defer { active.close() }
+        active.project = try VideoProject.open(url)
+        var replies: [[String: Any]] = []
+        let bridge = VideoEditorOpenBridge(reply: { replies.append($0) }, present: {})
+        bridge.activeEditor = active
+        let request = try VideoEditorService.prepareOpen(url)
+        active.setPendingViewEdit("caption.synthetic.text", hasChanges: true)
+        active.setPendingViewEdit("caption.synthetic.style", hasChanges: true)
+        bridge.receive(request, deadline: Date().addingTimeInterval(5))
+        #expect(replies.last?["code"] as? String == "editor_busy")
+        active.setPendingViewEdit("caption.synthetic.text", hasChanges: false)
+        bridge.receive(request, deadline: Date().addingTimeInterval(5))
+        #expect(replies.last?["code"] as? String == "editor_busy")
+        #expect(active.pendingViewEditIDs == ["caption.synthetic.style"])
+        active.setPendingViewEdit("caption.synthetic.style", hasChanges: false)
+        #expect(!active.blocksCommandOpen)
+    }
+
+    @Test(arguments: ["new", "open"])
+    func acceptedProjectIdentityChangesClearDraftsEvenWithTheSameTitle(operation: String)
+        async throws
+    {
+        let active = VideoEditorModel()
+        var files: [URL] = []
+        defer {
+            active.close()
+            for url in files { try? FileManager.default.removeItem(at: url) }
+        }
+        active.newProject()
+        files.append(try #require(active.project?.fileURL))
+        let originalID = try #require(active.project?.id)
+        let title = try #require(active.project?.title)
+        active.titleDraft = "Unsubmitted synthetic title"
+        active.setPendingViewEdit("caption.synthetic", hasChanges: true)
+        #expect(active.blocksCommandOpen)
+        if operation == "new" {
+            active.newProject()
+            files.append(try #require(active.project?.fileURL))
+        } else {
+            let next = files[0].deletingLastPathComponent().appendingPathComponent(
+                "\(UUID().uuidString).openscreen")
+            _ = try VideoEditorService.create(at: next, title: title)
+            files.append(next)
+            active.openProject(at: next)
+            try await waitUntil { !active.blocksCommandOpen }
+        }
+        #expect(active.project?.id != originalID)
+        #expect(active.project?.title == title)
+        #expect(active.titleDraft == nil)
+        #expect(active.pendingViewEditIDs.isEmpty)
+        try await waitUntil { !active.blocksCommandOpen }
+        active.titleDraft = "Keep this new draft"
+        active.setPendingViewEdit("caption.current", hasChanges: true)
+        active.openProject(
+            at: files[0].deletingLastPathComponent().appendingPathComponent("missing.openscreen"))
+        #expect(active.titleDraft == "Keep this new draft")
+        #expect(active.pendingViewEditIDs == ["caption.current"])
+        #expect(active.blocksCommandOpen)
+    }
+}

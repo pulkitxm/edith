@@ -1,0 +1,289 @@
+import CryptoKit
+import EdithExtensionSupport
+import Foundation
+
+struct MusicSurfaceTrack: Equatable, Sendable {
+    var key: String
+    var title: String
+}
+
+struct MusicSurfacePlayback: Equatable, Sendable {
+    var sourceID: String
+    var sourceTitle: String
+    var trackKey: String
+    var title: String
+    var artist = ""
+    var playing = false
+    var elapsed = 0.0
+    var duration = 0.0
+    var volume = 0.7
+    var seekable = true
+    var volumeAvailable = true
+    var shuffle: Bool?
+    var repeating: Bool?
+    var thumbnail: SurfaceThumbnail?
+    var queue: [MusicSurfaceTrack] = []
+
+    var token: String { Self.token(sourceID + "\0" + trackKey) }
+    static func token(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
+    }
+    func identifier(_ action: String) -> String { action + ":" + sourceID + ":" + token }
+    func queuedIdentifier(_ track: MusicSurfaceTrack) -> String {
+        "playQueue:" + sourceID + ":" + Self.token(sourceID + "\0" + track.key)
+    }
+}
+
+struct MusicSurfaceCommand: Equatable, Sendable {
+    var sourceID: String
+    var trackKey: String
+    var action: String
+    var value: Double?
+    var presentationID: UUID? = nil
+}
+
+@MainActor
+final class MusicSurface {
+    typealias Read = @MainActor (SurfaceTile) async throws -> [MusicSurfacePlayback]
+    typealias Perform = @MainActor (MusicSurfaceCommand) async throws -> Void
+    private let version: String
+    private let appIcon: @MainActor (String) -> SurfaceThumbnail?
+    private let readRetry: Read
+    private let controlError: @MainActor () -> String?
+    private let readNotch: Read
+    private let read: Read
+    private let perform: Perform
+    private let privacyValues: @MainActor () -> [String: String]
+
+    init(
+        read: @escaping Read, perform: @escaping Perform, readNotch: Read? = nil,
+        readRetry: Read? = nil, controlError: @escaping @MainActor () -> String? = { nil },
+        version: String = "1.0.0",
+        appIcon: @escaping @MainActor (String) -> SurfaceThumbnail? = { _ in nil },
+        privacyValues: @escaping @MainActor () -> [String: String] = {
+            ExtensionSharedState.current?.values(for: "presenter") ?? [:]
+        }
+    ) {
+        self.read = read; self.perform = perform; self.privacyValues = privacyValues
+        self.version = version; self.appIcon = appIcon; self.readNotch = readNotch ?? read;
+        self.readRetry = readRetry ?? readNotch ?? read
+        self.controlError = controlError
+    }
+
+    func execute(_ command: String, payload: Data) async throws -> Data {
+        let operation: String
+        let body: Data
+        let presentationID: UUID?
+        if command == "music.notch.perform" {
+            let action = try MusicNotchActionRequest.decode(payload)
+            operation = "surface.perform"; body = try action.action.encoded(providerID: "music")
+            presentationID = action.presentationID
+        } else {
+            operation = command; body = payload; presentationID = nil
+        }
+        let request: SurfaceSnapshotRequest
+        if operation == "surface.perform" {
+            request = try SurfaceActionRequest.decode(body, providerID: "music").snapshot
+        } else {
+            request = try SurfaceSnapshotRequest.decode(body, providerID: "music")
+        }
+        if ["music.notch.snapshot", "music.notch.glance", "music.notch.retry"].contains(command) {
+            guard request.target == .notch, request.tile.widget == .music else {
+                throw ExtensionPeerError.invalidRequest
+            }
+            if SurfacePrivacyState.hides(.music, values: privacyValues()) {
+                return try MusicNotchState(
+                    version: version,
+                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
+                    playback: []
+                ).encoded()
+            }
+            let states: [MusicSurfacePlayback]
+            switch command {
+            case "music.notch.glance": states = try await read(request.tile)
+            case "music.notch.retry": states = try await readRetry(request.tile)
+            default: states = try await readNotch(request.tile)
+            }
+            try Task.checkCancellation()
+            guard !SurfacePrivacyState.hides(.music, values: privacyValues()) else {
+                return try MusicNotchState(
+                    version: version,
+                    snapshot: .init(providerID: "music", message: "Hidden while presenting."),
+                    playback: []
+                ).encoded()
+            }
+            let snapshot = SurfaceCommandService.project(
+                Self.snapshot(states, tile: request.tile, target: .notch), tile: request.tile)
+            let playback = states.compactMap { state -> MusicNotchPlayback? in
+                let rowID = state.sourceID + ":" + state.token
+                guard !state.trackKey.isEmpty, snapshot.rows.contains(where: { $0.id == rowID })
+                else { return nil }
+                return .init(
+                    rowID: rowID,
+                    sourceName: state.sourceID == "local" ? "Music" : state.sourceTitle,
+                    playing: state.playing,
+                    elapsed: request.tile.shows("progress")
+                        ? max(0, min(state.elapsed, 86_400)) : 0,
+                    duration: request.tile.shows("progress")
+                        ? max(0, min(state.duration, 86_400)) : 0,
+                    shuffle: request.tile.shows("shuffle") ? state.shuffle : nil,
+                    repeating: request.tile.shows("repeat") ? state.repeating : nil,
+                    appIcon: appIcon(state.sourceID))
+            }
+            return try MusicNotchState(
+                version: version, snapshot: snapshot, playback: playback,
+                controlError: controlError()
+            )
+            .encoded()
+        }
+        return try await SurfaceCommandService.execute(
+            providerID: "music", command: operation, payload: body,
+            snapshot: { [self] tile in
+                Self.snapshot(try await read(tile), tile: tile, target: request.target)
+            },
+            perform: { [self] identifier in
+                try await dispatch(
+                    identifier, value: nil, tile: request.tile, presentationID: presentationID)
+            },
+            adjust: { [self] identifier, value in
+                try await dispatch(
+                    identifier, value: value, tile: request.tile, presentationID: presentationID)
+            },
+            privacyValues: privacyValues)
+    }
+
+    private func dispatch(
+        _ identifier: String, value: Double?, tile: SurfaceTile, presentationID: UUID?
+    ) async throws {
+        let states = try await read(tile)
+        try Task.checkCancellation()
+        for state in states {
+            let commands = [
+                "open", "openPlayer", "toggle", "previous", "next", "shuffle", "repeat", "backward",
+                "forward",
+                "seek", "volume",
+            ]
+            if let action = commands.first(where: { state.identifier($0) == identifier }) {
+                try await perform(
+                    .init(
+                        sourceID: state.sourceID, trackKey: state.trackKey, action: action,
+                        value: value, presentationID: presentationID))
+                return
+            }
+            if let track = state.queue.first(where: { state.queuedIdentifier($0) == identifier }) {
+                try await perform(
+                    .init(
+                        sourceID: state.sourceID, trackKey: track.key, action: "playQueue",
+                        value: nil))
+                return
+            }
+        }
+        throw ExtensionPeerError.invalidRequest
+    }
+
+    static func snapshot(_ states: [MusicSurfacePlayback], tile: SurfaceTile, target: SurfaceTarget)
+        -> SurfaceSnapshot
+    {
+        let selected = states.filter { tile.sourceIDs?.contains($0.sourceID) ?? true }
+        let ordered = selected.sorted { $0.playing && !$1.playing }
+        var rows: [SurfaceDataRow] = []
+        for state in ordered {
+            let playing = !state.trackKey.isEmpty
+            var actions = [
+                SurfaceAction(state.identifier("open"), "Open Music", "arrow.up.forward.app")
+            ]
+            if playing {
+                actions += [
+                    .init(state.identifier("previous"), "Previous", "backward.end.fill"),
+                    .init(
+                        state.identifier("toggle"), state.playing ? "Pause" : "Play",
+                        state.playing ? "pause.fill" : "play.fill"),
+                    .init(state.identifier("next"), "Next", "forward.end.fill"),
+                ]
+                if target == .notch {
+                    actions += [
+                        .init(
+                            state.identifier("backward"), "Back 15 seconds", "gobackward.15",
+                            field: "seekControls"),
+                        .init(
+                            state.identifier("forward"), "Forward 15 seconds", "goforward.15",
+                            field: "seekControls"),
+                    ]
+                    if let shuffle = state.shuffle {
+                        actions.append(
+                            .init(
+                                state.identifier("shuffle"), shuffle ? "Shuffle on" : "Shuffle off",
+                                "shuffle", field: "shuffle"))
+                    }
+                    if let repeating = state.repeating {
+                        actions.append(
+                            .init(
+                                state.identifier("repeat"), repeating ? "Repeat on" : "Repeat off",
+                                "repeat", field: "repeat"))
+                    }
+                }
+            }
+            var sliders: [SurfaceSlider] = []
+            if playing, target == .notch {
+                if state.duration > 0, state.seekable {
+                    sliders.append(
+                        .init(
+                            state.identifier("seek"), "Playback position", "clock",
+                            value: UnitInterval.clamp(state.elapsed / state.duration),
+                            field: "progress"))
+                }
+                if state.volumeAvailable {
+                    sliders.append(
+                        .init(
+                            state.identifier("volume"), "Volume", "speaker.wave.2.fill",
+                            value: UnitInterval.clamp(state.volume), field: "volume"))
+                }
+            }
+            rows.append(
+                .init(
+                    state.sourceID + ":" + state.token, sourceID: state.sourceID,
+                    title: text(playing ? state.title : "Nothing playing"),
+                    detail: tile.shows("artist") ? text(state.artist, empty: true) : "",
+                    value: playing
+                        ? (state.playing ? "Playing" : "Paused")
+                            + (tile.shows("progress")
+                                ? " · " + time(state.elapsed) + " / " + time(state.duration) : "")
+                        : state.sourceTitle,
+                    icon: "music.note",
+                    progress: playing && state.duration > 0
+                        ? UnitInterval.clamp(state.elapsed / state.duration) : nil,
+                    actions: actions, sliders: sliders,
+                    thumbnail: tile.shows("artwork") ? state.thumbnail : nil))
+            if tile.shows("queue") {
+                rows += state.queue.prefix(10).map { track in
+                    .init(
+                        "queue:" + MusicSurfacePlayback.token(state.sourceID + "\0" + track.key),
+                        sourceID: state.sourceID,
+                        title: text(track.title), detail: "Up next", icon: "music.note.list",
+                        field: "queue",
+                        actions: [
+                            .init(
+                                state.queuedIdentifier(track), "Play", "play.fill", field: "queue")
+                        ])
+                }
+            }
+        }
+        return .init(
+            providerID: "music", rows: rows,
+            actions: target == .notch
+                ? Array(ordered.prefix(8)).map {
+                    .init($0.identifier("openPlayer"), "Open player", "arrow.up.forward.app")
+                } : [],
+            sources: states.map { .init($0.sourceID, $0.sourceTitle) },
+            message: rows.isEmpty ? "No available player in this selection." : nil, updatedAt: .now)
+    }
+
+    private static func text(_ value: String, empty: Bool = false) -> String {
+        let text = String(value.replacingOccurrences(of: "\0", with: "").prefix(256))
+        return text.isEmpty && !empty ? "Untitled track" : text
+    }
+    private static func time(_ value: Double) -> String {
+        let seconds = value.isFinite ? max(0, min(value, 86_400)) : 0
+        return String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60)
+    }
+}

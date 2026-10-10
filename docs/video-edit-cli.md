@@ -23,7 +23,7 @@ centered magnification through black at the existing cut. Their duration uses
 output seconds and is bounded by the neighboring clips. They preserve every
 cut frame, project duration and source range, and scale to the preview canvas.
 
-Output-clock caption commands are documented in `docs/cli/studio/captions.md`.
+Output-clock caption commands are documented in the current Studio worker operation reference.
 They accept exact output frames or marker IDs and retain their timing after visual edits.
 Their targeted mutations save the input project with revision checks and support `--dry-run`.
 

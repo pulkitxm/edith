@@ -1,0 +1,536 @@
+import AppKit
+@_implementationOnly import GhosttyKit
+import OSLog
+
+public final class GhosttyRuntime {
+    public static let shared = GhosttyRuntime()
+
+    private let log = Logger(subsystem: "com.pulkit.edith", category: "ghostty")
+    private var app: ghostty_app_t?
+    private var config: ghostty_config_t?
+    private var autoSecureInput = true
+    private var ghosttyInitialized = false
+    private var started = false
+    private var tickScheduled = false
+    private var observers: [NSObjectProtocol] = []
+    private var modifierMonitor: Any?
+    private var hostFocus: [ObjectIdentifier: Bool] = [:]
+
+    public var isReady: Bool { app != nil }
+
+    public var version: String {
+        let info = ghostty_info()
+        return String(
+            decoding: UnsafeRawBufferPointer(start: info.version, count: Int(info.version_len)),
+            as: UTF8.self)
+    }
+
+    private init() {}
+
+    static func prepareProcessEnvironment(
+        unset: (String) -> Void = { _ = unsetenv($0) }
+    ) {
+        unset("NO_COLOR")
+    }
+
+    public func start() {
+        guard !started else { return }
+        TerminalFontRegistry.register()
+        GhosttyResourceLocator().configureEnvironment()
+
+        if !ghosttyInitialized {
+            Self.prepareProcessEnvironment()
+            guard ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0 else {
+                log.error("ghostty_init failed")
+                return
+            }
+            ghosttyInitialized = true
+        }
+
+        guard let cfg = configuration(for: nil) else {
+            log.error("ghostty_config_new failed")
+            return
+        }
+        var configuredAutoSecureInput = true
+        let autoSecureInputKey = "macos-auto-secure-input"
+        if !ghostty_config_get(
+            cfg, &configuredAutoSecureInput, autoSecureInputKey,
+            UInt(autoSecureInputKey.lengthOfBytes(using: .utf8)))
+        {
+            configuredAutoSecureInput = true
+        }
+        autoSecureInput = configuredAutoSecureInput
+
+        var runtime = ghostty_runtime_config_s()
+        runtime.userdata = Unmanaged.passUnretained(self).toOpaque()
+        runtime.supports_selection_clipboard = false
+        runtime.wakeup_cb = { userdata in
+            GhosttyRuntime.from(userdata)?.wakeup()
+        }
+        runtime.action_cb = { _, target, action in
+            GhosttyRuntime.shared.perform(action: action, target: target)
+        }
+        runtime.read_clipboard_cb = { userdata, location, state, mimes, count, list in
+            GhosttyRuntime.readClipboard(userdata, location, state, mimes, count, list)
+        }
+        runtime.confirm_read_clipboard_cb = { userdata, confirmation, state, request in
+            GhosttyRuntime.confirmClipboard(userdata, confirmation, state, request)
+        }
+        runtime.write_clipboard_cb = { userdata, location, content, count, confirm in
+            GhosttyRuntime.writeClipboard(userdata, location, content, count, confirm)
+        }
+        runtime.close_surface_cb = { userdata, processAlive in
+            GhosttySurfaceRegistry.shared.close(userdata, processAlive: processAlive)
+        }
+
+        guard let created = ghostty_app_new(&runtime, cfg) else {
+            ghostty_config_free(cfg)
+            log.error("ghostty_app_new failed")
+            return
+        }
+        config = cfg
+        app = created
+        started = true
+        ghostty_app_set_focus(
+            created, hostFocus.isEmpty ? NSApp.isActive : hostFocus.values.contains(true))
+        installApplicationObservers()
+    }
+
+    public var isStarted: Bool { started }
+
+    public func shutdown() {
+        guard started else { return }
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers.removeAll()
+        if let modifierMonitor { NSEvent.removeMonitor(modifierMonitor) }
+        modifierMonitor = nil
+        if let app { ghostty_app_free(app) }
+        app = nil
+        if let config { ghostty_config_free(config) }
+        config = nil
+        tickScheduled = false
+        hostFocus.removeAll()
+        started = false
+    }
+
+    @MainActor func setHostFocus(_ owner: ObjectIdentifier, active: Bool?) {
+        hostFocus[owner] = active
+        guard let app else { return }
+        ghostty_app_set_focus(
+            app, hostFocus.isEmpty ? NSApp.isActive : hostFocus.values.contains(true))
+    }
+
+    var handle: ghostty_app_t? { app }
+
+    func drainPendingWork() {
+        guard let app else { return }
+        ghostty_app_tick(app)
+    }
+
+    var configHandle: ghostty_config_t? { config }
+
+    static let selectionConfiguration = """
+        copy-on-select = false
+        clipboard-trim-trailing-spaces = true
+        selection-clear-on-copy = false
+
+        """
+
+    func configuration(for theme: GhosttyTheme?) -> ghostty_config_t? {
+        guard let cfg = ghostty_config_new() else { return nil }
+        let fixture = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"]
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let fixture {
+            fixture.appendingPathComponent("ghostty.conf").path.withCString {
+                ghostty_config_load_file(cfg, $0)
+            }
+        } else {
+            ghostty_config_load_default_files(cfg)
+        }
+        let configuration = Self.selectionConfiguration + (theme?.configuration ?? "")
+        let directory = (fixture ?? FileManager.default.temporaryDirectory)
+            .appendingPathComponent("edith-ghostty", isDirectory: true)
+        try? FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        let file = directory.appendingPathComponent(
+            "\(Self.stableHash(configuration)).conf")
+        do {
+            try configuration.write(to: file, atomically: true, encoding: .utf8)
+        } catch {
+            log.error("could not write the terminal theme: \(error.localizedDescription)")
+            ghostty_config_finalize(cfg)
+            return cfg
+        }
+        file.path.withCString { ghostty_config_load_file(cfg, $0) }
+        ghostty_config_finalize(cfg)
+        return cfg
+    }
+
+    static func stableHash(_ text: String) -> String {
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in text.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 0x0000_0100_0000_01b3
+        }
+        return String(hash, radix: 16)
+    }
+
+    private static func from(_ userdata: UnsafeMutableRawPointer?) -> GhosttyRuntime? {
+        guard let userdata else { return nil }
+        return Unmanaged<GhosttyRuntime>.fromOpaque(userdata).takeUnretainedValue()
+    }
+
+    private func wakeup() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.tickScheduled else { return }
+            self.tickScheduled = true
+            DispatchQueue.main.async {
+                self.tickScheduled = false
+                guard let app = self.app else { return }
+                ghostty_app_tick(app)
+            }
+        }
+    }
+
+    private func installApplicationObservers() {
+        let center = NotificationCenter.default
+        observers.append(
+            center.addObserver(
+                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let app = self?.app else { return }
+                ghostty_app_set_focus(
+                    app,
+                    self?.hostFocus.isEmpty == false
+                        ? self?.hostFocus.values.contains(true) == true : true)
+            })
+        observers.append(
+            center.addObserver(
+                forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let app = self?.app else { return }
+                ghostty_app_set_focus(app, self?.hostFocus.values.contains(true) == true)
+            })
+        observers.append(
+            center.addObserver(
+                forName: NSTextInputContext.keyboardSelectionDidChangeNotification,
+                object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let app = self?.app else { return }
+                ghostty_app_keyboard_changed(app)
+            })
+        modifierMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { event in
+            GhosttySurfaceRegistry.shared.forwardModifierChange(event)
+            return event
+        }
+    }
+
+    private func perform(action: ghostty_action_s, target: ghostty_target_s) -> Bool {
+        switch action.tag {
+        case GHOSTTY_ACTION_RENDER:
+            GhosttySurfaceRegistry.shared.render(target)
+            return true
+        case GHOSTTY_ACTION_NEW_TAB:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.newTab) ?? false
+        case GHOSTTY_ACTION_GOTO_TAB:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(
+                .selectTab(Int32(action.action.goto_tab.rawValue))) ?? false
+        case GHOSTTY_ACTION_NEW_SPLIT:
+            let direction: GhosttyPaneAction.Direction
+            switch action.action.new_split {
+            case GHOSTTY_SPLIT_DIRECTION_UP: direction = .up
+            case GHOSTTY_SPLIT_DIRECTION_DOWN: direction = .down
+            case GHOSTTY_SPLIT_DIRECTION_LEFT: direction = .left
+            case GHOSTTY_SPLIT_DIRECTION_RIGHT: direction = .right
+            default: return false
+            }
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.split(direction))
+                ?? false
+        case GHOSTTY_ACTION_GOTO_SPLIT:
+            let focus: GhosttyPaneAction.Focus
+            switch action.action.goto_split {
+            case GHOSTTY_GOTO_SPLIT_PREVIOUS: focus = .previous
+            case GHOSTTY_GOTO_SPLIT_NEXT: focus = .next
+            case GHOSTTY_GOTO_SPLIT_UP: focus = .up
+            case GHOSTTY_GOTO_SPLIT_DOWN: focus = .down
+            case GHOSTTY_GOTO_SPLIT_LEFT: focus = .left
+            case GHOSTTY_GOTO_SPLIT_RIGHT: focus = .right
+            default: return false
+            }
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.focus(focus))
+                ?? false
+        case GHOSTTY_ACTION_RESIZE_SPLIT:
+            let resize = action.action.resize_split
+            let direction: GhosttyPaneAction.Direction
+            switch resize.direction {
+            case GHOSTTY_RESIZE_SPLIT_UP: direction = .up
+            case GHOSTTY_RESIZE_SPLIT_DOWN: direction = .down
+            case GHOSTTY_RESIZE_SPLIT_LEFT: direction = .left
+            case GHOSTTY_RESIZE_SPLIT_RIGHT: direction = .right
+            default: return false
+            }
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(
+                .resize(direction, resize.amount)) ?? false
+        case GHOSTTY_ACTION_EQUALIZE_SPLITS:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.equalize)
+                ?? false
+        case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+            return GhosttySurfaceRegistry.shared.view(target)?.dispatchPaneAction(.toggleZoom)
+                ?? false
+        case GHOSTTY_ACTION_CLOSE_TAB, GHOSTTY_ACTION_CLOSE_WINDOW:
+            GhosttySurfaceRegistry.shared.requestClose(target)
+            return true
+        case GHOSTTY_ACTION_OPEN_URL:
+            guard let view = GhosttySurfaceRegistry.shared.view(target),
+                let value = GhosttyTerminalView.decoded(
+                    action.action.open_url.url, count: Int(action.action.open_url.len))
+            else { return false }
+            let kind = action.action.open_url.kind
+            if Thread.isMainThread {
+                return view.openTerminalTarget(value, kind: kind)
+            }
+            DispatchQueue.main.async { [weak view] in
+                _ = view?.openTerminalTarget(value, kind: kind)
+            }
+            return true
+        case GHOSTTY_ACTION_SHOW_CHILD_EXITED:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let exitCode = Int32(bitPattern: action.action.child_exited.exit_code)
+            onMain { view.childExited(exitCode) }
+            return true
+        case GHOSTTY_ACTION_SECURE_INPUT:
+            guard autoSecureInput else { return true }
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.setSecureInput(action.action.secure_input) }
+            return true
+        case GHOSTTY_ACTION_MOUSE_SHAPE:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.setMouseShape(action.action.mouse_shape) }
+            return true
+        case GHOSTTY_ACTION_MOUSE_VISIBILITY:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain {
+                view.setMouseVisible(action.action.mouse_visibility == GHOSTTY_MOUSE_VISIBLE)
+            }
+            return true
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let value = GhosttyTerminalView.decoded(
+                action.action.mouse_over_link.url, count: action.action.mouse_over_link.len)
+            onMain { view.setHoveredLink(value) }
+            return true
+        case GHOSTTY_ACTION_SELECTION_CHANGED:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.selectionChanged() }
+            return true
+        case GHOSTTY_ACTION_SET_TITLE, GHOSTTY_ACTION_SET_TAB_TITLE,
+            GHOSTTY_ACTION_SET_WINDOW_TITLE:
+            guard let view = GhosttySurfaceRegistry.shared.view(target),
+                let value = GhosttyTerminalView.decoded(action.action.set_title.title)
+            else { return false }
+            onMain { view.setTerminalTitle(value) }
+            return true
+        case GHOSTTY_ACTION_PWD:
+            guard let view = GhosttySurfaceRegistry.shared.view(target),
+                let value = GhosttyTerminalView.decoded(action.action.pwd.pwd)
+            else { return false }
+            onMain { view.setWorkingDirectory(value) }
+            return true
+        case GHOSTTY_ACTION_RING_BELL:
+            onMain { NSSound.beep() }
+            return true
+        case GHOSTTY_ACTION_START_SEARCH:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let needle = GhosttyTerminalView.decoded(action.action.start_search.needle) ?? ""
+            onMain { view.beginSearch(needle) }
+            return true
+        case GHOSTTY_ACTION_END_SEARCH:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            onMain { view.endSearch() }
+            return true
+        case GHOSTTY_ACTION_SEARCH_TOTAL:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let value = action.action.search_total.total
+            onMain { view.setSearchTotal(value >= 0 ? value : nil) }
+            return true
+        case GHOSTTY_ACTION_SEARCH_SELECTED:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let value = action.action.search_selected.selected
+            onMain { view.setSearchSelected(value >= 0 ? value : nil) }
+            return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            guard let view = GhosttySurfaceRegistry.shared.view(target) else { return false }
+            let report = action.action.progress_report
+            onMain { view.setProgress(report.state, progress: Int(report.progress)) }
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func onMain(_ action: () -> Void) {
+        if Thread.isMainThread {
+            action()
+        } else {
+            DispatchQueue.main.sync(execute: action)
+        }
+    }
+
+    private func onMain(_ action: () -> Bool) -> Bool {
+        if Thread.isMainThread { return action() }
+        return DispatchQueue.main.sync(execute: action)
+    }
+
+    private static func readClipboard(
+        _ userdata: UnsafeMutableRawPointer?, _ location: ghostty_clipboard_e,
+        _ state: UnsafeMutableRawPointer?, _ mimes: UnsafePointer<UnsafePointer<CChar>?>?,
+        _ count: Int, _ list: Bool
+    ) -> ghostty_clipboard_read_result_e {
+        guard location == GHOSTTY_CLIPBOARD_STANDARD,
+            let surface = GhosttySurfaceRegistry.shared.surface(userdata)
+        else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
+        let requested = (0..<count).compactMap { index in
+            mimes?[index].map(String.init(cString:))
+        }
+        guard
+            let request = TerminalClipboard.read(
+                requestedMIMEs: requested, listAvailable: list, from: .general)
+        else { return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE }
+        TerminalClipboard.complete(request, surface: surface, state: state)
+        return GHOSTTY_CLIPBOARD_READ_STARTED
+    }
+
+    private static func confirmClipboard(
+        _ userdata: UnsafeMutableRawPointer?,
+        _ confirmation: UnsafePointer<ghostty_clipboard_confirm_s>?,
+        _ state: UnsafeMutableRawPointer?, _ request: ghostty_clipboard_request_e
+    ) {
+        guard let view = GhosttySurfaceRegistry.shared.view(userdata), let confirmation, let state
+        else { return }
+        let value = confirmation.pointee
+        let entries: [TerminalClipboardEntry] =
+            if let contents = value.contents {
+                (0..<value.contents_len).compactMap { TerminalClipboardEntry(contents[$0]) }
+            } else {
+                []
+            }
+        let available: [String] =
+            if let values = value.available {
+                (0..<value.available_len).compactMap { values[$0].map(String.init(cString:)) }
+            } else {
+                []
+            }
+        let requestData = TerminalClipboardRead(entries: entries, availableMIMEs: available)
+        let detail = confirmationDetail(requestData)
+        let stateAddress = UInt(bitPattern: state)
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
+            let alert = NSAlert()
+            alert.messageText = confirmationTitle(for: request)
+            alert.informativeText = detail
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: confirmationButton(for: request))
+            alert.addButton(withTitle: "Cancel")
+            let finish: (NSApplication.ModalResponse) -> Void = { [weak view] response in
+                guard let surface = view?.surface,
+                    let pendingState = UnsafeMutableRawPointer(bitPattern: stateAddress)
+                else { return }
+                guard response == .alertFirstButtonReturn else {
+                    ghostty_surface_deny_clipboard_request(surface, pendingState)
+                    return
+                }
+                TerminalClipboard.complete(
+                    requestData, surface: surface, state: pendingState, confirmed: true)
+            }
+            if BackgroundTesting.isActive {
+                finish(.abort)
+                return
+            }
+            if let window = view.window {
+                alert.beginSheetModal(for: window, completionHandler: finish)
+            } else {
+                finish(alert.runModal())
+            }
+        }
+    }
+
+    private static func confirmationTitle(for request: ghostty_clipboard_request_e) -> String {
+        switch request {
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ, GHOSTTY_CLIPBOARD_REQUEST_KITTY_READ,
+            GHOSTTY_CLIPBOARD_REQUEST_LIST:
+            return "Allow terminal clipboard access?"
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE, GHOSTTY_CLIPBOARD_REQUEST_KITTY_WRITE:
+            return "Allow terminal to change the clipboard?"
+        default:
+            return "Paste into the terminal?"
+        }
+    }
+
+    private static func confirmationButton(for request: ghostty_clipboard_request_e) -> String {
+        switch request {
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_READ, GHOSTTY_CLIPBOARD_REQUEST_KITTY_READ,
+            GHOSTTY_CLIPBOARD_REQUEST_LIST:
+            return "Allow"
+        case GHOSTTY_CLIPBOARD_REQUEST_OSC_52_WRITE, GHOSTTY_CLIPBOARD_REQUEST_KITTY_WRITE:
+            return "Change Clipboard"
+        default:
+            return "Paste"
+        }
+    }
+
+    private static func confirmationDetail(_ request: TerminalClipboardRead) -> String {
+        guard
+            let entry = request.entries.first(where: { $0.baseMIMEType == "text/plain" })
+                ?? request.entries.first
+        else {
+            return "A program in this terminal requested clipboard access."
+        }
+        guard !entry.data.isEmpty else {
+            return "A program in this terminal requested clipboard access."
+        }
+        let text = String(
+            decoding: entry.data.prefix(240), as: UTF8.self)
+        return text.utf8.count < entry.data.count ? "\(text)…" : text
+    }
+
+    private static func writeClipboard(
+        _ userdata: UnsafeMutableRawPointer?, _ location: ghostty_clipboard_e,
+        _ content: UnsafePointer<ghostty_clipboard_content_s>?, _ count: Int, _ confirm: Bool
+    ) {
+        guard location == GHOSTTY_CLIPBOARD_STANDARD else { return }
+        let entries = TerminalClipboard.entries(from: content, count: count)
+        guard !entries.isEmpty else { return }
+        guard confirm else {
+            if TerminalClipboard.write(entries, to: .general) {
+                let view = GhosttySurfaceRegistry.shared.view(userdata)
+                DispatchQueue.main.async { [weak view] in view?.showCopyConfirmation() }
+            }
+            return
+        }
+        let detail = confirmationDetail(
+            TerminalClipboardRead(entries: entries, availableMIMEs: []))
+        let view = GhosttySurfaceRegistry.shared.view(userdata)
+        DispatchQueue.main.async { [weak view] in
+            guard let view else { return }
+            let alert = NSAlert()
+            alert.messageText = "Allow terminal to change the clipboard?"
+            alert.informativeText = detail
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Change Clipboard")
+            alert.addButton(withTitle: "Cancel")
+            let finish: (NSApplication.ModalResponse) -> Void = { response in
+                guard response == .alertFirstButtonReturn else { return }
+                if TerminalClipboard.write(entries, to: .general) { view.showCopyConfirmation() }
+            }
+            if BackgroundTesting.isActive {
+                finish(.abort)
+                return
+            }
+            if let window = view.window {
+                alert.beginSheetModal(for: window, completionHandler: finish)
+            } else {
+                finish(alert.runModal())
+            }
+        }
+    }
+}

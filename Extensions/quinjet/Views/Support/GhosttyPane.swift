@@ -1,0 +1,69 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import GhosttyTerminal
+import SwiftUI
+
+extension GhosttyTerminalView: DirectKeyboardInputResponder {}
+
+extension GhosttyTheme {
+    init(palette: TerminalPalette, fontSize: Double? = nil) {
+        self.init(
+            background: palette.background,
+            foreground: palette.foreground,
+            cursor: palette.caret,
+            selectionBackground: palette.selectionBackground,
+            selectionForeground: palette.selectionForeground,
+            palette: palette.ansi,
+            fontSize: fontSize, scrollbackLimitLines: 10_000)
+    }
+}
+
+struct GhosttyPane: NSViewRepresentable {
+    let holder: TerminalSessionHolder
+    let theme: GhosttyTheme
+    var active = true
+    var wantsFocus = true
+    var onFocus: (() -> Void)?
+
+    final class Coordinator {
+        private var requested = false
+
+        func shouldRequest(active: Bool, wantsFocus: Bool) -> Bool {
+            let next = active && wantsFocus
+            defer { requested = next }
+            return next && !requested
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> GhosttyTerminalView {
+        let view = holder.retainedGhosttyView(theme: theme)
+        let generation = holder.generation
+        view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
+        view.onFocus = onFocus
+        view.onFocusChange = { focused in
+            guard holder.generation == generation, focused else { return }
+            onFocus?()
+        }
+        holder.updatePresentation(active: active, wantsFocus: wantsFocus)
+        return view
+    }
+
+    func updateNSView(_ view: GhosttyTerminalView, context: Context) {
+        view.apply(theme: theme)
+        let generation = holder.generation
+        view.onDropFiles = { payload in holder.handleDropFiles(payload, generation: generation) }
+        view.onFocus = onFocus
+        view.onFocusChange = { focused in
+            guard holder.generation == generation, focused else { return }
+            onFocus?()
+        }
+        holder.updatePresentation(active: active, wantsFocus: wantsFocus)
+        if context.coordinator.shouldRequest(active: active, wantsFocus: wantsFocus) {
+            view.requestFocus()
+        } else if !(active && wantsFocus) {
+            view.cancelFocusRequest()
+        }
+    }
+}

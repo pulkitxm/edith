@@ -1,0 +1,219 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import EdithStudio
+import Foundation
+import Observation
+
+@MainActor
+@Observable
+final class StudioJob: Identifiable {
+    enum Phase: Equatable {
+        case editing
+        case running
+        case finished
+        case failed(String)
+    }
+
+    let id: UUID
+    let facade: StudioUIFacade?
+    let tool: StudioTool
+    var inputs: [URL]
+    var settings: StudioSettings
+    var phase: Phase = .editing
+    var progress = 0.0
+    var unit = 0
+    var units = 1
+    var status: String?
+    var result: StudioRunResult?
+    var startedAt: Date?
+    let preview = StudioPreviewModel()
+    private var task: Task<Void, Never>?
+
+    init(
+        tool: StudioTool, inputs: [URL], settings: StudioSettings? = nil,
+        id: UUID = UUID(), facade: StudioUIFacade? = nil
+    ) {
+        self.id = id
+        self.facade = facade
+        preview.facade = facade
+        self.tool = tool
+        self.inputs = StudioJobInputs.accepted(inputs, by: tool)
+        self.settings = settings ?? tool.defaultSettings
+    }
+
+    var isRunning: Bool { phase == .running }
+
+    var validationMessage: String? {
+        do {
+            try StudioRunner.validate(tool: tool, inputs: inputs, settings: settings)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func binding(_ key: String) -> StudioValue {
+        settings[key] ?? tool.defaultSettings[key] ?? .text("")
+    }
+
+    func set(_ key: String, _ value: StudioValue) {
+        settings[key] = value
+    }
+
+    func add(_ urls: [URL]) {
+        inputs = StudioJobInputs.merged(inputs, adding: urls, for: tool)
+        if phase != .running { phase = .editing }
+    }
+
+    func remove(_ url: URL) {
+        inputs.removeAll { $0 == url }
+    }
+
+    func move(_ url: URL, by offset: Int) {
+        guard let index = inputs.firstIndex(of: url) else { return }
+        let target = min(max(index + offset, 0), inputs.count - 1)
+        guard target != index else { return }
+        inputs.remove(at: index)
+        inputs.insert(url, at: target)
+    }
+
+    func run(
+        destination: StudioDestination, environment: StudioEnvironment,
+        onFinish: @escaping @MainActor (StudioJob) -> Void
+    ) {
+        guard task == nil, !isRunning else { return }
+        if let facade {
+            phase = .running
+            progress = 0
+            result = nil
+            startedAt = Date()
+            facade.run(self, onFinish: onFinish)
+            return
+        }
+        task?.cancel()
+        let tool = self.tool
+        let inputs = self.inputs
+        let settings = self.settings
+        phase = .running
+        progress = 0
+        status = nil
+        result = nil
+        startedAt = Date()
+        let report: @Sendable (StudioProgress) -> Void = { [weak self] progress in
+            Task { @MainActor [weak self] in
+                guard let self, self.phase == .running else { return }
+                self.progress = progress.fraction
+                self.unit = progress.unit
+                self.units = progress.units
+                if let status = progress.status { self.status = status }
+            }
+        }
+        StudioRunRegistry.track(self)
+        task = Task { [weak self] in
+            defer { if let self { self.task = nil; StudioRunRegistry.release(self) } }
+            let outcome: Result<StudioRunResult, Error>
+            do {
+                let value = try await StudioRunner.run(
+                    tool: tool, inputs: inputs, settings: settings, destination: destination,
+                    environment: environment, progress: report)
+                outcome = .success(value)
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self, !Task.isCancelled else { return }
+            StudioRunRegistry.release(self)
+            self.task = nil
+            switch outcome {
+            case let .success(value):
+                self.result = value
+                self.progress = 1
+                self.phase = .finished
+                onFinish(self)
+            case let .failure(error):
+                self.phase = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    func cancel() {
+        facade?.cancel(self)
+        task?.cancel()
+        if phase == .running { phase = .failed(StudioError.cancelled.localizedDescription) }
+        StudioRunRegistry.release(self)
+    }
+
+    func stopAndWait() async {
+        let pending = task
+        cancel()
+        await pending?.value
+    }
+
+    func apply(_ state: StudioUIJobState) {
+        guard state.id == id else { return }
+        progress = state.progress
+        unit = state.unit
+        units = state.units
+        status = state.status
+        result = state.result?.value
+        switch state.phase {
+        case "running": phase = .running
+        case "finished": phase = .finished
+        case "failed": phase = .failed(state.failure ?? "The operation failed.")
+        default: phase = .editing
+        }
+    }
+
+    func reset() {
+        guard !isRunning else { return }
+        phase = .editing
+        result = nil
+        progress = 0
+        status = nil
+    }
+}
+
+@MainActor
+enum StudioRunRegistry {
+    private static var jobs: [ObjectIdentifier: StudioJob] = [:]
+
+    static func track(_ job: StudioJob) {
+        jobs[ObjectIdentifier(job)] = job
+    }
+
+    static func contains(_ job: StudioJob) -> Bool {
+        jobs[ObjectIdentifier(job)] != nil
+    }
+
+    static func release(_ job: StudioJob) {
+        jobs.removeValue(forKey: ObjectIdentifier(job))
+    }
+
+    @discardableResult
+    static func cancelRunning() -> [String] {
+        let active = jobs.values.filter(\.isRunning)
+        for job in active { job.cancel() }
+        return active.map(\.tool.id)
+    }
+}
+
+enum StudioJobInputs {
+    static func accepted(_ urls: [URL], by tool: StudioTool) -> [URL] {
+        var seen = Set<URL>()
+        var result: [URL] = []
+        for url in urls where tool.accepts(url) && seen.insert(url).inserted {
+            result.append(url)
+        }
+        if let maximum = tool.arity.maximum, result.count > maximum {
+            return Array(result.prefix(maximum))
+        }
+        return result
+    }
+
+    static func merged(_ current: [URL], adding urls: [URL], for tool: StudioTool) -> [URL] {
+        accepted(current + urls, by: tool)
+    }
+
+    static func rejected(_ urls: [URL], by tool: StudioTool) -> [URL] {
+        urls.filter { !tool.accepts($0) }
+    }
+}

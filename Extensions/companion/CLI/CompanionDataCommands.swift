@@ -1,0 +1,276 @@
+import ArgumentParser
+import EdithExtensionCommands
+import EdithExtensionSupport
+import Foundation
+
+@MainActor struct CompanionExportCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "export",
+        abstract: "Save everything the companion remembers as a restorable bundle.",
+        discussion: """
+            Saves everything the companion remembers into a directory you choose: one
+            `bundle.json` holding episodes, observations, conversations, beliefs,
+            claims, facts, core memory and the non-secret reasoner settings, plus, with
+            `--include-media`, a `media/` directory of the original voice notes, PDFs,
+            images and videos.
+
+            Reads everything the companion remembers and writes a restorable bundle.
+
+            ed companion export /tmp/companion-export
+            ed companion export /tmp/companion-export --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(name: .long, help: "Companion API base URL.")
+    var endpoint: String?
+
+    @Flag(name: .long, help: "Also download voice notes, PDFs and other media files.")
+    var includeMedia = false
+
+    @Argument(help: "The directory the bundle is written into; created if missing.")
+    var directory: String
+
+    func run() async throws {
+        try await execute {
+            let target = try directory.companionCLIPath()
+            let include = includeMedia
+            let result = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                do {
+                    return try await operations.exportData(
+                        into: target, includeMedia: include)
+                } catch let error as CompanionDataTransferError {
+                    throw CLIFailure(error.errorDescription ?? "the export failed")
+                }
+            }
+            let counts = result.counts.sorted { $0.key < $1.key }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "directory": .string(result.directory),
+                        "counts": .object(
+                            counts.reduce(into: [:]) { $0[$1.key] = .int($1.value) }),
+                        "mediaSaved": .int(result.mediaSaved),
+                        "mediaFailed": .array(result.mediaFailed.map { .string($0) }),
+                    ]))
+                return
+            }
+            CLIOut.out(CompanionSettingsOperationText.exportData(result))
+            if includeMedia {
+                CLIOut.out("media files saved: \(result.mediaSaved)")
+                if !result.mediaFailed.isEmpty {
+                    CLIOut.note(
+                        "media that would not download: "
+                            + result.mediaFailed.joined(separator: ", "))
+                }
+            } else if result.mediaOnCompanion > 0 {
+                CLIOut.note(
+                    "\(result.mediaOnCompanion) media file(s) stayed on the companion; "
+                        + "add --include-media to bring them too")
+            }
+        }
+    }
+}
+
+@MainActor struct CompanionImportCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "import",
+        abstract: "Restore a bundle written by `ed companion export`.",
+        discussion: """
+            Restores a bundle written by [`ed companion export`](./export.md): episodes,
+            observations, conversations, beliefs, claims, facts, core memory, the
+            non-secret reasoner settings, and any media files sitting next to the
+            bundle.
+
+            Changes the companion database by restoring a bundle from export.
+
+            ed companion import /tmp/notes.md
+            ed companion import /tmp/notes.md --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(name: .long, help: "Companion API base URL.")
+    var endpoint: String?
+
+    @Argument(help: "The bundle.json file, or the directory holding it.")
+    var path: String
+
+    func run() async throws {
+        try await execute {
+            let expanded = try path.companionCLIPath()
+            let result = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                do {
+                    return try await operations.importData(from: expanded)
+                } catch let error as CompanionDataTransferError {
+                    switch error {
+                    case .missingBundle:
+                        throw CLIFailure.notFound(
+                            error.errorDescription ?? "no bundle.json there",
+                            hint: "point at a directory written by `ed companion export`")
+                    case let .unreadable(path, detail):
+                        if detail == "nothing there" {
+                            throw CLIFailure.notFound("nothing at \(path)")
+                        }
+                        throw CLIFailure("could not read \(path)", hint: detail)
+                    default:
+                        throw CLIFailure(error.errorDescription ?? "the import failed")
+                    }
+                }
+            }
+            let outcome = result.outcome
+            let mediaRestored = result.mediaRestored
+            let mediaFailed = result.mediaFailed
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "episodesInserted": .int(outcome.episodesInserted),
+                        "episodesSkipped": .int(outcome.episodesSkipped),
+                        "observationsInserted": .int(outcome.observationsInserted),
+                        "conversationsInserted": .int(outcome.conversationsInserted),
+                        "messagesInserted": .int(outcome.messagesInserted),
+                        "beliefsInserted": .int(outcome.beliefsInserted),
+                        "claimsInserted": .int(outcome.claimsInserted),
+                        "factsInserted": .int(outcome.factsInserted),
+                        "coreSectionsInserted": .int(outcome.coreSectionsInserted),
+                        "settingsInserted": .int(outcome.settingsInserted),
+                        "mediaRestored": .int(mediaRestored),
+                        "mediaFailed": .array(mediaFailed.map { .string($0) }),
+                        "pendingEpisodes": .int(outcome.pendingEpisodes),
+                    ]))
+                return
+            }
+            CLIOut.out(CompanionSettingsOperationText.importData(result))
+            if outcome.episodesSkipped > 0 {
+                CLIOut.out("already there: \(outcome.episodesSkipped) episode(s)")
+            }
+            if mediaRestored > 0 || !mediaFailed.isEmpty {
+                CLIOut.out("media restored: \(mediaRestored)")
+                if !mediaFailed.isEmpty {
+                    CLIOut.note(
+                        "media that would not restore: \(mediaFailed.joined(separator: ", "))")
+                }
+            }
+            if outcome.pendingEpisodes > 0 {
+                CLIOut.out(
+                    "\(outcome.pendingEpisodes) episode(s) queued for embedding; the companion is indexing them now"
+                )
+            }
+        }
+    }
+}
+
+@MainActor struct CompanionEraseCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "erase",
+        abstract: "Delete one episode, its media, and everything derived from it.",
+        discussion: """
+            Deletes one episode: its chunks, its claims and their corroborations, its
+            mention in belief evidence, and, when nothing else shares the source, the
+            original file in the vault.
+
+            Changes companion memory by deleting one episode and everything derived from
+            it.
+
+            ed companion erase 1
+            ed companion erase 1 --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(name: .long, help: "Companion API base URL.")
+    var endpoint: String?
+
+    @Flag(name: .long, help: "Actually delete; without it nothing happens.")
+    var yes = false
+
+    @Argument(help: "The episode id to erase.")
+    var id: String
+
+    func run() async throws {
+        try await execute {
+            guard yes else {
+                throw CLIFailure.usage(
+                    "erasing an episode cannot be undone",
+                    hint:
+                        "run `ed companion episode \(id)` to read it first, then repeat with --yes")
+            }
+            let outcome = try await CompanionBridge.request(endpoint: endpoint) { client in
+                try await client.deleteEpisode(id: id)
+            }
+            guard !json else {
+                CLIOut.json(
+                    .object([
+                        "erased": .string(outcome.id),
+                        "claimsDeleted": .int(outcome.claimsDeleted),
+                        "chunksDeleted": .int(outcome.chunksDeleted),
+                        "sourceDeleted": .bool(outcome.sourceDeleted),
+                        "vaultFileRemoved": .bool(outcome.vaultFileRemoved),
+                    ]))
+                return
+            }
+            CLIOut.out(
+                "erased episode \(outcome.id): \(outcome.chunksDeleted) chunk(s), "
+                    + "\(outcome.claimsDeleted) claim(s)"
+                    + (outcome.vaultFileRemoved ? ", and its vault file" : ""))
+        }
+    }
+}
+
+@MainActor struct CompanionWipeCommand: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "wipe",
+        abstract: "Delete every episode, observation, belief and conversation.",
+        discussion: """
+            Deletes the companion's entire memory: every episode, source, observation,
+            belief, claim, fact, conversation, entity, hypothesis and the vault files
+            behind them.
+
+            Changes companion memory by deleting every episode, observation, belief, and
+            conversation.
+
+            ed companion wipe
+            ed companion wipe --json
+            """, )
+
+    @Flag(name: .long, help: "Emit JSON on stdout.")
+    var json = false
+
+    @Option(name: .long, help: "Companion API base URL.")
+    var endpoint: String?
+
+    @Flag(name: .long, help: "Actually wipe; without it nothing happens.")
+    var yes = false
+
+    func run() async throws {
+        try await execute {
+            let operation = CompanionSettingsOperation.wipe
+            let plan = CLIDestructivePlan(
+                action: operation.descriptor.summary, targets: operation.previewTargets,
+                confirmed: yes, json: json)
+            guard plan.shouldApply() else { return }
+            let outcome = try await CompanionSettingsOperationBridge.request(
+                endpoint: endpoint
+            ) { operations in
+                try await operations.wipe()
+            }
+            plan.finish(
+                changed: true, plain: CompanionSettingsOperationText.wipe(outcome),
+                fields: [
+                    "episodesDropped": .int(outcome.episodesDropped),
+                    "sourcesDropped": .int(outcome.sourcesDropped),
+                    "observationsDropped": .int(outcome.observationsDropped),
+                    "conversationsDropped": .int(outcome.conversationsDropped),
+                    "beliefsDropped": .int(outcome.beliefsDropped),
+                    "vaultCleared": .bool(outcome.vaultCleared),
+                ])
+        }
+    }
+}

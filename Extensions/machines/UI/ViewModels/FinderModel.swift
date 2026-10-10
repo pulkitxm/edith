@@ -1,0 +1,1494 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import Observation
+import SwiftUI
+import UniformTypeIdentifiers
+
+@MainActor
+@Observable
+final class FinderModel {
+    typealias DirectoryLoader =
+        @MainActor @Sendable (String) async -> Result<
+            [RemoteFileEntry], Error
+        >
+    typealias FreeSpaceLoader = @MainActor @Sendable (String) async -> Int64?
+
+    var path: String
+    var entries: [RemoteFileEntry] = [] { didSet { updateEntryProjection() } }
+    let listingLoad = ContentLoad()
+    var loading: Bool { listingLoad.isRunning }
+    var errorMessage: String?
+    var statusMessage: String?
+    var selection: Set<String> = [] {
+        didSet { syncQuickLookToSelection() }
+    }
+    var renaming: String?
+    var renameText = ""
+    var quickLookPath: String?
+    var freeSpaceKB: Int64?
+    var searchQuery = ""
+    var searchResults: [RemoteFileEntry]? { didSet { updateEntryProjection() } }
+    var places: [FilePlaceSection] = []
+    var infoTarget: RemoteFileEntry?
+    var showSidebar = true
+    var progress: FileOperationProgress?
+    var pendingConflict: PendingConflict?
+    var scrollTarget: String?
+    static var clipboard: FileClipboard?
+
+    struct PendingConflict: Identifiable {
+        let id = UUID()
+        var intent: DropIntent
+        var destination: String
+        var names: [String]
+    }
+
+    var viewModeRaw = FinderDefaults.viewMode {
+        didSet { FinderDefaults.viewMode = viewModeRaw }
+    }
+    var sortKeyRaw = FinderDefaults.sortKey {
+        didSet { FinderDefaults.sortKey = sortKeyRaw; updateEntryProjection() }
+    }
+    var sortAscending = FinderDefaults.sortAscending {
+        didSet { FinderDefaults.sortAscending = sortAscending; updateEntryProjection() }
+    }
+    var showHidden = FinderDefaults.showHidden {
+        didSet { FinderDefaults.showHidden = showHidden; updateEntryProjection() }
+    }
+    var iconSize = FinderDefaults.iconSize {
+        didSet { FinderDefaults.iconSize = iconSize }
+    }
+
+    let remoteViewID = UUID()
+    let session: MachineSession
+    private let entryProjection = FinderEntryProjection()
+    private var shallowSearchTask: Task<[RemoteFileEntry], Never>?
+    private var history: [String] = []
+    private var future: [String] = []
+    private var anchor: String?
+    private var cursor: String?
+    var gridColumns = 1
+    private var typeBuffer = ""
+    private var typeBufferAt = Date.distantPast
+    private struct LoadRequest {
+        let generation: UInt64
+        let path: String
+    }
+
+    private struct LoadOutcome {
+        let path: String
+        let result: Result<[RemoteFileEntry], Error>
+        let freeSpaceKB: Int64?
+    }
+
+    private var loadWorkerGeneration = 0
+    private var pendingLoad: LoadRequest?
+    private var loadWorkerTask: Task<Void, Never>?
+    private var activeLoadTask: Task<LoadOutcome?, Never>?
+    private var flashToken = 0
+    private var searchToken = 0
+    private var searchTask: Task<Void, Never>?
+    private let localSearch: @Sendable (String, String) async -> [RemoteFileEntry]
+    private let directoryLoader: DirectoryLoader
+    private let freeSpaceLoader: FreeSpaceLoader
+    private var folderSizes: [String: Int64] = [:]
+    private var folderCounts: [String: Int] = [:]
+    private var resolvedHome: String?
+    private var undoStack: [FinderUndoStep] = []
+    private var remoteTransferTask: Task<MachineFileState, Error>?
+    private var transferTask: Task<RemoteTransferOutcome, Error>?
+    private var transferCommandTask: Task<Result<String, Error>, Never>?
+
+    var canCancelTransfer: Bool {
+        transferTask != nil || transferCommandTask != nil || remoteTransferTask != nil
+    }
+
+    func cancelTransfer() {
+        remoteTransferTask?.cancel()
+        transferTask?.cancel()
+        transferCommandTask?.cancel()
+    }
+
+    init(
+        session: MachineSession, path: String? = nil,
+        localSearch: @escaping @Sendable (String, String) async -> [RemoteFileEntry] = {
+            root, query in
+            let worker = Task.detached(priority: .userInitiated) {
+                MachineSession.searchLocalFiles(root: root, query: query)
+            }
+            return await withTaskCancellationHandler {
+                await worker.value
+            } onCancel: {
+                worker.cancel()
+            }
+        }, directoryLoader: DirectoryLoader? = nil, freeSpaceLoader: FreeSpaceLoader? = nil
+    ) {
+        self.session = session
+        self.localSearch = localSearch
+        self.directoryLoader = directoryLoader ?? { await session.listFiles(path: $0) }
+        self.freeSpaceLoader =
+            freeSpaceLoader ?? { path in
+                if session.isLocal {
+                    return VolumeCapacity.availableBytes(at: URL(fileURLWithPath: path))
+                        .map { $0 / 1024 }
+                }
+                let platform = session.remotePlatform ?? .linux
+                let result = await session.runCommand(
+                    FileOperations.freeSpaceCommand(path: path, platform: platform), timeout: 20)
+                guard case let .success(output) = result else { return nil }
+                return Int64(output.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        self.path =
+            path
+            ?? (session.isLocal && session.uiClient == nil
+                ? FileManager.default.homeDirectoryForCurrentUser.path : "~")
+    }
+
+    var viewMode: FileViewMode {
+        get { FileViewMode(rawValue: viewModeRaw) ?? .list }
+        set { viewModeRaw = newValue.rawValue }
+    }
+
+    var sortKey: FileSortKey {
+        get { FileSortKey(rawValue: sortKeyRaw) ?? .name }
+        set { sortKeyRaw = newValue.rawValue }
+    }
+
+    var canGoBack: Bool { !history.isEmpty }
+    var canGoForward: Bool { !future.isEmpty }
+    var canGoUp: Bool { FileListing.parentPath(of: path) != nil }
+
+    var visibleEntries: [RemoteFileEntry] { entryProjection.entries }
+    var projectingEntries: Bool { entryProjection.isUpdating }
+
+    private func updateEntryProjection() {
+        entryProjection.update(
+            entries: entries, searchResults: searchResults, showHidden: showHidden,
+            key: sortKey, ascending: sortAscending)
+    }
+
+    func waitForEntryProjection() async { await entryProjection.wait() }
+
+    var selectedEntries: [RemoteFileEntry] {
+        visibleEntries.filter { selection.contains($0.path) }
+    }
+
+    var canRevealSelection: Bool {
+        if session.isLocal { return !selectedEntries.isEmpty }
+        return selectedEntries.contains { !$0.isDirectory }
+    }
+
+    var statusLine: String {
+        let total = visibleEntries.count
+        var text = "\(total) item\(total == 1 ? "" : "s")"
+        if selection.count == 1, let entry = selectedEntries.first {
+            text += ", \(entry.name) selected"
+        } else if selection.count > 1 {
+            let bytes = selectedEntries.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            text += ", \(selection.count) selected (\(ByteFormatter.string(bytes)))"
+        }
+        if let freeSpaceKB {
+            text += "  ·  \(ByteFormatter.string(freeSpaceKB * 1024)) available"
+        }
+        return text
+    }
+
+    func connectIfNeeded() {
+        guard !session.isLocal else { return }
+        if case .disconnected = session.state { session.start() }
+    }
+
+    func waitForConnection(timeout: TimeInterval = 30) async {
+        guard !session.isLocal else { return }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if session.state.isConnected { return }
+            if case .failed = session.state { return }
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+    }
+
+    func loadPlaces() async {
+        if session.uiClient != nil { await remotePerform(.places); return }
+        if session.isLocal {
+            let volumes =
+                FileManager.default.mountedVolumeURLs(
+                    includingResourceValuesForKeys: [.volumeIsBrowsableKey],
+                    options: [.skipHiddenVolumes]) ?? []
+            let external = volumes.filter { $0.path != "/" }
+            places = FilePlaces.localSections(volumes: external)
+            return
+        }
+        let platform = session.remotePlatform ?? .linux
+        let result = await session.runCommand(
+            FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
+        let home =
+            (try? result.get())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "~"
+        places = FilePlaces.remoteSections(
+            home: home.isEmpty ? "~" : home, platform: platform)
+    }
+
+    func copySelection(operation: FileClipboardOperation) {
+        let paths = selectedEntries.map(\.path)
+        guard !paths.isEmpty else { return }
+        Self.clipboard = FileClipboard(
+            paths: paths, machineID: session.machine.id, operation: operation)
+        flash(
+            "\(operation == .copy ? "Copied" : "Cut") \(paths.count) item"
+                + (paths.count == 1 ? "" : "s"))
+    }
+
+    func paste() async {
+        guard let clipboard = Self.clipboard else { return }
+        guard clipboard.machineID == session.machine.id else {
+            await perform(
+                intent: .transferBetweenMachines(
+                    from: clipboard.machineID, paths: clipboard.paths,
+                    moving: clipboard.operation == .move),
+                destination: path)
+            return
+        }
+        let isCopy = clipboard.operation == .copy
+        let alreadyHere = clipboard.paths.filter { FileListing.parentPath(of: $0) == path }
+        let fromElsewhere = clipboard.paths.filter { FileListing.parentPath(of: $0) != path }
+        guard isCopy || !fromElsewhere.isEmpty else {
+            errorMessage = "Those items are already here."
+            return
+        }
+        if isCopy, !alreadyHere.isEmpty {
+            await duplicate(paths: alreadyHere)
+        }
+        if !fromElsewhere.isEmpty {
+            await perform(
+                intent: isCopy
+                    ? .copyWithinMachine(fromElsewhere) : .moveWithinMachine(fromElsewhere),
+                destination: path)
+        }
+        if !isCopy, errorMessage == nil { Self.clipboard = nil }
+    }
+
+    func showInfo() {
+        infoTarget = selectedEntries.first
+        guard let target = infoTarget, target.isDirectory else { return }
+        Task { await measure(target) }
+    }
+
+    func infoSummary(for entry: RemoteFileEntry) -> FileInfoSummary {
+        guard entry.isDirectory else { return FileInfoSummary(entry: entry) }
+        return FileInfoSummary(entry: entry, sizeOverride: folderSummary(for: entry))
+    }
+
+    func setViewMode(_ mode: FileViewMode) {
+        viewMode = mode
+    }
+
+    func toggleHidden() {
+        showHidden.toggle()
+    }
+
+    func load() async {
+        if session.uiClient != nil { await remotePerform(.load); return }
+        let task = scheduleLoad()
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func scheduleLoad() -> Task<Void, Never> {
+        if session.uiClient != nil {
+            loadWorkerTask?.cancel()
+            let task = Task { await remotePerform(.load) }
+            loadWorkerTask = task
+            return task
+        }
+        pendingLoad = LoadRequest(
+            generation: listingLoad.begin(preservingContent: !entries.isEmpty), path: path)
+        activeLoadTask?.cancel()
+        errorMessage = nil
+        if let loadWorkerTask { return loadWorkerTask }
+        loadWorkerGeneration += 1
+        let workerGeneration = loadWorkerGeneration
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.drainLoads(workerGeneration: workerGeneration)
+        }
+        loadWorkerTask = task
+        return task
+    }
+
+    private func drainLoads(workerGeneration: Int) async {
+        while !Task.isCancelled, let request = pendingLoad {
+            pendingLoad = nil
+            let operation = Task { [weak self] in
+                await self?.loadDirectory(request.path)
+            }
+            activeLoadTask = operation
+            let outcome = await withTaskCancellationHandler {
+                await operation.value
+            } onCancel: {
+                operation.cancel()
+            }
+            guard workerGeneration == loadWorkerGeneration else { return }
+            activeLoadTask = nil
+            guard !operation.isCancelled, listingLoad.isCurrent(request.generation), let outcome
+            else {
+                continue
+            }
+            publish(outcome, requestedPath: request.path)
+            switch outcome.result {
+            case .success: listingLoad.complete(request.generation)
+            case let .failure(error): listingLoad.fail(request.generation, error: error)
+            }
+        }
+        guard workerGeneration == loadWorkerGeneration else { return }
+        loadWorkerTask = nil
+        activeLoadTask = nil
+        if listingLoad.isRunning { listingLoad.cancel() }
+    }
+
+    private func loadDirectory(_ requestedPath: String) async -> LoadOutcome? {
+        var resolvedPath = requestedPath
+        if !session.isLocal, requestedPath == "~" || requestedPath.isEmpty {
+            let platform = session.remotePlatform ?? .linux
+            let result = await session.runCommand(
+                FilePlaces.homeDirectoryCommand(platform: platform), timeout: 20)
+            guard !Task.isCancelled else { return nil }
+            if case let .success(output) = result {
+                let home = output.trimmingCharacters(in: .whitespacesAndNewlines)
+                if home.hasPrefix("/") || FileListing.isWindowsPath(home) { resolvedPath = home }
+            }
+        }
+        let result = await directoryLoader(resolvedPath)
+        guard !Task.isCancelled else { return nil }
+        let freeSpaceKB = await freeSpaceLoader(resolvedPath)
+        guard !Task.isCancelled else { return nil }
+        return LoadOutcome(path: resolvedPath, result: result, freeSpaceKB: freeSpaceKB)
+    }
+
+    private func publish(_ outcome: LoadOutcome, requestedPath: String) {
+        if path == requestedPath, outcome.path != requestedPath {
+            resolvedHome = outcome.path
+            path = outcome.path
+        }
+        guard path == outcome.path else { return }
+        freeSpaceKB = outcome.freeSpaceKB
+        switch outcome.result {
+        case let .success(items):
+            entries = items
+            selection = selection.filter { path in items.contains { $0.path == path } }
+        case let .failure(failure):
+            errorMessage = failure.localizedDescription
+        }
+    }
+
+    func cancelAndDrain() -> Task<Void, Never> {
+        let worker = loadWorkerTask, active = activeLoadTask
+        let search = searchTask, shallow = shallowSearchTask
+        let transfer = transferTask, command = transferCommandTask, remote = remoteTransferTask
+        let projection = entryProjection.cancelAndDrain()
+        cancelTransfer(); stopLoading()
+        return Task {
+            await worker?.value; _ = await active?.value
+            await search?.value; _ = await shallow?.value
+            _ = try? await transfer?.value; _ = await command?.value; _ = try? await remote?.value
+            await projection.value
+        }
+    }
+
+    func stopLoading() {
+        entryProjection.cancel()
+        invalidateSearch()
+        listingLoad.cancel()
+        loadWorkerGeneration += 1
+        pendingLoad = nil
+        activeLoadTask?.cancel()
+        activeLoadTask = nil
+        loadWorkerTask?.cancel()
+        loadWorkerTask = nil
+    }
+
+    func navigate(to newPath: String, recordHistory: Bool = true) {
+        let target = expandingHome(newPath)
+        guard target != path else { return }
+        invalidateSearch()
+        if recordHistory {
+            history.append(path)
+            future.removeAll()
+        }
+        path = target
+        entries = []
+        selection = []
+        anchor = nil
+        searchResults = nil
+        searchQuery = ""
+        _ = scheduleLoad()
+    }
+
+    private func expandingHome(_ candidate: String) -> String {
+        guard candidate == "~" || candidate.hasPrefix("~/") else { return candidate }
+        guard let home = resolvedHome else { return candidate }
+        if candidate == "~" { return home }
+        return FileListing.join(parent: home, name: String(candidate.dropFirst(2)))
+    }
+
+    func goBack() {
+        guard let previous = history.popLast() else { return }
+        future.append(path)
+        navigate(to: previous, recordHistory: false)
+    }
+
+    func goForward() {
+        guard let next = future.popLast() else { return }
+        history.append(path)
+        navigate(to: next, recordHistory: false)
+    }
+
+    func goUp() {
+        guard let parent = FileListing.parentPath(of: path) else { return }
+        navigate(to: parent)
+    }
+
+    func goHome() {
+        if session.uiClient != nil { Task { await remotePerform(.home) }; return }
+        let target =
+            session.isLocal
+            ? FileManager.default.homeDirectoryForCurrentUser.path
+            : (places.first?.places.first?.path ?? "~")
+        navigate(to: target)
+    }
+
+    func refresh() {
+        _ = scheduleLoad()
+    }
+
+    func open(_ entry: RemoteFileEntry) {
+        if session.uiClient != nil, !entry.isDirectory, entry.kind != .symlink {
+            Task { await remotePerform(.open, text: entry.path) }; return
+        }
+        if entry.isDirectory || entry.kind == .symlink {
+            navigate(to: entry.path)
+            return
+        }
+        if session.isLocal {
+            RemoteFileOperationExecution.present(
+                [URL(fileURLWithPath: entry.path)], action: .open
+            ) { urls, _ in NSWorkspace.shared.open(urls[0]) }
+            return
+        }
+        Task { await openRemote(entry) }
+    }
+
+    private func openRemote(_ entry: RemoteFileEntry) async {
+        statusMessage = "Opening \(entry.name)…"
+        do {
+            let destination = try await RemoteFileOperationExecution.materialize(
+                entry, machineID: session.machine.id, isLocal: false
+            ) { remotePath, localURL in
+                guard let connection = session.connectionRef else {
+                    throw FinderTransferError.notConnected
+                }
+                try await connection.download(remotePath: remotePath, to: localURL)
+            }
+            RemoteFileOperationExecution.present([destination], action: .open) { urls, _ in
+                NSWorkspace.shared.open(urls[0])
+            }
+            flash("Opened \(entry.name)")
+        } catch {
+            errorMessage = error.localizedDescription
+            statusMessage = nil
+        }
+    }
+
+    func openSelection() {
+        let targets = selectedEntries
+        guard !targets.isEmpty else { return }
+        if targets.count == 1 || targets.contains(where: \.isDirectory) {
+            guard let first = targets.first else { return }
+            open(first)
+            return
+        }
+        for entry in targets { open(entry) }
+    }
+
+    func toggleQuickLook() {
+        if quickLookPath != nil {
+            quickLookPath = nil
+        } else {
+            quickLookPath = quickLookTarget
+        }
+    }
+
+    private var quickLookTarget: String? {
+        let ordered = visibleEntries.filter { selection.contains($0.path) }
+        return ordered.first?.path ?? visibleEntries.first?.path
+    }
+
+    private func syncQuickLookToSelection() {
+        guard quickLookPath != nil, let target = quickLookTarget, target != quickLookPath else {
+            return
+        }
+        quickLookPath = target
+    }
+
+    func measure(_ entry: RemoteFileEntry) async {
+        if session.uiClient != nil { await remotePerform(.measure, text: entry.path); return }
+        guard entry.isDirectory, folderSizes[entry.path] == nil else { return }
+        folderSizes[entry.path] = -1
+        if session.isLocal {
+            let path = entry.path
+            let count = await Task.detached(priority: .utility) {
+                try? FileManager.default.contentsOfDirectory(atPath: path).count
+            }.value
+            guard !Task.isCancelled else { return }
+            folderCounts[entry.path] = count ?? 0
+        }
+        let result = await MachineFileOperationExecution.info(
+            path: entry.path, platform: session.remotePlatform ?? .linux
+        ) {
+            [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        switch result {
+        case let .success(bytes): folderSizes[entry.path] = bytes / 1024
+        case .failure: folderSizes[entry.path] = 0
+        }
+    }
+
+    func folderSummary(for entry: RemoteFileEntry) -> String {
+        guard let kilobytes = folderSizes[entry.path], kilobytes >= 0 else {
+            return "Calculating size…"
+        }
+        var text = ByteFormatter.string(kilobytes * 1024)
+        if let count = folderCounts[entry.path] {
+            text += ", \(count) item\(count == 1 ? "" : "s")"
+        }
+        return text
+    }
+
+    func renameSelection() {
+        guard let entry = selectedEntries.first else { return }
+        beginRename(entry)
+    }
+
+    func click(_ entry: RemoteFileEntry, modifiers: EventModifiers) {
+        if modifiers.contains(.shift) {
+            selection = FileSelectionMath.rangeSelection(
+                in: visibleEntries, from: anchor, to: entry.path)
+        } else if modifiers.contains(.command) {
+            selection = FileSelectionMath.toggled(selection, path: entry.path)
+            anchor = entry.path
+            cursor = entry.path
+        } else {
+            selection = [entry.path]
+            anchor = entry.path
+            cursor = entry.path
+        }
+    }
+
+    func selectAll() {
+        let items = visibleEntries
+        selection = Set(items.map(\.path))
+        anchor = items.first?.path
+        cursor = items.last?.path
+    }
+
+    func invertSelection() {
+        let items = visibleEntries
+        selection = Set(items.map(\.path).filter { !selection.contains($0) })
+        anchor = selection.isEmpty ? nil : items.first { selection.contains($0.path) }?.path
+        cursor = anchor
+    }
+
+    func moveSelection(by offset: Int, extend: Bool) {
+        let items = visibleEntries
+        guard !items.isEmpty else { return }
+        let currentIndex = items.firstIndex { $0.path == (cursor ?? selection.first) } ?? -1
+        let nextIndex = max(0, min(items.count - 1, currentIndex + offset))
+        let target = items[nextIndex]
+        cursor = target.path
+        if extend {
+            if anchor == nil { anchor = items[max(currentIndex, 0)].path }
+            selection = FileSelectionMath.rangeSelection(
+                in: items, from: anchor, to: target.path)
+        } else {
+            selection = [target.path]
+            anchor = target.path
+        }
+        reveal(target.path)
+        if quickLookPath != nil { quickLookPath = target.path }
+    }
+
+    func moveSelection(_ direction: FinderMoveDirection, extend: Bool) {
+        let stride = viewMode == .icon ? max(gridColumns, 1) : 1
+        return switch direction {
+        case .up: moveSelection(by: viewMode == .icon ? -stride : -1, extend: extend)
+        case .down: moveSelection(by: viewMode == .icon ? stride : 1, extend: extend)
+        case .left: moveSelection(by: viewMode == .icon ? -1 : 0, extend: extend)
+        case .right: moveSelection(by: viewMode == .icon ? 1 : 0, extend: extend)
+        }
+    }
+
+    func typeSelect(_ characters: String) {
+        let now = Date()
+        if now.timeIntervalSince(typeBufferAt) > 0.75 { typeBuffer = "" }
+        typeBufferAt = now
+        typeBuffer += characters.lowercased()
+        guard
+            let match = FileSelectionMath.typeSelectMatch(
+                in: visibleEntries, prefix: typeBuffer, after: anchor)
+        else { return }
+        selection = [match]
+        reveal(match)
+        anchor = match
+    }
+
+    func beginRename(_ entry: RemoteFileEntry) {
+        renaming = entry.path
+        renameText = entry.name
+    }
+
+    func reveal(_ path: String?) {
+        guard let path else { return }
+        scrollTarget = path
+    }
+
+    var canUndo: Bool { !undoStack.isEmpty }
+
+    var undoTitle: String? {
+        guard let last = undoStack.last else { return nil }
+        return "Undo \(last.label)"
+    }
+
+    func recordUndo(_ step: FinderUndoStep) {
+        undoStack.append(step)
+        if undoStack.count > 20 { undoStack.removeFirst(undoStack.count - 20) }
+    }
+
+    func undoLastOperation() async {
+        if session.uiClient != nil { await remotePerform(.undo); return }
+        guard let step = undoStack.popLast() else {
+            flash("Nothing to undo")
+            return
+        }
+        let result = await MachineFileOperationExecution.undo(
+            step, platform: session.remotePlatform ?? .linux
+        ) {
+            [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        if case let .failure(error) = result {
+            undoStack.append(step)
+            errorMessage = error.localizedDescription
+        }
+        await load()
+        if case let .success(restored) = result {
+            selection = Set(restored)
+            flash("Undid \(step.label)")
+        }
+    }
+
+    func focusContext(on entry: RemoteFileEntry) {
+        guard !selection.contains(entry.path) else { return }
+        selection = [entry.path]
+    }
+
+    func commitRename() async {
+        if session.uiClient != nil {
+            await remotePerform(.rename, text: renameText, paths: renaming.map { [$0] } ?? []);
+            return
+        }
+        guard let renaming else { return }
+        let pool = searchResults ?? entries
+        guard let entry = pool.first(where: { $0.path == renaming }) else {
+            self.renaming = nil
+            return
+        }
+        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard RenameSelection.isValid(trimmed) else {
+            errorMessage = "That name cannot be used."
+            return
+        }
+        guard trimmed != entry.name else {
+            self.renaming = nil
+            return
+        }
+        let parent = FileListing.parentPath(of: entry.path) ?? path
+        let siblings = entries.filter { $0.path != entry.path }
+        let sameNameDifferentCase =
+            NameFolding.key(trimmed, caseInsensitive: true)
+            == NameFolding.key(entry.name, caseInsensitive: true)
+        if !sameNameDifferentCase,
+            !NameConflicts.conflicting(names: [trimmed], existing: siblings).isEmpty
+        {
+            errorMessage = "An item named \(trimmed) already exists here."
+            return
+        }
+        self.renaming = nil
+        let target = FileListing.join(parent: parent, name: trimmed)
+        let result = await MachineFileOperationExecution.rename(
+            path: entry.path, destination: target, viaTemporary: sameNameDifferentCase,
+            platform: session.remotePlatform ?? .linux
+        ) { [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        await load()
+        switch result {
+        case .success:
+            recordUndo(
+                FinderUndoStep(
+                    label: "Rename", moves: [FinderUndoStep.Move(from: entry.path, to: target)]))
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+        if case .success = result {
+            selection = [target]
+            reveal(target)
+        }
+    }
+
+    func newFolder() async {
+        if session.uiClient != nil { await remotePerform(.mkdir); return }
+        let name = FileOperations.newFolderName(existing: entries)
+        let target = FileListing.join(parent: path, name: name)
+        if case let .failure(error) = await session.createDirectory(path: target) {
+            errorMessage = error.localizedDescription
+            return
+        }
+        await load()
+        if let created = entries.first(where: { $0.path == target }) {
+            selection = [target]
+            reveal(target)
+            beginRename(created)
+        }
+    }
+
+    func duplicateSelection() async {
+        await duplicate(paths: selectedEntries.map(\.path))
+    }
+
+    func duplicate(paths: [String]) async {
+        if session.uiClient != nil { await remotePerform(.duplicate, paths: paths); return }
+        guard !paths.isEmpty else { return }
+        var taken = entries
+        for source in paths {
+            let name = FileOperations.duplicateName(
+                of: (source as NSString).lastPathComponent, existing: taken)
+            let target = FileListing.join(parent: path, name: name)
+            taken.append(
+                RemoteFileEntry(name: name, path: target, kind: .file, sizeBytes: 0))
+            let result = await MachineFileOperationExecution.duplicate(
+                path: source, destination: target,
+                platform: session.remotePlatform ?? .linux
+            ) { [session] command, timeout in
+                await session.runCommand(command, timeout: timeout)
+            }
+            if case let .failure(error) = result {
+                errorMessage = error.localizedDescription
+                break
+            }
+        }
+        await load()
+    }
+
+    func trashSelection(permanently: Bool) async {
+        if session.uiClient != nil { await remotePerform(.trash, permanently: permanently); return }
+        let paths = selectedEntries.map(\.path)
+        guard !paths.isEmpty else { return }
+        let plan = MachineFileRemovalPlan(paths: paths, permanently: permanently)
+        let nativeTrash: MachineFileOperationExecution.Trash? =
+            session.isLocal && !permanently
+            ? { paths in
+                do {
+                    for path in paths {
+                        try FileManager.default.trashItem(
+                            at: URL(fileURLWithPath: path), resultingItemURL: nil)
+                    }
+                    return .success(())
+                } catch {
+                    return .failure(error)
+                }
+            } : nil
+        let result = await MachineFileOperationExecution.remove(
+            plan, confirmed: true, platform: session.remotePlatform ?? .linux,
+            trash: nativeTrash
+        ) { [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        switch result {
+        case .success:
+            selection = []
+            await load()
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func copyPaths() {
+        let paths = selectedEntries.map(\.path)
+        guard !paths.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(paths.joined(separator: "\n"), forType: .string)
+        flash("Copied \(paths.count) path\(paths.count == 1 ? "" : "s")")
+    }
+
+    func flash(_ message: String) {
+        statusMessage = message
+        flashToken += 1
+        let token = flashToken
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self, token == flashToken else { return }
+            statusMessage = nil
+        }
+    }
+
+    func revealInFinder() async {
+        if session.uiClient != nil { await remotePerform(.reveal); return }
+        errorMessage = nil
+        let projection = await FinderRevealProjection.make(
+            entries: selectedEntries, isLocal: session.isLocal)
+        guard !Task.isCancelled else { return }
+        let targets = projection.targets
+        guard !targets.isEmpty else { return }
+        do {
+            let urls: [URL]
+            if let localURLs = projection.localURLs {
+                urls = localURLs
+            } else {
+                guard let connection = session.connectionRef else {
+                    throw FinderTransferError.notConnected
+                }
+                var materialized: [URL] = []
+                for entry in targets {
+                    let destination = try await RemoteFileOperationExecution.materialize(
+                        entry, machineID: session.machine.id, isLocal: false
+                    ) { remotePath, localURL in
+                        try await connection.download(remotePath: remotePath, to: localURL)
+                    }
+                    materialized.append(destination)
+                }
+                urls = materialized
+            }
+            let presented = RemoteFileOperationExecution.present(urls, action: .reveal) {
+                urls, _ in
+                NSWorkspace.shared.activateFileViewerSelecting(urls)
+                return true
+            }
+            guard presented else {
+                throw FinderTransferError.presentationUnavailable
+            }
+            flash("Revealed \(urls.count) item\(urls.count == 1 ? "" : "s")")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func download(to destination: URL) async {
+        if session.uiClient != nil {
+            await remotePerform(.download, text: destination.path); return
+        }
+        guard progress == nil else { return }
+        let sources = selectedEntries.filter { !$0.isDirectory }
+        guard !sources.isEmpty else { return }
+        guard let source = transferEndpoint(for: session) else {
+            errorMessage = FinderTransferError.notConnected.localizedDescription
+            return
+        }
+        let local = RemoteTransferEndpoint.local(
+            machineID: session.machine.id, name: "This Mac")
+        errorMessage = nil
+        do {
+            let existing = try await local.list(destination.path)
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: sources.map(\.path), destination: destination.path,
+                existing: existing)
+            let outcome = try await executeTransfer(
+                plan, from: source, to: local, title: "Downloading", confirmsReplacement: false)
+            finishTransfer(outcome, verb: "Downloaded")
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        progress = nil
+    }
+
+    func upload(_ urls: [URL]) async {
+        if session.uiClient != nil { await remotePerform(.upload, paths: urls.map(\.path)); return }
+        await uploadPaths(urls, into: path, resolutions: [:])
+    }
+
+    func searchQueryChanged() {
+        if session.uiClient != nil {
+            searchTask?.cancel();
+            searchTask = Task { await remotePerform(.search, text: searchQuery) }; return
+        }
+        invalidateSearch()
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            searchResults = nil
+            return
+        }
+        let token = searchToken
+        let needsBackground = entries.count > FinderEntryProjection.backgroundThreshold
+        let shallow =
+            needsBackground
+            ? [] : entries.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+        searchResults = shallow
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            defer { if token == searchToken { searchTask = nil } }
+            let matches = needsBackground ? await shallowMatches(trimmed) : shallow
+            guard !Task.isCancelled, token == searchToken else { return }
+            if needsBackground { searchResults = matches }
+            do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+            guard !Task.isCancelled, token == searchToken else { return }
+            await runDeepSearch(trimmed, token: token, shallow: matches)
+        }
+    }
+
+    private func shallowMatches(_ query: String) async -> [RemoteFileEntry] {
+        let snapshot = entries
+        let token = searchToken
+        shallowSearchTask = Task.detached(priority: .userInitiated) {
+            var matches: [RemoteFileEntry] = []
+            for (index, entry) in snapshot.enumerated() {
+                if index % 256 == 0, Task.isCancelled { return [] }
+                if entry.name.localizedCaseInsensitiveContains(query) { matches.append(entry) }
+            }
+            return matches
+        }
+        guard let worker = shallowSearchTask else { return [] }
+        let matches = await withTaskCancellationHandler {
+            await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        if token == searchToken { shallowSearchTask = nil }
+        return matches
+    }
+
+    private func runDeepSearch(_ query: String, token: Int, shallow: [RemoteFileEntry]) async {
+        let localAdapter: MachineFileOperationExecution.LocalSearch? =
+            session.isLocal
+            ? { [localSearch] root, query, limit in
+                let entries = await localSearch(root, query)
+                return .success(
+                    entries.prefix(limit).map {
+                        MachineFileSearchItem(path: $0.path, kind: $0.kind)
+                    })
+            } : nil
+        let result = await MachineFileOperationExecution.search(
+            path: path, query: query, platform: session.remotePlatform ?? .linux,
+            localSearch: localAdapter
+        ) { [session] command, timeout in
+            await session.runCommand(command, timeout: timeout)
+        }
+        guard token == searchToken, case let .success(items) = result else { return }
+        var seen = Set(shallow.map { FilePathKey.canonical($0.path) })
+        var combined = shallow
+        for item in items {
+            let full = item.path
+            guard !full.isEmpty, seen.insert(FilePathKey.canonical(full)).inserted else { continue }
+            let kind = item.kind ?? entries.first { $0.path == full }?.kind ?? .file
+            combined.append(
+                RemoteFileEntry(
+                    name: (full as NSString).lastPathComponent, path: full,
+                    kind: kind, sizeBytes: 0))
+        }
+        searchResults = combined
+    }
+
+    private func invalidateSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        shallowSearchTask?.cancel()
+        shallowSearchTask = nil
+        searchToken += 1
+    }
+
+    func runSearch() async {
+        searchQueryChanged()
+        await searchTask?.value
+    }
+
+    func dragPayload() -> MachineItemsPayload {
+        MachineItemsPayload(
+            machineID: session.machine.id, paths: selectedEntries.map(\.path),
+            isLocal: session.isLocal)
+    }
+
+    func handleDrop(
+        providers: [NSItemProvider], destination: String, optionHeld: Bool
+    ) async {
+        var payload: MachineItemsPayload?
+        var localPaths: [String] = []
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(MachineItemsPayload.typeIdentifier) {
+                if let data = await provider.loadDataSafely(
+                    forTypeIdentifier: MachineItemsPayload.typeIdentifier)
+                {
+                    payload = MachineItemsPayload.decode(data)
+                }
+            } else if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                if let data = await provider.loadDataSafely(
+                    forTypeIdentifier: UTType.fileURL.identifier),
+                    let url = URL(dataRepresentation: data, relativeTo: nil)
+                {
+                    localPaths.append(url.path)
+                }
+            }
+        }
+        guard
+            let intent = DropResolver.intent(
+                payload: payload, fileURLPaths: localPaths,
+                destinationMachine: session.machine.id, optionHeld: optionHeld)
+        else { return }
+        await perform(intent: intent, destination: destination)
+    }
+
+    private func destinationEntries(_ destination: String) async -> [RemoteFileEntry]? {
+        guard let endpoint = transferEndpoint(for: session) else {
+            errorMessage = FinderTransferError.notConnected.localizedDescription
+            return nil
+        }
+        do {
+            return try await endpoint.list(destination)
+        } catch {
+            errorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func perform(intent: DropIntent, destination: String) async {
+        if session.uiClient != nil {
+            await remotePerform(.drop, text: destination, intent: intent); return
+        }
+        guard DropResolver.isDropAllowed(paths: intent.paths, destination: destination) else {
+            return
+        }
+        errorMessage = nil
+        let names = intent.paths.map { ($0 as NSString).lastPathComponent }
+        guard let existing = await destinationEntries(destination) else { return }
+        let clashes = NameConflicts.conflicting(names: names, existing: existing)
+        if !clashes.isEmpty {
+            pendingConflict = PendingConflict(
+                intent: intent, destination: destination, names: clashes)
+            return
+        }
+        await commit(intent: intent, destination: destination, resolutions: [:])
+    }
+
+    func commit(
+        intent: DropIntent, destination: String,
+        resolutions: [String: NameConflictResolution]
+    ) async {
+        if session.uiClient != nil {
+            await remotePerform(
+                .commitDrop, text: destination, intent: intent, resolutions: resolutions);
+            return
+        }
+        guard progress == nil else { return }
+        switch intent {
+        case .moveWithinMachine, .copyWithinMachine:
+            errorMessage = nil
+            guard let existing = await destinationEntries(destination) else { return }
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: intent.paths, destination: destination, existing: existing,
+                resolutions: resolutions)
+            guard
+                let command = RemoteTransferOperationExecution.withinMachineCommand(
+                    plan, moving: intent.isMove,
+                    platform: session.remotePlatform ?? .linux)
+            else { return }
+            progress = FileOperationProgress(
+                title: intent.isMove ? "Moving" : "Copying", total: plan.items.count)
+            let task = Task { await session.runCommand(command, timeout: 120) }
+            transferCommandTask = task
+            let result = await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            transferCommandTask = nil
+            progress = nil
+            let operationError: String?
+            switch result {
+            case .success:
+                operationError = nil
+            case .failure where Task.isCancelled:
+                operationError = nil
+            case let .failure(error) where error is CancellationError:
+                operationError = nil
+            case let .failure(error):
+                operationError = error.localizedDescription
+            }
+            await load()
+            if let operationError { errorMessage = operationError }
+            if intent.isMove, case .success = result {
+                recordUndo(
+                    FinderUndoStep(
+                        label: "Move",
+                        moves: plan.items.map {
+                            FinderUndoStep.Move(
+                                from: $0.sourcePath,
+                                to: $0.destinationPath)
+                        }))
+            }
+        case let .uploadLocalFiles(paths):
+            await uploadPaths(
+                paths.map { URL(fileURLWithPath: $0) }, into: destination,
+                resolutions: resolutions)
+        case let .transferBetweenMachines(from, paths, moving):
+            await transfer(
+                paths: paths, fromMachine: from, into: destination,
+                resolutions: resolutions, moving: moving)
+        }
+    }
+
+    private func transfer(
+        paths: [String], fromMachine: UUID, into destination: String,
+        resolutions: [String: NameConflictResolution], moving: Bool
+    ) async {
+        guard let sourceSession = MachinesModel.shared.sessions[fromMachine] else {
+            errorMessage = "The source machine is unavailable."
+            return
+        }
+        guard let source = transferEndpoint(for: sourceSession) else {
+            errorMessage = "\(sourceSession.machine.name) is not connected."
+            return
+        }
+        guard let target = transferEndpoint(for: session) else {
+            errorMessage = "\(session.machine.name) is not connected."
+            return
+        }
+        errorMessage = nil
+        do {
+            let existing = try await target.list(destination)
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: paths, destination: destination, existing: existing,
+                resolutions: resolutions)
+            guard !plan.items.isEmpty else {
+                flash("Nothing transferred")
+                return
+            }
+            let outcome = try await executeTransfer(
+                plan, from: source, to: target,
+                title: "Transferring", confirmsReplacement: !plan.replacements.isEmpty,
+                moving: moving)
+            if errorMessage == nil {
+                finishTransfer(outcome, verb: moving ? "Moved" : "Transferred")
+            }
+            if moving, errorMessage == nil {
+                Self.clipboard = nil
+            }
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        progress = nil
+        let transferError = errorMessage
+        await load()
+        if let transferError { errorMessage = transferError }
+    }
+
+    private func transferEndpoint(for session: MachineSession) -> RemoteTransferEndpoint? {
+        if session.isLocal {
+            return .local(machineID: session.machine.id, name: session.machine.name)
+        }
+        guard let connection = session.connectionRef else { return nil }
+        return .remote(machine: session.machine, connection: connection)
+    }
+
+    private func setTransferProgress(title: String, processed: Int, total: Int) {
+        progress = FileOperationProgress(
+            title: title, completed: processed, total: total)
+    }
+
+    private func executeTransfer(
+        _ plan: RemoteTransferPlan, from source: RemoteTransferEndpoint,
+        to destination: RemoteTransferEndpoint, title: String,
+        confirmsReplacement: Bool, moving: Bool = false
+    ) async throws -> RemoteTransferOutcome {
+        guard transferTask == nil, transferCommandTask == nil else {
+            throw SSHConnectionError.transferFailed("Another file transfer is already running.")
+        }
+        progress = FileOperationProgress(title: title, total: plan.items.count)
+        let task = Task { [weak self] in
+            try await RemoteTransferOperationExecution.execute(
+                plan, from: source, to: destination, confirmsReplacement: confirmsReplacement,
+                moving: moving
+            ) { [weak self] processed, total in
+                await self?.setTransferProgress(title: title, processed: processed, total: total)
+            }
+        }
+        transferTask = task
+        defer { transferTask = nil; progress = nil }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func finishTransfer(_ outcome: RemoteTransferOutcome, verb: String) {
+        let completed = outcome.completed.count
+        guard let first = outcome.failures.first else {
+            flash("\(verb) \(completed) item\(completed == 1 ? "" : "s")")
+            return
+        }
+        let name = (first.sourcePath as NSString).lastPathComponent
+        let detail = "\(name) -> \(first.destination): \(first.message)"
+        errorMessage =
+            outcome.failures.count == 1
+            ? detail
+            : "\(outcome.failures.count) of \(completed + outcome.failures.count) items failed. \(detail)"
+    }
+
+    private func uploadPaths(
+        _ urls: [URL], into destination: String,
+        resolutions: [String: NameConflictResolution]
+    ) async {
+        guard !urls.isEmpty, progress == nil else { return }
+        errorMessage = nil
+        guard let target = transferEndpoint(for: session) else {
+            errorMessage = FinderTransferError.notConnected.localizedDescription
+            return
+        }
+        let source = RemoteTransferEndpoint.local(
+            machineID: session.machine.id, name: "This Mac")
+        do {
+            let existing = try await target.list(destination)
+            let plan = RemoteTransferOperationExecution.plan(
+                paths: urls.map(\.path), destination: destination, existing: existing,
+                resolutions: resolutions)
+            guard !plan.items.isEmpty else {
+                flash("Nothing uploaded")
+                return
+            }
+            let outcome = try await executeTransfer(
+                plan, from: source, to: target,
+                title: "Uploading", confirmsReplacement: !plan.replacements.isEmpty)
+            finishTransfer(outcome, verb: "Uploaded")
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        progress = nil
+        let transferError = errorMessage
+        await load()
+        if let transferError { errorMessage = transferError }
+    }
+
+    func moveSelection(into destination: String) async {
+        let paths = selectedEntries.map(\.path)
+        guard !paths.isEmpty else { return }
+        await perform(intent: .moveWithinMachine(paths), destination: destination)
+    }
+
+    func dragProvider(for entry: RemoteFileEntry) -> NSItemProvider {
+        let provider = itemProvider(for: entry)
+        if let data = dragPayload().encoded() {
+            provider.registerDataRepresentation(
+                forTypeIdentifier: MachineItemsPayload.typeIdentifier, visibility: .ownProcess
+            ) { completion in
+                completion(data, nil)
+                return nil
+            }
+        }
+        return provider
+    }
+
+    func itemProvider(for entry: RemoteFileEntry) -> NSItemProvider {
+        if let client = session.uiClient {
+            let provider = NSItemProvider()
+            provider.suggestedName = entry.name
+            let type =
+                entry.isDirectory
+                ? .folder : UTType(filenameExtension: entry.fileExtension) ?? .data
+            let machineID = session.id
+            provider.registerFileRepresentation(
+                forTypeIdentifier: type.identifier, fileOptions: [], visibility: .all
+            ) { completion in
+                let progress = Progress(totalUnitCount: max(1, entry.sizeBytes))
+                let task = Task { @MainActor in
+                    do {
+                        let url =
+                            entry.isDirectory
+                            ? try await client.materializeDirectory(
+                                entry: entry, machineID: machineID)
+                            : try await client.materialize(
+                                entry: entry, machineID: machineID,
+                                maximumBytes: RemoteFileOperationExecution.cacheLimitBytes)
+                        completion(url, false, nil)
+                        progress.completedUnitCount = progress.totalUnitCount
+                    } catch { completion(nil, false, error) }
+                }
+                progress.cancellationHandler = { task.cancel() }
+                return progress
+            }
+            return provider
+        }
+        if session.isLocal {
+            return NSItemProvider(contentsOf: URL(fileURLWithPath: entry.path))
+                ?? NSItemProvider()
+        }
+        let provider = NSItemProvider()
+        provider.suggestedName = entry.name
+        let type = UTType(filenameExtension: entry.fileExtension) ?? .data
+        let contentType = type.conforms(to: .data) ? type : .data
+        let connection = session.connectionRef
+        let remotePath = entry.path
+        let name = entry.name
+        provider.registerFileRepresentation(
+            forTypeIdentifier: contentType.identifier, fileOptions: [], visibility: .all
+        ) { completion in
+            let progress = Progress(totalUnitCount: max(1, entry.sizeBytes))
+            let task = Task.detached {
+                guard let connection else {
+                    completion(nil, false, FinderTransferError.notConnected)
+                    return
+                }
+                let destination = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString)
+                try? FileManager.default.createDirectory(
+                    at: destination, withIntermediateDirectories: true)
+                let fileURL = destination.appendingPathComponent(name)
+                do {
+                    try await RemoteFileOperationExecution.download(
+                        remotePath: remotePath, to: fileURL
+                    ) { remotePath, localURL in
+                        try await connection.download(
+                            remotePath: remotePath, to: localURL
+                        ) { sent in progress.completedUnitCount = sent }
+                    }
+                    completion(fileURL, false, nil)
+                } catch {
+                    completion(nil, false, error)
+                }
+            }
+            progress.cancellationHandler = { task.cancel() }
+            return progress
+        }
+        return provider
+    }
+}
+
+enum FinderTransferError: LocalizedError {
+    case notConnected
+    case presentationUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .notConnected: "The machine is not connected."
+        case .presentationUnavailable: "Finder is unavailable."
+        }
+    }
+}
+
+private struct FinderRevealProjection: Sendable {
+    let targets: [RemoteFileEntry]
+    let localURLs: [URL]?
+
+    static func make(entries: [RemoteFileEntry], isLocal: Bool) async -> FinderRevealProjection {
+        await Task.detached(priority: .userInitiated) {
+            let targets = isLocal ? entries : entries.filter { !$0.isDirectory }
+            return FinderRevealProjection(
+                targets: targets,
+                localURLs: isLocal ? targets.map { URL(fileURLWithPath: $0.path) } : nil)
+        }.value
+    }
+}
+
+extension DropIntent {
+    var isMove: Bool {
+        if case .moveWithinMachine = self { return true }
+        if case let .transferBetweenMachines(_, _, moving) = self { return moving }
+        return false
+    }
+}
+
+extension NSItemProvider {
+    func loadDataSafely(forTypeIdentifier identifier: String) async -> Data? {
+        await withCheckedContinuation { continuation in
+            _ = loadDataRepresentation(forTypeIdentifier: identifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+    }
+}
+
+extension FinderModel {
+    func fileState() -> MachineFileState {
+        MachineFileState(
+            path: path, entries: entries, selection: selection,
+            freeSpaceKB: freeSpaceKB, places: places, searchResults: searchResults,
+            error: errorMessage, status: statusMessage, undoSteps: undoStack,
+            folderSizes: folderSizes, folderCounts: folderCounts, renaming: renaming,
+            renameText: renameText,
+            conflict: pendingConflict.map {
+                .init(intent: $0.intent, destination: $0.destination, names: $0.names)
+            })
+    }
+
+    func openOwnedFile(_ entry: RemoteFileEntry) async {
+        if session.isLocal { open(entry) } else { await openRemote(entry) }
+    }
+
+    func runOwnedSearch() async {
+        searchQueryChanged()
+        await searchTask?.value
+    }
+
+    private func remotePerform(
+        _ operation: MachineFileRequest.Operation, text: String = "", paths: [String] = [],
+        permanently: Bool = false, intent: DropIntent? = nil,
+        resolutions: [String: NameConflictResolution] = [:]
+    ) async {
+        guard let client = session.uiClient else { return }
+        let requestedPath = path
+        let request = listingLoad.begin()
+        let value = MachineFileRequest(
+            viewID: remoteViewID, machineID: session.id, operation: operation,
+            path: path, selection: selection, text: text, paths: paths, permanently: permanently,
+            intent: intent, resolutions: resolutions)
+        do {
+            let task = Task {
+                try await client.files(value) { [weak self] progress in
+                    guard let self, listingLoad.isCurrent(request), path == requestedPath else {
+                        return
+                    }
+                    self.progress = progress
+                }
+            }
+            let transferring = [.download, .upload, .drop, .commitDrop].contains(operation)
+            if transferring { remoteTransferTask = task }
+            defer { if transferring { remoteTransferTask = nil; progress = nil } }
+            let result = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
+            }
+            try Task.checkCancellation()
+            guard listingLoad.isCurrent(request), path == requestedPath else { return }
+            path = result.path; entries = result.entries; selection = result.selection
+            freeSpaceKB = result.freeSpaceKB; places = result.places;
+            searchResults = result.searchResults
+            errorMessage = result.error; statusMessage = result.status; undoStack = result.undoSteps
+            folderSizes = result.folderSizes; folderCounts = result.folderCounts
+            renaming = result.renaming; renameText = result.renameText
+            pendingConflict = result.conflict.map {
+                PendingConflict(intent: $0.intent, destination: $0.destination, names: $0.names)
+            }
+            listingLoad.complete(request)
+        } catch {
+            guard !Task.isCancelled, listingLoad.isCurrent(request) else {
+                listingLoad.cancel(request); return
+            }
+            errorMessage = error.localizedDescription
+            listingLoad.fail(request, message: error.localizedDescription)
+        }
+    }
+}

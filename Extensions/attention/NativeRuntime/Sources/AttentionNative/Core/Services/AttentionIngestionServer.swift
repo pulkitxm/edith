@@ -1,0 +1,394 @@
+@_implementationOnly import EdithExtensionSupport_attention_native
+@_implementationOnly import EdithExtensionUI_attention_native
+import Foundation
+import Network
+
+final class AttentionIngestionServer: @unchecked Sendable {
+    enum State: Equatable, Sendable {
+        case stopped
+        case starting
+        case ready
+        case failed(String)
+    }
+
+    private let repository: AttentionRepository
+    private let settings: AttentionSettings
+    private let activity: @Sendable () -> (idleSeconds: TimeInterval?, locked: Bool)
+    private let queue = DispatchQueue(label: "com.pulkit.edith.attention.server")
+    private var listener: NWListener?
+    private let stateLock = NSLock()
+    private var storedState: State = .stopped
+    private var storedPort: UInt16?
+
+    init(
+        repository: AttentionRepository = AttentionRepository(), settings: AttentionSettings,
+        activity: @escaping @Sendable () -> (idleSeconds: TimeInterval?, locked: Bool) = {
+            (AttentionSystemActivity.idleSeconds(), AttentionSystemActivity.isLocked)
+        }
+    ) {
+        self.repository = repository
+        self.settings = settings
+        self.activity = activity
+    }
+
+    var state: State {
+        stateLock.withLock { storedState }
+    }
+
+    var boundPort: UInt16? {
+        stateLock.withLock { storedPort }
+    }
+
+    func start() throws {
+        guard listener == nil else { return }
+        guard let port = NWEndpoint.Port(rawValue: settings.serverPort) else {
+            throw AttentionIngestionError.invalidPort
+        }
+        let parameters = NWParameters.tcp
+        parameters.allowLocalEndpointReuse = true
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
+        let listener = try NWListener(using: parameters)
+        setState(.starting)
+        listener.stateUpdateHandler = { [weak self] state in
+            switch state {
+            case .ready:
+                self?.setPort(listener.port?.rawValue)
+                self?.setState(.ready)
+            case let .failed(error): self?.setState(.failed(error.localizedDescription))
+            case .cancelled: self?.setState(.stopped)
+            default: break
+            }
+        }
+        listener.newConnectionHandler = { [weak self] connection in
+            self?.accept(connection)
+        }
+        self.listener = listener
+        listener.start(queue: queue)
+    }
+
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        setPort(nil)
+        setState(.stopped)
+    }
+
+    static func healthURL(port: UInt16) -> URL {
+        URL(string: "http://127.0.0.1:\(port)/v1/health")!
+    }
+
+    static func isHealthy(port: UInt16, timeout: TimeInterval = 2) async -> Bool {
+        var request = URLRequest(url: healthURL(port: port))
+        request.timeoutInterval = timeout
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            return (response as? HTTPURLResponse)?.statusCode == 200
+        } catch {
+            return false
+        }
+    }
+
+    private func setState(_ value: State) {
+        stateLock.withLock { storedState = value }
+    }
+
+    private func setPort(_ value: UInt16?) {
+        stateLock.withLock { storedPort = value }
+    }
+
+    private func accept(_ connection: NWConnection) {
+        connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + 15) { [weak connection] in connection?.cancel() }
+        receive(connection, data: Data())
+    }
+
+    private func receive(_ connection: NWConnection, data: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1_048_576) {
+            [weak self] content, _, complete, error in
+            guard let self else {
+                connection.cancel()
+                return
+            }
+            var accumulated = data
+            if let content { accumulated.append(content) }
+            guard accumulated.count <= 1_048_576 else {
+                send(.init(status: 400, body: ["error": "request too large"]), over: connection)
+                return
+            }
+            if let request = AttentionHTTPRequest.parse(accumulated) {
+                send(response(for: request), over: connection)
+                return
+            }
+            if complete || error != nil || accumulated.count >= 1_048_576 {
+                send(.init(status: 400, body: ["error": "invalid request"]), over: connection)
+                return
+            }
+            receive(connection, data: accumulated)
+        }
+    }
+
+    private func response(for request: AttentionHTTPRequest) -> AttentionHTTPResponse {
+        if request.method == "OPTIONS" {
+            return .init(status: 204, body: [:])
+        }
+        if request.method == "GET", request.path == "/v1/health" {
+            return .init(
+                status: 200,
+                body: ["status": "ok", "extension": AttentionExtensionInstaller.version])
+        }
+        if request.method == "GET", request.path == "/v1/presence" {
+            guard request.headers["x-edith-token"] == settings.serverToken else {
+                return .init(status: 401, body: ["error": "unauthorized"])
+            }
+            let sample = activity()
+            let presence = AttentionSystemActivity.presence(
+                idleSeconds: sample.idleSeconds, threshold: settings.idleThreshold,
+                locked: sample.locked)
+            var body = [
+                "presence": presence.rawValue,
+                "idleThreshold": String(settings.idleThreshold),
+            ]
+            if let seconds = sample.idleSeconds, seconds.isFinite, seconds >= 0 {
+                body["idleSeconds"] = String(seconds)
+            }
+            return .init(status: 200, body: body)
+        }
+        guard request.method == "POST", request.path == "/v1/heartbeat" else {
+            if request.method == "POST", request.path == "/v1/history" {
+                return historyResponse(for: request)
+            }
+            return .init(status: 404, body: ["error": "not found"])
+        }
+        guard request.headers["x-edith-token"] == settings.serverToken else {
+            return .init(status: 401, body: ["error": "unauthorized"])
+        }
+        let heartbeat: AttentionBrowserHeartbeat
+        do {
+            heartbeat = try Self.decoder.decode(AttentionBrowserHeartbeat.self, from: request.body)
+        } catch {
+            return .init(status: 422, body: ["error": "invalid heartbeat"])
+        }
+        do {
+            try ingest(heartbeat)
+            return .init(status: 202, body: ["status": "accepted"])
+        } catch {
+            return .init(status: 503, body: ["error": "event storage unavailable"])
+        }
+    }
+
+    private func historyResponse(for request: AttentionHTTPRequest) -> AttentionHTTPResponse {
+        guard request.headers["x-edith-token"] == settings.serverToken else {
+            return .init(status: 401, body: ["error": "unauthorized"])
+        }
+        do {
+            let payload = try Self.decoder.decode(AttentionHistoryImport.self, from: request.body)
+            let visits = payload.visits.compactMap { sanitize(visit: $0) }
+            try repository.importHistory(visits)
+            return .init(
+                status: 202,
+                body: ["status": "accepted", "imported": String(visits.count)])
+        } catch {
+            return .init(status: 422, body: ["error": "invalid history"])
+        }
+    }
+
+    private func sanitize(visit: AttentionHistoryVisit) -> AttentionHistoryVisit? {
+        guard var components = URLComponents(string: visit.url),
+            let host = components.host?.lowercased(), !host.isEmpty
+        else { return nil }
+        components.query = nil
+        components.fragment = nil
+        let storedURL: String
+        switch settings.privacyLevel {
+        case .applications: return nil
+        case .domains: storedURL = host
+        case .detailed: storedURL = components.string ?? host
+        }
+        return AttentionHistoryVisit(
+            url: storedURL,
+            title: settings.privacyLevel == .detailed
+                ? visit.title.map { String($0.prefix(500)) } : nil,
+            lastVisitedAt: visit.lastVisitedAt, visitCount: max(0, visit.visitCount),
+            typedCount: max(0, visit.typedCount), profile: String(visit.profile.prefix(100)))
+    }
+
+    private func ingest(_ heartbeat: AttentionBrowserHeartbeat) throws {
+        guard let sink = repository.resolvedEventSink else {
+            throw AttentionServiceError(.unavailable, "The Attention event store is unavailable.")
+        }
+        try sink.record(
+            AttentionBatch(
+                events: Self.events(
+                    from: heartbeat, privacyLevel: settings.privacyLevel,
+                    media: settings.mediaTrackingEnabled)))
+    }
+
+    static func events(
+        from heartbeat: AttentionBrowserHeartbeat, privacyLevel: AttentionPrivacyLevel,
+        media: Bool = true
+    ) -> [AttentionEvent] {
+        var events: [AttentionEvent] = []
+        if heartbeat.duration > 0 {
+            let event = browserEvent(from: heartbeat, privacyLevel: privacyLevel)
+            events.append(event)
+            for (index, playing) in heartbeat.media.enumerated() where media && playing.playing {
+                events.append(
+                    AttentionEvent(
+                        id: "\(event.id):media:\(index)",
+                        startedAt: event.startedAt, duration: event.duration, source: .media,
+                        presence: heartbeat.presence, appName: heartbeat.appName,
+                        bundleID: heartbeat.bundleID, domain: event.domain,
+                        browserProfile: heartbeat.browserProfile, media: sanitized(playing)))
+            }
+        }
+        for tab in heartbeat.audible ?? [] where media && tab.duration > 0 {
+            let domain =
+                privacyLevel == .applications
+                ? nil
+                : (tab.domain ?? tab.url.flatMap { URLComponents(string: $0)?.host })?.lowercased()
+            events.append(
+                AttentionEvent(
+                    id: "browser:audible:\(tab.id.uuidString)", startedAt: tab.timestamp,
+                    duration: max(0, min(tab.duration, 3_600)), source: .media,
+                    presence: .active, appName: heartbeat.appName, bundleID: heartbeat.bundleID,
+                    domain: domain, browserProfile: heartbeat.browserProfile,
+                    media: AttentionMedia(
+                        title: privacyLevel == .detailed
+                            ? String(tab.title.prefix(300)) : (domain ?? heartbeat.appName),
+                        service: domain ?? heartbeat.appName, kind: tab.kind, playing: true)))
+        }
+        return events
+    }
+
+    private static func sanitized(_ media: AttentionMedia) -> AttentionMedia {
+        var copy = media
+        copy.title = String(media.title.prefix(300))
+        copy.artist = media.artist.map { String($0.prefix(200)) }
+        copy.album = media.album.map { String($0.prefix(200)) }
+        copy.service = String(media.service.prefix(200))
+        return copy
+    }
+
+    static func browserEvent(
+        from heartbeat: AttentionBrowserHeartbeat, privacyLevel: AttentionPrivacyLevel
+    ) -> AttentionEvent {
+        let components = heartbeat.url.flatMap(URLComponents.init(string:))
+        let domain = (heartbeat.domain ?? components?.host)?.lowercased()
+        var sanitizedURL: String?
+        if privacyLevel == .detailed, var components {
+            components.query = nil
+            components.fragment = nil
+            sanitizedURL = components.string
+        }
+        var tags = (heartbeat.tags ?? [:]).reduce(into: [String: String]()) { result, entry in
+            let key = String(entry.key.prefix(40))
+            let value = String(entry.value.prefix(300))
+            guard !key.isEmpty, !value.isEmpty, result.count < 24 else { return }
+            result[key] = value
+        }
+        tags = AttentionTag.filtered(tags, privacyLevel: privacyLevel) ?? [:]
+        return AttentionEvent(
+            id: "browser:\(heartbeat.id.uuidString)",
+            startedAt: heartbeat.timestamp, duration: max(0, min(heartbeat.duration, 3_600)),
+            source: .browser, presence: heartbeat.presence, appName: heartbeat.appName,
+            bundleID: heartbeat.bundleID,
+            windowTitle: privacyLevel == .detailed
+                ? heartbeat.title.map { String($0.prefix(500)) } : nil,
+            url: sanitizedURL, domain: privacyLevel == .applications ? nil : domain,
+            faviconURL: privacyLevel == .applications ? nil : heartbeat.faviconURL,
+            browserProfile: heartbeat.browserProfile, tags: tags, signals: heartbeat.signals)
+    }
+
+    private func send(_ response: AttentionHTTPResponse, over connection: NWConnection) {
+        connection.send(
+            content: response.data,
+            completion: .contentProcessed { _ in
+                connection.cancel()
+            })
+    }
+
+    private static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+}
+
+struct AttentionHTTPRequest: Equatable, Sendable {
+    var method: String
+    var path: String
+    var headers: [String: String]
+    var body: Data
+
+    static func parse(_ data: Data) -> AttentionHTTPRequest? {
+        let separator = Data("\r\n\r\n".utf8)
+        guard let headerRange = data.range(of: separator),
+            let headerText = String(data: data[..<headerRange.lowerBound], encoding: .utf8)
+        else { return nil }
+        let lines = headerText.components(separatedBy: "\r\n")
+        guard let first = lines.first else { return nil }
+        let requestParts = first.split(separator: " ")
+        guard requestParts.count >= 2 else { return nil }
+        var headers: [String: String] = [:]
+        for line in lines.dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            headers[name] = value
+        }
+        let bodyStart = headerRange.upperBound
+        guard data.count <= 1_048_576,
+            let length = Int(headers["content-length"] ?? "0"), length >= 0,
+            length <= 1_048_576 - bodyStart
+        else { return nil }
+        guard data.count >= bodyStart + length else { return nil }
+        return AttentionHTTPRequest(
+            method: String(requestParts[0]), path: String(requestParts[1]), headers: headers,
+            body: data.subdata(in: bodyStart..<(bodyStart + length)))
+    }
+}
+
+struct AttentionHTTPResponse: Equatable, Sendable {
+    var status: Int
+    var body: [String: String]
+
+    init(status: Int, body: [String: String]) {
+        self.status = status
+        self.body = body
+    }
+
+    var data: Data {
+        let reason =
+            switch status {
+            case 200: "OK"
+            case 202: "Accepted"
+            case 204: "No Content"
+            case 400: "Bad Request"
+            case 401: "Unauthorized"
+            case 404: "Not Found"
+            case 422: "Unprocessable Content"
+            case 503: "Service Unavailable"
+            default: "Error"
+            }
+        let payload =
+            (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])) ?? Data()
+        let headers = [
+            "HTTP/1.1 \(status) \(reason)",
+            "Content-Type: application/json",
+            "Content-Length: \(payload.count)",
+            "Access-Control-Allow-Origin: *",
+            "Access-Control-Allow-Headers: Content-Type, X-Edith-Token",
+            "Access-Control-Allow-Methods: GET, POST, OPTIONS",
+            "Connection: close",
+            "",
+            "",
+        ].joined(separator: "\r\n")
+        return Data(headers.utf8) + payload
+    }
+}
+
+enum AttentionIngestionError: LocalizedError {
+    case invalidPort
+
+    var errorDescription: String? { "The browser ingestion port is invalid." }
+}

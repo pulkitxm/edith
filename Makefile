@@ -16,6 +16,8 @@ endif
 
 else
 
+EXTENSION_SWIFT_JOBS ?= 2
+
 FLAGS := $(if $(PR),--pr $(PR)) $(if $(BRANCH),--branch $(BRANCH))
 PKG := Packages/Edith
 STUDIO_PKG := Packages/EdithStudio
@@ -32,7 +34,7 @@ else
 endif
 export DEVELOPER_DIR
 
-.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-scripts-batch ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-swift-test-batch ci-studio ci-studio-batch ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
+.PHONY: ghostty build install camera-profiles reset reinstall release release-dry loc ci ci-all ci-comments ci-secrets ci-duplicate-keys ci-lint ci-scripts ci-scripts-batch ci-performance ci-docs ci-companion-runtime ci-site ci-promo ci-browser ci-swift ci-swift-check ci-swift-lint ci-swift-build ci-swift-test ci-swift-test-batch ci-studio ci-studio-batch ci-hygiene ci-community ci-yaml ci-markdown ci-links ci-workflows ci-security ci-gitleaks ci-cargo-audit ci-osv ci-semgrep ci-trivy ci-companion ci-companion-migrate ci-tools verify-release-build-settings verify-bundle ci-shipping shipping-fixture shipping-appcast-fixture site-dev cli icon wiki wiki-push bench-cli performance-fixture approve-package-plugins
 
 ci:
 	bun install --frozen-lockfile
@@ -54,10 +56,8 @@ site-dev:
 approve-package-plugins:
 	python3 scripts/approve-package-plugins.py
 
-cli: approve-package-plugins
-	$(XCODEBUILD) -scheme ed -configuration Release build
-	build/Build/Products/Release/ed install --directory $(HOME)/.local/bin
-	build/Build/Products/Release/ed completions install
+cli:
+	./build.sh --no-open
 
 icon:
 	@set -eu; \
@@ -147,19 +147,182 @@ ci-promo:
 	cd apps/promo-video && npm ci && npx tsc --noEmit
 
 ci-swift-lint:
-	cd $(PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
-	cd $(STUDIO_PKG) && find Sources Tests Package.swift -type f -name '*.swift' ! -name '._*' -print0 | xargs -0 swift format lint --strict --parallel
+	rg --files Packages/EdithHost Packages/ExtensionMarketplace Packages/ExtensionSupport Packages/EdithDocsWorker Extensions | rg '\.swift$$' | xargs swift format lint --strict --parallel
 
-ci-meeting-microphone:
-	python3 scripts/build-meeting-microphone.py --test --output .build/meeting-microphone
+ci-swift-build:
+	EDITH_RELEASE_ALLOW_DEV_SIGNING=1 ./build.sh --no-open --release
+	$(MAKE) verify-bundle
 
-ci-swift-build: approve-package-plugins ci-meeting-microphone
-	@test -n "$(DEVELOPER_DIR)" \
-	  || { echo "Xcode is required to build edth.xcodeproj; install it or run xcode-select -s" >&2; exit 1; }
-	$(XCODEBUILD) -scheme EdithMain -configuration Debug $(SIGN_OVERRIDES) build
+ci-swift-test:
+	$(MAKE) ci-marketplace-host ci-music-native
 
-ci-swift-test: ci-studio
-	cd $(PKG) && ./test.sh $(if $(FILTER),--filter '$(FILTER)')
+.PHONY: ci-host ci-host-core host ci-marketplace-runtime ci-marketplace-host extension-dev ci-extension-support ci-extension-docs ci-extension-commands ci-extension-workers
+ci-host:
+	swift format lint --strict --parallel --recursive Packages/EdithHost/Sources Packages/EdithHost/Tests Packages/EdithHost/Package.swift
+	swift test --package-path Packages/EdithHost --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-host-core:
+	bun scripts/test-host-core.mjs
+
+host:
+	bun scripts/build-minimal-host.mjs
+
+extension-dev:
+	bun scripts/build-extension-package.mjs $(EXTENSION) --development
+
+ci-extension-support:
+	swift format lint --strict --parallel --recursive Packages/ExtensionSupport/Sources Packages/ExtensionSupport/Tests Packages/ExtensionSupport/Package.swift Extensions/keepAwake Extensions/focusDim Extensions/windowSweaters Extensions/colorPicker Extensions/keystrokeHighlight Extensions/systemStats Extensions/micMute Extensions/emoji Extensions/homebrew Extensions/calendar Extensions/jev Extensions/presenter Extensions/system Extensions/timeLapse Extensions/cleaner Extensions/appMaintenance Extensions/blitztree Extensions/plugins Extensions/notchShelf Extensions/clipboard Extensions/music Extensions/docs Extensions/latex Extensions/usage Extensions/companion Extensions/bifrost Extensions/lidAwake Extensions/downloads Extensions/seoAudit Extensions/fixtureSupport Extensions/Package.swift Packages/EdithDocsWorker/Sources Packages/EdithDocsWorker/Tests Packages/EdithDocsWorker/Package.swift
+	swift test --package-path Packages/ExtensionSupport --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	fixture=$$(mktemp -d /tmp/edith-worker-fixture-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_SHARED_DEFAULTS_SUITE="edith.worker-fixture.tests.$$(basename "$$fixture")" swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)')
+
+define UTILITY_EXTENSION_NATIVE_TEST
+	swift format lint --strict --recursive Extensions/$(1)
+	fixture=$$(mktemp -d /tmp/edith-$(1)-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; env -u EDITH_EXTENSION_TEST_SDK -u EDITH_TEST_VOICE_ENCODER -u EDITH_TEST_VOICE_MODEL EDITH_TEST_NATIVE_CAPTURE=0 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.$(1).tests.$$(basename "$$fixture")" swift test --package-path Extensions/$(1) --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)') $(if $(SKIP),--skip '$(SKIP)')
+endef
+
+.PHONY: ci-extension-system-stats
+ci-extension-system-stats:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,systemStats)
+
+.PHONY: ci-extension-homebrew
+ci-extension-homebrew:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,homebrew)
+
+.PHONY: ci-extension-jev
+ci-extension-jev:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,jev)
+
+.PHONY: ci-extension-system
+ci-extension-system:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,system)
+
+.PHONY: ci-extension-time-lapse
+ci-extension-time-lapse:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,timeLapse)
+
+.PHONY: ci-extension-cleaner
+ci-extension-cleaner:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,cleaner)
+
+.PHONY: ci-extension-app-maintenance
+ci-extension-app-maintenance:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,appMaintenance)
+
+.PHONY: ci-extension-blitztree
+ci-extension-blitztree:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,blitztree)
+
+.PHONY: ci-extension-lid-awake
+ci-extension-lid-awake:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,lidAwake)
+	swiftc -typecheck -swift-version 5 -module-name LidAwakePrivilegedRole -target arm64-apple-macos14.0 Extensions/lidAwake/Privileged/LidAwakePrivilegedController.swift Extensions/lidAwake/Privileged/LidAwakePrivilegedRuntime.swift Extensions/lidAwake/Services/LidAwakeCommand.swift Extensions/lidAwake/Services/LidAwakeCommandProcess.swift
+
+.PHONY: ci-extension-audio-mixer
+ci-extension-audio-mixer:
+	$(call UTILITY_EXTENSION_NATIVE_TEST,audioMixer)
+
+.PHONY: ci-extension-camera
+ci-extension-camera:
+	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
+	$(call UTILITY_EXTENSION_NATIVE_TEST,virtualCamera)
+	swiftc -typecheck -swift-version 5 -module-name CameraCarrierRole -target arm64-apple-macos14.0 -I Extensions/virtualCamera/.build/arm64-apple-macosx/debug/Modules Extensions/virtualCamera/CameraCarrierRuntime.swift Extensions/virtualCamera/CameraCarrierLease.swift Extensions/virtualCamera/CameraCarrierProtocol.swift Extensions/virtualCamera/CameraCarrierSession.swift Extensions/virtualCamera/CameraSystemExtensionController.swift Extensions/virtualCamera/Carrier/Factory.swift
+
+.PHONY: ci-extension-camera-roles
+ci-extension-camera-roles: ci-extension-camera
+
+.PHONY: ci-extension-camera-carrier
+ci-extension-camera-carrier: host
+	bun test scripts/camera-carrier.test.js
+	bun scripts/test-camera-carrier.mjs
+
+.PHONY: ci-extension-camera-voice
+ci-extension-camera-voice:
+	bun scripts/test-extension-native-policy.mjs
+	python3 scripts/build-camera-microphone.py --application com.pulkit.edith.tests.camera --version 1.0.0 --output local/camera-microphone
+	python3 scripts/build-camera-microphone.py --test --driver local/camera-microphone/com.pulkit.edith.tests.camera.microphone.driver --output local/camera-microphone
+	swift test --package-path Extensions/virtualCamera/NativeRuntime --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel
+
+ci-extension-docs:
+	swift test --package-path Packages/EdithDocsWorker --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
+
+.PHONY: ci-extension-docs-native ci-extension-plugins-native ci-extension-latex-native ci-extension-code-stats-native ci-extension-seo-audit-native ci-extension-companion-native ci-extension-bifrost-native
+ci-extension-docs-native:
+	swift format lint --strict --recursive Extensions/docs
+	fixture=$$(mktemp -d /tmp/edith-docs-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.docs.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/docs --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-plugins-native:
+	swift format lint --strict --recursive Extensions/plugins
+	fixture=$$(mktemp -d /tmp/edith-plugins-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.plugins.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/plugins --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-latex-native:
+	swift format lint --strict --recursive Extensions/latex
+	fixture=$$(mktemp -d /tmp/edith-latex-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.latex.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/latex --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-code-stats-native:
+	swift format lint --strict --recursive Extensions/codeStats
+	fixture=$$(mktemp -d /tmp/edith-codeStats-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.codeStats.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/codeStats --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-seo-audit-native:
+	swift format lint --strict --recursive Extensions/seoAudit
+	fixture=$$(mktemp -d /tmp/edith-seoAudit-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.seoAudit.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/seoAudit --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-companion-native:
+	swift format lint --strict --recursive Extensions/companion
+	fixture=$$(mktemp -d /tmp/edith-companion-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.companion.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/companion --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-bifrost-native:
+	swift format lint --strict --recursive Extensions/bifrost
+	fixture=$$(mktemp -d /tmp/edith-bifrost-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.bifrost.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/bifrost --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+
+ci-extension-workers:
+	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostLifecycleHarness
+	bun scripts/test-extension-workers.mjs $(EXTENSION)
+
+.PHONY: ci-privileged-worker
+ci-privileged-worker:
+	python3 -B scripts/test-privileged-extension-worker.py
+
+.PHONY: ci-extension-bifrost ci-extension-lid-awake
+ci-extension-bifrost:
+	swift format lint --strict --recursive Extensions/bifrost
+	swift test --package-path Extensions --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter BifrostExtensionTests
+
+.PHONY: ci-music-native
+ci-music-native:
+	cargo fmt --manifest-path Extensions/music/Native/Cargo.toml --check
+	cargo test --locked --jobs $(EXTENSION_SWIFT_JOBS) --manifest-path Extensions/music/Native/Cargo.toml
+
+.PHONY: ci-extension-studio ci-extension-studio-native
+ci-extension-studio:
+	$(MAKE) -C Extensions/studio ci-studio-extension
+
+ci-extension-studio-native:
+	swift test --package-path Extensions/studio/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+ci-extension-commands:
+	bun scripts/test-extension-commands.mjs
+
+.PHONY: ci-host-cli
+ci-host-cli:
+	bun scripts/test-host-cli.mjs
+
+ci-marketplace-runtime:
+	swift format lint --strict --parallel --recursive Packages/ExtensionMarketplace/Sources Packages/ExtensionMarketplace/Tests
+	swift test --package-path Packages/ExtensionMarketplace --build-system native --jobs $(EXTENSION_SWIFT_JOBS)
+
+ci-marketplace-host: ci-host host
+	$(MAKE) ci-host-cli
+	python3 -B scripts/test-extension-size-report.py
+	python3 -B scripts/test-extension-host-size-report.py
+	python3 -B scripts/test-host-build-metadata.py
+	bun scripts/extension-host-abi.mjs --write
+	bun test scripts/build-extension-support.test.js scripts/extension-owned-sources.test.js scripts/extension-host-abi.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extension-release-ready.test.js
+	$(MAKE) ci-marketplace-runtime
+	$(MAKE) ci-extension-support ci-extension-docs
+	$(MAKE) ci-extension-commands
+	$(MAKE) ci-extension-workers
+	$(MAKE) ci-comments
 
 ci-swift-test-batch:
 	@test -n "$(BATCH)" || { echo "set BATCH to a swift test batch" >&2; exit 1; }
@@ -187,110 +350,26 @@ ci-swift: ci-swift-check
 	$(MAKE) verify-bundle
 
 verify-release-build-settings:
-	@for target in EdithMain EdithHelper; do \
-	  settings="$$(xcodebuild -project edth.xcodeproj -scheme $$target -configuration Release -derivedDataPath build \
-	    -onlyUsePackageVersionsFromResolvedFile -showBuildSettings)" || exit 1; \
-	  test "$$(printf '%s\n' "$$settings" | awk '$$1 == "DEAD_CODE_STRIPPING" { print $$3; exit }')" = YES \
-	    || { echo "$$target Release DEAD_CODE_STRIPPING must be YES" >&2; exit 1; }; \
-	  test "$$(printf '%s\n' "$$settings" | awk '$$1 == "SWIFT_OPTIMIZATION_LEVEL" { print $$3; exit }')" = -Osize \
-	    || { echo "$$target Release SWIFT_OPTIMIZATION_LEVEL must be -Osize" >&2; exit 1; }; \
-	done
+	bun test scripts/shipping-host.test.js
 
-verify-bundle: verify-release-build-settings
-	test -f dist/Edith.app/Contents/MacOS/Edith
-	test ! -L dist/Edith.app/Contents/MacOS/Edith
-	test -x dist/Edith.app/Contents/MacOS/Edith
-	file -b dist/Edith.app/Contents/MacOS/Edith | grep -q '^Mach-O'
-	test -L dist/Edith.app/Contents/MacOS/ed
-	test -x dist/Edith.app/Contents/MacOS/ed
-	test "$$(readlink dist/Edith.app/Contents/MacOS/ed)" = ../Resources/ed-launcher
-	test -f dist/Edith.app/Contents/Resources/ed-launcher
-	test -x dist/Edith.app/Contents/Resources/ed-launcher
-	head -n 1 dist/Edith.app/Contents/Resources/ed-launcher | grep -qx '#!/bin/sh'
-	test ! -e dist/Edith.app/Contents/MacOS/edh
-	test ! -L dist/Edith.app/Contents/MacOS/edh
-	test 1 -eq "$$(find dist/Edith.app/Contents/MacOS -maxdepth 1 -type l -name ed | wc -l | tr -d ' ')"
-	codesign --verify --strict dist/Edith.app/Contents/MacOS/Edith
-	@set -e; install_dir="$$(mktemp -d /tmp/edith-install.XXXXXX)"; \
-	  trap 'rm -rf "$$install_dir"' EXIT; \
-	  dist/Edith.app/Contents/MacOS/ed install --directory "$$install_dir" >/dev/null; \
-	  target="$$(pwd)/dist/Edith.app/Contents/MacOS/ed"; \
-	  version="$$($$install_dir/ed --version)"; \
-	  test -n "$$version"; \
-	  test "$$version" != development; \
-	  for name in ed edith; do \
-	    test -L "$$install_dir/$$name"; \
-	    test "$$(readlink "$$install_dir/$$name")" = "$$target"; \
-	    test -x "$$install_dir/$$name"; \
-	    test "$$version" = "$$($$install_dir/$$name --version)"; \
-	  done; \
-	  test ! -e "$$install_dir/edh"; \
-	  test ! -L "$$install_dir/edh"
-	test 1 -eq "$$(find dist/Edith.app -name Sparkle.framework | wc -l | tr -d ' ')"
-	test 1 -eq "$$(find dist/Edith.app -name EdithShared.framework | wc -l | tr -d ' ')"
-	test 1 -eq "$$(find dist/Edith.app -name MeetingVoice.framework | wc -l | tr -d ' ')"
-	test ! -e dist/Edith.app/Contents/Frameworks/onnxruntime.framework
-	test -x dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver/Contents/MacOS/EdithMicrophone
-	codesign --verify --strict dist/Edith.app/Contents/Library/Audio/Plug-Ins/HAL/*.microphone.driver
-	test -x dist/Edith.app/Contents/Frameworks/EdithShared.framework/Versions/A/EdithShared
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithKit.framework
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithCore.framework
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithCameraSupport.framework
-	test ! -e dist/Edith.app/Contents/Frameworks/EdithLidAwakeSupport.framework
-	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Frameworks
-	test -d dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/Frameworks/EdithCameraSupport.framework
-	otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithShared.framework/'
-	otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/Sparkle.framework/'
-	! otool -L dist/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithKit.framework/'
-	! otool -L dist/Edith.app/Contents/MacOS/edithd | grep -q '@rpath/EdithKit.framework/'
-	otool -L dist/Edith.app/Contents/MacOS/edithd | grep -q '@rpath/EdithShared.framework/'
-	otool -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithShared.framework/'
-	! otool -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith | grep -q '@rpath/EdithKit.framework/'
-	otool -L dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@rpath/EdithShared.framework/'
-	! otool -L dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@rpath/EdithLidAwakeSupport.framework/'
-	otool -l dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake | grep -q '@executable_path/../../Frameworks'
-	otool -L dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '@rpath/EdithCameraSupport.framework/'
-	! otool -L dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '@rpath/EdithShared.framework/'
-	! otool -l dist/Edith.app/Contents/MacOS/Edith dist/Edith.app/Contents/MacOS/edithd dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension/Contents/MacOS/*.camera | grep -q '/Users/'
-	@! find dist/Edith.app -type f -perm -u+x -exec file {} + | grep -q 'universal binary'
-	test ! -e dist/Edith.app/Contents/Resources/Edith_Edith.bundle
-	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/ghostty/shell-integration/zsh/ghostty-integration' -type f | grep -q .
-	find dist/Edith.app/Contents/Resources -path '*/GhosttyResources/terminfo/78/xterm-ghostty' -type f | grep -q .
-	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
-	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-	test -f dist/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/ChromeExtension/manifest.json
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/MacOS/Edith
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/MenuBar.png
-	test -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns
-	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/AppIcon.icns)" = ../../../../../Resources/AppIcon.icns
-	test -L dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle
-	test "$$(readlink dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle)" = ../../../../../Resources/Edith_EdithKit.bundle
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/claude.svg
-	test -f dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Resources/Edith_EdithKit.bundle/Contents/Resources/codex.svg
-	python3 scripts/verify-app-identity.py dist/Edith.app
-	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	test ! -e dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.plist
-	test -x dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	test "$$(stat -f %z dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake)" -le 500000
-	test -f dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist
-	test -x dist/Edith.app/Contents/MacOS/edithd
-	/usr/libexec/PlistBuddy -c 'Print :BundleProgram' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake
-	/usr/libexec/PlistBuddy -c 'Print :AssociatedBundleIdentifiers:0' dist/Edith.app/Contents/Library/LaunchDaemons/com.pulkit.edith.lidawake.v2.plist | grep -qx com.pulkit.edith
-	codesign -dvv dist/Edith.app/Contents/Library/PrivilegedHelperTools/com.pulkit.edith.lidawake 2>&1 | grep -qx Identifier=com.pulkit.edith.lidawake
-	@for plist in dist/Edith.app/Contents/Info.plist dist/Edith.app/Contents/Library/LoginItems/Edith.app/Contents/Info.plist; do \
-	  for field in CFBundleName CFBundleDisplayName; do \
-	    /usr/libexec/PlistBuddy -c "Print :$$field" "$$plist" | grep -q Helper \
-	      && { echo "$$plist $$field mentions Helper" >&2; exit 1; }; \
-	  done; \
-	done; exit 0
-	codesign --verify dist/Edith.app/Contents/Library/LoginItems/Edith.app
-	test 1 -eq "$$(find dist/Edith.app/Contents/Library/SystemExtensions -maxdepth 1 -name '*.camera.systemextension' | wc -l | tr -d ' ')"
-	codesign --verify --strict dist/Edith.app/Contents/Library/SystemExtensions/*.camera.systemextension
-	codesign --verify --deep --strict dist/Edith.app
+verify-bundle:
+	python3 scripts/verify-shipping-host.py dist/Edith.app
+
+ci-shipping:
+	bun test scripts/shipping-host.test.js scripts/build-install.test.js scripts/local-install-signing.test.js scripts/release-workflows.test.js scripts/ci-routing.test.js scripts/camera-extension.test.js scripts/publish-release-state.test.js scripts/publish-host-release.test.js scripts/extension-release-plan.test.js scripts/extension-publish.test.js scripts/extensions-workflow.test.js
+
+shipping-fixture:
+	@test -n "$(HOST_FIXTURE)" || { echo "set HOST_FIXTURE to a signed empty host" >&2; exit 1; }
+	python3 scripts/package-shipping-host.py "$(HOST_FIXTURE)" local/shipping-fixture/Edith.app --identity - --release
+	python3 scripts/verify-shipping-host.py local/shipping-fixture/Edith.app --release
+	python3 scripts/package-host-dmg.py local/shipping-fixture/Edith.app local/shipping-fixture/Edith.dmg
+
+shipping-appcast-fixture:
+	python3 scripts/test-host-appcast.py local/shipping-fixture/Edith.app Packages/EdithHost/.build/artifacts/sparkle/Sparkle/bin
 
 
 ghostty:
-	scripts/build-ghostty.sh
+	bash scripts/build-ghostty.sh
 
 build:
 	./build.sh $(FLAGS)
@@ -354,7 +433,8 @@ ci-osv:
 
 ci-semgrep:
 	@command -v semgrep >/dev/null || { echo "semgrep missing: run make ci-tools" >&2; exit 1; }
-	semgrep scan --error --config p/rust --config p/swift --config p/secrets --config p/github-actions .
+	python3 scripts/test-semgrep.py
+	python3 scripts/check-semgrep.py -- semgrep
 
 ci-trivy:
 	@command -v trivy >/dev/null || { echo "trivy missing: run make ci-tools" >&2; exit 1; }
@@ -372,8 +452,90 @@ ci-companion-migrate:
 	@test -n "$$DATABASE_URL" || { echo "set DATABASE_URL to a pgvector database (start one with ac)" >&2; exit 1; }
 	cd apps/companion && cargo +stable run --locked -- --migrate-only
 
+.PHONY: ci-extension-database
+ci-extension-database:
+	swift format lint --strict --recursive Extensions/database
+	env -u EDITH_DATABASE_POSTGRESQL_HOST swift test --package-path Extensions/database/DatabaseEngine --no-parallel --jobs $(EXTENSION_SWIFT_JOBS)
+	cd Extensions/database && env -u EDITH_DATABASE_POSTGRESQL_HOST EDITH_DATABASE_RELATION_FILTERS=0 node test.mjs $(if $(FILTER),'$(FILTER)')
+
 ci-tools:
 	brew install yamllint lychee gitleaks trivy osv-scanner actionlint zizmor semgrep go zig fish || true
 	cargo install cargo-audit --locked || true
 
 endif
+
+.PHONY: ghostty-extension ci-extension-terminal
+ghostty-extension:
+	bash scripts/build-ghostty.sh --extension-only
+
+ci-extension-terminal: ghostty-extension
+	swift format lint --strict --parallel --recursive Extensions/terminal
+	swift test --package-path Extensions/terminal/Native --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+	swift test --package-path Extensions/terminal --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)')
+
+.PHONY: ci-extension-attention
+ci-extension-attention:
+	bun scripts/prepare-extension-native-support.mjs attention
+	swift format lint --strict --recursive Extensions/attention
+	swift test --package-path Extensions/attention/NativeRuntime --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+.PHONY: ci-machines
+ci-machines: ghostty-extension
+	EDITH_EXTENSION_FIXTURE_HOME=/tmp/edith-machines-tests swift test --package-path Extensions/machines --build-system native --disable-build-manifest-caching --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter MachinesExtensionTests
+
+.PHONY: ci-machines-ui
+ci-machines-ui: ghostty-extension
+	EDITH_EXTENSION_FIXTURE_HOME=/tmp/edith-machines-tests swift test --package-path Extensions/machines --build-system native --disable-build-manifest-caching --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter MachinesExtensionUITests
+
+.PHONY: ci-extension-machines
+ci-extension-machines: ci-machines ci-machines-ui
+.PHONY: ci-extension-downloads
+ci-extension-downloads:
+	swift format lint --strict --recursive Extensions/downloads
+	fixture=$$(mktemp -d /tmp/edith-downloads-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.downloads.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/downloads --build-system native --no-parallel --jobs 1 -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+.PHONY: ci-extension-native-tasks
+ci-extension-native-tasks:
+	swift build --package-path Packages/EdithHost --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --product HostNativeTaskHarness
+	bun scripts/test-extension-native-tasks.mjs
+.PHONY: ci-extension-herdr-core
+ci-extension-herdr-core: ghostty-extension
+	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrExtensionTests
+
+
+.PHONY: ci-extension-herdr-ui ci-extension-herdr
+ci-extension-herdr-ui: ghostty-extension
+	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --skip AgentTranscriptMemoryTests --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter HerdrUITests
+	fixture=$$(mktemp -d /tmp/edith-herdr-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.herdr.fixture.$$(basename "$$fixture")" swift test --package-path Extensions/herdr --build-system native --no-parallel --filter AgentTranscriptMemoryTests --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+ci-extension-herdr: ci-extension-herdr-core ci-extension-herdr-ui
+
+.PHONY: ci-extension-quinjet-core
+ci-extension-quinjet-core: ghostty-extension
+	@fixture=$$(mktemp -d /tmp/edith-quinjet-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.quinjet.tests.$$(uuidgen)" swift test --package-path Extensions/quinjet --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter QuinjetExtensionTests
+
+.PHONY: ci-extension-quinjet-ui ci-extension-quinjet
+ci-extension-quinjet-ui: ghostty-extension
+	@fixture=$$(mktemp -d /tmp/edith-quinjet-ui-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_SHARED_DEFAULTS_SUITE="edith.quinjet.ui.tests.$$(uuidgen)" swift test --package-path Extensions/quinjet --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" --filter QuinjetUITests
+ci-extension-quinjet: ci-extension-quinjet-core ci-extension-quinjet-ui
+
+.PHONY: ci-extension-music
+ci-extension-music:
+	swift format lint --strict --parallel --recursive Extensions/music
+	fixture=$$(mktemp -d /tmp/edith-music-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.music.tests.$$(basename "$$fixture")" swift test --package-path Extensions/music --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+.PHONY: ci-extension-notch-native
+ci-extension-notch-native:
+	@fixture=$$(mktemp -d /tmp/edith-notch-native-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_BACKGROUND_TESTING=1 EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="com.pulkit.edith.tests.notch.$$(basename "$$fixture")" swift test --package-path Extensions/notchShelf --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+.PHONY: ci-extension-clipboard-native
+ci-extension-clipboard-native:
+	swift format lint --strict --parallel --recursive Extensions/clipboard
+	fixture=$$(mktemp -d /tmp/edith-clipboard-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; identity="com.pulkit.edith.tests.clipboard.$$(basename "$$fixture")"; EDITH_BACKUP_RUNTIME_FIXTURE=1 EDITH_APPLICATION_IDENTIFIER="$$identity" EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/Data/clipboard" EDITH_SHARED_DEFAULTS_SUITE="$$identity" swift test --package-path Extensions/clipboard --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins" $(if $(FILTER),--filter '$(FILTER)') $(if $(SKIP),--skip '$(SKIP)')
+
+.PHONY: ci-extension-presenter
+ci-extension-presenter:
+	swift format lint --strict --parallel --recursive Extensions/presenter
+	fixture=$$(mktemp -d /tmp/edith-presenter-tests.XXXXXX); trap 'rm -rf "$$fixture"' EXIT; EDITH_EXTENSION_FIXTURE_HOME="$$fixture" EDITH_EXTENSION_DATA_ROOT="$$fixture/data" EDITH_SHARED_DEFAULTS_SUITE="edith.presenter.tests.$$(basename "$$fixture")" swift test --package-path Extensions/presenter --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
+.PHONY: ci-extension-usage-native
+ci-extension-usage-native:
+	$(MAKE) -C Extensions/usage format-check test $(if $(FILTER),FILTER='$(FILTER)')

@@ -1,0 +1,319 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
+
+private struct MachineConnectionsEnabledKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    var machineConnectionsEnabled: Bool {
+        get { self[MachineConnectionsEnabledKey.self] }
+        set { self[MachineConnectionsEnabledKey.self] = newValue }
+    }
+}
+
+struct MachinesPage: View {
+    @State private var model = MachinesModel.shared
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+    @AppStorage(MachineSettingsKeys.tab, store: SharedDefaults.store) private var storedTab =
+        MachineTab.overview.rawValue
+    @Environment(\.machineConnectionsEnabled) private var connectionsEnabled
+    @AppStorage(MachineSettingsKeys.selection, store: SharedDefaults.store) private
+        var storedSelection = ""
+    @AppStorage(MachineSettingsKeys.mode, store: SharedDefaults.store) private var modeRaw =
+        "fleet"
+    @State private var addSheetPresented = false
+    @State private var editingMachine: Machine?
+    @State private var confirmRemoval: Machine?
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        PageWorkspace {
+            header
+        } content: {
+            content
+        }
+        .navigationRoute("place", selection: placeBinding, isValid: placeIsValid)
+        .navigationTitle("Machines")
+        .overlay(alignment: .bottom) {
+            if let message = model.operationError {
+                Text(message).font(.edithText(.caption)).padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+        .edithSheet(isPresented: $addSheetPresented, dismissible: false) {
+            AddMachineSheet { machine, secrets in
+                model.add(machine, secrets: changes(secrets))
+            }
+        }
+        .edithSheet(item: $editingMachine, dismissible: false) { machine in
+            AddMachineSheet(editing: machine) { updated, secrets in
+                model.update(updated, secrets: changes(secrets))
+            }
+        }
+        .confirmationDialog(
+            MachinePrivacy.shared.hidesMachines
+                ? "Remove this machine?"
+                : "Remove \(confirmRemoval?.name ?? "machine")?",
+            isPresented: Binding(
+                get: { confirmRemoval != nil }, set: { if !$0 { confirmRemoval = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Remove", role: .destructive) {
+                if let machine = confirmRemoval { model.remove(id: machine.id) }
+                confirmRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { confirmRemoval = nil }
+        } message: {
+            Text(
+                "Edith forgets the connection details and any saved password. Nothing on the machine changes."
+            )
+        }
+        .onAppear {
+            guard connectionsEnabled else { return }
+            model.reconcileSSHClipboards()
+            model.restoreSelection(storedSelection)
+            model.startSelected()
+            reconcileTab()
+        }
+        .onChange(of: model.selection) { _, selection in
+            guard connectionsEnabled else { return }
+            storedSelection = selection?.uuidString ?? ""
+            model.startSelected()
+            reconcileTab()
+        }
+    }
+
+    private var tab: MachineTab {
+        MachineTab(rawValue: storedTab) ?? .overview
+    }
+
+    private func reconcileTab() {
+        let hasDocker = model.selection.map { model.session(for: $0).docker.isInstalled } ?? false
+        let available = MachineTab.tabs(isLocal: isLocalSelection, hasDocker: hasDocker)
+        if !available.contains(tab) { storedTab = MachineTab.overview.rawValue }
+    }
+
+    private var isLocalSelection: Bool {
+        model.selection.map { model.isLocal($0) } ?? true
+    }
+
+    private var header: some View {
+        PageHeader(
+            "Machines",
+            trailing: {
+                Button {
+                    addSheetPresented = true
+                } label: {
+                    Label("Add machine", systemImage: "plus")
+                }
+            },
+            accessory: { machineStrip })
+    }
+
+    private var machineStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: UIScale.pt(10)) {
+                FleetChip(
+                    title: "All machines", subtitle: "Summary", symbol: "square.grid.2x2",
+                    selected: mode == .fleet, dark: dark
+                ) { modeRaw = MachinesMode.fleet.rawValue }
+                FleetChip(
+                    title: "Workspace", subtitle: "Split panes",
+                    symbol: "rectangle.split.2x1", selected: mode == .workspace, dark: dark
+                ) { modeRaw = MachinesMode.workspace.rawValue }
+                if connectionsEnabled {
+                    ForEach(model.allMachines) { machine in
+                        MachineChip(
+                            machine: machine,
+                            session: model.session(for: machine.id),
+                            sshClipboardState: model.sshClipboardState(for: machine),
+                            selected: mode == .machine && model.selection == machine.id,
+                            isLocal: model.isLocal(machine.id), dark: dark,
+                            onSelect: {
+                                modeRaw = MachinesMode.machine.rawValue
+                                model.selection = machine.id
+                            },
+                            onDetach: {
+                                MachineWindow.open(machineID: machine.id, title: machine.name)
+                            },
+                            onEdit: { editingMachine = machine },
+                            onRemove: { confirmRemoval = machine }
+                        )
+                        .machinePrivacyCover()
+                    }
+                }
+            }
+            .padding(.vertical, UIScale.pt(2))
+        }
+    }
+
+    private var mode: MachinesMode {
+        MachinesMode(rawValue: modeRaw) ?? .fleet
+    }
+
+    private var placeBinding: Binding<String> {
+        Binding(
+            get: {
+                switch mode {
+                case .fleet: ""
+                case .workspace: "workspace"
+                case .machine: model.selection?.uuidString ?? ""
+                }
+            },
+            set: { value in
+                if value.isEmpty || value == "fleet" {
+                    modeRaw = MachinesMode.fleet.rawValue
+                } else if value == "workspace" {
+                    modeRaw = MachinesMode.workspace.rawValue
+                } else if let id = UUID(uuidString: value), model.knows(id) {
+                    modeRaw = MachinesMode.machine.rawValue
+                    model.selection = id
+                }
+            })
+    }
+
+    private func placeIsValid(_ value: String) -> Bool {
+        if value.isEmpty || value == "fleet" || value == "workspace" { return true }
+        guard let id = UUID(uuidString: value) else { return false }
+        return model.knows(id)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        fleetContent.machinePrivacyCover()
+    }
+
+    @ViewBuilder
+    private var fleetContent: some View {
+        if !connectionsEnabled {
+            Color.clear
+        } else if mode == .fleet {
+            FleetHomeView(model: model) { id in
+                modeRaw = MachinesMode.machine.rawValue
+                model.selection = id
+            }
+        } else if mode == .workspace {
+            WorkspaceView(machines: model)
+        } else if let session = model.selectedSession() {
+            MachineDetailView(
+                session: session, model: model,
+                tab: Binding(
+                    get: { tab },
+                    set: { storedTab = $0.rawValue }))
+        } else {
+            emptyState
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: UIScale.pt(12)) {
+            Image(systemName: "server.rack")
+                .font(.system(size: UIScale.pt(38)))
+                .foregroundStyle(DashSkin.inkFaint(dark))
+            Text("No machines yet")
+                .font(DashSkin.heading(20))
+                .foregroundStyle(DashSkin.ink(dark))
+            Text(
+                "Add a computer you can reach over SSH to watch its resources, browse its files, and run its containers."
+            )
+            .font(.system(size: UIScale.pt(12.5)))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: UIScale.pt(420))
+            Button("Add machine") { addSheetPresented = true }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func changes(_ secrets: AddMachineSheet.Secrets) -> MachineSecretChanges {
+        MachineSecretChanges(
+            login: secrets.login, sudoPassword: secrets.sudo,
+            forgetSudoPassword: secrets.forgetSudo)
+    }
+}
+
+private struct MachineChip: View {
+    let machine: Machine
+    let session: MachineSession
+    let sshClipboardState: SSHClipboardSyncState
+    let selected: Bool
+    let isLocal: Bool
+    let dark: Bool
+    let onSelect: () -> Void
+    let onDetach: () -> Void
+    let onEdit: () -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        SelectableChipRow(
+            icon: isLocal ? "laptopcomputer" : "server.rack",
+            title: machine.name,
+            subtitle: isLocal ? "Local" : machine.subtitle,
+            selected: selected, dark: dark,
+            onSelect: {
+                if NSEvent.modifierFlags.contains(.command) {
+                    onDetach()
+                } else {
+                    onSelect()
+                }
+            }
+        ) {
+            HStack(spacing: UIScale.pt(6)) {
+                if machine.sshClipboardEnabled {
+                    Image(systemName: sshClipboardState.symbol)
+                        .font(.system(size: UIScale.pt(9), weight: .semibold))
+                        .foregroundStyle(sshClipboardColor)
+                        .help(sshClipboardState.label)
+                }
+                Circle()
+                    .fill(MachineStatusStyle.color(session.state, dark: dark))
+                    .frame(width: UIScale.pt(7), height: UIScale.pt(7))
+            }
+        }
+        .help("\(machine.name) (⌘-click to open in its own window)")
+        .contextMenu {
+            Button("Open in New Window", action: onDetach)
+            if !isLocal {
+                Divider()
+                Button("Edit…", action: onEdit)
+                Button(
+                    session.state == .disconnected ? "Connect" : "Disconnect",
+                    action: toggleConnection)
+                Divider()
+                Button("Remove", role: .destructive, action: onRemove)
+                if machine.sshClipboardEnabled {
+                    Divider()
+                    Button(sshClipboardState.label) {}
+                        .disabled(true)
+                }
+            }
+        }
+    }
+
+    private var sshClipboardColor: Color {
+        switch sshClipboardState {
+        case .active: return DashSkin.ok
+        case .configuring: return DashSkin.gold
+        case .failed: return DashSkin.danger
+        case .disabled: return DashSkin.inkFaint(dark)
+        }
+    }
+
+    private func toggleConnection() {
+        let operation: MachineConnectionOperation =
+            session.state == .disconnected ? .connect : .disconnect
+        Task {
+            _ = await MachineConnectionOperationExecution.perform(
+                operation,
+                connect: {
+                    session.start()
+                    return nil
+                },
+                disconnect: { session.stop() })
+        }
+    }
+}

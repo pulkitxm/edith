@@ -1,0 +1,606 @@
+@testable import GhosttyTerminal
+import GhosttyKit
+@testable import HerdrUI
+import EdithExtensionSupport
+import EdithExtensionUI
+import AppKit
+import Testing
+
+@MainActor
+@Suite struct HerdrCockpitUITests {
+    @Test func oneTerminalIsOfferedPerMachineThatHasHerdr() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote, missing])
+        #expect(store.listedAgents.map(\.pane) == ["w2:p1"])
+        #expect(store.machineTerminals.map(\.machineName) == ["This Mac", "tuf-wired"])
+        #expect(store.machineTerminals.filter(\.isTerminal).count == 2)
+    }
+
+    @Test func theMachineFilterAlsoNarrowsTheTerminals() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        store.machineFilter = "local"
+        #expect(store.machineTerminals.map(\.machineName) == ["This Mac"])
+        store.machineFilter = remote.id
+        #expect(store.machineTerminals.map(\.machineName) == ["tuf-wired"])
+        store.machineFilter = "all"
+        #expect(store.machineTerminals.count == 2)
+    }
+
+    @Test func openingASplitClosesTheDetailPane() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host])
+        store.detailOpen = true
+        store.open(agent, showing: .split)
+        #expect(store.detailOpen == false)
+        #expect(store.view(for: agent.id) == .split)
+    }
+
+    @Test func aTerminalTabNeverOpensInTheDiffView() {
+        let suite = defaults()
+        let store = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        store.apply([host])
+        let terminal = HerdrMachineTerminal.agent(for: host)
+        HerdrAgentViews.set(.diff, for: terminal.id, suite)
+        store.open(terminal)
+        #expect(store.view(for: terminal.id) == .agent)
+    }
+
+    @Test func closingAnAgentRunsItsControlAndClosesOnlyTheEdithTab() async throws {
+        let capture = HerdrCloseCapture()
+        let store = HerdrStore(
+            defaults: defaults(), liveWatcher: { _ in },
+            agentCloser: { agent in await capture.append(agent.id) })
+        store.apply([host])
+        store.open(agent)
+        #expect(store.currentTab?.focused == agent.id)
+
+        try await store.closeAgent(agent)
+
+        #expect(await capture.ids() == [agent.id])
+        #expect(store.tabs.isEmpty)
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(store.hosts.first?.agents == [agent])
+    }
+
+    @Test func tabsReorderTheWayTheyAreDragged() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        let first = HerdrMachineTerminal.agent(for: host)
+        let second = HerdrMachineTerminal.agent(for: remote)
+        store.open(agent)
+        store.open(first)
+        store.open(second)
+        #expect(store.tabs.map(\.focused) == [agent.id, first.id, second.id])
+        store.moveTab(tabID(store, second), toIndexOf: tabID(store, agent))
+        #expect(store.tabs.map(\.focused) == [second.id, agent.id, first.id])
+        store.moveTab(tabID(store, second), toIndexOf: HerdrStore.boardID)
+        #expect(store.tabs.map(\.focused) == [second.id, agent.id, first.id])
+        store.moveTab(tabID(store, agent), toIndexOf: tabID(store, first))
+        #expect(store.tabs.map(\.focused) == [second.id, first.id, agent.id])
+    }
+
+    @Test func theBoardNeverMovesAndUnknownTabsAreIgnored() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host])
+        store.open(agent)
+        store.moveTab(HerdrStore.boardID, toIndexOf: tabID(store, agent))
+        store.moveTab("nowhere", toIndexOf: tabID(store, agent))
+        store.moveTab(tabID(store, agent), toIndexOf: "nowhere")
+        #expect(store.tabs.map(\.focused) == [agent.id])
+    }
+
+    @Test func optionNumbersWalkTheTabsAndNineIsTheLast() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        store.open(agent)
+        store.open(HerdrMachineTerminal.agent(for: host))
+        store.open(HerdrMachineTerminal.agent(for: remote))
+        store.selectTab(number: 1)
+        #expect(store.selectedTab == HerdrStore.boardID)
+        store.selectTab(number: 3)
+        #expect(store.selectedTab == store.tabs[1].id)
+        store.selectTab(number: 9)
+        #expect(store.selectedTab == store.tabs[2].id)
+        store.selectTab(number: 8)
+        #expect(store.selectedTab == store.tabs[2].id)
+    }
+
+    @Test func aHoveredCardReadsStrongerThanARestingOne() {
+        let resting = HerdrStatusColor.fill(agent, dark: true, selected: false)
+        let hovered = HerdrStatusColor.fill(agent, dark: true, selected: true)
+        #expect(resting != hovered)
+        #expect(
+            HerdrStatusColor.stroke(agent, dark: true, selected: false)
+                != HerdrStatusColor.stroke(agent, dark: true, selected: true))
+    }
+
+    @Test func theBoardStillOffersTheMachineTerminals() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        store.selectBoard()
+        #expect(store.selectedTab == HerdrStore.boardID)
+        #expect(store.machineTerminals.count == 2)
+        let terminal = store.machineTerminals[0]
+        store.open(terminal)
+        #expect(store.currentTab?.focused == terminal.id)
+        #expect(store.tabs.map(\.focused) == [terminal.id])
+    }
+
+    @Test func bothPanesSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(first.detailOpen)
+        #expect(first.railOpen)
+        first.detailOpen = false
+        first.setRailOpen(false)
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!second.detailOpen)
+        #expect(!second.railOpen)
+
+        second.detailOpen = true
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.detailOpen)
+        #expect(!third.railOpen)
+    }
+
+    @Test func layoutChangesAreInstantUntilAnimationIsTurnedOn() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.animatesLayout)
+        #expect(first.layoutAnimation == nil)
+
+        first.animatesLayout = true
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.animatesLayout)
+        #expect(
+            (second.layoutAnimation == nil)
+                == NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+
+        second.animatesLayout = false
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!third.animatesLayout)
+        #expect(third.layoutAnimation == nil)
+    }
+
+    @Test func paneWidthsAreClampedAndSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(first.railWidth == HerdrPaneSizing.railDefault)
+        #expect(first.detailWidth == HerdrPaneSizing.detailDefault)
+
+        first.railWidth = 340
+        first.detailWidth = 410
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.railWidth == 340)
+        #expect(second.detailWidth == 410)
+
+        suite.set(10, forKey: AppStorageKeys.Herdr.railWidth)
+        suite.set(900, forKey: AppStorageKeys.Herdr.detailWidth)
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.railWidth == HerdrPaneSizing.railMinimum)
+        #expect(third.detailWidth == HerdrPaneSizing.detailMaximum)
+    }
+
+    @Test func eachRailSectionCollapsesAndSurvivesARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.terminalsCollapsed)
+        #expect(!first.agentsCollapsed)
+        first.terminalsCollapsed = true
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.terminalsCollapsed)
+        #expect(!second.agentsCollapsed)
+
+        second.agentsCollapsed = true
+        second.terminalsCollapsed = false
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(third.agentsCollapsed)
+        #expect(!third.terminalsCollapsed)
+    }
+
+    @Test func collapsedSectionsReopenOnlyWhenTheirCountsChange() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        first.apply([host])
+        first.terminalsCollapsed = true
+        first.agentsCollapsed = true
+        #expect(suite.integer(forKey: AppStorageKeys.Herdr.terminalsCollapsedCount) == 1)
+        #expect(suite.integer(forKey: AppStorageKeys.Herdr.agentsCollapsedCount) == 1)
+
+        let same = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        same.apply([host])
+        #expect(same.terminalsCollapsed)
+        #expect(same.agentsCollapsed)
+
+        let added = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "edith", cwd: "/repo")
+        let changedAgents = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        changedAgents.apply([.local(herdrPresent: true, agents: [agent, added])])
+        #expect(changedAgents.terminalsCollapsed)
+        #expect(!changedAgents.agentsCollapsed)
+
+        let changedTerminals = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        changedTerminals.apply([host, remote])
+        #expect(!changedTerminals.terminalsCollapsed)
+    }
+
+    @Test func agentsCanBeGroupedIntoNamedSpaces() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "OpenCode", status: .idle,
+            title: "Second agent", workspace: "edith", cwd: "/repo")
+        let unassigned = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p3", kind: "OpenCode", status: .idle,
+            title: "Third agent", workspace: "  ", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [unassigned, second, agent])])
+
+        #expect(store.agentSpaces.map(\.title) == ["edith", "Unassigned"])
+        #expect(store.agentSpaces[0].agents.map(\.pane) == ["w2:p2", "w2:p1"])
+        #expect(store.agentSpaces[1].agents.map(\.pane) == ["w2:p3"])
+    }
+
+    @Test func spaceGroupingAndCollapsedSpacesSurviveARestart() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!first.spaceGroupingEnabled)
+        #expect(!first.spaceIsCollapsed("local|edith"))
+
+        first.spaceGroupingEnabled = true
+        first.toggleSpace("local|edith")
+
+        let second = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(second.spaceGroupingEnabled)
+        #expect(second.spaceIsCollapsed("local|edith"))
+        second.toggleSpace("local|edith")
+
+        let third = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        #expect(!third.spaceIsCollapsed("local|edith"))
+    }
+
+    @Test func allSpacesCanBeCollapsedAndExpandedTogether() {
+        let suite = defaults()
+        let store = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "quinjet", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [agent, second])])
+
+        #expect(!store.allAgentSpacesCollapsed)
+        store.setAllAgentSpacesCollapsed(true)
+        #expect(store.allAgentSpacesCollapsed)
+        #expect(store.spaceIsCollapsed("local|edith"))
+        #expect(store.spaceIsCollapsed("local|quinjet"))
+
+        let restored = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        restored.apply([.local(herdrPresent: true, agents: [agent, second])])
+        #expect(restored.allAgentSpacesCollapsed)
+        restored.setAllAgentSpacesCollapsed(false)
+        #expect(!restored.allAgentSpacesCollapsed)
+        #expect(!restored.spaceIsCollapsed("local|edith"))
+        #expect(!restored.spaceIsCollapsed("local|quinjet"))
+    }
+
+    @Test func openingAnAgentRevealsOnlyItsSpace() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "quinjet", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [agent, second])])
+        store.setAllAgentSpacesCollapsed(true)
+
+        store.open(second, showing: .diff)
+
+        #expect(store.spaceIsCollapsed("local|edith"))
+        #expect(!store.spaceIsCollapsed("local|quinjet"))
+
+        store.setAllAgentSpacesCollapsed(true)
+        store.open(agent)
+        #expect(!store.spaceIsCollapsed("local|edith"))
+        #expect(store.spaceIsCollapsed("local|quinjet"))
+
+        store.setAllAgentSpacesCollapsed(true)
+        store.setView(.split, for: agent.id)
+        #expect(!store.spaceIsCollapsed("local|edith"))
+        #expect(store.spaceIsCollapsed("local|quinjet"))
+    }
+
+    @Test func selectingOrDetachingAnAgentRevealsItsSpace() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        let second = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "quinjet", cwd: "/repo")
+        store.apply([.local(herdrPresent: true, agents: [agent, second])])
+        store.open(agent)
+        store.open(second)
+        store.setAllAgentSpacesCollapsed(true)
+
+        store.selectedTab = tabID(store, agent)
+        #expect(!store.spaceIsCollapsed("local|edith"))
+        #expect(store.spaceIsCollapsed("local|quinjet"))
+
+        store.setAllAgentSpacesCollapsed(true)
+        _ = store.detachedTab(for: second)
+        #expect(store.spaceIsCollapsed("local|edith"))
+        #expect(!store.spaceIsCollapsed("local|quinjet"))
+    }
+
+    @Test func collapsedSpaceReopensOnlyWhenItsAgentCountChanges() {
+        let suite = defaults()
+        let first = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        first.apply([host])
+        first.toggleSpace("local|edith")
+
+        let same = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        same.apply([host])
+        #expect(same.spaceIsCollapsed("local|edith"))
+
+        let added = HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p2", kind: "Codex", status: .idle,
+            title: "Second agent", workspace: "edith", cwd: "/repo")
+        let changed = HerdrStore(defaults: suite, liveWatcher: { _ in })
+        changed.apply([.local(herdrPresent: true, agents: [agent, added])])
+        #expect(!changed.spaceIsCollapsed("local|edith"))
+    }
+
+    @Test func aBurstOfUpdatesLandsOnceAsTheLatestState() async throws {
+        let store = HerdrStore(
+            defaults: defaults(), liveWatcher: { _ in }, machinesProvider: { [] })
+        store.settle([host])
+        store.settle([host, remote])
+        store.settle([remote])
+        #expect(store.hosts.map(\.name) == ["This Mac"])
+
+        try await Task.sleep(for: HerdrStore.settleWindow * 3)
+        #expect(store.hosts.map(\.name) == ["tuf-wired"])
+        #expect(!store.settling)
+    }
+
+    @Test func aDetachedAgentKeepsOneTabUntilItsWindowCloses() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host])
+        #expect(store.detachedIDs.isEmpty)
+
+        let first = store.detachedTab(for: agent)
+        #expect(store.detachedIDs == [agent.id])
+        let again = store.detachedTab(for: agent)
+        #expect(first.id == again.id)
+        #expect(store.detachedIDs.count == 1)
+
+        store.reattach(agent.id)
+        #expect(store.detachedIDs.isEmpty)
+    }
+
+    @Test func aTerminalCanBeDetachedTheSameWay() {
+        let store = HerdrStore(defaults: defaults(), liveWatcher: { _ in })
+        store.apply([host, remote])
+        let terminal = HerdrMachineTerminal.agent(for: remote)
+        let tab = store.detachedTab(for: terminal)
+        #expect(tab.agent.isTerminal)
+        #expect(tab.view == .agent)
+        #expect(store.detachedIDs == [terminal.id])
+    }
+
+    @Test func theRailRemembersWhetherItWasCollapsed() {
+        let store = defaults()
+        let first = HerdrStore(defaults: store, liveWatcher: { _ in })
+        #expect(first.railOpen)
+        first.setRailOpen(false)
+        let second = HerdrStore(defaults: store, liveWatcher: { _ in })
+        #expect(second.railOpen == false)
+    }
+
+    @Test func terminalsCarryTheirOwnToneAndAgentsFollowTheirStatus() {
+        let terminal = HerdrMachineTerminal.agent(for: host)
+        #expect(HerdrStatusColor.tone(terminal, dark: false) == DashSkin.gold)
+        #expect(
+            HerdrStatusColor.tone(agent, dark: false)
+                == HerdrStatusColor.color(.working, dark: false))
+    }
+
+    @Test func shiftReturnUsesTheNativeTerminalBinding() {
+        let theme = GhosttyTheme(palette: .edith(dark: false))
+        #expect(theme.configuration.contains(#"keybind = shift+enter=text:\x1b\r"#))
+        #expect(theme.configuration.contains("mouse-shift-capture = false"))
+    }
+
+    @Test func commandCAndCommandVReachTheNativeTerminalInput() {
+        let paste = key(code: 9, flags: .command, characters: "v")
+        let copy = key(code: 8, flags: .command, characters: "c")
+        let ordinary = key(code: 1, flags: .command, characters: "s")
+        #expect(GhosttyTerminalView.inputText(for: paste) == "v")
+        #expect(GhosttyTerminalView.inputText(for: copy) == "c")
+        #expect(GhosttyTerminalView.inputText(for: ordinary) == "s")
+    }
+
+    @Test func nativeScrollbackIsDeepEnoughForALongAgentRun() throws {
+        #expect(ghostty_init(UInt(CommandLine.argc), CommandLine.unsafeArgv) == 0)
+        let config = try #require(ghostty_config_new())
+        defer { ghostty_config_free(config) }
+        ghostty_config_finalize(config)
+        let theme = GhosttyTheme(palette: .edith(dark: false))
+        #expect(theme.scrollbackLimitLines == 10_000)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "herdr-scrollback-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("config")
+        try Data(theme.configuration.utf8).write(to: file)
+        ghostty_config_load_file(config, file.path)
+        ghostty_config_finalize(config)
+        #expect(ghostty_config_diagnostics_count(config) == 0)
+        #expect(theme.configuration.contains("scrollback-limit-lines = 10000"))
+    }
+
+    private func key(
+        code: UInt16, flags: NSEvent.ModifierFlags, characters: String = "\r"
+    ) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+            windowNumber: 0, context: nil, characters: characters,
+            charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code)!
+    }
+
+    private func defaults() -> UserDefaults {
+        UserDefaults(suiteName: "herdr.cockpit.\(UUID().uuidString)")!
+    }
+
+    private var agent: HerdrAgent {
+        HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p1", kind: "Claude Code", status: .working,
+            title: "Herdr cockpit", workspace: "edith", cwd: "/repo")
+    }
+
+    private var host: HerdrHostSnapshot {
+        .local(herdrPresent: true, agents: [agent])
+    }
+
+    private var remote: HerdrHostSnapshot {
+        HerdrHostSnapshot(
+            id: "60E1AA8E-9B9C-487D-BA0F-D7D664D97CEB", name: "tuf-wired", isLocal: false,
+            sshTarget: "tuf-wired", herdrPresent: true, reachable: true)
+    }
+
+    private var missing: HerdrHostSnapshot {
+        HerdrHostSnapshot(
+            id: "11111111-1111-1111-1111-111111111111", name: "mini-pc", isLocal: false,
+            sshTarget: "mini-pc", herdrPresent: false, reachable: true)
+    }
+}
+
+private actor HerdrCloseCapture {
+    private var values: [String] = []
+
+    func append(_ id: String) {
+        values.append(id)
+    }
+
+    func ids() -> [String] {
+        values
+    }
+}
+
+@MainActor
+private func tabID(_ store: HerdrStore, _ agent: HerdrAgent) -> String {
+    store.tab(containing: agent.id)?.id ?? ""
+}
+
+@MainActor
+@Suite(.serialized) struct HerdrAgentDetailCommandTests {
+    @Test func optionCommandBIsTheOnlyChord() {
+        #expect(HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .option]))
+        #expect(HerdrAgentDetailCommand.matches(characters: "B", modifiers: [.command, .option]))
+        #expect(
+            HerdrAgentDetailCommand.matches(
+                characters: "b", modifiers: [.command, .option, .capsLock]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .control]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: [.command, .shift]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .command))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "b", modifiers: .option))
+        #expect(
+            !HerdrAgentDetailCommand.matches(
+                characters: "b", modifiers: [.command, .option, .shift]))
+        #expect(
+            !HerdrAgentDetailCommand.matches(
+                characters: "b", modifiers: [.command, .option, .control]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: "j", modifiers: [.command, .option]))
+        #expect(!HerdrAgentDetailCommand.matches(characters: nil, modifiers: [.command, .option]))
+    }
+
+    @Test func theShortcutStaysInsideAnOpenAgentSession() {
+        #expect(HerdrAgentDetailCommand.applies(to: .agentWindow, sessionsOnScreen: false))
+        #expect(
+            HerdrAgentDetailCommand.applies(to: .space(hasAgent: true), sessionsOnScreen: false))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .space(hasAgent: false), sessionsOnScreen: true))
+        #expect(
+            HerdrAgentDetailCommand.applies(
+                to: .mainSessions(agentSessionOpen: true), sessionsOnScreen: true))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .mainSessions(agentSessionOpen: true), sessionsOnScreen: false))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .mainSessions(agentSessionOpen: false), sessionsOnScreen: true))
+        #expect(
+            HerdrAgentDetailCommand.applies(
+                to: .detachedSessions(agentSessionOpen: true), sessionsOnScreen: false))
+        #expect(
+            !HerdrAgentDetailCommand.applies(
+                to: .detachedSessions(agentSessionOpen: false), sessionsOnScreen: true))
+        #expect(!HerdrAgentDetailCommand.applies(to: .elsewhere, sessionsOnScreen: true))
+        #expect(HerdrAgentDetailCommand.help(open: true) == "Hide details (⌥⌘B)")
+        #expect(HerdrAgentDetailCommand.help(open: false) == "Show details (⌥⌘B)")
+        #expect(HerdrAgentDetailCommand.help(open: true, available: false) == "Hide details")
+    }
+
+    @Test func optionCommandBCollapsesAndRestoresTheOpenSessionDetails() {
+        let store = HerdrStore(defaults: detailDefaults(), liveWatcher: { _ in })
+        store.apply([detailHost])
+        let main = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
+        main.identifier = NSUserInterfaceItemIdentifier("edith.extension.herdr")
+        let other = TestWindowHost.window(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100))
+
+        #expect(store.detailOpen)
+        #expect(
+            HerdrAgentDetailCommand.surface(of: main, store: store)
+                == .mainSessions(agentSessionOpen: false))
+        #expect(!toggle("b", in: main, store: store, sessionsOnScreen: true))
+        #expect(store.detailOpen)
+
+        store.open(detailAgent)
+        #expect(
+            HerdrAgentDetailCommand.surface(of: main, store: store)
+                == .mainSessions(agentSessionOpen: true))
+        #expect(HerdrAgentDetailCommand.surface(of: other, store: store) == .elsewhere)
+        #expect(HerdrAgentDetailCommand.surface(of: nil, store: store) == .elsewhere)
+        #expect(!toggle("b", in: other, store: store, sessionsOnScreen: true))
+        #expect(!toggle("b", in: main, store: store, sessionsOnScreen: false))
+        #expect(!toggle("b", in: nil, store: store, sessionsOnScreen: true))
+        #expect(!toggle("b", modifiers: .command, in: main, store: store, sessionsOnScreen: true))
+        #expect(store.detailOpen)
+
+        #expect(toggle("b", in: main, store: store, sessionsOnScreen: true))
+        #expect(!store.detailOpen)
+        #expect(toggle("B", repeats: true, in: main, store: store, sessionsOnScreen: true))
+        #expect(!store.detailOpen)
+        #expect(toggle("b", in: main, store: store, sessionsOnScreen: true))
+        #expect(store.detailOpen)
+    }
+
+    private func toggle(
+        _ characters: String, modifiers: NSEvent.ModifierFlags = [.command, .option],
+        repeats: Bool = false, in window: NSWindow?, store: HerdrStore, sessionsOnScreen: Bool
+    ) -> Bool {
+        HerdrAgentDetailCommand.perform(
+            characters: characters, modifiers: modifiers, repeats: repeats, in: window,
+            store: store, sessionsOnScreen: { sessionsOnScreen })
+    }
+
+    private func detailDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "herdr.agent-details.\(UUID().uuidString)")!
+    }
+
+    private var detailAgent: HerdrAgent {
+        HerdrAgent.make(
+            machineID: "local", machineName: "This Mac", machineIsLocal: true, sshTarget: nil,
+            session: "default", pane: "w2:p1", kind: "Grok", status: .done,
+            title: "Keep the window frame", workspace: "edith", cwd: "/repo")
+    }
+
+    private var detailHost: HerdrHostSnapshot {
+        .local(herdrPresent: true, agents: [detailAgent])
+    }
+}

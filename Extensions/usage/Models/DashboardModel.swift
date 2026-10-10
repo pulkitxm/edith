@@ -1,0 +1,1137 @@
+import EdithExtensionSupport
+import EdithExtensionUI
+import Observation
+import SwiftUI
+
+enum DashPalette {
+    static let lightCat = [
+        "#d97757", "#2f4858", "#c89b3c", "#6a8d73", "#8c5e58",
+        "#4a6b8a", "#b07156", "#7d6b9e", "#9aa05c", "#5f7a7a",
+    ]
+    static let darkCat = [
+        "#e08a6a", "#7ea7be", "#d8b04f", "#85ab8e", "#b07d74",
+        "#6f97bd", "#c98a6c", "#9c8bc0", "#b3bb6e", "#7fa0a0",
+    ]
+    static let other = "#b8b0a4"
+
+    static let lightColors = lightCat.map(color)
+    static let darkColors = darkCat.map(color)
+    static let otherColor = color(other)
+    static let slateLight = color("#2f4858")
+    static let slateDark = color("#7ea7be")
+
+    static func cat(_ dark: Bool) -> [String] { dark ? darkCat : lightCat }
+    static func slate(_ dark: Bool) -> Color { dark ? slateDark : slateLight }
+
+    static func categorical(_ index: Int, dark: Bool) -> Color {
+        let c = dark ? darkColors : lightColors
+        return c[((index % c.count) + c.count) % c.count]
+    }
+
+    static func modelColor(_ index: Int?, dark: Bool) -> Color {
+        guard let index else { return otherColor }
+        return categorical(index, dark: dark)
+    }
+
+    static func sourceColor(_ index: Int?, dark: Bool) -> Color {
+        guard let index else { return otherColor }
+        return index == 0 ? slate(dark) : categorical(index - 1, dark: dark)
+    }
+
+    static let inputColor = { (dark: Bool) in slate(dark) }
+    static func outputColor(_ dark: Bool) -> Color { categorical(0, dark: dark) }
+    static let cacheCreateColor = color("#c89b3c")
+    static let cacheReadColor = color("#6a8d73")
+
+    static func color(_ hex: String) -> Color {
+        var s = hex
+        if s.hasPrefix("#") { s.removeFirst() }
+        var value: UInt64 = 0
+        Scanner(string: s).scanHexInt64(&value)
+        let r = Double((value >> 16) & 0xff) / 255
+        let g = Double((value >> 8) & 0xff) / 255
+        let b = Double(value & 0xff) / 255
+        return Color(.sRGB, red: r, green: g, blue: b, opacity: 1)
+    }
+}
+
+struct DashUsage: Decodable {
+    let generatedAt: String?
+    let schemaVersion: Int?
+    let sources: [String]?
+    let defaultSources: [String]?
+    let sourceMeta: [String: Meta]?
+    let totals: Totals?
+    let machines: [Machine]?
+    let daily: [Day]
+    let sessions: [Session]?
+
+    struct Meta: Decodable {
+        let label: String?
+        let tool: String?
+        let machine: String?
+        let machineID: String?
+    }
+    struct Totals: Decodable {
+        let cost: Double?
+        let tokens: Double?
+    }
+    struct Session: Decodable {
+        let id: String?
+        let source: String?
+    }
+    struct Machine: Decodable {
+        let id: String?
+        let collectedAt: String?
+    }
+    struct Day: Decodable {
+        let period: String
+        let bySource: [String: [Model]]?
+        let projects: [Project]?
+        let hours: [Hour]?
+    }
+    struct Model: Decodable {
+        let modelName: String?
+        let inputTokens: Double?
+        let outputTokens: Double?
+        let cacheCreationTokens: Double?
+        let cacheReadTokens: Double?
+        let cost: Double?
+        var tokens: Double {
+            (inputTokens ?? 0) + (outputTokens ?? 0) + (cacheCreationTokens ?? 0)
+                + (cacheReadTokens ?? 0)
+        }
+    }
+    struct Attribution: Decodable {
+        let method: String?
+    }
+    struct Project: Decodable {
+        let attribution: Attribution?
+        let projectName: String?
+        let repositoryID: String?
+        let repositoryName: String?
+        let repositoryURL: String?
+        let folderName: String?
+        let path: String?
+        let machineName: String?
+        let machineID: String?
+        let tokens: Double?
+        let cost: Double?
+        let bySource: [String: SourceBreakdown]?
+        let chats: [Chat]?
+        let worktrees: [Worktree]?
+    }
+    struct SourceBreakdown: Decodable {
+        let tokens: Double?
+        let cost: Double?
+        let byModel: [String: ProjectUsage]?
+    }
+    struct ProjectUsage: Decodable {
+        let tokens: Double?
+        let cost: Double?
+    }
+    struct Worktree: Decodable {
+        let name: String?
+        let tokens: Double?
+        let cost: Double?
+        let chats: [Chat]?
+    }
+    struct Chat: Decodable {
+        let id: String?
+        let path: String?
+        let title: String?
+        let tokens: Double?
+        let cost: Double?
+        let source: String?
+        let firstTs: Double?
+        let lastTs: Double?
+    }
+    struct Hour: Decodable {
+        let tokens: Double?
+        let cost: Double?
+        let bySource: [String: SourceBreakdown]?
+        let byPath: [String: PathBreakdown]?
+    }
+    struct PathBreakdown: Decodable {
+        let tokens: Double?
+        let cost: Double?
+        let bySource: [String: SourceBreakdown]?
+    }
+}
+
+enum DashRange: Equatable {
+    case today, yesterday, thisWeek, lastWeek, all
+    case month(String)
+    case custom(String, String)
+}
+
+enum DashMetric: String { case tokens, cost }
+
+struct DayDatum: Identifiable {
+    let id: String
+    let date: Date
+    let label: String
+    var input = 0.0
+    var output = 0.0
+    var cacheCreate = 0.0
+    var cacheRead = 0.0
+    var cost = 0.0
+    var byModel: [String: Double] = [:]
+    var bySource: [String: Double] = [:]
+    var tokens: Double { input + output + cacheCreate + cacheRead }
+}
+
+struct ModelTotal: Identifiable {
+    let id: String
+    let model: String
+    let tokens: Double
+    let cost: Double
+    let input: Double
+    let output: Double
+    let cacheRead: Double
+    let days: Int
+    var share = 0.0
+    var tokenShare = 0.0
+}
+
+struct DOWDatum: Identifiable {
+    let id = UUID()
+    let label: String
+    let tokens: Double
+    let cost: Double
+}
+
+struct HourDatum: Identifiable {
+    let id: Int
+    let hour: Int
+    let tokens: Double
+    let cost: Double
+}
+
+struct ProjectPath: Identifiable, Hashable {
+    var id: String { path }
+    let path: String
+    let name: String
+    let tokens: Double
+}
+
+struct MachineGroup: Identifiable, Equatable {
+    static let localID = "local"
+
+    let id: String
+    let name: String
+    let sourceIDs: [String]
+    var agentNames: [String] = []
+
+    var isLocal: Bool { id == Self.localID }
+
+    var agentSummary: String { agentNames.joined(separator: ", ") }
+}
+
+struct ProjectAgg: Identifiable {
+    let id: String
+    let name: String
+    let tokens: Double
+    let cost: Double
+    var share = 0.0
+}
+
+enum ProjSortKey: String, CaseIterable {
+    case name, tokens, cost, share, days, dur, lastActive
+}
+
+func normalizedPart(
+    _ value: Double, alternate: Double, rawTotal: Double, rawAlternateTotal: Double,
+    target: Double
+) -> Double {
+    if rawTotal > 0 { return target * value / rawTotal }
+    if rawAlternateTotal > 0 { return target * alternate / rawAlternateTotal }
+    return 0
+}
+
+struct DayScale {
+    var rawTokens = 0.0
+    var rawCost = 0.0
+    var dayTokens = 0.0
+    var dayCost = 0.0
+
+    func tokens(_ tokens: Double, _ cost: Double) -> Double {
+        normalizedPart(
+            tokens, alternate: cost, rawTotal: rawTokens, rawAlternateTotal: rawCost,
+            target: dayTokens)
+    }
+
+    func cost(_ cost: Double, _ tokens: Double) -> Double {
+        normalizedPart(
+            cost, alternate: tokens, rawTotal: rawCost, rawAlternateTotal: rawTokens,
+            target: dayCost)
+    }
+}
+
+protocol ProjSortable {
+    var sortName: String { get }
+    var tokens: Double { get }
+    var cost: Double { get }
+    var share: Double { get }
+    var days: Int { get }
+    var dur: Double { get }
+    var lastActive: String { get }
+}
+
+struct ProjChat: Identifiable, ProjSortable {
+    let id: String
+    let title: String
+    let tokens: Double
+    let cost: Double
+    var share = 0.0
+    let daySet: Set<String>
+    let dur: Double
+    let lastActive: String
+    let source: String
+    var days: Int { daySet.count }
+    var sortName: String { title }
+}
+
+struct ProjWorktree: Identifiable, ProjSortable {
+    let id: String
+    let name: String
+    let tokens: Double
+    let cost: Double
+    var share = 0.0
+    let days: Int
+    let dur: Double
+    let lastActive: String
+    var chats: [ProjChat]
+    var sortName: String { name }
+}
+
+struct ProjFolder: Identifiable, ProjSortable {
+    let id: String
+    let name: String
+    let path: String
+    let machineName: String
+    let machineID: String
+    let tokens: Double
+    let cost: Double
+    var share = 0.0
+    let daySet: Set<String>
+    let dur: Double
+    let lastActive: String
+    var chats: [ProjChat]
+    var worktrees: [ProjWorktree]
+    var attribution = ""
+    var days: Int { daySet.count }
+    var sortName: String { displayName }
+    var displayName: String {
+        machineName.isEmpty ? name : "\(name) · \(machineName)"
+    }
+    var nestedCount: Int {
+        chats.count + worktrees.count + worktrees.reduce(0) { $0 + $1.chats.count }
+    }
+    var expandable: Bool { !chats.isEmpty || !worktrees.isEmpty }
+}
+
+struct ProjTreeRow: Identifiable, ProjSortable {
+    let id: String
+    let name: String
+    let repositoryURL: String
+    let tokens: Double
+    let cost: Double
+    var share = 0.0
+    let days: Int
+    let dur: Double
+    let lastActive: String
+    var folders: [ProjFolder]
+    var sortName: String { name }
+    var chats: [ProjChat] { folders.flatMap(\.chats) }
+    var worktrees: [ProjWorktree] { folders.flatMap(\.worktrees) }
+    var nestedCount: Int {
+        folders.count + folders.reduce(0) { $0 + $1.nestedCount }
+    }
+    var expandable: Bool { !folders.isEmpty }
+
+    func matches(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        guard !q.isEmpty else { return true }
+        func hit(_ value: String) -> Bool { value.localizedCaseInsensitiveContains(q) }
+        return hit(name) || hit(id) || hit(repositoryURL)
+            || folders.contains { folder in
+                hit(folder.name) || hit(folder.path) || hit(folder.machineName)
+                    || hit(folder.machineID)
+                    || folder.chats.contains { hit($0.id) || hit($0.title) }
+                    || folder.worktrees.contains {
+                        hit($0.name) || $0.chats.contains { hit($0.id) || hit($0.title) }
+                    }
+            }
+    }
+}
+
+struct KPI: Identifiable {
+    var id: String { label }
+    let label: String
+    let value: String
+    let sub: String
+    var hot = false
+    var sensitiveValue = false
+    var sensitiveSub = false
+    var usageValue = false
+    var usageSub = false
+}
+
+struct NamedValue: Identifiable, Codable, Equatable {
+    let id: String
+    let name: String
+    let value: Double
+}
+
+struct HeatDay: Codable, Equatable {
+    var date: Date
+    var tokens = 0.0
+    var cost = 0.0
+    var input = 0.0
+    var output = 0.0
+    var cacheCreate = 0.0
+    var cacheRead = 0.0
+    var models: [NamedValue] = []
+    var sources: [NamedValue] = []
+    var projects: [NamedValue] = []
+    var chatCount = 0
+    var projCount = 0
+    var peakHour: Int?
+    var peakTokens = 0.0
+}
+
+enum TableColumn: String, CaseIterable {
+    case model, cost, share, tokens, input, output, cacheRead, days
+}
+
+struct MetaLine {
+    var updated = ""
+    var totalCost = ""
+    var totalTokens = ""
+    var activeDays = 0
+    var modelCount = 0
+    var sourceLabels = ""
+    var windowFrom = ""
+    var windowTo = ""
+    var schema = 0
+    var sessions = 0
+}
+
+@MainActor
+@Observable
+final class DashboardModel {
+    static let shared = DashboardModel()
+    static let unattributedCostModel = DashboardComputation.unattributedCostModel
+
+    var range: DashRange = .all { didSet { persist(.range); recompute() } }
+    var selectedSources: Set<String> = [] { didSet { persist(.sources); recompute() } }
+    var selectedModels: Set<String> = [] { didSet { persist(.models); recompute() } }
+    var selectedPaths: Set<String> = [] { didSet { persist(.paths); recompute() } }
+    var sortColumn: TableColumn = .cost { didSet { persist(.sort); resortTotals() } }
+    var sortAscending = false { didSet { persist(.sortAscending); resortTotals() } }
+    var heatMetric: DashMetric = .tokens { didSet { persist(.heatMetric) } }
+    var projSortKey: ProjSortKey = .cost { didSet { persist(.projSort); resortProjectTree() } }
+    var projSortAscending = false { didSet { persist(.projSortAscending); resortProjectTree() } }
+    var projListOpen = false
+    var projExpanded: Set<String> = []
+    var projQuery = ""
+
+    private var loading = false
+    private var restored = false
+    private var knownSources: Set<String> = []
+    private var knownModels: Set<String> = []
+    private var homeUsageStoreTask: Task<Void, Never>?
+    private let homeUsageStore: HomeUsageSnapshotStore
+
+    private(set) var loaded = false
+    private(set) var loadAttempted = false
+    let contentLoad = ContentLoad()
+    let computation = ContentLoad()
+    private(set) var published = DashboardSnapshot()
+    private(set) var homeUsage = HomeUsageSnapshot()
+    private(set) var calendarDays: [DayPoint] = []
+    private(set) var heatDetail: [String: HeatDay] = [:]
+
+    var series: [DayDatum] { published.series }
+    var kpis: [KPI] { published.kpis }
+    var modelTotals: [ModelTotal] { published.modelTotals }
+    var dow: [DOWDatum] { published.dow }
+    var hourlyAll: [HourDatum] { published.hourlyAll }
+    var hourlyUnattributedTokens: Double { published.hourlyUnattributedTokens }
+    var hourlyUnattributedCost: Double { published.hourlyUnattributedCost }
+    var pathUnattributedTokens: Double { published.pathUnattributedTokens }
+    var pathUnattributedCost: Double { published.pathUnattributedCost }
+    var modelUnfilterableCost: Double { published.modelUnfilterableCost }
+    var projects: [ProjectAgg] { published.projects }
+    var projectTree: [ProjTreeRow] { published.projectTree }
+    var meta: MetaLine { published.meta }
+    var chartData: DashChartData { published.chartData }
+    var revision: Int { published.revision }
+
+    private(set) var allModels: [String] = []
+    private(set) var allProjectPaths: [ProjectPath] = []
+    private(set) var allSources: [SourceInfo] = []
+    private(set) var machineGroups: [MachineGroup] = []
+    private(set) var machineCollectionDates: [String: Date] = [:]
+    private(set) var defaultSources: [String] = []
+    private(set) var defaultModels: [String] = []
+    private(set) var monthOptions: [String] = []
+    private var modelIndex: [String: Int] = [:]
+    private var sourceIndex: [String: Int] = [:]
+
+    private var data: DashUsage?
+    private var sortedPeriods: [String] = []
+    private var mtime: Date?
+    private var dataDirWatch: DispatchSourceFileSystemObject?
+    private var reloadDebounce: Task<Void, Never>?
+    private var observers = 0
+    private var missedReload = false
+    private let ingestion = ContentLoad()
+    private var computeTask: Task<Void, Never>?
+
+    private var allowsInlineComputation = false
+
+    private let cal = Calendar.current
+    private let preferences: UserDefaults
+    private let uiClient: UsageUIClient?
+    private var remoteClient: UsageUIClient? { uiClient ?? UsageUIClient.current }
+
+    init(
+        preferences: UserDefaults = SharedDefaults.store,
+        homeUsageStore: HomeUsageSnapshotStore = .standard, uiClient: UsageUIClient? = nil
+    ) {
+        self.preferences = preferences
+        self.uiClient = uiClient
+        self.homeUsageStore = homeUsageStore
+        syncExtensionState()
+    }
+
+    func beginObserving() {
+        observers += 1
+        guard observers == 1 else { return }
+        watchDataDir()
+        if missedReload {
+            missedReload = false
+            scheduleReload()
+        }
+    }
+
+    func endObserving() {
+        observers = max(0, observers - 1)
+        guard observers == 0 else { return }
+        reloadDebounce?.cancel()
+        reloadDebounce = nil
+        dataDirWatch?.cancel()
+        dataDirWatch = nil
+    }
+
+    private func watchDataDir() {
+        guard remoteClient == nil, extensionEnabled, observers > 0, dataDirWatch == nil
+        else { return }
+        let fd = open(Repo.dataDir.path, O_EVTONLY)
+        guard fd >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd, eventMask: .write, queue: .main)
+        source.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.scheduleReload() }
+        }
+        source.setCancelHandler { close(fd) }
+        source.resume()
+        dataDirWatch = source
+    }
+
+    func syncExtensionState() {
+        if extensionEnabled {
+            watchDataDir()
+        } else {
+            missedReload = false
+            reloadDebounce?.cancel()
+            reloadDebounce = nil
+            dataDirWatch?.cancel()
+            dataDirWatch = nil
+        }
+    }
+
+    private var extensionEnabled: Bool {
+        true
+    }
+
+    private func scheduleReload() {
+        guard extensionEnabled else { return }
+        guard observers > 0 else {
+            missedReload = true
+            return
+        }
+        reloadDebounce?.cancel()
+        reloadDebounce = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            await self?.load()
+        }
+    }
+
+    static let ymd = DashboardComputation.ymd
+
+    func modelColor(_ model: String, dark: Bool) -> Color {
+        DashPalette.modelColor(modelIndex[model], dark: dark)
+    }
+    func modelLabel(_ model: String) -> String {
+        model == Self.unattributedCostModel ? "Unattributed cost" : DashFmt.shortModel(model)
+    }
+    func sourceColor(_ source: String, dark: Bool) -> Color {
+        DashPalette.sourceColor(sourceIndex[source], dark: dark)
+    }
+    func sourceLabel(_ id: String) -> String {
+        allSources.first { $0.id == id }?.label ?? id
+    }
+
+    func load() async {
+        syncExtensionState()
+        guard extensionEnabled else { return }
+        if let client = remoteClient {
+            await contentLoad.perform(operation: { try await client.document() }) { parsed in
+                self.ingest(parsed)
+            }
+            if !Task.isCancelled { loadAttempted = true }
+            return
+        }
+        await restoreCachedHomeUsage()
+        let url = Repo.usageJSON
+        let request = contentLoad.begin()
+        defer {
+            if Task.isCancelled {
+                contentLoad.cancel(request)
+            } else if contentLoad.isCurrent(request) {
+                loadAttempted = true
+            }
+        }
+        var failure: Error?
+        for attempt in 0..<4 {
+            let m = await Task.detached(priority: .utility) {
+                (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate])
+                    as? Date
+            }.value
+            guard contentLoad.isCurrent(request) else { return }
+            if let m, m == mtime, data != nil {
+                contentLoad.complete(request)
+                loadAttempted = true
+                return
+            }
+            do {
+                let read = Task.detached(priority: .utility) {
+                    guard
+                        let data = try UsageDataFiles.readRegularFile(
+                            at: url, maximumBytes: 67_108_864)
+                    else { throw CocoaError(.fileReadNoSuchFile) }
+                    try Task.checkCancellation()
+                    return try JSONDecoder().decode(DashUsage.self, from: data)
+                }
+                let parsed = try await withTaskCancellationHandler {
+                    try await read.value
+                } onCancel: {
+                    read.cancel()
+                }
+                guard contentLoad.isCurrent(request) else { return }
+                mtime = m
+                await ingestDetached(parsed)
+                contentLoad.complete(request)
+                loadAttempted = true
+                return
+            } catch {
+                failure = error
+            }
+            if attempt < 3 {
+                try? await Task.sleep(nanoseconds: 400_000_000)
+            }
+        }
+        guard contentLoad.isCurrent(request) else { return }
+        loadAttempted = true
+        if !loaded, (failure as? CocoaError)?.code == .fileReadNoSuchFile {
+            contentLoad.complete(request, empty: true)
+        } else {
+            contentLoad.fail(
+                request, message: failure?.localizedDescription ?? "Usage data could not be read.")
+        }
+    }
+
+    func ingest(_ parsed: DashUsage) {
+        let request = ingestion.begin()
+        apply(DashboardComputation.digest(parsed, calendar: cal), parsed: parsed)
+        recompute()
+        contentLoad.setContent()
+        ingestion.complete(request)
+    }
+
+    private func ingestDetached(_ parsed: DashUsage) async {
+        let calendar = cal
+        await ingestion.perform(operation: {
+            DashboardComputation.digest(parsed, calendar: calendar)
+        }) { digest in
+            apply(digest, parsed: parsed)
+            recompute()
+        }
+        await awaitPendingComputation()
+    }
+
+    private func apply(_ digest: DashboardIngestDigest, parsed: DashUsage) {
+        allowsInlineComputation = digest.allowsInlineComputation
+        data = parsed
+        sortedPeriods = digest.sortedPeriods
+        allSources = digest.allSources
+        sourceIndex = digest.sourceIndex
+        machineGroups = digest.machineGroups
+        machineCollectionDates = digest.machineCollectionDates
+        defaultSources = digest.defaultSources
+        allModels = digest.allModels
+        modelIndex = digest.modelIndex
+        defaultModels = digest.defaultModels
+        allProjectPaths = digest.allProjectPaths
+        monthOptions = digest.monthOptions
+        if restored {
+            reconcile()
+        } else {
+            restore()
+            restored = true
+        }
+        heatDetail = digest.heatDetail
+        calendarDays = digest.calendarDays
+        homeUsage = HomeUsageSnapshot(
+            calendarDays: digest.calendarDays,
+            heatDetail: digest.heatDetail,
+            heatScale: DashboardComputation.heatScale(for: digest.calendarDays))
+        persistHomeUsage()
+        loaded = true
+    }
+
+    func restoreCachedHomeUsage() async {
+        guard remoteClient == nil, !homeUsage.hasDays else { return }
+        guard let cached = await homeUsageStore.load(), cached.hasDays else { return }
+        homeUsage = cached
+        heatDetail = cached.heatDetail
+    }
+
+    private func persistHomeUsage() {
+        guard remoteClient == nil else { return }
+        homeUsageStoreTask?.cancel()
+        let snapshot = homeUsage
+        let store = homeUsageStore
+        homeUsageStoreTask = Task {
+            await store.store(snapshot)
+        }
+    }
+
+    func awaitPendingComputation() async {
+        await computeTask?.value
+    }
+
+    private var shutdownTask: Task<Void, Never>?
+
+    func shutdownAndWait() async { shutdown(); await shutdownTask?.value }
+
+    func shutdown() {
+        let previous = shutdownTask
+        let computationTask = computeTask
+        let debounce = reloadDebounce
+        let cache = homeUsageStoreTask
+        observers = 0
+        reloadDebounce?.cancel(); reloadDebounce = nil
+        dataDirWatch?.cancel(); dataDirWatch = nil
+        cancelLoading()
+        shutdownTask = Task {
+            await previous?.value
+            await computationTask?.value
+            await debounce?.value
+            await cache?.value
+        }
+    }
+
+    func cancelLoading() {
+        contentLoad.cancel()
+        computation.cancel()
+        ingestion.cancel()
+        computeTask?.cancel()
+        computeTask = nil
+        homeUsageStoreTask?.cancel()
+        homeUsageStoreTask = nil
+    }
+
+    static func agentName(_ entry: DashUsage.Meta?, id: String, local: Bool) -> String {
+        DashboardComputation.agentName(entry, id: id, local: local)
+    }
+
+    static func groupByMachine(
+        _ ids: [String], meta: [String: DashUsage.Meta], naming: [String: String]
+    ) -> [MachineGroup] {
+        DashboardComputation.groupByMachine(ids, meta: meta, naming: naming)
+    }
+
+    func machineIsShown(_ group: MachineGroup) -> Bool {
+        !group.sourceIDs.isEmpty && group.sourceIDs.allSatisfy { selectedSources.contains($0) }
+    }
+
+    func machineIsPartlyShown(_ group: MachineGroup) -> Bool {
+        group.sourceIDs.contains { selectedSources.contains($0) } && !machineIsShown(group)
+    }
+
+    func machineFreshness(_ group: MachineGroup, now: Date = Date()) -> MachineUsageFreshness? {
+        guard !group.isLocal, let collectedAt = machineCollectionDates[group.id] else { return nil }
+        return MachineUsageFreshness(collectedAt: collectedAt, now: now)
+    }
+
+    func showMachine(_ group: MachineGroup, _ shown: Bool) {
+        var next = selectedSources
+        if shown {
+            next.formUnion(group.sourceIDs)
+        } else {
+            next.subtract(group.sourceIDs)
+        }
+        guard !next.isEmpty else { return }
+        selectedSources = next
+    }
+
+    func showOnlyMachine(_ group: MachineGroup) {
+        guard !group.sourceIDs.isEmpty else { return }
+        selectedSources = Set(group.sourceIDs)
+    }
+
+    func reloadPreferences() {
+        guard loaded else { return }
+        let before = preferenceState
+        restore()
+        guard preferenceState != before else { return }
+        recompute()
+    }
+
+    private struct PreferenceState: Equatable {
+        let range: String
+        let sources: Set<String>
+        let models: Set<String>
+        let paths: Set<String>
+        let sort: String
+        let sortAscending: Bool
+        let projectSort: String
+        let projectSortAscending: Bool
+        let heatMetric: String
+    }
+
+    private var preferenceState: PreferenceState {
+        PreferenceState(
+            range: encodeRange(range), sources: selectedSources, models: selectedModels,
+            paths: selectedPaths, sort: sortColumn.rawValue, sortAscending: sortAscending,
+            projectSort: projSortKey.rawValue, projectSortAscending: projSortAscending,
+            heatMetric: heatMetric.rawValue)
+    }
+
+    private func restore() {
+        loading = true
+        defer { loading = false }
+        let d = preferences
+        if let rs = d.string(forKey: "dashRange") {
+            range = decodeRange(rs)
+            d.setIfChanged(encodeRange(range), forKey: "dashRange")
+        }
+        let validSources = Set(allSources.map(\.id))
+        let savedSources = d.string(forKey: "dashSources").flatMap(Self.decodeSet)
+        let savedKnownSources = d.string(forKey: "dashKnownSources").flatMap(Self.decodeSet)
+        let savedSourceVersion = (d.object(forKey: "dashSourceSelectionVersion") as? NSNumber)?
+            .intValue
+        selectedSources = UsageSourceSelection.restore(
+            selected: savedSources, known: savedKnownSources, storedVersion: savedSourceVersion,
+            available: validSources, defaults: Set(defaultSources))
+        let validModels = Set(allModels)
+        if let raw = d.string(forKey: "dashModels"), !raw.isEmpty {
+            let saved = Set(raw.split(separator: ",").map(String.init)).intersection(validModels)
+            selectedModels = saved.isEmpty ? Set(defaultModels) : saved
+        } else if selectedModels.isEmpty || selectedModels.isDisjoint(with: validModels) {
+            selectedModels = Set(defaultModels)
+        }
+        if let raw = d.string(forKey: "dashPaths") {
+            selectedPaths = reconciledPaths(Set(raw.split(separator: "\n").map(String.init)))
+        }
+        if let sc = d.string(forKey: "dashSort"), let col = TableColumn(rawValue: sc) {
+            sortColumn = col
+        }
+        sortAscending = d.bool(forKey: "dashSortAsc")
+        if let ps = d.string(forKey: "projSort"), let key = ProjSortKey(rawValue: ps) {
+            projSortKey = key
+        }
+        projSortAscending = d.bool(forKey: "projSortAsc")
+        if let hm = d.string(forKey: "dashHeatMetric"), let m = DashMetric(rawValue: hm) {
+            heatMetric = m
+        }
+        knownSources = validSources
+        knownModels = validModels
+        d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
+        d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+        d.setIfChanged(UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+    }
+
+    private func reconcile() {
+        loading = true
+        defer { loading = false }
+        let validSources = Set(allSources.map(\.id))
+        let keptSources =
+            UsageSourceSelection.reconcile(
+                selected: selectedSources, known: knownSources, available: validSources,
+                defaults: Set(defaultSources))
+        selectedSources = keptSources
+        knownSources = validSources
+        preferences.setIfChanged(
+            knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+        let validModels = Set(allModels)
+        let keptModels =
+            selectedModels.union(validModels.subtracting(knownModels)).intersection(validModels)
+        selectedModels = keptModels.isEmpty ? Set(defaultModels) : keptModels
+        knownModels = validModels
+        selectedPaths = reconciledPaths(selectedPaths)
+        preferences.setIfChanged(
+            selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
+        preferences.setIfChanged(
+            selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
+    }
+
+    private func reconciledPaths(_ paths: Set<String>) -> Set<String> {
+        paths.filter { scope in
+            allProjectPaths.contains { entry in
+                DashboardComputation.path(entry.path, isWithin: scope)
+                    || DashboardComputation.path(scope, isWithin: entry.path)
+            }
+        }
+    }
+
+    private enum PersistedSetting: CaseIterable {
+        case range, sources, models, paths, sort, sortAscending
+        case projSort, projSortAscending, heatMetric
+    }
+
+    private func persist(_ setting: PersistedSetting) {
+        guard !loading else { return }
+        let d = preferences
+        switch setting {
+        case .range:
+            d.setIfChanged(encodeRange(range), forKey: "dashRange")
+        case .sources:
+            d.setIfChanged(selectedSources.sorted().joined(separator: ","), forKey: "dashSources")
+            d.setIfChanged(knownSources.sorted().joined(separator: ","), forKey: "dashKnownSources")
+            d.setIfChanged(
+                UsageSourceSelection.currentVersion, forKey: "dashSourceSelectionVersion")
+        case .models:
+            d.setIfChanged(selectedModels.sorted().joined(separator: ","), forKey: "dashModels")
+        case .paths:
+            d.setIfChanged(selectedPaths.sorted().joined(separator: "\n"), forKey: "dashPaths")
+        case .sort:
+            d.setIfChanged(sortColumn.rawValue, forKey: "dashSort")
+        case .sortAscending:
+            d.setIfChanged(sortAscending, forKey: "dashSortAsc")
+        case .projSort:
+            d.setIfChanged(projSortKey.rawValue, forKey: "projSort")
+        case .projSortAscending:
+            d.setIfChanged(projSortAscending, forKey: "projSortAsc")
+        case .heatMetric:
+            d.setIfChanged(heatMetric.rawValue, forKey: "dashHeatMetric")
+        }
+    }
+
+    private func encodeRange(_ r: DashRange) -> String {
+        switch r {
+        case .today: return "today"
+        case .yesterday: return "yesterday"
+        case .thisWeek: return "thisWeek"
+        case .lastWeek: return "lastWeek"
+        case .all: return "all"
+        case .month(let ym): return "month:\(ym)"
+        case .custom(let f, let t): return "custom:\(f)~\(t)"
+        }
+    }
+
+    private static func decodeSet(_ raw: String) -> Set<String>? {
+        let values = Set(raw.split(separator: ",").map(String.init))
+        return values.isEmpty ? nil : values
+    }
+
+    private func decodeRange(_ s: String) -> DashRange {
+        switch s {
+        case "today": return .today
+        case "yesterday": return .yesterday
+        case "thisWeek": return .thisWeek
+        case "lastWeek": return .lastWeek
+        case "all": return .all
+        default:
+            if s.hasPrefix("month:") { return .month(String(s.dropFirst(6))) }
+            if s.hasPrefix("custom:") {
+                let parts = s.dropFirst(7).split(separator: "~", maxSplits: 1).map(String.init)
+                if parts.count == 2 { return .custom(parts[0], parts[1]) }
+            }
+            return .all
+        }
+    }
+
+    func reset() {
+        loading = true
+        range = .all
+        selectedSources = Set(defaultSources)
+        selectedModels = Set(defaultModels)
+        selectedPaths = []
+        sortColumn = .cost
+        sortAscending = false
+        projSortKey = .cost
+        projSortAscending = false
+        heatMetric = .tokens
+        projExpanded = []
+        projListOpen = false
+        projQuery = ""
+        loading = false
+        for setting in PersistedSetting.allCases {
+            persist(setting)
+        }
+        recompute()
+    }
+
+    private func parseYMD(_ s: String) -> Date? { Self.ymd.date(from: s) }
+    private func ymdStr(_ d: Date) -> String { Self.ymd.string(from: d) }
+
+    var tokenBearingModelTotals: [ModelTotal] {
+        modelTotals.filter { $0.model != Self.unattributedCostModel && $0.tokens > 0 }
+    }
+
+    var dataRange: ClosedRange<Date>? {
+        guard let first = sortedPeriods.first, let last = sortedPeriods.last,
+            let e = parseYMD(first), let l = parseYMD(last)
+        else { return nil }
+        return e...max(l, cal.startOfDay(for: Date()))
+    }
+
+    func ymd(_ d: Date) -> String { ymdStr(d) }
+
+    private func computeRequest(_ data: DashUsage) -> DashboardComputeRequest {
+        DashboardComputeRequest(
+            data: data, sortedPeriods: sortedPeriods, allSources: allSources,
+            allModels: allModels, calendarDays: calendarDays, range: range,
+            selectedSources: selectedSources, selectedModels: selectedModels,
+            selectedPaths: selectedPaths, sortColumn: sortColumn, sortAscending: sortAscending,
+            projSortKey: projSortKey, projSortAscending: projSortAscending, calendar: cal)
+    }
+
+    private func publish(_ snapshot: DashboardSnapshot) {
+        var next = snapshot
+        next.revision = published.revision &+ 1
+        published = next
+    }
+
+    private func resortTotals() {
+        guard !loading else { return }
+        var next = published
+        next.modelTotals.sort {
+            DashboardComputation.modelTotalLess(
+                $0, $1, column: sortColumn, ascending: sortAscending)
+        }
+        published = next
+    }
+
+    private func recompute() {
+        guard loaded, !loading, let data else { return }
+        computeTask?.cancel()
+        let request = computeRequest(data)
+        if allowsInlineComputation {
+            if let snapshot = DashboardComputation.snapshot(request) {
+                publish(snapshot)
+            }
+            return
+        }
+        computeTask = Task { [weak self] in
+            guard !Task.isCancelled else { return }
+            guard let self else { return }
+            await computation.perform(operation: {
+                DashboardComputation.snapshot(request)
+            }) { snapshot in
+                if let snapshot { self.publish(snapshot) }
+            }
+        }
+    }
+
+    func pathInScope(_ path: String?) -> Bool {
+        DashboardComputation.pathInScope(path, selectedPaths: selectedPaths)
+    }
+
+    func projLess(_ a: some ProjSortable, _ b: some ProjSortable) -> Bool {
+        DashboardComputation.projSortableLess(
+            a, b, key: projSortKey, ascending: projSortAscending)
+    }
+
+    private func resortProjectTree() {
+        guard !loading, !projectTree.isEmpty else { return }
+        var next = published
+        next.projectTree = DashboardComputation.sortTree(
+            projectTree, key: projSortKey, ascending: projSortAscending)
+        published = next
+    }
+}
+
+extension DateFormatter {
+    static let monthParser: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM"
+        return f
+    }()
+}
+
+enum DashFmt {
+    static func tokens(_ v: Double) -> String {
+        TokenFormatter.compact(v)
+    }
+    private static let tokensFullFmt: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
+        return f
+    }()
+    private static let usdLongFmt: NumberFormatter = {
+        let f = NumberFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.numberStyle = .decimal
+        f.minimumFractionDigits = 2
+        f.maximumFractionDigits = 2
+        return f
+    }()
+    static func tokensFull(_ v: Double) -> String {
+        tokensFullFmt.string(from: NSNumber(value: v)) ?? "\(Int(v))"
+    }
+    static func usd(_ v: Double) -> String {
+        if v >= 1000 { return String(format: "$%.1fk", v / 1000) }
+        return String(format: "$%.2f", v)
+    }
+    static func usdFull(_ v: Double) -> String { String(format: "$%.2f", v) }
+    static func usdLong(_ v: Double) -> String {
+        "$" + (usdLongFmt.string(from: NSNumber(value: v)) ?? String(format: "%.2f", v))
+    }
+    static func pct(_ v: Double) -> String { String(format: "%.1f%%", v * 100) }
+    static func duration(_ ms: Double) -> String {
+        guard ms > 0 else { return "-" }
+        let s = Int((ms / 1000).rounded())
+        if s < 60 { return "\(s)s" }
+        let m = Int((Double(s) / 60).rounded())
+        if m < 60 { return "\(m)m" }
+        let h = m / 60
+        let rem = m % 60
+        return rem > 0 ? "\(h)h \(rem)m" : "\(h)h"
+    }
+    static func dateShort(_ ymd: String) -> String {
+        let parts = ymd.split(separator: "-")
+        guard parts.count == 3, let m = Int(parts[1]), let d = Int(parts[2]), (1...12).contains(m)
+        else { return "-" }
+        let mon = [
+            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+        ]
+        return "\(mon[m - 1]) \(d)"
+    }
+    static func shortModel(_ m: String) -> String {
+        var s = m
+        if s.hasPrefix("claude-") { s.removeFirst("claude-".count) }
+        if let r = s.range(of: #"-\d{8}$"#, options: .regularExpression) { s.removeSubrange(r) }
+        return s
+    }
+}

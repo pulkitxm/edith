@@ -1,0 +1,262 @@
+import AppKit
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
+
+struct BlitzTreePage: View {
+    @State var model: BlitzTreeModel
+    @State private var list = BlitzTreeList.children
+    @State private var rings = false
+    @State private var pendingRemoval: BlitzTreeReport.Entry?
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.compactLayout) private var compact
+
+    var body: some View {
+        PageScaffold {
+            PageHeader {
+                Text("BlitzTree")
+            } accessory: {
+                HStack {
+                    if model.scanning {
+                        LoadingIndicator()
+                        Button("Cancel", action: model.cancel)
+                    } else if let root = model.root {
+                        Button("Rescan", systemImage: "arrow.clockwise") {
+                            model.scan(root, remember: false)
+                        }
+                    }
+                    Button("Choose folder", systemImage: "folder") { chooseFolder() }
+                        .buttonStyle(.edith(.primary))
+                        .disabled(model.removing)
+                }
+            }
+        } content: {
+            VStack(alignment: .leading, spacing: UIScale.pt(16)) {
+                navigation
+                if let error = model.error {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)
+                }
+                if model.root == nil {
+                    emptyState
+                } else {
+                    PageLoading(
+                        state: model.loading.state,
+                        message: model.loading.errorMessage ?? "The folder scan was interrupted.",
+                        layout: .analytics, refreshing: model.loading.isRefreshing,
+                        retry: { if let root = model.root { model.scan(root, remember: false) } },
+                        cancel: model.cancel
+                    ) {
+                        if let report = model.report { results(report) }
+                    }
+                }
+            }
+        }
+        .onDisappear { model.cancel() }
+        .confirmationDialog(
+            "Move this item to Trash?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }
+            ), titleVisibility: .visible
+        ) {
+            Button("Move to Trash", role: .destructive) {
+                if let entry = pendingRemoval { model.trash(entry) }
+                pendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRemoval = nil }
+        } message: {
+            if let entry = pendingRemoval {
+                Text(
+                    "\(entry.path)\n\(bytes(entry.allocatedBytes)) allocated. The item stays in Trash until you empty it."
+                )
+            }
+        }
+        .pageRefresh(interval: { .seconds(1) }) { await model.refreshRemote() }
+    }
+
+    private var folderBinding: Binding<String> {
+        Binding(
+            get: { model.root ?? "" },
+            set: { path in
+                guard !path.isEmpty else { return }
+                model.scan(path, remember: false)
+            })
+    }
+
+    private func folderIsValid(_ path: String) -> Bool {
+        path.hasPrefix("/") && !path.utf8.contains(0)
+
+    }
+
+    private var navigation: some View {
+        HStack {
+            Button("Back", systemImage: "chevron.left") {
+                model.back()
+            }
+            .disabled(model.history.isEmpty || model.removing)
+            Text(model.root ?? "Choose a folder to explore its disk usage")
+                .font(.system(size: UIScale.pt(12), design: .monospaced))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+            Spacer()
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: UIScale.pt(12)) {
+            Image(systemName: "square.grid.3x3.fill")
+                .font(.system(size: UIScale.pt(40)))
+                .foregroundStyle(.secondary)
+            Text(model.scanning ? "Scanning folder..." : "See where your space goes")
+                .font(DashSkin.heading(24))
+            Text(
+                model.scanning
+                    ? "\(model.scannedEntries.formatted()) entries scanned. You can cancel at any time."
+                    : "Explore a disk-space treemap, large files and cleanup candidates."
+            )
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, UIScale.pt(64))
+    }
+
+    @ViewBuilder private func results(_ report: BlitzTreeReport) -> some View {
+        LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: UIScale.pt(130)), spacing: UIScale.pt(24))],
+            alignment: .leading
+        ) {
+            metric("Allocated", bytes(report.summary.allocatedBytes))
+            metric("Files", report.summary.fileCount.formatted())
+            metric("Folders", report.summary.directoryCount.formatted())
+            metric("Scan", String(format: "%.2f s", report.scanSeconds))
+        }
+        if !report.coverage.complete {
+            Label(
+                "Partial scan: \(report.coverage.errors) errors, \(report.coverage.skippedCloudDirectories) cloud folders and \(report.coverage.skippedMountPoints) mount points skipped.",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.edithText(.callout))
+            .foregroundStyle(.orange)
+        }
+        HStack {
+            Text(model.removing ? "Moving to Trash..." : "Folder overview")
+                .font(.edithText(.headline))
+            Spacer()
+            EdithSegmentedPicker(
+                "Visualization", selection: $rings, options: [false, true],
+                label: { $0 ? "Rings" : "Treemap" }
+            )
+            .labelsHidden()
+            .frame(width: UIScale.pt(180))
+        }
+        Group {
+            if rings {
+                BlitzTreeRings(report: report) { entry in activate(entry) }
+            } else {
+                BlitzTreeMap(report: report) { entry in activate(entry) }
+            }
+        }
+        .frame(height: UIScale.pt(280))
+        .disabled(model.removing)
+        Text("Allocated space, not guaranteed recoverable space. Click a folder to scan inside it.")
+            .font(.edithText(.caption))
+            .foregroundStyle(.secondary)
+        EdithSegmentedPicker(
+            "Show", selection: $list, options: BlitzTreeList.allCases, label: { $0.rawValue })
+        if list == .candidates {
+            Text(
+                "\(report.report.candidateCount) candidates. Review each folder in Finder before removing anything.\(report.report.truncated ? " Showing the largest 200." : "")"
+            )
+            .font(.edithText(.callout))
+            .foregroundStyle(.secondary)
+        }
+        let entries = list.entries(report)
+        if entries.isEmpty {
+            Text(
+                list == .candidates
+                    ? "No cleanup candidates meet the 50 MB threshold." : "No entries to show."
+            )
+            .foregroundStyle(.secondary)
+            .padding(.vertical, UIScale.pt(24))
+        }
+        LazyVStack(spacing: 0) {
+            ForEach(entries) { entry in
+                HStack(spacing: UIScale.pt(12)) {
+                    Image(systemName: entry.isDirectory ? "folder.fill" : "doc.fill")
+                        .foregroundStyle(entry.isDirectory ? Color.blue : Color.teal)
+                    Button {
+                        activate(entry)
+                    } label: {
+                        VStack(alignment: .leading, spacing: UIScale.pt(3)) {
+                            Text(entry.name).fontWeight(.medium).lineLimit(1)
+                            Text(entry.reason ?? entry.path)
+                                .font(.edithText(.caption))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.edith(.borderless))
+                    if !entry.complete {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                            .help("This entry was only partially scanned")
+                    }
+                    Text(bytes(entry.allocatedBytes)).monospacedDigit()
+                    Button("Reveal", systemImage: "arrow.up.forward.square") { reveal(entry) }
+                        .labelStyle(.iconOnly)
+                        .help("Reveal in Finder")
+                    Button("Move to Trash", systemImage: "trash") { pendingRemoval = entry }
+                        .labelStyle(.iconOnly)
+                        .help("Move to Trash")
+                        .disabled(model.removing)
+                }
+                .padding(.vertical, UIScale.pt(10))
+                Divider()
+            }
+        }
+    }
+
+    private func metric(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(4)) {
+            Text(label).font(.edithText(.caption)).foregroundStyle(.secondary)
+            Text(value).font(.edithText(.title2)).monospacedDigit()
+        }
+    }
+
+    private func chooseFolder() { model.chooseFolder() }
+
+    private func activate(_ entry: BlitzTreeReport.Entry) {
+        if entry.isDirectory { model.scan(entry.path) } else { reveal(entry) }
+    }
+
+    private func reveal(_ entry: BlitzTreeReport.Entry) {
+        model.reveal(entry.path)
+    }
+
+    private func bytes(_ value: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .file)
+    }
+}
+
+private enum BlitzTreeList: String, CaseIterable, Identifiable {
+    case children = "Contents"
+    case directories = "Largest folders"
+    case files = "Largest files"
+    case candidates = "Cleanup candidates"
+
+    var id: String { rawValue }
+
+    func entries(_ report: BlitzTreeReport) -> [BlitzTreeReport.Entry] {
+        switch self {
+        case .children: report.report.inventory.largestChildren
+        case .directories: report.report.inventory.largestDirectories
+        case .files: report.report.inventory.largestFiles
+        case .candidates: report.report.candidates
+        }
+    }
+}

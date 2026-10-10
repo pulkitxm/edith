@@ -1,0 +1,159 @@
+import AppKit
+import Carbon.HIToolbox
+import EdithExtensionSupport
+import EdithExtensionUI
+import SwiftUI
+
+struct ColorPickerRows: View {
+    let presentation: ControlPresentation
+    @AppStorage(AppStorageKeys.ColorPicker.enabled, store: SharedDefaults.store) private
+        var colorPickerEnabled =
+        false
+    @AppStorage(AppStorageKeys.ColorPicker.copyFormat, store: SharedDefaults.store) private
+        var copyFormat: ColorCopyFormat = .hex
+    @AppStorage(AppStorageKeys.ColorPicker.profile, store: SharedDefaults.store) private
+        var profile: ColorProfile = .sRGB
+    @AppStorage(AppStorageKeys.ColorPicker.historySize, store: SharedDefaults.store) private
+        var historySize = 100
+    @State private var history: [ColorSwatch] = ColorHistoryStore.load()
+
+    @State private var historyObserver: NSObjectProtocol?
+
+    var body: some View {
+        Group {
+            Section {
+                Button("Pick now") {
+                    presentation.perform("pick")
+                }
+                .disabled(!presentation.active)
+                LabeledContent {
+                    HotKeyRecorderControl(keyPrefix: "colorPickerHotKey", defaultLabel: "⌃⌥⌘C")
+                } label: {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("Pick hotkey")
+                        InfoDot("Summons the magnifier from anywhere.")
+                    }
+                }
+                Picker(
+                    "Copy format",
+                    selection: $copyFormat.notifyingSettingsChange()
+                ) {
+                    ForEach(ColorCopyFormat.allCases, id: \.self) { format in
+                        Text(format.displayName).tag(format)
+                    }
+                }
+                Picker(selection: $profile.notifyingSettingsChange()) {
+                    ForEach(ColorProfile.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                } label: {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("Color profile")
+                        InfoDot(
+                            "Compute values in sRGB or Display P3 - they differ on wide-gamut screens like this MacBook's."
+                        )
+                    }
+                }
+                Stepper(
+                    value: $historySize.notifyingSettingsChange(),
+                    in: 1...100
+                ) {
+                    HStack(spacing: UIScale.pt(6)) {
+                        Text("History size: \(historySize)")
+                        InfoDot("How many past colors to keep.")
+                    }
+                }
+            }
+
+            if colorPickerEnabled {
+                Section {
+                    if history.isEmpty {
+                        Label(
+                            "No colors picked yet. Choose Pick now to start.",
+                            systemImage: "eyedropper"
+                        )
+                        .settingsCaption()
+                    } else {
+                        ColorSwatchGrid(
+                            history: history, defaultFormat: copyFormat, presentation: presentation)
+                    }
+                } header: {
+                    Text("Recent Colors")
+                }
+            }
+        }
+        .onAppear {
+            history = ColorHistoryStore.load()
+            historyObserver = IPC.observe(IPC.Name.settingsChanged) {
+                history = ColorHistoryStore.load()
+            }
+        }
+        .onDisappear {
+            if let historyObserver { IPC.stopObserving(historyObserver) }
+            historyObserver = nil
+        }
+    }
+}
+private struct ColorSwatchGrid: View {
+    let history: [ColorSwatch]
+    let defaultFormat: ColorCopyFormat
+    let presentation: ControlPresentation
+
+    private let columns = [GridItem(.adaptive(minimum: 28), spacing: UIScale.pt(6))]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: UIScale.pt(6)) {
+            ForEach(history) { swatch in
+                ColorSwatchChip(
+                    swatch: swatch, defaultFormat: defaultFormat, presentation: presentation)
+            }
+        }
+    }
+}
+
+private struct ColorSwatchChip: View {
+    let swatch: ColorSwatch
+    let defaultFormat: ColorCopyFormat
+    let presentation: ControlPresentation
+    @State private var copyError: String?
+
+    var body: some View {
+        Button {
+            copy(defaultFormat)
+        } label: {
+            RoundedRectangle(cornerRadius: UIScale.pt(5))
+                .fill(swatch.color)
+                .frame(width: UIScale.pt(26), height: UIScale.pt(26))
+                .overlay(
+                    RoundedRectangle(cornerRadius: UIScale.pt(5)).strokeBorder(
+                        .primary.opacity(0.12))
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.iconOnly))
+        .disabled(!presentation.active)
+        .accessibilityLabel("Copy \(swatch.string(for: defaultFormat))")
+        .contextMenu {
+            ForEach(ColorCopyFormat.allCases, id: \.self) { format in
+                Button(swatch.string(for: format)) { copy(format) }
+            }
+        }
+        .help(swatch.string(for: defaultFormat))
+        .alert(
+            "Could not copy colour",
+            isPresented: Binding(
+                get: { copyError != nil },
+                set: { if !$0 { copyError = nil } })
+        ) {
+            Button("OK") { copyError = nil }
+        } message: {
+            Text(copyError ?? "The pasteboard refused the colour value.")
+        }
+    }
+
+    private func copy(_ format: ColorCopyFormat) {
+        presentation.perform("copy", value: swatch.id.uuidString + ":" + format.rawValue) { error in
+            copyError = error?.localizedDescription
+        }
+    }
+}

@@ -1,0 +1,344 @@
+import EdithExtensionUI
+import EdithExtensionSupport
+import SwiftUI
+
+enum CompanionMetrics {
+    static var columnWidth: CGFloat { UIScale.pt(680) }
+    static var cardSpacing: CGFloat { UIScale.pt(16) }
+    static var rowSpacing: CGFloat { UIScale.pt(10) }
+}
+
+struct CompanionButton: View {
+    enum Role {
+        case primary
+        case normal
+        case destructive
+    }
+
+    let title: String
+    var role: Role = .normal
+    var busy = false
+    var busyTitle: String? = nil
+    var disabled = false
+    var help: String? = nil
+    let action: () -> Void
+
+    private var inactive: Bool { disabled || busy }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: UIScale.pt(6)) {
+                if busy {
+                    LoadingIndicator()
+                }
+                Text(busy ? (busyTitle ?? title) : title).font(.edithText(.callout))
+            }
+        }
+        .buttonStyle(
+            .edith(role == .primary ? .primary : role == .destructive ? .destructive : .secondary)
+        )
+        .disabled(inactive)
+        .help(help ?? "")
+        .accessibilityLabel(busy ? (busyTitle ?? "\(title) in progress") : title)
+    }
+}
+
+struct CompanionLinkButton: View {
+    let title: String
+    var destructive = false
+    var disabled = false
+    var help: String? = nil
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+    @State private var hovering = false
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: UIScale.pt(11.5), weight: .medium))
+                .foregroundStyle(destructive ? DashSkin.danger : DashSkin.accent(dark))
+                .underline(hovering && !disabled)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.edith(.borderless))
+        .disabled(disabled)
+        .opacity(disabled ? 0.5 : 1)
+        .onHover { hovering = $0 }
+        .help(help ?? "")
+    }
+}
+
+struct CompanionFieldLabel: View {
+    let text: String
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: UIScale.pt(9.5), weight: .semibold))
+            .tracking(UIScale.pt(0.9))
+            .foregroundStyle(DashSkin.inkFaint(dark))
+    }
+}
+
+struct CompanionLabeledField: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    var help: String? = nil
+    var error: String? = nil
+    var onSubmit: (() -> Void)? = nil
+
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+            CompanionFieldLabel(text: label)
+            EdithTextField(
+                placeholder: placeholder, text: $text, invalid: error != nil,
+                onSubmit: onSubmit)
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.danger)
+            } else if let help {
+                Text(help)
+                    .font(.system(size: UIScale.pt(10.5)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+            }
+        }
+    }
+}
+
+struct CompanionSecureField: View {
+    let label: String
+    let placeholder: String
+    @Binding var text: String
+    var detail: String? = nil
+    var detailEmphasis = false
+    var clear: (() -> Void)? = nil
+    var clearDisabled = false
+    var onSubmit: (() -> Void)? = nil
+
+    @Environment(\.colorScheme) private var scheme
+    @FocusState private var focused: Bool
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+            HStack(spacing: UIScale.pt(8)) {
+                CompanionFieldLabel(text: label)
+                Spacer(minLength: 0)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: UIScale.pt(10.5)))
+                        .foregroundStyle(
+                            detailEmphasis ? DashSkin.inkSoft(dark) : DashSkin.inkFaint(dark)
+                        )
+                        .lineLimit(1)
+                }
+                if let clear {
+                    CompanionLinkButton(
+                        title: "Clear", destructive: false, disabled: clearDisabled,
+                        help: "Remove the stored token", action: clear)
+                }
+            }
+            SecureField(placeholder, text: $text)
+                .textFieldStyle(.plain)
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(DashSkin.ink(dark))
+                .focused($focused)
+                .focusEffectDisabled()
+                .onSubmit { onSubmit?() }
+                .edithFieldSurface(focused: focused)
+        }
+    }
+}
+
+struct AnswerField: View {
+    let placeholder: String
+    @Binding var text: String
+    var submit: (() -> Void)? = nil
+
+    @Environment(\.colorScheme) private var scheme
+    @FocusState private var focused: Bool
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        TextField(placeholder, text: $text, axis: .vertical)
+            .textFieldStyle(.plain)
+            .lineLimit(2...6)
+            .font(.system(size: UIScale.pt(12.5)))
+            .foregroundStyle(DashSkin.ink(dark))
+            .focused($focused)
+            .focusEffectDisabled()
+            .onSubmit { submit?() }
+            .edithFieldSurface(focused: focused)
+    }
+}
+
+struct CompanionStatusLine: View {
+    enum Tone {
+        case ok
+        case info
+        case error
+    }
+
+    let text: String
+    var tone: Tone = .info
+
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    private var icon: String {
+        switch tone {
+        case .ok: return "checkmark.circle.fill"
+        case .info: return "info.circle"
+        case .error: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var color: Color {
+        switch tone {
+        case .ok: return DashSkin.ok
+        case .info: return DashSkin.inkFaint(dark)
+        case .error: return DashSkin.warn
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: UIScale.pt(5)) {
+            Image(systemName: icon)
+                .font(.system(size: UIScale.pt(10.5)))
+                .foregroundStyle(color)
+            Text(text)
+                .font(.system(size: UIScale.pt(11)))
+                .foregroundStyle(tone == .info ? DashSkin.inkFaint(dark) : DashSkin.inkSoft(dark))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .transition(.opacity)
+    }
+}
+
+struct CompanionDangerRow: View {
+    let title: String
+    let consequence: String
+    let buttonTitle: String
+    var busy = false
+    var disabled = false
+    let action: () -> Void
+
+    @Environment(\.colorScheme) private var scheme
+
+    private var dark: Bool { scheme == .dark }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: UIScale.pt(12)) {
+            VStack(alignment: .leading, spacing: UIScale.pt(2)) {
+                Text(title)
+                    .font(.system(size: UIScale.pt(12.5), weight: .semibold))
+                    .foregroundStyle(DashSkin.ink(dark))
+                Text(consequence)
+                    .font(.system(size: UIScale.pt(11)))
+                    .foregroundStyle(DashSkin.inkFaint(dark))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: UIScale.pt(12))
+            CompanionButton(
+                title: buttonTitle, role: .destructive, busy: busy, disabled: disabled,
+                action: action)
+        }
+        .padding(.vertical, UIScale.pt(8))
+    }
+}
+
+struct CompanionConfirmSheet: View {
+    let title: String
+    let message: String
+    let phrase: String
+    let actionTitle: String
+    let confirm: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @State private var typed = ""
+    @FocusState private var focused: Bool
+
+    private var dark: Bool { scheme == .dark }
+    private var matches: Bool {
+        typed.trimmingCharacters(in: .whitespaces).uppercased() == phrase.uppercased()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIScale.pt(14)) {
+            HStack(spacing: UIScale.pt(10)) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: UIScale.pt(20)))
+                    .foregroundStyle(DashSkin.danger)
+                Text(title)
+                    .font(DashSkin.heading(20))
+                    .foregroundStyle(DashSkin.ink(dark))
+            }
+            Text(message)
+                .font(.system(size: UIScale.pt(12.5)))
+                .foregroundStyle(DashSkin.inkSoft(dark))
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: UIScale.pt(5)) {
+                CompanionFieldLabel(text: "Type \(phrase) to continue")
+                EdithTextField(
+                    placeholder: phrase, text: $typed,
+                    onSubmit: {
+                        guard matches else { return }
+                        dismiss()
+                        confirm()
+                    })
+            }
+            HStack {
+                Spacer()
+                CompanionButton(title: "Cancel") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                CompanionButton(
+                    title: actionTitle, role: .destructive, disabled: !matches
+                ) {
+                    dismiss()
+                    confirm()
+                }
+            }
+        }
+        .padding(UIScale.pt(20))
+        .frame(width: PresentationMetrics.width(400))
+        .background(DashSkin.paper(dark))
+    }
+}
+
+struct CompanionSkeletonCard<Content: View>: View {
+    let titleWidth: Double
+    var noteWidth: Double? = nil
+    let dark: Bool
+    var fill = false
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        PagePanel(fill: fill) {
+            HStack(alignment: .firstTextBaseline) {
+                SkeletonBlock(width: titleWidth, height: 16, corner: 5)
+                Spacer()
+                if let noteWidth {
+                    SkeletonBlock(width: noteWidth, height: 9, corner: 4)
+                }
+            }
+        } content: {
+            content()
+        }
+    }
+}
