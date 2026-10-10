@@ -15,6 +15,7 @@ struct VirtualCameraEngineEnvironment {
     var frontmostApplication: () -> VirtualCameraRunningApplication?
     var sources: () -> [VirtualCameraSource] = { VirtualCameraDevices.sources() }
     var prepareMicrophone: (@MainActor () async throws -> Void)?
+    var applicationNotifications: () -> NotificationCenter? = { nil }
 
     static var live: VirtualCameraEngineEnvironment {
         VirtualCameraEngineEnvironment(
@@ -29,7 +30,8 @@ struct VirtualCameraEngineEnvironment {
                     VirtualCameraRunningApplication(
                         pid: $0.processIdentifier, bundleIdentifier: $0.bundleIdentifier)
                 }
-            })
+            },
+            applicationNotifications: { NSWorkspace.shared.notificationCenter })
     }
 }
 
@@ -52,6 +54,7 @@ final class VirtualCameraEngine {
     private var stopWork: DispatchWorkItem?
     private var stateToken: NSObjectProtocol?
     private var workspaceTokens: [NSObjectProtocol] = []
+    private var workspaceCenter: NotificationCenter?
     private var lastPublished: VirtualCameraSnapshot?
     private var observedDevices: [Bool] = []
     private(set) var trigger: VirtualCameraRunningApplication?
@@ -112,22 +115,25 @@ final class VirtualCameraEngine {
                     MainActor.assumeIsolated { self?.syncSettings(announced) }
                 }
             })
-        let center = NSWorkspace.shared.notificationCenter
-        workspaceTokens = [
-            center.addObserver(
-                forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
-            ) { [weak self] note in
-                let app =
-                    note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-                let pid = app?.processIdentifier
-                MainActor.assumeIsolated { self?.applicationQuit(pid) }
-            },
-            center.addObserver(
-                forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshExtension() }
-            },
-        ]
+        if let center = environment.applicationNotifications() {
+            workspaceCenter = center
+            workspaceTokens = [
+                center.addObserver(
+                    forName: NSWorkspace.didTerminateApplicationNotification, object: nil,
+                    queue: .main
+                ) { [weak self] note in
+                    let app =
+                        note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+                    let pid = app?.processIdentifier
+                    MainActor.assumeIsolated { self?.applicationQuit(pid) }
+                },
+                center.addObserver(
+                    forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
+                ) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.refreshExtension() }
+                },
+            ]
+        }
         observeDevices()
         refreshExtension()
     }
@@ -145,8 +151,8 @@ final class VirtualCameraEngine {
         stopWork = nil
         if let stateToken { IPC.stopObserving(stateToken) }
         stateToken = nil
-        workspaceTokens.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
-        workspaceTokens = []
+        if let workspaceCenter { workspaceTokens.forEach { workspaceCenter.removeObserver($0) } }
+        workspaceTokens = []; workspaceCenter = nil
         edithSink.stopObserving()
         obsSink.stopObserving()
         stopStreaming()
