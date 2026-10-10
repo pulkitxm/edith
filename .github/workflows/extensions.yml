@@ -222,17 +222,24 @@ jobs:
         run: |
           ghostty="$(bun -e 'const entry=JSON.parse(await Bun.file("Extensions/manifest.json").text()).find(item=>item.id===process.env.EXTENSION_ID); console.log(entry?.nativeProduct==="GhosttyTerminal")')"
           echo "ghostty=$ghostty" >> "$GITHUB_OUTPUT"
+      - name: Identify the optional terminal toolchain
+        if: "steps.native.outputs.ghostty == 'true'"
+        id: ghostty-toolchain
+        run: |
+          command -v zig >/dev/null 2>&1 || brew install zig
+          echo "fingerprint=$(node scripts/extension-ghostty-native.mjs --fingerprint)" >> "$GITHUB_OUTPUT"
       - name: Cache the optional terminal library
         if: "steps.native.outputs.ghostty == 'true'"
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: Extensions/terminal/Native/vendor
-          key: "ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/build-ghostty.sh', 'Extensions/terminal/Native/Package.swift') }}"
+          key: "ghostty-extension-${{ runner.os }}-${{ runner.arch }}-${{ steps.ghostty-toolchain.outputs.fingerprint }}-${{ hashFiles('scripts/build-ghostty.sh', 'scripts/patches/ghostty-external-io.patch', 'scripts/extension-ghostty-native.mjs', 'Extensions/terminal/Native/Package.swift') }}"
       - name: Build the optional terminal library
         if: "steps.native.outputs.ghostty == 'true'"
         run: |
-          command -v zig >/dev/null 2>&1 || brew install zig
           make ghostty-extension
+          node scripts/extension-ghostty-native.mjs --check
+          bun test scripts/extension-ghostty-native.test.js
       - name: Identify the support build toolchain
         id: support-toolchain
         run: |

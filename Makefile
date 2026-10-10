@@ -304,7 +304,7 @@ shipping-appcast-fixture:
 
 
 ghostty:
-	scripts/build-ghostty.sh
+	bash scripts/build-ghostty.sh
 
 build:
 	./build.sh $(FLAGS)
@@ -401,7 +401,7 @@ endif
 
 .PHONY: ghostty-extension ci-extension-terminal
 ghostty-extension:
-	test -d Extensions/terminal/Native/vendor/GhosttyKit.xcframework -a -f Extensions/terminal/Native/vendor/GhosttyResources/terminfo/78/xterm-ghostty || bash scripts/build-ghostty.sh
+	bash scripts/build-ghostty.sh --extension-only
 
 ci-extension-terminal: ghostty-extension
 	swift format lint --strict --parallel --recursive Extensions/terminal
