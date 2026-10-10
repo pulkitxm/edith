@@ -47,6 +47,7 @@ final class ExtensionRuntime: NSObject {
 
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
+        model?.stopBackgroundEstimates()
         Task {
             await commands.shutdownAndWait()
             await cliStreams?.stopAndWait()
@@ -69,7 +70,12 @@ final class ExtensionRuntime: NSObject {
             guard let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            if model == nil { model = CleanerModel() }
+            if model == nil {
+                model = CleanerModel()
+                if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+                    model?.startBackgroundEstimates()
+                }
+            }
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
                 let client = configuration.engineClient,
@@ -85,6 +91,9 @@ final class ExtensionRuntime: NSObject {
         case "synchronize": break
         case "stop":
             commands.shutdown(); cliStreams?.stop()
+            let ownedModel = model
+            ownedModel?.stopBackgroundEstimates()
+            Task { await ownedModel?.shutdown() }
             model = nil
         case "status": return ["ok": true, "running": model != nil] as NSDictionary
         default: return ["ok": false] as NSDictionary

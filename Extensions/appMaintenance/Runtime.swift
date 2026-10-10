@@ -54,6 +54,7 @@ final class ExtensionRuntime: NSObject {
     func prepareToStop(completion: @escaping () -> Void) {
         stopped = true
         stopUI()
+        model?.stopBackgroundDiscovery()
         Task {
             await commands.shutdownAndWait()
             await cliStreams?.stopAndWait()
@@ -76,7 +77,12 @@ final class ExtensionRuntime: NSObject {
             guard !stopped, let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
-            if model == nil { model = AppMaintenanceModel() }
+            if model == nil {
+                model = AppMaintenanceModel()
+                if ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] == nil {
+                    model?.startBackgroundDiscovery()
+                }
+            }
             TextEditingCommands.install()
         case "configureUI":
             guard let configuration = ExtensionUIConfiguration(context: input),
@@ -109,6 +115,9 @@ final class ExtensionRuntime: NSObject {
             stopped = true
             stopUI()
             commands.shutdown(); cliStreams?.stop()
+            let ownedModel = model
+            ownedModel?.stopBackgroundDiscovery()
+            Task { await ownedModel?.shutdown() }
             model = nil
             TextEditingCommands.shutdown()
         case "status": return ["ok": true, "running": model != nil] as NSDictionary

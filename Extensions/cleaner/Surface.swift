@@ -9,7 +9,13 @@ enum CleanerSurface {
             ? [
                 .init("space", "Reclaimable", JunkScanner.format(model.reclaimableTotal)),
                 .init("categories", "Categories", model.categories.count.description),
-            ] : []
+            ]
+            : model.latestEstimate.map {
+                [
+                    .init("space", "Reclaimable", JunkScanner.format($0.reclaimableBytes)),
+                    .init("categories", "Categories", $0.categoryCount.description),
+                ]
+            } ?? []
         let actions: [SurfaceAction] = [
             .init(
                 model.scanning ? "cancel" : "scan", model.scanning ? "Cancel scan" : "Scan",
@@ -25,6 +31,8 @@ enum CleanerSurface {
             }, actions: actions,
             message: model.scanning
                 ? model.operationTitle
-                : model.scanned ? nil : "Scan your configured folders to see reclaimable space.")
+                : model.scanned || model.latestEstimate != nil
+                    ? nil : "Scan your configured folders to see reclaimable space.",
+            updatedAt: model.latestEstimate?.scannedAt)
     }
 }

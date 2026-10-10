@@ -1,4 +1,5 @@
 import AppKit
+import IOKit.ps
 import EdithExtensionSupport
 import EdithExtensionUI
 import Observation
@@ -60,6 +61,9 @@ final class AppMaintenanceModel {
     private let snapshots: AppMaintenanceSnapshotStore
     private let inventory: AppMaintenanceInventoryLoad
     private let discover: AppMaintenanceDiscover
+    private let now: @Sendable () -> Date
+    private var backgroundDiscovery: Task<Void, Never>?
+    private var loadedBackgroundSnapshot = false
     private let updateExecutor = AppUpdateExecutor()
     @ObservationIgnored private var operation: (id: UUID, cancellation: MaintenanceCancellation)?
     @ObservationIgnored private var ownedTasks: [UUID: Task<Void, Never>] = [:]
@@ -82,6 +86,7 @@ final class AppMaintenanceModel {
         inventory: @escaping AppMaintenanceInventoryLoad = { data in
             await BlockingWork.value { AppMaintenanceInventory.applications(updateData: data) }
         },
+        now: @escaping @Sendable () -> Date = { Date() },
         discover: @escaping AppMaintenanceDiscover = { applications, brewData, brewFresh, onBatch in
             await AppUpdateDiscovery.discoverChannels(
                 applications: applications, brewData: brewData, brewFresh: brewFresh,
@@ -94,6 +99,7 @@ final class AppMaintenanceModel {
         self.snapshots = snapshots
         self.inventory = inventory
         self.discover = discover
+        self.now = now
     }
     private var securityScopedURL: URL?
     private var hasSecurityScopedAccess = false
@@ -263,7 +269,7 @@ final class AppMaintenanceModel {
         if engineClient != nil, !stopped {
             sendRemote("refresh", enabled: automatic, number: interval); return
         }
-        guard !stopped, !mutationInProgress else { return }
+        guard !stopped, !mutationInProgress, !checkingUpdates || operation == nil else { return }
         cancelOperation()
         let generation = loading.begin()
         refreshInterval = interval
@@ -283,6 +289,66 @@ final class AppMaintenanceModel {
         }
     }
 
+    func startBackgroundDiscovery(
+        onBattery: @escaping @MainActor () -> Bool = {
+            guard let sources = IOPSCopyPowerSourcesInfo()?.takeRetainedValue() else {
+                return false
+            }
+            return IOPSGetProvidingPowerSourceType(sources).takeUnretainedValue() as String
+                == kIOPMBatteryPowerKey
+        },
+        delay: @escaping @Sendable (Duration) async throws -> Void = {
+            try await Task.sleep(for: $0)
+        }
+    ) {
+        guard !stopped, engineClient == nil, backgroundDiscovery == nil else { return }
+        backgroundDiscovery = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, !stopped else { return }
+                await discoverIfDue(onBattery: onBattery())
+                do { try await delay(.seconds(60)) } catch { return }
+            }
+        }
+    }
+
+    func discoverIfDue(onBattery: Bool) async {
+        guard !stopped, !Task.isCancelled, engineClient == nil, !onBattery,
+            !mutationInProgress, operation == nil
+        else { return }
+        if !loadedBackgroundSnapshot {
+            let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
+            let snapshot = await snapshots.load()
+            guard !stopped, !Task.isCancelled, operation == nil else { return }
+            loadedBackgroundSnapshot = true
+            updateState = state
+            updateHistory = state.history
+            lastUpdateRefresh = state.lastRefresh
+            if let snapshot, applications.isEmpty, updates.isEmpty {
+                applications = snapshot.applications
+                discovered = snapshot.updates
+                updates = updatePersistence.visible(snapshot.updates, state: state, now: now())
+                brewCache = snapshot.homebrewOutdated
+                brewCachedAt = snapshot.homebrewCachedAt
+                phase = .ready
+                loading.retainContent()
+            }
+        }
+        guard lastUpdateRefresh.map({ now().timeIntervalSince($0) < 21_600 }) != true else {
+            return
+        }
+        refresh(interval: 21_600)
+        await withTaskCancellationHandler {
+            await finishWork()
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelOperation() }
+        }
+    }
+
+    func stopBackgroundDiscovery() {
+        backgroundDiscovery?.cancel()
+        cancelOperation()
+    }
+
     private func performRefresh(
         generation: UInt64, automatic: Bool, interval: TimeInterval, previousIDs: Set<String>
     ) async {
@@ -292,6 +358,7 @@ final class AppMaintenanceModel {
         let state = await BlockingWork.value { [updatePersistence] in updatePersistence.load() }
         guard !stopped, loading.isCurrent(generation) else { return }
         updateState = state
+        loadedBackgroundSnapshot = true
         updateHistory = state.history
         lastUpdateRefresh = state.lastRefresh
         if applications.isEmpty, updates.isEmpty, let snapshot {
@@ -325,7 +392,7 @@ final class AppMaintenanceModel {
         discovered = found
         updates = updatePersistence.visible(found, state: updateState, now: Date())
         reconcileUpdates()
-        updateState.lastRefresh = Date()
+        updateState.lastRefresh = now()
         lastUpdateRefresh = updateState.lastRefresh
         let stateToSave = updateState
         let snapshotToSave = AppMaintenanceSnapshot(
@@ -709,6 +776,9 @@ final class AppMaintenanceModel {
     func shutdown() async {
         guard !stopped else { return }
         stopped = true
+        stopBackgroundDiscovery()
+        await backgroundDiscovery?.value
+        backgroundDiscovery = nil
         preferencesTask?.cancel(); await preferencesTask?.value; preferencesTask = nil
         remoteRevision += 1; remoteTask?.cancel(); await remoteTask?.value; remoteTask = nil
         cancel()
