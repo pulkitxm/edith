@@ -17,6 +17,7 @@ import {
   readCIArtifactSet,
   validateCIArtifactSet,
   validatePackageReceipt,
+  verifyFactoryOverlaySources,
 } from "./hosted-managed-views/package-preparation.mjs";
 
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -333,6 +334,7 @@ describe("original and fixture payload truth", () => {
       const overlay = {
         extensionID,
         reviewedSource: sha,
+        sourceFilesVerified: true,
         functionalActionsValidated: false,
         sources: [
           {
@@ -484,4 +486,48 @@ describe("atomic complete preparation receipts", () => {
       await rm(directory, { recursive: true });
     }
   });
+});
+
+test("factory source review checks both actual source trees and rejects changed or escaped source", async () => {
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), "managed-overlay-test-")),
+  );
+  try {
+    const originalRoot = join(directory, "original");
+    const fixtureRoot = join(directory, "fixture");
+    const path = "Extensions/plugins/Runtime.swift";
+    for (const root of [originalRoot, fixtureRoot])
+      await mkdir(join(root, "Extensions/plugins"), { recursive: true });
+    await writeFile(join(originalRoot, path), "original synthetic factory");
+    await writeFile(join(fixtureRoot, path), "reviewed synthetic factory");
+    const overlay = {
+      extensionID: "plugins",
+      reviewedSource: sha,
+      sources: [
+        {
+          path,
+          originalSHA256: digest("original synthetic factory"),
+          fixtureSHA256: digest("reviewed synthetic factory"),
+        },
+      ],
+    };
+    expect(
+      (
+        await verifyFactoryOverlaySources(overlay, {
+          originalRoot,
+          fixtureRoot,
+        })
+      ).sourceFilesVerified,
+    ).toBe(true);
+    await writeFile(join(fixtureRoot, path), "unreviewed factory");
+    await expect(
+      verifyFactoryOverlaySources(overlay, { originalRoot, fixtureRoot }),
+    ).rejects.toThrow("differs from its review");
+    overlay.sources[0].path = "Extensions/plugins/../Runtime.swift";
+    await expect(
+      verifyFactoryOverlaySources(overlay, { originalRoot, fixtureRoot }),
+    ).rejects.toThrow();
+  } finally {
+    await rm(directory, { recursive: true });
+  }
 });

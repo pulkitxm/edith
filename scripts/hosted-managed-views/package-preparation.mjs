@@ -365,6 +365,43 @@ function validateInventory(inventory) {
   }
 }
 
+export async function verifyFactoryOverlaySources(
+  overlay,
+  { originalRoot, fixtureRoot },
+) {
+  assert(["plugins", "studio"].includes(overlay.extensionID));
+  assert.match(overlay.reviewedSource, commit);
+  assert(overlay.sources.length > 0 && overlay.sources.length <= 8);
+  const sourceFiles = [];
+  for (const source of overlay.sources) {
+    assert(source.path.startsWith(`Extensions/${overlay.extensionID}/`));
+    assert(
+      source.path
+        .split("/")
+        .every((part) => part && part !== "." && part !== ".."),
+    );
+    assert.match(source.originalSHA256, hash);
+    assert.match(source.fixtureSHA256, hash);
+    for (const [root, expected] of [
+      [originalRoot, source.originalSHA256],
+      [fixtureRoot, source.fixtureSHA256],
+    ]) {
+      const canonicalRoot = await realpath(root);
+      const path = join(canonicalRoot, source.path);
+      assert.equal(await realpath(path), path);
+      const status = await lstat(path);
+      assert(status.isFile() && !status.isSymbolicLink());
+      assert.equal(
+        sha256(await readFile(path)),
+        expected,
+        "Factory overlay source differs from its review",
+      );
+    }
+    sourceFiles.push(source);
+  }
+  return { ...overlay, sourceFilesVerified: true, sources: sourceFiles };
+}
+
 export function proveFixturePayload(
   original,
   fixture,
@@ -381,10 +418,17 @@ export function proveFixturePayload(
   if (overlay) {
     assert.equal(overlay.extensionID, extensionID);
     assert.match(overlay.reviewedSource, commit);
+    assert.equal(overlay.reviewedSource, original.sourceCommit);
+    assert.equal(overlay.sourceFilesVerified, true);
     assert.equal(overlay.functionalActionsValidated, false);
     assert(overlay.sources.length > 0 && overlay.sources.length <= 8);
     for (const source of overlay.sources) {
       assert(source.path.startsWith(`Extensions/${extensionID}/`));
+      assert(
+        source.path
+          .split("/")
+          .every((part) => part && part !== "." && part !== ".."),
+      );
       assert.match(source.originalSHA256, hash);
       assert.match(source.fixtureSHA256, hash);
     }
