@@ -255,20 +255,28 @@ test("a cold Machines target prepares its native renderer before Swift tests", (
     );
     script(
       "swift",
-      'case "$*" in\n  *"--package-path Extensions/machines"*) test -f Extensions/terminal/Native/vendor/prepared; printf "%s\\n" machines >> events ;;\n  *"--package-path Extensions "*) printf "%s\\n" models >> events ;;\n  *) exit 2 ;;\nesac',
+      'test -f Extensions/terminal/Native/vendor/prepared\ncase "$*" in\n  *"--package-path Extensions/machines"*"--filter MachinesExtensionTests"*) printf "%s\\n" machines-core >> events ;;\n  *"--package-path Extensions/machines"*"--filter MachinesExtensionUITests"*) printf "%s\\n" machines-ui >> events ;;\n  *) exit 2 ;;\nesac',
     );
-    execFileSync("make", ["-f", makefile, "ci-extension-machines"], {
-      cwd: root,
-      stdio: "pipe",
-      env: {
-        ...process.env,
-        EDITH_MAKE_GATE: "skip",
-        PATH: `${bin}:${process.env.PATH}`,
-      },
-    });
-    expect(
-      readFileSync(join(root, "events"), "utf8").trim().split("\n"),
-    ).toEqual(["models", "renderer", "machines"]);
+    for (const [target, expected] of [
+      ["ci-machines", ["renderer", "machines-core"]],
+      ["ci-machines-ui", ["renderer", "machines-ui"]],
+      ["ci-extension-machines", ["renderer", "machines-core", "machines-ui"]],
+    ]) {
+      rmSync(join(root, "events"), { force: true });
+      rmSync(join(root, "Extensions"), { recursive: true, force: true });
+      execFileSync("make", ["-f", makefile, target], {
+        cwd: root,
+        stdio: "pipe",
+        env: {
+          ...process.env,
+          EDITH_MAKE_GATE: "skip",
+          PATH: `${bin}:${process.env.PATH}`,
+        },
+      });
+      expect(
+        readFileSync(join(root, "events"), "utf8").trim().split("\n"),
+      ).toEqual(expected);
+    }
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
