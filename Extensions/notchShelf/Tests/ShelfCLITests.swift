@@ -1,3 +1,4 @@
+import EdithExtensionCommands
 import EdithExtensionSupport
 import Foundation
 import Testing
@@ -126,6 +127,66 @@ import Testing
         #expect(failure.stdout.isEmpty)
         #expect(failure.stderr == "error: macOS could not open the shelf items\n")
         #expect(try ShelfMutationExecution.snapshot(root: fixture.root).items.count == 1)
+    }
+
+    @Test func relativePathsUseRequestDirectoryAndStreamsKeepTheirOwnedRoots() async throws {
+        let first = try Fixture()
+        let second = try Fixture()
+        defer { first.clean(); second.clean() }
+        try Data("cwd fixture".utf8).write(
+            to: first.directory.appendingPathComponent("relative.txt"))
+        let cwd = FileManager.default.currentDirectoryPath
+        let root = ShelfIndex.root
+        let added = try await ShelfCLIExecution.run(
+            .init(arguments: ["add", "relative.txt"], workingDirectory: first.directory.path),
+            root: first.root, defaults: first.defaults
+        ) { _ in throw ExtensionPeerError.unavailable }
+        #expect(added.stdout == "shelved relative.txt\n")
+        #expect(FileManager.default.currentDirectoryPath == cwd)
+        #expect(ShelfIndex.root == root)
+        let streams = try ExtensionCLIStreams(owner: "notchShelf")
+        defer { streams.stop() }
+        let configuration = ShelfCLIConfiguration(
+            root: second.root, defaults: second.defaults, open: { _ in false }, reveal: { _ in },
+            share: { _ in throw ExtensionPeerError.unavailable })
+        let handle = try ShelfCLIEnvironment.$configuration.withValue(configuration) {
+            try streams.start(
+                ShelfCommand.self,
+                request: .init(
+                    owner: "notchShelf", session: UUID(),
+                    request: .init(
+                        arguments: ["add-text", "stream fixture"],
+                        standardInput: Data("unused original stdin".utf8),
+                        workingDirectory: second.directory.path)))
+        }
+        var output = Data()
+        var sequence: UInt64 = 0
+        var code: Int32?
+        for _ in 0..<100 {
+            let frame = try streams.read(.init(handle: handle, sequence: sequence))
+            sequence = frame.nextSequence
+            for chunk in frame.chunks {
+                #expect(chunk.channel == .stdout)
+                output.append(chunk.data)
+            }
+            if frame.state != .running { code = frame.exitCode; break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(code == 0)
+        #expect(String(decoding: output, as: UTF8.self) == "shelved Dropped Text.txt\n")
+        #expect(
+            try ShelfMutationExecution.snapshot(root: first.root).items.map(\.name) == [
+                "relative.txt"
+            ])
+        #expect(
+            try ShelfMutationExecution.snapshot(root: second.root).items.map(\.name) == [
+                "Dropped Text.txt"
+            ])
+        try streams.end(handle)
+        #expect(throws: (any Error).self) {
+            try streams.read(.init(handle: handle, sequence: sequence))
+        }
+        await streams.stopAndWait()
     }
 
     @MainActor private struct Fixture {

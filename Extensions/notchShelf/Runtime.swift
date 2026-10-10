@@ -11,10 +11,26 @@ final class ExtensionRuntime: NSObject {
     private var uiModel: NotchSettingsModel?
     private var uiClient: ExtensionEngineClient?
     private let commands = ExtensionCommandRegistry()
+    private let cliStreams = try! ExtensionCLIStreams(owner: "notchShelf")
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
             guard let controller = self?.controller else { throw ExtensionPeerError.unavailable }
+            if ["notch.cli.start", "notch.cli.read", "notch.cli.cancel", "notch.cli.end"].contains(
+                command)
+            {
+                guard let self else { throw ExtensionPeerError.unavailable }
+                let configuration = ShelfCLIConfiguration(
+                    root: controller.store.root, defaults: controller.context.defaults,
+                    open: { NSWorkspace.shared.open($0) },
+                    reveal: { NSWorkspace.shared.activateFileViewerSelecting($0) },
+                    share: { try controller.shareCLIItems($0) })
+                return try ShelfCLIEnvironment.$configuration.withValue(configuration) {
+                    try self.cliStreams.invoke(
+                        ShelfCommand.self, operation: command, prefix: "notch.cli", payload: payload
+                    )
+                }
+            }
             if command == "notch.cli" {
                 let request = try JSONDecoder().decode(ExtensionCLIRequest.self, from: payload)
                 let reply = try await ShelfCLIExecution.run(
@@ -29,13 +45,16 @@ final class ExtensionRuntime: NSObject {
     @objc(prepareToStopWithCompletion:)
     func prepareToStop(completion: @escaping () -> Void) {
         commands.shutdown()
+        cliStreams.stop()
         stopUI()
         controller?.shutdown()
         controller = nil
         NotchPresenterState.shared.privacy = nil
         ShelfThumbnails.clear()
         Task {
-            await commands.shutdownAndWait(); completion()
+            await commands.shutdownAndWait()
+            await cliStreams.stopAndWait()
+            completion()
         }
     }
 
