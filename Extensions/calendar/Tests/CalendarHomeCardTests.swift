@@ -22,15 +22,16 @@ import Testing
                 calendarID: "one", start: today.addingTimeInterval(172800),
                 end: today.addingTimeInterval(176400), isAllDay: false),
         ]
-        let store = CalendarStore(
-            snapshotStore: .init(file: root.appendingPathComponent("agenda.json")),
-            fetch: { _ in events })
-        let presentation = CalendarPresentationState(channel: nil)
+        let store = CalendarUIFacade(invoke: { _, _ in
+            try JSONEncoder().encode(
+                CalendarUISnapshot(
+                    authorized: true, blurEvents: false, days: 14, events: events))
+        })
         defer {
-            store.shutdown(); presentation.shutdown()
+            store.shutdown()
             try? FileManager.default.removeItem(at: root)
         }
-        _ = await store.refreshAndWait()
+        await store.refreshAndWait()
         NSApplication.shared.setActivationPolicy(.prohibited)
         let attributes = ["AXManualAccessibility", "AXEnhancedUserInterface"].map {
             NSAccessibility.Attribute(rawValue: $0)
@@ -51,12 +52,11 @@ import Testing
             contentRect: .init(x: -10000, y: -10000, width: width, height: 400),
             styleMask: .borderless, backing: .buffered, defer: false)
         window.contentView = host
-        window.orderBack(nil)
         defer { window.orderOut(nil) }
         func render(authorized: Bool) async {
             host.rootView = AnyView(
                 HomeMeetingsCard(
-                    dark: false, store: store, calendarPresentation: presentation,
+                    dark: false, store: store,
                     authorized: { authorized }, grantAccess: { granted += 1 }, open: { opened += 1 }
                 )
                 .environment(

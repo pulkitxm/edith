@@ -428,6 +428,8 @@
         "Extensions/calendar/ViewModels/CalendarAgendaSnapshotStore.swift",
         "Extensions/calendar/ViewModels/CalendarPresentationState.swift",
         "Extensions/calendar/ViewModels/CalendarStore.swift",
+        "Extensions/calendar/ViewModels/CalendarUIFacade.swift",
+        "Extensions/calendar/Views/CalendarUIPresentation.swift",
         "Extensions/calendar/Views/CalendarPage.swift",
         "Extensions/calendar/Views/HomeMeetingsCard.swift",
         "Extensions/calendar/CLI/CalendarCommands.swift",

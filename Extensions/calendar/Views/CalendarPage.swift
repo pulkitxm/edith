@@ -4,12 +4,10 @@ import EdithExtensionUI
 import SwiftUI
 
 struct CalendarPage: View {
-    private let store: CalendarStore
-    private let presentation: CalendarPresentationState
+    private let store: CalendarUIFacade
 
-    init(store: CalendarStore, presentation: CalendarPresentationState) {
+    init(store: CalendarUIFacade) {
         self.store = store
-        self.presentation = presentation
     }
     @AppStorage(AppStorageKeys.General.theme, store: SharedDefaults.store) private var themeName =
         "accent"
@@ -18,33 +16,31 @@ struct CalendarPage: View {
 
     private var dark: Bool { scheme == .dark }
     private var theme: Color { themeColor(themeName) }
-    private var blurCalendar: Bool { presentation.blurEvents }
+    private var blurCalendar: Bool { store.blurEvents }
 
     var body: some View {
         PageWorkspace {
             pageHeader
         } content: {
-            if store.authStatus != .fullAccess {
-                CalendarPermissionPrompt(style: calendarStyle, accentColor: theme)
+            PageLoading(
+                state: store.loaded ? .content : store.error == nil ? .loading : .error,
+                title: "Calendar unavailable", message: store.error ?? "Reading your schedule.",
+                layout: .list, retry: store.refresh
+            ) {
+                if !store.authorized {
+                    CalendarPermissionPrompt(
+                        style: calendarStyle, accentColor: theme,
+                        onGrant: { store.perform(.permission) }
+                    )
                     .frame(maxWidth: UIScale.pt(420))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                agenda
+                } else {
+                    agenda
+                }
             }
         }
         .navigationTitle("Calendar")
-        .pageTask(cancel: store.shutdown) { store.start() }
-        .onReceive(
-            NotificationCenter.default.publisher(for: CalendarPermission.changed)
-        ) { _ in
-            store.refreshAuthStatus()
-        }
-        .onReceive(
-            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) {
-            _ in
-            store.refreshAuthStatus()
-        }
+        .pageTask(cancel: store.suspend) { await store.observe() }
     }
 
     private var pageHeader: some View {
@@ -52,7 +48,7 @@ struct CalendarPage: View {
             "Calendar",
             trailing: {
                 Button {
-                    CalendarEventActions.openCalendar()
+                    store.perform(.open)
                 } label: {
                     Label("Open Calendar", systemImage: "arrow.up.forward.app")
                 }
@@ -66,7 +62,9 @@ struct CalendarPage: View {
             style: calendarStyle,
             accentColor: theme,
             blurEvents: blurCalendar,
-            onLoadMore: store.loadMore
+            onLoadMore: store.loadMore,
+            onOpenMeeting: { store.perform(.join, eventID: $0.id) },
+            onDirections: { store.perform(.directions, eventID: $0.id) }
         )
     }
 

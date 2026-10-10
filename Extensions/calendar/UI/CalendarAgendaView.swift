@@ -7,7 +7,8 @@ public struct CalendarAgendaView: View {
     private let accentColor: Color
     private let blurEvents: Bool
     private let onLoadMore: () -> Void
-    private let onOpenMeeting: (URL) -> Void
+    private let onOpenMeeting: (CalendarEventPayload) -> Void
+    private let onDirections: (CalendarEventPayload) -> Void
 
     public init(
         days: [(day: Date, events: [CalendarEventPayload])],
@@ -15,9 +16,9 @@ public struct CalendarAgendaView: View {
         accentColor: Color,
         blurEvents: Bool,
         onLoadMore: @escaping () -> Void,
-        onOpenMeeting: @escaping (URL) -> Void = { url in
-            Task { @MainActor in CalendarEventActions.join(url) }
-        }
+        onOpenMeeting: @escaping (CalendarEventPayload) -> Void,
+        onDirections: @escaping (CalendarEventPayload) -> Void
+
     ) {
         groupedDays = days
         self.style = style
@@ -25,6 +26,7 @@ public struct CalendarAgendaView: View {
         self.blurEvents = blurEvents
         self.onLoadMore = onLoadMore
         self.onOpenMeeting = onOpenMeeting
+        self.onDirections = onDirections
     }
 
     public var body: some View {
@@ -40,7 +42,8 @@ public struct CalendarAgendaView: View {
                             style: style,
                             accentColor: accentColor,
                             blurEvents: blurEvents,
-                            onOpenMeeting: onOpenMeeting
+                            onOpenMeeting: onOpenMeeting,
+                            onDirections: onDirections
                         )
                     }
                 }
@@ -59,9 +62,12 @@ public struct CalendarPermissionPrompt: View {
     private let style: CalendarAgendaStyle
     private let accentColor: Color
 
-    public init(style: CalendarAgendaStyle, accentColor: Color) {
+    private let onGrant: () -> Void
+
+    public init(style: CalendarAgendaStyle, accentColor: Color, onGrant: @escaping () -> Void) {
         self.style = style
         self.accentColor = accentColor
+        self.onGrant = onGrant
     }
 
     public var body: some View {
@@ -86,7 +92,7 @@ public struct CalendarPermissionPrompt: View {
                     .font(.system(size: style.permissionTitleSize))
                 Spacer()
                 Button("Grant…") {
-                    CalendarPermission.performRequest()
+                    onGrant()
                 }
                 .buttonStyle(.edith(.toolbar))
                 .font(.system(size: style.permissionButtonSize))
@@ -106,7 +112,8 @@ private struct CalendarDaySection: View {
     private let style: CalendarAgendaStyle
     private let accentColor: Color
     private let blurEvents: Bool
-    private let onOpenMeeting: (URL) -> Void
+    private let onOpenMeeting: (CalendarEventPayload) -> Void
+    private let onDirections: (CalendarEventPayload) -> Void
 
     init(
         day: Date,
@@ -114,7 +121,8 @@ private struct CalendarDaySection: View {
         style: CalendarAgendaStyle,
         accentColor: Color,
         blurEvents: Bool,
-        onOpenMeeting: @escaping (URL) -> Void
+        onOpenMeeting: @escaping (CalendarEventPayload) -> Void,
+        onDirections: @escaping (CalendarEventPayload) -> Void
     ) {
         self.day = day
         self.events = events
@@ -122,6 +130,7 @@ private struct CalendarDaySection: View {
         self.accentColor = accentColor
         self.blurEvents = blurEvents
         self.onOpenMeeting = onOpenMeeting
+        self.onDirections = onDirections
     }
 
     var body: some View {
@@ -153,7 +162,8 @@ private struct CalendarDaySection: View {
                 style: style,
                 accentColor: accentColor,
                 blurEvents: blurEvents,
-                onOpenMeeting: onOpenMeeting
+                onOpenMeeting: onOpenMeeting,
+                onDirections: onDirections
             )
             if style.wrapsRowsInCard && index < events.count - 1 {
                 Divider().opacity(0.5)
@@ -205,20 +215,23 @@ private struct CalendarEventRow: View {
     private let style: CalendarAgendaStyle
     private let accentColor: Color
     private let blurEvents: Bool
-    private let onOpenMeeting: (URL) -> Void
+    private let onOpenMeeting: (CalendarEventPayload) -> Void
+    private let onDirections: (CalendarEventPayload) -> Void
 
     init(
         event: CalendarEventPayload,
         style: CalendarAgendaStyle,
         accentColor: Color,
         blurEvents: Bool,
-        onOpenMeeting: @escaping (URL) -> Void
+        onOpenMeeting: @escaping (CalendarEventPayload) -> Void,
+        onDirections: @escaping (CalendarEventPayload) -> Void
     ) {
         self.event = event
         self.style = style
         self.accentColor = accentColor
         self.blurEvents = blurEvents
         self.onOpenMeeting = onOpenMeeting
+        self.onDirections = onDirections
     }
 
     var body: some View {
@@ -338,7 +351,7 @@ private struct CalendarEventRow: View {
                     help: blurEvents
                         ? "Join meeting" : "Join meeting at \(url.host ?? url.absoluteString)"
                 ) {
-                    onOpenMeeting(url)
+                    onOpenMeeting(event)
                 }
             }
             if CalendarEventActions.locationURL(for: event) != nil {
@@ -348,7 +361,7 @@ private struct CalendarEventRow: View {
                     color: .orange,
                     help: "Open this location in Maps"
                 ) {
-                    CalendarEventActions.openLocation(event)
+                    onDirections(event)
                 }
             }
             CalendarActionButton(
@@ -406,7 +419,7 @@ private struct CalendarEventRow: View {
         if let url = MeetingLink.url(for: event) {
             let color = CalendarText.providerColor(for: url, fallback: accentColor)
             Button {
-                onOpenMeeting(url)
+                onOpenMeeting(event)
             } label: {
                 if style.showsMeetingLabel {
                     Label("Join", systemImage: "video.fill")

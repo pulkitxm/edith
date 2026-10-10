@@ -12,6 +12,7 @@ final class ExtensionRuntime: NSObject {
     private var surface: CalendarSurface?
     private var uiEngine: CalendarUIEngine?
     private let commands = ExtensionCommandRegistry()
+    private var uiPresentations: [UUID: CalendarUIPresentation] = [:]
 
     @objc func invoke(_ request: NSDictionary, completion: @escaping (NSData?, NSString?) -> Void) {
         commands.invoke(request, completion: completion) { [weak self] command, payload in
@@ -74,7 +75,8 @@ final class ExtensionRuntime: NSObject {
                 "hostABI": bundle.object(forInfoDictionaryKey: "EdithHostABI") as? String ?? "",
             ] as NSDictionary
         case "start":
-            guard let suite = input["defaultsSuite"] as? String,
+            guard Bundle.main.bundleURL.pathExtension != "appex", uiPresentations.isEmpty,
+                let suite = input["defaultsSuite"] as? String,
                 suite == ProcessInfo.processInfo.environment["EDITH_SHARED_DEFAULTS_SUITE"]
             else { return ["ok": false] as NSDictionary }
             if store == nil { store = CalendarStore(startImmediately: false) }
@@ -84,26 +86,28 @@ final class ExtensionRuntime: NSObject {
                 uiEngine = CalendarUIEngine(store: store, presentation: presentation)
                 store.start()
             }
+        case "configureUI":
+            guard store == nil, let configuration = ExtensionUIConfiguration(context: input),
+                configuration.extensionID == "calendar", let client = configuration.engineClient,
+                let scene = CalendarUIPresentation(client: client, context: input),
+                uiPresentations.count < 8 || uiPresentations[client.presentationID] != nil
+            else { return ["ok": false] as NSDictionary }
+            uiPresentations[client.presentationID]?.shutdown()
+            uiPresentations[client.presentationID] = scene
         case "view":
-            guard let store, let presentation else { return ["ok": false] as NSDictionary }
-            if input["location"] as? String == "home" {
-                guard input["section"] as? String == "calendar",
-                    let data = input["tile"] as? Data, data.count <= 65_536,
-                    let tile = try? JSONDecoder().decode(SurfaceTile.self, from: data),
-                    tile.widget == .calendar
-                else { return ["ok": false] as NSDictionary }
-                return NSHostingController(
-                    rootView: ExtensionPageHost {
-                        CalendarHomeScene(tile: tile, store: store, presentation: presentation)
-                    })
-            }
-            return NSHostingController(
-                rootView: ExtensionPageHost {
-                    CalendarPage(store: store, presentation: presentation)
-                })
+            guard let value = input["presentationID"] as? String,
+                let id = UUID(uuidString: value), let scene = uiPresentations[id],
+                scene.matches(input)
+            else { return ["ok": false] as NSDictionary }
+            return scene.controller()
+        case "stopUI":
+            for scene in uiPresentations.values { scene.shutdown() }
+            uiPresentations.removeAll()
         case "cancelCommand": commands.cancel(input["token"] as? String ?? "")
         case "synchronize": store?.refreshAuthStatus()
         case "stop":
+            for scene in uiPresentations.values { scene.shutdown() }
+            uiPresentations.removeAll()
             commands.shutdown()
             uiEngine?.shutdown()
             uiEngine = nil
