@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   attachmentExportArguments,
+  exportJourneyAttachments,
   journeyTestIdentifier,
   readJourneyAttachments,
   selectJourneyAttachments,
@@ -17,7 +18,7 @@ function manifest(attachments) {
 }
 const first = attachment("edith-journey-outcome-0001.json");
 
-test("official exporter selects only the owned test and attachment prefix", () => {
+test("official exporter pins the schema and exact owned test without a filename filter", () => {
   const args = attachmentExportArguments(
     "/fixture/HostedShellJourney.xcresult",
     "/fixture/journey-attachments",
@@ -26,14 +27,14 @@ test("official exporter selects only the owned test and attachment prefix", () =
     "xcresulttool",
     "export",
     "attachments",
+    "--schema-version",
+    "0.4.0",
     "--test-id",
     journeyTestIdentifier,
     "--path",
     "/fixture/HostedShellJourney.xcresult",
     "--output-path",
     "/fixture/journey-attachments",
-    "--filter",
-    "edith-journey-*",
   ]);
   for (const paths of [
     ["relative.xcresult", "/fixture/journey-attachments"],
@@ -145,5 +146,115 @@ test("symlink, oversize, sequence mismatch and regressed proof fail rather than 
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  }
+});
+
+test("official schema filename exports select human names and ignore framework attachments without reading their files", () => {
+  const current = [
+    {
+      testIdentifier: journeyTestIdentifier,
+      testIdentifierURL: "test://synthetic/owned",
+      attachments: [
+        {
+          ...first,
+          exportedFileName: "B21A.json",
+          isAssociatedWithFailure: false,
+          configurationName: "Debug",
+          deviceName: "Synthetic Mac",
+          deviceId: "synthetic",
+          timestamp: 1,
+        },
+        attachment("Screenshot", "unrelated.png"),
+      ],
+    },
+  ];
+  expect(selectJourneyAttachments(current).outcomes[0].file).toBe("B21A.json");
+});
+
+test("export failures expose bounded categories without private command stderr", async () => {
+  for (const [failure, category] of [
+    [{ code: 1 }, "command-rejected"],
+    [{ code: "ENOENT" }, "tool-unavailable"],
+    [{ killed: true }, "timed-out"],
+  ]) {
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "edith-journey-export-")),
+    );
+    try {
+      let received;
+      try {
+        await exportJourneyAttachments({
+          resultBundle: join(root, "HostedShellJourney.xcresult"),
+          outputDirectory: join(root, "journey-attachments"),
+          run: async () => {
+            throw Object.assign(Error("/private/synthetic-command"), failure);
+          },
+        });
+      } catch (error) {
+        received = error;
+      }
+      expect(received.phase).toBe("attachment-command");
+      expect(received.category).toBe(category);
+      expect(received.message).not.toContain("/private");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("asynchronous official export reads generated filenames through the pinned manifest schema", async () => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "edith-journey-export-")),
+  );
+  const outputDirectory = join(root, "journey-attachments");
+  try {
+    let command;
+    const result = await exportJourneyAttachments({
+      resultBundle: join(root, "HostedShellJourney.xcresult"),
+      outputDirectory,
+      run: async (executable, args) => {
+        command = [executable, ...args];
+        await writeFile(
+          join(outputDirectory, "manifest.json"),
+          JSON.stringify([
+            {
+              testIdentifier: journeyTestIdentifier,
+              attachments: [
+                {
+                  suggestedHumanReadableName: "edith-journey-outcome-0001.json",
+                  exportedFileName: "D43B.json",
+                  isAssociatedWithFailure: false,
+                  configurationName: "Debug",
+                  deviceName: "Synthetic Mac",
+                  deviceId: "synthetic",
+                },
+              ],
+            },
+          ]),
+          { mode: 0o600 },
+        );
+        await writeFile(
+          join(outputDirectory, "D43B.json"),
+          JSON.stringify({
+            schema: 1,
+            sequence: 1,
+            startup: { stage: "registered" },
+            snapshots: [],
+          }),
+          { mode: 0o600 },
+        );
+      },
+    });
+    expect(command).toEqual([
+      "xcrun",
+      ...attachmentExportArguments(
+        join(root, "HostedShellJourney.xcresult"),
+        outputDirectory,
+      ),
+    ]);
+    expect(command).not.toContain("--filter");
+    expect(result.proof.startup.stage).toBe("registered");
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });

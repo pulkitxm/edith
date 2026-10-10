@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { lstat, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { journeyImageNames } from "./evidence.mjs";
@@ -18,14 +19,14 @@ export function attachmentExportArguments(resultBundle, outputDirectory) {
     "xcresulttool",
     "export",
     "attachments",
+    "--schema-version",
+    "0.4.0",
     "--test-id",
     journeyTestIdentifier,
     "--path",
     resultBundle,
     "--output-path",
     outputDirectory,
-    "--filter",
-    "edith-journey-*",
   ];
 }
 
@@ -36,7 +37,7 @@ export function selectJourneyAttachments(manifest) {
   assert(
     Array.isArray(test.attachments) &&
       test.attachments.length > 0 &&
-      test.attachments.length <= 66,
+      test.attachments.length <= 256,
   );
   const names = new Set();
   const files = new Set();
@@ -47,6 +48,7 @@ export function selectJourneyAttachments(manifest) {
     assert(typeof name === "string" && name.length <= 128);
     assert(typeof file === "string" && /^[A-Za-z0-9._-]{1,255}$/.test(file));
     assert.equal(basename(file), file);
+    if (!name.startsWith("edith-journey-")) continue;
     assert(!names.has(name) && !files.has(file));
     names.add(name);
     files.add(file);
@@ -124,15 +126,43 @@ export async function readJourneyAttachments(
 export async function exportJourneyAttachments({
   resultBundle,
   outputDirectory,
-  run = execFileSync,
+  run = promisify(execFile),
 }) {
-  await mkdir(outputDirectory, { recursive: false, mode: 0o700 });
-  run("xcrun", attachmentExportArguments(resultBundle, outputDirectory), {
-    stdio: "pipe",
-    timeout: 30_000,
-    maxBuffer: 262_144,
-  });
-  return readJourneyAttachments(outputDirectory);
+  try {
+    await mkdir(outputDirectory, { recursive: false, mode: 0o700 });
+  } catch {
+    throw Object.assign(Error("Attachment export directory rejected"), {
+      phase: "attachment-directory",
+      category: "invalid-directory",
+    });
+  }
+  try {
+    await run(
+      "xcrun",
+      attachmentExportArguments(resultBundle, outputDirectory),
+      {
+        timeout: 30_000,
+        maxBuffer: 262_144,
+      },
+    );
+  } catch (error) {
+    throw Object.assign(Error("Attachment export command rejected"), {
+      phase: "attachment-command",
+      category: error.killed
+        ? "timed-out"
+        : error.code === "ENOENT"
+          ? "tool-unavailable"
+          : "command-rejected",
+    });
+  }
+  try {
+    return await readJourneyAttachments(outputDirectory);
+  } catch {
+    throw Object.assign(Error("Attachment manifest rejected"), {
+      phase: "attachment-read",
+      category: "invalid-export",
+    });
+  }
 }
 
 export async function retainJourneyAttachmentProof(attachments, output) {
