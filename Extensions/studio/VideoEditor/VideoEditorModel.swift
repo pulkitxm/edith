@@ -1429,6 +1429,7 @@ final class VideoEditorModel {
         if value.rate != 0 || !preserveProject { playhead = value.playhead }
         isRebuildingPreview = value.preparing
         externalSyncMessage = value.externalSyncMessage
+        permissionSettingsURL = value.permissionSettingsURL
         audioStatus = value.audioStatus; isTranscribing = value.transcribing
         silenceClipID = value.silenceClipID; silentRanges = value.silentRanges
         recentProjects = value.recent.map(\.value)
@@ -1471,6 +1472,19 @@ final class VideoEditorModel {
             exporter.setAudioReport(report, for: url)
         }
         return true
+    }
+
+    func openPermissionSettings() {
+        guard let url = permissionSettingsURL else { return }
+        if let facade {
+            runRemoteFile {
+                let _: [String: String] = try await facade.read(
+                    "studio.ui.media.settings", object: ["kind": "speech"])
+            }
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+        permissionSettingsURL = nil; errorMessage = nil
     }
 
     func runRemoteFile(_ operation: @escaping @MainActor () async throws -> Void) {

@@ -61,10 +61,12 @@ struct StudioUIImageRender: Codable, Sendable {
                 throw ExtensionPeerError.invalidRequest
             }
             let url = try StudioCommands.localPath(path)
+            let size = object["size"] as? Int ?? StudioImageEditorModel.previewSize
+            guard (1...4096).contains(size) else { throw ExtensionPeerError.invalidRequest }
             let image = try await BlockingWork.perform {
                 let source = try StudioImageEditorWork.loadSource(
                     url,
-                    maxPixelSize: StudioImageEditorModel.previewSize
+                    maxPixelSize: size
                 ).get()
                 return try StudioUIImageData(source.image, originalSize: source.originalSize)
             }

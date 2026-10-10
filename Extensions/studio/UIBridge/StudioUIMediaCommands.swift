@@ -10,7 +10,7 @@ import Foundation
         "studio.ui.media.waveform": ["path"], "studio.ui.media.beats": ["path", "settings"],
         "studio.ui.media.aspect": ["path"], "studio.ui.media.duration": ["path"],
         "studio.ui.media.frameSampling": ["project"],
-        "studio.ui.media.scan": ["resource", "type"],
+        "studio.ui.media.scan": ["resource", "type"], "studio.ui.media.settings": ["kind"],
     ]
     static func execute(
         _ operation: String, payload: Data, resources: StudioUIResources,
@@ -93,6 +93,15 @@ import Foundation
                     try await project.validateFrameSampling()
                     return Data("{}".utf8)
                 })
+        case "studio.ui.media.settings":
+            guard object["kind"] as? String == "speech",
+                let url = URL(
+                    string:
+                        "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+                )
+            else { throw ExtensionPeerError.invalidRequest }
+            NSWorkspace.shared.open(url)
+            return Data("{}".utf8)
         case "studio.ui.media.scan":
             let data = try consume(object["resource"], resources: resources)
             guard data.count <= 128 * 1024 * 1024, let type = object["type"] as? String,

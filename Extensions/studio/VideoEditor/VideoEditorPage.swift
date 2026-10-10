@@ -186,12 +186,8 @@ struct VideoEditorPage: View {
                 model.errorMessage = nil
                 model.permissionSettingsURL = nil
             }
-            if let url = model.permissionSettingsURL {
-                Button("Open System Settings") {
-                    NSWorkspace.shared.open(url)
-                    model.permissionSettingsURL = nil
-                    model.errorMessage = nil
-                }
+            if model.permissionSettingsURL != nil {
+                Button("Open System Settings", action: model.openPermissionSettings)
             }
         } message: {
             Text(model.errorMessage ?? "")

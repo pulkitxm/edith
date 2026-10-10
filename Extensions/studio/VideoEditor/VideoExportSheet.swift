@@ -47,6 +47,7 @@ struct VideoExportSheet: View {
     let model: VideoEditorModel
     var exporter = VideoExporter.shared
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.studioFacade) private var facade
     @State private var format = "mp4"
     @State private var quality: VideoExportQuality = .source
     @State private var delivery = VideoDeliverySettings()
@@ -325,7 +326,7 @@ struct VideoExportSheet: View {
                 HStack {
                     Spacer()
                     Button("Show in Finder") {
-                        NSWorkspace.shared.activateFileViewerSelecting([job.destination])
+                        StudioFileActions.reveal([job.destination], facade: facade)
                     }
                     Button("Done") { close() }
                         .buttonStyle(.edith(.primary))

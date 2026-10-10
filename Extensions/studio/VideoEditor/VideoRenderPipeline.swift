@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import Darwin
 import CoreImage
 import ImageIO
 import UniformTypeIdentifiers
@@ -592,23 +593,21 @@ struct VideoRenderPipeline {
         to url: URL, quality: String = "good",
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
+        try Task.checkCancellation()
+        let temporary = Self.exportTemporaryURL(url)
+        defer { try? FileManager.default.removeItem(at: temporary) }
         let preset =
             quality == "medium"
-            ? AVAssetExportPresetMediumQuality
-            : AVAssetExportPresetHighestQuality
-        guard
-            let session = AVAssetExportSession(
-                asset: composition, presetName: preset)
-        else { throw RenderError.exportFailed("Could not create an export session") }
-        session.videoComposition = videoComposition
-        session.audioMix = audioMix
-        session.outputURL = url
-        session.outputFileType = .mp4
-        try? FileManager.default.removeItem(at: url)
+            ? AVAssetExportPresetMediumQuality : AVAssetExportPresetHighestQuality
+        guard let session = AVAssetExportSession(asset: composition, presetName: preset) else {
+            throw RenderError.exportFailed("Could not create an export session")
+        }
+        session.videoComposition = videoComposition; session.audioMix = audioMix
+        session.outputURL = temporary; session.outputFileType = .mp4
         let reporter = Task {
             while !Task.isCancelled {
                 progress(Double(session.progress))
-                try? await Task.sleep(for: .milliseconds(200))
+                do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
             }
         }
         await withTaskCancellationHandler {
@@ -618,12 +617,13 @@ struct VideoRenderPipeline {
         } onCancel: {
             session.cancelExport()
         }
-        reporter.cancel()
+        reporter.cancel(); await reporter.value
+        try Task.checkCancellation()
         guard session.status == .completed else {
-            try? FileManager.default.removeItem(at: url)
             if session.status == .cancelled { throw CancellationError() }
             throw session.error ?? RenderError.exportFailed("MP4 export failed")
         }
+        try Self.publishExport(temporary, to: url)
         progress(1)
     }
 
@@ -631,43 +631,75 @@ struct VideoRenderPipeline {
         to url: URL, fps: Int = 15, maxWidth: Int = 0, loop: Bool = true,
         progress: @escaping @Sendable (Double) -> Void = { _ in }
     ) async throws {
-        let count = max(1, Int(ceil(duration * Double(fps))))
-        guard
-            let destination = CGImageDestinationCreateWithURL(
-                url as CFURL, UTType.gif.identifier as CFString, count, nil)
-        else { throw RenderError.exportFailed("Could not create a GIF") }
-        let generator = AVAssetImageGenerator(asset: composition)
-        generator.videoComposition = videoComposition
-        generator.appliesPreferredTrackTransform = true
-        if maxWidth > 0, canvas.width > CGFloat(maxWidth) {
-            let factor = CGFloat(maxWidth) / canvas.width
-            generator.maximumSize = CGSize(
-                width: CGFloat(maxWidth), height: max(1, canvas.height * factor))
+        guard duration.isFinite, duration > 0, duration <= 21_600, (1...120).contains(fps),
+            maxWidth >= 0
+        else {
+            throw RenderError.exportFailed(
+                "GIF export settings are outside their supported ranges.")
         }
-        do {
-            for index in 0..<count {
-                try Task.checkCancellation()
-                let time = CMTime(seconds: Double(index) / Double(fps), preferredTimescale: 600)
-                let image = try generator.copyCGImage(at: time, actualTime: nil)
-                let properties: [CFString: Any] = [
-                    kCGImagePropertyGIFDictionary: [
-                        kCGImagePropertyGIFDelayTime: 1.0 / Double(fps)
-                    ]
-                ]
-                CGImageDestinationAddImage(destination, image, properties as CFDictionary)
-                progress(Double(index + 1) / Double(count))
+        try Task.checkCancellation()
+        let worker = Task.detached(priority: .userInitiated) {
+            let temporary = Self.exportTemporaryURL(url)
+            defer { try? FileManager.default.removeItem(at: temporary) }
+            let count = max(1, Int(ceil(duration * Double(fps))))
+            guard
+                let destination = CGImageDestinationCreateWithURL(
+                    temporary as CFURL, UTType.gif.identifier as CFString, count, nil)
+            else { throw RenderError.exportFailed("Could not create a GIF") }
+            let generator = AVAssetImageGenerator(asset: composition)
+            generator.videoComposition = videoComposition;
+            generator.appliesPreferredTrackTransform = true
+            generator.requestedTimeToleranceBefore = .zero;
+            generator.requestedTimeToleranceAfter = .zero
+            if maxWidth > 0, canvas.width > CGFloat(maxWidth) {
+                generator.maximumSize = CGSize(
+                    width: CGFloat(maxWidth),
+                    height: max(1, canvas.height * CGFloat(maxWidth) / canvas.width))
             }
             CGImageDestinationSetProperties(
                 destination,
-                [
-                    kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: loop ? 0 : 1]
-                ] as CFDictionary)
+                [kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: loop ? 0 : 1]]
+                    as CFDictionary)
+            try await withTaskCancellationHandler {
+                for index in 0..<count {
+                    try Task.checkCancellation()
+                    let frame = try await generator.image(
+                        at: CMTime(value: Int64(index), timescale: Int32(fps)))
+                    try Task.checkCancellation()
+                    let properties: [CFString: Any] = [
+                        kCGImagePropertyGIFDictionary: [
+                            kCGImagePropertyGIFDelayTime: 1.0 / Double(fps)
+                        ]
+                    ]
+                    CGImageDestinationAddImage(destination, frame.image, properties as CFDictionary)
+                    progress(Double(index + 1) / Double(count))
+                }
+            } onCancel: {
+                generator.cancelAllCGImageGeneration()
+            }
+            try Task.checkCancellation()
             guard CGImageDestinationFinalize(destination) else {
                 throw RenderError.exportFailed("Could not finish GIF export")
             }
-        } catch {
-            try? FileManager.default.removeItem(at: url)
-            throw error
+            try Task.checkCancellation()
+            try Self.publishExport(temporary, to: url)
+        }
+        try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    private static func exportTemporaryURL(_ destination: URL) -> URL {
+        destination.deletingLastPathComponent().appendingPathComponent(
+            ".studio-video-\(UUID().uuidString).\(destination.pathExtension)")
+    }
+
+    private static func publishExport(_ temporary: URL, to destination: URL) throws {
+        try Task.checkCancellation()
+        guard rename(temporary.path, destination.path) == 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
         }
     }
 
