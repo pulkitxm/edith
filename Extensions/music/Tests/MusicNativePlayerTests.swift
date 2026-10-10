@@ -28,8 +28,10 @@ extension MusicExtensionTests {
                     #include <string.h>
                     typedef void (*callback_t)(const unsigned char *, size_t, void *);
                     typedef struct { callback_t callback; void *context; } player_t;
-                    void *edith_music_player_start(const char *service, const char *name, int mode,
+                    void *edith_music_player_start(const char *service, size_t service_size,
+                        const char *name, size_t name_size, int mode,
                         callback_t callback, void *context) {
+                        if (service_size != strlen(service) || name_size != strlen(name)) return NULL;
                         player_t *player = malloc(sizeof(player_t));
                         player->callback = callback; player->context = context;
                         const char *event = "{\\"event\\":\\"connected\\",\\"account\\":\\"mock-listener\\"}";
@@ -46,7 +48,7 @@ extension MusicExtensionTests {
                     """)
             let probe = Probe()
             let player = try MusicNativePlayer(
-                libraryURL: library, service: "synthetic.music", name: "Mock Player",
+                libraryURL: library, service: "synthetic.音楽", name: "Café",
                 resume: true, receive: { probe.append($0) }, onExit: { probe.exited() })
             #expect(probe.events.count == 1)
             #expect(String(decoding: probe.events[0], as: UTF8.self).hasSuffix("\n"))
@@ -65,6 +67,43 @@ extension MusicExtensionTests {
                 resume: true, receive: { probe.append($0) }, onExit: { probe.exited() })
             restarted.stop()
             #expect(probe.events.count == 3)
+        }
+
+        @Test func rejectsEmptyOversizedAndEmbeddedNullBridgeIdentityBeforeLoading() async throws {
+            let root = try directory()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let library = try await fixture(
+                root,
+                source: """
+                    #include <stdbool.h>
+                    #include <stdlib.h>
+                    typedef void (*callback_t)(const unsigned char *, size_t, void *);
+                    void *edith_music_player_start(const char *service, size_t service_size,
+                        const char *name, size_t name_size, int mode, callback_t callback, void *context) {
+                        return malloc(1);
+                    }
+                    bool edith_music_player_send(void *handle, const unsigned char *bytes, size_t size) { return true; }
+                    void edith_music_player_stop(void *handle) { free(handle); }
+                    bool edith_music_player_forget(const char *service, size_t service_size) { return true; }
+                    """)
+            for service in ["", String(repeating: "x", count: 257), "synthetic\0other"] {
+                #expect(throws: CocoaError.self) {
+                    _ = try MusicNativePlayer(
+                        libraryURL: library,
+                        service: service, name: "Mock", resume: true, receive: { _ in }, onExit: {})
+                }
+                #expect(
+                    !MusicNativePlayer.forget(
+                        libraryURL: library,
+                        service: service))
+            }
+            for name in ["", String(repeating: "x", count: 129), "synthetic\0other"] {
+                #expect(throws: CocoaError.self) {
+                    _ = try MusicNativePlayer(
+                        libraryURL: library, service: "synthetic.music", name: name,
+                        resume: true, receive: { _ in }, onExit: {})
+                }
+            }
         }
 
         private func directory() throws -> URL {
