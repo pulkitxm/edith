@@ -83,6 +83,8 @@ struct HostWorkflowOnboardingView: View {
                             maxWidth: .infinity, minHeight: UIScale.pt(72), alignment: .topLeading
                         ).padding(UIScale.pt(12))
                     }.buttonStyle(.edith(.secondary)).disabled(model.busy)
+                        .accessibilityLabel(workflow.title)
+                        .accessibilityHint(workflow.detail)
                 }
             }
             HStack {
