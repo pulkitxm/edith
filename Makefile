@@ -178,6 +178,11 @@ ci-extension-audio-mixer:
 	swift format lint --strict --recursive Extensions/audioMixer
 	swift test --package-path Extensions/audioMixer --build-system native --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
 
+.PHONY: ci-extension-system
+ci-extension-system:
+	swift format lint --strict --parallel --recursive Extensions/system
+	swift test --package-path Extensions/system --build-system native --no-parallel --jobs $(EXTENSION_SWIFT_JOBS) -Xswiftc -plugin-path -Xswiftc "$(DEVELOPER_DIR)/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+
 .PHONY: ci-extension-camera
 ci-extension-camera:
 	swift test --package-path Extensions/virtualCamera/Privileged --build-system native --jobs $(EXTENSION_SWIFT_JOBS) --no-parallel

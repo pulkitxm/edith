@@ -428,7 +428,10 @@
         "Extensions/system/ViewModels/RunningAppsModel.swift",
         "Extensions/system/ViewModels/SystemPresentationState.swift",
         "Extensions/system/Views/SystemPage.swift",
-        "Extensions/system/Surface.swift"
+        "Extensions/system/Surface.swift",
+        "Extensions/system/ViewModels/KeyboardCleaning.swift",
+        "Extensions/system/Services/KeyboardCleaningHardware.swift",
+        "Extensions/system/Views/CleaningOverlay.swift"
       ]
     },
     "inputs": [

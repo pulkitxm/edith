@@ -219,7 +219,7 @@ let package = Package(
         .target(
             name: "SystemExtension",
             dependencies: [.product(name: "EdithExtensionUI", package: "ExtensionSupport")],
-            path: "system", exclude: ["Tests", "Runtime.swift"],
+            path: "system", exclude: ["Tests", "Runtime.swift", "Package.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(
             name: "SystemExtensionTests", dependencies: ["SystemExtension"],
