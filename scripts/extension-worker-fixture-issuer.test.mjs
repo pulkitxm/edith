@@ -35,8 +35,8 @@ test("all39 declared workers are admitted before any fixture build", () => {
   );
 });
 
-test("all eleven strict inert owners and conditional owners remain selectable", () => {
-  assert.equal(inertFixtureWorkers.size, 11);
+test("all thirteen strict inert owners and conditional owners remain selectable", () => {
+  assert.equal(inertFixtureWorkers.size, 13);
   for (const worker of workers)
     assert.deepEqual(validateWorkerFixtureSelection(definitions, [worker.id]), [
       worker,
@@ -59,6 +59,17 @@ test("launcher and native harness have the same fail-closed boundary", async () 
     new Set([...inert.matchAll(/"([^"]+)"/g)].map((match) => match[1])),
     inertFixtureWorkers,
   );
+  const admission = await readFile(
+    "Extensions/fixtureSupport/WorkerFixtureAdmission.swift",
+    "utf8",
+  );
+  const roleOwners = ["helperIDs", "appIDs"].flatMap((name) => {
+    const owners = admission.match(
+      new RegExp(String.raw`let ${name}: Set<String> = \[([\s\S]*?)\]`),
+    )[1];
+    return [...owners.matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+  });
+  assert.deepEqual(new Set(roleOwners), inertFixtureWorkers);
   const supported = source.match(
     /static let supportedIDs[\s\S]*?= \[([\s\S]*?)\]/,
   )[1];
@@ -82,13 +93,20 @@ test("inert proof never promotes unavailable features or metadata to media cover
     inertFeatureDeclineValidated: true,
     studioDataValidated: false,
     studioMetadataValidated: false,
+    notchMetadataValidated: false,
   };
   const studio = {
     surfaceDataValidated: true,
     inertFeatureDeclineValidated: false,
     studioDataValidated: false,
     studioMetadataValidated: true,
+    notchMetadataValidated: false,
   };
+  const notch = { ...music, notchMetadataValidated: true };
+  validateWorkerFixtureProof(notch, {
+    id: "notchShelf",
+    surfaceContractVersion: 1,
+  });
   validateWorkerFixtureProof(music, { id: "music", surfaceContractVersion: 1 });
   validateWorkerFixtureProof(studio, {
     id: "studio",
@@ -99,6 +117,9 @@ test("inert proof never promotes unavailable features or metadata to media cover
     ["music", music, "inertFeatureDeclineValidated"],
     ["studio", studio, "studioDataValidated"],
     ["studio", studio, "studioMetadataValidated"],
+    ["notchShelf", notch, "notchMetadataValidated"],
+    ["notchShelf", notch, "surfaceDataValidated"],
+    ["notchShelf", notch, "inertFeatureDeclineValidated"],
   ])
     assert.throws(() =>
       validateWorkerFixtureProof(
