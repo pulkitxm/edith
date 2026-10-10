@@ -96,6 +96,7 @@ struct DocsBrowserTests {
     }
 
     @Test func documentViewRetainsCompleteBrowserAndOutlineUI() throws {
+        _ = NSApplication.shared
         let browser = DocsBrowser(library: Self.library)
         browser.open(.init(path: "herdr/ls.md"))
         let controller = NSHostingController(
