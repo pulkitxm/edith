@@ -161,6 +161,29 @@ final class ExtensionRuntime: NSObject {
     }
 }
 
+enum CameraCarrierLaunchEnvironment {
+    static func make(
+        inherited: [String: String], fixture: Bool, selectedSource: URL, carrier: URL
+    ) throws -> [String: String] {
+        var environment = inherited
+        for key in environment.keys where key.hasPrefix("DYLD_") || key == "LD_PRELOAD" {
+            environment.removeValue(forKey: key)
+        }
+        if fixture {
+            guard selectedSource.isFileURL, carrier.isFileURL, carrier.path == selectedSource.path,
+                selectedSource.path == selectedSource.standardizedFileURL.path,
+                selectedSource.path == selectedSource.resolvingSymlinksInPath().path,
+                selectedSource.lastPathComponent == "CameraCarrier.app",
+                selectedSource.deletingLastPathComponent().path != "/",
+                inherited["EDITH_EXTENSION_FIXTURE_HOME"]?.hasPrefix("/") == true
+            else { throw ExtensionPeerError.invalidRequest }
+            environment["EDITH_EXTENSION_FIXTURE_HOME"] =
+                selectedSource.deletingLastPathComponent().path
+        }
+        return environment
+    }
+}
+
 @MainActor final class CameraAppWorker {
     let engine: VirtualCameraEngine
     let model: VirtualCameraPageModel
@@ -223,11 +246,9 @@ final class ExtensionRuntime: NSObject {
                 ]
                 process.standardInput = Pipe(); process.standardOutput = Pipe()
                 process.standardError = fixture ? FileHandle.standardError : FileHandle.nullDevice
-                var environment = ProcessInfo.processInfo.environment
-                for key in environment.keys where key.hasPrefix("DYLD_") || key == "LD_PRELOAD" {
-                    environment.removeValue(forKey: key)
-                }
-                process.environment = environment
+                process.environment = try CameraCarrierLaunchEnvironment.make(
+                    inherited: ProcessInfo.processInfo.environment,
+                    fixture: fixture, selectedSource: source, carrier: carrier)
                 try process.run()
                 return process
             })
