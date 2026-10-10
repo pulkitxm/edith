@@ -103,17 +103,20 @@ struct CalendarLifecycleFixture {
 
 extension HostLifecycleHarness {
     @MainActor static func verifyCalendar(_ endpoint: ExtensionPeerEndpoint) async throws {
-        let request = try ExtensionCLIRequest(
-            arguments: ["ls", "--days", "7", "--json"], workingDirectory: "/tmp")
-        let reply = try JSONDecoder().decode(
-            ExtensionCLIReply.self,
-            from: await endpoint.invoke("calendar.cli", payload: JSONEncoder().encode(request)))
-        guard reply.exitCode == 0, reply.stderr.isEmpty,
-            let events = try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8))
-                as? [[String: Any]],
-            events.contains(where: { $0["id"] as? String == "synthetic-calendar-meeting" }),
-            events.contains(where: { $0["id"] as? String == "synthetic-calendar-next-page" })
-        else { throw HostWorkerError.invalidResponse }
+        for (days, includesLaterEvent) in [(7, false), (30, true)] {
+            let request = try ExtensionCLIRequest(
+                arguments: ["ls", "--days", String(days), "--json"], workingDirectory: "/tmp")
+            let reply = try JSONDecoder().decode(
+                ExtensionCLIReply.self,
+                from: await endpoint.invoke("calendar.cli", payload: JSONEncoder().encode(request)))
+            guard reply.exitCode == 0, reply.stderr.isEmpty,
+                let events = try JSONSerialization.jsonObject(with: Data(reply.stdout.utf8))
+                    as? [[String: Any]],
+                events.contains(where: { $0["id"] as? String == "synthetic-calendar-meeting" }),
+                events.contains(where: { $0["id"] as? String == "synthetic-calendar-next-page" })
+                    == includesLaterEvent
+            else { throw HostWorkerError.invalidResponse }
+        }
         let catalog =
             try JSONSerialization.jsonObject(
                 with: await endpoint.invoke("calendar.cli.catalog", payload: Data("{}".utf8)))
