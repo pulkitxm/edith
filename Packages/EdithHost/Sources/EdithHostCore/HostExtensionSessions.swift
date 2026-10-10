@@ -131,6 +131,10 @@ public final class HostExtensionSessions {
     }
 
     public func disable(id: String, remember: Bool = true) async throws {
+        try await stop(id: id, remember: remember, reason: .disable)
+    }
+
+    private func stop(id: String, remember: Bool, reason: HostWorkerStopReason) async throws {
         guard states[id] != .starting, states[id] != .stopping else {
             throw HostWorkerError.rejected
         }
@@ -144,7 +148,7 @@ public final class HostExtensionSessions {
                 workers[id] = worker
                 try await worker.start(recoveryOnly: true)
             }
-            if let worker = workers[id] { try await worker.stop() }
+            if let worker = workers[id] { try await worker.stop(reason: reason) }
         } catch {
             states[id] =
                 workers[id]?.ready == true && workers[id]?.configuration.recoveryOnly != true
@@ -179,18 +183,21 @@ public final class HostExtensionSessions {
             versions[package.id] != package.version
         else { return }
         let previous = packages[package.id]
-        try await disable(id: package.id, remember: false)
+        try await stop(id: package.id, remember: false, reason: .update)
         do { try await enable(package) } catch {
             if let previous { try? await enable(previous) }
             throw error
         }
     }
 
-    @discardableResult public func shutdown() async -> Bool {
+    @discardableResult public func shutdown(reason: HostWorkerStopReason = .shutdown) async -> Bool
+    {
         for id in Set(workers.keys).union(HostRemoteSession.extensionIDs).union(
             HostRemoteCarrierCheckIn.extensionIDs)
         {
-            do { try await disable(id: id, remember: false) } catch { failures.insert(id) }
+            do { try await stop(id: id, remember: false, reason: reason) } catch {
+                failures.insert(id)
+            }
         }
         return workers.isEmpty && HostRemoteSession.extensionIDs.isEmpty
             && HostRemoteCarrierCheckIn.extensionIDs.isEmpty

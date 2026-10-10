@@ -124,7 +124,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
     @Published private(set) var remaining: TimeInterval?
     @Published private(set) var batterySuspended = false
 
-    private let privilegedClient = LidAwakePrivilegedClient()
+    private let privilegedClient: LidAwakePrivilegedClient
     private let batteryMonitor = LidAwakeBatteryMonitor()
     private let lidMonitor = LidAwakeLidMonitor()
     private let displayWakeKeeper: LidAwakeDisplayWakeKeeper
@@ -168,11 +168,13 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
         startServices: Bool, recoveryOnly: Bool = false,
         systemStateReader: (@Sendable () async throws -> Bool)? = nil,
         initialError: String? = nil, automaticStopRetries: Int = 1,
+        privilegedClient: LidAwakePrivilegedClient? = nil,
         announceChange: @escaping @MainActor @Sendable () -> Void = {
             NotificationCenter.default.post(
                 name: Notification.Name(LidAwakeNotifications.changed), object: nil)
         }
     ) {
+        self.privilegedClient = privilegedClient ?? LidAwakePrivilegedClient()
         self.defaults = defaults
         displayWakeKeeper = .init(enabled: startServices)
         applyOverride = applySystemState
@@ -223,7 +225,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
 
     func prepareDisable() async throws {
         await mutationSequencer.drain()
-        guard !stopped else { return }
+        guard !stopped else { try await privilegedClient.release(); return }
         var needsRestoration =
             active || batterySuspended || intent || LidAwakeState.automaticStopPending(defaults)
         if let systemStateReader {
@@ -237,7 +239,7 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
             if let applyOverride {
                 outcome = await applyOverride(false)
             } else {
-                do { try await privilegedClient.release(); outcome = .applied } catch {
+                do { try await privilegedClient.restoreOwnedState(); outcome = .applied } catch {
                     outcome = .failed(error.localizedDescription)
                 }
             }
@@ -264,6 +266,25 @@ final class LidAwakeEngine: ObservableObject, FeatureModule {
 
     func shutdown() {
         _ = stopEngine(force: false)
+    }
+
+    func prepareForApplicationQuit(_ context: LidAwakeApplicationQuitContext) async throws {
+        try context.validate()
+        await mutationSequencer.drain()
+        try context.validate()
+        let retain =
+            !LidAwakeState.restoresOnQuit(defaults)
+            && (active || batterySuspended || intent)
+        if retain {
+            if privilegedClient.hasOwnedLease {
+                do { try await privilegedClient.relinquishForApplicationQuit(context) } catch {
+                    try await prepareDisable()
+                }
+            }
+        } else {
+            try await prepareDisable()
+        }
+        await shutdownForTermination()
     }
 
     func shutdownForTermination() async {

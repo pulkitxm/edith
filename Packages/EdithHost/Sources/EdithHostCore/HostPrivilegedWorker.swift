@@ -1,10 +1,11 @@
 import Darwin
+import EdithExtensionSupport
 import ExtensionMarketplace
 import Foundation
 
 @MainActor public final class HostPrivilegedWorker {
     private let object: NSObject
-    private let image: UnsafeMutableRawPointer
+    private let image: UnsafeMutableRawPointer?
     private var frames = HostWorkerFrames()
     private var watcher: DispatchSourceProcess?
     private var ending = false
@@ -43,6 +44,18 @@ import Foundation
         guard object.responds(to: NSSelectorFromString("invoke:completion:")),
             object.responds(to: NSSelectorFromString("prepareDisableWithCompletion:"))
         else { throw MarketplaceError.invalidBundle }
+    }
+
+    init(object: NSObject) {
+        self.object = object
+        image = nil
+    }
+
+    func prepareForStop(_ stop: HostPrivilegedStop) async throws {
+        let retain = try stop.retainsState()
+        if !retain { try await prepare() }
+        guard !ending else { throw HostWorkerError.rejected }
+        if retain { _ = try stop.retainsState() }
     }
 
     public func run() {
@@ -86,7 +99,9 @@ import Foundation
                         case "prepareDisable":
                             try await prepare(); try send(request.token, data: Data())
                         case "stop":
-                            try await prepare(); try send(request.token, data: Data()); exit(0)
+                            guard let stop = request.stop else { throw HostWorkerError.rejected }
+                            try await prepareForStop(stop)
+                            try send(request.token, data: Data()); exit(0)
                         default: throw HostWorkerError.rejected
                         }
                     } catch {

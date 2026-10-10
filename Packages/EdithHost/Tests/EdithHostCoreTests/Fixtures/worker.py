@@ -73,6 +73,11 @@ for line in sys.stdin:
                 continue
     if operation == "prepareDisable" and mode == "navigation-disable":
         navigate()
+    if mode == "quit-policy" and operation in ["prepareDisable", "prepareApplicationQuit", "stop"]:
+        with open(sys.argv[2], "a") as stream:
+            stream.write(json.dumps(request) + "\n")
+    if operation == "prepareApplicationQuit" and mode == "reject-quit":
+        response["ok"] = False
     if operation == "prepareDisable":
         prepare_count += 1
         if mode == "reject-disable-always" or (mode == "reject-disable-once" and prepare_count == 1):

@@ -36,20 +36,31 @@ public struct HostWorkerConfiguration: Codable, Sendable {
     }
 }
 
+public enum HostWorkerStopReason: String, Codable, CaseIterable, Sendable {
+    case applicationQuit
+    case disable
+    case update
+    case removal
+    case shutdown
+    case ownerLost
+}
+
 public struct HostWorkerRequest: Codable, Sendable {
     public let token: UUID
     public let operation: String
     public let configuration: HostWorkerConfiguration?
     public let navigation: HostWorkerNavigationReply?
+    public let stopReason: HostWorkerStopReason?
 
     public init(
         token: UUID = UUID(), operation: String, configuration: HostWorkerConfiguration? = nil,
-        navigation: HostWorkerNavigationReply? = nil
+        navigation: HostWorkerNavigationReply? = nil, stopReason: HostWorkerStopReason? = nil
     ) {
         self.token = token
         self.operation = operation
         self.configuration = configuration
         self.navigation = navigation
+        self.stopReason = stopReason
     }
 }
 

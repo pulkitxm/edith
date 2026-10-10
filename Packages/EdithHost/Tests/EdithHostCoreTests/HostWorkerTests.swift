@@ -12,8 +12,12 @@ import Testing
             let identity = try HostIdentity(
                 identifier: identifier, supportDirectory: URL(fileURLWithPath: "/synthetic/support")
             )
-            let configuration = HostWorkerConfiguration(
-                identity: identity, extensionID: "sample", version: "1.0.0")
+            let bytes = try JSONSerialization.data(withJSONObject: [
+                "identifier": identifier, "supportDirectory": "file:///synthetic/support",
+                "extensionID": "sample", "version": "1.0.0", "theme": "accent",
+                "appearance": "system", "zoom": 1.0, "recoveryOnly": false,
+            ])
+            let configuration = try JSONDecoder().decode(HostWorkerConfiguration.self, from: bytes)
             #expect(try configuration.identity().root == identity.root)
         }
     }
@@ -264,6 +268,45 @@ import Testing
         try await Task.sleep(for: .milliseconds(180))
         #expect(!applied)
         try await worker.stop()
+    }
+
+    @Test(arguments: HostWorkerStopReason.allCases)
+    func closedStopReasonSelectsQuitOnlyForOriginalLidAwake(reason: HostWorkerStopReason)
+        async throws
+    {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let identity = try HostIdentity(
+            identifier: "com.pulkit.edith.tests.quit-" + UUID().uuidString,
+            supportDirectory: URL(fileURLWithPath: "/synthetic/support"))
+        let script = try #require(
+            Bundle.module.url(forResource: "worker", withExtension: "py", subdirectory: "Fixtures"))
+        let worker = HostWorker(
+            configuration: .init(identity: identity, extensionID: "lidAwake", version: "1.0.0"),
+            executable: URL(fileURLWithPath: "/usr/bin/python3"),
+            arguments: [script.path, "quit-policy", file.path], requestTimeout: .seconds(2))
+        try await worker.start()
+        let pid = try #require(worker.processIdentifier)
+        try await worker.stop(reason: reason)
+        let requests = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map {
+            try JSONDecoder().decode(HostWorkerRequest.self, from: Data($0.utf8))
+        }
+        #expect(
+            requests.map(\.operation) == [
+                reason == .applicationQuit ? "prepareApplicationQuit" : "prepareDisable", "stop",
+            ])
+        #expect(requests.last?.stopReason == reason)
+        #expect(kill(pid, 0) == -1)
+    }
+
+    @Test func unknownStopReasonIsRejectedByDecoding() {
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder().decode(
+                HostWorkerRequest.self,
+                from: Data(
+                    "{\"token\":\"\(UUID().uuidString)\",\"operation\":\"stop\",\"stopReason\":\"skipCleanup\"}"
+                        .utf8))
+        }
     }
 
     private func fixture(_ mode: String, timeout: Duration = .seconds(2)) throws -> HostWorker {

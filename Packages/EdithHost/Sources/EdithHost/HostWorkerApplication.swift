@@ -19,6 +19,7 @@ final class HostWorkerApplication {
     private var resourceObservers: [NSObjectProtocol] = []
     private var stopping = false
     private var preparingDisable = false
+    private var preparedApplicationQuit = false
     private var peerServer: ExtensionPeerServer?
     private var shutdownTask: Task<Void, Never>?
 
@@ -110,8 +111,12 @@ final class HostWorkerApplication {
                     prepareDisable(request)
                     continue
                 }
+                if request.operation == "prepareApplicationQuit" {
+                    prepareApplicationQuit(request)
+                    continue
+                }
                 if request.operation == "stop" {
-                    shutdown(token: request.token)
+                    shutdown(token: request.token, reason: request.stopReason ?? .shutdown)
                     return
                 }
                 let response: HostWorkerResponse
@@ -156,6 +161,52 @@ final class HostWorkerApplication {
                     : text
                 try? control.send(
                     HostWorkerResponse(token: request.token, ok: false, message: message))
+            }
+        }
+    }
+
+    private func prepareApplicationQuit(_ request: HostWorkerRequest) {
+        guard !preparingDisable, !preparedApplicationQuit,
+            request.stopReason == .applicationQuit, let configuration,
+            configuration.extensionID == "lidAwake", !configuration.recoveryOnly,
+            let engine = runtimes.first(where: { $0.role == .app })
+        else {
+            try? control.send(HostWorkerResponse(token: request.token, ok: false))
+            return
+        }
+        preparingDisable = true
+        navigation?.cancelPending()
+        peerServer?.shutdown()
+        peerServer = nil
+        Task { [self] in
+            defer { preparingDisable = false }
+            do {
+                guard let host = ExtensionProcessIdentity.read(getppid()) else {
+                    throw HostWorkerError.rejected
+                }
+                let response = try engine.response(
+                    id: configuration.extensionID, operation: "prepareApplicationQuit",
+                    context: [
+                        "reason": HostWorkerStopReason.applicationQuit.rawValue,
+                        "hostPID": host.pid, "hostGeneration": host.generation,
+                    ])
+                guard response["ok"] as? Bool == true else { throw HostWorkerError.rejected }
+                for runtime in runtimes where runtime !== engine {
+                    try await runtime.prepareDisableAll()
+                }
+                try await engine.prepareToStopAll()
+                guard !stopping, host.isAlive else { throw HostWorkerError.rejected }
+                preparedApplicationQuit = true
+                try control.send(
+                    HostWorkerResponse(
+                        token: request.token, ok: true, version: configuration.version))
+            } catch {
+                try? control.send(
+                    HostWorkerResponse(
+                        token: request.token, ok: false,
+                        message:
+                            "The extension could not finish its quit policy. Restore settings and try again."
+                    ))
             }
         }
     }
@@ -318,7 +369,7 @@ final class HostWorkerApplication {
         try await navigation.request()
     }
 
-    private func shutdown(token: UUID? = nil) {
+    private func shutdown(token: UUID? = nil, reason: HostWorkerStopReason = .ownerLost) {
         guard !stopping else { return }
         stopping = true
         navigation?.invalidate()
@@ -332,6 +383,9 @@ final class HostWorkerApplication {
         resourceObservers.forEach(NotificationCenter.default.removeObserver)
         resourceObservers.removeAll()
         shutdownTask = Task { [self] in
+            if reason != .applicationQuit || !preparedApplicationQuit {
+                for runtime in runtimes { try? await runtime.prepareDisableAll() }
+            }
             for runtime in runtimes { try? await runtime.prepareToStopAll() }
             for runtime in runtimes { try? runtime.stopAll() }
             if let token {
