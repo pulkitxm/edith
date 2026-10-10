@@ -130,11 +130,12 @@ public actor CodeStatsEngine {
         let identity = settings.identity
         let logins = Set(
             ([profile?.login].compactMap { $0 } + identity.substrings).map { $0.lowercased() })
+        let repositoryForks = forks
         let plans = await CodeStatsTaskRunner.map(repositories, limit: analysisLimit) {
             _, repository in
             await self.plan(
                 repository, root: root, cache: caches[repository.fullName], identity: identity,
-                logins: logins, forks: forks)
+                logins: logins, forks: repositoryForks)
         }
         let analyzed = await extract(plans, root: root)
         if let interrupted = interruption() {
