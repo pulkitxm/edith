@@ -24,7 +24,7 @@ struct NotchHomeTab: View {
                     inspect: { controller.openCustomization(tileID: $0) },
                     reorder: reorder, configure: configure, add: add,
                     measuredHeight: controller.measureHomeContent
-                ) { tile in NotchSurfaceCard(controller: controller, tile: tile) }
+                ) { tile in tileContent(tile) }
             } else {
                 ScrollView {
                     SurfaceCanvas(
@@ -32,11 +32,46 @@ struct NotchHomeTab: View {
                         selected: selected, select: { selected = $0 },
                         place: { widget, _ in add(widget) },
                         inspect: { controller.openCustomization(tileID: $0) }, reorder: reorder,
-                        configure: configure
-                    ) { tile in NotchSurfaceCard(controller: controller, tile: tile) }
+                        configure: { tile in controller.layouts.update(.notch) { $0.position(tile) }
+                        },
+                        placeAt: { widget, column, row in
+                            controller.layouts.update(.notch) {
+                                selected = $0.add(widget, column: column, row: row)
+                            }
+                        }
+                    ) { tile in tileContent(tile) }
                 }
             }
         }.padding(.horizontal, 12).padding(.bottom, 12)
+    }
+
+    private func tileContent(_ tile: SurfaceTile) -> some View {
+        NotchSurfaceCard(controller: controller, tile: tile)
+            .contextMenu {
+                Button("Move to first") {
+                    controller.layouts.update(.notch) {
+                        $0.move(tile.id, before: $0.visible.first?.id)
+                    }
+                }.disabled(tile.locked)
+                Button(tile.locked ? "Unlock layout" : "Lock layout") {
+                    controller.layouts.update(.notch) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        else { return }
+                        layout.tiles[index].locked.toggle()
+                    }
+                }
+                Button("Duplicate") {
+                    controller.layouts.update(.notch) { selected = $0.duplicate(tile.id) }
+                }
+                Button("Hide") {
+                    controller.layouts.update(.notch) { layout in
+                        guard let index = layout.tiles.firstIndex(where: { $0.id == tile.id })
+                        else { return }
+                        layout.tiles[index].hidden = true
+                    }
+                }
+                Button("Open widget editor") { controller.openCustomization(tileID: tile.id) }
+            }
     }
 
     private func reorder(_ id: String, _ before: String?) {
@@ -52,7 +87,7 @@ struct NotchHomeTab: View {
     }
 
     private func add(_ widget: SurfaceWidget) {
-        controller.layouts.update(.notch) { _ = $0.add(widget) }
+        controller.layouts.update(.notch) { selected = $0.add(widget) }
     }
 }
 

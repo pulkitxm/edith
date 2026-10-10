@@ -52,6 +52,7 @@ import Testing
         for (name, width, zoom) in [
             ("compact", 540.0, 1.0), ("regular", 960.0, 1.0), ("zoomed", 960.0, 1.5),
         ] {
+            UIScale.apply(zoom)
             let host = NSHostingView(
                 rootView: NotchSettingsPage(controller: fixture.controller)
                     .environment(\.compactLayout, width < 720)
