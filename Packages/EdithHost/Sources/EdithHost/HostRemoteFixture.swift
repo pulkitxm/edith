@@ -15,31 +15,36 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
     private let marketplace: HostMarketplace
     private let manager: HostRemoteSessionManager
     private let package: ExtensionPackage
+    private let registrationOnly: Bool
+    private let retainedPackages: [ExtensionPackage]
     private var window: NSWindow!
     private var root: NSViewController!
     private var browser: EXAppExtensionBrowserViewController?
     private var remote: EXHostViewController?
     private var handle: HostRemoteSceneHandle?
+    private var activation: Task<Void, Never>?
     private var timer: Timer?
     private var busy = false
     private var phase = "starting"
     private var failure: String?
     private var previousUI: HostRemoteProcessIdentity?
 
-    static func run(directory: URL) throws {
+    static func run(directory: URL, registrationOnly: Bool = false) throws {
         guard Bundle.main.bundleIdentifier?.hasPrefix("com.pulkit.edith.tests.remote-") == true
         else {
             throw HostWorkerError.rejected
         }
-        let fixture = try HostRemoteFixture(directory: directory)
+        let fixture = try HostRemoteFixture(
+            directory: directory, registrationOnly: registrationOnly)
         let application = NSApplication.shared
-        application.setActivationPolicy(.regular)
+        application.setActivationPolicy(registrationOnly ? .prohibited : .regular)
         application.delegate = fixture
         withExtendedLifetime(fixture) { application.run() }
     }
 
-    private init(directory: URL) throws {
+    private init(directory: URL, registrationOnly: Bool) throws {
         self.directory = directory
+        self.registrationOnly = registrationOnly
         identity = try HostIdentity(
             identifier: Bundle.main.bundleIdentifier!,
             supportDirectory: directory.appendingPathComponent("support"))
@@ -50,7 +55,21 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
             throw HostWorkerError.rejected
         }
         let store = ExtensionPackageStore(root: identity.root.appendingPathComponent("Extensions"))
-        try store.commit([package])
+        let retainedURL = directory.appendingPathComponent("retained-packages.json")
+        let retained =
+            FileManager.default.fileExists(atPath: retainedURL.path)
+            ? try JSONDecoder().decode([ExtensionPackage].self, from: Data(contentsOf: retainedURL))
+            : []
+        let selectedPackage = package
+        guard retained.count < 8,
+            retained.allSatisfy({
+                $0.id == selectedPackage.id && $0.hostABI == selectedPackage.hostABI
+                    && $0.version != selectedPackage.version
+            })
+        else { throw HostWorkerError.rejected }
+        retainedPackages = retained
+        try store.commit(retained + [package])
+        try store.select(package)
         let defaults = UserDefaults(suiteName: identity.defaultsSuite)!
         defaults.removePersistentDomain(forName: identity.defaultsSuite)
         let executable = Bundle.main.executableURL!
@@ -85,6 +104,10 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if registrationOnly {
+            Task { await verifyRegistration() }
+            return
+        }
         window = NSWindow(
             contentRect: NSRect(x: 100, y: 100, width: 900, height: 650),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -109,6 +132,184 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
         }
     }
 
+    private func verifyRegistration() async {
+        root = NSViewController()
+        root.view = NSView(frame: NSRect(x: 0, y: 0, width: 900, height: 650))
+        window = NSWindow(contentViewController: root)
+        window.setFrame(NSRect(x: -10_000, y: -10_000, width: 900, height: 650), display: false)
+        window.isReleasedWhenClosed = false
+        do {
+            var approvalRequired = false
+            var rejectedRetainedCandidates = 0
+            var verifiedRejectedUIExit = true
+            let rejectsRetained =
+                ProcessInfo.processInfo.environment["EDITH_REMOTE_RETAINED_NEGATIVE"] == "1"
+            if let retained = retainedPackages.first, rejectsRetained {
+                try await manager.fixturePrioritizeRetained(retained)
+            }
+            let cleansUnconnected =
+                ProcessInfo.processInfo.environment["EDITH_REMOTE_UNCONNECTED_CLEANUP"] == "1"
+            if cleansUnconnected { try await verifyUnconnectedCleanup() }
+            do {
+                if !cleansUnconnected {
+                    let handle = try await manager.scene(
+                        for: EdithHostCore.HostExtensionContentRequest(
+                            extensionID: "sample", location: "settings", section: "extension"))
+                    self.handle = handle
+                    attachRegistration(handle)
+                    let deadline = ContinuousClock.now + .seconds(12)
+                    while phase == "attaching", ContinuousClock.now < deadline {
+                        try await Task.sleep(for: .milliseconds(20))
+                    }
+                    if rejectsRetained {
+                        guard phase != "active", !handle.isPresented, handle.processIdentity == nil
+                        else {
+                            throw HostWorkerError.invalidResponse
+                        }
+                        let rejected = handle.fixtureRejectedProcesses
+                        guard let retained = retainedPackages.first else {
+                            throw HostWorkerError.rejected
+                        }
+                        let carrier = try ExtensionUICarrier(
+                            payload: marketplace.packageStore.directory(for: retained)
+                                .appendingPathComponent(retained.id),
+                            package: retained, expectedHostIdentifier: identity.identifier)
+                        let executable = carrier.worker.appendingPathComponent(
+                            "Contents/MacOS/Edith"
+                        )
+                        .resolvingSymlinksInPath()
+                        guard rejected.count == 1, rejected[0].executable == executable else {
+                            throw HostWorkerError.invalidResponse
+                        }
+                        rejectedRetainedCandidates = rejected.count
+                        remote?.configuration = nil
+                        if let remote { root.dismiss(remote) }
+                        try await manager.endPresentation(id: handle.presentationID)
+                        verifiedRejectedUIExit = rejected.allSatisfy { !$0.isRunning }
+                        guard verifiedRejectedUIExit else { throw HostWorkerError.stillRunning }
+                        self.handle = nil
+                        phase = "rejected"
+                    } else {
+                        guard phase == "active", handle.isPresented,
+                            let peer = handle.processIdentity,
+                            peer.isRunning
+                        else {
+                            throw NSError(
+                                domain: "remote-fixture", code: 1,
+                                userInfo: [NSLocalizedDescriptionKey: failure ?? "timedOut"])
+                        }
+                        previousUI = peer
+                        let rejected = handle.fixtureRejectedProcesses
+                        rejectedRetainedCandidates = rejected.count
+                        verifiedRejectedUIExit = rejected.allSatisfy { !$0.isRunning }
+                        guard rejected.isEmpty else { throw HostWorkerError.invalidResponse }
+                        try await manager.prepareToClose(id: handle.presentationID)
+                        remote?.configuration = nil
+                        if let remote { root.dismiss(remote) }
+                        try await manager.endPresentation(id: handle.presentationID)
+                        self.handle = nil
+                    }
+                }
+            } catch HostRemoteAvailabilityError.approvalRequired {
+                approvalRequired = true
+            }
+            remote?.configuration = nil
+            if let remote { root.dismiss(remote) }
+            remote = nil
+            let remainedInvisible = !window.isVisible && !window.isKeyWindow && !window.isMainWindow
+            window.close()
+            window = nil
+            guard await marketplace.sessions.shutdown(), remainedInvisible,
+                marketplace.sessions.processIdentifiers.isEmpty,
+                previousUI?.isRunning != true
+            else { throw HostWorkerError.stillRunning }
+            let lease = try PackageFileLock(
+                url: marketplace.packageStore.leaseURL(for: package), exclusive: true)
+            lease.close()
+            let result: [String: Any] = [
+                "outcome": "passed", "verifiedCarrierCheckIn": true,
+                "approvalRequired": approvalRequired,
+                "readonlyControlVerified": !approvalRequired && !rejectsRetained
+                    && !cleansUnconnected,
+                "unconnectedCleanupVerified": cleansUnconnected,
+                "staleCandidateRejectedBeforeNativeLoad": rejectsRetained,
+                "packageLeaseReleased": true, "verifiedUIExit": true,
+                "noEngineWorkers": true, "noVisibleWindows": remainedInvisible,
+                "selectedVersion": package.version,
+                "rejectedRetainedCandidates": rejectedRetainedCandidates,
+                "verifiedRejectedUIExit": verifiedRejectedUIExit,
+            ]
+            try JSONSerialization.data(withJSONObject: result, options: .sortedKeys).write(
+                to: directory.appendingPathComponent("result-registration.json"), options: .atomic)
+            NSApp.terminate(nil)
+        } catch {
+            try? JSONSerialization.data(withJSONObject: [
+                "outcome": "failed", "error": String(describing: error),
+                "identities": manager.fixtureIdentities,
+            ]).write(
+                to: directory.appendingPathComponent("result-registration.json"), options: .atomic)
+            remote?.configuration = nil
+            if let remote { root.dismiss(remote) }
+            remote = nil
+            window?.close()
+            window = nil
+            _ = await marketplace.sessions.shutdown()
+            NSApp.terminate(nil)
+        }
+    }
+
+    private func verifyUnconnectedCleanup() async throws {
+        for operation in ["close", "disable", "deadline"] {
+            let request = EdithHostCore.HostExtensionContentRequest(
+                extensionID: "sample", location: "settings", section: "extension")
+            let handle = try await manager.scene(for: request)
+            guard handle.processIdentity == nil, !handle.isPresented,
+                manager.presentationCounts()["sample"] == 1,
+                marketplace.sessions.processIdentifiers.isEmpty
+            else { throw HostWorkerError.invalidResponse }
+            switch operation {
+            case "close": try await manager.endPresentation(id: request.presentationID)
+            case "disable": try await marketplace.sessions.disable(id: "sample", remember: false)
+            default:
+                let until = ContinuousClock.now + .seconds(23)
+                while manager.presentationCounts()["sample"] != nil, ContinuousClock.now < until {
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+            }
+            guard manager.presentationCounts().isEmpty,
+                !HostRemoteSession.extensionIDs.contains("sample"),
+                handle.processIdentity == nil, !handle.isPresented,
+                marketplace.sessions.processIdentifiers.isEmpty
+            else { throw HostWorkerError.invalidResponse }
+            do {
+                try await handle.update(compact: false, visible: false, width: 500)
+                throw HostWorkerError.invalidResponse
+            } catch HostWorkerError.rejected {}
+            let lease = try PackageFileLock(
+                url: marketplace.packageStore.leaseURL(for: package), exclusive: true)
+            lease.close()
+        }
+    }
+
+    private func attachRegistration(_ handle: HostRemoteSceneHandle) {
+        activation?.cancel()
+        activation = nil
+        if let remote {
+            remote.delegate = nil
+            remote.configuration = nil
+            root.dismiss(remote)
+        }
+        let controller = EXHostViewController()
+        controller.delegate = self
+        controller.configuration = .init(
+            appExtension: handle.identity, sceneID: handle.sceneIdentifier)
+        controller.view.frame = root.view.bounds
+        remote = controller
+        phase = "attaching"
+        failure = nil
+        root.present(controller, animator: HostRemoteOffscreenAnimator())
+    }
+
     private func open() async throws {
         guard handle == nil else { throw HostWorkerError.rejected }
         let next = try await manager.scene(
@@ -131,15 +332,19 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
 
     func hostViewControllerDidActivate(_ viewController: EXHostViewController) {
         guard viewController === remote, let handle else { return }
-        Task { [weak self] in
+        activation = Task { [weak self] in
             guard let self else { return }
             do {
                 try await handle.connect(
                     through: viewController.makeXPCConnection(),
-                    compact: false, visible: true, width: 670)
+                    compact: false, visible: !registrationOnly, width: 670)
+                guard !Task.isCancelled, viewController === remote else { return }
                 phase = "active"
                 writeState()
-            } catch { report(error) }
+            } catch {
+                guard !Task.isCancelled, viewController === remote else { return }
+                report(error)
+            }
         }
     }
 
@@ -241,4 +446,22 @@ final class HostRemoteFixture: NSObject, NSApplicationDelegate, EXHostViewContro
         }
     }
 }
+@MainActor
+private final class HostRemoteOffscreenAnimator: NSObject, NSViewControllerPresentationAnimator {
+    func animatePresentation(
+        of viewController: NSViewController, from presentingViewController: NSViewController
+    ) {
+        presentingViewController.addChild(viewController)
+        viewController.view.frame = presentingViewController.view.bounds
+        presentingViewController.view.addSubview(viewController.view)
+    }
+
+    func animateDismissal(
+        of viewController: NSViewController, from presentingViewController: NSViewController
+    ) {
+        viewController.view.removeFromSuperview()
+        viewController.removeFromParent()
+    }
+}
+
 #endif

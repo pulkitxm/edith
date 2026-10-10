@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { openSync, closeSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 const [operation, directory_] = process.argv.slice(2);
 assert(
-  ["launch", "approved", "verify"].includes(operation) && directory_,
-  "Usage: test-host-remote-ui.mjs launch|approved|verify fixture-directory",
+  [
+    "register",
+    "register-public",
+    "register-stale",
+    "register-cleanup",
+    "launch",
+    "approved",
+    "verify",
+  ].includes(operation) && directory_,
+  "Usage: test-host-remote-ui.mjs register|register-public|register-stale|register-cleanup|launch|approved|verify fixture-directory",
 );
 const directory = resolve(directory_);
 const fixture = JSON.parse(
@@ -53,16 +62,84 @@ function released(current) {
   assert(!current.remoteSessions.includes("sample"));
 }
 
-if (operation === "launch") {
-  execFileSync("open", [
-    "-g",
-    "-j",
-    "-n",
-    fixture.carrier,
-    "--args",
-    "--extension-ui-carrier",
-  ]);
-  await sleep(1000);
+if (
+  [
+    "register",
+    "register-public",
+    "register-stale",
+    "register-cleanup",
+  ].includes(operation)
+) {
+  const resultFile = join(directory, "result-registration.json");
+  await unlink(resultFile).catch((error) => {
+    if (error.code !== "ENOENT") throw error;
+  });
+  const trace = openSync(join(directory, "registration-trace.log"), "w");
+  const child = spawn(
+    fixture.executable,
+    ["--extension-remote-registration-fixture", directory],
+    {
+      stdio: ["ignore", trace, trace],
+      env: {
+        ...process.env,
+        EDITH_REMOTE_OFFSCREEN_FIXTURE: operation === "register" ? "1" : "0",
+        EDITH_REMOTE_RETAINED_NEGATIVE:
+          operation === "register-stale" ? "1" : "0",
+        EDITH_REMOTE_UNCONNECTED_CLEANUP:
+          operation === "register-cleanup" ? "1" : "0",
+      },
+    },
+  );
+  closeSync(trace);
+  let launchError;
+  child.on("error", (error) => {
+    launchError = error;
+  });
+  let result;
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    if (launchError) throw launchError;
+    try {
+      result = JSON.parse(await readFile(resultFile, "utf8"));
+      break;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await sleep(50);
+  }
+  if (!result) child.kill("SIGKILL");
+  assert(result, "Background carrier check-in timed out");
+  const exitDeadline = Date.now() + 3000;
+  while (
+    child.exitCode === null &&
+    child.signalCode === null &&
+    Date.now() < exitDeadline
+  ) {
+    await sleep(20);
+  }
+  assert.equal(child.exitCode, 0, "Owned fixture host did not exit cleanly");
+  assert.equal(result.outcome, "passed", JSON.stringify(result));
+  assert.equal(result.verifiedCarrierCheckIn, true);
+  assert.equal(result.packageLeaseReleased, true);
+  assert.equal(result.verifiedUIExit, true);
+  assert.equal(result.noEngineWorkers, true);
+  assert.equal(result.noVisibleWindows, true);
+  if (operation === "register-stale") {
+    assert.equal(result.staleCandidateRejectedBeforeNativeLoad, true);
+    assert.equal(result.rejectedRetainedCandidates, 1);
+    assert.equal(result.verifiedRejectedUIExit, true);
+  }
+  if (operation === "register-cleanup") {
+    assert.equal(result.unconnectedCleanupVerified, true);
+    assert.equal(result.readonlyControlVerified, false);
+  }
+  console.log(
+    JSON.stringify({
+      ...result,
+      publicCarrierCheckIn: operation !== "register",
+    }),
+  );
+} else if (operation === "launch") {
   execFileSync("open", [
     "-n",
     fixture.app,
@@ -143,6 +220,7 @@ if (operation === "launch") {
     freshEngineGeneration: true,
     packageLeaseReleased: true,
     sameExecutableCarrier: true,
+    verifiedCarrierCheckIn: true,
   };
   await writeFile(join(directory, "result.json"), JSON.stringify(result));
   console.log(JSON.stringify(result));

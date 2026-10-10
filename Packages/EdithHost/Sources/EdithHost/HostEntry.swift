@@ -43,6 +43,13 @@ struct HostEntry: AppExtension {
             exit(HostCLI.run(arguments))
         }
         #if EDITH_CLI_FIXTURE
+        if arguments.count == 2, arguments[0] == "--extension-remote-registration-fixture" {
+            do {
+                try HostRemoteFixture.run(
+                    directory: URL(fileURLWithPath: arguments[1]), registrationOnly: true)
+            } catch { exit(1) }
+            return
+        }
         if arguments.count == 2, arguments[0] == "--extension-remote-fixture" {
             do { try HostRemoteFixture.run(directory: URL(fileURLWithPath: arguments[1])) } catch {
                 exit(1)

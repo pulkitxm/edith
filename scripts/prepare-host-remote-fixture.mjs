@@ -38,8 +38,19 @@ export async function prepareHostRemoteFixture({
   root,
   directory,
   sourceHost,
+  sourceExecutable,
   identifier,
+  version = "1.0.0",
+  retainedVersions = [],
 }) {
+  assert.match(version, /^\d{1,8}\.\d{1,8}\.\d{1,8}$/);
+  assert(retainedVersions.length < 8);
+  assert.equal(
+    new Set([...retainedVersions, version]).size,
+    retainedVersions.length + 1,
+  );
+  for (const retained of retainedVersions)
+    assert.match(retained, /^\d{1,8}\.\d{1,8}\.\d{1,8}$/);
   assert.match(
     identifier,
     /^com\.pulkit\.edith\.tests\.remote-[a-z0-9-]{1,60}$/,
@@ -106,7 +117,7 @@ export async function prepareHostRemoteFixture({
     .toString()
     .trim();
   const executable = join(app, "Contents/MacOS/Edith");
-  await copyFile(join(products, "EdithHost"), executable);
+  await copyFile(sourceExecutable ?? join(products, "EdithHost"), executable);
   const links = run("otool", ["-L", executable]).toString();
   for (const line of links.split("\n").slice(1)) {
     const dependency = line.trim().split(" ")[0];
@@ -166,109 +177,121 @@ export async function prepareHostRemoteFixture({
   assert(hostABI);
   const slot = identifier.slice("com.pulkit.edith.tests.".length);
   const identityRoot = join(directory, "support/Edith Tests", slot);
-  const payloadDirectory = join(
-    identityRoot,
-    "Extensions/sample",
-    hostABI,
-    "arm64/1.0.0/sample",
-  );
-  const contents = join(payloadDirectory, "app.bundle/Contents");
-  await mkdir(join(contents, "MacOS"), { recursive: true });
-  const support = buildExtensionSupport(
-    root,
-    "EdithExtensionUI",
-    "RemoteFixture_app",
-  );
-  const source = join(directory, "Runtime.swift");
-  await writeFile(
-    source,
-    rewriteSupportImports(
-      (
-        await readFile(
-          join(root, "Packages/EdithHost/Tests/RemoteFixture/Runtime.swift"),
-          "utf8",
+  let carrier;
+  let worker;
+  const packages = [];
+  for (const fixtureVersion of [...retainedVersions, version]) {
+    const payloadDirectory = join(
+      identityRoot,
+      "Extensions/sample",
+      hostABI,
+      `arm64/${fixtureVersion}/sample`,
+    );
+    const contents = join(payloadDirectory, "app.bundle/Contents");
+    await mkdir(join(contents, "MacOS"), { recursive: true });
+    const support = buildExtensionSupport(
+      root,
+      "EdithExtensionUI",
+      "RemoteFixture_app",
+    );
+    const source = join(directory, `Runtime-${fixtureVersion}.swift`);
+    await writeFile(
+      source,
+      rewriteSupportImports(
+        (
+          await readFile(
+            join(root, "Packages/EdithHost/Tests/RemoteFixture/Runtime.swift"),
+            "utf8",
+          )
         )
-      ).replaceAll("HOST_ABI", hostABI),
-      support.modules,
-    ),
-  );
-  run("xcrun", [
-    "swiftc",
-    "-emit-library",
-    "-parse-as-library",
-    "-Osize",
-    "-swift-version",
-    "5",
-    "-module-name",
-    "EdithRemoteFixture",
-    "-target",
-    "arm64-apple-macos14.0",
-    "-plugin-path",
-    `${process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer"}/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins`,
-    source,
-    "-I",
-    join(support.products, "Modules"),
-    "-L",
-    support.products,
-    `-l${support.product}`,
-    "-Xlinker",
-    "-dead_strip",
-    "-Xlinker",
-    "-exported_symbol",
-    "-Xlinker",
-    "_edith_extension_create",
-    "-Xlinker",
-    "-exported_symbol",
-    "-Xlinker",
-    "_edith_extension_presentation_create",
-    "-Xlinker",
-    "-install_name",
-    "-Xlinker",
-    "@rpath/EdithRemoteFixture",
-    "-o",
-    join(contents, "MacOS/Runtime"),
-  ]);
-  await plist(join(contents, "Info.plist"), {
-    CFBundleIdentifier: "com.pulkit.edith.extensions.sample.app",
-    CFBundleExecutable: "Runtime",
-    CFBundlePackageType: "BNDL",
-    CFBundleShortVersionString: "1.0.0",
-    EdithHostABI: hostABI,
-  });
-  sign(join(payloadDirectory, "app.bundle"));
-  const package_ = {
-    id: "sample",
-    version: "1.0.0",
-    hostABI,
-    architecture: "arm64",
-    minimumSystemVersion: 14,
-    downloadURL:
-      "https://github.com/pulkitxm/edith/releases/download/fixture/sample.zip",
-    sha256: "0".repeat(64),
-    downloadBytes: 1,
-    installedBytes: 1,
-    dependencies: [],
-  };
+          .replaceAll("HOST_ABI", hostABI)
+          .replaceAll("FIXTURE_VERSION", fixtureVersion),
+        support.modules,
+      ),
+    );
+    run("xcrun", [
+      "swiftc",
+      "-emit-library",
+      "-parse-as-library",
+      "-Osize",
+      "-swift-version",
+      "5",
+      "-module-name",
+      "EdithRemoteFixture",
+      "-target",
+      "arm64-apple-macos14.0",
+      "-plugin-path",
+      `${process.env.DEVELOPER_DIR ?? "/Applications/Xcode.app/Contents/Developer"}/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins`,
+      source,
+      "-I",
+      join(support.products, "Modules"),
+      "-L",
+      support.products,
+      `-l${support.product}`,
+      "-Xlinker",
+      "-dead_strip",
+      "-Xlinker",
+      "-exported_symbol",
+      "-Xlinker",
+      "_edith_extension_create",
+      "-Xlinker",
+      "-exported_symbol",
+      "-Xlinker",
+      "_edith_extension_presentation_create",
+      "-Xlinker",
+      "-install_name",
+      "-Xlinker",
+      "@rpath/EdithRemoteFixture",
+      "-o",
+      join(contents, "MacOS/Runtime"),
+    ]);
+    await plist(join(contents, "Info.plist"), {
+      CFBundleIdentifier: "com.pulkit.edith.extensions.sample.app",
+      CFBundleExecutable: "Runtime",
+      CFBundlePackageType: "BNDL",
+      CFBundleShortVersionString: fixtureVersion,
+      EdithHostABI: hostABI,
+    });
+    sign(join(payloadDirectory, "app.bundle"));
+    const package_ = {
+      id: "sample",
+      version: fixtureVersion,
+      hostABI,
+      architecture: "arm64",
+      minimumSystemVersion: 14,
+      downloadURL:
+        "https://github.com/pulkitxm/edith/releases/download/fixture/sample.zip",
+      sha256: "0".repeat(64),
+      downloadBytes: 1,
+      installedBytes: 1,
+      dependencies: [],
+    };
+    packages.push(package_);
+    await buildExtensionUICarrier({
+      hostApp: app,
+      payloadDirectory,
+      id: "sample",
+      version: fixtureVersion,
+      hostABI,
+      development: true,
+    });
+    carrier = join(payloadDirectory, "ExtensionCarrier.app");
+    worker = join(carrier, "Contents/Extensions/ExtensionWorker.appex");
+    const entitlements = join(directory, "sandbox.plist");
+    await plist(entitlements, { "com.apple.security.app-sandbox": true });
+    await signRuntime(join(carrier, "Contents/Frameworks"));
+    sign(worker, entitlements);
+    sign(carrier);
+    run("codesign", ["--verify", "--deep", "--strict", carrier]);
+  }
   await writeFile(
     join(directory, "selected-package.json"),
-    JSON.stringify(package_),
+    JSON.stringify(packages.at(-1)),
   );
-  await buildExtensionUICarrier({
-    hostApp: app,
-    payloadDirectory,
-    id: "sample",
-    version: "1.0.0",
-    hostABI,
-    development: true,
-  });
-  const carrier = join(payloadDirectory, "ExtensionCarrier.app");
-  const worker = join(carrier, "Contents/Extensions/ExtensionWorker.appex");
-  const entitlements = join(directory, "sandbox.plist");
-  await plist(entitlements, { "com.apple.security.app-sandbox": true });
-  await signRuntime(join(carrier, "Contents/Frameworks"));
-  sign(worker, entitlements);
-  sign(carrier);
-  run("codesign", ["--verify", "--deep", "--strict", carrier]);
+  await writeFile(
+    join(directory, "retained-packages.json"),
+    JSON.stringify(packages.slice(0, -1)),
+  );
   const result = {
     directory: await realpath(directory),
     app,
@@ -277,16 +300,18 @@ export async function prepareHostRemoteFixture({
     worker,
     identifier,
     hostABI,
+    retainedVersions,
   };
   await writeFile(join(directory, "fixture.json"), JSON.stringify(result));
   return result;
 }
 
 if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
-  const [directory, sourceHost, identifier] = process.argv.slice(2);
+  const [directory, sourceHost, identifier, version, ...retainedVersions] =
+    process.argv.slice(2);
   assert(
     directory && sourceHost && identifier,
-    "Usage: prepare-host-remote-fixture.mjs directory frozen-host identifier",
+    "Usage: prepare-host-remote-fixture.mjs directory frozen-host identifier [version]",
   );
   console.log(
     JSON.stringify(
@@ -295,6 +320,8 @@ if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
         directory,
         sourceHost,
         identifier,
+        version,
+        retainedVersions,
       }),
     ),
   );
