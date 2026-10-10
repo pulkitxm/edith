@@ -35,6 +35,7 @@ try {
       ["database"],
       "Headless CLI proof is Database-only",
     );
+
   const workers = definitions.filter((entry) => entry.contractVersion === 1);
   for (const id of requested)
     assert(

@@ -210,7 +210,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: true)
             } else if extensionID == "database" {
-                try await verifyDatabase(endpoint, seed: true, headlessCLI: headlessCLI)
+                try await verifyDatabase(endpoint, seed: true, headlessCLI: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -284,7 +284,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: false)
             } else if extensionID == "database" {
-                try await verifyDatabase(endpoint, seed: false, headlessCLI: headlessCLI)
+                try await verifyDatabase(endpoint, seed: false, headlessCLI: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -386,7 +386,7 @@ struct HostLifecycleHarness {
             } else if extensionID == "studio" {
                 try await verifyStudio(endpoint, fixture: fixture, seed: false)
             } else if extensionID == "database" {
-                try await verifyDatabase(endpoint, seed: false, headlessCLI: headlessCLI)
+                try await verifyDatabase(endpoint, seed: false, headlessCLI: true)
             } else if extensionID == "blitztree" {
                 try await verifyBlitzTree(endpoint, fixture: fixture)
             } else if extensionID == "appMaintenance" {
@@ -493,7 +493,7 @@ struct HostLifecycleHarness {
                 })
             else { throw HostWorkerError.invalidResponse }
             print(
-                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
+                "{\"downloadedBundle\":true,\"nativeWindow\":false,\"headlessCLI\":\(headlessCLI),\"headlessLifecycle\":true,\"engineLifecycleValidated\":true,\"managedNativeViewValidated\":false,\"updateWithoutAppRestart\":true,\"restoreAfterAppUpdate\":true,\"freshHostSessionRestored\":true,\"pendingDisableRecoveryValidated\":true,\"disabledProcesses\":0,\"removedPayloads\":true,\"isolatedSupportTypes\":true,\"surfaceLayoutRestored\":true,\"surfaceDataValidated\":\(validateSurface),\"clipboardDataValidated\":\(extensionID == "clipboard"),\"latexDataValidated\":\(extensionID == "latex"),\"companionDataValidated\":\(extensionID == "companion"),\"terminalDataValidated\":\(extensionID == "terminal"),\"studioDataValidated\":\(extensionID == "studio"),\"audioMixerDataValidated\":\(extensionID == "audioMixer"),\"usageDataValidated\":\(extensionID == "usage"),\"usageHookLifecycleValidated\":\(extensionID == "usage"),\"cameraDataValidated\":\(extensionID == "virtualCamera"),\"codeStatsDataValidated\":\(extensionID == "codeStats"),\"agentActivityValidated\":\(extensionID == "herdr"),\"systemCleaningValidated\":\(extensionID == "system"),\"databaseDataValidated\":\(extensionID == "database"),\"machinesDataValidated\":\(extensionID == "machines")}"
             )
         } catch {
             if extensionID == "jev" {

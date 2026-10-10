@@ -4,7 +4,7 @@ import Foundation
 
 extension HostLifecycleHarness {
     @MainActor static func verifyDatabase(
-        _ endpoint: ExtensionPeerEndpoint, seed: Bool, headlessCLI: Bool = false
+        _ endpoint: ExtensionPeerEndpoint, seed: Bool, headlessCLI: Bool
     )
         async throws
     {
