@@ -170,4 +170,139 @@ struct ExtensionPackageFilesystemTests {
         #expect(!FileManager.default.fileExists(atPath: fixture.store.directory(for: package).path))
         #expect(try Data(contentsOf: sentinel) == bytes)
     }
+
+    @Test func descriptorCopyPreservesExecutableModesAndSealedResourceBytes() throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let package = fixturePackage()
+        let source = fixture.directory.appendingPathComponent("staged")
+        let payload = source.appendingPathComponent(package.id)
+        let bundle = payload.appendingPathComponent("helper.bundle")
+        let executable = bundle.appendingPathComponent("Contents/MacOS/Runtime")
+        let seal = bundle.appendingPathComponent("Contents/_CodeSignature/CodeResources")
+        for file in [executable, seal] {
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        let executableBytes = Data("synthetic executable bytes".utf8)
+        let sealBytes = Data("synthetic sealed resource bytes".utf8)
+        try executableBytes.write(to: executable)
+        try sealBytes.write(to: seal)
+        #expect(chmod(executable.path, 0o755) == 0)
+        #expect(chmod(bundle.path, 0o755) == 0)
+        let authority = try PackageDirectory(fixture.store.root, create: true)
+        try authority.install(package, from: source)
+        let installedBundle = fixture.store.directory(for: package)
+            .appendingPathComponent(package.id).appendingPathComponent("helper.bundle")
+        let installedExecutable = installedBundle.appendingPathComponent("Contents/MacOS/Runtime")
+        #expect(try Data(contentsOf: installedExecutable) == executableBytes)
+        #expect(
+            try Data(
+                contentsOf: installedBundle.appendingPathComponent(
+                    "Contents/_CodeSignature/CodeResources")) == sealBytes)
+        var mode = stat()
+        #expect(stat(installedExecutable.path, &mode) == 0)
+        #expect(mode.st_mode & 0o777 == 0o755)
+        #expect(stat(installedBundle.path, &mode) == 0)
+        #expect(mode.st_mode & 0o777 == 0o755)
+        try authority.remove(package)
+    }
+
+    @Test func pendingDeletionFailureRetainsExactRecordsForRestartCompletion() async throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let (package, archive) = try fixture.archive()
+        _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
+            [package], repository: "example/app")
+        let lease = try fixture.store.lease(package)
+        #expect(try fixture.store.requestRemoval(id: package.id) == false)
+        lease.close()
+        let blocked = fixture.store.directory(for: package)
+            .appendingPathComponent(package.id).appendingPathComponent(
+                "helper.bundle/Contents/MacOS")
+        #expect(chmod(blocked.path, 0o500) == 0)
+        #expect(throws: (any Error).self) { try fixture.store.completePendingRemovals() }
+        #expect(try fixture.store.installedPackages() == [package])
+        #expect(try fixture.store.pendingRemovals() == [package.id])
+        #expect(chmod(blocked.path, 0o700) == 0)
+        let restarted = ExtensionPackageStore(root: fixture.store.root)
+        try restarted.completePendingRemovals()
+        #expect(try restarted.installedPackages().isEmpty)
+        #expect(try restarted.pendingRemovals().isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: restarted.directory(for: package).path))
+    }
+
+    @Test func replacementWaitsForAnExistingLeaseAndKeepsPayloadOnVerificationFailure() async throws
+    {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let (package, archive) = try fixture.archive()
+        _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
+            [package], repository: "example/app")
+        try fixture.store.commit([])
+        let payload = fixture.store.directory(for: package)
+            .appendingPathComponent(package.id).appendingPathComponent("package.json")
+        let bytes = try Data(contentsOf: payload)
+        let lease = try fixture.store.lease(package)
+        await #expect(throws: MarketplaceError.packageBusy) {
+            try await fixture.installer(archives: [package.downloadURL: archive]).install(
+                [package], repository: "example/app")
+        }
+        lease.close()
+        await #expect(throws: MarketplaceError.invalidSignature) {
+            try await fixture.installer(
+                archives: [package.downloadURL: archive], rejectsSignature: true
+            ).install(
+                [package], repository: "example/app")
+        }
+        #expect(try Data(contentsOf: payload) == bytes)
+        _ = try await fixture.installer(archives: [package.downloadURL: archive]).install(
+            [package], repository: "example/app")
+        #expect(try fixture.store.installedPackages() == [package])
+        #expect(try Data(contentsOf: payload) == bytes)
+    }
+
+    @Test func rootSubstitutionDuringRollbackCannotDeletePersistentData() async throws {
+        let fixture = try PackageFixture()
+        defer { fixture.clean() }
+        let (first, firstArchive) = try fixture.archive()
+        let (second, _) = try fixture.archive(id: "calendar")
+        let detached = fixture.directory.appendingPathComponent("detached-root")
+        let data = fixture.directory.appendingPathComponent("Data")
+        let foreign = data.appendingPathComponent(first.id)
+            .appendingPathComponent(first.hostABI).appendingPathComponent(first.architecture)
+            .appendingPathComponent(first.version)
+        try FileManager.default.createDirectory(at: foreign, withIntermediateDirectories: true)
+        let sentinel = foreign.appendingPathComponent("history")
+        let bytes = Data("synthetic history retained on rollback".utf8)
+        try bytes.write(to: sentinel)
+        let installer = ExtensionPackageInstaller(
+            store: fixture.store,
+            download: { url, _ in
+                if url == first.downloadURL {
+                    let copy = fixture.directory.appendingPathComponent("downloaded.zip")
+                    try FileManager.default.copyItem(at: firstArchive, to: copy)
+                    return copy
+                }
+                try FileManager.default.moveItem(at: fixture.store.root, to: detached)
+                try FileManager.default.createSymbolicLink(
+                    at: fixture.store.root, withDestinationURL: data)
+                throw MarketplaceError.downloadFailed
+            }, verify: { _ in })
+        await #expect(throws: MarketplaceError.downloadFailed) {
+            try await installer.install([first, second], repository: "example/app")
+        }
+        #expect(try Data(contentsOf: sentinel) == bytes)
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: detached.appendingPathComponent(first.id)
+                    .appendingPathComponent(first.hostABI).appendingPathComponent(
+                        first.architecture
+                    )
+                    .appendingPathComponent(first.version).path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: data.appendingPathComponent("installed.json").path))
+    }
+
 }

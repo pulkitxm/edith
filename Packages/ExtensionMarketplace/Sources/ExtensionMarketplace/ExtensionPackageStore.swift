@@ -464,5 +464,10 @@ final class PackageDirectory {
                 }
             }
         }
+        guard
+            fcopyfile(
+                source.descriptor, descriptor, nil, copyfile_flags_t(COPYFILE_METADATA)) == 0
+        else { throw Self.failure() }
+
     }
 }
