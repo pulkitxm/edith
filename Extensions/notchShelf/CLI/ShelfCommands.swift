@@ -124,7 +124,8 @@ struct ShelfShareCommand: AsyncParsableCommand {
 enum ShelfBridge {
     static func items() throws -> [ShelfItem] {
         do {
-            return try ShelfMutationExecution.snapshot().items.sorted { $0.addedAt > $1.addedAt }
+            return try ShelfMutationExecution.snapshot(root: ShelfCLIEnvironment.root).items.sorted
+            { $0.addedAt > $1.addedAt }
         } catch {
             throw failure(error, action: "read the shelf")
         }
@@ -146,7 +147,7 @@ enum ShelfBridge {
     ) {
         let snapshot: ShelfPinnedSelection
         do {
-            snapshot = try ShelfMutationExecution.pinnedSelection()
+            snapshot = try ShelfMutationExecution.pinnedSelection(root: ShelfCLIEnvironment.root)
         } catch {
             throw failure(error, action: "read the shelf")
         }
@@ -179,7 +180,7 @@ enum ShelfBridge {
     }
 
     static func json(_ item: ShelfItem, index: Int) -> JSONValue {
-        let url = ShelfIndex.fileURL(for: item)
+        let url = ShelfCLIEnvironment.root.appendingPathComponent(item.name)
         let size =
             (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int ?? 0
         let position: JSONValue =
@@ -212,7 +213,7 @@ enum ShelfBridge {
         let result: ShelfPositionUpdateResult
         do {
             result = try ShelfMutationExecution.updatePositions(
-                [found.item.id: position], sender: "ed")
+                [found.item.id: position], root: ShelfCLIEnvironment.root, sender: "ed")
         } catch {
             throw failure(error, action: "update \(found.item.name)")
         }
@@ -260,7 +261,7 @@ struct ShelfListCommand: AsyncParsableCommand {
                 return
             }
             let rows = items.enumerated().map { offset, item in
-                let url = ShelfIndex.fileURL(for: item)
+                let url = ShelfCLIEnvironment.root.appendingPathComponent(item.name)
                 let size =
                     (try? FileManager.default.attributesOfItem(atPath: url.path)[.size])
                     as? Int ?? 0
@@ -298,7 +299,7 @@ struct ShelfPathCommand: AsyncParsableCommand {
                 CLIOut.json(ShelfBridge.json(found.item, index: index))
                 return
             }
-            CLIOut.out(ShelfIndex.fileURL(for: found.item).path)
+            CLIOut.out(ShelfCLIEnvironment.root.appendingPathComponent(found.item.name).path)
         }
     }
 }
@@ -322,13 +323,14 @@ struct ShelfAddCommand: AsyncParsableCommand {
 
     func run() async throws {
         try await execute {
-            let source = URL(fileURLWithPath: (file as NSString).expandingTildeInPath)
+            let source = try ExtensionCLIContext.resolvePath(file)
             guard FileManager.default.fileExists(atPath: source.path) else {
                 throw CLIFailure.notFound("no file at \(source.path)")
             }
             let result: ShelfMutationResult
             do {
-                result = try ShelfMutationExecution.addCopy(of: source, sender: "ed")
+                result = try ShelfMutationExecution.addCopy(
+                    of: source, root: ShelfCLIEnvironment.root, sender: "ed")
             } catch {
                 throw ShelfBridge.failure(
                     error, action: "put \(source.lastPathComponent) on the shelf")
@@ -371,7 +373,8 @@ struct ShelfAddTextCommand: AsyncParsableCommand {
             guard !text.isEmpty else { throw CLIFailure.usage("text is required") }
             let result: ShelfMutationResult
             do {
-                result = try ShelfMutationExecution.addText(text, sender: "ed")
+                result = try ShelfMutationExecution.addText(
+                    text, root: ShelfCLIEnvironment.root, sender: "ed")
             } catch {
                 throw ShelfBridge.failure(error, action: "put text on the shelf")
             }
@@ -459,7 +462,9 @@ struct ShelfRemoveCommand: AsyncParsableCommand {
             let selected = try ShelfBridge.selection(at: indices)
             let plan = CLIDestructivePlan(
                 action: selected.count == 1 ? "remove shelf item" : "remove shelf items",
-                targets: selected.map { ShelfIndex.fileURL(for: $0.item).path }, confirmed: yes,
+                targets: selected.map {
+                    ShelfCLIEnvironment.root.appendingPathComponent($0.item.name).path
+                }, confirmed: yes,
                 json: json,
                 fields: [
                     "items": .array(
@@ -470,7 +475,7 @@ struct ShelfRemoveCommand: AsyncParsableCommand {
             let result: ShelfMutationResult
             do {
                 result = try ShelfMutationExecution.remove(
-                    ids: Set(selected.map(\.item.id)), sender: "ed")
+                    ids: Set(selected.map(\.item.id)), root: ShelfCLIEnvironment.root, sender: "ed")
             } catch {
                 throw ShelfBridge.failure(error, action: "remove shelf items")
             }
@@ -503,13 +508,14 @@ struct ShelfClearCommand: AsyncParsableCommand {
         try await execute {
             let all = try ShelfBridge.items()
             let plan = CLIDestructivePlan(
-                action: "clear shelf", targets: all.map { ShelfIndex.fileURL(for: $0).path },
+                action: "clear shelf",
+                targets: all.map { ShelfCLIEnvironment.root.appendingPathComponent($0.name).path },
                 confirmed: yes, json: json, fields: ["removed": .int(all.count)])
             guard plan.shouldApply() else { return }
             let result: ShelfMutationResult
             do {
                 result = try ShelfMutationExecution.remove(
-                    ids: Set(all.map(\.id)), sender: "ed")
+                    ids: Set(all.map(\.id)), root: ShelfCLIEnvironment.root, sender: "ed")
             } catch {
                 throw ShelfBridge.failure(error, action: "clear the shelf")
             }
@@ -556,14 +562,16 @@ struct ShelfPurgeCommand: AsyncParsableCommand {
             }
             let plan = CLIDestructivePlan(
                 action: "purge expired shelf items",
-                targets: expired.map { ShelfIndex.fileURL(for: $0).path }, confirmed: yes,
+                targets: expired.map {
+                    ShelfCLIEnvironment.root.appendingPathComponent($0.name).path
+                }, confirmed: yes,
                 json: json,
                 fields: ["keep": .string(duration.rawValue), "removed": .int(expired.count)])
             guard plan.shouldApply() else { return }
             let result: ShelfMutationResult
             do {
                 result = try ShelfMutationExecution.remove(
-                    ids: Set(expired.map(\.id)), sender: "ed")
+                    ids: Set(expired.map(\.id)), root: ShelfCLIEnvironment.root, sender: "ed")
             } catch {
                 throw ShelfBridge.failure(error, action: "purge expired shelf items")
             }
