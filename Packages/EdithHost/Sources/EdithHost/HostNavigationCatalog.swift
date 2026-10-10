@@ -46,7 +46,7 @@ enum HostNavigationCatalog {
             extensionID: nil),
         .init(id: "storage", title: "Storage", symbol: "internaldrive", extensionID: nil),
         .init(id: "shortcuts", title: "Shortcuts", symbol: "keyboard", extensionID: nil),
-        .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: "terminal"),
+        .init(id: "terminal", title: "Terminal", symbol: "apple.terminal", extensionID: nil),
         .init(id: "icloud", title: "iCloud", symbol: "icloud", extensionID: nil),
         .init(
             id: "updates", title: "Updates", symbol: "arrow.triangle.2.circlepath", extensionID: nil
