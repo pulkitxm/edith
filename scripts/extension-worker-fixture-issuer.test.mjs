@@ -172,16 +172,13 @@ test("inert proof never promotes unavailable features or metadata to media cover
   );
 });
 
-test("native fixture homes match generic and Calendar admission topology", () => {
+test("native fixture homes separate the launcher home from the root and Calendar marker home", () => {
   for (const owner of workers.map(({ id }) => id)) {
     const home = workerFixtureHome("/synthetic/fixture", owner);
-    assert.equal(
-      home,
-      join(
-        "/synthetic/fixture",
-        owner === "calendar" ? "synthetic-data" : `${owner}-home`,
-      ),
-    );
+    assert.equal(home, join("/synthetic/fixture", `${owner}-home`));
+    assert.notEqual(home, "/synthetic/fixture");
+    if (owner === "calendar")
+      assert.notEqual(home, "/synthetic/fixture/synthetic-data");
     const environment = workerFixtureEnvironment(home);
     assert.equal(environment.HOME, home);
     assert.equal(environment.CFFIXED_USER_HOME, home);

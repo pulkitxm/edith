@@ -121,7 +121,7 @@ export function validateWorkerFixtureProof(
 export function workerFixtureHome(root, id) {
   assert.equal(resolve(root), root);
   assert(supportedFixtureWorkers.has(id));
-  return join(root, id === "calendar" ? "synthetic-data" : `${id}-home`);
+  return join(root, `${id}-home`);
 }
 
 export function workerFixtureEnvironment(home, hostIdentifier) {

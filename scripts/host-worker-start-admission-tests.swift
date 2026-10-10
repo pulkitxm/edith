@@ -25,8 +25,11 @@ struct HostWorkerStartAdmissionTests {
         init(owner: String) throws {
             let manager = FileManager.default
             let calendar = owner == "calendar"
-            root = manager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-                .resolvingSymlinksInPath()
+            guard let temporary = ProcessInfo.processInfo.environment["TMPDIR"] else {
+                throw Failure.assertion
+            }
+            root = URL(fileURLWithPath: temporary, isDirectory: true)
+                .appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
             home = root.appendingPathComponent(calendar ? "synthetic-data" : owner + "-home")
             identifier =
                 "com.pulkit.edith.tests." + (calendar ? "remote-" : "worker-")
