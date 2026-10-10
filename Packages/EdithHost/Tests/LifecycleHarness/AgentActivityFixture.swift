@@ -52,6 +52,15 @@ enum AgentActivityFixture {
     }
 
     @MainActor static func verify(_ endpoint: ExtensionPeerEndpoint) async throws {
+        guard let home = ProcessInfo.processInfo.environment["EDITH_EXTENSION_FIXTURE_HOME"] else {
+            throw HostWorkerError.rejected
+        }
+        let configuration = URL(fileURLWithPath: home).appendingPathComponent(
+            ".claude/settings.json")
+        try await installSyntheticHook(
+            invoke: { try await endpoint.invoke($0, payload: $1) },
+            configuration: configuration, readConfiguration: { try Data(contentsOf: configuration) }
+        )
         try verifyHooks(active: true)
         var tile = SurfaceTile(.agents)
         tile.sourceIDs = ["claude"]
@@ -154,6 +163,54 @@ enum AgentActivityFixture {
             try await Task.sleep(for: .milliseconds(50))
         } while ContinuousClock.now < deadline
         throw HostWorkerError.invalidResponse
+    }
+
+    @MainActor static func installSyntheticHook(
+        invoke: (String, Data) async throws -> Data, configuration: URL,
+        readConfiguration: () throws -> Data
+    ) async throws {
+        struct Preview: Decodable {
+            let id: UUID
+            let provider: String
+            let url: URL
+            let replacementBytes: Int
+        }
+        struct Chunk: Decodable { let bytes: Data; let nextOffset: Int }
+        struct Applied: Decodable { let url: URL; let changed: Bool }
+        guard try readConfiguration() == Data("{\n  \"synthetic\": true\n}\n".utf8) else {
+            throw HostWorkerError.invalidResponse
+        }
+        let preview = try JSONDecoder().decode(
+            Preview.self,
+            from: await invoke(
+                "herdr.ui.hook.plan", Data(#"{"provider":"claude","enabled":true}"#.utf8)))
+        guard preview.provider == "claude", preview.url == configuration,
+            preview.replacementBytes > 0, preview.replacementBytes <= 2_097_152
+        else { throw HostWorkerError.invalidResponse }
+        var replacement = Data()
+        while replacement.count < preview.replacementBytes {
+            let input = try JSONSerialization.data(withJSONObject: [
+                "id": preview.id.uuidString, "offset": replacement.count,
+            ])
+            let chunk = try JSONDecoder().decode(
+                Chunk.self, from: await invoke("herdr.ui.hook.read", input))
+            guard !chunk.bytes.isEmpty, chunk.bytes.count <= 32_768,
+                chunk.nextOffset == replacement.count + chunk.bytes.count,
+                chunk.nextOffset <= preview.replacementBytes
+            else { throw HostWorkerError.invalidResponse }
+            replacement.append(chunk.bytes)
+        }
+        guard String(decoding: replacement, as: UTF8.self).contains("activity.hook.claude") else {
+            throw HostWorkerError.invalidResponse
+        }
+        let applied = try JSONDecoder().decode(
+            Applied.self,
+            from: await invoke(
+                "herdr.ui.hook.apply",
+                JSONSerialization.data(withJSONObject: ["id": preview.id.uuidString])))
+        guard applied.url == configuration, applied.changed,
+            try readConfiguration() == replacement
+        else { throw HostWorkerError.invalidResponse }
     }
 
     @MainActor private static func permission(
