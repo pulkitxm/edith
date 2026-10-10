@@ -2829,7 +2829,11 @@
         "Extensions/herdr/Views/Support/WorkspaceFocusRoute.swift",
         "Extensions/herdr/Views/Support/WorkspaceKeyCommand.swift",
         "Extensions/herdr/Views/Support/WorkspaceLayout.swift",
-        "Extensions/herdr/Views/Support/ZoomableRoot.swift"
+        "Extensions/herdr/Views/Support/ZoomableRoot.swift",
+        "Extensions/herdr/Activity/HerdrAttentionSettings.swift",
+        "Extensions/herdr/Activity/HerdrNotification.swift",
+        "Extensions/herdr/Activity/HerdrNotificationAttention.swift",
+        "Extensions/herdr/Activity/HerdrNotificationService.swift"
       ]
     },
     "resources": {

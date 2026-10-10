@@ -8,6 +8,8 @@ import Foundation
     let hooks: AgentHookService
     let automaticActions: Bool
     private let activityInstaller: AgentActivityHookInstaller
+    private let notifications: HerdrNotificationService
+    private let defaults: UserDefaults
     private let attention: HerdrAttentionBridge
     private let inventory: HerdrInventoryCommands
     private let send: @Sendable (String, HerdrAgent) async -> HerdrPromptOutcome
@@ -17,6 +19,8 @@ import Foundation
 
     init(
         store: HerdrStore? = nil, activity: AgentActivityMonitor? = nil,
+        defaults: UserDefaults = SharedDefaults.store,
+        notifications: HerdrNotificationService? = nil,
         activityInstaller: AgentActivityHookInstaller? = nil,
         hooks: AgentHookService = .shared,
         attention: HerdrAttentionBridge? = nil,
@@ -26,13 +30,23 @@ import Foundation
             await HerdrAgentPrompt.send($0, to: $1)
         }
     ) {
-        self.activity = activity ?? AgentActivityMonitor()
+        let ownedStore = store ?? .shared
+        self.defaults = defaults
+        self.notifications =
+            notifications
+            ?? HerdrNotificationService(
+                defaults: defaults,
+                attention: .init(
+                    inspect: { await HerdrPaneReader.inspect($0) },
+                    decider: { await MainActor.run { AgentJevDecider.configured() } },
+                    appIsRunning: { true }), currentHosts: { ownedStore.hosts })
+        self.activity = activity ?? AgentActivityMonitor(defaults: defaults)
         self.activityInstaller =
             activityInstaller
             ?? AgentActivityHookInstaller(
                 executable: Bundle.main.executableURL
                     ?? URL(fileURLWithPath: CommandLine.arguments[0]))
-        self.store = store ?? .shared
+        self.store = ownedStore
         self.hooks = hooks
         self.attention = attention ?? HerdrAttentionBridge()
         self.automaticActions = automaticActions
@@ -62,6 +76,8 @@ import Foundation
             while !Task.isCancelled {
                 guard let self, !self.isStopped else { return }
                 await self.recordAttention()
+                await self.notifications.evaluate(
+                    self.store.hosts, hidden: PresenterState.shared.hidesAgents)
                 await self.activity.terminals.refresh(
                     hosts: self.store.hosts,
                     enabled: self.activity.discoversTerminals
@@ -82,6 +98,37 @@ import Foundation
     func execute(_ command: String, payload: Data) async throws -> Data {
         guard !isStopped else { throw ExtensionPeerError.unavailable }
         try Task.checkCancellation()
+        if command == "herdr.settings.read" || command == "herdr.settings.save" {
+            guard payload.count <= 4096,
+                let object = try JSONSerialization.jsonObject(with: payload) as? [String: Any]
+            else { throw ExtensionPeerError.invalidRequest }
+            if command == "herdr.settings.save" {
+                guard
+                    Set(object.keys) == [
+                        "blocked", "finished", "errors", "stuck", "openDiff", "monitoring",
+                        "stuckMinutes",
+                    ],
+                    ["blocked", "finished", "errors", "stuck", "openDiff", "monitoring"].allSatisfy(
+                        {
+                            (object[$0] as? NSNumber).map {
+                                CFGetTypeID($0) == CFBooleanGetTypeID()
+                            } == true
+                        }), let minutes = object["stuckMinutes"] as? NSNumber,
+                    CFGetTypeID(minutes) != CFBooleanGetTypeID(),
+                    minutes.doubleValue == Double(minutes.intValue),
+                    (2...120).contains(minutes.intValue)
+                else { throw ExtensionPeerError.invalidRequest }
+                let settings = try AgentPayload.decode(HerdrAttentionSettings.self, from: payload)
+                settings.save(in: defaults)
+                var providers = AgentActivitySettings.load(in: defaults)
+                providers.monitorTerminalAttention = settings.monitoring
+                defaults.set(providers.encoded, forKey: AgentActivitySettings.defaultsKey)
+                notifications.reconcile(settings)
+            } else if !object.isEmpty {
+                throw ExtensionPeerError.invalidRequest
+            }
+            return try AgentPayload.encode(HerdrAttentionSettings(defaults: defaults))
+        }
         if command.hasPrefix("activity.") {
             return try await activity.execute(command, payload: payload)
         }
@@ -195,6 +242,7 @@ import Foundation
         }
         await activity.shutdown()
         attention.shutdown()
+        notifications.shutdown()
         maintenance?.cancel()
         HerdrOpenBridge.shutdown()
         HerdrLayoutBridge.shutdown()

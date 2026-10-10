@@ -34,7 +34,7 @@ final class AgentActivityMonitor {
         defaults.object(forKey: "surfaceAgentTerminalDiscovery") as? Bool ?? true
     }
     var stuckMinutes: Int {
-        min(120, max(2, defaults.object(forKey: "surfaceAgentStuckMinutes") as? Int ?? 10))
+        HerdrAttentionSettings(defaults: defaults).stuckMinutes
     }
     var isListening: Bool {
         !stopped && !PresenterState.shared.hidesAgents && (observers > 0 || surfaceUntil > Date())
